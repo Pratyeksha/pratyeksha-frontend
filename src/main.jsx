@@ -24,7 +24,8 @@ createRoot(document.getElementById('root')).render(
         {/* Must stay at the bottom of the list */}
         <Route path="/:tenantId" element={<App />} />
 
-    
+        {/* 5. Default Fallback */}
+        <Route path="/" element={<Navigate to="/jay_ambe_fusion" replace />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>
