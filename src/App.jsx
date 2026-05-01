@@ -30,8 +30,8 @@ const PratyekshaPremiumMenu = () => {
   const navRef = useRef(null);
   const activeTabRef = useRef(null);
 
-  const LAPTOP_IP = "10.222.134.11"; 
-  const BASE_URL = `http://${LAPTOP_IP}:5000/api`;
+  // 🚀 UPDATED URL FOR HOSTED BACKEND
+  const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
   const triggerAlert = (msg, type = 'success') => {
     setAlert({ show: true, msg, type });
@@ -46,12 +46,13 @@ const PratyekshaPremiumMenu = () => {
   }, [urlTenantId]);
 
   useEffect(() => {
-    const socket = io(`http://${LAPTOP_IP}:5000`);
+    // 🚀 UPDATED SOCKET CONNECTION FOR HOSTED BACKEND
+    const socket = io("https://pratyeksha-backend.onrender.com");
     socket.on("menu_updated", (updatedItem) => {
       setAllMenuItems((prevItems) => prevItems.map((item) => item._id === updatedItem._id ? updatedItem : item));
     });
     return () => socket.disconnect();
-  }, [LAPTOP_IP]);
+  }, []); // Removed LAPTOP_IP dependency as it is no longer used
 
   useEffect(() => {
     if (activeTabRef.current && navRef.current) {
@@ -173,7 +174,7 @@ const PratyekshaPremiumMenu = () => {
   const requestFinalBill = async () => {
     if(!customerInfo.name || !customerInfo.phone) { triggerAlert("Details required.", "error"); return; }
     try {
-        const socket = io(`http://${LAPTOP_IP}:5000`);
+        const socket = io("https://pratyeksha-backend.onrender.com");
         socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
         await axios.post(`${BASE_URL}/customers`, { tenantId, name: customerInfo.name, phone: customerInfo.phone, lastVisit: new Date().toISOString() });
         setBillRequested(true);
@@ -229,7 +230,6 @@ const PratyekshaPremiumMenu = () => {
                       </div>
                   )}
 
-                  {/* 🚀 New Spice Level Logic: Shows only if the field exists in DB */}
                   {item.spiceLevel && (
                     <div style={{...styles.spiceTag, color: item.spiceLevel.toLowerCase() === 'high' ? '#ff4444' : primaryColor}}>
                       <Flame size={10} style={{marginRight: '4px'}} />
@@ -460,7 +460,6 @@ const styles = {
   fabBadgeCircular: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', border: '1.5px solid #d3bfa2' },
   fabGlowEffect: { position: 'absolute', width: '120%', height: '120%', background: 'radial-gradient(circle, rgba(211,191,162,0.25) 0%, rgba(211,191,162,0) 70%)', zIndex: 1, borderRadius: '50%' },
   
-  // 🚀 Spice Tag Styles
   tagContainer: {
     position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px', zIndex: 10
   },

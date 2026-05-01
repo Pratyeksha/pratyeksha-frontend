@@ -7,8 +7,8 @@ import {
   ShieldCheck, Zap, AlertCircle, Utensils, Coffee, ArrowRight
 } from 'lucide-react';
 
-const LAPTOP_IP = "10.222.134.11"; 
-const BASE_URL = `http://${LAPTOP_IP}:5000/api`;
+// 🚀 UPDATED URL FOR HOSTED BACKEND
+const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
 const PratyekshaMasterAdmin = () => {
   const [clients, setClients] = useState([]);
@@ -197,7 +197,7 @@ const styles = {
     color: '#fff', 
     fontFamily: "'Outfit', sans-serif", 
     overflow: 'hidden',
-    position: 'fixed', // Forces zero-gap alignment
+    position: 'fixed',
     top: 0,
     left: 0
   },
@@ -212,7 +212,7 @@ const styles = {
     display: 'flex', 
     flexDirection: 'column', 
     flexShrink: 0,
-    margin: 0 // Explicitly remove any margin
+    margin: 0
   },
   logoBlock: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '50px' },
   logoCircle: { width: '35px', height: '35px', borderRadius: '10px', background: '#d3bfa2', display: 'flex', alignItems: 'center', justifyContent: 'center' },

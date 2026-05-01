@@ -8,12 +8,14 @@ import { ChefHat, Timer, Zap, Hourglass, BellRing, StickyNote, ChevronDown } fro
 const KitchenView = () => {
   const { tenantId } = useParams();
   const [orders, setOrders] = useState([]);
-  const LAPTOP_IP = "10.222.134.11";
+  
+  // 🚀 UPDATED URL FOR HOSTED BACKEND
+  const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
   const audioPlayer = useRef(null);
 
   const markAsReady = async (orderId) => {
     try {
-      await axios.patch(`http://${LAPTOP_IP}:5000/api/admin/orders/${orderId}`, {
+      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, {
         status: 'served'
       });
       setOrders(prev => prev.filter(o => o._id !== orderId));
@@ -24,7 +26,7 @@ const KitchenView = () => {
 
   const fetchActiveOrders = async () => {
     try {
-      const res = await axios.get(`http://${LAPTOP_IP}:5000/api/admin/orders/${tenantId}/kitchen`);
+      const res = await axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`);
       const sorted = res.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(sorted);
     } catch (err) { console.error("Fetch Error:", err); }
@@ -33,7 +35,9 @@ const KitchenView = () => {
   useEffect(() => {
     if (!tenantId) return;
     fetchActiveOrders();
-    const socket = io(`http://${LAPTOP_IP}:5000`);
+    
+    // 🚀 UPDATED SOCKET CONNECTION FOR HOSTED BACKEND
+    const socket = io("https://pratyeksha-backend.onrender.com");
     socket.emit("join_restaurant", tenantId);
 
     socket.on("new_order", (newOrder) => {
@@ -117,7 +121,6 @@ const KDSOrderCard = ({ order, onReady, isNewest }) => {
     return () => clearInterval(timer);
   }, [order.createdAt]);
 
-  // Check if items list is overflowing the card
   useEffect(() => {
     if (listRef.current) {
       setHasOverflow(listRef.current.scrollHeight > listRef.current.clientHeight);
@@ -176,7 +179,6 @@ const KDSOrderCard = ({ order, onReady, isNewest }) => {
         ))}
       </div>
 
-      {/* 🚀 MORE ITEMS INDICATOR */}
       {hasOverflow && (
         <motion.div 
           animate={{ y: [0, 4, 0] }}
@@ -226,14 +228,7 @@ const styles = {
   itemName: { color: '#eee', fontSize: '1.05rem', fontWeight: 600, display: 'block' },
   portionText: { color: '#555', fontSize: '0.7rem', fontWeight: 700, marginTop: '4px', display: 'block' },
   suggestionBox: { color: '#d3bfa2', fontSize: '0.75rem', display: 'flex', alignItems: 'center', marginTop: '12px', background: 'rgba(211, 191, 162, 0.1)', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(211, 191, 162, 0.15)', fontWeight: '600' },
-  
-  moreIndicator: { 
-    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-    background: 'rgba(211, 191, 162, 0.1)', color: '#d3bfa2', 
-    fontSize: '0.6rem', fontWeight: 900, borderRadius: '8px', 
-    padding: '6px 0', marginBottom: '10px', border: '1px dashed #d3bfa244'
-  },
-
+  moreIndicator: { display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211, 191, 162, 0.1)', color: '#d3bfa2', fontSize: '0.6rem', fontWeight: 900, borderRadius: '8px', padding: '6px 0', marginBottom: '10px', border: '1px dashed #d3bfa244' },
   doneBtn: { width: '100%', padding: '18px', borderRadius: '18px', border: '1px solid rgba(211, 191, 162, 0.3)', backgroundColor: 'transparent', color: '#d3bfa2', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', marginTop: '5px', letterSpacing: '2px', textTransform: 'uppercase', transition: '0.3s background' }
 };
 

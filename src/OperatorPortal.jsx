@@ -9,12 +9,12 @@ import {
   Info, SendHorizontal, CookingPot, Percent 
 } from 'lucide-react';
 
-const LAPTOP_IP = "10.222.134.11";
-const BASE_URL = `http://${LAPTOP_IP}:5000/api`;
+// 🚀 UPDATED URL FOR HOSTED BACKEND
+const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
 const OperatorPortal = () => {
-  // Move socket inside to prevent connection leaks
-  const socket = useMemo(() => io(`http://${LAPTOP_IP}:5000`), []);
+  // 🚀 UPDATED SOCKET CONNECTION FOR HOSTED BACKEND
+  const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com"), []);
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
   const [loginData, setLoginData] = useState({ username: '', password: '' });
