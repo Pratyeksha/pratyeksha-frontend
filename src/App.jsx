@@ -30,7 +30,6 @@ const PratyekshaPremiumMenu = () => {
   const navRef = useRef(null);
   const activeTabRef = useRef(null);
 
-  // 🚀 UPDATED URL FOR HOSTED BACKEND
   const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
   const triggerAlert = (msg, type = 'success') => {
@@ -46,13 +45,12 @@ const PratyekshaPremiumMenu = () => {
   }, [urlTenantId]);
 
   useEffect(() => {
-    // 🚀 UPDATED SOCKET CONNECTION FOR HOSTED BACKEND
     const socket = io("https://pratyeksha-backend.onrender.com");
     socket.on("menu_updated", (updatedItem) => {
       setAllMenuItems((prevItems) => prevItems.map((item) => item._id === updatedItem._id ? updatedItem : item));
     });
     return () => socket.disconnect();
-  }, []); // Removed LAPTOP_IP dependency as it is no longer used
+  }, []);
 
   useEffect(() => {
     if (activeTabRef.current && navRef.current) {
@@ -79,7 +77,7 @@ const PratyekshaPremiumMenu = () => {
       finally { setIsLoading(false); }
     };
     fetchMenuContent();
-  }, [tenantId, BASE_URL]);
+  }, [tenantId]);
 
   const handleSwipe = (direction) => {
     const allCatIds = ['all', ...categoryList.map(c => c.categoryId)];
@@ -137,7 +135,6 @@ const PratyekshaPremiumMenu = () => {
         const portion = isMulti ? key.split('-')[1] : 'Single';
         const item = allMenuItems.find(i => i._id === id);
         const price = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
-        
         return { 
           menuItemId: item._id, 
           name: item.name, 
@@ -338,12 +335,21 @@ const PratyekshaPremiumMenu = () => {
               <div style={styles.dishModelWrapper}>
                 <model-viewer 
                   src={activeModel.modelUrl} 
-                  ar ar-modes="webxr scene-viewer quick-look" 
-                  camera-controls auto-rotate shadow-intensity="1" 
-                  environment-image="neutral" exposure="1" 
+                  ar 
+                  ar-modes="webxr scene-viewer quick-look" 
+                  ar-placement="floor"
+                  camera-controls 
+                  auto-rotate 
+                  shadow-intensity="1" 
+                  environment-image="neutral" 
+                  exposure="1" 
                   style={{ width: '100%', height: '100%' }}
+                  loading="eager"
+                  reveal="auto"
                 >
-                  <button slot="ar-button" style={{...styles.arCustomBtn, background: primaryColor}}>✨ VIEW IN YOUR SPACE</button>
+                  <button slot="ar-button" style={{...styles.arCustomBtn, background: primaryColor}}>
+                    ✨ VIEW IN YOUR SPACE
+                  </button>
                 </model-viewer>
               </div>
 
@@ -354,10 +360,11 @@ const PratyekshaPremiumMenu = () => {
                         <model-viewer 
                           src={activeModel.chefurl} 
                           autoplay 
-                          style={{ width: '180px', height: '320px' }} 
+                          style={{ width: '130px', height: '220px' }} 
                           camera-orbit="10deg 80deg 3m"
-                          camera-target="0m 1m 0m"
+                          camera-target="0m 0.8m 0m"
                           interaction-prompt="none"
+                          shadow-intensity="0"
                         />
                       </div>
                       <div style={styles.chefBubbleRight}>
@@ -367,6 +374,13 @@ const PratyekshaPremiumMenu = () => {
                    </div>
                 </div>
               )}
+              
+              {/* FIXED BUTTON FOR MOBILE - Ensures "View in Space" is always accessible */}
+              <div style={styles.fixedArButtonWrapper}>
+                 <button onClick={() => document.querySelector('model-viewer')?.activateAR()} style={{...styles.arCustomBtn, background: primaryColor, position: 'static', transform: 'none'}}>
+                    ✨ VIEW IN YOUR SPACE
+                 </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -395,6 +409,11 @@ const PratyekshaPremiumMenu = () => {
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        model-viewer {
+          --progress-bar-color: #d3bfa2;
+          background-color: transparent;
+          outline: none;
+        }
       `}</style>
     </div>
   );
@@ -403,7 +422,7 @@ const PratyekshaPremiumMenu = () => {
 const styles = {
   body: { minHeight: '100vh', fontFamily: 'Poppins, sans-serif', color: '#fff', overflowX: 'hidden' },
   header: { padding: '50px 20px 20px', textAlign: 'center' },
-  cafeName: { fontSize: '1.8rem', fontFamily: 'Playfair Display, serif', fontWeight: '800' },
+  cafeName: { fontSize: '1.4rem', fontFamily: 'Playfair Display, serif', fontWeight: '800' },
   poweredBy: { fontSize: '0.6rem', letterSpacing: '4px', marginTop: '5px', opacity: 0.5 },
   navContainer: { position: 'sticky', top: '0', zIndex: 999, backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(211, 191, 162, 0.15)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
   navScroll: { display: 'flex', overflowX: 'auto', padding: '16px 10px', gap: '20px', scrollBehavior: 'smooth', whiteSpace: 'nowrap' },
@@ -411,17 +430,17 @@ const styles = {
   activeUnderline: { position: 'absolute', bottom: '-8px', left: '0', right: '0', height: '3px', background: '#d3bfa2', borderRadius: '10px', boxShadow: '0 0 10px rgba(211, 191, 162, 0.4)' },
   contentWrapper: { marginTop: '10px' }, 
   menuContainer: { padding: '20px 15px', maxWidth: '600px', margin: '0 auto', paddingBottom: '120px', minHeight: '85vh', touchAction: 'pan-y' },
-  menuCard: { borderRadius: '28px', padding: '22px', marginBottom: '16px', display: 'flex', alignItems: 'center', border: '1px solid', textAlign: 'left' },
-  itemContentLeft: { flex: 1, paddingRight: '15px' },
-  itemTitle: { fontSize: '1.15rem', margin: 0, fontFamily: 'Playfair Display, serif', fontWeight: '700' },
-  itemDesc: { fontSize: '0.7rem', color: '#888', margin: '5px 0 12px' },
-  priceContainer: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  priceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' },
-  priceLabel: { fontSize: '0.85rem', fontWeight: '600' },
+  menuCard: { borderRadius: '24px', padding: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', border: '1px solid', textAlign: 'left' },
+  itemContentLeft: { flex: 1, paddingRight: '12px' },
+  itemTitle: { fontSize: '1.05rem', margin: 0, fontFamily: 'Playfair Display, serif', fontWeight: '700' },
+  itemDesc: { fontSize: '0.65rem', color: '#888', margin: '5px 0 10px', lineHeight: '1.4' },
+  priceContainer: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  priceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' },
+  priceLabel: { fontSize: '0.75rem', fontWeight: '600' },
   counterRowSmall: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderRadius: '8px', background: 'rgba(211, 191, 162, 0.15)' },
-  qtyBtnSmall: { background: 'none', border: 'none', color: '#d3bfa2', fontWeight: 'bold' },
-  addBtnSmall: { background: 'none', border: '1px solid', fontSize: '0.65rem', fontWeight: 'bold', padding: '4px 10px', borderRadius: '6px', color: '#d3bfa2', borderColor: '#d3bfa2' },
-  view3dBtn: { color: '#1a1a1a', width: '45px', height: '45px', borderRadius: '50%', fontWeight: '900', fontSize: '0.6rem', border: 'none', flexShrink: 0 },
+  qtyBtnSmall: { background: 'none', border: 'none', color: '#d3bfa2', fontWeight: 'bold', padding: '0 5px' },
+  addBtnSmall: { background: 'none', border: '1px solid', fontSize: '0.6rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px', color: '#d3bfa2', borderColor: '#d3bfa2' },
+  view3dBtn: { color: '#1a1a1a', width: '40px', height: '40px', borderRadius: '50%', fontWeight: '900', fontSize: '0.6rem', border: 'none', flexShrink: 0 },
   sideDrawer: { position: 'fixed', top: 0, right: 0, width: '85%', height: '100%', zIndex: 2000, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 30px rgba(0,0,0,0.5)' },
   drawerHeader: { padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid' },
   drawerContent: { flex: 1, overflowY: 'auto', padding: '20px' },
@@ -432,13 +451,14 @@ const styles = {
   drawerFooter: { padding: '20px', paddingBottom: '40px' },
   kitchenBtn: { width: '100%', padding: '18px', borderRadius: '15px', fontWeight: '900', border: 'none', color: '#1a1a1a' },
   billLinkBtn: { background: 'none', border: 'none', color: '#888', marginTop: '15px', width: '100%', fontSize: '0.8rem', textDecoration: 'underline' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5000, display: 'flex', flexDirection: 'column', background: '#000' },
-  modalNav: { padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid' },
-  modalTitle: { margin: 0, fontSize: '1.1rem', fontWeight: '800' },
-  closeModal: { fontSize: '2.5rem', cursor: 'pointer', padding: '0 10px' },
-  modelContainer: { flex: 1, background: '#111', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', position: 'relative' },
-  dishModelWrapper: { width: '100%', height: '50vh', marginTop: '10px' },
-  arCustomBtn: { position: 'absolute', bottom: '30px', left: '50%', transform: 'translateX(-50%)', border: 'none', padding: '15px 25px', borderRadius: '50px', fontWeight: '900', fontSize: '0.75rem', color: '#1a1a1a', zIndex: 6000 },
+  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5000, display: 'flex', flexDirection: 'column', background: '#000', overflow: 'hidden' },
+  modalNav: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', zIndex: 1000 },
+  modalTitle: { margin: 0, fontSize: '1rem', fontWeight: '800' },
+  closeModal: { fontSize: '2rem', cursor: 'pointer', padding: '0 10px' },
+  modelContainer: { flex: 1, background: '#111', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' },
+  dishModelWrapper: { width: '100%', height: '50vh', position: 'relative', zIndex: 5 },
+  fixedArButtonWrapper: { position: 'absolute', bottom: '40px', left: '0', width: '100%', display: 'flex', justifyContent: 'center', zIndex: 9999 },
+  arCustomBtn: { border: 'none', padding: '16px 28px', borderRadius: '50px', fontWeight: '900', fontSize: '0.75rem', color: '#1a1a1a', boxShadow: '0 8px 25px rgba(0,0,0,0.6)', whiteSpace: 'nowrap', pointerEvents: 'auto' },
   formContainer: { padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'center' },
   input: { padding: '15px', borderRadius: '10px', border: '1px solid #333', background: '#222', color: '#fff', outline: 'none' },
   loader: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' },
@@ -455,25 +475,17 @@ const styles = {
   premiumGoogleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', color: '#000', padding: '16px', borderRadius: '14px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '800', letterSpacing: '0.5px' },
   backToMenuBtn: { marginTop: '30px', background: 'transparent', border: 'none', color: '#555', fontSize: '0.7rem', fontWeight: '700', textDecoration: 'underline', cursor: 'pointer', letterSpacing: '1px' },
   globalAlert: { position: 'fixed', top: '0px', left: '16px', right: '16px', background: 'rgba(30, 30, 30, 0.96)', backdropFilter: 'blur(12px)', padding: '16px 18px', borderRadius: '16px', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 15px 35px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)' },
-  circularFab: { position: 'fixed', bottom: '30px', right: '25px', width: '75px', height: '75px', zIndex: 1000, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  circularFab: { position: 'fixed', bottom: '30px', right: '25px', width: '65px', height: '65px', zIndex: 1000, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   circularFabInner: { width: '100%', height: '100%', background: '#d3bfa2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.4), inset 0 2px 2px rgba(255,255,255,0.5)', border: '1.5px solid rgba(255,255,255,0.2)', position: 'relative', zIndex: 2 },
-  fabBadgeCircular: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', border: '1.5px solid #d3bfa2' },
+  fabBadgeCircular: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '900', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', border: '1.5px solid #d3bfa2' },
   fabGlowEffect: { position: 'absolute', width: '120%', height: '120%', background: 'radial-gradient(circle, rgba(211,191,162,0.25) 0%, rgba(211,191,162,0) 70%)', zIndex: 1, borderRadius: '50%' },
-  
-  tagContainer: {
-    position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px', zIndex: 10
-  },
-  chefTag: {
-    background: 'linear-gradient(135deg, #d3bfa2, #b09c7a)', color: '#1a1a1a', padding: '4px 10px', borderRadius: '20px', fontSize: '0.6rem', fontWeight: '900', display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-  },
-  spiceTag: {
-    background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '20px', fontSize: '0.6rem', fontWeight: '900', display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(4px)'
-  },
-
-  chefContainerAR: { position: 'absolute', bottom: '60px', left: '10px', zIndex: 100, width: '100%' },
-  chefFlexWrapper: { display: 'flex', alignItems: 'center', gap: '0px' },
-  chefModelBox: { flexShrink: 0 },
-  chefBubbleRight: { background: '#fff', color: '#1a1a1a', padding: '12px 16px', borderRadius: '2px 18px 18px 18px', fontSize: '0.7rem', fontWeight: '700', maxWidth: '170px', textAlign: 'left', boxShadow: '0 10px 30px rgba(0,0,0,0.6)', position: 'relative', border: '1px solid rgba(211, 191, 162, 0.4)', marginLeft: '-35px', marginTop: '-80px' }
+  tagContainer: { position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '6px', zIndex: 5 },
+  chefTag: { background: 'linear-gradient(135deg, #d3bfa2, #b09c7a)', color: '#1a1a1a', padding: '3px 8px', borderRadius: '15px', fontSize: '0.55rem', fontWeight: '900', display: 'flex', alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.3)' },
+  spiceTag: { background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '15px', fontSize: '0.55rem', fontWeight: '900', display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(4px)' },
+  chefContainerAR: { position: 'absolute', bottom: '110px', left: '0', zIndex: 50, width: '100%', pointerEvents: 'none' },
+  chefFlexWrapper: { display: 'flex', alignItems: 'flex-end', gap: '0px' },
+  chefModelBox: { flexShrink: 0, marginBottom: '-10px' },
+  chefBubbleRight: { background: '#fff', color: '#1a1a1a', padding: '10px 14px', borderRadius: '2px 15px 15px 15px', fontSize: '0.6rem', fontWeight: '700', maxWidth: '130px', textAlign: 'left', boxShadow: '0 8px 25px rgba(0,0,0,0.5)', position: 'relative', border: '1px solid rgba(211, 191, 162, 0.4)', marginLeft: '-20px', marginBottom: '70px', pointerEvents: 'auto' }
 };
 
 export default PratyekshaPremiumMenu;
