@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
-import { QRCodeSVG } from 'qrcode.react'; // 🚀 Added for QR Rendering
+import { QRCodeSVG } from 'qrcode.react'; 
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { 
   LayoutDashboard, UtensilsCrossed, ReceiptIndianRupee, BarChart3, LogOut, 
@@ -12,9 +12,12 @@ import {
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
 const OperatorPortal = () => {
+  // 🚀 Optimized for Render stability with polling fallback
   const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
     withCredentials: true,
-    transports: ['websocket', 'polling']
+    transports: ['polling', 'websocket'], 
+    reconnectionAttempts: 5,
+    timeout: 20000, 
   }), []);
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
@@ -28,14 +31,11 @@ const OperatorPortal = () => {
   const [tableBill, setTableBill] = useState(null);
   const [checkoutRequests, setCheckoutRequests] = useState([]);
   
-  // 🚀 WHATSAPP QR STATES
   const [qrCode, setQrCode] = useState(null);
   const [isBotReady, setIsBotReady] = useState(false);
-
   const [discount, setDiscount] = useState(0); 
   const [selectedBroadcastItem, setSelectedBroadcastItem] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-
   const [notif, setNotif] = useState({ show: false, msg: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
 
@@ -99,11 +99,9 @@ const OperatorPortal = () => {
   useEffect(() => {
     if (isAuthenticated) {
       socket.emit("join_restaurant", tenantId);
-      
       fetchInitialData();
       fetchAnalytics();
 
-      // 🚀 Listen for QR Code
       socket.on("whatsapp_qr", (qr) => {
         setQrCode(qr);
         setIsBotReady(false);
@@ -140,7 +138,6 @@ const OperatorPortal = () => {
     };
   }, [isAuthenticated, tenantId, socket]);
 
-  // 🚀 MANUAL LOGOUT WHATSAPP
   const handleWhatsappLogout = () => {
     setConfirmModal({
         show: true,
@@ -301,8 +298,8 @@ const OperatorPortal = () => {
                 <h3 style={{margin: '0 0 8px', color: '#fff'}}>{confirmModal.title}</h3>
                 <p style={{margin: '0 0 24px', color: '#888', fontSize: '0.85rem'}}>{confirmModal.subtitle}</p>
                 <div style={{display: 'flex', gap: '10px', width: '100%'}}>
-                   <button onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))} style={styles.cancelBtn}>Cancel</button>
-                   <button onClick={confirmModal.onConfirm} style={styles.confirmBtn}>Confirm</button>
+                    <button onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))} style={styles.cancelBtn}>Cancel</button>
+                    <button onClick={confirmModal.onConfirm} style={styles.confirmBtn}>Confirm</button>
                 </div>
              </motion.div>
           </motion.div>
@@ -590,7 +587,6 @@ const styles = {
   cancelBtn: { flex: 1, padding: '14px', background: '#222', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600' },
   confirmBtn: { flex: 1, padding: '14px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800' },
   
-  // 🚀 Pairing Specific Styles
   pairingContainer: { minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' },
   qrDisplayWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
   qrBox: { padding: '20px', background: '#fff', borderRadius: '20px', boxShadow: '0 10px 30px rgba(211,191,162,0.2)', marginBottom: '25px' },
