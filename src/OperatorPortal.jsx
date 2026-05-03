@@ -12,8 +12,11 @@ import {
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
 const OperatorPortal = () => {
-  // 🚀 UPDATED SOCKET CONNECTION FOR HOSTED BACKEND
-  const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com"), []);
+  // 🚀 FIXED: Added withCredentials and specific transports for Baileys/Render stability
+  const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
+    withCredentials: true,
+    transports: ['websocket', 'polling']
+  }), []);
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
   const [loginData, setLoginData] = useState({ username: '', password: '' });
@@ -26,7 +29,7 @@ const OperatorPortal = () => {
   const [tableBill, setTableBill] = useState(null);
   const [checkoutRequests, setCheckoutRequests] = useState([]);
   
-  // 🚀 WHATSAPP PAIRING STATES
+  // 🚀 WHATSAPP PAIRING STATES (Updated for Baileys)
   const [pairingPhone, setPairingPhone] = useState('');
   const [pairingCode, setPairingCode] = useState(null);
   const [isBotReady, setIsBotReady] = useState(false);
@@ -100,13 +103,13 @@ const OperatorPortal = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      // 🚀 Step 1: Join Restaurant Room
+      // 🚀 Join Restaurant Room
       socket.emit("join_restaurant", tenantId);
       
       fetchInitialData();
       fetchAnalytics();
 
-      // 🚀 Step 2: Listen for specific Pairing events
+      // 🚀 Listen for Baileys Pairing events
       socket.on("whatsapp_pairing_code", (code) => {
         setPairingCode(code);
         setIsRequestingCode(false);
