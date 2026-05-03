@@ -347,9 +347,7 @@ const PratyekshaPremiumMenu = () => {
                   loading="eager"
                   reveal="auto"
                 >
-                  <button slot="ar-button" style={{...styles.arCustomBtn, background: primaryColor}}>
-                    ✨ VIEW IN YOUR SPACE
-                  </button>
+                
                 </model-viewer>
               </div>
 
