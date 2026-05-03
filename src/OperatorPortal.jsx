@@ -1,18 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
+import { QRCodeSVG } from 'qrcode.react'; // 🚀 Added for QR Rendering
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { 
   LayoutDashboard, UtensilsCrossed, ReceiptIndianRupee, BarChart3, LogOut, 
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
-  Info, SendHorizontal, CookingPot, Percent, Smartphone, KeyRound 
+  Info, SendHorizontal, CookingPot, Percent, Smartphone, QrCode, RefreshCcw
 } from 'lucide-react';
 
-// 🚀 UPDATED URL FOR HOSTED BACKEND
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
 const OperatorPortal = () => {
-  // 🚀 FIXED: Added withCredentials and specific transports for Baileys/Render stability
   const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
     withCredentials: true,
     transports: ['websocket', 'polling']
@@ -29,14 +28,11 @@ const OperatorPortal = () => {
   const [tableBill, setTableBill] = useState(null);
   const [checkoutRequests, setCheckoutRequests] = useState([]);
   
-  // 🚀 WHATSAPP PAIRING STATES (Updated for Baileys)
-  const [pairingPhone, setPairingPhone] = useState('');
-  const [pairingCode, setPairingCode] = useState(null);
+  // 🚀 WHATSAPP QR STATES
+  const [qrCode, setQrCode] = useState(null);
   const [isBotReady, setIsBotReady] = useState(false);
-  const [isRequestingCode, setIsRequestingCode] = useState(false);
 
   const [discount, setDiscount] = useState(0); 
-
   const [selectedBroadcastItem, setSelectedBroadcastItem] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
 
@@ -82,7 +78,6 @@ const OperatorPortal = () => {
     });
   };
 
-  // --- CORE DATA FETCHING ---
   const fetchInitialData = async () => {
     try {
       const [orderRes, menuRes] = await Promise.all([
@@ -103,23 +98,21 @@ const OperatorPortal = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      // 🚀 Join Restaurant Room
       socket.emit("join_restaurant", tenantId);
       
       fetchInitialData();
       fetchAnalytics();
 
-      // 🚀 Listen for Baileys Pairing events
-      socket.on("whatsapp_pairing_code", (code) => {
-        setPairingCode(code);
-        setIsRequestingCode(false);
-        showNotif("Pairing Code Generated!");
+      // 🚀 Listen for QR Code
+      socket.on("whatsapp_qr", (qr) => {
+        setQrCode(qr);
+        setIsBotReady(false);
+        showNotif("New QR Code Generated!");
       });
 
       socket.on("whatsapp_ready", () => {
         setIsBotReady(true);
-        setPairingCode(null);
-        setIsRequestingCode(false);
+        setQrCode(null);
         showNotif("WhatsApp Bot is Online!", "success");
       });
 
@@ -139,7 +132,7 @@ const OperatorPortal = () => {
     }
 
     return () => {
-        socket.off("whatsapp_pairing_code");
+        socket.off("whatsapp_qr");
         socket.off("whatsapp_ready");
         socket.off("new_order");
         socket.off("order_status_updated");
@@ -147,17 +140,22 @@ const OperatorPortal = () => {
     };
   }, [isAuthenticated, tenantId, socket]);
 
-  // 🚀 REQUEST PAIRING LOGIC
-  const handleRequestPairing = () => {
-    if (!pairingPhone || pairingPhone.length < 10) {
-      return showNotif("Please enter a valid phone number with country code (e.g., 91...)", "error");
-    }
-    setIsRequestingCode(true);
-    setPairingCode(null);
-    socket.emit("request_pairing", { tenantId, phoneNumber: pairingPhone });
+  // 🚀 MANUAL LOGOUT WHATSAPP
+  const handleWhatsappLogout = () => {
+    setConfirmModal({
+        show: true,
+        title: "Reset WhatsApp?",
+        subtitle: "This will disconnect the current account and delete session data.",
+        onConfirm: () => {
+            socket.emit("logout_whatsapp", tenantId);
+            setQrCode(null);
+            setIsBotReady(false);
+            showNotif("Session Cleared. Generating new QR...");
+            setConfirmModal(prev => ({ ...prev, show: false }));
+        }
+    });
   };
 
-  // --- MARKETING LOGIC ---
   const handleBroadcast = async (customOffer = '') => {
     if (!selectedBroadcastItem && !customOffer) return showNotif("Select a dish or enter a message", "error");
     setIsBroadcasting(true);
@@ -176,7 +174,6 @@ const OperatorPortal = () => {
     }
   };
 
-  // --- BILLING LOGIC ---
   const generateBill = async (tableNum) => {
     setSelectedTable(tableNum);
     setDiscount(0);
@@ -220,7 +217,6 @@ const OperatorPortal = () => {
     });
   };
 
-  // --- MENU LOGIC ---
   const updateMenu = async (itemId, updateData) => {
     try {
       await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData);
@@ -238,7 +234,6 @@ const OperatorPortal = () => {
     }
   };
 
-  // --- HEATMAP RENDER ---
   const renderDetailedHeatmap = () => {
     const grid = [];
     for (let i = 1; i <= 31; i++) {
@@ -358,7 +353,7 @@ const OperatorPortal = () => {
                     <div style={styles.botCard}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginBottom:'20px'}}>
                             <Sparkles size={24} color="#d3bfa2" />
-                            <h3 style={{margin:0}}>WhatsApp Direct Pair</h3>
+                            <h3 style={{margin:0}}>WhatsApp QR Link</h3>
                         </div>
 
                         <div style={styles.pairingContainer}>
@@ -366,38 +361,25 @@ const OperatorPortal = () => {
                                 <div style={styles.statusBox}>
                                   <div style={styles.pulseGreen} />
                                   <span style={{color: '#00ff64', fontWeight: 'bold'}}>SYSTEM LIVE</span>
+                                  <button onClick={handleWhatsappLogout} style={{marginLeft: '20px', background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', display:'flex', alignItems:'center', gap:'5px', fontSize: '0.8rem'}}><RefreshCcw size={14}/> Reset</button>
                                 </div> 
-                            ) : pairingCode ? (
-                                <div style={styles.codeDisplayWrapper}>
-                                    <p style={{color: '#888', fontSize: '0.8rem', marginBottom: '15px'}}>Enter this 8-character code on your phone:</p>
-                                    <div style={styles.codeBox}>{pairingCode}</div>
+                            ) : qrCode ? (
+                                <div style={styles.qrDisplayWrapper}>
+                                    <div style={styles.qrBox}>
+                                        <QRCodeSVG value={qrCode} size={220} bgColor={"#000000"} fgColor={"#d3bfa2"} level={"H"} includeMargin={true} />
+                                    </div>
                                     <div style={styles.instructionList}>
                                         <p>1. Open WhatsApp on your business phone</p>
                                         <p>2. Go to <b>Linked Devices</b> &gt; <b>Link a Device</b></p>
-                                        <p>3. Tap <b>Link with phone number instead</b></p>
+                                        <p>3. Point your camera at this QR code to sync</p>
                                     </div>
-                                    <button onClick={() => setPairingCode(null)} style={{...styles.ghostBtn, marginTop: '20px', width: 'auto'}}>Try different number</button>
+                                    <button onClick={handleWhatsappLogout} style={{...styles.ghostBtn, marginTop: '20px', width: 'auto'}}>Try different account</button>
                                 </div>
                             ) : ( 
                                 <div style={styles.pairingInputWrapper}>
-                                    <p style={{color: '#666', fontSize: '0.85rem', marginBottom: '20px'}}>Link your restaurant's WhatsApp without scanning. Enter the number currently using WhatsApp Business.</p>
-                                    <div style={{position: 'relative', width: '100%'}}>
-                                        <Smartphone size={18} style={styles.inputIcon} />
-                                        <input 
-                                            type="tel" 
-                                            placeholder="91XXXXXXXXXX (with country code)" 
-                                            style={{...styles.input, paddingLeft: '45px'}} 
-                                            value={pairingPhone}
-                                            onChange={(e) => setPairingPhone(e.target.value)}
-                                        />
-                                    </div>
-                                    <button 
-                                        onClick={handleRequestPairing} 
-                                        disabled={isRequestingCode} 
-                                        style={styles.mainBtn}
-                                    >
-                                        {isRequestingCode ? "GENERATING CODE..." : "GENERATE PAIRING CODE"}
-                                    </button>
+                                    <div className="spinner"></div>
+                                    <p style={{color: '#666', fontSize: '0.85rem'}}>Initializing secure WhatsApp connection for {tenantId}...</p>
+                                    <p style={{color: '#444', fontSize: '0.75rem', marginTop: '10px'}}>QR code will appear here shortly.</p>
                                 </div> 
                             )}
                         </div>
@@ -609,11 +591,11 @@ const styles = {
   confirmBtn: { flex: 1, padding: '14px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800' },
   
   // 🚀 Pairing Specific Styles
-  pairingContainer: { minHeight: '200px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' },
-  codeBox: { background: '#000', color: '#d3bfa2', fontSize: '3rem', fontWeight: '900', letterSpacing: '8px', padding: '20px 40px', borderRadius: '16px', border: '1px dashed #d3bfa2', margin: '10px 0 25px', fontFamily: 'monospace' },
+  pairingContainer: { minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' },
+  qrDisplayWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
+  qrBox: { padding: '20px', background: '#fff', borderRadius: '20px', boxShadow: '0 10px 30px rgba(211,191,162,0.2)', marginBottom: '25px' },
   instructionList: { textAlign: 'left', color: '#888', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #222', paddingTop: '20px', width: '100%' },
-  pairingInputWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-  inputIcon: { position: 'absolute', left: '15px', top: '15px', color: '#444', zIndex: 2 }
+  pairingInputWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }
 };
 
 export default OperatorPortal;
