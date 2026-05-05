@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
 import { QRCodeSVG } from 'qrcode.react'; 
@@ -6,13 +6,42 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { 
   LayoutDashboard, UtensilsCrossed, ReceiptIndianRupee, BarChart3, LogOut, 
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
-  Info, SendHorizontal, CookingPot, Percent, Smartphone, QrCode, RefreshCcw
+  Info, SendHorizontal, CookingPot, Percent, Smartphone, QrCode, RefreshCcw,
+  Timer, Clock, Flame, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
+  User, ShieldCheck, Zap, MousePointer2, Filter, ShoppingBag, Truck, X
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
+/**
+ * 🚀 PREMIUM COMPONENT: LIVE PREP TIMER
+ * Calculates latency in real-time and shifts color to 'Gold' after 15 mins
+ */
+const OperatorLiveTimer = ({ createdAt }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const calc = () => setElapsed(Math.floor((new Date() - new Date(createdAt)) / 60000));
+    calc();
+    const interval = setInterval(calc, 30000);
+    return () => clearInterval(interval);
+  }, [createdAt]);
+
+  const getUrgencyColor = () => {
+    if (elapsed >= 15) return '#d4af37'; // Golden status for high latency
+    return '#444';                       
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: getUrgencyColor() }}>
+      <Timer size={14} />
+      <span style={{ fontSize: '0.85rem', fontWeight: '800', letterSpacing: '0.5px' }}>{elapsed}m</span>
+    </div>
+  );
+};
+
 const OperatorPortal = () => {
-  // 🚀 Optimized for Render stability with polling fallback
+  // 🛰️ REAL-TIME CONNECTIVITY
   const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
     withCredentials: true,
     transports: ['polling', 'websocket'], 
@@ -20,65 +49,78 @@ const OperatorPortal = () => {
     timeout: 20000, 
   }), []);
 
+  // 🔑 AUTH & SESSION STATE
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
   const [loginData, setLoginData] = useState({ username: '', password: '' });
+  
+  // 🛠️ NAVIGATION & FILTER STATE
   const [activeTab, setActiveTab] = useState('pending'); 
+  const [orderZone, setOrderZone] = useState('all'); 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewDate, setViewDate] = useState(new Date());
+
+  // 📊 DATA STATE
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [analytics, setAnalytics] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [tableBill, setTableBill] = useState(null);
   const [checkoutRequests, setCheckoutRequests] = useState([]);
   
+  // 🧾 BILLING & TABLE STATE
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tableBill, setTableBill] = useState(null);
+  const [discount, setDiscount] = useState(0); 
+
+  // 💬 MARKETING HUB STATE
   const [qrCode, setQrCode] = useState(null);
   const [isBotReady, setIsBotReady] = useState(false);
-  const [discount, setDiscount] = useState(0); 
   const [selectedBroadcastItem, setSelectedBroadcastItem] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastText, setBroadcastMsg] = useState("");
+
+  // 🔔 UI FEEDBACK STATE
   const [notif, setNotif] = useState({ show: false, msg: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
 
+  // 🏗️ TENANT CONFIG
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
   const tableCount = parseInt(localStorage.getItem('table_count')) || 12; 
   const logoPath = `${import.meta.env.BASE_URL}logo.png`;
 
-  const showNotif = (msg, type = 'success') => {
-    setNotif({ show: true, msg, type });
-    setTimeout(() => setNotif(prev => ({ ...prev, show: false })), 3000);
-  };
+  // 🧠 DERIVED STATE: OCCUPANCY
+  // A table is occupied if it exists in the active orders list
+  const occupiedTables = useMemo(() => {
+    return [...new Set(orders.map(o => o.tableNumber.toString()))];
+  }, [orders]);
 
-  const getFormattedDate = () => {
-    const date = new Date();
-    const day = date.getDate();
-    const month = date.toLocaleString('en-US', { month: 'long' });
-    const year = date.getFullYear();
-    const getOrdinal = (n) => {
-      const s = ["th", "st", "nd", "rd"];
-      const v = n % 100;
-      return n + (s[(v - 20) % 10] || s[v] || s[0]);
-    };
-    return `${getOrdinal(day)} ${month} ${year}`;
-  };
-
-  const getFormattedTime = () => {
-    return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase().replace(/\s/g, '');
-  };
-
-  const handleLogout = () => {
-    setConfirmModal({
-      show: true,
-      title: "Logout Session?",
-      subtitle: "Are you sure you want to end your current session?",
-      onConfirm: () => {
-        localStorage.clear();
-        setIsAuthenticated(false);
-        window.location.reload(); 
-      }
+  // 🧠 DERIVED STATE: KITCHEN ZONES
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
+      if (orderZone === 'delayed') return minutes >= 15;
+      if (orderZone === 'fresh') return minutes < 15;
+      return true;
     });
-  };
+  }, [orders, orderZone]);
 
-  const fetchInitialData = async () => {
+  // 🧠 DERIVED STATE: INSIGHTS
+  const currentMonthAnalytics = useMemo(() => {
+    const monthStr = (viewDate.getMonth() + 1).toString().padStart(2, '0');
+    const yearStr = viewDate.getFullYear().toString();
+    return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
+  }, [analytics, viewDate]);
+
+  const stats = useMemo(() => {
+    const revenue = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
+    const count = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
+    return {
+      revenue,
+      avg: count > 0 ? (revenue / count).toFixed(0) : 0,
+      online: (revenue * 0.18).toFixed(0) 
+    };
+  }, [currentMonthAnalytics]);
+
+  // 📡 DATA FETCHING LOGIC
+  const fetchInitialData = useCallback(async () => {
     try {
       const [orderRes, menuRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
@@ -86,172 +128,55 @@ const OperatorPortal = () => {
       ]);
       setOrders(orderRes.data);
       setMenuItems(menuRes.data);
-    } catch (err) { console.error(err); }
-  };
+    } catch (err) { console.error("Data Sync Error:", err); }
+  }, [tenantId]);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       const res = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`);
       setAnalytics(res.data);
-    } catch (err) { console.error(err); }
-  };
+    } catch (err) { console.error("Analytics Error:", err); }
+  }, [tenantId]);
 
+  // 🔌 SOCKET.IO EVENT LISTENERS
   useEffect(() => {
     if (isAuthenticated) {
       socket.emit("join_restaurant", tenantId);
       fetchInitialData();
       fetchAnalytics();
 
-      socket.on("whatsapp_qr", (qr) => {
-        setQrCode(qr);
-        setIsBotReady(false);
-        showNotif("New QR Code Generated!");
+      socket.on("whatsapp_qr", (qr) => { 
+        setQrCode(qr); 
+        setIsBotReady(false); 
       });
 
-      socket.on("whatsapp_ready", () => {
-        setIsBotReady(true);
-        setQrCode(null);
-        showNotif("WhatsApp Bot is Online!", "success");
+      socket.on("whatsapp_ready", () => { 
+        setIsBotReady(true); 
+        setQrCode(null); 
+        showNotif("System Linked", "success");
       });
 
-      socket.on("new_order", (order) => {
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play();
-        showNotif(`New Order Received for Table ${order.tableNumber}`);
-        fetchInitialData();
+      socket.on("new_order", (order) => { 
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play(); 
+        showNotif(`Order Update: Table ${order.tableNumber}`); 
+        fetchInitialData(); // Instantly occupies the table in UI
+      });
+
+      socket.on("bill_requested", (data) => {
+        setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play(); 
+        showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 
       socket.on("order_status_updated", () => fetchInitialData());
-
-      socket.on("bill_requested", (data) => {
-        setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber])]);
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play();
-        showNotif(`Bill requested: Table ${data.tableNumber}`, 'warning');
-      });
     }
+    return () => { socket.off(); };
+  }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics]);
 
-    return () => {
-        socket.off("whatsapp_qr");
-        socket.off("whatsapp_ready");
-        socket.off("new_order");
-        socket.off("order_status_updated");
-        socket.off("bill_requested");
-    };
-  }, [isAuthenticated, tenantId, socket]);
-
-  const handleWhatsappLogout = () => {
-    setConfirmModal({
-        show: true,
-        title: "Reset WhatsApp?",
-        subtitle: "This will disconnect the current account and delete session data.",
-        onConfirm: () => {
-            socket.emit("logout_whatsapp", tenantId);
-            setQrCode(null);
-            setIsBotReady(false);
-            showNotif("Session Cleared. Generating new QR...");
-            setConfirmModal(prev => ({ ...prev, show: false }));
-        }
-    });
-  };
-
-  const handleBroadcast = async (customOffer = '') => {
-    if (!selectedBroadcastItem && !customOffer) return showNotif("Select a dish or enter a message", "error");
-    setIsBroadcasting(true);
-    try {
-        const item = menuItems.find(i => i._id === selectedBroadcastItem);
-        await axios.post(`${BASE_URL}/admin/broadcast`, { 
-            tenantId, 
-            itemName: item?.name || '', 
-            customOffer: customOffer 
-        });
-        showNotif("Global Broadcast Launched!");
-    } catch (err) { 
-        showNotif("Broadcast failed", "error"); 
-    } finally { 
-        setIsBroadcasting(false); 
-    }
-  };
-
-  const generateBill = async (tableNum) => {
-    setSelectedTable(tableNum);
-    setDiscount(0);
-    try {
-      const res = await axios.get(`${BASE_URL}/admin/bill/${tenantId}/${tableNum}`);
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todayStats = analytics.find(a => a._id === todayStr);
-      const currentBillCount = (todayStats?.count || 0) + 1;
-      const allItems = res.data.flatMap(o => o.items);
-      if(allItems.length === 0) {
-        showNotif("No served items for this table.", "error");
-        setTableBill(null);
-        return;
-      }
-      const grandTotal = allItems.reduce((acc, item) => acc + (item.subtotal || 0), 0);
-      setTableBill({ items: allItems, total: grandTotal, billNo: currentBillCount, date: getFormattedDate(), time: getFormattedTime() });
-    } catch (err) { console.error(err); }
-  };
-
-  const settleBill = () => {
-    const finalAmount = tableBill.total - (tableBill.total * (discount / 100));
-    setConfirmModal({
-      show: true,
-      title: `Settle Table ${selectedTable}?`,
-      subtitle: `Final Amount after ${discount}% discount: ₹${finalAmount.toFixed(2)}`,
-      onConfirm: async () => {
-        try {
-          await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
-              discount: discount,
-              finalAmount: finalAmount
-          });
-          setCheckoutRequests(prev => prev.filter(t => t !== selectedTable));
-          setTableBill(null);
-          setSelectedTable(null);
-          fetchInitialData();
-          fetchAnalytics();
-          showNotif("Table Settled Successfully");
-          setConfirmModal(prev => ({ ...prev, show: false }));
-        } catch (err) { showNotif("Settlement failed", "error"); }
-      }
-    });
-  };
-
-  const updateMenu = async (itemId, updateData) => {
-    try {
-      await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData);
-      fetchInitialData();
-    } catch (err) { console.error(err); }
-  };
-
-  const editPortionPrice = (item, type) => {
-    const isHalf = type === 'Half';
-    const currentPrice = isHalf ? item.priceHalf : (item.priceFull || item.price);
-    const newPrice = prompt(`Update ${type} price for ${item.name}:`, currentPrice);
-    if (newPrice && !isNaN(newPrice)) {
-      const updateData = isHalf ? { priceHalf: Number(newPrice) } : (item.priceFull ? { priceFull: Number(newPrice) } : { price: Number(newPrice) });
-      updateMenu(item._id, updateData);
-    }
-  };
-
-  const renderDetailedHeatmap = () => {
-    const grid = [];
-    for (let i = 1; i <= 31; i++) {
-      const dayStr = i < 10 ? `0${i}` : `${i}`;
-      const dayData = analytics.find(d => d._id && d._id.endsWith(`-${dayStr}`));
-      const revenue = dayData ? dayData.revenue : 0;
-      grid.push(
-        <motion.div key={i} whileHover={{ scale: 1.1, zIndex: 2 }} className="heat-square"
-          style={{ 
-            ...styles.heatSquare, 
-            background: revenue > 0 ? `rgba(211, 191, 162, ${Math.min(revenue / 8000, 1)})` : '#111', 
-            border: revenue > 4000 ? '1px solid #d3bfa2' : '1px solid #222' 
-          }} >
-          <span style={{ fontSize: '0.6rem', color: revenue > 0 ? '#000' : '#444', fontWeight: 'bold' }}>{i}</span>
-          <div className="tooltip" style={styles.tooltip}>
-            {dayData ? `Date: ${dayData._id}` : `Day ${i}`}<br/>Revenue: ₹{revenue}
-          </div>
-        </motion.div>
-      );
-    }
-    return grid;
+  // 🛠️ HANDLERS
+  const showNotif = (msg, type = 'success') => {
+    setNotif({ show: true, msg, type });
+    setTimeout(() => setNotif(prev => ({ ...prev, show: false })), 4000);
   };
 
   const handleLogin = async (e) => {
@@ -266,256 +191,370 @@ const OperatorPortal = () => {
     } catch (err) { showNotif("Invalid Credentials", "error"); }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div style={styles.loginOverlay}>
-        <motion.form initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.loginBox} onSubmit={handleLogin}>
-          <img src={logoPath} alt="Logo" style={styles.loginLogo} />
-          <h2 style={styles.loginTitle}>Admin Portal</h2>
-          <input type="text" placeholder="Username" style={styles.input} value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} />
-          <input type="password" placeholder="Password" style={styles.input} value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          <button type="submit" style={styles.mainBtn}>ENTER DASHBOARD</button>
-        </motion.form>
-      </div>
-    );
-  }
+  const handleLogout = () => {
+    setConfirmModal({
+      show: true,
+      title: "Terminate Session",
+      subtitle: "Securely closing management dashboard and clearing cache.",
+      onConfirm: () => {
+        localStorage.clear();
+        window.location.reload();
+      }
+    });
+  };
+
+  const generateBill = async (id) => {
+    setSelectedTable(id);
+    setDiscount(0);
+    try {
+      const res = await axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`);
+      const allItems = res.data.flatMap(o => o.items);
+      if(allItems.length === 0) { 
+        setTableBill(null); 
+        showNotif("Mode: Vacant/Empty", "info");
+        return; 
+      }
+      setTableBill({ 
+        items: allItems, 
+        total: allItems.reduce((acc, item) => acc + (item.subtotal || 0), 0), 
+        billNo: Math.floor(10000 + Math.random() * 90000),
+        date: new Date().toLocaleDateString('en-IN'),
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      });
+    } catch (err) { console.error(err); }
+  };
+
+  const settleBill = () => {
+    const finalAmount = tableBill.total - (tableBill.total * (discount / 100));
+    setConfirmModal({
+      show: true,
+      title: `Confirm Settlement: ${selectedTable}?`,
+      subtitle: `Billed Amount: ₹${finalAmount.toFixed(0)}`,
+      onConfirm: async () => {
+        try {
+          await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { discount, finalAmount });
+          setCheckoutRequests(prev => prev.filter(t => t !== selectedTable));
+          setTableBill(null);
+          setSelectedTable(null);
+          await fetchInitialData(); // Re-syncs to clear orders and mark table as unoccupied
+          fetchAnalytics();
+          setConfirmModal({ show: false });
+          showNotif("Transaction Finalized");
+        } catch (err) { showNotif("Settlement Error", "error"); }
+      }
+    });
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastText && !selectedBroadcastItem) return;
+    setIsBroadcasting(true);
+    try {
+      const item = menuItems.find(i => i._id === selectedBroadcastItem);
+      await axios.post(`${BASE_URL}/admin/broadcast`, { 
+        tenantId, 
+        itemName: item?.name || '', 
+        customOffer: broadcastText 
+      });
+      showNotif("Campaign Dispatched");
+      setBroadcastMsg("");
+    } catch (err) { showNotif("Broadcast failed", "error"); }
+    finally { setIsBroadcasting(false); }
+  };
+
+  const updateMenu = async (itemId, updateData) => {
+    try { 
+      await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData); 
+      fetchInitialData(); 
+    } catch (err) { console.error(err); }
+  };
+
+  const changeMonth = (offset) => {
+    const newDate = new Date(viewDate);
+    newDate.setMonth(viewDate.getMonth() + offset);
+    setViewDate(newDate);
+  };
+
+  // 🗓️ HEATMAP CALCULATION
+  const renderMonthHeatmap = () => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    const grid = [];
+    const maxRev = Math.max(...currentMonthAnalytics.map(a => a.revenue || 0), 1);
+
+    for (let x = 0; x < firstDay; x++) grid.push(<div key={`pad-${x}`} style={styles.heatSquareEmpty} />);
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+      const dayData = currentMonthAnalytics.find(d => d._id === dateStr);
+      const revenue = dayData ? dayData.revenue : 0;
+      grid.push(
+        <motion.div key={i} whileHover={{ scale: 1.1, zIndex: 10 }}
+          style={{ 
+            ...styles.heatSquare, 
+            background: revenue > 0 ? `rgba(211, 191, 162, ${Math.max(0.15, revenue / maxRev)})` : '#111',
+            border: revenue > (maxRev * 0.7) ? '1px solid #d3bfa2' : '1px solid #1a1a1a'
+          }}>
+          <span style={{ fontSize: '0.75rem', color: revenue > (maxRev * 0.5) ? '#000' : '#444', fontWeight: '800' }}>{i}</span>
+          <div className="tooltip" style={styles.tooltip}>₹{revenue.toLocaleString()}</div>
+        </motion.div>
+      );
+    }
+    return grid;
+  };
+
+  if (!isAuthenticated) return (
+    <div style={styles.loginOverlay}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.loginBox}>
+        <img src={logoPath} alt="Logo" style={styles.sidebarLogo} />
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '30px', fontWeight: '900' }}>ADMIN COMMAND CENTER</h2>
+        <form onSubmit={handleLogin}>
+          <input type="text" placeholder="Username" style={styles.input} onChange={e => setLoginData({...loginData, username: e.target.value})} />
+          <input type="password" placeholder="Access PIN" style={styles.input} onChange={e => setLoginData({...loginData, password: e.target.value})} />
+          <button type="submit" style={styles.mainBtn}>INITIALIZE</button>
+        </form>
+      </motion.div>
+    </div>
+  );
 
   return (
     <div style={styles.dashboard}>
       <AnimatePresence>
         {notif.show && (
-          <motion.div initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 300, opacity: 0 }} style={{...styles.toast, borderRight: `5px solid ${notif.type === 'success' ? '#d3bfa2' : '#ff4444'}`}}>
-             <Info size={18} style={{marginRight: '10px'}} /> {notif.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {confirmModal.show && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.modalBackdrop}>
-             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} style={styles.confirmBox}>
-                <div style={styles.iconCircle}><AlertTriangle size={24} color="#d3bfa2" /></div>
-                <h3 style={{margin: '0 0 8px', color: '#fff'}}>{confirmModal.title}</h3>
-                <p style={{margin: '0 0 24px', color: '#888', fontSize: '0.85rem'}}>{confirmModal.subtitle}</p>
-                <div style={{display: 'flex', gap: '10px', width: '100%'}}>
-                    <button onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))} style={styles.cancelBtn}>Cancel</button>
-                    <button onClick={confirmModal.onConfirm} style={styles.confirmBtn}>Confirm</button>
-                </div>
-             </motion.div>
+          <motion.div initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 300, opacity: 0 }} 
+            style={{...styles.toast, borderLeft: `4px solid ${notif.type === 'success' ? '#d3bfa2' : '#8a704d'}`}}>
+             <Zap size={16} color={notif.type === 'success' ? '#d3bfa2' : '#8a704d'} /> {notif.msg}
           </motion.div>
         )}
       </AnimatePresence>
 
       <aside style={styles.sidebar}>
-        <LayoutGroup>
-          <div style={styles.sidebarTop}>
-            <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo} /></div>
-            <nav style={styles.navStack}>
-              {[
-                { id: 'pending', label: 'Live Kitchen', icon: <CookingPot size={20} /> },
-                { id: 'menu', label: 'Menu Editor', icon: <UtensilsCrossed size={20} /> },
-                { id: 'billing', label: 'Billing Hub', icon: <ReceiptIndianRupee size={20} /> },
-                { id: 'marketing', label: 'Marketing Hub', icon: <MessageSquare size={20} /> },
-                { id: 'insights', label: 'Insights', icon: <BarChart3 size={20} /> }
-              ].map((tab) => (
-                <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (tab.id === 'insights') fetchAnalytics(); if (tab.id === 'pending') fetchInitialData(); }} style={activeTab === tab.id ? styles.activeTab : styles.navBtn}>
-                  <span style={{ zIndex: 2, marginRight: '12px', display: 'flex' }}>{tab.icon}</span>
-                  <span style={{ zIndex: 2 }}>{tab.label}</span>
-                  {tab.id === 'billing' && checkoutRequests.length > 0 && <span style={styles.sidebarNotif}>{checkoutRequests.length}</span>}
-                  {tab.id === 'pending' && orders.length > 0 && <span style={{...styles.sidebarNotif, background: '#00ff64'}}>{orders.length}</span>}
-                  {activeTab === tab.id && <motion.div layoutId="active-bg" style={styles.activeBackground} />}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <button onClick={handleLogout} style={styles.logoutBtn}><LogOut size={18} style={{ marginRight: '12px' }} />Logout Session</button>
-        </LayoutGroup>
+        <div style={styles.sidebarTop}>
+          <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo} /></div>
+          <nav style={styles.navStack}>
+            {[
+              { id: 'pending', label: 'LIVE KITCHEN', icon: <CookingPot size={18} /> },
+              { id: 'menu', label: 'MENU EDITOR', icon: <UtensilsCrossed size={18} /> },
+              { id: 'billing', label: 'BILLING HUB', icon: <ReceiptIndianRupee size={18} /> },
+              { id: 'marketing', label: 'CAMPAIGN HUB', icon: <MessageSquare size={18} /> },
+              { id: 'insights', label: 'INSIGHTS', icon: <BarChart3 size={18} /> }
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={activeTab === tab.id ? styles.activeTab : styles.navBtn}>
+                <span style={{ marginRight: '15px' }}>{tab.icon}</span>
+                {tab.label}
+                {tab.id === 'billing' && checkoutRequests.length > 0 && <span style={styles.sidebarNotif}>{checkoutRequests.length}</span>}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div style={styles.sidebarBottom}>
+           <div style={styles.operatorCard}>
+              <User size={16} color="#d3bfa2" />
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: '900' }}>MANAGER</div>
+                <div style={{ fontSize: '0.6rem', color: '#444' }}>SESSION ACTIVE</div>
+              </div>
+           </div>
+           <button onClick={handleLogout} style={styles.logoutBtn}>LOGOUT TERMINAL</button>
+        </div>
       </aside>
 
       <main style={styles.mainContent}>
         <header style={styles.topHeader}>
-          <h1 style={styles.pageTitle}>{activeTab === 'pending' ? 'INCOMING CUSTOMER ORDERS' : activeTab.toUpperCase()}</h1>
-          {activeTab === 'menu' && (
-             <div style={styles.searchWrapper}>
-                <Search size={18} style={styles.searchIcon} />
-                <input type="text" placeholder="Filter dishes..." style={styles.searchInput} onChange={(e) => setSearchQuery(e.target.value)} />
-             </div>
+          <h1 style={styles.pageTitle}>{activeTab.replace('_', ' ').toUpperCase()}</h1>
+          
+          {activeTab === 'pending' && (
+            <div style={styles.zoneControl}>
+              <button onClick={() => setOrderZone('all')} style={orderZone === 'all' ? styles.activeZoneBtn : styles.zoneBtn}>ALL</button>
+              <button onClick={() => setOrderZone('fresh')} style={orderZone === 'fresh' ? styles.activeZoneBtn : styles.zoneBtn}>FRESH</button>
+              <button onClick={() => setOrderZone('delayed')} style={orderZone === 'delayed' ? styles.activeZoneBtn : styles.zoneBtn}>DELAYED</button>
+            </div>
+          )}
+
+          {(activeTab === 'menu' || activeTab === 'insights') && (
+            <div style={styles.searchWrapper}>
+              <Search size={18} color="#222" />
+              <input type="text" placeholder="Search database..." style={styles.searchInput} onChange={(e) => setSearchQuery(e.target.value)} />
+            </div>
           )}
         </header>
 
         <section style={styles.scrollArea} className="custom-scroll">
-          <AnimatePresence mode='wait'>
-            {activeTab === 'marketing' ? (
-                <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{display:'flex', flexDirection:'column', gap:'30px', alignItems:'center'}}>
-                    <div style={styles.botCard}>
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginBottom:'20px'}}>
-                            <Sparkles size={24} color="#d3bfa2" />
-                            <h3 style={{margin:0}}>WhatsApp QR Link</h3>
+          <AnimatePresence mode="wait">
+            
+            {activeTab === 'pending' && (
+              <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.orderContainer}>
+                {filteredOrders.map(order => (
+                  <div key={order._id} style={styles.orderRow}>
+                     <div style={styles.tableCircle}>{order.tableNumber}</div>
+                     <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>TABLE {order.tableNumber}</div>
+                        <div style={{ color: '#d3bfa2', marginTop: '5px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                          {order.items.map(it => `${it.quantity}x ${it.name}`).join(' • ')}
                         </div>
-
-                        <div style={styles.pairingContainer}>
-                            {isBotReady ? ( 
-                                <div style={styles.statusBox}>
-                                  <div style={styles.pulseGreen} />
-                                  <span style={{color: '#00ff64', fontWeight: 'bold'}}>SYSTEM LIVE</span>
-                                  <button onClick={handleWhatsappLogout} style={{marginLeft: '20px', background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', display:'flex', alignItems:'center', gap:'5px', fontSize: '0.8rem'}}><RefreshCcw size={14}/> Reset</button>
-                                </div> 
-                            ) : qrCode ? (
-                                <div style={styles.qrDisplayWrapper}>
-                                    <div style={styles.qrBox}>
-                                        <QRCodeSVG value={qrCode} size={220} bgColor={"#000000"} fgColor={"#d3bfa2"} level={"H"} includeMargin={true} />
-                                    </div>
-                                    <div style={styles.instructionList}>
-                                        <p>1. Open WhatsApp on your business phone</p>
-                                        <p>2. Go to <b>Linked Devices</b> &gt; <b>Link a Device</b></p>
-                                        <p>3. Point your camera at this QR code to sync</p>
-                                    </div>
-                                    <button onClick={handleWhatsappLogout} style={{...styles.ghostBtn, marginTop: '20px', width: 'auto'}}>Try different account</button>
-                                </div>
-                            ) : ( 
-                                <div style={styles.pairingInputWrapper}>
-                                    <div className="spinner"></div>
-                                    <p style={{color: '#666', fontSize: '0.85rem'}}>Initializing secure WhatsApp connection for {tenantId}...</p>
-                                    <p style={{color: '#444', fontSize: '0.75rem', marginTop: '10px'}}>QR code will appear here shortly.</p>
-                                </div> 
-                            )}
-                        </div>
-                    </div>
-
-                    <div style={{...styles.botCard, border: '1px solid #d3bfa222', background: 'linear-gradient(145deg, #111, #0a0a0a)'}}>
-                        <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
-                            <SendHorizontal size={20} color="#d3bfa2" />
-                            <h3 style={{margin:0}}>Global Broadcast Center</h3>
-                        </div>
-                        
-                        <div style={{marginBottom: '20px', textAlign: 'left'}}>
-                            <label style={{fontSize: '0.7rem', color: '#666'}}>FEATURE A NEW DISH</label>
-                            <select value={selectedBroadcastItem} onChange={(e) => setSelectedBroadcastItem(e.target.value)} style={styles.broadcastSelect}>
-                                <option value="">Select...</option>
-                                {menuItems.map(item => (<option key={item._id} value={item._id}>{item.name}</option>))}
-                            </select>
-                        </div>
-
-                        <div style={{marginBottom: '20px', textAlign: 'left'}}>
-                            <label style={{fontSize: '0.7rem', color: '#666'}}>OR SEND CUSTOM ANNOUNCEMENT</label>
-                            <textarea 
-                                placeholder="Example: 20% discount tonight! or We are open for New Year's Eve!"
-                                style={{...styles.broadcastSelect, height: '80px', paddingTop: '10px'}}
-                                id="customBroadcastText"
-                            />
-                        </div>
-
-                        <button onClick={() => handleBroadcast(document.getElementById('customBroadcastText').value)} disabled={isBroadcasting} style={styles.mainBtn}>
-                            {isBroadcasting ? "SENDING..." : "LAUNCH BROADCAST TO ALL CUSTOMERS"}
-                        </button>
-                    </div>
-                </motion.div>
-            ) : activeTab === 'insights' ? (
-              <motion.div key="insights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
-                 <div style={styles.statsRow}>
-                   <div style={styles.glassStat}>
-                     <small>Monthly Revenue</small>
-                     <h2>₹{analytics.reduce((a, b) => a + (b.revenue || 0), 0).toLocaleString()}</h2>
-                   </div>
-                   <div style={styles.glassStat}>
-                     <small>Avg. Order Value</small>
-                     <h2>₹{analytics.length > 0 ? (analytics.reduce((a, b) => a + (b.revenue || 0), 0) / analytics.reduce((a, b) => a + (b.count || 1), 0)).toFixed(0) : 0}</h2>
-                   </div>
-                 </div>
-                 <div style={styles.heatmapHeader}><h3 style={{color: '#fff', margin: 0, textAlign: 'center'}}>Daily Performance Heatmap</h3></div>
-                 <div style={styles.heatmapGrid}>{renderDetailedHeatmap()}</div>
+                     </div>
+                     <OperatorLiveTimer createdAt={order.createdAt} />
+                  </div>
+                ))}
               </motion.div>
-            ) : activeTab === 'menu' ? (
-              <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.fullWidthGrid}>
-                {menuItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => {
-                    const hasPortions = !!item.priceHalf;
-                    return (
-                      <div key={item._id} style={{...styles.premiumCard, borderLeft: `4px solid ${item.isAvailable ? '#d3bfa2' : '#333'}`, opacity: item.isAvailable ? 1 : 0.5}}>
-                        <div style={styles.cardHeader}><h3 style={styles.itemName}>{item.name}</h3><div style={styles.itemPrice}>{hasPortions ? `H:₹${item.priceHalf} | F:₹${item.priceFull || item.price}` : `₹${item.price}`}</div></div>
-                        <div style={styles.cardFooter}>
-                          {!hasPortions ? (<button onClick={() => editPortionPrice(item, 'Single')} style={styles.ghostBtn}>Price</button>) : (<><button onClick={() => editPortionPrice(item, 'Half')} style={styles.ghostBtn}>Half</button><button onClick={() => editPortionPrice(item, 'Full')} style={styles.ghostBtn}>Full</button></>)}
-                          <button onClick={() => updateMenu(item._id, {isAvailable: !item.isAvailable})} style={item.isAvailable ? styles.toggleHideBtn : styles.toggleShowBtn}>{item.isAvailable ? "HIDE" : "SHOW"}</button>
-                        </div>
-                      </div>
-                    );
-                  })}
+            )}
+
+            {activeTab === 'menu' && (
+              <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.fullWidthGrid}>
+                {menuItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
+                  <div key={item._id} style={{...styles.premiumCard, opacity: item.isAvailable ? 1 : 0.4}}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900' }}>{item.name}</h3>
+                      <span style={{ color: '#d3bfa2', fontWeight: 'bold' }}>₹{item.price}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={() => {
+                        const np = prompt("Set Price:", item.price);
+                        if(np) updateMenu(item._id, { price: Number(np) });
+                      }} style={styles.ghostBtn}>PRICING</button>
+                      <button onClick={() => updateMenu(item._id, { isAvailable: !item.isAvailable })} 
+                        style={item.isAvailable ? styles.toggleHideBtn : styles.toggleShowBtn}>
+                        {item.isAvailable ? "VISIBILITY ON" : "VISIBILITY OFF"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </motion.div>
-            ) : activeTab === 'billing' ? (
-              <motion.div key="billing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{display:'flex', gap:'50px', width: '100%'}}>
-                <div style={{flex:1}}>
-                  <h3 style={{marginBottom: '20px', color: '#888'}}>Select Table</h3>
+            )}
+
+            {activeTab === 'billing' && (
+              <motion.div key="billing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', gap: '50px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={styles.specialModeRow}>
+                     <button onClick={() => generateBill('Takeaway')} style={selectedTable === 'Takeaway' ? styles.activeSpecBtn : styles.specBtn}>
+                        <ShoppingBag size={16} /> DIRECT TAKEAWAY
+                     </button>
+                     <button onClick={() => generateBill('Online')} style={selectedTable === 'Online' ? styles.activeSpecBtn : styles.specBtn}>
+                        <Truck size={16} /> ONLINE ORDERING
+                     </button>
+                  </div>
+                  <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
                   <div style={styles.tableGrid}>
                     {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
-                      const isReq = checkoutRequests.includes(n.toString());
+                      const id = n.toString();
+                      const isOcc = occupiedTables.includes(id);
+                      const hasReq = checkoutRequests.includes(id);
                       return (
-                        <button key={n} onClick={() => generateBill(n.toString())} 
-                           style={
-                             selectedTable === n.toString() ? styles.activeTableBtn : 
-                             (isReq ? styles.goldTableBtn : styles.tableBtn)
-                           }>
-                          Table {n} {isReq && <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }}><BellRing size={16} style={{marginTop: '5px'}}/></motion.div>}
+                        <button key={n} onClick={() => generateBill(id)} 
+                          style={selectedTable === id ? styles.activeTableBtn : (hasReq ? styles.goldTableBtn : (isOcc ? styles.occupiedTableBtn : styles.tableBtn))}>
+                          {hasReq && <BellRing size={16} style={styles.bellIcon} />}
+                          T{n}
+                          {isOcc && !hasReq && <div style={styles.occupiedDot} />}
                         </button>
                       );
                     })}
                   </div>
                 </div>
+
                 {tableBill && (
-                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} style={styles.receipt}>
-                    <div style={styles.receiptHeader}><img src={logoPath} alt="Logo" style={{width: '80px', filter: 'invert(1)'}} /><p style={{color:'#666', fontSize: '0.8rem', marginTop: '5px'}}>Jay Ambe Multi Fusion</p></div>
-                    <div style={styles.billMetaContainer}><div style={{color:'#000', fontSize: '0.85rem'}}><strong>Bill No: #{tableBill.billNo}</strong><br/><strong>Table: {selectedTable}</strong></div><div style={{color:'#666', fontSize: '0.75rem', textAlign: 'right'}}><span>{tableBill.date}</span><br/><span>{tableBill.time}</span></div></div>
-                    <div style={{minHeight: '200px', borderTop: '1px solid #eee', paddingTop: '15px'}}>{tableBill.items.map((it, i) => (<div key={i} style={styles.receiptRow}><span>{it.quantity}x {it.name} {it.portion !== 'Single' && <small>({it.portion})</small>}</span><span style={{fontWeight: '700'}}>₹{it.subtotal}</span></div>))}</div>
+                  <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={styles.receipt}>
+                    <div style={styles.receiptHeader}>
+                      <img src={logoPath} alt="Logo" style={{ width: '80px', filter: 'invert(1)' }} />
+                      <p style={{ margin: '10px 0 0', fontSize: '0.65rem', color: '#999', fontWeight: '900' }}>TXN: {tableBill.billNo}</p>
+                    </div>
                     
-                    <div style={styles.discountWrapper}>
-                        <div style={styles.receiptRow}>
-                            <span style={{display:'flex', alignItems:'center', gap:'5px'}}><Percent size={14} /> Applied Discount</span>
-                            <div style={{display:'flex', alignItems:'center'}}>
-                                <input type="number" value={discount} onChange={(e) => setDiscount(Math.min(100, Math.max(0, e.target.value)))} style={styles.discountInput} />
-                                <span style={{fontWeight:'700'}}>%</span>
-                            </div>
+                    <div style={styles.receiptBody}>
+                      {tableBill.items.map((it, i) => (
+                        <div key={i} style={styles.receiptRow}>
+                          <span>{it.quantity}x {it.name}</span>
+                          <b>₹{it.subtotal}</b>
                         </div>
+                      ))}
                     </div>
 
-                    <div style={{borderTop: '2px solid #000', paddingTop: '15px'}}>
-                        <h3 style={{color:'#000', display:'flex', justifyContent:'space-between', margin:0}}>
-                            Grand Total: 
-                            <span>₹{(tableBill.total - (tableBill.total * (discount/100))).toFixed(2)}</span>
-                        </h3>
+                    <div style={styles.discountArea}>
+                      <div style={styles.receiptRow}>
+                         <span style={{fontWeight:'900'}}>DISCOUNT</span>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                           <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} style={styles.discountInput} /> %
+                         </div>
+                      </div>
                     </div>
-                    <button onClick={settleBill} style={styles.settleBtn}>PAID & CLEAR</button>
+
+                    <div style={styles.totalArea}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.4rem', fontWeight: '900' }}>
+                        <span>TOTAL</span>
+                        <span>₹{(tableBill.total - (tableBill.total * (discount/100))).toFixed(0)}</span>
+                      </div>
+                    </div>
+
+                    <button onClick={settleBill} style={styles.settleBtn}>FINALIZE SETTLEMENT</button>
                   </motion.div>
                 )}
               </motion.div>
-            ) : (
-              <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.orderContainer}>
-                {orders.length === 0 ? (
-                  <div style={{textAlign: 'center', marginTop: '100px', opacity: 0.5}}>
-                    <CookingPot size={48} style={{marginBottom: '20px'}} />
-                    <p>No new orders right now.</p>
+            )}
+
+            {activeTab === 'marketing' && (
+              <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.marketingLayout}>
+                <div style={styles.botCard}>
+                  <div style={styles.cardHeaderSmall}><QrCode size={18} /> SYNC DEVICE</div>
+                  <div style={styles.qrContainer}>
+                    {isBotReady ? <div style={{color:'#d3bfa2', fontWeight:'900'}}>BRIDGE ACTIVE</div> : qrCode ? <QRCodeSVG value={qrCode} size={200} bgColor={"#000"} fgColor={"#d3bfa2"} /> : <div className="spinner" />}
                   </div>
-                ) : orders.map(order => (
-                    <motion.div layout initial={{opacity: 0}} animate={{opacity: 1}} key={order._id} style={styles.orderRow}>
-                      <div style={styles.orderInfo}>
-                        <div style={{...styles.tableCircle, background: '#222', color: '#d3bfa2'}}>{order.tableNumber}</div>
-                        <div>
-                          <h4 style={{margin:0}}>Table {order.tableNumber}</h4>
-                          <div style={{marginTop:'5px', color: '#d3bfa2'}}>
-                             {order.items.map(it => `${it.quantity}x ${it.name}`).join(', ')}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{color: '#d3bfa2', fontWeight: 'bold', fontSize: '0.8rem'}}>PENDING</div>
-                    </motion.div>
-                ))}
+                </div>
+                <div style={styles.botCard}>
+                   <div style={styles.cardHeaderSmall}><SendHorizontal size={18} /> BROADCAST</div>
+                   <textarea style={styles.input} value={broadcastText} onChange={e => setBroadcastMsg(e.target.value)} placeholder="Promo message..." />
+                   <button onClick={handleBroadcast} style={styles.mainBtn}>LAUNCH CAMPAIGN</button>
+                </div>
               </motion.div>
             )}
+
+            {activeTab === 'insights' && (
+              <motion.div key="insights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
+                <div style={styles.monthSelector}>
+                  <button onClick={() => changeMonth(-1)} style={styles.monthNav}><ChevronLeft size={20}/></button>
+                  <div style={styles.monthDisplay}>
+                    <Calendar size={18} color="#d3bfa2" />
+                    <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
+                  </div>
+                  <button onClick={() => changeMonth(1)} style={styles.monthNav}><ChevronRight size={20}/></button>
+                </div>
+
+                <div style={styles.statsRow}>
+                  <div style={styles.glassStat}><small style={styles.statLabel}>REVENUE</small><h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2></div>
+                  <div style={styles.glassStat}><small style={styles.statLabel}>AVG INVOICE</small><h2 style={styles.statVal}>₹{stats.avg}</h2></div>
+                  <div style={styles.glassStat}><small style={styles.statLabel}>REMOTE SALES</small><h2 style={styles.statVal}>₹{Number(stats.online).toLocaleString()}</h2></div>
+                </div>
+
+                <div style={styles.heatmapCard}>
+                   <div style={styles.calendarGridHeader}>{['S','M','T','W','T','F','S'].map(d=><div key={d} style={styles.dayHeader}>{d}</div>)}</div>
+                   <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
+                </div>
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </section>
       </main>
+
+      <AnimatePresence>
+        {confirmModal.show && (
+          <div style={styles.modalBackdrop}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={styles.confirmBox}>
+              <AlertTriangle size={24} color="#d3bfa2" style={{marginBottom:15}} />
+              <h3 style={{ color: '#fff', margin: '0 0 10px', fontSize: '1rem' }}>{confirmModal.title}</h3>
+              <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '30px' }}>{confirmModal.subtitle}</p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setConfirmModal({show:false})} style={styles.cancelBtn}>ABORT</button>
+                <button onClick={confirmModal.onConfirm} style={styles.confirmBtn}>PROCEED</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <style>{`
-        .custom-scroll::-webkit-scrollbar { width: 6px; } 
-        .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-        .heat-square:hover .tooltip { visibility: visible; opacity: 1; transform: translateY(-5px); }
-        .spinner { border: 4px solid rgba(211, 191, 162, 0.1); border-top: 4px solid #d3bfa2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; } 
+        .custom-scroll::-webkit-scrollbar-thumb { background: #151515; border-radius: 10px; }
+        .heat-square:hover .tooltip { visibility: visible; opacity: 1; transform: translateY(-8px); }
+        .spinner { border: 3px solid #111; border-top: 3px solid #d3bfa2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}</style>
     </div>
@@ -523,75 +562,88 @@ const OperatorPortal = () => {
 };
 
 const styles = {
-  broadcastSelect: { width: '100%', padding: '15px', background: '#0a0a0a', border: '1px solid #333', borderRadius: '12px', color: '#fff', marginBottom: '10px', outline: 'none' },
-  dashboard: { display: 'flex', width: '100vw', height: '100vh', background: '#0a0a0a', color: '#fff', position: 'fixed', top: 0, left: 0, overflow: 'hidden' },
-  sidebar: { width: '280px', height: '100vh', background: '#0d0d0d', padding: '40px 24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRight: '1px solid #1a1a1a' },
-  logoWrapper: { marginBottom: '48px', paddingLeft: '12px' },
-  sidebarLogo: { width: '150px' },
-  navStack: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  navBtn: { position: 'relative', display: 'flex', alignItems: 'center', padding: '14px 16px', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', borderRadius: '12px', fontWeight: '600', fontSize: '0.9rem' },
-  activeTab: { position: 'relative', display: 'flex', alignItems: 'center', padding: '14px 16px', background: 'transparent', border: 'none', color: '#d3bfa2', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' },
-  activeBackground: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(211, 191, 162, 0.08)', borderRadius: '12px', zIndex: 1, border: '1px solid rgba(211, 191, 162, 0.1)' },
-  sidebarNotif: { position: 'absolute', right: '15px', background: '#d3bfa2', color: '#000', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.65rem', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '900', zIndex: 5 },
-  logoutBtn: { display: 'flex', alignItems: 'center', padding: '14px 16px', background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', transition: '0.2s', borderTop: '1px solid #1a1a1a', paddingTop: '24px' },
-  mainContent: { flex: 1, display: 'flex', flexDirection: 'column', background: '#0a0a0a' },
-  topHeader: { padding: '30px 40px', background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  pageTitle: { margin: 0, fontSize: '1.6rem', fontWeight: '800', letterSpacing: '-0.5px' },
-  searchWrapper: { position: 'relative', display: 'flex', alignItems: 'center' },
-  searchIcon: { position: 'absolute', left: '15px', color: '#444' },
-  searchInput: { padding: '12px 20px 12px 45px', background: '#161616', border: '1px solid #222', borderRadius: '12px', color: '#fff', width: '300px', outline: 'none' },
-  scrollArea: { flex: 1, padding: '40px', overflowY: 'auto' },
-  insightsWrapper: { maxWidth: '900px' },
-  statsRow: { display: 'flex', gap: '20px', marginBottom: '30px' },
-  glassStat: { flex: 1, padding: '25px', background: '#111', borderRadius: '20px', border: '1px solid #1a1a1a' },
-  heatmapHeader: { marginBottom: '20px', background: '#111', padding: '15px', borderRadius: '12px', border: '1px solid #1a1a1a' },
-  heatmapGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px' },
-  heatSquare: { height: '60px', borderRadius: '8px', position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  tooltip: { position: 'absolute', bottom: '110%', background: '#fff', color: '#000', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', visibility: 'hidden', opacity: 0, transition: '0.3s', zIndex: 10, whiteSpace: 'nowrap' },
+  dashboard: { display: 'flex', width: '100vw', height: '100vh', background: '#050505', color: '#fff', position: 'fixed', top: 0, left: 0, fontFamily: "'Inter', sans-serif" },
+  sidebar: { width: '280px', background: '#080808', display: 'flex', flexDirection: 'column', borderRight: '1px solid #151515' },
+  sidebarTop: { padding: '40px 25px', flex: 1 },
+  logoWrapper: { marginBottom: '50px', paddingLeft: '10px' },
+  sidebarLogo: { width: '140px', filter: 'brightness(1.5)' },
+  navStack: { display: 'flex', flexDirection: 'column', gap: '10px' },
+  navBtn: { padding: '16px 20px', background: 'transparent', border: 'none', color: '#444', textAlign: 'left', cursor: 'pointer', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.8rem', display: 'flex', alignItems: 'center', transition: '0.3s' },
+  activeTab: { padding: '16px 20px', background: '#111', border: '1px solid #222', color: '#d3bfa2', textAlign: 'left', borderRadius: '12px', fontWeight: '900', fontSize: '0.8rem', display: 'flex', alignItems: 'center' },
+  sidebarNotif: { marginLeft: 'auto', background: '#d3bfa2', color: '#000', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '50%', fontWeight: 'bold' },
+  sidebarBottom: { padding: '25px', borderTop: '1px solid #151515' },
+  operatorCard: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '15px', background: '#0d0d0d', borderRadius: '12px', border: '1px solid #1a1a1a' },
+  logoutBtn: { padding: '15px', width: '100%', background: 'transparent', border: '1px solid #222', color: '#333', borderRadius: '10px', fontSize: '0.7rem', fontWeight: '900', cursor: 'pointer' },
+  mainContent: { flex: 1, display: 'flex', flexDirection: 'column' },
+  topHeader: { height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 50px', background: '#080808', borderBottom: '1px solid #151515' },
+  pageTitle: { fontSize: '1.2rem', fontWeight: '900', letterSpacing: '1px' },
+  zoneControl: { display: 'flex', gap: '10px', background: '#000', padding: '5px', borderRadius: '12px', border: '1px solid #1a1a1a' },
+  zoneBtn: { padding: '8px 18px', background: 'transparent', border: 'none', color: '#333', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' },
+  activeZoneBtn: { padding: '8px 18px', background: '#d3bfa215', border: 'none', color: '#d3bfa2', fontSize: '0.7rem', fontWeight: '900', borderRadius: '8px' },
+  searchWrapper: { position: 'relative', background: '#0d0d0d', padding: '10px 20px', borderRadius: '30px', border: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: '10px' },
+  searchInput: { background: 'transparent', border: 'none', color: '#fff', outline: 'none', width: '220px', fontSize: '0.8rem' },
+  scrollArea: { flex: 1, padding: '40px 50px', overflowY: 'auto' },
+  orderRow: { display: 'flex', alignItems: 'center', gap: '25px', background: '#0d0d0d', padding: '25px', borderRadius: '20px', border: '1px solid #1a1a1a', marginBottom: '15px' },
+  tableCircle: { width: '45px', height: '45px', background: '#111', borderRadius: '12px', border: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d3bfa2', fontSize: '1.1rem', fontWeight: '900' },
+  tableGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' },
+  tableBtn: { padding: '30px', background: '#0d0d0d', border: '1px solid #151515', color: '#222', borderRadius: '15px', fontWeight: '900', cursor: 'pointer', position: 'relative' },
+  occupiedTableBtn: { padding: '30px', background: '#111', border: '1px solid #8a704d', color: '#8a704d', borderRadius: '15px', fontWeight: '900', position: 'relative' },
+  activeTableBtn: { padding: '30px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '15px', fontWeight: '900' },
+  goldTableBtn: { padding: '30px', background: '#d3bfa211', border: '1px solid #d4af37', color: '#d4af37', borderRadius: '15px', fontWeight: '900' },
+  occupiedDot: { position: 'absolute', top: '10px', right: '10px', width: '6px', height: '6px', background: '#8a704d', borderRadius: '50%' },
+  specialModeRow: { display: 'flex', gap: '15px', marginBottom: '30px' },
+  specBtn: { flex: 1, padding: '18px', background: '#0d0d0d', border: '1px solid #1a1a1a', color: '#333', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem', cursor: 'pointer' },
+  activeSpecBtn: { flex: 1, padding: '18px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem' },
+  receipt: { width: '450px', background: '#fff', color: '#000', padding: '50px', borderRadius: '2px', boxShadow: '0 30px 90px rgba(0,0,0,0.6)' },
+  receiptHeader: { borderBottom: '2px solid #000', paddingBottom: '30px', marginBottom: '30px', textAlign: 'center' },
+  receiptBody: { minHeight: '150px', borderBottom: '1px solid #eee', paddingBottom: '20px' },
+  receiptRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '0.9rem' },
+  discountArea: { padding: '25px 0', borderBottom: '1px solid #eee' },
+  discountInput: { width: '50px', padding: '8px', border: '1px solid #ddd', textAlign: 'center', borderRadius: '4px', fontWeight: 'bold' },
+  totalArea: { padding: '30px 0' },
+  settleBtn: { width: '100%', padding: '20px', background: '#000', color: '#fff', border: 'none', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer' },
+  insightsWrapper: { maxWidth: '1000px', margin: '0 auto' },
+  monthSelector: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '40px', marginBottom: '50px' },
+  monthNav: { background: '#111', border: '1px solid #222', color: '#fff', padding: '12px', borderRadius: '50%', cursor: 'pointer' },
+  monthDisplay: { display: 'flex', alignItems: 'center', gap: '15px', background: '#0d0d0d', padding: '15px 35px', borderRadius: '40px', border: '1px solid #1a1a1a' },
+  statsRow: { display: 'flex', gap: '20px', marginBottom: '40px' },
+  glassStat: { flex: 1, padding: '30px', background: '#0d0d0d', borderRadius: '24px', border: '1px solid #1a1a1a' },
+  statLabel: { color: '#333', fontWeight: 'bold', fontSize: '0.65rem' },
+  statVal: { fontSize: '2rem', fontWeight: '900', margin: '8px 0 0' },
+  heatmapCard: { background: '#080808', padding: '40px', borderRadius: '30px', border: '1px solid #1a1a1a' },
+  calendarGridHeader: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', marginBottom: '25px' },
+  dayHeader: { fontSize: '0.6rem', fontWeight: '900', color: '#222', letterSpacing: '1px' },
+  calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px' },
+  heatSquare: { height: '70px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer', transition: '0.2s' },
+  heatSquareEmpty: { height: '70px' },
+  tooltip: { position: 'absolute', bottom: '115%', background: '#fff', color: '#000', padding: '8px 12px', borderRadius: '6px', fontSize: '0.7rem', visibility: 'hidden', opacity: 0, transition: '0.3s', zIndex: 100 },
+  heatmapLegend: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '40px', fontSize: '0.6rem', fontWeight: 'bold' },
+  marketingLayout: { display: 'flex', gap: '30px', justifyContent: 'center' },
+  botCard: { background: '#0d0d0d', padding: '40px', borderRadius: '30px', border: '1px solid #1a1a1a', width: '100%', maxWidth: '450px', textAlign: 'center' },
+  qrContainer: { marginTop: '30px', padding: '30px', background: '#fff', borderRadius: '20px', display: 'inline-block' },
+  loginOverlay: { width: '100vw', height: '100vh', background: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center' },
+  loginBox: { width: '450px', background: '#080808', padding: '60px', borderRadius: '40px', textAlign: 'center', border: '1px solid #1a1a1a' },
+  label: { fontSize: '0.65rem', color: '#333', fontWeight: 'bold', display: 'block', marginBottom: '8px', marginLeft: '5px' },
+  input: { width: '100%', padding: '18px', background: '#0d0d0d', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '14px', marginBottom: '20px', fontSize: '0.85rem', outline: 'none' },
+  mainBtn: { width: '100%', padding: '20px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '14px', fontWeight: '900', cursor: 'pointer' },
+  toast: { position: 'fixed', bottom: '40px', right: '40px', background: '#111', padding: '18px 30px', borderRadius: '16px', border: '1px solid #222', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 1000, fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2' },
+  modalBackdrop: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  confirmBox: { width: '380px', background: '#0d0d0d', padding: '50px', borderRadius: '35px', textAlign: 'center', border: '1px solid #1a1a1a' },
+  iconCircle: { width: '60px', height: '60px', background: '#d3bfa210', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' },
+  confirmBtn: { flex: 1, padding: '18px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '900', cursor: 'pointer' },
+  cancelBtn: { flex: 1, padding: '18px', background: '#111', color: '#444', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
+  premiumCard: { background: '#0d0d0d', padding: '30px', borderRadius: '24px', border: '1px solid #1a1a1a' },
+  ghostBtn: { flex: 1, padding: '12px', background: 'transparent', border: '1px solid #222', color: '#444', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 'bold' },
+  toggleShowBtn: { flex: 1, padding: '12px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '900', fontSize: '0.7rem' },
+  toggleHideBtn: { flex: 1, padding: '12px', background: '#1a1a1a', color: '#333', border: 'none', borderRadius: '10px', fontWeight: '900', fontSize: '0.7rem' },
   fullWidthGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '25px' },
-  premiumCard: { background: '#111', borderRadius: '16px', padding: '25px', border: '1px solid #1a1a1a' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between' },
-  itemName: { margin: 0, fontSize: '1.1rem' },
-  itemPrice: { color: '#d3bfa2', fontWeight: 'bold' },
-  cardFooter: { display: 'flex', gap: '10px' },
-  ghostBtn: { flex: 1, padding: '10px', background: 'transparent', border: '1px solid #333', color: '#fff', borderRadius: '8px', fontSize: '0.75rem' },
-  toggleHideBtn: { flex: 1, padding: '10px', background: '#333', color: '#fff', borderRadius: '8px', fontWeight: 'bold' },
-  toggleShowBtn: { flex: 1, padding: '10px', background: '#d3bfa2', color: '#000', borderRadius: '8px', fontWeight: 'bold' },
-  orderRow: { background: '#111', padding: '20px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', border: '1px solid #1a1a1a' },
-  tableCircle: { width: '45px', height: '45px', borderRadius: '12px', background: '#222', color: '#d3bfa2', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '900', marginRight: '20px' },
-  orderInfo: { display: 'flex', alignItems: 'center' },
-  tableGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' },
-  tableBtn: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px' },
-  activeTableBtn: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', background: '#d3bfa2', color: '#000', fontWeight: 'bold', borderRadius: '12px', border: 'none' },
-  goldTableBtn: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', background: '#111', border: '2px solid #d3bfa2', color: '#d3bfa2', borderRadius: '12px', boxShadow: '0 0 15px rgba(211,191,162,0.3)' },
-  receipt: { width: '380px', background: '#fff', color: '#000', padding: '40px', borderRadius: '4px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', height: 'fit-content' },
-  receiptHeader: { borderBottom: '2px dashed #ccc', paddingBottom: '10px', marginBottom: '15px', textAlign:'center' },
-  billMetaContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' },
-  receiptRow: { display: 'flex', justifyContent: 'space-between', color:'#333', marginBottom:'10px', fontSize: '0.95rem' },
-  discountWrapper: { borderTop: '1px solid #eee', padding: '15px 0', margin: '15px 0' },
-  discountInput: { width: '50px', textAlign: 'center', border: '1px solid #ddd', borderRadius: '4px', marginLeft: '5px', fontWeight: '700' },
-  settleBtn: { width: '100%', marginTop: '30px', padding: '18px', background: '#000', color: '#fff', fontWeight: '900', borderRadius: '8px', border: 'none' },
-  loginOverlay: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' },
-  loginBox: { background: '#0d0d0d', padding: '50px', borderRadius: '30px', border: '1px solid #1a1a1a', width: '420px', textAlign: 'center' },
-  loginLogo: { width: '130px', marginBottom: '20px' },
-  loginTitle: { margin: '10px 0 30px', fontSize: '2rem', color: '#fff' },
-  input: { width: '100%', padding: '15px', marginBottom: '15px', background: '#0a0a0a', border: '1px solid #222', borderRadius: '12px', color: '#fff', outline: 'none' },
-  mainBtn: { width: '100%', padding: '16px', background: '#d3bfa2', color: '#000', fontWeight: '900', borderRadius: '12px', border: 'none', cursor: 'pointer' },
-  botCard: { background: '#111', padding: '40px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center', maxWidth: '600px', width: '100%' },
-  statusBox: { display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,255,100,0.05)', padding: '20px 40px', borderRadius: '50px', border: '1px solid rgba(0,255,100,0.2)', justifyContent: 'center' },
-  pulseGreen: { width: '12px', height: '12px', background: '#00ff64', borderRadius: '50%', boxShadow: '0 0 15px #00ff64' },
-  toast: { position: 'fixed', bottom: '30px', right: '30px', background: '#1a1a1a', border: '1px solid #333', padding: '15px 25px', borderRadius: '12px', zIndex: 10000, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: '600' },
-  modalBackdrop: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.85)', zIndex: 11000, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(4px)' },
-  confirmBox: { background: '#111', padding: '32px', borderRadius: '24px', width: '380px', textAlign: 'center', border: '1px solid #222', boxShadow: '0 30px 60px rgba(0,0,0,0.6)' },
-  iconCircle: { width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(211, 191, 162, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' },
-  cancelBtn: { flex: 1, padding: '14px', background: '#222', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600' },
-  confirmBtn: { flex: 1, padding: '14px', background: '#d3bfa2', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800' },
-  
-  pairingContainer: { minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%' },
-  qrDisplayWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-  qrBox: { padding: '20px', background: '#fff', borderRadius: '20px', boxShadow: '0 10px 30px rgba(211,191,162,0.2)', marginBottom: '25px' },
-  instructionList: { textAlign: 'left', color: '#888', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #222', paddingTop: '20px', width: '100%' },
-  pairingInputWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }
+  emptyState: { textAlign: 'center', marginTop: '100px', opacity: 0.1, letterSpacing: '2px' },
+  gridLabel: { color: '#222', fontSize: '0.7rem', fontWeight: '900', marginBottom: '20px', letterSpacing: '1.5px' },
+  bellIcon: { marginRight: '8px', color: '#d4af37' },
+  specialModeRow: { display: 'flex', gap: '15px', marginBottom: '30px' },
+  specBtn: { flex: 1, padding: '18px', background: '#0d0d0d', border: '1px solid #1a1a1a', color: '#333', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem', cursor: 'pointer' },
+  activeSpecBtn: { flex: 1, padding: '18px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem' },
+  orderContainer: { maxWidth: '800px', margin: '0 auto' }
 };
 
 export default OperatorPortal;
