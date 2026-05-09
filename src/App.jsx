@@ -192,25 +192,41 @@ const PratyekshaPremiumMenu = () => {
     if (direction === 'left' && currentIndex < categories.length - 1) setSelectedCategoryId(categories[currentIndex + 1]);
     else if (direction === 'right' && currentIndex > 0) setSelectedCategoryId(categories[currentIndex - 1]);
   };
+const notifyWaiter = async (serviceType = "Custom") => {
+  try {
+    // 1. Check if it's a count-based request (summary)
+    const activeCounts = Object.entries(waiterCounts).filter(([_, count]) => count > 0);
+    
+    let finalRequest = serviceType;
 
-  const notifyWaiter = async (serviceType = "Custom") => {
-    try {
-      const summary = Object.entries(waiterCounts)
-        .filter(([_, count]) => count > 0)
+    // 2. If it's the "Custom/Send Request" button, generate summary from counts
+    if (serviceType === "Custom") {
+      if (activeCounts.length === 0) return; // Don't send empty requests
+      finalRequest = activeCounts
         .map(([item, count]) => `${t.en[item]}: ${count}`)
         .join(", ");
-      
-      const payload = { 
-        tenantId, tableNumber, 
-        serviceRequest: serviceType === "Custom" ? summary : serviceType, 
-        timestamp: new Date().toISOString() 
-      };
-      await axios.post(`${BASE_URL}/waiter-requests`, payload);
-      triggerAlert("waiterSuccess");
-      setIsWaiterModalOpen(false);
-      setWaiterCounts({ spoon: 0, fork: 0, tissue: 0, plates: 0, water: 0 });
-    } catch (error) { triggerAlert("orderError", "error"); }
-  };
+    }
+
+    const payload = { 
+      tenantId, 
+      tableNumber, 
+      serviceRequest: finalRequest, 
+      timestamp: new Date().toISOString() 
+    };
+
+    // 🚀 IMPORTANT: Ensure this URL matches your backend route exactly
+    await axios.post(`${BASE_URL}/waiter-requests`, payload);
+    
+    triggerAlert("waiterSuccess");
+    setIsWaiterModalOpen(false);
+    
+    // Reset counts for next time
+    setWaiterCounts({ spoon: 0, fork: 0, tissue: 0, plates: 0, water: 0 });
+  } catch (error) { 
+    console.error("Waiter Request Error:", error);
+    triggerAlert("orderError", "error"); 
+  }
+};
 
   const updateWaiterCount = (item, delta) => {
     setWaiterCounts(prev => ({ ...prev, [item]: Math.max(0, prev[item] + delta) }));
@@ -370,38 +386,77 @@ const PratyekshaPremiumMenu = () => {
                 <div style={styles.tagContainer}>
                   {item.isChefSpecial === true && <div style={styles.chefTag}><Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}</div>}
                 </div>
-                <div style={styles.itemContentLeft}>
-                  <p style={{fontSize: '1.05rem', fontWeight: '700', color: '#fff'}}>{language === 'mr' ? item.name_mr : item.name}</p>
-                  <div style={{ marginTop: '4px' }}>
-                    <span style={{ fontSize: '0.6rem', color: primaryColor, fontWeight: '800', textTransform: 'uppercase' }}>{t[language].ingredients}: </span>
-                    <span style={styles.itemDesc}>{language === 'mr' ? (item.ingredients?.mr ? item.ingredients.mr.join(', ') : "") : (item.ingredients?.en ? item.ingredients.en.join(', ') : "")}</span>
-                  </div>
-                  <div style={styles.priceContainer}>
-                    {!item.priceHalf ? (
-                      <div style={styles.priceRow}>
-                        <div style={{fontSize: '1.1rem', fontWeight: '800', color: primaryColor}}>₹{language === 'mr' ? item.price_mr : (item.priceFull || item.price)}</div>
-                        {cart[item._id] ? (
-                          <div style={styles.counterRowSmall}>
-                            <button onClick={() => removeFromCart(item._id)} style={styles.qtyBtnSmall}>-</button>
-                            <span style={{fontSize: '0.8rem'}}>{convertToMrNumber(cart[item._id])}</span>
-                            <button onClick={() => addToCart(item, 'Single')} style={styles.qtyBtnSmall}>+</button>
-                          </div>
-                        ) : ( <button onClick={() => addToCart(item, 'Single')} style={styles.addBtnSmall}>{t[language].add}</button> )}
-                      </div>
-                    ) : (
-                      <>
-                        <div style={styles.priceRow}>
-                          <span style={styles.priceLabel}>{t[language].half}: <span style={{color: primaryColor}}>₹{language === 'mr' ? item.priceHalf_mr : convertToMrNumber(item.priceHalf)}</span></span>
-                          {cart[`${item._id}-Half`] ? ( <div style={styles.counterRowSmall}><button onClick={() => removeFromCart(`${item._id}-Half`)} style={styles.qtyBtnSmall}>-</button><span>{convertToMrNumber(cart[`${item._id}-Half`])}</span><button onClick={() => addToCart(item, 'Half')} style={styles.qtyBtnSmall}>+</button></div> ) : ( <button onClick={() => addToCart(item, 'Half')} style={styles.addBtnSmall}>{t[language].addHalf}</button> )}
-                        </div>
-                        <div style={styles.priceRow}>
-                          <span style={styles.priceLabel}>{t[language].full}: <span style={{color: primaryColor}}>₹{language === 'mr' ? item.priceFull_mr : convertToMrNumber(item.priceFull || item.price)}</span></span>
-                          {cart[`${item._id}-Full`] ? ( <div style={styles.counterRowSmall}><button onClick={() => removeFromCart(`${item._id}-Full`)} style={styles.qtyBtnSmall}>-</button><span>{convertToMrNumber(cart[`${item._id}-Full`])}</span><button onClick={() => addToCart(item, 'Full')} style={styles.qtyBtnSmall}>+</button></div> ) : ( <button onClick={() => addToCart(item, 'Full')} style={styles.addBtnSmall}>{t[language].addFull}</button> )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
+<div style={styles.itemContentLeft}>
+  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff' }}>
+    {language === 'mr' ? item.name_mr : item.name}
+  </p>
+  
+  {/* Corrected Ingredients Logic */}
+  <div style={{ marginTop: '4px' }}>
+    <span style={{ fontSize: '0.6rem', color: primaryColor, fontWeight: '800', textTransform: 'uppercase' }}>
+      {t[language].ingredients}: 
+    </span>
+    <span style={styles.itemDesc}>
+      {language === 'mr' 
+        ? (item.ingredients?.mr ? item.ingredients.mr.join(', ') : "") 
+        : (item.ingredients?.en ? item.ingredients.en.join(', ') : "")}
+    </span>
+  </div>
+
+  <div style={styles.priceContainer}>
+    {!item.priceHalf ? (
+      <div style={styles.priceRow}>
+        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: primaryColor }}>
+          ₹{language === 'mr' ? (item.price_mr || convertToMrNumber(item.price)) : (item.priceFull || item.price)}
+        </div>
+        {cart[item._id] ? (
+          <div style={styles.counterRowSmall}>
+            <button onClick={() => removeFromCart(item._id)} style={styles.qtyBtnSmall}>-</button>
+            <span style={{ fontSize: '0.8rem' }}>{convertToMrNumber(cart[item._id])}</span>
+            <button onClick={() => addToCart(item, 'Single')} style={styles.qtyBtnSmall}>+</button>
+          </div>
+        ) : (
+          <button onClick={() => addToCart(item, 'Single')} style={styles.addBtnSmall}>{t[language].add}</button>
+        )}
+      </div>
+    ) : (
+      <>
+        <div style={styles.priceRow}>
+          <span style={styles.priceLabel}>
+            {t[language].half}: <span style={{ color: primaryColor }}>
+              ₹{language === 'mr' ? (item.price_mr?.split('/')[0] || convertToMrNumber(item.priceHalf)) : convertToMrNumber(item.priceHalf)}
+            </span>
+          </span>
+          {cart[`${item._id}-Half`] ? (
+            <div style={styles.counterRowSmall}>
+              <button onClick={() => removeFromCart(`${item._id}-Half`)} style={styles.qtyBtnSmall}>-</button>
+              <span>{convertToMrNumber(cart[`${item._id}-Half`])}</span>
+              <button onClick={() => addToCart(item, 'Half')} style={styles.qtyBtnSmall}>+</button>
+            </div>
+          ) : (
+            <button onClick={() => addToCart(item, 'Half')} style={styles.addBtnSmall}>{t[language].addHalf}</button>
+          )}
+        </div>
+        <div style={styles.priceRow}>
+          <span style={styles.priceLabel}>
+            {t[language].full}: <span style={{ color: primaryColor }}>
+              ₹{language === 'mr' ? (item.price_mr?.split('/')[1] || convertToMrNumber(item.priceFull || item.price)) : convertToMrNumber(item.priceFull || item.price)}
+            </span>
+          </span>
+          {cart[`${item._id}-Full`] ? (
+            <div style={styles.counterRowSmall}>
+              <button onClick={() => removeFromCart(`${item._id}-Full`)} style={styles.qtyBtnSmall}>-</button>
+              <span>{convertToMrNumber(cart[`${item._id}-Full`])}</span>
+              <button onClick={() => addToCart(item, 'Full')} style={styles.qtyBtnSmall}>+</button>
+            </div>
+          ) : (
+            <button onClick={() => addToCart(item, 'Full')} style={styles.addBtnSmall}>{t[language].addFull}</button>
+          )}
+        </div>
+      </>
+    )}
+  </div>
+               </div>
                 <button style={{...styles.view3dBtn, background: primaryColor}} onClick={() => setActiveModel(item)}>{t[language].view3d}</button>
               </div>
             ))}
