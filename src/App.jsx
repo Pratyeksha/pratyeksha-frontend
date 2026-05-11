@@ -192,40 +192,38 @@ const PratyekshaPremiumMenu = () => {
   };
 const notifyWaiter = async (serviceType = "Custom") => {
   try {
-    // 1. Check if it's a count-based request (summary)
-    const activeCounts = Object.entries(waiterCounts).filter(([_, count]) => count > 0);
-    
-    let finalRequest = serviceType;
+    let requestText = serviceType;
 
-    // 2. If it's the "Custom/Send Request" button, generate summary from counts
     if (serviceType === "Custom") {
-      if (activeCounts.length === 0) return; // Don't send empty requests
-      finalRequest = activeCounts
-        .map(([item, count]) => `${t.en[item]}: ${count}`)
+      const activeCounts = Object.entries(waiterCounts).filter(([_, count]) => count > 0);
+      
+      if (activeCounts.length === 0) return; 
+
+      // This creates the string: "Spoons: 2, Water Bottle: 1"
+      requestText = activeCounts
+        .map(([item, count]) => `${t[language][item] || item}: ${count}`)
         .join(", ");
     }
 
     const payload = { 
-      tenantId, 
-      tableNumber, 
-      serviceRequest: finalRequest, 
-      timestamp: new Date().toISOString() 
+      tenantId: tenantId, 
+      tableNumber: tableNumber, 
+      serviceRequest: requestText // 🚀 FIXED: Must match backend schema key 'serviceRequest'
     };
 
-    // 🚀 IMPORTANT: Ensure this URL matches your backend route exactly
+    // Use BASE_URL from your file
     await axios.post(`${BASE_URL}/waiter-requests`, payload);
     
     triggerAlert("waiterSuccess");
     setIsWaiterModalOpen(false);
     
-    // Reset counts for next time
+    // Reset counts (Tissue removed as per your request)
     setWaiterCounts({ spoon: 0, fork: 0, plates: 0, water: 0 });
   } catch (error) { 
-    console.error("Waiter Request Error:", error);
+    console.error("Waiter Request Error:", error.response?.data || error.message);
     triggerAlert("orderError", "error"); 
   }
 };
-
   const updateWaiterCount = (item, delta) => {
     setWaiterCounts(prev => ({ ...prev, [item]: Math.max(0, prev[item] + delta) }));
   };

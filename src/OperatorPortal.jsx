@@ -318,6 +318,14 @@ const OperatorPortal = () => {
     </div>
   );
 
+  const completeWaiterRequest = async (requestId) => {
+  try {
+    await axios.patch(`${BASE_URL}/admin/waiter-requests/${requestId}/complete`);
+    setWaiterRequests(prev => prev.filter(r => r._id !== requestId));
+    showNotif("Request Cleared");
+  } catch (err) { showNotif("Error", "error"); }
+};
+
   return (
     <div style={styles.dashboard}>
       <AnimatePresence>
