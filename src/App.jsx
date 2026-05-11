@@ -30,7 +30,7 @@ const PratyekshaPremiumMenu = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
-  const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, tissue: 0, plates: 0, water: 0 });
+  const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, water: 0 });
   
   const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
@@ -83,7 +83,6 @@ const PratyekshaPremiumMenu = () => {
       waiterSuccess: "Request sent to staff!",
       spoon: "Spoons",
       fork: "Forks",
-      tissue: "Tissues",
       plates: "Empty Plates",
       water: "Water Bottle",
       clean: "Clean Table",
@@ -135,7 +134,6 @@ const PratyekshaPremiumMenu = () => {
       waiterSuccess: "सूचना पाठवण्यात आली आहे!",
       spoon: "चमचे",
       fork: "काटा चमचे",
-      tissue: "टिश्यू",
       plates: "रिकाम्या प्लेट्स",
       water: "पाण्याची बाटली",
       clean: "टेबल साफ करा",
@@ -221,7 +219,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
     setIsWaiterModalOpen(false);
     
     // Reset counts for next time
-    setWaiterCounts({ spoon: 0, fork: 0, tissue: 0, plates: 0, water: 0 });
+    setWaiterCounts({ spoon: 0, fork: 0, plates: 0, water: 0 });
   } catch (error) { 
     console.error("Waiter Request Error:", error);
     triggerAlert("orderError", "error"); 
@@ -487,9 +485,9 @@ const notifyWaiter = async (serviceType = "Custom") => {
             </div>
             <div style={styles.modalScrollBody}>
               <div style={styles.waiterCardGrid}>
-                {['spoon', 'fork', 'tissue', 'plates', 'water'].map(id => (
+                {['spoon', 'fork',  'plates', 'water'].map(id => (
                   <div key={id} style={styles.waiterCountCard}>
-                    <div style={{ color: primaryColor }}>{id === 'spoon' || id === 'fork' ? <Utensils size={22}/> : id === 'tissue' ? <StickyNote size={22}/> : id === 'plates' ? <HelpCircle size={22}/> : <Droplets size={22}/>}</div>
+                    <div style={{ color: primaryColor }}>{id === 'spoon' || id === 'fork'  ? <StickyNote size={22}/> : id === 'plates' ? <HelpCircle size={22}/> : <Droplets size={22}/>}</div>
                     <p style={styles.waiterLabel}>{t[language][id]}</p>
                     <div style={styles.countControls}>
                       <button style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={16}/></button>
