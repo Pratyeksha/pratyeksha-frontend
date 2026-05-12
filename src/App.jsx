@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
-  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight
+  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -483,10 +483,16 @@ const notifyWaiter = async (serviceType = "Custom") => {
             </div>
             <div style={styles.modalScrollBody}>
               <div style={styles.waiterCardGrid}>
-                {['spoon', 'fork',  'plates', 'water'].map(id => (
-                  <div key={id} style={styles.waiterCountCard}>
-                    <div style={{ color: primaryColor }}>{id === 'spoon' || id === 'fork'  ? <StickyNote size={22}/> : id === 'plates' ? <HelpCircle size={22}/> : <Droplets size={22}/>}</div>
-                    <p style={styles.waiterLabel}>{t[language][id]}</p>
+              {['spoon', 'fork', 'plates', 'water'].map(id => (
+  <div key={id} style={styles.waiterCountCard}>
+    <div style={{ color: primaryColor }}>
+      {/* UPDATED ICON LOGIC */}
+      {id === 'spoon' && <Utensils size={24} />}
+      {id === 'fork' && <UtensilsCrossed size={24} />}
+      {id === 'plates' && <Layers size={24} />}
+      {id === 'water' && <Droplets size={24} />}
+    </div>
+    <p style={styles.waiterLabel}>{t[language][id]}</p>
                     <div style={styles.countControls}>
                       <button style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={16}/></button>
                       <span style={styles.countDisplay}>{convertToMrNumber(waiterCounts[id])}</span>
