@@ -70,6 +70,8 @@ const OperatorPortal = () => {
   const [tableBill, setTableBill] = useState(null);
   const [discount, setDiscount] = useState(0); 
 
+  const [waiterRequests, setWaiterRequests] = useState([]);
+
   // 💬 MARKETING HUB STATE
   const [qrCode, setQrCode] = useState(null);
   const [isBotReady, setIsBotReady] = useState(false);
@@ -120,16 +122,18 @@ const OperatorPortal = () => {
   }, [currentMonthAnalytics]);
 
   // 📡 DATA FETCHING LOGIC
-  const fetchInitialData = useCallback(async () => {
-    try {
-      const [orderRes, menuRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
-        axios.get(`${BASE_URL}/menu/${tenantId}`)
-      ]);
-      setOrders(orderRes.data);
-      setMenuItems(menuRes.data);
-    } catch (err) { console.error("Data Sync Error:", err); }
-  }, [tenantId]);
+const fetchInitialData = useCallback(async () => {
+  try {
+    const [orderRes, menuRes, waiterRes] = await Promise.all([
+      axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
+      axios.get(`${BASE_URL}/menu/${tenantId}`),
+      axios.get(`${BASE_URL}/admin/waiter-requests/${tenantId}`).catch(() => ({ data: [] }))
+    ]);
+    setOrders(orderRes.data);
+    setMenuItems(menuRes.data);
+    setWaiterRequests(waiterRes.data); // 🚀 This ensures requests persist on refresh
+  } catch (err) { console.error("Data Sync Error:", err); }
+}, [tenantId]);
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -168,7 +172,14 @@ const OperatorPortal = () => {
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 
+      socket.on("new_waiter_request", (request) => {
+  new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play(); 
+  showNotif(`Service Request: Table ${request.tableNumber}`, "info");
+  setWaiterRequests(prev => [request, ...prev]);
+});
+
       socket.on("order_status_updated", () => fetchInitialData());
+
     }
     return () => { socket.off(); };
   }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics]);
@@ -318,12 +329,15 @@ const OperatorPortal = () => {
     </div>
   );
 
-  const completeWaiterRequest = async (requestId) => {
+// Add this inside the OperatorPortal component, near your other handlers
+const completeWaiterRequest = async (requestId) => {
   try {
     await axios.patch(`${BASE_URL}/admin/waiter-requests/${requestId}/complete`);
     setWaiterRequests(prev => prev.filter(r => r._id !== requestId));
-    showNotif("Request Cleared");
-  } catch (err) { showNotif("Error", "error"); }
+    showNotif("Service Call Resolved");
+  } catch (err) { 
+    showNotif("Error clearing request", "error"); 
+  }
 };
 
   return (
@@ -380,10 +394,10 @@ const OperatorPortal = () => {
             </div>
           )}
 
-          {(activeTab === 'menu' || activeTab === 'insights') && (
+          {(activeTab === 'menu') && (
             <div style={styles.searchWrapper}>
               <Search size={18} color="#222" />
-              <input type="text" placeholder="Search database..." style={styles.searchInput} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input type="text" placeholder="Search dishes..." style={styles.searchInput} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
           )}
         </header>
@@ -391,24 +405,79 @@ const OperatorPortal = () => {
         <section style={styles.scrollArea} className="custom-scroll">
           <AnimatePresence mode="wait">
             
-            {activeTab === 'pending' && (
-              <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.orderContainer}>
-                {filteredOrders.map(order => (
-                  <div key={order._id} style={styles.orderRow}>
-                     <div style={styles.tableCircle}>{order.tableNumber}</div>
-                     <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>TABLE {order.tableNumber}</div>
-                        <div style={{ color: '#d3bfa2', marginTop: '5px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                          {order.items.map(it => `${it.quantity}x ${it.name}`).join(' • ')}
-                        </div>
-                     </div>
-                     <OperatorLiveTimer createdAt={order.createdAt} />
-                  </div>
-                ))}
-              </motion.div>
-            )}
+{activeTab === 'pending' && (
+  <motion.div 
+    key="pending" 
+    initial={{ opacity: 0 }} 
+    animate={{ opacity: 1 }} 
+    style={{ 
+      display: 'flex', 
+      gap: '30px', 
+      alignItems: 'flex-start',
+      width: '100%' 
+    }}
+  >
+    
+    {/* 🍜 LEFT SIDE: KITCHEN TICKETS */}
+    <div style={{ flex: 1.2 }}>
+      <h3 style={styles.gridLabel}>KITCHEN TICKETS</h3>
+      {filteredOrders.length > 0 ? (
+        filteredOrders.map(order => (
+          <div key={order._id} style={styles.orderRow}>
+            <div style={styles.tableCircle}>{order.tableNumber}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>TABLE {order.tableNumber}</div>
+              <div style={{ color: '#d3bfa2', marginTop: '5px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                {order.items.map(it => `${it.quantity}x ${it.name}`).join(' • ')}
+              </div>
+            </div>
+            <OperatorLiveTimer createdAt={order.createdAt} />
+          </div>
+        ))
+      ) : (
+        <div style={{ textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '40px', background: '#0d0d0d', borderRadius: '15px' }}>
+          NO ACTIVE ORDERS
+        </div>
+      )}
+    </div>
 
-            {activeTab === 'menu' && (
+    {/* 🛎️ RIGHT SIDE: SERVICE CALLS */}
+    <div style={{ flex: 1, borderLeft: '1px solid #1a1a1a', paddingLeft: '30px' }}>
+      <h3 style={styles.gridLabel}>ACTIVE SERVICE CALLS</h3>
+      {Array.isArray(waiterRequests) && waiterRequests.length > 0 ? (
+        waiterRequests.map(req => (
+          <motion.div 
+            initial={{ x: 20, opacity: 0 }} 
+            animate={{ x: 0, opacity: 1 }} 
+            key={req._id} 
+            style={{...styles.waiterRequestRow, gap: '15px', padding: '15px'}}
+          >
+            <div style={{...styles.goldCircle, width: '35px', height: '35px'}}>
+              <BellRing size={16} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '900', color: '#d4af37', fontSize: '0.8rem' }}>TABLE {req.tableNumber}</div>
+              <div style={{ fontSize: '0.75rem', color: '#fff', marginTop: '2px', lineHeight: '1.4' }}>
+                {req.serviceRequest}
+              </div>
+            </div>
+            <button 
+              onClick={() => completeWaiterRequest(req._id)} 
+              style={{...styles.doneBtn, padding: '6px 12px', fontSize: '0.6rem'}}
+            >
+              DONE
+            </button>
+          </motion.div>
+        ))
+      ) : (
+        <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', padding: '20px' }}>
+          NO PENDING REQUESTS
+        </div>
+      )}
+    </div>
+    
+  </motion.div>
+)}            {activeTab === 'menu' && (
               <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.fullWidthGrid}>
                 {menuItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
                   <div key={item._id} style={{...styles.premiumCard, opacity: item.isAvailable ? 1 : 0.4}}>
@@ -651,7 +720,39 @@ const styles = {
   specialModeRow: { display: 'flex', gap: '15px', marginBottom: '30px' },
   specBtn: { flex: 1, padding: '18px', background: '#0d0d0d', border: '1px solid #1a1a1a', color: '#333', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem', cursor: 'pointer' },
   activeSpecBtn: { flex: 1, padding: '18px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '15px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '0.8rem' },
-  orderContainer: { maxWidth: '800px', margin: '0 auto' }
+  orderContainer: { maxWidth: '800px', margin: '0 auto' },
+  // Add these inside your styles constant at the bottom of the file
+waiterRequestRow: { 
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '20px', 
+  background: '#111', 
+  padding: '15px 20px', 
+  borderRadius: '15px', 
+  border: '1px solid #d4af37', 
+  marginBottom: '12px' 
+},
+goldCircle: { 
+  width: '40px', 
+  height: '40px', 
+  background: '#d4af3715', 
+  borderRadius: '10px', 
+  border: '1px solid #d4af37', 
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'center', 
+  color: '#d4af37' 
+},
+doneBtn: { 
+  background: '#d3bfa2', 
+  color: '#000', 
+  border: 'none', 
+  padding: '8px 15px', 
+  borderRadius: '8px', 
+  fontWeight: '900', 
+  fontSize: '0.7rem',
+  cursor: 'pointer'
+},
 };
 
 export default OperatorPortal;
