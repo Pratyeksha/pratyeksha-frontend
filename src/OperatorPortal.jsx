@@ -8,7 +8,8 @@ import {
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
   Info, SendHorizontal, CookingPot, Percent, Smartphone, QrCode, RefreshCcw,
   Timer, Clock, Flame, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
-  User, ShieldCheck, Zap, MousePointer2, Filter, ShoppingBag, Truck, X, CreditCard, Wallet, Banknote
+  User, ShieldCheck, Zap, MousePointer2, Filter, ShoppingBag, Truck, X, CreditCard, Wallet, Banknote,
+  ChefHat // 🚀 FIXED: Imported ChefHat directly to prevent Uncaught ReferenceError crashes
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -84,6 +85,9 @@ const calculateTenure = (joiningDateString) => {
     return parts.join(' ') + ' with us';
 };
 
+
+
+
 const OperatorPortal = () => {
   const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
     withCredentials: true,
@@ -92,9 +96,6 @@ const OperatorPortal = () => {
     timeout: 20000, 
   }), []);
 
-  const [newStaff, setNewStaff] = useState({
-    name: '', role: 'Waiter', age: '', contact: '', address: '', shiftType: 'Day Shift', baseSalary: ''
-});
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [activeTab, setActiveTab] = useState('pending'); 
@@ -133,7 +134,29 @@ const [staff, setStaff] = useState([]);
 const [selectedMenuItem, setSelectedMenuItem] = useState('');
 const [recipeIngredients, setRecipeIngredients] = useState([{ inventoryId: '', quantityUsed: '' }]);
 
+const [rosterSearchQuery, setRosterSearchQuery] = useState(""); // 🚀 Registered search handler
+  const [topPerformers, setTopPerformers] = useState([]); // Category rankings array structures
+  const [bottomPerformers, setBottomPerformers] = useState([]);
+
+
 const [tenantConfig, setTenantConfig] = useState(null);
+
+const [newStaff, setNewStaff] = useState({
+    name: '', 
+    role: 'Waiter', 
+    age: '', 
+    contact: '', 
+    address: '', 
+    shiftType: 'Day Shift', // Matches backend enum: 'Day Shift' or 'Night Shift'
+    joiningDate: new Date().toISOString().split('T')[0], 
+    baseSalary: '',
+    assignedTables: [], 
+    cookingRole: '' 
+});
+
+// For live attendance tracking
+const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+const [attendanceLogs, setAttendanceLogs] = useState([]);
 
 useEffect(() => {
     const fetchConfig = async () => {
@@ -156,11 +179,14 @@ useEffect(() => {
     });
   }, [orders, orderZone]);
 
-  const currentMonthAnalytics = useMemo(() => {
-    const monthStr = (viewDate.getMonth() + 1).toString().padStart(2, '0');
-    const yearStr = viewDate.getFullYear().toString();
-    return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
-  }, [analytics, viewDate]);
+const currentMonthAnalytics = useMemo(() => {
+  // 🚀 FIX: Guard the array execution using an empty fallback block if array is not ready
+  if (!analytics || !Array.isArray(analytics)) return [];
+  
+  const monthStr = (viewDate.getMonth() + 1).toString().padStart(2, '0');
+  const yearStr = viewDate.getFullYear().toString();
+  return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
+}, [analytics, viewDate]);
 
   const stats = useMemo(() => {
     const revenue = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
@@ -171,6 +197,36 @@ useEffect(() => {
       online: (revenue * 0.18).toFixed(0) 
     };
   }, [currentMonthAnalytics]);
+
+  const filteredStaff = useMemo(() => {
+    return staff.filter(m => m.name.toLowerCase().includes(rosterSearchQuery.toLowerCase()));
+  }, [staff, rosterSearchQuery]);
+
+  const totalPayrollValue = useMemo(() => {
+    return filteredStaff.reduce((acc, m) => acc + (Number(m.baseSalary) || 0), 0);
+  }, [filteredStaff]);
+
+// 🚀 FIXED SYSTEM: Changed tracking handle assignment to standard liveFloorIntelligence
+  const liveFloorIntelligence = useMemo(() => {
+     const presentStaffIds = attendanceLogs.map(log => log.staffId);
+     const presentStaff = staff.filter(s => presentStaffIds.includes(s._id));
+     
+     const activeChefs = presentStaff.filter(s => s.role === 'Chef').length;
+     const activeHelpers = presentStaff.filter(s => s.role === 'Helper').length;
+     const activeWaiters = presentStaff.filter(s => s.role === 'Waiter').length;
+
+     const coveredTables = [];
+     presentStaff.forEach(s => { if(s.assignedTables) s.assignedTables.forEach(t => coveredTables.push(t)); });
+     const uniqueCovered = [...new Set(coveredTables)].sort((a, b) => Number(a) - Number(b));
+
+     return { 
+       activeChefs, 
+       activeHelpers, 
+       activeWaiters, 
+       coveredCount: uniqueCovered.length, 
+       coveredList: uniqueCovered.map(t => `T${t}`).join(', ') || 'NONE' 
+     };
+  }, [staff, attendanceLogs]);
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -185,11 +241,16 @@ useEffect(() => {
     } catch (err) { console.error("Data Sync Error:", err); }
   }, [tenantId]);
 
-  const fetchAnalytics = useCallback(async () => {
+const fetchAnalytics = useCallback(async () => {
     try {
       const res = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`);
-      setAnalytics(res.data);
-    } catch (err) { console.error("Analytics Error:", err); }
+      // 🚀 Safe array fallback extractions completely stop white/black screen engine blackouts
+      setAnalytics(res.data.salesData || []); 
+      setTopPerformers(res.data.topItems || []);
+      setBottomPerformers(res.data.bottomItems || []);
+    } catch (err) { 
+      console.error("Blackout Preventer Layer caught exception:", err); 
+    }
   }, [tenantId]);
 
 
@@ -465,6 +526,21 @@ const updateMenu = async (itemId, updateData) => {
     return { sources, topItems, hourlyTraffic: Array(24).fill(0), loyaltyRate: analytics.length > 0 ? 84 : 0 };
   }, [serverStats, analytics]);
 
+const fetchAttendanceForDate = useCallback(async (targetDate) => {
+    try {
+        const res = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${targetDate}`);
+        setAttendanceLogs(res.data || []);
+    } catch (err) {
+        console.error("Error pulling attendance matrix:", err);
+    }
+}, [tenantId]);
+
+// Trigger initial attendance pull when Management tab mounts
+useEffect(() => {
+    if (activeTab === 'management') {
+        fetchAttendanceForDate(attendanceDate);
+    }
+}, [activeTab, attendanceDate, fetchAttendanceForDate]);
 
   return (
     <div style={styles.dashboard}>
@@ -632,7 +708,16 @@ const updateMenu = async (itemId, updateData) => {
                       );
                     })}
                   </div>
+                  {/* 💰 DYNAMIC RUNNING DAILY CURRENCY BREAKDOWN COMPONENT BAR */}
+  <div style={{ ...styles.biCard, marginTop: '30px', borderTop: '2px solid #d3bfa2', background: '#090909' }}>
+     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', textAlign: 'center' }}>
+        <div><small style={styles.statLabel}>CASH RUNNING PORTFOLIO</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.cash || 0}</div></div>
+        <div><small style={styles.statLabel}>UPI INSTANT CAPTURES</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.upi || 0}</div></div>
+        <div><small style={styles.statLabel}>CARD SETTLED CAPTURES</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.card || 0}</div></div>
+     </div>
+  </div>
                 </div>
+                
 
 {tableBill && (
   <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={styles.receipt}>
@@ -898,7 +983,7 @@ const updateMenu = async (itemId, updateData) => {
 {activeTab === 'management' && (
   <motion.div key="management" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '35px', paddingBottom: '100px' }}>
     
-    {/* PILLAR 1: ACTION CARD PANEL - ADD NEW PERSONNEL */}
+    {/* WORKFORCE REGISTER TERMINAL */}
     <div style={styles.biCard}>
       <h4 style={styles.biTitle}><User size={18} color="#d3bfa2" /> WORKFORCE REGISTER TERMINAL</h4>
       <p style={{ fontSize: '0.75rem', color: '#666', marginBottom: '20px', marginTop: '-15px' }}>
@@ -913,10 +998,23 @@ const updateMenu = async (itemId, updateData) => {
         
         <div>
           <label style={styles.statLabel}>OPERATIONAL ROLE</label>
-          <select style={{ ...styles.input, marginBottom: 0 }} value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})}>
+          <select style={{ ...styles.input, marginBottom: 0 }} value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value, assignedTables: []})}>
             {['Manager', 'Chef', 'Waiter', 'Cashier', 'Helper'].map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
           </select>
         </div>
+
+        {/* 🚀 NEW: DYNAMIC CUISINE SELECTION FOR CHEFS ONLY */}
+        {newStaff.role === 'Chef' && (
+          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+            <label style={styles.statLabel}>CUISINE SPECIALIZATION</label>
+            <select style={{ ...styles.input, marginBottom: 0, border: '1px solid #d3bfa2' }} value={newStaff.cookingRole} onChange={e => setNewStaff({...newStaff, cookingRole: e.target.value})}>
+              <option value="">Select Category...</option>
+              {menuItems && [...new Set(menuItems.map(item => item.categoryId))].map(catId => (
+                <option key={catId} value={catId}>{catId.toUpperCase()}</option>
+              ))}
+            </select>
+          </motion.div>
+        )}
 
         <div>
           <label style={styles.statLabel}>AGE</label>
@@ -940,34 +1038,82 @@ const updateMenu = async (itemId, updateData) => {
           <label style={styles.statLabel}>BASE MONTHLY SALARY</label>
           <input type="number" placeholder="₹25,000" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.baseSalary} onChange={e => setNewStaff({...newStaff, baseSalary: e.target.value})} />
         </div>
+
+        {/* 🚀 NEW: CALENDAR JOINING DATE SELECTION */}
+        <div>
+          <label style={styles.statLabel}>JOINING DATE</label>
+          <input type="date" style={{ ...styles.input, marginBottom: 0, colorScheme: 'dark' }} value={newStaff.joiningDate} onChange={e => setNewStaff({...newStaff, joiningDate: e.target.value})} />
+        </div>
       </div>
+
+      {/* 🚀 NEW: ASSIGN TABLES DIRECTLY DURING REGISTRATION (ONLY FOR WAITERS) */}
+      {newStaff.role === 'Waiter' && (
+        <div style={{ marginTop: '20px', background: '#080808', padding: '15px', borderRadius: '12px', border: '1px solid #151515' }}>
+          <label style={styles.statLabel}>INITIAL TABLE ASSIGNMENTS</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+            {Array.from({ length: tableCount }, (_, idx) => (idx + 1).toString()).map(tableNum => {
+              const isSelected = newStaff.assignedTables.includes(tableNum);
+              return (
+                <button
+                  key={tableNum}
+                  type="button"
+                  onClick={() => {
+                    const updatedTables = isSelected
+                      ? newStaff.assignedTables.filter(t => t !== tableNum)
+                      : [...newStaff.assignedTables, tableNum];
+                    setNewStaff({ ...newStaff, assignedTables: updatedTables });
+                  }}
+                  style={{
+                    padding: '6px 12px', borderRadius: '6px', border: 'none', fontSize: '0.65rem', fontWeight: '800', cursor: 'pointer',
+                    background: isSelected ? '#d3bfa2' : '#111', color: isSelected ? '#000' : '#444'
+                  }}
+                >
+                  T{tableNum}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: '20px' }}>
         <label style={styles.statLabel}>RESIDENTIAL ADDRESS</label>
         <div style={{ display: 'flex', gap: '15px' }}>
           <input type="text" placeholder="Street layout, city coordinates, landmarks" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.address} onChange={e => setNewStaff({...newStaff, address: e.target.value})} />
           <button 
-           onClick={async () => {
-  if(!newStaff.name || !newStaff.contact || !newStaff.baseSalary) return showNotif("Please execute mandatory parameter inputs", "error");
-  try {
-    // Force type conversion to match backend schemas requirements exactly
-    const payload = {
-      ...newStaff,
-      tenantId,
-      age: Number(newStaff.age),
-      baseSalary: Number(newStaff.baseSalary)
-    };
-    
-    await axios.post(`${BASE_URL}/staff/register`, payload);
-    showNotif(`${newStaff.name} safely locked into data registers.`);
-    setNewStaff({ name: '', role: 'Waiter', age: '', contact: '', address: '', shiftType: 'Day Shift', baseSalary: '' });
-    fetchManagementData();
-  } catch(e) { 
-  // 🔍 DEBUG SYSTEM: Logs precise database validation rejections directly to your inspect console
-  console.error("Database Server Rejected Request:", e.response?.data || e.message);
-  showNotif(e.response?.data?.error || "Failed to sync employee record", "error"); 
-}
-}}
+            onClick={async () => {
+              if(!newStaff.name || !newStaff.contact || !newStaff.baseSalary) return showNotif("Mandatory enrollment parameters missing", "error");
+              try {
+                // If it's a Chef and a specialized cooking role was selected, append it to their name or note it
+                const finalName = newStaff.role === 'Chef' && newStaff.cookingRole 
+                  ? `${newStaff.name} (${newStaff.cookingRole.toUpperCase()})` 
+                  : newStaff.name;
+
+                const payload = {
+                  ...newStaff,
+                  name: finalName,
+                  tenantId,
+                  age: Number(newStaff.age),
+                  baseSalary: Number(newStaff.baseSalary)
+                };
+
+                // 1. Fire registration request
+                const res = await axios.post(`${BASE_URL}/staff/register`, payload);
+                
+                // 2. If tables were assigned, map them out instantly to your separate table-map model
+                if (newStaff.role === 'Waiter' && newStaff.assignedTables.length > 0) {
+                  await axios.put(`${BASE_URL}/staff/floor-map`, {
+                    tenantId,
+                    staffId: res.data.member._id,
+                    assignedTables: newStaff.assignedTables
+                  });
+                }
+
+                showNotif(`${newStaff.name} safely locked into registers.`);
+                setNewStaff({ name: '', role: 'Waiter', age: '', contact: '', address: '', shiftType: 'Day Shift', joiningDate: new Date().toISOString().split('T')[0], baseSalary: '', assignedTables: [], cookingRole: '' });
+                fetchManagementData();
+              } catch(e) { showNotif("Failed to sync employee record", "error"); }
+            }}
             style={{ ...styles.mainBtn, width: '220px' }}
           >
             AUTHORIZE ROSTER
@@ -976,37 +1122,63 @@ const updateMenu = async (itemId, updateData) => {
       </div>
     </div>
 
-    {/* PILLAR 2: LIVE METRIC INTEL HUB */}
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', alignItems: 'start' }}>
+   {/* 🚀 NEW: LIVE HUD TELEMETRY VISUALIZERS INDICATING ATTENDANCE DENSITIES */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px' }}>
+       <div style={{ ...styles.biCard, borderLeft: '4px solid #fbbf24', background: '#090909' }}>
+          <h4 style={{ ...styles.biTitle, color: '#fbbf24' }}><ChefHat size={16} /> LIVE PRODUCTION HUB LEVEL INDICATOR</h4>
+          <div style={{ fontSize: '1.8rem', fontWeight: '900', margin: '5px 0' }}>
+             {liveFloorIntelligence.activeChefs} Chefs • {liveFloorIntelligence.activeHelpers} Helpers Active
+          </div>
+          <small style={{ color: '#444', fontWeight: 'bold' }}>TOTAL BACK-OF-HOUSE STAFF CURRENTLY WORKING IN KITCHEN</small>
+       </div>
+       <div style={{ ...styles.biCard, borderLeft: '4px solid #60a5fa', background: '#090909' }}>
+          <h4 style={{ ...styles.biTitle, color: '#60a5fa' }}><MousePointer2 size={16} /> DINING STATIONS LIVE COVERAGE</h4>
+          <div style={{ fontSize: '1.8rem', fontWeight: '900', margin: '5px 0' }}>
+             {liveFloorIntelligence.coveredCount} / {tableCount} Tables Guarded
+          </div>
+          <small style={{ color: '#60a5fa', fontWeight: 'bold', textTransform: 'uppercase' }}>
+             Active Coverage Zone Nodes: {liveFloorIntelligence.coveredList}
+          </small>
+       </div>
+    </div>
+
+    {/* MASTER DATA MANAGEMENT MATRIX */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.3fr', gap: '30px', alignItems: 'start' }}>
       
-      {/* LEFT: MASTER ATTENDANCE, LONGEVITY & PERFORMANCE MONITOR */}
+      {/* HISTORIC ROSTER LEDGER INDEX MATRIX PANEL WITH SEARCH & SUM TOTALS */}
       <div style={styles.biCard}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h4 style={styles.biTitle}><Layers size={18} color="#d3bfa2" /> HISTORIC LEDGER & REAL-TIME TRACKING</h4>
-          <span style={{ fontSize: '0.65rem', padding: '5px 10px', borderRadius: '20px', background: '#d3bfa215', color: '#d3bfa2', fontWeight: 'bold' }}>
-            {staff?.length || 0} PROFILES SYNCED
-          </span>
+          <h4 style={styles.biTitle}><Layers size={18} color="#d3bfa2" /> HISTORIC ROSTER RECORD REGISTRY</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+             {/* Dynamic filter matching staff search inputs string values instantly */}
+             <div style={{ ...styles.searchWrapper, padding: '6px 15px', background: '#000', marginBottom: 0 }}>
+                <Search size={14} color="#666" />
+                <input type="text" placeholder="Search employee name..." style={{ ...styles.searchInput, width: '150px', fontSize: '0.75rem', marginBottom: 0 }} value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} />
+             </div>
+             <span style={{ fontSize: '0.65rem', padding: '5px 10px', borderRadius: '20px', background: '#d3bfa215', color: '#d3bfa2', fontWeight: 'bold' }}>
+               {filteredStaff.length} RECORDS SYNCED
+             </span>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', fontSize: '0.65rem', color: '#444', borderBottom: '1px solid #151515', textTransform: 'uppercase' }}>
-                <th style={{ padding: '15px 10px' }}>Staff Matrix</th>
-                <th>Shift Type</th>
-                <th>Dynamic Tenure</th>
-                <th>Compensation</th>
+                <th style={{ padding: '15px 10px' }}>Staff Details</th>
+                <th>Shift Window</th>
+                <th>Payroll Compliance</th>
                 <th style={{ textAlign: 'right', paddingRight: '15px' }}>Roster Action</th>
               </tr>
             </thead>
             <tbody>
-              {staff && staff.length > 0 ? staff.map(member => (
-                <tr key={member._id} style={{ borderBottom: '1px solid #0d0d0d', fontSize: '0.85rem', transition: '0.2s' }} className="table-row-hover">
+              {filteredStaff.length > 0 ? filteredStaff.map(member => (
+                <tr key={member._id} style={{ borderBottom: '1px solid #0d0d0d', fontSize: '0.85rem' }}>
                   <td style={{ padding: '15px 10px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontWeight: '800', color: '#fff' }}>{member.name}</span>
                       <span style={{ fontSize: '0.65rem', color: '#d3bfa2', fontWeight: 'bold', marginTop: '2px' }}>
-                        {member.role.toUpperCase()} • {member.age}yrs
+                        {member.role.toUpperCase()} • {member.age}yrs • {calculateTenure(member.joiningDate)}
                       </span>
                     </div>
                   </td>
@@ -1015,101 +1187,115 @@ const updateMenu = async (itemId, updateData) => {
                       <Clock size={12} /> {member.shiftType.toUpperCase()}
                     </span>
                   </td>
-                  <td style={{ color: '#ccc', fontWeight: '600', fontSize: '0.75rem' }}>
-                    {calculateTenure(member.joiningDate)}
-                  </td>
-                  <td style={{ fontWeight: '800', color: '#fff' }}>
-                    ₹{Number(member.baseSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small>
+                  <td>
+                     {/* PAYROLL SALARY STATE MULTIPLEXER SELECTOR FORM ENTITY */}
+                     <select 
+                       value={member.salaryStatus || 'Unpaid'} 
+                       onChange={async (e) => {
+                          try {
+                             await axios.patch(`${BASE_URL}/staff/salary-status/${member._id}`, { salaryStatus: e.target.value });
+                             fetchManagementData();
+                             showNotif(`Salary flag converted to ${e.target.value.toUpperCase()} for ${member.name}`);
+                          } catch(err) { showNotif("Payroll transaction failed", "error"); }
+                       }}
+                       style={{ background: '#000', color: member.salaryStatus === 'Paid' ? '#4ade80' : '#ff4d4d', border: '1px solid #222', padding: '6px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 'bold', outline: 'none' }}
+                     >
+                        <option value="Unpaid">❌ UNPAID</option>
+                        <option value="Paid">✅ PAID</option>
+                      </select>
                   </td>
                   <td style={{ textAlign: 'right', paddingRight: '15px' }}>
+                    {/* Hard Delete Trigger replacing the old deactivation system layout button */}
                     <button 
                       onClick={async () => {
-                        if(confirm(`Terminate active service logs for ${member.name}?`)) {
+                        if(confirm(`CRITICAL DELETION WARNING:\nAre you absolutely certain you want to erase ${member.name} from the database permanently?\nThis will completely clear all historic logs and cannot be undone.`)) {
                           try {
-                            await axios.patch(`${BASE_URL}/staff/terminate/${member._id}`);
-                            showNotif("Roster link split cleanly.");
+                            await axios.delete(`${BASE_URL}/staff/remove/${member._id}`);
+                            showNotif(`Wiped ${member.name} completely from enterprise datastores.`, "info");
                             fetchManagementData();
-                          } catch(e) { showNotif("Transaction failure", "error"); }
+                          } catch(e) { showNotif("Data removal pipeline error", "error"); }
                         }
                       }}
-                      style={{ background: '#ff4d4d15', border: '1px solid #ff4d4d44', color: '#ff4d4d', padding: '6px 12px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}
+                      style={{ background: '#ff4d4d15', border: '1px solid #ff4d4d33', color: '#ff4d4d', padding: '6px 12px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}
                     >
-                      DEACTIVATE
+                      REMOVE PERMANENTLY
                     </button>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.8rem' }}>
-                    No workforce profiles detected. Enroll floor team members to begin auditing.
+                  <td colSpan="4" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.8rem' }}>
+                    No matching profiles captured under specified filter targets.
                   </td>
                 </tr>
               )}
             </tbody>
+            {/* SUM LABILITY RUNNING CALCULATION TFOOT STRIP METRIC */}
+            <tfoot>
+               <tr style={{ background: '#080808', borderTop: '2px solid #151515', fontSize: '0.78rem' }}>
+                  <td colSpan="3" style={{ padding: '15px 10px', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>TOTAL ACCUMULATED ROSTER MONTHLY SALARY LIABILITY:</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: '900', color: '#fff', fontSize: '0.9rem', paddingRight: '15px' }}>
+                     ₹{totalPayrollValue.toLocaleString()}
+                  </td>
+               </tr>
+            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* RIGHT: FLOATING ACCOUNTABILITY MATRIX - LIVE TABLE ASSIGNMENT */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div style={styles.botCard}>
-          <h4 style={styles.biTitle}><MousePointer2 size={16} color="#d3bfa2" /> FLOOR GRID ACCOUNTABILITY</h4>
-          <p style={{ fontSize: '0.7rem', color: '#666', marginTop: '-10px', marginBottom: '20px', lineHeight: '1.4' }}>
-            Map active dining floor zones to waitstaff instantly to track service allocation.
-          </p>
+      {/* FIXED SYSTEMS LOOKUPS DESIGN MATRIX TREATMENT TRACKING ELEMENT PANEL */}
+      <div style={styles.botCard}>
+        <h4 style={styles.biTitle}><Calendar size={16} color="#d3bfa2" /> REAL-TIME ATTENDANCE LEDGER INTERACTIVE TRACKER</h4>
+        <input 
+          type="date" 
+          style={{ ...styles.input, marginBottom: '20px', colorScheme: 'dark', fontSize: '0.8rem' }} 
+          value={attendanceDate}
+          onChange={(e) => {
+            setAttendanceDate(e.target.value);
+            fetchAttendanceForDate(e.target.value);
+          }} 
+        />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'left' }}>
-            {staff && staff.filter(s => s.role === 'Waiter').map(waiter => (
-              <div key={waiter._id} style={{ background: '#050505', border: '1px solid #151515', borderRadius: '12px', padding: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>{waiter.name.toUpperCase()}</span>
-                  <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: 'bold' }}>ACTIVE REGION</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
+          {staff && staff.filter(s => s.isActive !== false).map(m => {
+            const log = attendanceLogs.find(l => l.staffId === m._id);
+            const isClockedIn = !!log && !log.clockOut;
+            const isShiftEnded = !!log && !!log.clockOut;
+            return (
+              <div key={m._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', alignItems: 'center', borderRadius: '12px', background: '#050505', border: isClockedIn ? '1px solid #d3bfa2' : '1px solid #111', transition: '0.2s' }}>
+                <div>
+                   <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fff' }}>{m.name}</div>
+                   <small style={{ fontSize: '0.65rem', color: isClockedIn ? '#d3bfa2' : '#444', fontWeight: 'bold', marginTop: '2px', display: 'block', textTransform: 'uppercase' }}>
+                      {isShiftEnded ? `Done (~${log.totalWorkingHours} hrs logs completed)` : isClockedIn ? "ON ACTIVE SHIFT WINDOW" : "ABSENT / NOT DETECTED"}
+                   </small>
                 </div>
-                
-                {/* Dynamic Table Badger Row */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {Array.from({ length: tableCount }, (_, idx) => (idx + 1).toString()).map(tableNum => {
-                    const isAssigned = waiter.assignedTables?.includes(tableNum);
-                    return (
-                      <button
-                        key={tableNum}
-                        onClick={async () => {
-                          const currentTables = waiter.assignedTables || [];
-                          const nextTables = currentTables.includes(tableNum)
-                            ? currentTables.filter(t => t !== tableNum)
-                            : [...currentTables, tableNum];
-                          try {
-                            await axios.put(`${BASE_URL}/staff/floor-map`, {
-                              tenantId, staffId: waiter._id, assignedTables: nextTables
-                            });
-                            fetchManagementData();
-                          } catch(e) { showNotif("Failed to alter sector distribution", "error"); }
-                        }}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          fontSize: '0.65rem',
-                          fontWeight: '800',
-                          cursor: 'pointer',
-                          background: isAssigned ? '#d3bfa2' : '#111',
-                          color: isAssigned ? '#000' : '#444',
-                          transition: '0.15s'
-                        }}
-                      >
-                        T{tableNum}
-                      </button>
-                    );
-                  })}
-                </div>
+                <button 
+                  onClick={async () => {
+                     try {
+                        if(!log) {
+                           await axios.post(`${BASE_URL}/staff/attendance/clock-in`, { tenantId, staffId: m._id });
+                           showNotif(`${m.name} Registered Present Successfully.`);
+                        } else if(isClockedIn) {
+                           await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
+                           showNotif(`${m.name} Shift Finalized and Stored Safely.`);
+                        }
+                        // FORCE IMMEDIATE LOCAL FETCH SYNC CYCLE LIFECYCLE HOOK
+                        const res = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${attendanceDate}`);
+                        setAttendanceLogs(res.data || []);
+                     } catch(err) { showNotif("Roster link skipped", "error"); }
+                  }} 
+                  disabled={isShiftEnded} 
+                  style={{ 
+                     background: isShiftEnded ? '#111' : isClockedIn ? '#ff4d4d22' : '#10b98122', 
+                     color: isShiftEnded ? '#444' : isClockedIn ? '#ff4d4d' : '#10b981', 
+                     border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '900', cursor: isShiftEnded ? 'default' : 'pointer'
+                  }}
+                >
+                   {isShiftEnded ? "COMPLETED" : isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
+                </button>
               </div>
-            ))}
-            {(!staff || staff.filter(s => s.role === 'Waiter').length === 0) && (
-              <div style={{ textTransform: 'uppercase', color: '#333', fontSize: '0.65rem', textAlign: 'center', padding: '10px' }}>
-                No serving staff logged on floor.
-              </div>
-            )}
-          </div>
+            );
+          })}
         </div>
       </div>
 
