@@ -110,10 +110,12 @@ const OperatorPortal = () => {
   const [tableBill, setTableBill] = useState(null);
   const [discount, setDiscount] = useState(0); 
 
-  // 💰 NEW PAYMENT STATE
-  const [paymentModes, setPaymentModes] = useState({ cash: '', upi: '', card: '' });
-  const [activePaymentType, setActivePaymentType] = useState('full'); // 'full' or 'split'
+
+// 💰 TRACKING STATE COMPILERS
+  const [paymentModes, setPaymentModes] = useState({ cash: 0, upi: 0, card: 0 });
+  const [activePaymentType, setActivePaymentType] = useState('full'); 
   const [selectedSingleMode, setSelectedSingleMode] = useState('cash');
+
 
   const [waiterRequests, setWaiterRequests] = useState([]);
   const [serverStats, setServerStats] = useState({ topItems: [], hourlyStats: [] });
@@ -227,6 +229,34 @@ const currentMonthAnalytics = useMemo(() => {
        coveredList: uniqueCovered.map(t => `T${t}`).join(', ') || 'NONE' 
      };
   }, [staff, attendanceLogs]);
+
+// 🚀 FIXED CALCULATION ENGINE: RE-MAPPED TO LIVE MONTH ANALYTICS DATA ARRAYS
+  const dailySettlementBreakdown = useMemo(() => {
+    // Standardizes dates to ensure zeroing boundaries match (YYYY-MM-DD)
+    const activeTargetDate = attendanceDate; 
+    
+    let cashSum = 0;
+    let upiSum = 0;
+    let cardSum = 0;
+
+    if (analytics && Array.isArray(analytics)) {
+      const activeDayData = analytics.find(d => d._id === activeTargetDate);
+      if (activeDayData) {
+        cashSum = Number(activeDayData.cash || 0);
+        upiSum = Number(activeDayData.upi || 0);
+        cardSum = Number(activeDayData.card || 0);
+      }
+    }
+
+    const grossCombinedTotal = cashSum + upiSum + cardSum;
+
+    return {
+      cash: cashSum,
+      upi: upiSum,
+      card: cardSum,
+      gross: grossCombinedTotal
+    };
+  }, [analytics, attendanceDate]);
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -391,39 +421,33 @@ const settleBill = () => {
   });
 };
 
-// Change 2: Add this NEW function to handle the actual database call
 const handleFinalSettle = async () => {
   const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-  let paymentMethodDetails;
-
-  if (activePaymentType === 'split') {
-    paymentMethodDetails = { 
-      type: 'split', 
-      breakdown: { cash: paymentModes.cash, upi: paymentModes.upi, card: paymentModes.card } 
-    };
-  } else {
-    paymentMethodDetails = { type: 'full', method: selectedSingleMode };
-  }
+  let paymentMethodDetails = activePaymentType === 'split' 
+    ? { type: 'split', breakdown: { cash: paymentModes.cash, upi: paymentModes.upi, card: paymentModes.card } }
+    : { type: 'full', method: selectedSingleMode };
 
   try {
     const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { 
       discount, 
       finalAmount: finalAmt, 
       paymentMethods: paymentMethodDetails,
-      customerPhone: "" // 🚀 PASS CUSTOMER PHONE HERE FOR SMS/LOYALTY
+      customerPhone: "" 
     });
 
     if (res.data && res.data.billNo) {
       setTableBill(prev => ({ ...prev, billNo: res.data.billNo }));
       showNotif(`Invoice #${res.data.billNo} Generated`, "success");
-      if(res.data.loyaltyMsg) showNotif(res.data.loyaltyMsg, "info");
 
-      setTimeout(() => {
+      setTimeout(async () => {
         setTableBill(null);
         setSelectedTable(null);
         setConfirmModal({ show: false });
-        fetchInitialData(); 
-        fetchManagementData(); // 🚀 REFRESH INVENTORY NUMBERS IN UI
+        
+        // 🚀 CRITICAL UPDATE: Fetch fresh operational datasets so live states re-render cleanly
+        await fetchInitialData();   // Pulls updated settled order arrays
+        await fetchAnalytics();     // Pulls daily cash, upi, card breakdown sums
+        fetchManagementData();      // Refreshes inventory numbers
       }, 2000);
     }
   } catch (err) {
@@ -709,11 +733,26 @@ useEffect(() => {
                     })}
                   </div>
                   {/* 💰 DYNAMIC RUNNING DAILY CURRENCY BREAKDOWN COMPONENT BAR */}
-  <div style={{ ...styles.biCard, marginTop: '30px', borderTop: '2px solid #d3bfa2', background: '#090909' }}>
-     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', textAlign: 'center' }}>
-        <div><small style={styles.statLabel}>CASH RUNNING PORTFOLIO</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.cash || 0}</div></div>
-        <div><small style={styles.statLabel}>UPI INSTANT CAPTURES</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.upi || 0}</div></div>
-        <div><small style={styles.statLabel}>CARD SETTLED CAPTURES</small><div style={{ fontSize: '1.2rem', fontWeight: '900', marginTop: '4px' }}>₹{stats.card || 0}</div></div>
+ {/* 💰 UPGRADED HIGH-CONTRAST DATA STRIP MATRIX BAR */}
+  <div style={{ ...styles.biCard, marginTop: '25px', borderTop: '2px solid #d3bfa2', background: '#090909', padding: '20px' }}>
+     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center', alignItems: 'center' }}>
+        <div>
+           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CASH PORTFOLIO</small>
+           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.cash.toLocaleString()}</div>
+        </div>
+        <div>
+           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY UPI INSTANT NET</small>
+           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.upi.toLocaleString()}</div>
+        </div>
+        <div>
+           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CARD CAPTURES</small>
+           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.card.toLocaleString()}</div>
+        </div>
+        {/* 🚀 NEW ADDITION: GROSS CONSOLIDATED COMBINED TOTAL LIQUIDITY VALUE */}
+        <div style={{ borderLeft: '1px solid #151515', paddingLeft: '15px' }}>
+           <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.5px' }}>DAILY GROSS SETTLED</small>
+           <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>₹{dailySettlementBreakdown.gross.toLocaleString()}</div>
+        </div>
      </div>
   </div>
                 </div>
@@ -1003,7 +1042,6 @@ useEffect(() => {
           </select>
         </div>
 
-        {/* 🚀 NEW: DYNAMIC CUISINE SELECTION FOR CHEFS ONLY */}
         {newStaff.role === 'Chef' && (
           <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
             <label style={styles.statLabel}>CUISINE SPECIALIZATION</label>
@@ -1039,14 +1077,12 @@ useEffect(() => {
           <input type="number" placeholder="₹25,000" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.baseSalary} onChange={e => setNewStaff({...newStaff, baseSalary: e.target.value})} />
         </div>
 
-        {/* 🚀 NEW: CALENDAR JOINING DATE SELECTION */}
         <div>
           <label style={styles.statLabel}>JOINING DATE</label>
           <input type="date" style={{ ...styles.input, marginBottom: 0, colorScheme: 'dark' }} value={newStaff.joiningDate} onChange={e => setNewStaff({...newStaff, joiningDate: e.target.value})} />
         </div>
       </div>
 
-      {/* 🚀 NEW: ASSIGN TABLES DIRECTLY DURING REGISTRATION (ONLY FOR WAITERS) */}
       {newStaff.role === 'Waiter' && (
         <div style={{ marginTop: '20px', background: '#080808', padding: '15px', borderRadius: '12px', border: '1px solid #151515' }}>
           <label style={styles.statLabel}>INITIAL TABLE ASSIGNMENTS</label>
@@ -1084,7 +1120,6 @@ useEffect(() => {
             onClick={async () => {
               if(!newStaff.name || !newStaff.contact || !newStaff.baseSalary) return showNotif("Mandatory enrollment parameters missing", "error");
               try {
-                // If it's a Chef and a specialized cooking role was selected, append it to their name or note it
                 const finalName = newStaff.role === 'Chef' && newStaff.cookingRole 
                   ? `${newStaff.name} (${newStaff.cookingRole.toUpperCase()})` 
                   : newStaff.name;
@@ -1097,10 +1132,8 @@ useEffect(() => {
                   baseSalary: Number(newStaff.baseSalary)
                 };
 
-                // 1. Fire registration request
                 const res = await axios.post(`${BASE_URL}/staff/register`, payload);
                 
-                // 2. If tables were assigned, map them out instantly to your separate table-map model
                 if (newStaff.role === 'Waiter' && newStaff.assignedTables.length > 0) {
                   await axios.put(`${BASE_URL}/staff/floor-map`, {
                     tenantId,
@@ -1122,41 +1155,51 @@ useEffect(() => {
       </div>
     </div>
 
-   {/* 🚀 NEW: LIVE HUD TELEMETRY VISUALIZERS INDICATING ATTENDANCE DENSITIES */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px' }}>
-       <div style={{ ...styles.biCard, borderLeft: '4px solid #fbbf24', background: '#090909' }}>
-          <h4 style={{ ...styles.biTitle, color: '#fbbf24' }}><ChefHat size={16} /> LIVE PRODUCTION HUB LEVEL INDICATOR</h4>
-          <div style={{ fontSize: '1.8rem', fontWeight: '900', margin: '5px 0' }}>
-             {liveFloorIntelligence.activeChefs} Chefs • {liveFloorIntelligence.activeHelpers} Helpers Active
+    {/* 👑 PREMIUM TELEMETRY HEADS-UP DISPLAY */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+       <div style={{ ...styles.biCard, borderLeft: '3px solid #d3bfa2', background: '#0a0a0a', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+             <div style={{ background: 'rgba(211,191,162,0.08)', padding: '10px', borderRadius: '10px', color: '#d3bfa2' }}><ChefHat size={20} /></div>
+             <div>
+                <small style={{ color: '#555', fontWeight: '800', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>PRODUCTION HUB CAPACITY</small>
+                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>
+                   {liveFloorIntelligence.activeChefs} Chefs <span style={{ color: '#444', fontSize: '1.1rem', fontWeight: '500' }}>•</span> {liveFloorIntelligence.activeHelpers} Helpers Active
+                </div>
+             </div>
           </div>
-          <small style={{ color: '#444', fontWeight: 'bold' }}>TOTAL BACK-OF-HOUSE STAFF CURRENTLY WORKING IN KITCHEN</small>
        </div>
-       <div style={{ ...styles.biCard, borderLeft: '4px solid #60a5fa', background: '#090909' }}>
-          <h4 style={{ ...styles.biTitle, color: '#60a5fa' }}><MousePointer2 size={16} /> DINING STATIONS LIVE COVERAGE</h4>
-          <div style={{ fontSize: '1.8rem', fontWeight: '900', margin: '5px 0' }}>
-             {liveFloorIntelligence.coveredCount} / {tableCount} Tables Guarded
+
+       <div style={{ ...styles.biCard, borderLeft: '3px solid #8a704d', background: '#0a0a0a', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+             <div style={{ background: 'rgba(138,112,77,0.08)', padding: '10px', borderRadius: '10px', color: '#8a704d' }}><MousePointer2 size={20} /></div>
+             <div style={{ width: '100%' }}>
+                <small style={{ color: '#555', fontWeight: '800', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>FLOORGRID COVERAGE DENSITY</small>
+                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>
+                   {liveFloorIntelligence.coveredCount} <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '700' }}>OF {tableCount} TABLES ACCOUNTED</span>
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#8a704d', fontWeight: 'bold', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '380px' }}>
+                   ACTIVE NODES: {liveFloorIntelligence.coveredList}
+                </div>
+             </div>
           </div>
-          <small style={{ color: '#60a5fa', fontWeight: 'bold', textTransform: 'uppercase' }}>
-             Active Coverage Zone Nodes: {liveFloorIntelligence.coveredList}
-          </small>
        </div>
     </div>
 
-    {/* MASTER DATA MANAGEMENT MATRIX */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.3fr', gap: '30px', alignItems: 'start' }}>
+    {/* DATA WORKSPACE GRID */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1.75fr 1.25fr', gap: '30px', alignItems: 'start' }}>
       
-      {/* HISTORIC ROSTER LEDGER INDEX MATRIX PANEL WITH SEARCH & SUM TOTALS */}
+      {/* HISTORIC ROSTER LEDGER INDEX MATRIX PANEL */}
       <div style={styles.biCard}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h4 style={styles.biTitle}><Layers size={18} color="#d3bfa2" /> HISTORIC ROSTER RECORD REGISTRY</h4>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-             {/* Dynamic filter matching staff search inputs string values instantly */}
-             <div style={{ ...styles.searchWrapper, padding: '6px 15px', background: '#000', marginBottom: 0 }}>
-                <Search size={14} color="#666" />
-                <input type="text" placeholder="Search employee name..." style={{ ...styles.searchInput, width: '150px', fontSize: '0.75rem', marginBottom: 0 }} value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', gap: '20px' }}>
+          <h4 style={{ ...styles.biTitle, marginBottom: 0 }}><Layers size={16} color="#d3bfa2" /> HISTORIC ROSTER RECORD REGISTRY</h4>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+             <div style={{ ...styles.searchWrapper, padding: '8px 14px', background: '#000', border: '1px solid #151515', borderRadius: '8px', marginBottom: 0 }}>
+                <Search size={14} color="#444" />
+                <input type="text" placeholder="Filter records by name..." style={{ ...styles.searchInput, width: '160px', fontSize: '0.75rem', color: '#fff' }} value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} />
              </div>
-             <span style={{ fontSize: '0.65rem', padding: '5px 10px', borderRadius: '20px', background: '#d3bfa215', color: '#d3bfa2', fontWeight: 'bold' }}>
-               {filteredStaff.length} RECORDS SYNCED
+             <span style={{ fontSize: '0.65rem', padding: '6px 12px', borderRadius: '6px', background: 'rgba(211,191,162,0.05)', color: '#d3bfa2', fontWeight: '800', border: '1px solid rgba(211,191,162,0.1)' }}>
+               {filteredStaff.length} ARCHIVES
              </span>
           </div>
         </div>
@@ -1164,77 +1207,94 @@ useEffect(() => {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign: 'left', fontSize: '0.65rem', color: '#444', borderBottom: '1px solid #151515', textTransform: 'uppercase' }}>
-                <th style={{ padding: '15px 10px' }}>Staff Details</th>
-                <th>Shift Window</th>
-                <th>Payroll Compliance</th>
-                <th style={{ textAlign: 'right', paddingRight: '15px' }}>Roster Action</th>
+              <tr style={{ textAlign: 'left', fontSize: '0.65rem', color: '#444', borderBottom: '1px solid #111', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <th style={{ padding: '0 0 15px 10px' }}>Staff Details (Role)</th>
+                <th style={{ paddingBottom: '15px' }}>Shift Window</th>
+                <th style={{ paddingBottom: '15px' }}>Dynamic Tenure</th>
+                <th style={{ paddingBottom: '15px' }}>Compensation</th>
+                <th style={{ paddingBottom: '15px' }}>Payroll Status</th>
+                <th style={{ paddingBottom: '15px', textAlign: 'right', paddingRight: '10px' }}>Roster Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredStaff.length > 0 ? filteredStaff.map(member => (
-                <tr key={member._id} style={{ borderBottom: '1px solid #0d0d0d', fontSize: '0.85rem' }}>
-                  <td style={{ padding: '15px 10px' }}>
+                <tr key={member._id} className="table-row-hover" style={{ borderBottom: '1px solid #0a0a0a', fontSize: '0.8rem', transition: '0.2s' }}>
+                  <td style={{ padding: '16px 10px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: '800', color: '#fff' }}>{member.name}</span>
-                      <span style={{ fontSize: '0.65rem', color: '#d3bfa2', fontWeight: 'bold', marginTop: '2px' }}>
-                        {member.role.toUpperCase()} • {member.age}yrs • {calculateTenure(member.joiningDate)}
+                      <span style={{ fontWeight: '800', color: '#fff', letterSpacing: '0.2px' }}>{member.name}</span>
+                      <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '700', marginTop: '3px' }}>
+                        {member.role.toUpperCase()} {member.age ? `• ${member.age} YRS` : ''}
                       </span>
                     </div>
                   </td>
                   <td>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: '700', color: member.shiftType === 'Night Shift' ? '#a78bfa' : '#fbbf24' }}>
-                      <Clock size={12} /> {member.shiftType.toUpperCase()}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: '800', color: member.shiftType === 'Night Shift' ? '#8a704d' : '#d3bfa2' }}>
+                      <Clock size={11} /> {member.shiftType.toUpperCase()}
                     </span>
                   </td>
+                  <td style={{ color: '#aaa', fontWeight: '600', fontSize: '0.75rem' }}>
+                    {calculateTenure(member.joiningDate)}
+                  </td>
+                  <td style={{ fontWeight: '800', color: '#fff' }}>
+                    ₹{Number(member.baseSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small>
+                  </td>
                   <td>
-                     {/* PAYROLL SALARY STATE MULTIPLEXER SELECTOR FORM ENTITY */}
                      <select 
                        value={member.salaryStatus || 'Unpaid'} 
                        onChange={async (e) => {
                           try {
                              await axios.patch(`${BASE_URL}/staff/salary-status/${member._id}`, { salaryStatus: e.target.value });
                              fetchManagementData();
-                             showNotif(`Salary flag converted to ${e.target.value.toUpperCase()} for ${member.name}`);
-                          } catch(err) { showNotif("Payroll transaction failed", "error"); }
+                             showNotif(`Salary log updated for ${member.name}`);
+                          } catch(err) { showNotif("Payroll synchronization skipped", "error"); }
                        }}
-                       style={{ background: '#000', color: member.salaryStatus === 'Paid' ? '#4ade80' : '#ff4d4d', border: '1px solid #222', padding: '6px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 'bold', outline: 'none' }}
+                       style={{ 
+                         background: '#000', 
+                         color: member.salaryStatus === 'Paid' ? '#d3bfa2' : '#555', 
+                         border: member.salaryStatus === 'Paid' ? '1px solid rgba(211,191,162,0.3)' : '1px solid #1a1a1a', 
+                         padding: '5px 8px', 
+                         borderRadius: '6px', 
+                         fontSize: '0.65rem', 
+                         fontWeight: '900', 
+                         outline: 'none',
+                         cursor: 'pointer'
+                       }}
                      >
-                        <option value="Unpaid">❌ UNPAID</option>
-                        <option value="Paid">✅ PAID</option>
+                        <option value="Unpaid">UNPAID</option>
+                        <option value="Paid">PAID</option>
                       </select>
                   </td>
-                  <td style={{ textAlign: 'right', paddingRight: '15px' }}>
-                    {/* Hard Delete Trigger replacing the old deactivation system layout button */}
+                  <td style={{ textAlign: 'right', paddingRight: '10px' }}>
                     <button 
                       onClick={async () => {
-                        if(confirm(`CRITICAL DELETION WARNING:\nAre you absolutely certain you want to erase ${member.name} from the database permanently?\nThis will completely clear all historic logs and cannot be undone.`)) {
+                        if(confirm(`PERMANENT WIPEOUT DIALOGUE:\nAre you entirely certain you want to destroy records for ${member.name} immutably? This will flush all sub-collection archives from datastores.`)) {
                           try {
                             await axios.delete(`${BASE_URL}/staff/remove/${member._id}`);
-                            showNotif(`Wiped ${member.name} completely from enterprise datastores.`, "info");
+                            showNotif(`Successfully erased memory arrays for ${member.name}.`, "info");
                             fetchManagementData();
-                          } catch(e) { showNotif("Data removal pipeline error", "error"); }
+                          } catch(e) { showNotif("Destruction gateway exception thrown", "error"); }
                         }
                       }}
-                      style={{ background: '#ff4d4d15', border: '1px solid #ff4d4d33', color: '#ff4d4d', padding: '6px 12px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}
+                      style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '800', cursor: 'pointer', transition: '0.15s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#555'; }}
                     >
-                      REMOVE PERMANENTLY
+                      WIPE ARCHIVE
                     </button>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="4" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.8rem' }}>
-                    No matching profiles captured under specified filter targets.
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.75rem', fontWeight: '700' }}>
+                    NO VALID WORKFORCE ARCHIVES LOCATED UNDER SPECIFIED SCOPE
                   </td>
                 </tr>
               )}
             </tbody>
-            {/* SUM LABILITY RUNNING CALCULATION TFOOT STRIP METRIC */}
             <tfoot>
-               <tr style={{ background: '#080808', borderTop: '2px solid #151515', fontSize: '0.78rem' }}>
-                  <td colSpan="3" style={{ padding: '15px 10px', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>TOTAL ACCUMULATED ROSTER MONTHLY SALARY LIABILITY:</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: '900', color: '#fff', fontSize: '0.9rem', paddingRight: '15px' }}>
+               <tr style={{ background: '#050505', borderTop: '2px solid #111' }}>
+                  <td colSpan="3" style={{ padding: '16px 10px', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d', letterSpacing: '0.5px', textTransform: 'uppercase' }}>AGGREGATED MONTHLY RUNNING PAYROLL MARGIN LIABILITY:</td>
+                  <td colSpan="3" style={{ padding: '16px 10px', textAlign: 'left', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
                      ₹{totalPayrollValue.toLocaleString()}
                   </td>
                </tr>
@@ -1243,52 +1303,45 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* FIXED SYSTEMS LOOKUPS DESIGN MATRIX TREATMENT TRACKING ELEMENT PANEL */}
+      {/* DYNAMIC SHIFT AUDITING REGISTER COMPASS PANEL */}
       <div style={styles.botCard}>
-        <h4 style={styles.biTitle}><Calendar size={16} color="#d3bfa2" /> REAL-TIME ATTENDANCE LEDGER INTERACTIVE TRACKER</h4>
+        <h4 style={{ ...styles.biTitle, textAlign: 'left', marginBottom: '8px' }}><Calendar size={14} color="#8a704d" /> ATTENDANCE MATRIX LIFE TRACKER</h4>
+        <p style={{ fontSize: '0.68rem', color: '#555', textAlign: 'left', marginBottom: '20px', marginTop: 0 }}>Verify clock intervals and toggle on-duty parameters cleanly.</p>
+        
         <input 
           type="date" 
-          style={{ ...styles.input, marginBottom: '20px', colorScheme: 'dark', fontSize: '0.8rem' }} 
-          value={attendanceDate}
-          onChange={(e) => {
-            setAttendanceDate(e.target.value);
-            fetchAttendanceForDate(e.target.value);
-          }} 
+          value={attendanceDate} 
+          onChange={(e) => setAttendanceDate(e.target.value)} 
+          style={{ ...styles.input, colorScheme: 'dark', border: '1px solid #151515', background: '#000', fontSize: '0.8rem', padding: '12px 14px' }} 
         />
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
-          {staff && staff.filter(s => s.isActive !== false).map(m => {
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {staff.map(m => {
             const log = attendanceLogs.find(l => l.staffId === m._id);
             const isClockedIn = !!log && !log.clockOut;
             const isShiftEnded = !!log && !!log.clockOut;
             return (
-              <div key={m._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', alignItems: 'center', borderRadius: '12px', background: '#050505', border: isClockedIn ? '1px solid #d3bfa2' : '1px solid #111', transition: '0.2s' }}>
-                <div>
-                   <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fff' }}>{m.name}</div>
-                   <small style={{ fontSize: '0.65rem', color: isClockedIn ? '#d3bfa2' : '#444', fontWeight: 'bold', marginTop: '2px', display: 'block', textTransform: 'uppercase' }}>
-                      {isShiftEnded ? `Done (~${log.totalWorkingHours} hrs logs completed)` : isClockedIn ? "ON ACTIVE SHIFT WINDOW" : "ABSENT / NOT DETECTED"}
+              <div key={m._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '14px', borderRadius: '12px', background: '#050505', border: isClockedIn ? '1px solid rgba(211,191,162,0.3)' : '1px solid #111', alignItems: 'center', transition: '0.2s' }}>
+                <div style={{ textAlign: 'left' }}>
+                   <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fff' }}>{m.name}</div>
+                   <small style={{ color: isClockedIn ? '#d3bfa2' : '#444', fontSize: '0.65rem', fontWeight: '700', marginTop: '2px', display: 'block' }}>
+                      {isShiftEnded ? `SHIFT CLOSED (~${log.totalWorkingHours}H)` : isClockedIn ? "ON DUTY • WORKSPACE ACTIVE" : "NOT PRESENT / UNPUNCHED"}
                    </small>
                 </div>
                 <button 
                   onClick={async () => {
-                     try {
-                        if(!log) {
-                           await axios.post(`${BASE_URL}/staff/attendance/clock-in`, { tenantId, staffId: m._id });
-                           showNotif(`${m.name} Registered Present Successfully.`);
-                        } else if(isClockedIn) {
-                           await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
-                           showNotif(`${m.name} Shift Finalized and Stored Safely.`);
-                        }
-                        // FORCE IMMEDIATE LOCAL FETCH SYNC CYCLE LIFECYCLE HOOK
-                        const res = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${attendanceDate}`);
-                        setAttendanceLogs(res.data || []);
-                     } catch(err) { showNotif("Roster link skipped", "error"); }
+                     if(!log) await axios.post(`${BASE_URL}/staff/attendance/clock-in`, { tenantId, staffId: m._id });
+                     else if(isClockedIn) await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
+                     
+                     const syncRes = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${attendanceDate}`);
+                     setAttendanceLogs(syncRes.data || []);
                   }} 
                   disabled={isShiftEnded} 
                   style={{ 
-                     background: isShiftEnded ? '#111' : isClockedIn ? '#ff4d4d22' : '#10b98122', 
-                     color: isShiftEnded ? '#444' : isClockedIn ? '#ff4d4d' : '#10b981', 
-                     border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '900', cursor: isShiftEnded ? 'default' : 'pointer'
+                    background: isShiftEnded ? '#111' : isClockedIn ? 'rgba(138,112,77,0.1)' : '#d3bfa2', 
+                    color: isShiftEnded ? '#333' : isClockedIn ? '#8a704d' : '#000', 
+                    border: isClockedIn ? '1px solid rgba(138,112,77,0.3)' : 'none',
+                    padding: '8px 14px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', letterSpacing: '0.3px', cursor: isShiftEnded ? 'default' : 'pointer', transition: '0.15s'
                   }}
                 >
                    {isShiftEnded ? "COMPLETED" : isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
@@ -1302,6 +1355,7 @@ useEffect(() => {
     </div>
   </motion.div>
 )}
+
           </AnimatePresence>
         </section>
       </main>
