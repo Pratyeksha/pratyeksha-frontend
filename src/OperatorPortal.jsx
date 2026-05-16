@@ -144,21 +144,30 @@ const [rosterSearchQuery, setRosterSearchQuery] = useState(""); // 🚀 Register
 const [tenantConfig, setTenantConfig] = useState(null);
 
 const [newStaff, setNewStaff] = useState({
-    name: '', 
-    role: 'Waiter', 
-    age: '', 
-    contact: '', 
-    address: '', 
-    shiftType: 'Day Shift', // Matches backend enum: 'Day Shift' or 'Night Shift'
-    joiningDate: new Date().toISOString().split('T')[0], 
-    baseSalary: '',
-    assignedTables: [], 
-    cookingRole: '' 
-});
+      name: '', 
+      role: 'Waiter', 
+      age: '', 
+      contact: '', 
+      address: '', 
+      shiftType: 'Day Shift', 
+      joiningDate: (() => {
+        const localIstString = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+        const parsedIstDate = new Date(localIstString);
+        return parsedIstDate.getFullYear() + '-' + String(parsedIstDate.getMonth() + 1).padStart(2, '0') + '-' + String(parsedIstDate.getDate()).padStart(2, '0');
+      })(),
+      baseSalary: '',
+      assignedTables: [], 
+      cookingRole: '' 
+  });
 
 // For live attendance tracking
-const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-const [attendanceLogs, setAttendanceLogs] = useState([]);
+  // 🚀 FIXED: Renders initial layout picker strings correctly locked to local Indian Standard Time maps
+  const [attendanceDate, setAttendanceDate] = useState(() => {
+    const localIstString = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+    const parsedIstDate = new Date(localIstString);
+    return parsedIstDate.getFullYear() + '-' + String(parsedIstDate.getMonth() + 1).padStart(2, '0') + '-' + String(parsedIstDate.getDate()).padStart(2, '0');
+  });
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
 
 useEffect(() => {
     const fetchConfig = async () => {
@@ -170,7 +179,16 @@ useEffect(() => {
     if (isAuthenticated) fetchConfig();
 }, [isAuthenticated, tenantId]);
 
-  const occupiedTables = useMemo(() => [...new Set(orders.map(o => o.tableNumber.toString()))], [orders]);
+// 🚀 FIXED: Keeps table occupied during served state until it's settled completely
+  const occupiedTables = useMemo(() => {
+    return [
+      ...new Set(
+        orders
+          .filter(o => o.status === 'pending' || o.status === 'ready' || o.status === 'served')
+          .map(o => o.tableNumber.toString())
+      )
+    ];
+  }, [orders]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -231,8 +249,8 @@ const currentMonthAnalytics = useMemo(() => {
   }, [staff, attendanceLogs]);
 
 // 🚀 FIXED CALCULATION ENGINE: RE-MAPPED TO LIVE MONTH ANALYTICS DATA ARRAYS
+// 🚀 FIXED COMPILER ENGINE: TRACKS INCOME PATHS CORRECTLY IN REALTIME
   const dailySettlementBreakdown = useMemo(() => {
-    // Standardizes dates to ensure zeroing boundaries match (YYYY-MM-DD)
     const activeTargetDate = attendanceDate; 
     
     let cashSum = 0;
@@ -240,6 +258,7 @@ const currentMonthAnalytics = useMemo(() => {
     let cardSum = 0;
 
     if (analytics && Array.isArray(analytics)) {
+      // Looks up the specific IST array date entry key matching your calendar selection
       const activeDayData = analytics.find(d => d._id === activeTargetDate);
       if (activeDayData) {
         cashSum = Number(activeDayData.cash || 0);
@@ -330,14 +349,38 @@ const fetchManagementData = useCallback(async () => {
         ));
       });
 
+      socket.on("table_occupied_live", (data) => {
+        setOrders(prevOrders => {
+          const exists = prevOrders.some(o => o.tableNumber === data.tableNumber && o.status === 'pending');
+          if (!exists) {
+            // Mock a transient live order instance to switch grid item to occupied color specs instantly
+            return [{ _id: `live-stub-${Date.now()}`, tenantId, tableNumber: data.tableNumber, status: 'pending', items: [], createdAt: new Date() }, ...prevOrders];
+          }
+          return prevOrders;
+        });
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play();
+      });
+
+      // 🚀 EVENT 2: REAL-TIME BILL REQUEST COLORED HIGHLIGHTER
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
         new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play(); 
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 
-      socket.on("order_status_updated", () => fetchInitialData());
+      // 🚀 EVENT 3: IMMUTABLE CLEANUP ON LIVE WAGE/BILL MARGIN SETTLEMENTS
+// 🚀 FIXED: Handles kitchen updates safely while waiting for final payment settlement
+      socket.on("order_status_updated", (data) => {
+        if (data && data.status === 'settled') {
+          // Clear active checkout bells and arrays instantly only when settled
+          setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber.toString()));
+        }
+        // Pull fresh datasets seamlessly 
+        fetchInitialData();
+        fetchAnalytics();
+      });
     }
+
     return () => { socket.off(); };
   }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics,fetchManagementData]);
 
@@ -423,8 +466,17 @@ const settleBill = () => {
 
 const handleFinalSettle = async () => {
   const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+  
+  // Enforce numeric data mapping formats before reaching the endpoint
   let paymentMethodDetails = activePaymentType === 'split' 
-    ? { type: 'split', breakdown: { cash: paymentModes.cash, upi: paymentModes.upi, card: paymentModes.card } }
+    ? { 
+        type: 'split', 
+        breakdown: { 
+          cash: Number(paymentModes.cash || 0), 
+          upi: Number(paymentModes.upi || 0), 
+          card: Number(paymentModes.card || 0) 
+        } 
+      }
     : { type: 'full', method: selectedSingleMode };
 
   try {
@@ -443,18 +495,18 @@ const handleFinalSettle = async () => {
         setTableBill(null);
         setSelectedTable(null);
         setConfirmModal({ show: false });
+        setPaymentModes({ cash: '', upi: '', card: '' }); // Clear input field forms
         
-        // 🚀 CRITICAL UPDATE: Fetch fresh operational datasets so live states re-render cleanly
-        await fetchInitialData();   // Pulls updated settled order arrays
-        await fetchAnalytics();     // Pulls daily cash, upi, card breakdown sums
-        fetchManagementData();      // Refreshes inventory numbers
-      }, 2000);
+        // 🚀 FIX: Pull down clean data directly inside the callback timeline
+        await axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`).then(r => setOrders(r.data || []));
+        await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`).then(r => setAnalytics(r.data.salesData || []));
+        fetchManagementData();      
+      }, 1500);
     }
   } catch (err) {
     showNotif("Failed to save to database", "error");
   }
 };
-
 const handleBroadcast = async () => {
     if (!broadcastText && !selectedBroadcastItem) return;
     setIsBroadcasting(true);
@@ -716,22 +768,63 @@ useEffect(() => {
                         <Truck size={16} /> ONLINE ORDERING
                      </button>
                   </div>
-                  <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
-                  <div style={styles.tableGrid}>
-                    {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
-                      const id = n.toString();
-                      const isOcc = occupiedTables.includes(id);
-                      const hasReq = checkoutRequests.includes(id);
-                      return (
-                        <button key={n} onClick={() => generateBill(id)} 
-                          style={selectedTable === id ? styles.activeTableBtn : (hasReq ? styles.goldTableBtn : (isOcc ? styles.occupiedTableBtn : styles.tableBtn))}>
-                          {hasReq && <BellRing size={16} style={styles.bellIcon} />}
-                          T{n}
-                          {isOcc && !hasReq && <div style={styles.occupiedDot} />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                 <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
+  <div style={styles.tableGrid}>
+    {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
+      const id = n.toString();
+      const isOccupied = occupiedTables.includes(id);
+      const hasRequestedCheckout = checkoutRequests.includes(id);
+      const isCurrentlySelected = selectedTable === id;
+
+      return (
+        <button 
+          key={n} 
+          onClick={() => generateBill(id)} 
+          style={{
+            ...styles.tableBtn,
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            background: isCurrentlySelected 
+              ? '#d3bfa2' 
+              : hasRequestedCheckout 
+                ? 'rgba(211, 191, 162, 0.15)' // Matte gold highlight for billing requests
+                : isOccupied 
+                  ? '#111111' // High-end dark slate remains active after kitchen served/dispatch
+                  : '#0d0d0d', 
+            color: isCurrentlySelected 
+              ? '#000000' 
+              : hasRequestedCheckout 
+                ? '#d3bfa2' 
+                : isOccupied 
+                  ? 'rgba(211,191,162,0.6)' 
+                  : '#333333',
+            border: isCurrentlySelected 
+              ? '1px solid #d3bfa2' 
+              : hasRequestedCheckout 
+                ? '1px dashed #d3bfa2' 
+                : isOccupied 
+                  ? '1px solid rgba(211,191,162,0.25)' 
+                  : '1px solid #151515'
+          }}
+        >
+          {hasRequestedCheckout && (
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
+              <BellRing size={16} style={{ color: '#d3bfa2' }} />
+            </motion.div>
+          )}
+          <span style={{ fontSize: '1.05rem', fontWeight: '900' }}>T{n}</span>
+          {isOccupied && !hasRequestedCheckout && !isCurrentlySelected && (
+            <div style={{ width: '5px', height: '5px', background: '#8a704d', borderRadius: '50%' }} />
+          )}
+        </button>
+      );
+    })}
+  </div>
+
                   {/* 💰 DYNAMIC RUNNING DAILY CURRENCY BREAKDOWN COMPONENT BAR */}
  {/* 💰 UPGRADED HIGH-CONTRAST DATA STRIP MATRIX BAR */}
   <div style={{ ...styles.biCard, marginTop: '25px', borderTop: '2px solid #d3bfa2', background: '#090909', padding: '20px' }}>
