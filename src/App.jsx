@@ -166,8 +166,11 @@ const PratyekshaPremiumMenu = () => {
     setTableNumber(params.get('table') || 'Takeaway');
   }, [urlTenantId]);
 
+// 🚀 UNIFIED ENGINE: HANDLES INITIAL HTTP REST CONTENT LOADS & LIVE REAL-TIME SOCKET BROADCASTS
   useEffect(() => {
     if (!tenantId) return;
+
+    // 1. PHASE A: EXECUTE INITIAL REST DATA FETCH ON MOUNT
     const fetchMenuContent = async () => {
       try {
         const [res, cat, menu] = await Promise.all([
@@ -178,11 +181,40 @@ const PratyekshaPremiumMenu = () => {
         setRestaurantData(res.data);
         setCategoryList(cat.data);
         setAllMenuItems(menu.data);
-      } catch (error) { console.error("Fetch Error:", error); } 
-      finally { setIsLoading(false); }
+      } catch (error) { 
+        console.error("Initial Setup Sync Error:", error); 
+      } finally { 
+        setIsLoading(false); 
+      }
     };
+    
     fetchMenuContent();
-  }, [tenantId]);
+
+    // 2. PHASE B: SPIN UP LONG-LIVED WEB SOCKET CHANNELS FOR LIVE DATA SYNCING
+    const socket = io("https://pratyeksha-backend.onrender.com");
+    
+    // Join the unique restaurant multi-tenant data stream room footprint
+    socket.emit("join_restaurant", tenantId);
+
+    // Watch for immediate operator modifications (Visibility / Pricing shifts)
+    socket.on("menu_updated", (updatedItem) => {
+      if (updatedItem && updatedItem.tenantId === tenantId) {
+        setAllMenuItems((prevItems) =>
+          prevItems.map((item) =>
+            item._id === updatedItem._id ? { ...item, ...updatedItem } : item
+          )
+        );
+        
+    
+      }
+    });
+
+    // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
+    return () => {
+      socket.off("menu_updated");
+      socket.disconnect();
+    };
+  }, [tenantId, language]);
 
   const handleSwipe = (direction) => {
     const categories = ['all', ...categoryList.map(c => c.categoryId)];
@@ -399,16 +431,17 @@ const notifyWaiter = async (serviceType = "Custom") => {
     </span>
   </div>
 
-  <div style={styles.priceContainer}>
+<div style={styles.priceContainer}>
     {!item.priceHalf ? (
       <div style={styles.priceRow}>
         <div style={{ fontSize: '1.1rem', fontWeight: '800', color: primaryColor }}>
-          ₹{language === 'mr' ? (item.price_mr || convertToMrNumber(item.price)) : (item.priceFull || item.price)}
+          {/* 🚀 FIXED: Hard-locked to English variables to prevent any live sync database mismatches */}
+          ₹{item.priceFull || item.price}
         </div>
         {cart[item._id] ? (
           <div style={styles.counterRowSmall}>
             <button onClick={() => removeFromCart(item._id)} style={styles.qtyBtnSmall}>-</button>
-            <span style={{ fontSize: '0.8rem' }}>{convertToMrNumber(cart[item._id])}</span>
+            <span style={{ fontSize: '0.8rem' }}>{cart[item._id]}</span>
             <button onClick={() => addToCart(item, 'Single')} style={styles.qtyBtnSmall}>+</button>
           </div>
         ) : (
@@ -420,13 +453,14 @@ const notifyWaiter = async (serviceType = "Custom") => {
         <div style={styles.priceRow}>
           <span style={styles.priceLabel}>
             {t[language].half}: <span style={{ color: primaryColor }}>
-              ₹{language === 'mr' ? (item.price_mr?.split('/')[0] || convertToMrNumber(item.priceHalf)) : convertToMrNumber(item.priceHalf)}
+              {/* 🚀 FIXED: Read directly from standard numeric variable fields */}
+              ₹{item.priceHalf}
             </span>
           </span>
           {cart[`${item._id}-Half`] ? (
             <div style={styles.counterRowSmall}>
               <button onClick={() => removeFromCart(`${item._id}-Half`)} style={styles.qtyBtnSmall}>-</button>
-              <span>{convertToMrNumber(cart[`${item._id}-Half`])}</span>
+              <span>{cart[`${item._id}-Half`]}</span>
               <button onClick={() => addToCart(item, 'Half')} style={styles.qtyBtnSmall}>+</button>
             </div>
           ) : (
@@ -436,13 +470,14 @@ const notifyWaiter = async (serviceType = "Custom") => {
         <div style={styles.priceRow}>
           <span style={styles.priceLabel}>
             {t[language].full}: <span style={{ color: primaryColor }}>
-              ₹{language === 'mr' ? (item.price_mr?.split('/')[1] || convertToMrNumber(item.priceFull || item.price)) : convertToMrNumber(item.priceFull || item.price)}
+              {/* 🚀 FIXED: Read directly from standard numeric variable fields */}
+              ₹{item.priceFull || item.price}
             </span>
           </span>
           {cart[`${item._id}-Full`] ? (
             <div style={styles.counterRowSmall}>
               <button onClick={() => removeFromCart(`${item._id}-Full`)} style={styles.qtyBtnSmall}>-</button>
-              <span>{convertToMrNumber(cart[`${item._id}-Full`])}</span>
+              <span>{cart[`${item._id}-Full`]}</span>
               <button onClick={() => addToCart(item, 'Full')} style={styles.qtyBtnSmall}>+</button>
             </div>
           ) : (
@@ -512,6 +547,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
       </AnimatePresence>
 
       {/* CHECKOUT / BILL SUMMARY PAGE */}
+{/* CHECKOUT / BILL SUMMARY PAGE */}
       <AnimatePresence>
         {isBillOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{...styles.fullscreenModal, zIndex: 6000}}>
@@ -534,7 +570,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
                    <h2 style={styles.professionalTitle}>{t[language].thankYou}</h2>
                    <p style={styles.professionalSubtitle}>{t[language].receiptSent}</p>
                    
-                   {/* BILL STRUCTURED TABLE */}
+                   {/* 📱 ON-SCREEN UI: KEEPS YOUR ORIGINAL DESIGN COMPLETELY UNTOUCHED */}
                    <div style={styles.billBriefCard}>
                       <div style={styles.billBriefHeader}><ReceiptText size={18} /> {t[language].billSummary}</div>
                       
@@ -565,9 +601,102 @@ const notifyWaiter = async (serviceType = "Custom") => {
                       </div>
                    </div>
 
-                   <button style={styles.professionalContinueBtn} onClick={() => setShowReviewPage(true)}>
-                      {t[language].continue} <ChevronRight size={18} />
-                   </button>
+                   {/* ========================================================================= */}
+                   {/* 📥 PRINT DOM ENGINE ROOT: AUTO-SIZED & SHIFTED FOR PERFECT 1-PAGE A4 CENTERING */}
+                   {/* ========================================================================= */}
+                   <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+                      {/* 🚀 FIXED: Set sizing limits natively on the frame to prevent 2-page spilling */}
+                      <div id="pdf-rendering-frame" style={{ width: '210mm', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#ffffff', padding: '15mm 0', boxSizing: 'border-box' }}>
+                         
+                         <div id="customer-pdf-invoice" style={{ background: '#ffffff', color: '#000000', padding: '40px 25px', width: '420px', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+                              <h4 style={{ margin: 0, fontSize: '0.7rem', letterSpacing: '2px', fontWeight: '800', color: '#888' }}>TAX INVOICE</h4>
+                              <h1 style={{ margin: '8px 0', fontSize: '1.5rem', fontWeight: '900', color: '#000000', textTransform: 'uppercase', letterSpacing: '-0.5px', lineHeight: '1.2' }}>
+                                {restaurantData?.name || 'JAY AMBE MULTI FUSION FOOD AND SHAKES'}
+                              </h1>
+                              <p style={{ fontSize: '0.7rem', color: '#333', margin: '0 0 5px', fontWeight: '500', lineHeight: '1.4' }}>
+                                {restaurantData?.address ? `${restaurantData.address.street}, ${restaurantData.address.city}` : "Shop No 2, Jagdale Colony, Pratibha Nagar, Kolhapur"}
+                              </p>
+                              <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#000000', marginTop: '4px' }}>
+                                GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}
+                              </p>
+                            </div>
+                            
+                            <div style={{ borderTop: '2px solid #000000', borderBottom: '2px solid #000000', padding: '10px 0', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                               <div style={{ textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#666' }}>BILL NO.</div>
+                                  <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#000000' }}>#{placedOrders[0]?.billNo || '10'}</div>
+                               </div>
+                               <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#000000' }}>17 MAY 2026</div>
+                                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#555' }}>01:53 PM</div>
+                               </div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: '900', color: '#888', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                               <span>ITEM DESCRIPTION</span>
+                               <span>TOTAL</span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px', borderBottom: '1px solid #eeeeee', paddingBottom: '15px' }}>
+                               {placedOrders.map((order, idx) => (
+                                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', color: '#000000' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                                       <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>{order.quantity}x {order.name}</span>
+                                       <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>@ ₹{order.pricePerUnit || (order.subtotal / order.quantity).toFixed(0)}</span>
+                                    </div>
+                                    <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{order.subtotal}</b>
+                                 </div>
+                               ))}
+                            </div>
+
+                            <div style={{ fontSize: '0.85rem', color: '#333333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>₹{(calculateGrandTotal() / 1.05).toFixed(2)}</span></div>
+                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>CGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
+                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
+                            </div>
+
+                            <div style={{ borderTop: '2px solid #000000', marginTop: '15px', paddingTop: '15px' }}>
+                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '900', color: '#000000' }}>
+                                  <span style={{ fontSize: '1.2rem', letterSpacing: '-0.5px' }}>GRAND TOTAL</span>
+                                  <span style={{ fontSize: '1.4rem' }}>₹{calculateGrandTotal()}</span>
+                               </div>
+                            </div>
+                            
+                            <div style={{ textAlign: 'center', marginTop: '25px', fontSize: '0.6rem', fontWeight: '900', color: '#aaaaaa', letterSpacing: '1px', borderTop: '1px dashed #cccccc', paddingTop: '15px' }}>
+                              POWERED BY PRATYEKSHA
+                            </div>
+                         </div>
+
+                      </div>
+                   </div>
+
+                   {/* INTERACTIVE CONTROLS CONTAINER ROW */}
+                   <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>
+                      <button 
+                        style={{ width: '100%', padding: '18px', borderRadius: '15px', background: 'linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%)', color: '#000000', fontWeight: '900', border: '1px solid #e2e2e2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}
+                        onClick={() => {
+                          import('html2pdf.js').then((html2pdf) => {
+                            const element = document.getElementById('pdf-rendering-frame');
+                            const opt = {
+                              margin:       [0, 0, 0, 0],
+                              filename:     `TaxInvoice_Table_${tableNumber}.pdf`,
+                              image:        { type: 'jpeg', quality: 1.0 },
+                              html2canvas:  { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false },
+                              jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                            };
+                            html2pdf.default().set(opt).from(element).save();
+                          });
+                        }}
+                      >
+                        <ReceiptText size={18} color="#000000" strokeWidth={2.5} /> 
+                        <span>DOWNLOAD TAX INVOICE PDF</span>
+                      </button>
+
+                      <button style={styles.professionalContinueBtn} onClick={() => setShowReviewPage(true)}>
+                         {t[language].continue} <ChevronRight size={18} />
+                      </button>
+                   </div>
                 </div>
               ) : (
                 <div style={styles.thankYouWrapperProfessional}>
@@ -598,7 +727,6 @@ const notifyWaiter = async (serviceType = "Custom") => {
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* CART DRAWER */}
       <AnimatePresence>
         {isDrawerOpen && ( 

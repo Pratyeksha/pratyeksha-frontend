@@ -141,6 +141,10 @@ const [rosterSearchQuery, setRosterSearchQuery] = useState(""); // 🚀 Register
   const [bottomPerformers, setBottomPerformers] = useState([]);
 
 
+  // 🚀 CUSTOM MODAL STATE HOOKS: Replaces native browser alert/prompts seamlessly
+  const [activePriceEditItem, setActivePriceEditItem] = useState(null); // Holds item copy: { _id, name, price, priceHalf, priceFull }
+  const [pendingDeleteStaff, setPendingDeleteStaff] = useState(null);   // Holds staff copy: { _id, name }
+
 const [tenantConfig, setTenantConfig] = useState(null);
 
 const [newStaff, setNewStaff] = useState({
@@ -218,9 +222,49 @@ const currentMonthAnalytics = useMemo(() => {
     };
   }, [currentMonthAnalytics]);
 
+// 🚀 METRICS SORTING SYSTEMS: Tracks sorting column keys and orientation direction
+  const [ledgerSortConfig, setLedgerSortConfig] = useState({ key: 'name', direction: 'asc' });
+
+  const requestLedgerSort = (targetKey) => {
+    let direction = 'asc';
+    if (ledgerSortConfig.key === targetKey && ledgerSortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setLedgerSortConfig({ key: targetKey, direction });
+  };
+
+  // 💸 IMMUTABLE COMPILER ENGINE: Keeps filteredStaff as a flat array to prevent dependency breakages
   const filteredStaff = useMemo(() => {
-    return staff.filter(m => m.name.toLowerCase().includes(rosterSearchQuery.toLowerCase()));
-  }, [staff, rosterSearchQuery]);
+    let processingList = staff.filter(m => m.name.toLowerCase().includes(rosterSearchQuery.toLowerCase()));
+
+    if (ledgerSortConfig.key !== null) {
+      processingList.sort((a, b) => {
+        let valA = a[ledgerSortConfig.key];
+        let valB = b[ledgerSortConfig.key];
+
+        if (ledgerSortConfig.key === 'baseSalary') {
+          valA = Number(a.baseSalary) || 0;
+          valB = Number(b.baseSalary) || 0;
+        }
+
+        if (ledgerSortConfig.key === 'monthlyAttendance') {
+          const activePrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+          valA = attendanceLogs.filter(log => log.staffId === a._id && log.date?.startsWith(activePrefix)).length;
+          valB = attendanceLogs.filter(log => log.staffId === b._id && log.date?.startsWith(activePrefix)).length;
+        }
+
+        if (ledgerSortConfig.key === 'joiningDate') {
+          valA = new Date(a.joiningDate || 0).getTime();
+          valB = new Date(b.joiningDate || 0).getTime();
+        }
+
+        if (valA < valB) return ledgerSortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return ledgerSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return processingList;
+  }, [staff, rosterSearchQuery, ledgerSortConfig, attendanceLogs, viewDate]);
 
 // 💸 REAL-TIME PAYROLL ACCOUNTING ENGINE: EXCLUDES SETTLED ACCOUNTS FROM ACCUMULATED LIABILITIES
   const totalPayrollValue = useMemo(() => {
@@ -395,6 +439,9 @@ const fetchManagementData = useCallback(async () => {
     return () => { socket.off(); };
   }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics,fetchManagementData]);
 
+  
+  
+  
   const showNotif = (msg, type = 'success') => {
     setNotif({ show: true, msg, type });
     setTimeout(() => setNotif(prev => ({ ...prev, show: false })), 4000);
@@ -773,10 +820,8 @@ useEffect(() => {
                       <span style={{ color: '#d3bfa2', fontWeight: 'bold' }}>₹{item.price}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <button onClick={() => {
-                        const np = prompt("Set Price:", item.price);
-                        if(np) updateMenu(item._id, { price: Number(np) });
-                      }} style={styles.ghostBtn}>PRICING</button>
+                      {/* 🚀 FIXED: Opens native UI editor instead of window.prompt */}
+                      <button onClick={() => setActivePriceEditItem(item)} style={styles.ghostBtn}>PRICING</button>
                       <button onClick={() => updateMenu(item._id, { isAvailable: !item.isAvailable })} 
                         style={item.isAvailable ? styles.toggleHideBtn : styles.toggleShowBtn}>
                         {item.isAvailable ? "VISIBILITY ON" : "VISIBILITY OFF"}
@@ -1192,33 +1237,41 @@ useEffect(() => {
               </motion.div>
             )}
 {activeTab === 'management' && (
-  <motion.div key="management" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '35px', paddingBottom: '100px' }}>
+  <motion.div 
+    key="management" 
+    initial={{ opacity: 0, y: 15 }} 
+    animate={{ opacity: 1, y: 0 }} 
+    transition={{ duration: 0.4, ease: "easeOut" }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '40px', paddingBottom: '100px', width: '100%' }}
+  >
     
-    {/* WORKFORCE REGISTER TERMINAL */}
-    <div style={styles.biCard}>
-      <h4 style={styles.biTitle}><User size={18} color="#d3bfa2" /> WORKFORCE REGISTER TERMINAL</h4>
-      <p style={{ fontSize: '0.75rem', color: '#666', marginBottom: '20px', marginTop: '-15px' }}>
-        Enroll premium restaurant team members with structural base parameters.
+    {/* 📋 WORKFORCE REGISTER TERMINAL */}
+    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2', background: 'linear-gradient(180deg, #0d0d0d 0%, #080808 100%)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+        <User size={20} color="#d3bfa2" />
+        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff', fontSize: '1rem', letterSpacing: '0.5px' }}>WORKFORCE REGISTER TERMINAL</h4>
+      </div>
+      <p style={{ fontSize: '0.75rem', color: '#555', marginBottom: '25px', paddingLeft: '32px' }}>
+        Enroll premium restaurant team members with structural baseline operational metrics.
       </p>
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', alignItems: 'end', padding: '0 10px' }}>
         <div>
-          <label style={styles.statLabel}>FULL NAME</label>
-          <input type="text" placeholder="John Doe" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>FULL NAME</label>
+          <input type="text" placeholder="John Doe" style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem' }} value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
         </div>
         
         <div>
-          <label style={styles.statLabel}>OPERATIONAL ROLE</label>
-          <select style={{ ...styles.input, marginBottom: 0 }} value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value, assignedTables: []})}>
-            {['Manager', 'Chef', 'Waiter', 'Cashier', 'Helper'].map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>OPERATIONAL ROLE</label>
+          <select style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem', cursor: 'pointer' }} value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value, assignedTables: []})}>
+            {['Waiter', 'Chef', 'Manager', 'Cashier', 'Helper'].map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
           </select>
         </div>
 
-{/* 🚀 FIXED CHEF CATEGORY CONTAINER MATRIX: FIXED BLACKOUT EXCEPTIONS */}
         {newStaff.role === 'Chef' && (
-          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} style={{ gridColumn: 'span 2' }}>
-            <label style={styles.statLabel}>CUISINE SPECIALIZATION (SELECT MULTIPLE CATEGORIES)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', background: '#000', padding: '12px', borderRadius: '10px', border: '1px solid #151515', minHeight: '50px' }}>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ gridColumn: 'span 2' }}>
+            <label style={{ ...styles.statLabel, color: '#d3bfa2', marginBottom: '8px', display: 'block', fontWeight: '800' }}>CUISINE SPECIALIZATION (SELECT MULTIPLE CATEGORIES)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', background: '#000', padding: '14px', borderRadius: '12px', border: '1px solid #1a1a1a', minHeight: '54px' }}>
               {menuItems && menuItems.length > 0 ? (
                 [...new Set(menuItems.map(item => item.categoryId))].filter(Boolean).map(catId => {
                   const currentSelections = newStaff.cookingRole ? newStaff.cookingRole.split(', ') : [];
@@ -1234,9 +1287,10 @@ useEffect(() => {
                         setNewStaff({ ...newStaff, cookingRole: updatedCategories.join(', ') });
                       }}
                       style={{
-                        padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', border: 'none', cursor: 'pointer', transition: '0.2s',
+                        padding: '6px 14px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                         background: isChecked ? '#d3bfa2' : '#111',
-                        color: isChecked ? '#000' : '#666'
+                        color: isChecked ? '#000' : '#666',
+                        boxShadow: isChecked ? '0 4px 12px rgba(211,191,162,0.2)' : 'none'
                       }}
                     >
                       {catId.toUpperCase()}
@@ -1244,50 +1298,51 @@ useEffect(() => {
                   );
                 })
               ) : (
-                <div style={{ fontSize: '0.7rem', color: '#444', padding: '5px' }}>LOADING REQUISITE MENU CATEGORIES...</div>
+                <div style={{ fontSize: '0.7rem', color: '#444', display: 'flex', alignItems: 'center' }}>LOADING ARCHITECTURAL CATEGORIES...</div>
               )}
             </div>
           </motion.div>
         )}
 
         <div>
-          <label style={styles.statLabel}>AGE</label>
-          <input type="number" placeholder="25" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.age} onChange={e => setNewStaff({...newStaff, age: e.target.value})} />
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>AGE</label>
+          <input type="number" placeholder="25" style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515' }} value={newStaff.age} onChange={e => setNewStaff({...newStaff, age: e.target.value})} />
         </div>
 
         <div>
-          <label style={styles.statLabel}>CONTACT NUMBER</label>
-          <input type="text" placeholder="9876543210" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.contact} onChange={e => setNewStaff({...newStaff, contact: e.target.value})} />
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>CONTACT NUMBER</label>
+          <input type="text" placeholder="9876543210" style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515' }} value={newStaff.contact} onChange={e => setNewStaff({...newStaff, contact: e.target.value})} />
+        </div>
+
+<div>
+  <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>SHIFT WINDOW</label>
+  <select 
+    style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', cursor: 'pointer' }} 
+    value={newStaff.shiftType} 
+    onChange={e => setNewStaff({...newStaff, shiftType: e.target.value})}
+  >
+    <option value="Day Shift">DAY SHIFT</option>
+    <option value="Night Shift">NIGHT SHIFT</option>
+    {/* 🚀 FIXED: Value normalized to 'Both Shifts' to clear Mongoose backend validation gates */}
+    <option value="Both Shifts">BOTH SHIFTS (DAY & NIGHT)</option>
+  </select>
+</div>
+
+        <div>
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>BASE MONTHLY SALARY</label>
+          <input type="number" placeholder="₹25,000" style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515' }} value={newStaff.baseSalary} onChange={e => setNewStaff({...newStaff, baseSalary: e.target.value})} />
         </div>
 
         <div>
-          <label style={styles.statLabel}>SHIFT WINDOW</label>
-          <select style={{ ...styles.input, marginBottom: 0 }} value={newStaff.shiftType} onChange={e => setNewStaff({...newStaff, shiftType: e.target.value})}>
-            <option value="Day Shift">DAY SHIFT</option>
-            <option value="Night Shift">NIGHT SHIFT</option>
-            {/* 🚀 NEW UPGRADE OPTION: SUPPORT DUAL COGNITIVE ROTATIONS */}
-            <option value="Both Shift">BOTH SHIFTS (DAY & NIGHT)</option>
-          </select>
-        </div>
-
-        {/* 🚀 UPGRADED: MULTI-SELECT CUISINE SPECIALIZATIONS FOR CHEFS ONLY */}
-       
-
-        <div>
-          <label style={styles.statLabel}>BASE MONTHLY SALARY</label>
-          <input type="number" placeholder="₹25,000" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.baseSalary} onChange={e => setNewStaff({...newStaff, baseSalary: e.target.value})} />
-        </div>
-
-        <div>
-          <label style={styles.statLabel}>JOINING DATE</label>
-          <input type="date" style={{ ...styles.input, marginBottom: 0, colorScheme: 'dark' }} value={newStaff.joiningDate} onChange={e => setNewStaff({...newStaff, joiningDate: e.target.value})} />
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>JOINING DATE</label>
+          <input type="date" style={{ ...styles.input, marginBottom: 0, colorScheme: 'dark', background: '#000', borderColor: '#151515', cursor: 'pointer' }} value={newStaff.joiningDate} onChange={e => setNewStaff({...newStaff, joiningDate: e.target.value})} />
         </div>
       </div>
 
       {newStaff.role === 'Waiter' && (
-        <div style={{ marginTop: '20px', background: '#080808', padding: '15px', borderRadius: '12px', border: '1px solid #151515' }}>
-          <label style={styles.statLabel}>INITIAL TABLE ASSIGNMENTS</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+        <div style={{ marginTop: '25px', background: '#080808', padding: '18px', borderRadius: '14px', border: '1px solid #121212' }}>
+          <label style={{ ...styles.statLabel, color: '#888', marginBottom: '10px', display: 'block' }}>INITIAL FLOORGRID TABLE ASSIGNMENTS</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {Array.from({ length: tableCount }, (_, idx) => (idx + 1).toString()).map(tableNum => {
               const isSelected = newStaff.assignedTables.includes(tableNum);
               return (
@@ -1301,8 +1356,11 @@ useEffect(() => {
                     setNewStaff({ ...newStaff, assignedTables: updatedTables });
                   }}
                   style={{
-                    padding: '6px 12px', borderRadius: '6px', border: 'none', fontSize: '0.65rem', fontWeight: '800', cursor: 'pointer',
-                    background: isSelected ? '#d3bfa2' : '#111', color: isSelected ? '#000' : '#444'
+                    padding: '8px 16px', borderRadius: '8px', border: 'none', fontSize: '0.7rem', fontWeight: '800', cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: isSelected ? 'linear-gradient(135deg, #8a704d, #d3bfa2)' : '#111', 
+                    color: isSelected ? '#000' : '#555',
+                    boxShadow: isSelected ? '0 4px 10px rgba(138,112,77,0.25)' : 'none'
                   }}
                 >
                   T{tableNum}
@@ -1313,10 +1371,10 @@ useEffect(() => {
         </div>
       )}
 
-      <div style={{ marginTop: '20px' }}>
-        <label style={styles.statLabel}>RESIDENTIAL ADDRESS</label>
-        <div style={{ display: 'flex', gap: '15px' }}>
-          <input type="text" placeholder="Street layout, city coordinates, landmarks" style={{ ...styles.input, marginBottom: 0 }} value={newStaff.address} onChange={e => setNewStaff({...newStaff, address: e.target.value})} />
+      <div style={{ marginTop: '25px', padding: '0 10px' }}>
+        <label style={{ ...styles.statLabel, color: '#888', marginBottom: '8px', display: 'block' }}>RESIDENTIAL ADDRESS</label>
+        <div style={{ display: 'flex', gap: '20px' }}>
+          <input type="text" placeholder="Street layout, city coordinates, landmarks" style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515' }} value={newStaff.address} onChange={e => setNewStaff({...newStaff, address: e.target.value})} />
           <button 
             onClick={async () => {
               if(!newStaff.name || !newStaff.contact || !newStaff.baseSalary) return showNotif("Mandatory enrollment parameters missing", "error");
@@ -1343,12 +1401,12 @@ useEffect(() => {
                   });
                 }
 
-                showNotif(`${newStaff.name} safely locked into registers.`);
+                showNotif(`${newStaff.name} safely locked into registers.`, "success");
                 setNewStaff({ name: '', role: 'Waiter', age: '', contact: '', address: '', shiftType: 'Day Shift', joiningDate: new Date().toISOString().split('T')[0], baseSalary: '', assignedTables: [], cookingRole: '' });
                 fetchManagementData();
               } catch(e) { showNotif("Failed to sync employee record", "error"); }
             }}
-            style={{ ...styles.mainBtn, width: '220px' }}
+            style={{ ...styles.mainBtn, width: '240px', background: 'linear-gradient(135deg, #d3bfa2, #bda88a)', boxShadow: '0 6px 20px rgba(211,191,162,0.15)' }}
           >
             AUTHORIZE ROSTER
           </button>
@@ -1357,28 +1415,28 @@ useEffect(() => {
     </div>
 
     {/* 👑 PREMIUM TELEMETRY HEADS-UP DISPLAY */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-       <div style={{ ...styles.biCard, borderLeft: '3px solid #d3bfa2', background: '#0a0a0a', padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-             <div style={{ background: 'rgba(211,191,162,0.08)', padding: '10px', borderRadius: '10px', color: '#d3bfa2' }}><ChefHat size={20} /></div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+       <div style={{ ...styles.biCard, borderLeft: '4px solid #d3bfa2', background: 'linear-gradient(90deg, #0d0d0d 0%, #070707 100%)', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+             <div style={{ background: 'rgba(211,191,162,0.06)', padding: '12px', borderRadius: '12px', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.1)' }}><ChefHat size={22} /></div>
              <div>
-                <small style={{ color: '#555', fontWeight: '800', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>PRODUCTION HUB CAPACITY</small>
-                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>
-                   {liveFloorIntelligence.activeChefs} Chefs <span style={{ color: '#444', fontSize: '1.1rem', fontWeight: '500' }}>•</span> {liveFloorIntelligence.activeHelpers} Helpers Active
+                <small style={{ color: '#444', fontWeight: '900', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>PRODUCTION HUB CAPACITY</small>
+                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>
+                   {liveFloorIntelligence.activeChefs} Chefs <span style={{ color: '#222', fontSize: '1.2rem' }}>•</span> {liveFloorIntelligence.activeHelpers} Helpers Active
                 </div>
              </div>
           </div>
        </div>
 
-       <div style={{ ...styles.biCard, borderLeft: '3px solid #8a704d', background: '#0a0a0a', padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-             <div style={{ background: 'rgba(138,112,77,0.08)', padding: '10px', borderRadius: '10px', color: '#8a704d' }}><MousePointer2 size={20} /></div>
+       <div style={{ ...styles.biCard, borderLeft: '4px solid #8a704d', background: 'linear-gradient(90deg, #0d0d0d 0%, #070707 100%)', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+             <div style={{ background: 'rgba(138,112,77,0.06)', padding: '12px', borderRadius: '12px', color: '#8a704d', border: '1px solid rgba(138,112,77,0.1)' }}><MousePointer2 size={22} /></div>
              <div style={{ width: '100%' }}>
-                <small style={{ color: '#555', fontWeight: '800', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>FLOORGRID COVERAGE DENSITY</small>
-                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>
-                   {liveFloorIntelligence.coveredCount} <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '700' }}>OF {tableCount} TABLES ACCOUNTED</span>
+                <small style={{ color: '#444', fontWeight: '900', fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>FLOORGRID COVERAGE DENSITY</small>
+                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>
+                   {liveFloorIntelligence.coveredCount} <span style={{ fontSize: '0.8rem', color: '#444', fontWeight: '800' }}>OF {tableCount} TABLES ACCOUNTED</span>
                 </div>
-                <div style={{ fontSize: '0.65rem', color: '#8a704d', fontWeight: 'bold', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '380px' }}>
+                <div style={{ fontSize: '0.65rem', color: '#8a704d', fontWeight: 'bold', marginTop: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '420px' }}>
                    ACTIVE NODES: {liveFloorIntelligence.coveredList}
                 </div>
              </div>
@@ -1386,197 +1444,395 @@ useEffect(() => {
        </div>
     </div>
 
-    {/* DATA WORKSPACE GRID */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1.75fr 1.25fr', gap: '30px', alignItems: 'start' }}>
+    {/* 👑 WIDESCREEN FULL-WIDTH STACK ARCHITECTURE */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '40px', width: '100%' }}>
       
-      {/* HISTORIC ROSTER LEDGER INDEX MATRIX PANEL */}
-      <div style={styles.biCard}>
+      {/* SECTION A: HISTORIC ROSTER LEDGER INDEX MATRIX PANEL */}
+      <div style={{ ...styles.biCard, width: '100%', boxShadow: '0 15px 35px rgba(0,0,0,0.4)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', gap: '20px' }}>
-          <h4 style={{ ...styles.biTitle, marginBottom: 0 }}><Layers size={16} color="#d3bfa2" /> HISTORIC ROSTER RECORD REGISTRY</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Layers size={18} color="#d3bfa2" />
+            <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff', fontSize: '0.95rem' }}>HISTORIC ROSTER RECORD REGISTRY</h4>
+          </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-             <div style={{ ...styles.searchWrapper, padding: '8px 14px', background: '#000', border: '1px solid #151515', borderRadius: '8px', marginBottom: 0 }}>
+             <div style={{ ...styles.searchWrapper, padding: '8px 14px', background: '#000', border: '1px solid #121212', borderRadius: '8px', marginBottom: 0 }}>
                 <Search size={14} color="#444" />
-                <input type="text" placeholder="Filter records by name..." style={{ ...styles.searchInput, width: '160px', fontSize: '0.75rem', color: '#fff' }} value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} />
+                <input type="text" placeholder="Filter records by name..." style={{ ...styles.searchInput, width: '200px', fontSize: '0.75rem', color: '#fff' }} value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} />
              </div>
              <span style={{ fontSize: '0.65rem', padding: '6px 12px', borderRadius: '6px', background: 'rgba(211,191,162,0.05)', color: '#d3bfa2', fontWeight: '800', border: '1px solid rgba(211,191,162,0.1)' }}>
-               {filteredStaff.length} ARCHIVES
+               {filteredStaff.length} ARCHIVES ACTIVE
              </span>
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto' }} className="custom-scroll">
+         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign: 'left', fontSize: '0.65rem', color: '#444', borderBottom: '1px solid #111', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                <th style={{ padding: '0 0 15px 10px' }}>Staff Details (Role)</th>
+              <tr style={{ textAlign: 'left', fontSize: '0.65rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                <th onClick={() => requestLedgerSort('name')} style={{ padding: '0 0 15px 12px', cursor: 'pointer', color: ledgerSortConfig.key === 'name' ? '#d3bfa2' : '#555' }}>Staff Details {ledgerSortConfig.key === 'name' && (ledgerSortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                <th style={{ paddingBottom: '15px' }}>Operational Node Assignments</th>
                 <th style={{ paddingBottom: '15px' }}>Shift Window</th>
-                <th style={{ paddingBottom: '15px' }}>Dynamic Tenure</th>
-                <th style={{ paddingBottom: '15px' }}>Compensation</th>
+                <th onClick={() => requestLedgerSort('monthlyAttendance')} style={{ paddingBottom: '15px', textAlign: 'center', cursor: 'pointer', color: ledgerSortConfig.key === 'monthlyAttendance' ? '#d3bfa2' : '#555' }}>Monthly Attendance {ledgerSortConfig.key === 'monthlyAttendance' && (ledgerSortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                <th onClick={() => requestLedgerSort('joiningDate')} style={{ paddingBottom: '15px', cursor: 'pointer', color: ledgerSortConfig.key === 'joiningDate' ? '#d3bfa2' : '#555' }}>Dynamic Tenure {ledgerSortConfig.key === 'joiningDate' && (ledgerSortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                <th onClick={() => requestLedgerSort('baseSalary')} style={{ paddingBottom: '15px', cursor: 'pointer', color: ledgerSortConfig.key === 'baseSalary' ? '#d3bfa2' : '#555' }}>Compensation {ledgerSortConfig.key === 'baseSalary' && (ledgerSortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                 <th style={{ paddingBottom: '15px' }}>Payroll Status</th>
-                <th style={{ paddingBottom: '15px', textAlign: 'right', paddingRight: '10px' }}>Roster Action</th>
+                <th style={{ paddingBottom: '15px', textAlign: 'right', paddingRight: '12px' }}>Roster Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredStaff.length > 0 ? filteredStaff.map(member => (
-                <tr key={member._id} className="table-row-hover" style={{ borderBottom: '1px solid #0a0a0a', fontSize: '0.8rem', transition: '0.2s' }}>
-                  <td style={{ padding: '16px 10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: '800', color: '#fff', letterSpacing: '0.2px' }}>{member.name}</span>
-                      <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '700', marginTop: '3px' }}>
-                        {member.role.toUpperCase()} {member.age ? `• ${member.age} YRS` : ''}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: '800', color: member.shiftType === 'Night Shift' ? '#8a704d' : '#d3bfa2' }}>
-                      <Clock size={11} /> {member.shiftType.toUpperCase()}
-                    </span>
-                  </td>
-                  <td style={{ color: '#aaa', fontWeight: '600', fontSize: '0.75rem' }}>
-                    {calculateTenure(member.joiningDate)}
-                  </td>
-                  <td style={{ fontWeight: '800', color: '#fff' }}>
-                    ₹{Number(member.baseSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small>
-                  </td>
-                  <td>
-                     <select 
-                       value={member.salaryStatus || 'Unpaid'} 
-                       onChange={async (e) => {
-                          try {
-                             await axios.patch(`${BASE_URL}/staff/salary-status/${member._id}`, { salaryStatus: e.target.value });
-                             fetchManagementData();
-                             showNotif(`Salary log updated for ${member.name}`);
-                          } catch(err) { showNotif("Payroll synchronization skipped", "error"); }
-                       }}
-                       style={{ 
-                         background: '#000', 
-                         color: member.salaryStatus === 'Paid' ? '#d3bfa2' : '#555', 
-                         border: member.salaryStatus === 'Paid' ? '1px solid rgba(211,191,162,0.3)' : '1px solid #1a1a1a', 
-                         padding: '5px 8px', 
-                         borderRadius: '6px', 
-                         fontSize: '0.65rem', 
-                         fontWeight: '900', 
-                         outline: 'none',
-                         cursor: 'pointer'
-                       }}
-                     >
-                        <option value="Unpaid">UNPAID</option>
-                        <option value="Paid">PAID</option>
-                      </select>
-                  </td>
-                  <td style={{ textAlign: 'right', paddingRight: '10px' }}>
-                    <button 
-                      onClick={async () => {
-                        if(confirm(`PERMANENT WIPEOUT DIALOGUE:\nAre you entirely certain you want to destroy records for ${member.name} immutably? This will flush all sub-collection archives from datastores.`)) {
-                          try {
-                            await axios.delete(`${BASE_URL}/staff/remove/${member._id}`);
-                            showNotif(`Successfully erased memory arrays for ${member.name}.`, "info");
-                            fetchManagementData();
-                          } catch(e) { showNotif("Destruction gateway exception thrown", "error"); }
-                        }
-                      }}
-                      style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '800', cursor: 'pointer', transition: '0.15s' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#555'; }}
-                    >
-                      WIPE ARCHIVE
-                    </button>
-                  </td>
-                </tr>
-              )) : (
+              {filteredStaff.length > 0 ? (
+                ['Chef', 'Waiter', 'Manager', 'Cashier', 'Helper'].map(roleName => {
+                  // Filter matching entries on runtime for this visual partition block
+                  const bucketList = filteredStaff.filter(m => (m.role || 'Helper') === roleName);
+                  if (bucketList.length === 0) return null;
+
+                  return (
+                    <React.Fragment key={roleName}>
+                      {/* ROLE CATEGORY SEPARATOR UI BAR */}
+                      <tr style={{ background: 'rgba(211,191,162,0.02)' }}>
+                        <td colSpan="8" style={{ padding: '10px 12px', background: '#090909', borderBottom: '1px solid #111' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ width: '4px', height: '12px', background: '#d3bfa2', borderRadius: '2px' }} />
+                            <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.2px', textTransform: 'uppercase' }}>
+                              {roleName}S POOL ({bucketList.length} ACTIVE)
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {bucketList.map(member => {
+                        const currentYearStr = viewDate.getFullYear().toString();
+                        const currentMonthStr = String(viewDate.getMonth() + 1).padStart(2, '0');
+                        const targetMonthPrefix = `${currentYearStr}-${currentMonthStr}`;
+                        
+                        const monthlyPresentDays = attendanceLogs.filter(log => log.staffId === member._id && log.date?.startsWith(targetMonthPrefix)).length;
+                        const pureStaffName = member.name.includes(' (') ? member.name.split(' (')[0] : member.name;
+                        const explicitCuisines = member.cookingRole || (member.name.includes(' (') ? member.name.split('(')[1]?.replace(')', '') : '');
+
+                        return (
+                          <tr key={member._id} className="table-row-hover" style={{ borderBottom: '1px solid #090909', fontSize: '0.8rem' }}>
+                            <td style={{ padding: '16px 12px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <b style={{ color: '#fff' }}>{pureStaffName}</b>
+                                <span style={{ fontSize: '0.65rem', color: '#666', marginTop: '4px', fontWeight: '700' }}>
+                                  {member.role.toUpperCase()} {member.age ? `• ${member.age} YRS` : ''}
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              {member.role === 'Chef' ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxWidth: '320px' }}>
+                                  {explicitCuisines ? explicitCuisines.split(', ').map(cuisine => (
+                                    <span key={cuisine} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '4px', color: '#d3bfa2', fontWeight: '800' }}>
+                                      🍳 {cuisine.toUpperCase()}
+                                    </span>
+                                  )) : <span style={{ fontSize: '0.65rem', color: '#444', fontWeight: '700' }}>GENERAL KITCHEN</span>}
+                                </div>
+                              ) : member.role === 'Waiter' ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '280px' }}>
+                                  {member.assignedTables && member.assignedTables.length > 0 ? (
+                                    member.assignedTables.map(t => (
+                                      <span key={t} style={{ fontSize: '0.62rem', padding: '2px 6px', background: '#111', border: '1px solid #161616', borderRadius: '4px', color: '#aaa', fontWeight: '800' }}>
+                                        T{t}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span style={{ fontSize: '0.65rem', color: '#444', fontWeight: 'bold' }}>UNASSIGNED STATIONS</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '0.65rem', color: '#333', fontStyle: 'italic', fontWeight: '700' }}>FIXED EQUIPMENT</span>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: '800', color: member.shiftType === 'Night Shift' ? '#8a704d' : '#d3bfa2' }}>
+                                <Clock size={11} /> {member.shiftType.toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ padding: '4px 10px', borderRadius: '12px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.08)', fontSize: '0.75rem', fontWeight: '800', color: '#fff' }}>
+                                {monthlyPresentDays} <span style={{ color: '#444', fontSize: '0.6rem', fontWeight: '700' }}>DAYS LOGGED</span>
+                              </span>
+                            </td>
+                            <td>{calculateTenure(member.joiningDate)}</td>
+                            <td style={{ fontWeight: '800', color: '#fff' }}>
+                              ₹{Number(member.baseSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small>
+                            </td>
+                            <td>
+                               <select 
+                                 value={member.salaryStatus || 'Unpaid'} 
+                                 onChange={async (e) => {
+                                    try {
+                                       await axios.patch(`${BASE_URL}/staff/salary-status/${member._id}`, { salaryStatus: e.target.value });
+                                       fetchManagementData();
+                                       showNotif(`Roster payroll flag successfully updated for ${pureStaffName}`, "success");
+                                    } catch(err) { showNotif("Payroll synchronization skipped", "error"); }
+                                 }}
+                                 style={{ 
+                                   background: '#000', color: member.salaryStatus === 'Paid' ? '#d3bfa2' : '#444', 
+                                   border: member.salaryStatus === 'Paid' ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515', 
+                                   padding: '6px 10px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', outline: 'none', cursor: 'pointer'
+                                 }}
+                               >
+                                  <option value="Unpaid">UNPAID</option>
+                                  <option value="Paid">PAID</option>
+                                </select>
+                            </td>
+                            <td style={{ textAlign: 'right', paddingRight: '12px' }}>
+                              {/* 🚀 FIXED: Passes control block directly to safe inline layout dialogs */}
+                              <button 
+                                onClick={() => setPendingDeleteStaff(member)}
+                                style={{ background: 'transparent', border: '1px solid #151515', color: '#444', padding: '6px 14px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '800', cursor: 'pointer', transition: 'all 0.15s' }}
+                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#ff4d4d'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#151515'; e.currentTarget.style.color = '#444'; }}
+                              >
+                                WIPE ARCHIVE
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })
+              ) : (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.75rem', fontWeight: '700' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#444', fontSize: '0.75rem', fontWeight: '700' }}>
                     NO VALID WORKFORCE ARCHIVES LOCATED UNDER SPECIFIED SCOPE
                   </td>
                 </tr>
               )}
             </tbody>
-            <tfoot>
+<tfoot>
                <tr style={{ background: '#050505', borderTop: '2px solid #111' }}>
-                  <td colSpan="3" style={{ padding: '16px 10px', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d', letterSpacing: '0.5px', textTransform: 'uppercase' }}>AGGREGATED MONTHLY RUNNING PAYROLL MARGIN LIABILITY:</td>
-                  <td colSpan="3" style={{ padding: '16px 10px', textAlign: 'left', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
+                  {/* 🚀 STEP 1: Empty layout spacer cell spans across columns 1 to 5 */}
+                  <td colSpan="4" style={{ padding: 0 }} />
+                  
+                  {/* 🚀 STEP 2: The descriptive label sits directly left of the compensation column */}
+                  <td style={{ padding: '18px 12px', textAlign: 'right', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                     AGGREGATED PAYROLL:
+                  </td>
+                  
+                  {/* 🚀 STEP 3: Total value renders strictly below your individual base monthly compensation metrics */}
+                  <td style={{ padding: '18px 10px', textAlign: 'left', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                      ₹{totalPayrollValue.toLocaleString()}
                   </td>
+                  
+                  {/* 🚀 STEP 4: Secondary spacer cell addresses layout boundaries for remaining roster action columns */}
+                  <td style={{ padding: 0 }} />
                </tr>
             </tfoot>
           </table>
         </div>
       </div>
 
-      {/* DYNAMIC SHIFT AUDITING REGISTER COMPASS PANEL */}
-      <div style={styles.botCard}>
-        <h4 style={{ ...styles.biTitle, textAlign: 'left', marginBottom: '8px' }}><Calendar size={14} color="#8a704d" /> ATTENDANCE MATRIX LIFE TRACKER</h4>
-        <p style={{ fontSize: '0.68rem', color: '#555', textAlign: 'left', marginBottom: '20px', marginTop: 0 }}>Verify clock intervals and toggle on-duty parameters cleanly.</p>
+      {/* SECTION B: ATTENDANCE REGISTER TRACKER PANEL WITH LIVE SEARCH FILTERS */}
+{/* SECTION B: ATTENDANCE REGISTER TRACKER PANEL WITH LIVE ROLE-BASED GROUPS */}
+      <div style={{ ...styles.biCard, width: '100%', background: '#0d0d0d', borderTop: '1px solid #151515' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', marginBottom: '20px' }}>
+           <div>
+              <h4 style={{ ...styles.biTitle, marginBottom: '4px', color: '#fff' }}><Calendar size={14} color="#8a704d" /> ATTENDANCE MATRIX LIFE TRACKER</h4>
+              <p style={{ fontSize: '0.68rem', color: '#555', margin: 0 }}>Verify daily clock intervals and toggle on-duty workspace parameters cleanly.</p>
+           </div>
+           
+           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ ...styles.searchWrapper, padding: '6px 12px', background: '#000', border: '1px solid #181818', borderRadius: '6px', marginBottom: 0 }}>
+                 <Search size={12} color="#333" />
+                 <input 
+                    type="text" 
+                    placeholder="Search tracking name..." 
+                    id="attendanceSearchInput"
+                    style={{ ...styles.searchInput, width: '160px', fontSize: '0.72rem', color: '#fff' }} 
+                    onChange={(e) => {
+                       const query = e.target.value.toLowerCase();
+                       const elements = document.querySelectorAll('.attendance-card-node');
+                       elements.forEach(el => {
+                          const name = el.getAttribute('data-name');
+                          if(name && name.includes(query)) { el.style.display = 'flex'; } else { el.style.display = 'none'; }
+                       });
+                    }}
+                 />
+              </div>
+              <input 
+                type="date" 
+                value={attendanceDate} 
+                onChange={(e) => {
+                   setAttendanceDate(e.target.value);
+                   fetchAttendanceForDate(e.target.value);
+                }} 
+                style={{ ...styles.input, colorScheme: 'dark', border: '1px solid #181818', background: '#000', fontSize: '0.75rem', padding: '8px 12px', width: '160px', marginBottom: 0, cursor: 'pointer' }} 
+              />
+           </div>
+        </div>
         
-        <input 
-          type="date" 
-          value={attendanceDate} 
-          onChange={(e) => setAttendanceDate(e.target.value)} 
-          style={{ ...styles.input, colorScheme: 'dark', border: '1px solid #151515', background: '#000', fontSize: '0.8rem', padding: '12px 14px' }} 
-        />
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {staff.map(m => {
-            const log = attendanceLogs.find(l => l.staffId === m._id);
-            const isClockedIn = !!log && !log.clockOut;
-            const isShiftEnded = !!log && !!log.clockOut;
+        {/* ROLE-BASED GROUPS GRID SECTION FOR LIVE CARDS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          {['Chef', 'Waiter', 'Manager', 'Cashier', 'Helper'].map(roleName => {
+            const roleStaff = staff.filter(m => (m.role || 'Helper') === roleName);
+            if (roleStaff.length === 0) return null;
+
             return (
-              <div key={m._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '14px', borderRadius: '12px', background: '#050505', border: isClockedIn ? '1px solid rgba(211,191,162,0.3)' : '1px solid #111', alignItems: 'center', transition: '0.2s' }}>
-                <div style={{ textAlign: 'left' }}>
-                   <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fff' }}>{m.name}</div>
-                   <small style={{ color: isClockedIn ? '#d3bfa2' : '#444', fontSize: '0.65rem', fontWeight: '700', marginTop: '2px', display: 'block' }}>
-                      {isShiftEnded ? `SHIFT CLOSED (~${log.totalWorkingHours}H)` : isClockedIn ? "ON DUTY • WORKSPACE ACTIVE" : "NOT PRESENT / UNPUNCHED"}
-                   </small>
+              <div key={`attendance-group-${roleName}`} style={{ border: '1px solid #121212', padding: '20px', borderRadius: '16px', background: '#090909' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #151515', paddingBottom: '10px' }}>
+                   <Clock size={12} color="#8a704d" />
+                   <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#888', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                      {roleName.toUpperCase()} ROSTER STATIONS ({roleStaff.length})
+                   </span>
                 </div>
-                <button 
-                  onClick={async () => {
-                     if(!log) await axios.post(`${BASE_URL}/staff/attendance/clock-in`, { tenantId, staffId: m._id });
-                     else if(isClockedIn) await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
-                     
-                     const syncRes = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${attendanceDate}`);
-                     setAttendanceLogs(syncRes.data || []);
-                  }} 
-                  disabled={isShiftEnded} 
-                  style={{ 
-                    background: isShiftEnded ? '#111' : isClockedIn ? 'rgba(138,112,77,0.1)' : '#d3bfa2', 
-                    color: isShiftEnded ? '#333' : isClockedIn ? '#8a704d' : '#000', 
-                    border: isClockedIn ? '1px solid rgba(138,112,77,0.3)' : 'none',
-                    padding: '8px 14px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', letterSpacing: '0.3px', cursor: isShiftEnded ? 'default' : 'pointer', transition: '0.15s'
-                  }}
-                >
-                   {isShiftEnded ? "COMPLETED" : isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
-                </button>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
+                  {roleStaff.map(m => {
+                    const log = attendanceLogs.find(l => l.staffId === m._id);
+                    const isClockedIn = !!log && !log.clockOut;
+                    const isShiftEnded = !!log && !!log.clockOut;
+                    const sanitizedStaffName = m.name.includes(' (') ? m.name.split(' (')[0] : m.name;
+                    return (
+                      <div 
+                        key={m._id} 
+                        className="attendance-card-node"
+                        data-name={sanitizedStaffName.toLowerCase()}
+                        style={{ display: 'flex', justifyContent: 'space-between', padding: '14px', borderRadius: '12px', background: '#050505', border: isClockedIn ? '1px solid rgba(211,191,162,0.2)' : '1px solid #111', alignItems: 'center', transition: 'all 0.2s ease' }}
+                      >
+                        <div style={{ textAlign: 'left' }}>
+                           <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fff' }}>{sanitizedStaffName}</div>
+                           <small style={{ color: isClockedIn ? '#d3bfa2' : '#444', fontSize: '0.65rem', fontWeight: '700', marginTop: '3px', display: 'block' }}>
+                              {isShiftEnded ? `SHIFT CLOSED (~${log.totalWorkingHours}H)` : isClockedIn ? "ON DUTY • ACTIVE" : "NOT PRESENT / UNPUNCHED"}
+                           </small>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                             if(!log) await axios.post(`${BASE_URL}/staff/attendance/clock-in`, { tenantId, staffId: m._id });
+                             else if(isClockedIn) await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
+                             
+                             const syncRes = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${attendanceDate}`);
+                             setAttendanceLogs(syncRes.data || []);
+                          }} 
+                          disabled={isShiftEnded} 
+                          style={{ 
+                            background: isShiftEnded ? '#111' : isClockedIn ? 'rgba(138,112,77,0.08)' : '#d3bfa2', 
+                            color: isShiftEnded ? '#333' : isClockedIn ? '#8a704d' : '#000', 
+                            border: isClockedIn ? '1px solid rgba(138,112,77,0.2)' : 'none',
+                            padding: '8px 14px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', letterSpacing: '0.3px', cursor: isShiftEnded ? 'default' : 'pointer', transition: 'all 0.15s'
+                          }}
+                        >
+                           {isShiftEnded ? "COMPLETED" : isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
         </div>
+      </div>  
       </div>
-
-    </div>
-  </motion.div>
+      </motion.div>
 )}
-
           </AnimatePresence>
         </section>
       </main>
 
+{/* 👑 PREMIUM MODAL A: PRICING LAYER MANAGER (REPLACES WINDOW.PROMPT) */}
       <AnimatePresence>
-       {confirmModal.show && (
-  <div style={styles.modalBackdrop}>
-    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={styles.confirmBox}>
-      <AlertTriangle size={24} color="#d3bfa2" style={{ marginBottom: 15 }} />
-      <h3 style={{ color: '#fff', margin: '0 0 10px', fontSize: '1rem' }}>{confirmModal.title}</h3>
-      <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '30px' }}>{confirmModal.subtitle}</p>
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <button onClick={() => setConfirmModal({ show: false })} style={styles.cancelBtn}>ABORT</button>
-        
-        {/* 🚀 FIXED BUTTON: Explicitly calls the function */}
-        <button onClick={handleFinalSettle} style={styles.confirmBtn}>PROCEED</button>
-      </div>
-    </motion.div>
-  </div>
-)}
+        {activePriceEditItem && (
+          <div style={styles.modalBackdrop}>
+            <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }} style={{ ...styles.confirmBox, width: '420px', textAlign: 'left' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <UtensilsCrossed size={20} color="#d3bfa2" />
+                <h3 style={{ color: '#fff', margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>EDIT VALUATION METRICS</h3>
+              </div>
+              <p style={{ color: '#666', fontSize: '0.8rem', marginTop: '-10px', marginBottom: '20px' }}>Modifying base price points for <b>{activePriceEditItem.name}</b></p>
+              
+              {!activePriceEditItem.priceHalf ? (
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '8px' }}>STANDARD PRICE (₹)</label>
+                  <input 
+                    type="number" 
+                    style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#222' }} 
+                    value={activePriceEditItem.price || ''} 
+                    onChange={e => setActivePriceEditItem({ ...activePriceEditItem, price: Number(e.target.value) })}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                  <div>
+                    <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '8px' }}>HALF PRICE (₹)</label>
+                    <input 
+                      type="number" 
+                      style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#222' }} 
+                      value={activePriceEditItem.priceHalf || ''} 
+                      onChange={e => setActivePriceEditItem({ ...activePriceEditItem, priceHalf: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '8px' }}>FULL PRICE (₹)</label>
+                    <input 
+                      type="number" 
+                      style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#222' }} 
+                      value={activePriceEditItem.priceFull || ''} 
+                      onChange={e => setActivePriceEditItem({ ...activePriceEditItem, priceFull: Number(e.target.value), price: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '30px' }}>
+                <button onClick={() => setActivePriceEditItem(null)} style={styles.cancelBtn}>ABORT</button>
+                <button 
+                  onClick={() => {
+                    const payload = activePriceEditItem.priceHalf 
+                      ? { priceHalf: activePriceEditItem.priceHalf, priceFull: activePriceEditItem.priceFull, price: activePriceEditItem.priceFull }
+                      : { price: activePriceEditItem.price };
+                    updateMenu(activePriceEditItem._id, payload);
+                    setActivePriceEditItem(null);
+                  }} 
+                  style={styles.confirmBtn}
+                >
+                  SAVE CHANGES
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 👑 PREMIUM MODAL B: ATOMIC ERASER MANAGER (REPLACES WINDOW.CONFIRM) */}
+      <AnimatePresence>
+        {pendingDeleteStaff && (
+          <div style={styles.modalBackdrop}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} style={styles.confirmBox}>
+              <div style={{ display: 'flex', justifyContent: 'center', color: '#ff4d4d', marginBottom: '15px' }}>
+                <AlertTriangle size={32} />
+              </div>
+              <h3 style={{ color: '#fff', margin: '0 0 10px', fontSize: '1.1rem', fontWeight: '900' }}>PERMANENT WIPEOUT DIALOGUE</h3>
+              <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '25px', lineHeight: '1.5' }}>
+                Are you entirely certain you want to destroy records for <b style={{ color: '#fff' }}>{pendingDeleteStaff.name.split(' (')[0]}</b> immutably? This will flush all sub-collection archives from data stores.
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setPendingDeleteStaff(null)} style={styles.cancelBtn}>ABORT</button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await axios.delete(`${BASE_URL}/staff/remove/${pendingDeleteStaff._id}`);
+                      if (res.data.success) {
+                        showNotif(`Successfully erased memory arrays for ${pendingDeleteStaff.name.split(' (')[0]}.`, "info");
+                        setStaff(prev => prev.filter(m => m._id !== pendingDeleteStaff._id));
+                        setAttendanceLogs(prev => prev.filter(log => log.staffId !== pendingDeleteStaff._id));
+                        fetchManagementData();
+                      }
+                    } catch(e) { showNotif("Destruction gateway exception thrown", "error"); }
+                    finally { setPendingDeleteStaff(null); }
+                  }} 
+                  style={{ ...styles.confirmBtn, background: '#ff4d4d', color: '#fff' }}
+                >
+                  PURGE RECORD
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
 
       <style>{`
