@@ -222,13 +222,21 @@ const currentMonthAnalytics = useMemo(() => {
     return staff.filter(m => m.name.toLowerCase().includes(rosterSearchQuery.toLowerCase()));
   }, [staff, rosterSearchQuery]);
 
+// 💸 REAL-TIME PAYROLL ACCOUNTING ENGINE: EXCLUDES SETTLED ACCOUNTS FROM ACCUMULATED LIABILITIES
   const totalPayrollValue = useMemo(() => {
-    return filteredStaff.reduce((acc, m) => acc + (Number(m.baseSalary) || 0), 0);
+    return filteredStaff.reduce((acc, m) => {
+      // If employee has already been paid out, their baseline salary drops out of the active liabilities margin
+      if (m.salaryStatus === 'Paid') return acc;
+      return acc + (Number(m.baseSalary) || 0);
+    }, 0);
   }, [filteredStaff]);
 
 // 🚀 FIXED SYSTEM: Changed tracking handle assignment to standard liveFloorIntelligence
+// 🚀 HIGH-PRECISION WORKFORCE PRODUCTION TELEMETRY COMPILER
   const liveFloorIntelligence = useMemo(() => {
-     const presentStaffIds = attendanceLogs.map(log => log.staffId);
+     // Explicitly filter for entries that have logged a clock-in but haven't clocked-out yet
+     const activePunches = attendanceLogs.filter(log => log.clockIn && !log.clockOut);
+     const presentStaffIds = activePunches.map(log => log.staffId);
      const presentStaff = staff.filter(s => presentStaffIds.includes(s._id));
      
      const activeChefs = presentStaff.filter(s => s.role === 'Chef').length;
@@ -333,22 +341,23 @@ const fetchManagementData = useCallback(async () => {
         showNotif(`Order Update: Table ${order.tableNumber}`); 
         fetchInitialData(); 
       });
-      socket.on("bill_requested", (data) => {
-        setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play(); 
-        showNotif(`Settlement Request: Table ${data.tableNumber}`);
+
+      socket.on("staff_wiped_live", (data) => {
+        setStaff(prev => prev.filter(m => m._id !== data.staffId));
+        setAttendanceLogs(prev => prev.filter(log => log.staffId !== data.staffId));
+        showNotif("Roster database modification synced in real-time.", "info");
       });
+
+
       socket.on("new_waiter_request", (request) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play(); 
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
         setWaiterRequests(prev => [request, ...prev]);
       });
       socket.on("menu_updated", (updatedItem) => {
-        setMenuItems(prev => prev.map(item => 
-          item._id === updatedItem._id ? updatedItem : item
-        ));
+        // 🚀 LIVE MENU UPDATE FIX: Updates state arrays natively to prevent full reloads
+        setMenuItems(prev => prev.map(item => item._id === updatedItem._id ? updatedItem : item));
       });
-
       socket.on("table_occupied_live", (data) => {
         setOrders(prevOrders => {
           const exists = prevOrders.some(o => o.tableNumber === data.tableNumber && o.status === 'pending');
@@ -595,11 +604,30 @@ const updateMenu = async (itemId, updateData) => {
     } catch (err) { showNotif("Error clearing request", "error"); }
   };
 
+// 🚀 DYNAMIC REVENUE SOURCE ALLOCATOR BASED ON EXPLICIT ASSIGNMENT VALUES
   const advancedStats = useMemo(() => {
     const topItems = (serverStats?.topItems || []).map(item => [item._id, item.totalSold]);
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
-    analytics.forEach(day => { sources.direct += (day.revenue || 0); });
-    return { sources, topItems, hourlyTraffic: Array(24).fill(0), loyaltyRate: analytics.length > 0 ? 84 : 0 };
+    
+    if (analytics && Array.isArray(analytics)) {
+      analytics.forEach(day => {
+        // Enforces clean matching keys from backend strings
+        const orderSourceKey = day.source ? day.source.toLowerCase() : 'direct';
+        
+        if (sources.hasOwnProperty(orderSourceKey)) {
+          sources[orderSourceKey] += Number(day.revenue || 0);
+        } else {
+          sources.direct += Number(day.revenue || 0);
+        }
+      });
+    }
+
+    return { 
+      sources, 
+      topItems, 
+      hourlyTraffic: Array(24).fill(0), 
+      loyaltyRate: analytics.length > 0 ? 84 : 0 
+    };
   }, [serverStats, analytics]);
 
 const fetchAttendanceForDate = useCallback(async (targetDate) => {
@@ -1135,15 +1163,34 @@ useEffect(() => {
           </select>
         </div>
 
-        {newStaff.role === 'Chef' && (
-          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
-            <label style={styles.statLabel}>CUISINE SPECIALIZATION</label>
-            <select style={{ ...styles.input, marginBottom: 0, border: '1px solid #d3bfa2' }} value={newStaff.cookingRole} onChange={e => setNewStaff({...newStaff, cookingRole: e.target.value})}>
-              <option value="">Select Category...</option>
-              {menuItems && [...new Set(menuItems.map(item => item.categoryId))].map(catId => (
-                <option key={catId} value={catId}>{catId.toUpperCase()}</option>
-              ))}
-            </select>
+ {newStaff.role === 'Chef' && (
+          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} style={{ gridColumn: 'span 2' }}>
+            <label style={styles.statLabel}>CUISINE SPECIALIZATION (SELECT MULTIPLE CATEGORIES)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', background: '#000', padding: '12px', borderRadius: '10px', border: '1px solid #151515' }}>
+              {categoryList && categoryList.map(cat => {
+                const currentSelections = newStaff.cookingRole ? newStaff.cookingRole.split(', ') : [];
+                const isChecked = currentSelections.includes(cat.name);
+                return (
+                  <button
+                    key={cat._id}
+                    type="button"
+                    onClick={() => {
+                      let updatedCategories = isChecked 
+                        ? currentSelections.filter(c => c !== cat.name)
+                        : [...currentSelections, cat.name];
+                      setNewStaff({ ...newStaff, cookingRole: updatedCategories.join(', ') });
+                    }}
+                    style={{
+                      padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', border: 'none', cursor: 'pointer', transition: '0.2s',
+                      background: isChecked ? '#d3bfa2' : '#111',
+                      color: isChecked ? '#000' : '#666'
+                    }}
+                  >
+                    {cat.name.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
           </motion.div>
         )}
 
@@ -1162,8 +1209,13 @@ useEffect(() => {
           <select style={{ ...styles.input, marginBottom: 0 }} value={newStaff.shiftType} onChange={e => setNewStaff({...newStaff, shiftType: e.target.value})}>
             <option value="Day Shift">DAY SHIFT</option>
             <option value="Night Shift">NIGHT SHIFT</option>
+            {/* 🚀 NEW UPGRADE OPTION: SUPPORT DUAL COGNITIVE ROTATIONS */}
+            <option value="Both Shift">BOTH SHIFTS (DAY & NIGHT)</option>
           </select>
         </div>
+
+        {/* 🚀 UPGRADED: MULTI-SELECT CUISINE SPECIALIZATIONS FOR CHEFS ONLY */}
+       
 
         <div>
           <label style={styles.statLabel}>BASE MONTHLY SALARY</label>
