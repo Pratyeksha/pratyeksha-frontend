@@ -298,13 +298,15 @@ const currentMonthAnalytics = useMemo(() => {
     } catch (err) { console.error("Data Sync Error:", err); }
   }, [tenantId]);
 
-const fetchAnalytics = useCallback(async () => {
+const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this hook right below topPerformers state
+
+  const fetchAnalytics = useCallback(async () => {
     try {
       const res = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`);
-      // 🚀 Safe array fallback extractions completely stop white/black screen engine blackouts
       setAnalytics(res.data.salesData || []); 
       setTopPerformers(res.data.topItems || []);
       setBottomPerformers(res.data.bottomItems || []);
+      setCategoryRankings(res.data.categoryRankings || {}); // 🚀 Capture category insights cleanly
     } catch (err) { 
       console.error("Blackout Preventer Layer caught exception:", err); 
     }
@@ -1091,6 +1093,55 @@ useEffect(() => {
                    </div>
                 </div>
 
+                {/* 🚀 NEW UPGRADE SECTION: CATEGORY DENSITY ANALYSIS VIEW GRID */}
+        <div style={{ ...styles.biCard, marginBottom: '30px', borderTop: '2px solid #d3bfa2' }}>
+           <h4 style={styles.biTitle}><Layers size={16} /> OPERATIONAL CATEGORY PERFORMANCE SEGMENTATION</h4>
+           <p style={{ fontSize: '0.75rem', color: '#555', marginTop: '-15px', marginBottom: '25px' }}>
+              Detailed structural lookup analyzing menu category items performance velocity.
+           </p>
+
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+              {Object.keys(categoryRankings).length > 0 ? (
+                 Object.entries(categoryRankings).map(([catName, metrics]) => (
+                    <div key={catName} style={{ background: '#050505', border: '1px solid #111', padding: '20px', borderRadius: '16px' }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
+                          <span style={{ fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{catName}</span>
+                          <span style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.05)', color: '#888', fontWeight: '800' }}>
+                             {metrics.totalSoldInCategory} UNITS SOLD
+                          </span>
+                       </div>
+
+                       {/* Category Top Performers Strip */}
+                       <div style={{ marginBottom: '15px' }}>
+                          <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP MOVING</small>
+                          {metrics.topDishes.map((dish, idx) => (
+                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#fff' }}>
+                                <span>✦ {dish.name}</span>
+                                <span style={{ fontWeight: '700', color: '#d3bfa2' }}>{dish.sold} sold</span>
+                             </div>
+                          ))}
+                       </div>
+
+                       {/* Category Bottom Performers Strip */}
+                       <div>
+                          <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>UNDERPERFORMING</small>
+                          {metrics.bottomDishes.map((dish, idx) => (
+                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#555' }}>
+                                <span>• {dish.name}</span>
+                                <span style={{ fontWeight: '600' }}>{dish.sold} sold</span>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 ))
+              ) : (
+                 <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', padding: '20px', gridColumn: 'span 2' }}>
+                    AWAITING SETTLED INVOICES TO MAP CATEGORY DISTRIBUTIONS...
+                 </div>
+              )}
+           </div>
+        </div>
+
                 {/* --- ADD THIS INSIDE INSIGHTS TAB --- */}
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
     
@@ -1163,33 +1214,38 @@ useEffect(() => {
           </select>
         </div>
 
- {newStaff.role === 'Chef' && (
+{/* 🚀 FIXED CHEF CATEGORY CONTAINER MATRIX: FIXED BLACKOUT EXCEPTIONS */}
+        {newStaff.role === 'Chef' && (
           <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} style={{ gridColumn: 'span 2' }}>
             <label style={styles.statLabel}>CUISINE SPECIALIZATION (SELECT MULTIPLE CATEGORIES)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', background: '#000', padding: '12px', borderRadius: '10px', border: '1px solid #151515' }}>
-              {categoryList && categoryList.map(cat => {
-                const currentSelections = newStaff.cookingRole ? newStaff.cookingRole.split(', ') : [];
-                const isChecked = currentSelections.includes(cat.name);
-                return (
-                  <button
-                    key={cat._id}
-                    type="button"
-                    onClick={() => {
-                      let updatedCategories = isChecked 
-                        ? currentSelections.filter(c => c !== cat.name)
-                        : [...currentSelections, cat.name];
-                      setNewStaff({ ...newStaff, cookingRole: updatedCategories.join(', ') });
-                    }}
-                    style={{
-                      padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', border: 'none', cursor: 'pointer', transition: '0.2s',
-                      background: isChecked ? '#d3bfa2' : '#111',
-                      color: isChecked ? '#000' : '#666'
-                    }}
-                  >
-                    {cat.name.toUpperCase()}
-                  </button>
-                );
-              })}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', background: '#000', padding: '12px', borderRadius: '10px', border: '1px solid #151515', minHeight: '50px' }}>
+              {menuItems && menuItems.length > 0 ? (
+                [...new Set(menuItems.map(item => item.categoryId))].filter(Boolean).map(catId => {
+                  const currentSelections = newStaff.cookingRole ? newStaff.cookingRole.split(', ') : [];
+                  const isChecked = currentSelections.includes(catId);
+                  return (
+                    <button
+                      key={catId}
+                      type="button"
+                      onClick={() => {
+                        let updatedCategories = isChecked 
+                          ? currentSelections.filter(c => c !== catId)
+                          : [...currentSelections, catId];
+                        setNewStaff({ ...newStaff, cookingRole: updatedCategories.join(', ') });
+                      }}
+                      style={{
+                        padding: '6px 12px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900', border: 'none', cursor: 'pointer', transition: '0.2s',
+                        background: isChecked ? '#d3bfa2' : '#111',
+                        color: isChecked ? '#000' : '#666'
+                      }}
+                    >
+                      {catId.toUpperCase()}
+                    </button>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: '0.7rem', color: '#444', padding: '5px' }}>LOADING REQUISITE MENU CATEGORIES...</div>
+              )}
             </div>
           </motion.div>
         )}
