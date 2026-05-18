@@ -415,27 +415,63 @@ const notifyWaiter = async (serviceType = "Custom") => {
                   {item.isChefSpecial === true && <div style={styles.chefTag}><Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}</div>}
                 </div>
 <div style={styles.itemContentLeft}>
-  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff' }}>
+  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
     {language === 'mr' ? item.name_mr : item.name}
+    
+    {/* 🌶️ DYNAMIC SPICY LEVEL HIGHLIGHT INDICATOR */}
+    {item.spicylevel && (
+      <span style={{
+        fontSize: '0.58rem',
+        fontWeight: '900',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        background: item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(255,77,77,0.15)' : 'rgba(211,191,162,0.15)',
+        color: item.spicylevel.toUpperCase() === 'HIGH' ? '#ff4d4d' : '#d3bfa2',
+        border: item.spicylevel.toUpperCase() === 'HIGH' ? '1px solid rgba(255,77,77,0.3)' : '1px solid rgba(211,191,162,0.3)',
+        letterSpacing: '0.5px'
+      }}>
+        🔥 {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
+      </span>
+    )}
   </p>
   
-  {/* Corrected Ingredients Logic */}
-  <div style={{ marginTop: '4px' }}>
-    <span style={{ fontSize: '0.6rem', color: primaryColor, fontWeight: '800', textTransform: 'uppercase' }}>
-      {t[language].ingredients}: 
+  {/* 📋 PREMIUM INGREDIENTS LAYOUT BADGE ARRAYS */}
+  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      {t[language].ingredients}
     </span>
-    <span style={styles.itemDesc}>
-      {language === 'mr' 
-        ? (item.ingredients?.mr ? item.ingredients.mr.join(', ') : "") 
-        : (item.ingredients?.en ? item.ingredients.en.join(', ') : "")}
-    </span>
+    
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+      {language === 'mr' ? (
+        /* 🚀 FIXED: Using bracket notation to safely extract the array from MongoDB object mapping profiles */
+        item.ingredients && item.ingredients['mr'] && item.ingredients['mr'].length > 0 ? (
+          item.ingredients['mr'].map((ing, idx) => (
+            <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '4px', color: '#aaa', fontWeight: '500' }}>
+              {ing}
+            </span>
+          ))
+        ) : (
+          <span style={{ fontSize: '0.65rem', color: '#444', fontStyle: 'italic' }}>माहिती उपलब्ध नाही</span>
+        )
+      ) : (
+        /* 🚀 FIXED: Using bracket notation to safely extract the array from MongoDB object mapping profiles */
+        item.ingredients && item.ingredients['en'] && item.ingredients['en'].length > 0 ? (
+          item.ingredients['en'].map((ing, idx) => (
+            <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '4px', color: '#aaa', fontWeight: '500' }}>
+              {ing}
+            </span>
+          ))
+        ) : (
+          <span style={{ fontSize: '0.65rem', color: '#444', fontStyle: 'italic' }}>No data provided</span>
+        )
+      )}
+    </div>
   </div>
 
-<div style={styles.priceContainer}>
+  <div style={styles.priceContainer}>
     {!item.priceHalf ? (
       <div style={styles.priceRow}>
         <div style={{ fontSize: '1.1rem', fontWeight: '800', color: primaryColor }}>
-          {/* 🚀 FIXED: Hard-locked to English variables to prevent any live sync database mismatches */}
           ₹{item.priceFull || item.price}
         </div>
         {cart[item._id] ? (
@@ -453,7 +489,6 @@ const notifyWaiter = async (serviceType = "Custom") => {
         <div style={styles.priceRow}>
           <span style={styles.priceLabel}>
             {t[language].half}: <span style={{ color: primaryColor }}>
-              {/* 🚀 FIXED: Read directly from standard numeric variable fields */}
               ₹{item.priceHalf}
             </span>
           </span>
@@ -470,7 +505,6 @@ const notifyWaiter = async (serviceType = "Custom") => {
         <div style={styles.priceRow}>
           <span style={styles.priceLabel}>
             {t[language].full}: <span style={{ color: primaryColor }}>
-              {/* 🚀 FIXED: Read directly from standard numeric variable fields */}
               ₹{item.priceFull || item.price}
             </span>
           </span>
