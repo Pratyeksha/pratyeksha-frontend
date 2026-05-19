@@ -762,6 +762,11 @@ const sendBatchToKitchen = async () => {
   <span>GRAND TOTAL</span>
   <span>₹{convertToMrNumber(calculateGrandTotal())}</span>
 </div>
+{/* 6. Branding Footer */}
+        <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '0.6rem', fontWeight: '900', color: '#888', borderTop: '1px dashed #ccc', paddingTop: '15px' }}>
+          POWERED BY PRATYEKSHA
+        </div>
+      
       </div>
     )}
   </div>
