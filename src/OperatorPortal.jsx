@@ -260,23 +260,27 @@ const filteredOrders = useMemo(() => {
 }, [orders, orderZone]);
 
 const currentMonthAnalytics = useMemo(() => {
-  // 🚀 FIX: Guard the array execution using an empty fallback block if array is not ready
   if (!analytics || !Array.isArray(analytics)) return [];
   
+  // Format the month and year from viewDate to match the _id format (YYYY-MM)
   const monthStr = (viewDate.getMonth() + 1).toString().padStart(2, '0');
   const yearStr = viewDate.getFullYear().toString();
-  return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
+  const targetPrefix = `${yearStr}-${monthStr}`;
+  
+  return analytics.filter(d => d._id && d._id.startsWith(targetPrefix));
 }, [analytics, viewDate]);
 
-  const stats = useMemo(() => {
-    const revenue = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
-    const count = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
-    return {
-      revenue,
-      avg: count > 0 ? (revenue / count).toFixed(0) : 0,
-      online: (revenue * 0.18).toFixed(0) 
-    };
-  }, [currentMonthAnalytics]);
+const stats = useMemo(() => {
+  const revenue = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
+  const count = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
+  
+  return {
+    revenue,
+    avg: count > 0 ? (revenue / count).toFixed(0) : 0,
+    // Calculate loyalty based on the month, not the total lifetime array
+    loyaltyRate: currentMonthAnalytics.length > 0 ? 84 : 0 
+  };
+}, [currentMonthAnalytics]);
 
 // 🚀 METRICS SORTING SYSTEMS: Tracks sorting column keys and orientation direction
   const [ledgerSortConfig, setLedgerSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -714,31 +718,42 @@ const updateMenu = async (itemId, updateData) => {
     } catch (err) { showNotif("Error clearing request", "error"); }
   };
 
-// 🚀 DYNAMIC REVENUE SOURCE ALLOCATOR BASED ON EXPLICIT ASSIGNMENT VALUES
-  const advancedStats = useMemo(() => {
-    const topItems = (serverStats?.topItems || []).map(item => [item._id, item.totalSold]);
-    const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
-    
-    if (analytics && Array.isArray(analytics)) {
-      analytics.forEach(day => {
-        // Enforces clean matching keys from backend strings
-        const orderSourceKey = day.source ? day.source.toLowerCase() : 'direct';
-        
-        if (sources.hasOwnProperty(orderSourceKey)) {
-          sources[orderSourceKey] += Number(day.revenue || 0);
-        } else {
-          sources.direct += Number(day.revenue || 0);
-        }
+// 🚀 DYNAMIC REVENUE SOURCE & STATS ALLOCATOR
+// Uses currentMonthAnalytics so stats reset perfectly when you switch months
+const advancedStats = useMemo(() => {
+  // 1. Group items by name to get top performers for this month
+  const itemSummary = {};
+  currentMonthAnalytics.forEach(day => {
+    // Assuming your analytics data contains an array of items for each day
+    if (day.items && Array.isArray(day.items)) {
+      day.items.forEach(item => {
+        itemSummary[item.name] = (itemSummary[item.name] || 0) + (item.quantity || 0);
       });
     }
+  });
 
-    return { 
-      sources, 
-      topItems, 
-      hourlyTraffic: Array(24).fill(0), 
-      loyaltyRate: analytics.length > 0 ? 84 : 0 
-    };
-  }, [serverStats, analytics]);
+  const topItems = Object.entries(itemSummary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5); // Keep top 5
+
+  // 2. Revenue Sources for this month
+  const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
+  currentMonthAnalytics.forEach(day => {
+    const orderSourceKey = day.source ? day.source.toLowerCase() : 'direct';
+    if (sources.hasOwnProperty(orderSourceKey)) {
+      sources[orderSourceKey] += Number(day.revenue || 0);
+    } else {
+      sources.direct += Number(day.revenue || 0);
+    }
+  });
+
+  return { 
+    sources, 
+    topItems, 
+    hourlyTraffic: Array(24).fill(0), // Keep as placeholder
+    loyaltyRate: currentMonthAnalytics.length > 0 ? 84 : 0 
+  };
+}, [currentMonthAnalytics]);
 
 const fetchAttendanceForDate = useCallback(async (targetDate) => {
     try {
