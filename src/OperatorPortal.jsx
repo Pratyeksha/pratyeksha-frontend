@@ -501,70 +501,71 @@ const generateBill = async (id) => {
 
 
 
-// Change 1: Update the settleBill function to ONLY open the modal
-const settleBill = () => {
-  const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-  
-  // Basic validation before opening modal
-  if (activePaymentType === 'split') {
-    const totalEntered = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
-    if (Math.abs(totalEntered - finalAmt) > 1) {
-      showNotif(`Mismatch: ₹${totalEntered} vs ₹${finalAmt}`, "error");
-      return;
-    }
-  }
-
-  setConfirmModal({
-    show: true,
-    title: `Finalize Table Settlement?`,
-    subtitle: `Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
-    // We remove the onConfirm from here to avoid the "not clicking" bug
-  });
-};
-
-const handleFinalSettle = async () => {
-  const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-  
-  // Enforce numeric data mapping formats before reaching the endpoint
-  let paymentMethodDetails = activePaymentType === 'split' 
-    ? { 
-        type: 'split', 
-        breakdown: { 
-          cash: Number(paymentModes.cash || 0), 
-          upi: Number(paymentModes.upi || 0), 
-          card: Number(paymentModes.card || 0) 
-        } 
+// 🔥 FIXED: Added onConfirm trigger to securely bridge settlement execution
+  const settleBill = () => {
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    
+    if (activePaymentType === 'split') {
+      const totalEntered = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
+      if (Math.abs(totalEntered - finalAmt) > 1) {
+        showNotif(`Mismatch: ₹${totalEntered} vs ₹${finalAmt}`, "error");
+        return;
       }
-    : { type: 'full', method: selectedSingleMode };
-
-  try {
-    const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { 
-      discount, 
-      finalAmount: finalAmt, 
-      paymentMethods: paymentMethodDetails,
-      customerPhone: "" 
-    });
-
-    if (res.data && res.data.billNo) {
-      setTableBill(prev => ({ ...prev, billNo: res.data.billNo }));
-      showNotif(`Invoice #${res.data.billNo} Generated`, "success");
-
-      setTimeout(async () => {
-        setTableBill(null);
-        setSelectedTable(null);
-        setConfirmModal({ show: false });
-        setPaymentModes({ cash: '', upi: '', card: '' }); // Clear input field forms
-        
-        // 🚀 FIX: Pull down clean data directly inside the callback timeline
-        await axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`).then(r => setOrders(r.data || []));
-        await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`).then(r => setAnalytics(r.data.salesData || []));
-        fetchManagementData();      
-      }, 1500);
     }
-  } catch (err) {
-    showNotif("Failed to save to database", "error");
-  }
-};
+
+    setConfirmModal({
+      show: true,
+      title: `Finalize Table Settlement?`,
+      subtitle: `Total Liabilities: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
+      onConfirm: () => handleFinalSettle() // 🚀 FIXED: Binds the execution loop securely
+    });
+  };
+
+  const handleFinalSettle = async () => {
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    
+    let paymentMethodDetails = activePaymentType === 'split' 
+      ? { 
+          type: 'split', 
+          breakdown: { 
+            cash: Number(paymentModes.cash || 0), 
+            upi: Number(paymentModes.upi || 0), 
+            card: Number(paymentModes.card || 0) 
+          } 
+        }
+      : { type: 'full', method: selectedSingleMode };
+
+    try {
+      const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { 
+        discount, 
+        finalAmount: finalAmt, 
+        paymentMethods: paymentMethodDetails,
+        customerPhone: "" 
+      });
+
+      if (res.data && res.data.billNo) {
+        setTableBill(prev => ({ ...prev, billNo: res.data.billNo }));
+        showNotif(`Invoice #${res.data.billNo} Generated Successfully`, "success");
+
+        setTimeout(async () => {
+          setTableBill(null);
+          setSelectedTable(null);
+          setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null }); // Clear modal state completely
+          setPaymentModes({ cash: '', upi: '', card: '' }); 
+          
+          // 🚀 REFRAINED DEPENDENCY GATEWAYS
+          await axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`).then(r => setOrders(r.data || []));
+          await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`).then(r => setAnalytics(r.data.salesData || []));
+          
+          if (fetchManagementData.current) {
+            fetchManagementData.current(); // 🚀 FIXED: Invokes using the accurate ref pointer architecture
+          }
+        }, 1500);
+      }
+    } catch (err) {
+      showNotif("Failed to save transaction to database", "error");
+    }
+  };
 const handleBroadcast = async () => {
     if (!broadcastText && !selectedBroadcastItem) return;
     setIsBroadcasting(true);
