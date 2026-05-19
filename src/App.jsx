@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
@@ -297,47 +297,109 @@ const notifyWaiter = async (serviceType = "Custom") => {
     }, 0);
   };
 
-  const sendBatchToKitchen = async () => {
+const sendBatchToKitchen = async () => {
     try {
-      const orderItems = Object.entries(cart).map(([key, qty]) => {
+      // 🚀 AGGREGATE CART ITEMS: Group by ID and Portion
+      const summary = {};
+      Object.entries(cart).forEach(([key, qty]) => {
         const isMulti = key.includes('-');
         const id = isMulti ? key.split('-')[0] : key;
         const portion = isMulti ? key.split('-')[1] : 'Single';
         const item = allMenuItems.find(i => i._id === id);
-        const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
-        return { 
-          menuItemId: item._id, 
-          name: item.name, 
-          name_mr: item.name_mr,
-          quantity: qty, 
-          portion: portion, 
-          pricePerUnit: unitPrice, 
-          subtotal: unitPrice * qty,
-          suggestion: suggestions[key] || "" 
-        };
+        
+        const summaryKey = `${id}-${portion}`;
+        if (!summary[summaryKey]) {
+          const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+          summary[summaryKey] = { 
+            menuItemId: item._id, 
+            name: item.name, 
+            name_mr: item.name_mr,
+            quantity: 0, 
+            portion: portion, 
+            pricePerUnit: unitPrice, 
+            subtotal: 0,
+            suggestion: suggestions[key] || "" 
+          };
+        }
+        summary[summaryKey].quantity += qty;
+        summary[summaryKey].subtotal = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
       });
 
-      const total = getCartTotal();
+      const orderItems = Object.values(summary);
+      const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
+      
       const payload = { 
-        tenantId, tableNumber, items: orderItems, 
+        tenantId, 
+        tableNumber, 
+        items: orderItems, 
         billDetails: { itemsTotal: total, taxAmount: total * 0.05, grandTotal: total * 1.05 }, 
-        status: "pending", paymentStatus: "unpaid", createdAt: new Date().toISOString() 
+        status: "pending", 
+        paymentStatus: "unpaid", 
+        createdAt: new Date().toISOString() 
       };
 
       await axios.post(`${BASE_URL}/orders`, payload);
-      setPlacedOrders(prev => [...prev, ...orderItems]); // Save to state for bill structural calculation
+      
+      // Update placedOrders with the aggregated view for the receipt
+      setPlacedOrders(prev => [...prev, ...orderItems]); 
       triggerAlert("orderSuccess");
       setHasPlacedInitialOrder(true);
       setCart({}); 
       setSuggestions({}); 
       setIsDrawerOpen(false);
-    } catch (error) { triggerAlert("orderError", "error"); }
+    } catch (error) { 
+      console.error(error);
+      triggerAlert("orderError", "error"); 
+    }
   };
 
   const calculateGrandTotal = () => {
     const subtotal = placedOrders.reduce((sum, item) => sum + item.subtotal, 0);
     return subtotal; // Assuming direct sum for simplicity as per UI requirement
   };
+
+// 📊 UNIFIED RECEIPT AGGREGATOR
+  const receiptData = useMemo(() => {
+    if (placedOrders.length === 0) return null;
+    
+    // Group by ID + Portion to match the onscreen summary
+    const map = {};
+    placedOrders.forEach(item => {
+      const key = `${item.menuItemId}-${item.portion}`;
+      if (!map[key]) {
+        map[key] = { ...item };
+      } else {
+        map[key].quantity += item.quantity;
+        map[key].subtotal += item.subtotal;
+      }
+    });
+
+    const items = Object.values(map);
+    const total = items.reduce((sum, i) => sum + i.subtotal, 0);
+
+    return {
+      items,
+      total,
+      billNo: placedOrders[0]?.billNo || '001',
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    };
+  }, [placedOrders]);
+  
+  // 📊 COMPUTED AGGREGATE: Group placed items for the final receipt view
+  const finalBillItems = useMemo(() => {
+    const map = {};
+    placedOrders.forEach(item => {
+      const key = `${item.menuItemId}-${item.portion}`;
+      if (!map[key]) {
+        map[key] = { ...item };
+      } else {
+        map[key].quantity += item.quantity;
+        map[key].subtotal += item.subtotal;
+      }
+    });
+    return Object.values(map);
+  }, [placedOrders]);
 
   const requestFinalBill = async () => {
     if(!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
@@ -614,18 +676,20 @@ const notifyWaiter = async (serviceType = "Custom") => {
                          <span style={{flex: 1, textAlign: 'right'}}>{t[language].amt}</span>
                       </div>
                       
-                      <div style={styles.billTableBody}>
-                         {placedOrders.map((order, idx) => (
-                           <div key={idx} style={styles.billTableRow}>
-                              <div style={{flex: 2, display: 'flex', flexDirection: 'column'}}>
-                                 <span style={{fontSize: '0.85rem', color: '#fff'}}>{language === 'mr' ? order.name_mr : order.name}</span>
-                                 <span style={{fontSize: '0.65rem', color: primaryColor}}>{order.portion !== 'Single' ? order.portion : ''}</span>
-                              </div>
-                              <span style={{flex: 0.5, textAlign: 'center', fontSize: '0.85rem'}}>{convertToMrNumber(order.quantity)}</span>
-                              <span style={{flex: 1, textAlign: 'right', fontSize: '0.85rem'}}>₹{convertToMrNumber(order.subtotal)}</span>
-                           </div>
-                         ))}
-                      </div>
+                      {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
+<div style={styles.billTableBody}>
+   {finalBillItems.map((order, idx) => (
+     <div key={idx} style={styles.billTableRow}>
+        <div style={{flex: 2, display: 'flex', flexDirection: 'column'}}>
+           <span style={{fontSize: '0.85rem', fontWeight: '700', color: '#fff'}}>
+             {order.quantity}x {language === 'mr' ? order.name_mr : order.name}
+           </span>
+           <span style={{fontSize: '0.65rem', color: primaryColor}}>{order.portion !== 'Single' ? order.portion : ''}</span>
+        </div>
+        <span style={{flex: 1, textAlign: 'right', fontSize: '0.85rem'}}>₹{convertToMrNumber(order.subtotal)}</span>
+     </div>
+   ))}
+</div>
 
                       <div style={styles.billTableFooter}>
                          <div style={styles.billLineTotal}>
@@ -638,72 +702,70 @@ const notifyWaiter = async (serviceType = "Custom") => {
                    {/* ========================================================================= */}
                    {/* 📥 PRINT DOM ENGINE ROOT: AUTO-SIZED & SHIFTED FOR PERFECT 1-PAGE A4 CENTERING */}
                    {/* ========================================================================= */}
-                   <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
-                      {/* 🚀 FIXED: Set sizing limits natively on the frame to prevent 2-page spilling */}
-                      <div id="pdf-rendering-frame" style={{ width: '210mm', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#ffffff', padding: '15mm 0', boxSizing: 'border-box' }}>
-                         
-                         <div id="customer-pdf-invoice" style={{ background: '#ffffff', color: '#000000', padding: '40px 25px', width: '420px', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
-                            <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-                              <h4 style={{ margin: 0, fontSize: '0.7rem', letterSpacing: '2px', fontWeight: '800', color: '#888' }}>TAX INVOICE</h4>
-                              <h1 style={{ margin: '8px 0', fontSize: '1.5rem', fontWeight: '900', color: '#000000', textTransform: 'uppercase', letterSpacing: '-0.5px', lineHeight: '1.2' }}>
-                                {restaurantData?.name || 'JAY AMBE MULTI FUSION FOOD AND SHAKES'}
-                              </h1>
-                              <p style={{ fontSize: '0.7rem', color: '#333', margin: '0 0 5px', fontWeight: '500', lineHeight: '1.4' }}>
-                                {restaurantData?.address ? `${restaurantData.address.street}, ${restaurantData.address.city}` : "Shop No 2, Jagdale Colony, Pratibha Nagar, Kolhapur"}
-                              </p>
-                              <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#000000', marginTop: '4px' }}>
-                                GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}
-                              </p>
-                            </div>
-                            
-                            <div style={{ borderTop: '2px solid #000000', borderBottom: '2px solid #000000', padding: '10px 0', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                               <div style={{ textAlign: 'left' }}>
-                                  <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#666' }}>BILL NO.</div>
-                                  <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#000000' }}>#{placedOrders[0]?.billNo || '10'}</div>
-                               </div>
-                               <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#000000' }}>17 MAY 2026</div>
-                                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#555' }}>01:53 PM</div>
-                               </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: '900', color: '#888', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                               <span>ITEM DESCRIPTION</span>
-                               <span>TOTAL</span>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px', borderBottom: '1px solid #eeeeee', paddingBottom: '15px' }}>
-                               {placedOrders.map((order, idx) => (
-                                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', color: '#000000' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-                                       <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>{order.quantity}x {order.name}</span>
-                                       <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>@ ₹{order.pricePerUnit || (order.subtotal / order.quantity).toFixed(0)}</span>
-                                    </div>
-                                    <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{order.subtotal}</b>
-                                 </div>
-                               ))}
-                            </div>
+                {/* 📥 PRINT DOM ENGINE ROOT: UPDATED WITH AGGREGATED finalBillItems */}
+<div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+  <div id="pdf-rendering-frame" style={{ width: '210mm', display: 'flex', justifyContent: 'center', background: '#ffffff', padding: '15mm 0' }}>
+    {receiptData && (
+      <div id="customer-pdf-invoice" style={{ background: '#ffffff', color: '#000000', padding: '40px 25px', width: '420px', fontFamily: "'Inter', sans-serif" }}>
+        
+        {/* 1. Header */}
+        <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+          <h4 style={{ margin: 0, fontSize: '0.7rem', fontWeight: '800', color: '#888' }}>TAX INVOICE</h4>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: '900', margin: '8px 0', color:"black" }}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
+          <p style={{ fontSize: '0.7rem', color: '#333', margin: 0 }}>{restaurantData?.address?.street}, {restaurantData?.address?.city}</p>
+          <p style={{ fontSize: '0.75rem', fontWeight: '800', marginTop: '4px' }}>GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}</p>
+        </div>
 
-                            <div style={{ fontSize: '0.85rem', color: '#333333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>₹{(calculateGrandTotal() / 1.05).toFixed(2)}</span></div>
-                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>CGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
-                               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
-                            </div>
+        {/* 2. Bill & Customer Meta Info */}
+        <div style={{ borderTop: '2px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div><div style={{ fontSize: '0.65rem', color: '#666' }}>BILL NO.</div><div style={{ fontWeight: '900' }}>#{receiptData.billNo}</div></div>
+            <div style={{ textAlign: 'right' }}><div style={{ fontSize: '0.8rem', fontWeight: '800' }}>{receiptData.date}</div><div style={{ fontSize: '0.75rem' }}>{receiptData.time}</div></div>
+          </div>
+          <div style={{ fontSize: '0.75rem', fontWeight: '700', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
+            <div>Customer: {customerInfo.name || "N/A"}</div>
+            <div>Phone: {customerInfo.phone || "N/A"}</div>
+            <div>Table: {tableNumber}</div>
+          </div>
+        </div>
 
-                            <div style={{ borderTop: '2px solid #000000', marginTop: '15px', paddingTop: '15px' }}>
-                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '900', color: '#000000' }}>
-                                  <span style={{ fontSize: '1.2rem', letterSpacing: '-0.5px' }}>GRAND TOTAL</span>
-                                  <span style={{ fontSize: '1.4rem' }}>₹{calculateGrandTotal()}</span>
-                               </div>
-                            </div>
-                            
-                            <div style={{ textAlign: 'center', marginTop: '25px', fontSize: '0.6rem', fontWeight: '900', color: '#aaaaaa', letterSpacing: '1px', borderTop: '1px dashed #cccccc', paddingTop: '15px' }}>
-                              POWERED BY PRATYEKSHA
-                            </div>
-                         </div>
+      {/* 3. Aggregated Items (Using finalBillItems for grouping) */}
+<div style={{ padding: '10px 0', borderBottom: '1px solid #eee' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: '900', color: '#888', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+     <span>ITEM DESCRIPTION</span>
+     <span>TOTAL</span>
+  </div>
+  {finalBillItems.map((order, idx) => (
+    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
+       <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
+            {convertToMrNumber(order.quantity)}x {language === 'mr' ? order.name_mr : order.name}
+          </span>
+          {/* 🚀 PRICE PER UNIT DISPLAYED LIKE YOUR UPLOADED IMAGE */}
+          <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>
+            @ ₹{convertToMrNumber(order.pricePerUnit)} {order.portion !== 'Single' ? `(${order.portion})` : ''}
+          </span>
+       </div>
+       <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{convertToMrNumber(order.subtotal)}</b>
+    </div>
+  ))}
+</div>
 
-                      </div>
-                   </div>
+{/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
+<div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{(calculateGrandTotal() / 1.05).toFixed(2)}</span></div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
+  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
+</div>
+
+<div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
+  <span>GRAND TOTAL</span>
+  <span>₹{convertToMrNumber(calculateGrandTotal())}</span>
+</div>
+      </div>
+    )}
+  </div>
+</div>
 
                    {/* INTERACTIVE CONTROLS CONTAINER ROW */}
                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>

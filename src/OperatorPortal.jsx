@@ -183,6 +183,59 @@ useEffect(() => {
     if (isAuthenticated) fetchConfig();
 }, [isAuthenticated, tenantId]);
 
+// 📊 REAL-TIME HUD BREAKDOWN CORES: Counts daily source distribution blocks instantly from active analytics array mapping
+// 📊 REAL-TIME DAILY HUD COUNTER ENGINE: Tracks today's settled metrics starting fresh at 0 each morning
+  const hudLiveCounterBreakdown = useMemo(() => {
+    const activeTargetDate = attendanceDate; // Current date string: YYYY-MM-DD (IST Local)
+    
+    // Fallback template matching clean architectural data criteria
+    const fallbackTemplate = { total: 0, direct: 0, takeaway: 0, online: 0 };
+
+    if (!analytics || !Array.isArray(analytics) || analytics.length === 0) {
+      return fallbackTemplate;
+    }
+
+    // Locate the unique data block for today inside your database-fed analytics array stream
+    const todayDataBlock = analytics.find(d => d._id === activeTargetDate);
+
+    // If no bills have been closed out yet today, it cleanly returns 0 across the entire grid row
+    if (!todayDataBlock) {
+      return fallbackTemplate;
+    }
+
+    // Parse values natively from your specific analytics structure mapping blocks
+    const cashCount = Number(todayDataBlock.cashCount || 0);
+    const upiCount = Number(todayDataBlock.upiCount || 0);
+    const cardCount = Number(todayDataBlock.cardCount || 0);
+    
+    // Fallback compilation method tracking transaction instances manually based on source keys
+    let dailyDirect = 0;
+    let dailyTakeaway = 0;
+    let dailyOnline = 0;
+
+    // Filter through analytics tracking items explicitly mapped to today's temporal window bounds
+    const todaysAnalyticsInstances = analytics.filter(d => d._id === activeTargetDate);
+    
+    todaysAnalyticsInstances.forEach(item => {
+      const lowerSource = item.source ? item.source.toLowerCase() : 'direct';
+      if (lowerSource === 'takeaway') {
+        dailyTakeaway += (item.count || 1);
+      } else if (lowerSource === 'zomato' || lowerSource === 'swiggy' || lowerSource === 'online') {
+        dailyOnline += (item.count || 1);
+      } else {
+        dailyDirect += (item.count || 1);
+      }
+    });
+
+    const dailyTotalCombined = dailyDirect + dailyTakeaway + dailyOnline;
+
+    return {
+      total: dailyTotalCombined,
+      direct: dailyDirect,
+      takeaway: dailyTakeaway,
+      online: dailyOnline
+    };
+  }, [analytics, attendanceDate]);
 // 🚀 FIXED: Keeps table occupied during served state until it's settled completely
   const occupiedTables = useMemo(() => {
     return [
@@ -194,14 +247,17 @@ useEffect(() => {
     ];
   }, [orders]);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
-      if (orderZone === 'delayed') return minutes >= 15;
-      if (orderZone === 'fresh') return minutes < 15;
-      return true;
-    });
-  }, [orders, orderZone]);
+// 🚀 FIXED: Hides completed ('served') and paid ('settled') tickets from the PENDING panel
+const filteredOrders = useMemo(() => {
+  return orders.filter(order => {
+    if (order.status === 'served' || order.status === 'settled') return false;
+
+    const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
+    if (orderZone === 'delayed') return minutes >= 15;
+    if (orderZone === 'fresh') return minutes < 15;
+    return true;
+  });
+}, [orders, orderZone]);
 
 const currentMonthAnalytics = useMemo(() => {
   // 🚀 FIX: Guard the array execution using an empty fallback block if array is not ready
@@ -300,8 +356,7 @@ const currentMonthAnalytics = useMemo(() => {
      };
   }, [staff, attendanceLogs]);
 
-// 🚀 FIXED CALCULATION ENGINE: RE-MAPPED TO LIVE MONTH ANALYTICS DATA ARRAYS
-// 🚀 FIXED COMPILER ENGINE: TRACKS INCOME PATHS CORRECTLY IN REALTIME
+// 💰 FIXED: Accurate aggregation of nested payment details from the analytics stream
   const dailySettlementBreakdown = useMemo(() => {
     const activeTargetDate = attendanceDate; 
     
@@ -310,22 +365,22 @@ const currentMonthAnalytics = useMemo(() => {
     let cardSum = 0;
 
     if (analytics && Array.isArray(analytics)) {
-      // Looks up the specific IST array date entry key matching your calendar selection
-      const activeDayData = analytics.find(d => d._id === activeTargetDate);
-      if (activeDayData) {
-        cashSum = Number(activeDayData.cash || 0);
-        upiSum = Number(activeDayData.upi || 0);
-        cardSum = Number(activeDayData.card || 0);
-      }
+      // Find all records for today (aggregating from the array of objects)
+      const todayRecords = analytics.filter(d => d._id === activeTargetDate);
+      
+      todayRecords.forEach(record => {
+        // Look for values in the root OR inside the nested paymentDetails structure if it exists
+        cashSum += Number(record.cash || record.paymentDetails?.cash || 0);
+        upiSum += Number(record.upi || record.paymentDetails?.upi || 0);
+        cardSum += Number(record.card || record.paymentDetails?.card || 0);
+      });
     }
-
-    const grossCombinedTotal = cashSum + upiSum + cardSum;
 
     return {
       cash: cashSum,
       upi: upiSum,
       card: cardSum,
-      gross: grossCombinedTotal
+      gross: cashSum + upiSum + cardSum
     };
   }, [analytics, attendanceDate]);
 
@@ -475,13 +530,24 @@ const generateBill = async (id) => {
         const res = await axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`);
         const countRes = await axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } }));
         
-        const allItems = res.data.flatMap(o => o.items);
-        if(allItems.length === 0) { 
-            setTableBill(null); 
-            return; 
+        // 🚀 AGGREGATION LOGIC: Group identical items by name
+        const rawItems = res.data.flatMap(o => o.items);
+        if (rawItems.length === 0) {
+            setTableBill(null);
+            return;
         }
 
-        // 🚀 Dynamic professional format: 12 MAY 2026
+        const aggregatedItems = rawItems.reduce((acc, item) => {
+            const existing = acc.find(i => i.name === item.name);
+            if (existing) {
+                existing.quantity += Number(item.quantity || 1);
+                existing.subtotal += Number(item.subtotal || 0);
+            } else {
+                acc.push({ ...item, quantity: Number(item.quantity || 1), subtotal: Number(item.subtotal || 0) });
+            }
+            return acc;
+        }, []);
+
         const today = new Date();
         const formattedDate = today.toLocaleDateString('en-GB', { 
             day: 'numeric', 
@@ -490,8 +556,8 @@ const generateBill = async (id) => {
         }).toUpperCase();
 
         setTableBill({ 
-            items: allItems, 
-            total: allItems.reduce((acc, item) => acc + (item.subtotal || 0), 0), 
+            items: aggregatedItems, 
+            total: aggregatedItems.reduce((acc, item) => acc + item.subtotal, 0), 
             billNo: countRes.data.nextBillNo, 
             date: formattedDate,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -499,72 +565,67 @@ const generateBill = async (id) => {
     } catch (err) { console.error("Bill Generation Error:", err); }
 };
 
-
-
-// Change 1: Update the settleBill function to ONLY open the modal
-const settleBill = () => {
-  const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-  
-  // Basic validation before opening modal
-  if (activePaymentType === 'split') {
-    const totalEntered = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
-    if (Math.abs(totalEntered - finalAmt) > 1) {
-      showNotif(`Mismatch: ₹${totalEntered} vs ₹${finalAmt}`, "error");
-      return;
-    }
-  }
-
-  setConfirmModal({
-    show: true,
-    title: `Finalize Table Settlement?`,
-    subtitle: `Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
-    // We remove the onConfirm from here to avoid the "not clicking" bug
-  });
-};
-
-const handleFinalSettle = async () => {
-  const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-  
-  // Enforce numeric data mapping formats before reaching the endpoint
-  let paymentMethodDetails = activePaymentType === 'split' 
-    ? { 
-        type: 'split', 
-        breakdown: { 
-          cash: Number(paymentModes.cash || 0), 
-          upi: Number(paymentModes.upi || 0), 
-          card: Number(paymentModes.card || 0) 
-        } 
+  const settleBill = () => {
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    
+    if (activePaymentType === 'split') {
+      const totalEntered = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
+      if (Math.abs(totalEntered - finalAmt) > 1) {
+        showNotif(`Mismatch: ₹${totalEntered} vs ₹${finalAmt}`, "error");
+        return;
       }
-    : { type: 'full', method: selectedSingleMode };
-
-  try {
-    const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { 
-      discount, 
-      finalAmount: finalAmt, 
-      paymentMethods: paymentMethodDetails,
-      customerPhone: "" 
-    });
-
-    if (res.data && res.data.billNo) {
-      setTableBill(prev => ({ ...prev, billNo: res.data.billNo }));
-      showNotif(`Invoice #${res.data.billNo} Generated`, "success");
-
-      setTimeout(async () => {
-        setTableBill(null);
-        setSelectedTable(null);
-        setConfirmModal({ show: false });
-        setPaymentModes({ cash: '', upi: '', card: '' }); // Clear input field forms
-        
-        // 🚀 FIX: Pull down clean data directly inside the callback timeline
-        await axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`).then(r => setOrders(r.data || []));
-        await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`).then(r => setAnalytics(r.data.salesData || []));
-        fetchManagementData();      
-      }, 1500);
     }
-  } catch (err) {
-    showNotif("Failed to save to database", "error");
-  }
-};
+
+    setConfirmModal({
+      show: true,
+      title: `Finalize Table Settlement?`,
+      subtitle: `Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
+      onConfirm: () => handleFinalSettle() 
+    });
+  };
+
+  const handleFinalSettle = async () => {
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    
+    let paymentMethodDetails = activePaymentType === 'split' 
+      ? { 
+          type: 'split', 
+          breakdown: { 
+            cash: Number(paymentModes.cash || 0), 
+            upi: Number(paymentModes.upi || 0), 
+            card: Number(paymentModes.card || 0) 
+          } 
+        }
+      : { type: 'full', method: selectedSingleMode };
+
+    try {
+      const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, { 
+        discount, 
+        finalAmount: finalAmt, 
+        paymentMethods: paymentMethodDetails,
+        customerPhone: "" 
+      });
+
+      if (res.data && res.data.billNo) {
+        setTableBill(prev => ({ ...prev, billNo: res.data.billNo }));
+        showNotif(`Invoice #${res.data.billNo} Generated`, "success");
+
+        setTimeout(async () => {
+          setTableBill(null);
+          setSelectedTable(null);
+          setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
+          setPaymentModes({ cash: 0, upi: 0, card: 0 }); 
+          
+          await axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`).then(r => setOrders(r.data || []));
+          await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`).then(r => setAnalytics(r.data.salesData || []));
+          fetchManagementData();      
+        }, 1500);
+      }
+    } catch (err) {
+      showNotif("Failed to save to database", "error");
+    }
+  };
+
 const handleBroadcast = async () => {
     if (!broadcastText && !selectedBroadcastItem) return;
     setIsBroadcasting(true);
@@ -695,6 +756,8 @@ useEffect(() => {
     }
 }, [activeTab, attendanceDate, fetchAttendanceForDate]);
 
+
+
   return (
     <div style={styles.dashboard}>
       <AnimatePresence>
@@ -739,8 +802,43 @@ useEffect(() => {
       </aside>
 
       <main style={styles.mainContent}>
+      {/* --- UPGRADED REAL-TIME HUD HEADER WITH COMPACT METRICS BLOCKS --- */}
         <header style={styles.topHeader}>
-          <h1 style={styles.pageTitle}>{activeTab.replace('_', ' ').toUpperCase()}</h1>
+          <div>
+            <h1 style={styles.pageTitle}>{activeTab.replace('_', ' ').toUpperCase()}</h1>
+          </div>
+
+          {/* 👑 Real-Time Interactive Settlement Counters — Exclusively mounted inside Billing tab view matrix */}
+          {/* 👑 Real-Time Daily Settlement Counters — Premium Matte Monochrome with Gold Accent */}
+         {activeTab === 'billing' && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={styles.hudCountersRow}>
+              <div style={styles.hudStatBox}>
+                <small style={{ ...styles.hudStatLabel, color: '#bda88a' }}>TODAY'S INVOICES</small>
+                <div style={{ ...styles.hudStatValue, color: '#d3bfa2' }} className="mono">
+                  {hudLiveCounterBreakdown.total < 10 ? `0${hudLiveCounterBreakdown.total}` : hudLiveCounterBreakdown.total}
+                </div>
+              </div>
+              <div style={{ ...styles.hudStatBox, borderLeft: '1px solid #1c1f26' }}>
+                <small style={styles.hudStatLabel}>DINE-IN SETTLED</small>
+                <div style={styles.hudStatValue} className="mono">
+                  {hudLiveCounterBreakdown.direct < 10 ? `0${hudLiveCounterBreakdown.direct}` : hudLiveCounterBreakdown.direct}
+                </div>
+              </div>
+              <div style={{ ...styles.hudStatBox, borderLeft: '1px solid #1c1f26' }}>
+                <small style={styles.hudStatLabel}>TAKEAWAY SETTLED</small>
+                <div style={styles.hudStatValue} className="mono">
+                  {hudLiveCounterBreakdown.takeaway < 10 ? `0${hudLiveCounterBreakdown.takeaway}` : hudLiveCounterBreakdown.takeaway}
+                </div>
+              </div>
+              <div style={{ ...styles.hudStatBox, borderLeft: '1px solid #1c1f26' }}>
+                <small style={styles.hudStatLabel}>ONLINE SETTLED</small>
+                <div style={styles.hudStatValue} className="mono">
+                  {hudLiveCounterBreakdown.online < 10 ? `0${hudLiveCounterBreakdown.online}` : hudLiveCounterBreakdown.online}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'insights' && (
             <div style={styles.headerMonthSelector}>
               <button onClick={() => changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
@@ -832,7 +930,7 @@ useEffect(() => {
               </motion.div>
             )}
 
-            {activeTab === 'billing' && (
+{activeTab === 'billing' && (
               <motion.div key="billing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', gap: '50px' }}>
                 <div style={{ flex: 1 }}>
                   <div style={styles.specialModeRow}>
@@ -843,88 +941,86 @@ useEffect(() => {
                         <Truck size={16} /> ONLINE ORDERING
                      </button>
                   </div>
-                 <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
-  <div style={styles.tableGrid}>
-    {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
-      const id = n.toString();
-      const isOccupied = occupiedTables.includes(id);
-      const hasRequestedCheckout = checkoutRequests.includes(id);
-      const isCurrentlySelected = selectedTable === id;
+                  <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
+                  <div style={styles.tableGrid}>
+                    {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
+                      const id = n.toString();
+                      const isOccupied = occupiedTables.includes(id);
+                      const hasRequestedCheckout = checkoutRequests.includes(id);
+                      const isCurrentlySelected = selectedTable === id;
 
-      return (
-        <button 
-          key={n} 
-          onClick={() => generateBill(id)} 
-          style={{
-            ...styles.tableBtn,
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            background: isCurrentlySelected 
-              ? '#d3bfa2' 
-              : hasRequestedCheckout 
-                ? 'rgba(211, 191, 162, 0.15)' // Matte gold highlight for billing requests
-                : isOccupied 
-                  ? '#111111' // High-end dark slate remains active after kitchen served/dispatch
-                  : '#0d0d0d', 
-            color: isCurrentlySelected 
-              ? '#000000' 
-              : hasRequestedCheckout 
-                ? '#d3bfa2' 
-                : isOccupied 
-                  ? 'rgba(211,191,162,0.6)' 
-                  : '#333333',
-            border: isCurrentlySelected 
-              ? '1px solid #d3bfa2' 
-              : hasRequestedCheckout 
-                ? '1px dashed #d3bfa2' 
-                : isOccupied 
-                  ? '1px solid rgba(211,191,162,0.25)' 
-                  : '1px solid #151515'
-          }}
-        >
-          {hasRequestedCheckout && (
-            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
-              <BellRing size={16} style={{ color: '#d3bfa2' }} />
-            </motion.div>
-          )}
-          <span style={{ fontSize: '1.05rem', fontWeight: '900' }}>T{n}</span>
-          {isOccupied && !hasRequestedCheckout && !isCurrentlySelected && (
-            <div style={{ width: '5px', height: '5px', background: '#8a704d', borderRadius: '50%' }} />
-          )}
-        </button>
-      );
-    })}
-  </div>
+                      return (
+                        <button 
+                          key={n} 
+                          onClick={() => generateBill(id)} 
+                          style={{
+                            ...styles.tableBtn,
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            background: isCurrentlySelected 
+                              ? '#d3bfa2' 
+                              : hasRequestedCheckout 
+                                ? 'rgba(211, 191, 162, 0.15)' 
+                                : isOccupied 
+                                  ? '#111111' 
+                                  : '#0d0d0d', 
+                            color: isCurrentlySelected 
+                              ? '#000000' 
+                              : hasRequestedCheckout 
+                                ? '#d3bfa2' 
+                                : isOccupied 
+                                  ? 'rgba(211,191,162,0.6)' 
+                                  : '#333333',
+                            border: isCurrentlySelected 
+                              ? '1px solid #d3bfa2' 
+                              : hasRequestedCheckout 
+                                ? '1px dashed #d3bfa2' 
+                                : isOccupied 
+                                  ? '1px solid rgba(211,191,162,0.25)' 
+                                  : '1px solid #151515'
+                          }}
+                        >
+                          {hasRequestedCheckout && (
+                            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
+                              <BellRing size={16} style={{ color: '#d3bfa2' }} />
+                            </motion.div>
+                          )}
+                          <span style={{ fontSize: '1.05rem', fontWeight: '900' }}>T{n}</span>
+                          {isOccupied && !hasRequestedCheckout && !isCurrentlySelected && (
+                            <div style={{ width: '5px', height: '5px', background: '#8a704d', borderRadius: '50%' }} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
 
                   {/* 💰 DYNAMIC RUNNING DAILY CURRENCY BREAKDOWN COMPONENT BAR */}
- {/* 💰 UPGRADED HIGH-CONTRAST DATA STRIP MATRIX BAR */}
-  <div style={{ ...styles.biCard, marginTop: '25px', borderTop: '2px solid #d3bfa2', background: '#090909', padding: '20px' }}>
-     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center', alignItems: 'center' }}>
-        <div>
-           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CASH PORTFOLIO</small>
-           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.cash.toLocaleString()}</div>
-        </div>
-        <div>
-           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY UPI INSTANT NET</small>
-           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.upi.toLocaleString()}</div>
-        </div>
-        <div>
-           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CARD CAPTURES</small>
-           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.card.toLocaleString()}</div>
-        </div>
-        {/* 🚀 NEW ADDITION: GROSS CONSOLIDATED COMBINED TOTAL LIQUIDITY VALUE */}
-        <div style={{ borderLeft: '1px solid #151515', paddingLeft: '15px' }}>
-           <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.5px' }}>DAILY GROSS SETTLED</small>
-           <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>₹{dailySettlementBreakdown.gross.toLocaleString()}</div>
-        </div>
-     </div>
-  </div>
+                  {/* 💰 UPGRADED HIGH-CONTRAST DATA STRIP MATRIX BAR */}
+                  <div style={{ ...styles.biCard, marginTop: '25px', borderTop: '2px solid #d3bfa2', background: '#090909', padding: '20px' }}>
+                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center', alignItems: 'center' }}>
+                        <div>
+                           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CASH PORTFOLIO</small>
+                           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.cash.toLocaleString()}</div>
+                        </div>
+                        <div>
+                           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY UPI INSTANT NET</small>
+                           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.upi.toLocaleString()}</div>
+                        </div>
+                        <div>
+                           <small style={{ ...styles.statLabel, color: '#666', letterSpacing: '0.5px' }}>DAILY CARD CAPTURES</small>
+                           <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#fff', marginTop: '4px' }}>₹{dailySettlementBreakdown.card.toLocaleString()}</div>
+                        </div>
+                        <div style={{ borderLeft: '1px solid #151515', paddingLeft: '15px' }}>
+                           <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.5px' }}>DAILY GROSS SETTLED</small>
+                           <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>₹{dailySettlementBreakdown.gross.toLocaleString()}</div>
+                        </div>
+                     </div>
+                  </div>
                 </div>
-                
 
 {tableBill && (
   <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={styles.receipt}>
@@ -1057,7 +1153,30 @@ useEffect(() => {
   </motion.div>
 )}
               </motion.div>
-            )}
+            )
+            }
+            <AnimatePresence>
+        {confirmModal.show && (
+          <div style={styles.modalBackdrop}>
+            <div style={styles.confirmBox}>
+              <h3 style={{ color: '#fff', margin: '0 0 10px', fontSize: '1.1rem', fontWeight: '900' }}>{confirmModal.title}</h3>
+              <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '25px', lineHeight: '1.5' }}>{confirmModal.subtitle}</p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null })} style={styles.cancelBtn}>CANCEL</button>
+                <button 
+                  onClick={() => {
+                    if (confirmModal.onConfirm) confirmModal.onConfirm(); // ✨ Executes your handleFinalSettle logic safely
+                    setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
+                  }} 
+                  style={styles.confirmBtn}
+                >
+                  CONFIRM SETTLE
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
 
             {activeTab === 'marketing' && (
               <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.marketingLayout}>
@@ -1939,7 +2058,44 @@ const styles = {
   billInput: { width: '100px', padding: '10px', border: '1px solid #eee', background: '#fafafa', borderRadius: '8px', textAlign: 'right', fontWeight: '900', color: '#000', outline: 'none' },
   singleModeGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' },
   modeBtn: { padding: '15px 5px', background: '#f9f9f9', border: '1px solid #eee', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', fontSize: '0.65rem', fontWeight: '900', color: '#999', cursor: 'pointer' },
-  activeModeBtn: { padding: '15px 5px', background: '#000', border: '1px solid #000', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', fontSize: '0.65rem', fontWeight: '900', color: '#fff', cursor: 'pointer' }
+  activeModeBtn: { padding: '15px 5px', background: '#000', border: '1px solid #000', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', fontSize: '0.65rem', fontWeight: '900', color: '#fff', cursor: 'pointer' },
+  /* 👑 ULTRA-PREMIUM HUD COUNTER DISPLAY DESIGN CORE PLATFORMS (STEALTH MONOCHROME SPEC) */
+  hudCountersRow: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '24px', 
+    background: '#0a0a0c',              // Flat obsidian canvas anchor
+    padding: '8px 24px', 
+    borderRadius: '12px', 
+    border: '1px solid #16181f',        // Micro metallic border framing
+    marginRight: '20px', 
+    boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.8), 0 4px 20px rgba(0,0,0,0.2)' 
+  },
+  hudStatBox: { 
+    padding: '4px 18px', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    minWidth: '110px'
+  },
+  hudStatLabel: { 
+    fontSize: '0.58rem', 
+    fontWeight: '800', 
+    color: '#4e5361',                   // Deep platinum slate fallback text
+    letterSpacing: '1.5px', 
+    textTransform: 'uppercase', 
+    marginBottom: '4px',
+    textAlign: 'center'
+  },
+  hudStatValue: { 
+    fontSize: '1.4rem', 
+    fontWeight: '900', 
+    fontFamily: 'JetBrains Mono, monospace', 
+    color: '#ffffff',                   // Default stark white high-end typography
+    lineHeight: '1.1',
+    letterSpacing: '-0.5px'
+  },
 };
 
 export default OperatorPortal;
