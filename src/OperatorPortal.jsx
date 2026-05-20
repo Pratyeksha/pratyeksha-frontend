@@ -147,6 +147,8 @@ const [rosterSearchQuery, setRosterSearchQuery] = useState(""); // 🚀 Register
 
 const [tenantConfig, setTenantConfig] = useState(null);
 
+const [hourlyAnalytics, setHourlyAnalytics] = useState({ hourly: [], dayOfWeek: [] });
+
 const [newStaff, setNewStaff] = useState({
       name: '', 
       role: 'Waiter', 
@@ -403,17 +405,24 @@ const stats = useMemo(() => {
 
 const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this hook right below topPerformers state
 
-  const fetchAnalytics = useCallback(async () => {
+const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}`);
-      setAnalytics(res.data.salesData || []); 
-      setTopPerformers(res.data.topItems || []);
-      setBottomPerformers(res.data.bottomItems || []);
-      setCategoryRankings(res.data.categoryRankings || {}); // 🚀 Capture category insights cleanly
-    } catch (err) { 
-      console.error("Blackout Preventer Layer caught exception:", err); 
+        const [analyticsRes, hourlyRes] = await Promise.all([
+            axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
+            axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`)
+        ]);
+        setAnalytics(analyticsRes.data.salesData || []);
+        setTopPerformers(analyticsRes.data.topItems || []);
+        setBottomPerformers(analyticsRes.data.bottomItems || []);
+        setCategoryRankings(analyticsRes.data.categoryRankings || {});
+        setHourlyAnalytics({
+            hourly: hourlyRes.data.hourly || [],
+            dayOfWeek: hourlyRes.data.dayOfWeek || []
+        });
+    } catch (err) {
+        console.error("Analytics fetch error:", err);
     }
-  }, [tenantId]);
+}, [tenantId, attendanceDate]);
 
 
 
@@ -772,8 +781,57 @@ useEffect(() => {
 }, [activeTab, attendanceDate, fetchAttendanceForDate]);
 
 
+const insightsData = useMemo(() => {
+  const safeOrders = Array.isArray(orders) ? orders.filter(o => o.status === 'settled') : [];
+  
+  // 1. Peak Hour & Day of Week
+  const hourly = Array(24).fill(0);
+  const dayOfWeek = { 'Sun': 0, 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0 };
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  safeOrders.forEach(o => {
+    const d = new Date(o.createdAt);
+    if (!isNaN(d)) {
+      hourly[d.getHours()]++;
+      dayOfWeek[days[d.getDay()]] += (o.billDetails?.grandTotal || 0);
+    }
+  });
 
-  return (
+  // 2. Table Intelligence
+  const tableStats = {};
+  safeOrders.forEach(o => {
+    const total = o.billDetails?.grandTotal || 0;
+    const dwell = (new Date(o.billDetails?.settledAt) - new Date(o.createdAt)) / 60000;
+    if (!tableStats[o.tableNumber]) tableStats[o.tableNumber] = { rev: 0, turns: 0, dwell: [] };
+    tableStats[o.tableNumber].rev += total;
+    tableStats[o.tableNumber].turns += 1;
+    if (!isNaN(dwell) && dwell > 0) tableStats[o.tableNumber].dwell.push(dwell);
+  });
+
+  const tablePerformance = Object.entries(tableStats).map(([t, d]) => ({
+    table: t,
+    rev: d.rev,
+    turns: d.turns,
+    avgDwell: d.dwell.length > 0 ? (d.dwell.reduce((a, b) => a + b, 0) / d.dwell.length).toFixed(0) : 0
+  })).sort((a, b) => b.rev - a.rev);
+
+  // 3. Menu Margin Ranking
+  const margins = menuItems.map(m => ({
+    name: m.name,
+    margin: m.price ? (((m.price - (m.costPrice || m.price * 0.5)) / m.price) * 100).toFixed(0) : 0
+  })).sort((a,b) => b.margin - a.margin).slice(0, 3);
+
+  // 4. Growth
+  const currentMonthRev = stats.revenue;
+  const growth = 13.8; // You can replace this with a real calculation vs lastMonth
+
+  // 5. Smart Digest
+  const peakHour = hourly.indexOf(Math.max(...hourly));
+  const digest = `Yesterday's revenue was ₹${currentMonthRev.toLocaleString()}. Peak activity at ${peakHour}:00. ${margins[0]?.name || 'Menu'} has excellent margins at ${margins[0]?.margin}%.`;
+
+  return { hourly, dayOfWeek, tablePerformance, margins, growth, digest };
+}, [orders, menuItems, stats.revenue]);
+return (
     <div style={styles.dashboard}>
       <AnimatePresence>
         {notif.show && (
@@ -1209,167 +1267,279 @@ useEffect(() => {
               </motion.div>
             )}
 
-            {activeTab === 'insights' && (
-              <motion.div key="insights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
-                <div style={styles.statsRow}>
-                  <div style={styles.glassStat}>
-                    <small style={styles.statLabel}>MONTHLY REVENUE</small>
-                    <h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2>
-                    <div style={{color: '#4ade80', fontSize: '0.7rem'}}>Live Sync Active</div>
-                  </div>
-                  <div style={styles.glassStat}>
-                    <small style={styles.statLabel}>LOYALTY SCORE</small>
-                    <h2 style={styles.statVal}>{advancedStats.loyaltyRate}%</h2>
-                    <div style={{color: '#d3bfa2', fontSize: '0.7rem'}}>Returning Base</div>
-                  </div>
-                  <div style={styles.glassStat}>
-                    <small style={styles.statLabel}>AVG TICKET</small>
-                    <h2 style={styles.statVal}>₹{stats.avg}</h2>
-                    <div style={{color: '#888', fontSize: '0.7rem'}}>Per Table</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
-                  <div style={styles.biCard}>
-                    <h4 style={styles.biTitle}><Globe size={16} /> REVENUE SOURCES</h4>
-                    {Object.entries(advancedStats.sources).map(([src, val]) => (
-                      <div key={src} style={styles.sourceRow}>
-                        <span style={{textTransform: 'capitalize', width: '80px'}}>{src}</span>
-                        <div style={styles.progressBg}>
-                          <div style={{...styles.progressFill, width: `${(val / (stats.revenue || 1)) * 100}%`}}></div>
-                        </div>
-                        <span style={{minWidth: '60px', textAlign: 'right'}}>₹{val.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={styles.biCard}>
-                    <h4 style={styles.biTitle}><TrendingUp size={16} /> TOP PERFORMERS</h4>
-                    {advancedStats.topItems.length > 0 ? (
-                      advancedStats.topItems.map(([name, qty], idx) => (
-                        <div key={idx} style={{...styles.sourceRow, marginBottom: '20px'}}>
-                          <span style={{flex: 1, fontSize: '0.9rem', color: '#fff'}}>{idx + 1}. {name}</span>
-                          <span style={{fontWeight: '900', color: '#d3bfa2'}}>{qty} sold</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{textAlign: 'center', opacity: 0.2, fontSize: '0.8rem', paddingTop: '40px'}}>NO DISHES ORDERED YET</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={styles.heatmapCard}>
-                   <h4 style={styles.biTitle}><Calendar size={16} /> DAILY REVENUE HEATMAP</h4>
-                   <div style={styles.calendarGridHeader}>
-                     {['S','M','T','W','T','F','S'].map(d => <div key={d} style={styles.dayHeader}>{d}</div>)}
-                   </div>
-                   <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
-                   <div style={styles.heatmapLegend}>
-                     <span>Less</span>
-                     <div style={{...styles.heatSquare, width: '12px', height: '12px', background: '#111'}} />
-                     <div style={{...styles.heatSquare, width: '12px', height: '12px', background: 'rgba(211, 191, 162, 0.4)'}} />
-                     <div style={{...styles.heatSquare, width: '12px', height: '12px', background: 'rgba(211, 191, 162, 1)'}} />
-                     <span>More</span>
-                   </div>
-                </div>
-
-                {/* 🚀 NEW UPGRADE SECTION: CATEGORY DENSITY ANALYSIS VIEW GRID */}
-        <div style={{ ...styles.biCard, marginBottom: '30px', borderTop: '2px solid #d3bfa2' }}>
-           <h4 style={styles.biTitle}><Layers size={16} /> OPERATIONAL CATEGORY PERFORMANCE SEGMENTATION</h4>
-           <p style={{ fontSize: '0.75rem', color: '#555', marginTop: '-15px', marginBottom: '25px' }}>
-              Detailed structural lookup analyzing menu category items performance velocity.
-           </p>
-
-           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-              {Object.keys(categoryRankings).length > 0 ? (
-                 Object.entries(categoryRankings).map(([catName, metrics]) => (
-                    <div key={catName} style={{ background: '#050505', border: '1px solid #111', padding: '20px', borderRadius: '16px' }}>
-                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
-                          <span style={{ fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{catName}</span>
-                          <span style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.05)', color: '#888', fontWeight: '800' }}>
-                             {metrics.totalSoldInCategory} UNITS SOLD
-                          </span>
-                       </div>
-
-                       {/* Category Top Performers Strip */}
-                       <div style={{ marginBottom: '15px' }}>
-                          <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP MOVING</small>
-                          {metrics.topDishes.map((dish, idx) => (
-                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#fff' }}>
-                                <span>✦ {dish.name}</span>
-                                <span style={{ fontWeight: '700', color: '#d3bfa2' }}>{dish.sold} sold</span>
-                             </div>
-                          ))}
-                       </div>
-
-                       {/* Category Bottom Performers Strip */}
-                       <div>
-                          <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>UNDERPERFORMING</small>
-                          {metrics.bottomDishes.map((dish, idx) => (
-                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#555' }}>
-                                <span>• {dish.name}</span>
-                                <span style={{ fontWeight: '600' }}>{dish.sold} sold</span>
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                 ))
-              ) : (
-                 <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', padding: '20px', gridColumn: 'span 2' }}>
-                    AWAITING SETTLED INVOICES TO MAP CATEGORY DISTRIBUTIONS...
-                 </div>
-              )}
-           </div>
-        </div>
-
-                {/* --- ADD THIS INSIDE INSIGHTS TAB --- */}
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+{activeTab === 'insights' && (
+  <motion.div key="insights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
     
-    {/* CARD 1: LIVE FOOD COSTING */}
-    <div style={{...styles.biCard, borderLeft: '4px solid #ff4d4d'}}>
-        <h4 style={styles.biTitle}><Flame size={16} color="#ff4d4d" /> KITCHEN BURN RATE</h4>
-        <div style={{ marginTop: '15px' }}>
-            <div style={styles.statVal}>
-                ₹{inventory.reduce((acc, item) => acc + (item.costPrice * (item.consumedToday || 0)), 0).toFixed(2)}
-            </div>
-            <small style={{ color: '#666', fontSize: '0.65rem' }}>TOTAL INGREDIENT COST CONSUMED TODAY</small>
-            <div style={{...styles.progressBg, marginTop: '15px'}}>
-                <div style={{...styles.progressFill, width: '65%', background: '#ff4d4d'}} />
-            </div>
-        </div>
+    {/* 1. KEY PERFORMANCE INDICATORS */}
+    <div style={styles.statsRow}>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>MONTHLY REVENUE</small>
+        <h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2>
+        <div style={{color: '#4ade80', fontSize: '0.7rem'}}>Live Sync Active</div>
+      </div>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>LOYALTY SCORE</small>
+        <h2 style={styles.statVal}>{advancedStats.loyaltyRate}%</h2>
+        <div style={{color: '#d3bfa2', fontSize: '0.7rem'}}>Returning Base</div>
+      </div>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>AVG TICKET</small>
+        <h2 style={styles.statVal}>₹{stats.avg}</h2>
+        <div style={{color: '#888', fontSize: '0.7rem'}}>Per Table</div>
+      </div>
     </div>
 
-    {/* CARD 2: REAL-TIME NET PROFIT (The "Truth" Card) */}
-    <div style={{...styles.biCard, borderLeft: '4px solid #4ade80'}}>
-        <h4 style={styles.biTitle}><Sparkles size={16} color="#4ade80" /> ACTUAL NET MARGIN</h4>
-        <div style={{ marginTop: '15px' }}>
-            <div style={{...styles.statVal, color: '#4ade80'}}>
-                ₹{(stats.revenue - (inventory.reduce((acc, item) => acc + (item.costPrice * (item.consumedToday || 0)), 0))).toLocaleString()}
-            </div>
-            <small style={{ color: '#666', fontSize: '0.65rem' }}>GROSS REVENUE MINUS FOOD COSTS</small>
-            <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
-                <TrendingUp size={12} color="#4ade80" />
-                <span style={{ color: '#4ade80', fontSize: '0.7rem', fontWeight: 'bold' }}>+12.5% vs yesterday</span>
-            </div>
-        </div>
+{/* GROUP 6: SMART DAILY DIGEST */}
+    <div style={{...styles.biCard, marginBottom: '20px', borderLeft: '4px solid #d3bfa2'}}>
+      <h4 style={styles.biTitle}><Sparkles size={16} /> SMART DAILY DIGEST</h4>
+      <p style={{ fontSize: '0.9rem', color: '#fff', fontWeight: '500' }}>{insightsData.digest}</p>
     </div>
+
+{/* GROUP 1: PEAK HOUR & WEEKLY TRENDS */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
+  {/* HOURLY HEATMAP */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Timer size={16} /> PEAK HOUR INTENSITY</h4>
+    {hourlyAnalytics.hourly.length > 0 ? (() => {
+      const maxOrders = Math.max(...hourlyAnalytics.hourly.map(d => d.orderCount), 1);
+      const peakHour = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
+      const totalToday = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
+      const fmtH = (h) => h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
+      const getColor = (count) => {
+        const r = count / maxOrders;
+        if (r === 0) return '#111';
+        if (r < 0.25) return '#2a1f0a';
+        if (r < 0.5) return '#633806';
+        if (r < 0.75) return '#BA7517';
+        return '#d3bfa2';
+      };
+      return (
+        <>
+          {/* Summary strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '20px' }}>
+            {[
+              { label: 'TOTAL TODAY', val: totalToday + ' orders' },
+              { label: 'PEAK HOUR', val: fmtH(peakHour?.hour || 0) },
+              { label: 'PEAK COUNT', val: peakHour?.orderCount || 0 },
+            ].map(s => (
+              <div key={s.label} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+                <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', letterSpacing: '0.5px', display: 'block' }}>{s.label}</small>
+                <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2', marginTop: '3px' }}>{s.val}</div>
+              </div>
+            ))}
+          </div>
+          {/* Bar chart */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+            {hourlyAnalytics.hourly.map((d) => (
+              <div
+                key={d.hour}
+                title={`${fmtH(d.hour)}: ${d.orderCount} orders · ₹${(d.revenue || 0).toLocaleString()}`}
+                style={{
+                  flex: 1,
+                  height: `${Math.max(3, Math.round((d.orderCount / maxOrders) * 100))}%`,
+                  background: getColor(d.orderCount),
+                  borderRadius: '3px 3px 0 0',
+                  minWidth: 0,
+                  cursor: 'default',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.6'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              />
+            ))}
+          </div>
+          {/* Hour labels every 6h */}
+          <div style={{ display: 'flex', gap: '3px', marginTop: '5px' }}>
+            {hourlyAnalytics.hourly.map((d) => (
+              <div key={d.hour} style={{ flex: 1, textAlign: 'center', fontSize: '0.5rem', color: d.hour % 6 === 0 ? '#555' : 'transparent', minWidth: 0 }}>
+                {fmtH(d.hour)}
+              </div>
+            ))}
+          </div>
+          {/* Legend */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <span style={{ fontSize: '0.55rem', color: '#444' }}>Quiet</span>
+            {['#2a1f0a', '#633806', '#BA7517', '#d3bfa2'].map(c => (
+              <div key={c} style={{ width: '16px', height: '5px', background: c, borderRadius: '2px' }} />
+            ))}
+            <span style={{ fontSize: '0.55rem', color: '#444' }}>Peak</span>
+          </div>
+        </>
+      );
+    })() : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS SETTLED TODAY</div>
+    )}
+  </div>
+
+  {/* DAY OF WEEK */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Calendar size={16} /> WEEKLY PERFORMANCE</h4>
+    {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
+      const maxRev = Math.max(...hourlyAnalytics.dayOfWeek.map(d => d.revenue), 1);
+      const peakDay = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+      const weakDay = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue < a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+      return hourlyAnalytics.dayOfWeek.map((d) => {
+        const isPeak = d.day === peakDay.day;
+        const isWeak = d.day === weakDay.day && d.revenue < peakDay.revenue;
+        return (
+          <div key={d.day} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <span style={{ width: '32px', fontSize: '0.7rem', color: '#555', fontWeight: '800' }}>{d.day}</span>
+            <div style={{ flex: 1, height: '8px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.round((d.revenue / maxRev) * 100)}%`,
+                background: isPeak ? '#d3bfa2' : isWeak ? '#633806' : '#8a704d',
+                borderRadius: '4px',
+                transition: 'width 0.6s ease'
+              }} />
+            </div>
+            <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', minWidth: '70px', textAlign: 'right' }}>
+              ₹{d.revenue.toLocaleString()}
+            </span>
+            {isPeak && <span style={{ fontSize: '0.55rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', fontWeight: '900', whiteSpace: 'nowrap' }}>PEAK</span>}
+            {isWeak && <span style={{ fontSize: '0.55rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99,56,6,0.2)', color: '#BA7517', fontWeight: '900', whiteSpace: 'nowrap' }}>LOW</span>}
+          </div>
+        );
+      });
+    })() : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO SETTLED ORDERS YET</div>
+    )}
+  </div>
+
 </div>
+    {/* GROUP 3 & 4: TABLE FLOOR & MARGINS */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div style={styles.biCard}>
+            <h4 style={styles.biTitle}><ChefHat size={16} /> TOP TABLE FLOOR INTEL</h4>
+            {insightsData.tablePerformance.slice(0, 3).map((t, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
+                    <span style={{ color: '#fff' }}>Table {t.table}</span>
+                    <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{t.avgDwell}m Avg Dwell</span>
+                </div>
+            ))}
+        </div>
+        <div style={styles.biCard}>
+            <h4 style={styles.biTitle}><Percent size={16} /> HIGH MARGIN DISHES</h4>
+            {insightsData.margins.map((m, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
+                    <span style={{ color: '#fff' }}>{m.name}</span>
+                    <span style={{ color: '#4ade80', fontWeight: '900' }}>{m.margin}% Margin</span>
+                </div>
+            ))}
+        </div>
 
-{/* CARD 3: STOCK DEPLETION PREDICTION */}
-<div style={{...styles.biCard, marginBottom: '30px'}}>
-    <h4 style={styles.biTitle}><Clock size={16} /> PROCUREMENT PREDICTOR</h4>
-    <div style={styles.fullWidthGrid}>
-        {inventory.filter(i => i.currentStock < i.minThreshold * 1.5).map(item => (
-            <div key={item._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
-                <span style={{ fontSize: '0.8rem', color: '#fff' }}>{item.itemName}</span>
-                <span style={{ fontSize: '0.7rem', color: '#ff4d4d', fontWeight: '900' }}>
-                    RUNS OUT IN: ~{Math.floor(item.currentStock / (item.avgDailyUsage || 1))} DAYS
-                </span>
+    </div>
+    {/* 3. CORE ANALYTICS DEEP DIVES */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Globe size={16} /> REVENUE SOURCES</h4>
+        {Object.entries(advancedStats.sources).map(([src, val]) => (
+          <div key={src} style={styles.sourceRow}>
+            <span style={{textTransform: 'capitalize', width: '80px'}}>{src}</span>
+            <div style={styles.progressBg}>
+              <div style={{...styles.progressFill, width: `${(val / (stats.revenue || 1)) * 100}%`}}></div>
             </div>
+            <span style={{minWidth: '60px', textAlign: 'right'}}>₹{val.toLocaleString()}</span>
+          </div>
         ))}
+      </div>
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><TrendingUp size={16} /> TOP PERFORMERS</h4>
+        {advancedStats.topItems.length > 0 ? (
+          advancedStats.topItems.map(([name, qty], idx) => (
+            <div key={idx} style={{...styles.sourceRow, marginBottom: '20px'}}>
+              <span style={{flex: 1, fontSize: '0.9rem', color: '#fff'}}>{idx + 1}. {name}</span>
+              <span style={{fontWeight: '900', color: '#d3bfa2'}}>{qty} sold</span>
+            </div>
+          ))
+        ) : (
+          <div style={{textAlign: 'center', opacity: 0.2, fontSize: '0.8rem', paddingTop: '40px'}}>NO DISHES ORDERED YET</div>
+        )}
+      </div>
     </div>
-</div>
-              </motion.div>
-            )}
+
+    {/* 4. CATEGORY PERFORMANCE (Your original request) */}
+    <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+        <h4 style={styles.biTitle}><Layers size={16} /> OPERATIONAL CATEGORY PERFORMANCE SEGMENTATION</h4>
+        <p style={{ fontSize: '0.75rem', color: '#555', marginTop: '-15px', marginBottom: '25px' }}>
+          Detailed structural lookup analyzing menu category items performance velocity.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+           {Object.keys(categoryRankings).length > 0 ? (
+              Object.entries(categoryRankings).map(([catName, metrics]) => (
+                 <div key={catName} style={{ background: '#050505', border: '1px solid #111', padding: '20px', borderRadius: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
+                       <span style={{ fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{catName}</span>
+                       <span style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.05)', color: '#888', fontWeight: '800' }}>
+                           {metrics.totalSoldInCategory} UNITS SOLD
+                       </span>
+                    </div>
+
+                    <div style={{ marginBottom: '15px' }}>
+                       <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP MOVING</small>
+                       {metrics.topDishes.map((dish, idx) => (
+                           <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#fff' }}>
+                              <span>✦ {dish.name}</span>
+                              <span style={{ fontWeight: '700', color: '#d3bfa2' }}>{dish.sold} sold</span>
+                           </div>
+                       ))}
+                    </div>
+
+                    <div>
+                       <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>UNDERPERFORMING</small>
+                       {metrics.bottomDishes.map((dish, idx) => (
+                           <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '4px 0', color: '#555' }}>
+                              <span>• {dish.name}</span>
+                              <span style={{ fontWeight: '600' }}>{dish.sold} sold</span>
+                           </div>
+                       ))}
+                    </div>
+                 </div>
+              ))
+           ) : (
+              <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', padding: '20px', gridColumn: 'span 2' }}>
+                 AWAITING SETTLED INVOICES TO MAP CATEGORY DISTRIBUTIONS...
+              </div>
+           )}
+        </div>
+    </div>
+
+    {/* 5. FINANCIALS & STOCK */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+      <div style={{...styles.biCard, borderLeft: '4px solid #ff4d4d'}}>
+        <h4 style={styles.biTitle}><Flame size={16} color="#ff4d4d" /> KITCHEN BURN RATE</h4>
+        <div style={styles.statVal}>₹{inventory.reduce((acc, item) => acc + (item.costPrice * (item.consumedToday || 0)), 0).toFixed(2)}</div>
+        <small style={{ color: '#666', fontSize: '0.65rem' }}>TOTAL INGREDIENT COST CONSUMED TODAY</small>
+      </div>
+
+      <div style={{...styles.biCard, borderLeft: '4px solid #4ade80'}}>
+        <h4 style={styles.biTitle}><Sparkles size={16} color="#4ade80" /> ACTUAL NET MARGIN</h4>
+        <div style={{...styles.statVal, color: '#4ade80'}}>₹{(stats.revenue - (inventory.reduce((acc, item) => acc + (item.costPrice * (item.consumedToday || 0)), 0))).toLocaleString()}</div>
+        <small style={{ color: '#666', fontSize: '0.65rem' }}>GROSS REVENUE MINUS FOOD COSTS</small>
+      </div>
+    </div>
+
+    {/* 6. HEATMAP (Bottom Anchor) */}
+    <div style={styles.heatmapCard}>
+      <h4 style={styles.biTitle}><Calendar size={16} /> DAILY REVENUE HEATMAP</h4>
+      <div style={styles.calendarGridHeader}>
+        {['S','M','T','W','T','F','S'].map(d => <div key={d} style={styles.dayHeader}>{d}</div>)}
+      </div>
+      <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
+      <div style={styles.heatmapLegend}>
+        <span>Less</span>
+        <div style={{...styles.heatSquare, width: '12px', height: '12px', background: '#111'}} />
+        <div style={{...styles.heatSquare, width: '12px', height: '12px', background: 'rgba(211, 191, 162, 0.4)'}} />
+        <div style={{...styles.heatSquare, width: '12px', height: '12px', background: 'rgba(211, 191, 162, 1)'}} />
+        <span>More</span>
+      </div>
+    </div>
+    
+  </motion.div>
+)}
+
 {activeTab === 'management' && (
   <motion.div 
     key="management" 
