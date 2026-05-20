@@ -151,6 +151,15 @@ const [trendsData, setTrendsData] = useState(null);
 const [hourlyAnalytics, setHourlyAnalytics] = useState({ hourly: [], dayOfWeek: [] });
 const [prepTimeData, setPrepTimeData] = useState(null);
 
+// 🚀 INVENTORY & RECIPE STATE
+const [newInventoryItem, setNewInventoryItem] = useState({
+    itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: ''
+});
+const [recipeMap, setRecipeMap] = useState({}); // { menuItemId: [{ inventoryId, quantityUsed }] }
+const [activeRecipeItemId, setActiveRecipeItemId] = useState('');
+const [recipeIngredientRows, setRecipeIngredientRows] = useState([{ inventoryId: '', quantityUsed: '' }]);
+const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+
 const [lowStockAlerts, setLowStockAlerts] = useState([]);
 const [newStaff, setNewStaff] = useState({
       name: '', 
@@ -407,31 +416,30 @@ const stats = useMemo(() => {
   }, [tenantId]);
 
 const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this hook right below topPerformers state
+const [profitabilityData, setProfitabilityData] = useState([]);
+const [procurementData, setProcurementData] = useState([]);
 
 const fetchAnalytics = useCallback(async () => {
     try {
-
-        const prepRes = await axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}`).catch(() => ({ data: null }));
-setPrepTimeData(prepRes.data);
-        const [analyticsRes, hourlyRes, trendsRes] = await Promise.all([
+        const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes] = await Promise.all([
             axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
             axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`),
-            axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}`)
+            axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}`),
+            axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}`).catch(() => ({ data: null })),
+            axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}`).catch(() => ({ data: [] })),
+            axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] }))
         ]);
         setAnalytics(analyticsRes.data.salesData || []);
         setTopPerformers(analyticsRes.data.topItems || []);
         setBottomPerformers(analyticsRes.data.bottomItems || []);
         setCategoryRankings(analyticsRes.data.categoryRankings || {});
-        setHourlyAnalytics({
-            hourly: hourlyRes.data.hourly || [],
-            dayOfWeek: hourlyRes.data.dayOfWeek || []
-        });
+        setHourlyAnalytics({ hourly: hourlyRes.data.hourly || [], dayOfWeek: hourlyRes.data.dayOfWeek || [] });
         setTrendsData(trendsRes.data);
-    } catch (err) {
-        console.error("Analytics fetch error:", err);
-    }
+        setPrepTimeData(prepRes.data);
+        setProfitabilityData(profitRes.data || []);
+        setProcurementData(procureRes.data || []);
+    } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, attendanceDate]);
-
 
 
 const fetchManagementData = useCallback(async () => {
@@ -950,14 +958,15 @@ return (
         <div style={styles.sidebarTop}>
           <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo} /></div>
           <nav style={styles.navStack}>
-       {[
+{[
   { id: 'pending', label: 'LIVE KITCHEN', icon: <CookingPot size={18} /> },
   { id: 'menu', label: 'MENU EDITOR', icon: <UtensilsCrossed size={18} /> },
   { id: 'billing', label: 'BILLING HUB', icon: <ReceiptIndianRupee size={18} /> },
   { id: 'marketing', label: 'CAMPAIGN HUB', icon: <MessageSquare size={18} /> },
   { id: 'insights', label: 'INSIGHTS', icon: <BarChart3 size={18} /> },
-  // 🚀 NEW TAB
-  { id: 'management', label: 'MANAGEMENT', icon: <ShieldCheck size={18} /> } 
+  { id: 'management', label: 'MANAGEMENT', icon: <ShieldCheck size={18} /> },
+  { id: 'inventory', label: 'INVENTORY', icon: <Layers size={18} /> },      // 🚀 NEW
+  { id: 'recipes', label: 'RECIPES', icon: <ChefHat size={18} /> },          // 🚀 NEW
 ].map(tab => (
   <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={activeTab === tab.id ? styles.activeTab : styles.navBtn}>
     <span style={{ marginRight: '15px' }}>{tab.icon}</span>
@@ -1693,15 +1702,37 @@ return (
 
 {/* GROUP 3: HIGH MARGIN DISHES (kept as-is) */}
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-  <div style={styles.biCard}>
-    <h4 style={styles.biTitle}><Percent size={16} /> HIGH MARGIN DISHES</h4>
-    {insightsData.margins.map((m, i) => (
-      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
-        <span style={{ color: '#fff' }}>{m.name}</span>
-        <span style={{ color: '#4ade80', fontWeight: '900' }}>{m.margin}% Margin</span>
-      </div>
-    ))}
-  </div>
+ {/* DISH PROFITABILITY MATRIX — replaces the old HIGH MARGIN DISHES card */}
+<div style={styles.biCard}>
+  <h4 style={styles.biTitle}><Percent size={16} /> DISH PROFITABILITY MATRIX</h4>
+  {profitabilityData.length > 0 ? (
+    <>
+      {profitabilityData.slice(0, 6).map((d, i) => {
+        const maxProfit = profitabilityData[0]?.profit || 1;
+        const isNegative = d.profit < 0;
+        return (
+          <div key={d._id} style={{ padding: '8px 0', borderBottom: '1px solid #111' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ color: '#fff', fontSize: '0.78rem', fontWeight: '700' }}>{d.name}</span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.65rem', color: '#555' }}>₹{d.sellingPrice} - ₹{d.ingredientCost}</span>
+                <span style={{ fontWeight: '900', fontSize: '0.78rem', color: isNegative ? '#BA7517' : '#d3bfa2' }}>
+                  {d.marginPct}%
+                </span>
+              </div>
+            </div>
+            <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.max(0, Math.round((d.profit / maxProfit) * 100))}%`, background: isNegative ? '#633806' : '#8a704d', borderRadius: '2px' }} />
+            </div>
+            {!d.hasRecipe && <div style={{ fontSize: '0.55rem', color: '#333', marginTop: '3px' }}>No recipe linked — cost estimated</div>}
+          </div>
+        );
+      })}
+    </>
+  ) : (
+    <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>LINK RECIPES TO COMPUTE ACTUAL MARGINS</div>
+  )}
+</div>
 
   {/* REVENUE TREND VS LAST MONTH */}
   <div style={styles.biCard}>
@@ -2487,6 +2518,302 @@ return (
             </motion.div>
           </div>
         )}
+
+
+        {activeTab === 'inventory' && (
+  <motion.div key="inventory" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '100px', width: '100%' }}>
+
+    {/* ADD NEW INVENTORY ITEM */}
+    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff' }}><Layers size={18} color="#d3bfa2" /> &nbsp; INGREDIENT REGISTER</h4>
+        <button onClick={() => exportToExcel('inventory')}
+          style={{ padding: '8px 16px', background: 'transparent', border: '1px solid rgba(211,191,162,0.3)', color: '#d3bfa2', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer' }}>
+          EXPORT XLS
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+        {[
+          { label: 'INGREDIENT NAME', key: 'itemName', placeholder: 'Tomato', type: 'text' },
+          { label: 'CURRENT STOCK', key: 'currentStock', placeholder: '500', type: 'number' },
+          { label: 'MIN THRESHOLD', key: 'minThreshold', placeholder: '100', type: 'number' },
+          { label: 'COST PRICE (₹/unit)', key: 'costPrice', placeholder: '2.50', type: 'number' },
+        ].map(f => (
+          <div key={f.key}>
+            <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '6px' }}>{f.label}</label>
+            <input type={f.type} placeholder={f.placeholder}
+              style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem' }}
+              value={newInventoryItem[f.key]}
+              onChange={e => setNewInventoryItem({ ...newInventoryItem, [f.key]: e.target.value })} />
+          </div>
+        ))}
+        <div>
+          <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '6px' }}>UNIT</label>
+          <select style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem', cursor: 'pointer' }}
+            value={newInventoryItem.unit}
+            onChange={e => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}>
+            {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <button onClick={async () => {
+            if (!newInventoryItem.itemName || !newInventoryItem.currentStock) return showNotif("Fill all required fields", "error");
+            try {
+              await axios.post(`${BASE_URL}/inventory/${tenantId}`, {
+                ...newInventoryItem,
+                currentStock: Number(newInventoryItem.currentStock),
+                minThreshold: Number(newInventoryItem.minThreshold),
+                costPrice: Number(newInventoryItem.costPrice)
+              });
+              showNotif(`${newInventoryItem.itemName} added to inventory`);
+              setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
+              fetchManagementData();
+            } catch (e) { showNotif("Failed to add ingredient", "error"); }
+          }} style={{ ...styles.mainBtn, background: 'linear-gradient(135deg, #d3bfa2, #bda88a)', width: '100%' }}>
+            ADD INGREDIENT
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* INVENTORY TABLE */}
+    <div style={{ ...styles.biCard }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff' }}>CURRENT STOCK LEDGER</h4>
+        <div style={{ ...styles.searchWrapper, padding: '8px 14px', background: '#000', border: '1px solid #121212', borderRadius: '8px' }}>
+          <Search size={14} color="#444" />
+          <input type="text" placeholder="Search ingredient..." value={inventorySearchQuery}
+            onChange={e => setInventorySearchQuery(e.target.value)}
+            style={{ ...styles.searchInput, width: '160px', fontSize: '0.75rem', color: '#fff' }} />
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }} className="custom-scroll">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'left' }}>
+              {['Ingredient', 'Unit', 'Current Stock', 'Min Threshold', 'Cost/Unit', 'Stock Value', 'Status', 'Action'].map(h => (
+                <th key={h} style={{ padding: '0 12px 12px 0' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {inventory.filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).map(item => {
+              const isLow = item.currentStock <= item.minThreshold;
+              const stockValue = Math.round(item.currentStock * item.costPrice);
+              return (
+                <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.8rem' }}>
+                  <td style={{ padding: '14px 12px 14px 0', fontWeight: '900', color: '#fff' }}>{item.itemName}</td>
+                  <td style={{ color: '#555', fontWeight: '800' }}>{item.unit}</td>
+                  <td>
+                    <input type="number" defaultValue={item.currentStock}
+                      style={{ width: '80px', background: '#000', border: '1px solid #1a1a1a', color: '#d3bfa2', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '900' }}
+                      onBlur={async (e) => {
+                        const val = Number(e.target.value);
+                        if (val === item.currentStock) return;
+                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
+                        fetchManagementData();
+                        showNotif(`${item.itemName} stock updated`);
+                      }} />
+                  </td>
+                  <td style={{ color: '#555' }}>{item.minThreshold} {item.unit}</td>
+                  <td style={{ color: '#888' }}>₹{item.costPrice}</td>
+                  <td style={{ color: '#d3bfa2', fontWeight: '900' }}>₹{stockValue.toLocaleString()}</td>
+                  <td>
+                    <span style={{
+                      fontSize: '0.6rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
+                      background: isLow ? 'rgba(138,112,77,0.15)' : 'rgba(211,191,162,0.05)',
+                      color: isLow ? '#BA7517' : '#555',
+                      border: `1px solid ${isLow ? 'rgba(186,117,23,0.3)' : '#1a1a1a'}`
+                    }}>
+                      {isLow ? 'LOW STOCK' : 'OK'}
+                    </span>
+                  </td>
+                  <td>
+                    <button onClick={async () => {
+                      if (!window.confirm(`Delete ${item.itemName}?`)) return;
+                      await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
+                      fetchManagementData();
+                      showNotif(`${item.itemName} removed`);
+                    }} style={{ background: 'transparent', border: '1px solid #151515', color: '#444', padding: '4px 10px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#151515'; }}>
+                      REMOVE
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{ borderTop: '2px solid #111' }}>
+              <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.7rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
+              <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
+                ₹{inventory.reduce((a, i) => a + Math.round(i.currentStock * i.costPrice), 0).toLocaleString()}
+              </td>
+              <td colSpan="2" />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    {/* PROCUREMENT PREDICTOR */}
+    {procurementData.length > 0 && (
+      <div style={{ ...styles.biCard, borderLeft: '4px solid #8a704d' }}>
+        <h4 style={styles.biTitle}><Truck size={16} /> PROCUREMENT PREDICTOR — DAYS REMAINING</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+          {procurementData.filter(d => d.daysRemaining !== null).slice(0, 8).map(item => {
+            const isUrgent = item.daysRemaining !== null && item.daysRemaining <= 3;
+            const isWarning = item.daysRemaining !== null && item.daysRemaining <= 7;
+            return (
+              <div key={item._id} style={{ background: '#050505', border: `1px solid ${isUrgent ? 'rgba(138,112,77,0.4)' : '#111'}`, padding: '14px', borderRadius: '12px' }}>
+                <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.8rem', marginBottom: '6px' }}>{item.itemName}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#555' }}>{item.currentStock} {item.unit} left</span>
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
+                    background: isUrgent ? 'rgba(138,112,77,0.15)' : 'rgba(211,191,162,0.05)',
+                    color: isUrgent ? '#BA7517' : isWarning ? '#d3bfa2' : '#555'
+                  }}>
+                    {item.daysRemaining}d left
+                  </span>
+                </div>
+                <div style={{ height: '4px', background: '#111', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, (item.daysRemaining / 30) * 100)}%`, background: isUrgent ? '#8a704d' : '#333', borderRadius: '2px' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+  </motion.div>
+)}
+
+{activeTab === 'recipes' && (
+  <motion.div key="recipes" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '100px', width: '100%' }}>
+
+    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2' }}>
+      <h4 style={{ ...styles.biTitle, color: '#fff' }}><ChefHat size={18} color="#d3bfa2" /> &nbsp; RECIPE BUILDER — LINK DISH → INGREDIENTS</h4>
+      <p style={{ fontSize: '0.75rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>Each recipe tells the system how much of each ingredient is consumed per serving. This powers auto-deduction and profitability reports.</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px' }}>
+        {/* SELECT DISH */}
+        <div>
+          <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '8px' }}>SELECT MENU ITEM</label>
+          <select style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', cursor: 'pointer' }}
+            value={activeRecipeItemId}
+            onChange={e => {
+              setActiveRecipeItemId(e.target.value);
+              // Load existing recipe if present
+              axios.get(`${BASE_URL}/recipes/${tenantId}`).then(res => {
+                const existing = res.data.find(r => r.menuItemId?.toString() === e.target.value);
+                if (existing) {
+                  setRecipeIngredientRows(existing.ingredients.map(ing => ({
+                    inventoryId: ing.inventoryId?._id || ing.inventoryId,
+                    quantityUsed: ing.quantityUsed
+                  })));
+                } else {
+                  setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
+                }
+              });
+            }}>
+            <option value="">-- Select a dish --</option>
+            {menuItems.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+          </select>
+        </div>
+
+        {/* INGREDIENT ROWS */}
+        <div>
+          <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '8px' }}>INGREDIENTS PER SERVING</label>
+          {recipeIngredientRows.map((row, idx) => (
+            <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+              <select style={{ flex: 2, ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem', cursor: 'pointer' }}
+                value={row.inventoryId}
+                onChange={e => {
+                  const updated = [...recipeIngredientRows];
+                  updated[idx].inventoryId = e.target.value;
+                  setRecipeIngredientRows(updated);
+                }}>
+                <option value="">-- Select ingredient --</option>
+                {inventory.map(i => <option key={i._id} value={i._id}>{i.itemName} ({i.unit})</option>)}
+              </select>
+              <input type="number" placeholder="Qty used" style={{ flex: 1, ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem' }}
+                value={row.quantityUsed}
+                onChange={e => {
+                  const updated = [...recipeIngredientRows];
+                  updated[idx].quantityUsed = e.target.value;
+                  setRecipeIngredientRows(updated);
+                }} />
+              <button onClick={() => setRecipeIngredientRows(prev => prev.filter((_, i) => i !== idx))}
+                style={{ background: 'transparent', border: '1px solid #222', color: '#444', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.7rem' }}>✕</button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+            <button onClick={() => setRecipeIngredientRows(prev => [...prev, { inventoryId: '', quantityUsed: '' }])}
+              style={{ ...styles.ghostBtn, flex: 1 }}>+ ADD INGREDIENT</button>
+            <button onClick={async () => {
+              if (!activeRecipeItemId) return showNotif("Select a menu item first", "error");
+              const valid = recipeIngredientRows.filter(r => r.inventoryId && r.quantityUsed);
+              if (valid.length === 0) return showNotif("Add at least one ingredient", "error");
+              try {
+                await axios.post(`${BASE_URL}/recipes/save`, {
+                  tenantId, menuItemId: activeRecipeItemId,
+                  ingredients: valid.map(r => ({ inventoryId: r.inventoryId, quantityUsed: Number(r.quantityUsed) }))
+                });
+                showNotif("Recipe saved successfully");
+                fetchAnalytics();
+              } catch (e) { showNotif("Failed to save recipe", "error"); }
+            }} style={{ ...styles.mainBtn, flex: 2, background: 'linear-gradient(135deg, #d3bfa2, #bda88a)' }}>
+              SAVE RECIPE
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* EXISTING RECIPES LIST */}
+    <div style={styles.biCard}>
+      <h4 style={{ ...styles.biTitle, color: '#fff' }}>CONFIGURED RECIPES</h4>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
+        {menuItems.filter(m => {
+          // Only show items that have recipes — check against recipeMap
+          return true; // show all, grey out those without
+        }).map(menuItem => {
+          const dish = menuItem;
+          return (
+            <div key={dish._id} style={{ background: '#050505', border: '1px solid #111', padding: '16px', borderRadius: '12px', cursor: 'pointer' }}
+              onClick={() => {
+                setActiveTab('recipes');
+                setActiveRecipeItemId(dish._id);
+                axios.get(`${BASE_URL}/recipes/${tenantId}`).then(res => {
+                  const existing = res.data.find(r => r.menuItemId?.toString() === dish._id.toString());
+                  if (existing) {
+                    setRecipeIngredientRows(existing.ingredients.map(ing => ({
+                      inventoryId: ing.inventoryId?._id || ing.inventoryId,
+                      quantityUsed: ing.quantityUsed
+                    })));
+                  } else {
+                    setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
+                  }
+                });
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.85rem' }}>{dish.name}</span>
+                <span style={{ fontSize: '0.6rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.05)', color: '#555', border: '1px solid #111' }}>
+                  ₹{dish.price}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.65rem', color: '#444', fontStyle: 'italic' }}>Click to edit recipe →</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </motion.div>
+)}
       </AnimatePresence>
 
       <style>{`
