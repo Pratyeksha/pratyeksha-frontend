@@ -147,6 +147,7 @@ const [rosterSearchQuery, setRosterSearchQuery] = useState(""); // 🚀 Register
 
 const [tenantConfig, setTenantConfig] = useState(null);
 
+const [trendsData, setTrendsData] = useState(null);
 const [hourlyAnalytics, setHourlyAnalytics] = useState({ hourly: [], dayOfWeek: [] });
 
 const [newStaff, setNewStaff] = useState({
@@ -407,9 +408,10 @@ const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this h
 
 const fetchAnalytics = useCallback(async () => {
     try {
-        const [analyticsRes, hourlyRes] = await Promise.all([
+        const [analyticsRes, hourlyRes, trendsRes] = await Promise.all([
             axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
-            axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`)
+            axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`),
+            axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}`)
         ]);
         setAnalytics(analyticsRes.data.salesData || []);
         setTopPerformers(analyticsRes.data.topItems || []);
@@ -419,6 +421,7 @@ const fetchAnalytics = useCallback(async () => {
             hourly: hourlyRes.data.hourly || [],
             dayOfWeek: hourlyRes.data.dayOfWeek || []
         });
+        setTrendsData(trendsRes.data);
     } catch (err) {
         console.error("Analytics fetch error:", err);
     }
@@ -1409,27 +1412,201 @@ return (
 
 </div>
     {/* GROUP 3 & 4: TABLE FLOOR & MARGINS */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        <div style={styles.biCard}>
-            <h4 style={styles.biTitle}><ChefHat size={16} /> TOP TABLE FLOOR INTEL</h4>
-            {insightsData.tablePerformance.slice(0, 3).map((t, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
-                    <span style={{ color: '#fff' }}>Table {t.table}</span>
-                    <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{t.avgDwell}m Avg Dwell</span>
-                </div>
-            ))}
-        </div>
-        <div style={styles.biCard}>
-            <h4 style={styles.biTitle}><Percent size={16} /> HIGH MARGIN DISHES</h4>
-            {insightsData.margins.map((m, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
-                    <span style={{ color: '#fff' }}>{m.name}</span>
-                    <span style={{ color: '#4ade80', fontWeight: '900' }}>{m.margin}% Margin</span>
-                </div>
-            ))}
-        </div>
+   {/* GROUP 2: TABLE & FLOOR INTELLIGENCE */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
 
-    </div>
+  {/* TABLE PERFORMANCE RANKING */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Layers size={16} /> TABLE PERFORMANCE RANKING</h4>
+    {trendsData?.tables?.performance?.length > 0 ? (
+      <>
+        {trendsData.tables.performance.slice(0, 5).map((t, i) => {
+          const maxRev = trendsData.tables.performance[0]?.revenue || 1;
+          const isLow = t.revenue < maxRev * 0.3;
+          return (
+            <div key={t.table} style={{ padding: '10px 0', borderBottom: '1px solid #111' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                <span style={{ color: '#fff', fontWeight: '900', fontSize: '0.8rem' }}>Table {t.table}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#d3bfa2', fontWeight: '900', fontSize: '0.8rem' }}>₹{t.revenue.toLocaleString()}</span>
+                  {isLow && <span style={{ fontSize: '0.55rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99,56,6,0.2)', color: '#BA7517', fontWeight: '900' }}>LOW</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ flex: 1, height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden', marginRight: '10px' }}>
+                  <div style={{ height: '100%', width: `${Math.round((t.revenue / maxRev) * 100)}%`, background: isLow ? '#633806' : '#8a704d', borderRadius: '2px' }} />
+                </div>
+                <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '800', whiteSpace: 'nowrap' }}>{t.turns} turns</span>
+              </div>
+            </div>
+          );
+        })}
+      </>
+    ) : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>NO SETTLED TABLE DATA YET</div>
+    )}
+  </div>
+
+  {/* AVERAGE TABLE DWELL TIME */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Timer size={16} /> AVERAGE TABLE DWELL TIME</h4>
+    {trendsData?.tables ? (
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: '8px', marginBottom: '15px' }}>
+          {[
+            { label: 'AVG DWELL TIME', val: trendsData.tables.overallAvgDwell > 0 ? `${trendsData.tables.overallAvgDwell} min` : '— min' },
+            { label: 'FASTEST TURNOVER', val: trendsData.tables.fastest ? `Table ${trendsData.tables.fastest.table} · ${trendsData.tables.fastest.avgDwell} min avg` : '—' },
+            { label: 'SLOWEST TURNOVER', val: trendsData.tables.slowest ? `Table ${trendsData.tables.slowest.table} · ${trendsData.tables.slowest.avgDwell} min avg` : '—' },
+          ].map(s => (
+            <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #111' }}>
+              <small style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900', letterSpacing: '0.5px' }}>{s.label}</small>
+              <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fff' }}>{s.val}</span>
+            </div>
+          ))}
+        </div>
+        {trendsData.tables.performance.length > 0 && (
+          <div style={{ marginTop: '10px' }}>
+            <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>PER TABLE DWELL</small>
+            {trendsData.tables.performance.filter(t => t.avgDwell > 0).slice(0, 4).map(t => (
+              <div key={t.table} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span style={{ width: '50px', fontSize: '0.65rem', color: '#666', fontWeight: '800' }}>T{t.table}</span>
+                <div style={{ flex: 1, height: '5px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, Math.round((t.avgDwell / (trendsData.tables.slowest?.avgDwell || 1)) * 100))}%`,
+                    background: t.avgDwell === trendsData.tables.fastest?.avgDwell ? '#1D9E75' : t.avgDwell === trendsData.tables.slowest?.avgDwell ? '#BA7517' : '#8a704d',
+                    borderRadius: '3px'
+                  }} />
+                </div>
+                <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '800', minWidth: '40px', textAlign: 'right' }}>{t.avgDwell}m</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    ) : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>COMPUTING DWELL INTERVALS...</div>
+    )}
+  </div>
+
+</div>
+
+{/* GROUP 3: HIGH MARGIN DISHES (kept as-is) */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Percent size={16} /> HIGH MARGIN DISHES</h4>
+    {insightsData.margins.map((m, i) => (
+      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
+        <span style={{ color: '#fff' }}>{m.name}</span>
+        <span style={{ color: '#4ade80', fontWeight: '900' }}>{m.margin}% Margin</span>
+      </div>
+    ))}
+  </div>
+
+  {/* REVENUE TREND VS LAST MONTH */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><TrendingUp size={16} /> REVENUE TREND VS LAST MONTH</h4>
+    {trendsData?.revenue ? (() => {
+      const { current, previous, growthPct } = trendsData.revenue;
+      const isPositive = growthPct !== null && Number(growthPct) >= 0;
+      return (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
+            <span style={{ fontSize: '0.75rem', color: '#888' }}>This month</span>
+            <span style={{ fontWeight: '900', color: '#fff' }}>₹{current.toLocaleString()}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #111' }}>
+            <span style={{ fontSize: '0.75rem', color: '#888' }}>Last month</span>
+            <span style={{ fontWeight: '900', color: '#555' }}>₹{previous.toLocaleString()}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
+            <span style={{ fontSize: '0.75rem', color: '#888' }}>Growth</span>
+            {growthPct !== null ? (
+              <span style={{
+                fontSize: '0.85rem', fontWeight: '900', padding: '4px 10px', borderRadius: '6px',
+                background: isPositive ? 'rgba(29,158,117,0.1)' : 'rgba(226,75,74,0.1)',
+                color: isPositive ? '#1D9E75' : '#E24B4A'
+              }}>
+                {isPositive ? '+' : ''}{growthPct}% {isPositive ? '↑' : '↓'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.75rem', color: '#555', fontStyle: 'italic' }}>No previous data</span>
+            )}
+          </div>
+          {previous > 0 && (
+            <div style={{ marginTop: '5px' }}>
+              <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, Math.round((previous / Math.max(current, previous)) * 100))}%`, background: '#333', borderRadius: '3px' }} />
+              </div>
+              <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, Math.round((current / Math.max(current, previous)) * 100))}%`, background: isPositive ? '#1D9E75' : '#E24B4A', borderRadius: '3px', transition: 'width 0.8s ease' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                <span style={{ fontSize: '0.55rem', color: '#333' }}>Last month</span>
+                <span style={{ fontSize: '0.55rem', color: '#555' }}>This month</span>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    })() : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>NO DATA YET</div>
+    )}
+  </div>
+</div>
+
+{/* GROUP 5: CUSTOMER & REVENUE INTELLIGENCE */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
+  {/* REPEAT VS NEW CUSTOMERS */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><User size={16} /> REPEAT VS NEW CUSTOMERS</h4>
+    {trendsData?.customers && trendsData.customers.total > 0 ? (
+      <>
+        {/* Donut-style bar */}
+        <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
+          <div style={{ width: `${trendsData.customers.repeatPct}%`, background: '#d3bfa2', transition: 'width 0.8s ease' }} />
+          <div style={{ flex: 1, background: '#1a1a1a' }} />
+        </div>
+        {[
+          { label: 'TOTAL CUSTOMERS', val: trendsData.customers.total, color: '#fff' },
+          { label: 'REPEAT VISITORS', val: `${trendsData.customers.repeat} (${trendsData.customers.repeatPct}%)`, color: '#d3bfa2' },
+          { label: 'NEW CUSTOMERS', val: trendsData.customers.new, color: '#888' },
+          { label: 'AVG VISITS/CUSTOMER', val: trendsData.customers.avgVisits + 'x', color: '#fff' },
+        ].map(s => (
+          <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #111' }}>
+            <small style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900', letterSpacing: '0.5px' }}>{s.label}</small>
+            <span style={{ fontSize: '0.8rem', fontWeight: '900', color: s.color }}>{s.val}</span>
+          </div>
+        ))}
+      </>
+    ) : (
+      <div style={{ textAlign: 'center', paddingTop: '20px' }}>
+        <div style={{ fontSize: '0.75rem', color: '#444', lineHeight: '1.6' }}>
+          Start capturing customer phone numbers at billing to unlock retention metrics.
+        </div>
+        <div style={{ marginTop: '12px', fontSize: '0.65rem', padding: '6px 12px', borderRadius: '6px', background: 'rgba(186,117,23,0.1)', color: '#BA7517', fontWeight: '900', display: 'inline-block' }}>
+          ENABLE PHONE CAPTURE AT CHECKOUT
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* REVENUE SOURCES (existing, kept) */}
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Globe size={16} /> REVENUE SOURCES</h4>
+    {Object.entries(advancedStats.sources).map(([src, val]) => (
+      <div key={src} style={styles.sourceRow}>
+        <span style={{textTransform: 'capitalize', width: '80px'}}>{src}</span>
+        <div style={styles.progressBg}>
+          <div style={{...styles.progressFill, width: `${(val / (stats.revenue || 1)) * 100}%`}}></div>
+        </div>
+        <span style={{minWidth: '60px', textAlign: 'right'}}>₹{val.toLocaleString()}</span>
+      </div>
+    ))}
+  </div>
+
+</div>
     {/* 3. CORE ANALYTICS DEEP DIVES */}
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
       <div style={styles.biCard}>
