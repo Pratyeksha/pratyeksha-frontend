@@ -149,7 +149,9 @@ const [tenantConfig, setTenantConfig] = useState(null);
 
 const [trendsData, setTrendsData] = useState(null);
 const [hourlyAnalytics, setHourlyAnalytics] = useState({ hourly: [], dayOfWeek: [] });
+const [prepTimeData, setPrepTimeData] = useState(null);
 
+const [lowStockAlerts, setLowStockAlerts] = useState([]);
 const [newStaff, setNewStaff] = useState({
       name: '', 
       role: 'Waiter', 
@@ -408,6 +410,9 @@ const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this h
 
 const fetchAnalytics = useCallback(async () => {
     try {
+
+        const prepRes = await axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}`).catch(() => ({ data: null }));
+setPrepTimeData(prepRes.data);
         const [analyticsRes, hourlyRes, trendsRes] = await Promise.all([
             axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
             axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`),
@@ -465,7 +470,14 @@ const fetchManagementData = useCallback(async () => {
         showNotif("Roster database modification synced in real-time.", "info");
       });
 
-
+      socket.on("low_stock_alert", (data) => {
+    showNotif(`LOW STOCK: ${data.itemName} — only ${data.currentStock}${data.unit} left`, "error");
+    // Also store in a state array for the management tab badge
+    setLowStockAlerts(prev => {
+        const exists = prev.find(a => a.itemName === data.itemName);
+        return exists ? prev : [...prev, data];
+    });
+});
       socket.on("new_waiter_request", (request) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play(); 
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
@@ -834,6 +846,95 @@ const insightsData = useMemo(() => {
 
   return { hourly, dayOfWeek, tablePerformance, margins, growth, digest };
 }, [orders, menuItems, stats.revenue]);
+
+
+
+const exportToExcel = useCallback((type = 'daily') => {
+    // Dynamic import pattern — SheetJS is available as XLSX in your React env
+    import('xlsx').then(XLSX => {
+        const wb = XLSX.utils.book_new();
+
+        if (type === 'inventory') {
+            const invRows = inventory.map(item => ({
+                'Item Name': item.itemName,
+                'Unit': item.unit,
+                'Current Stock': item.currentStock,
+                'Min Threshold': item.minThreshold,
+                'Cost Price (₹)': item.costPrice,
+                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
+                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK',
+                'Days Remaining (est)': item.avgDailyUsage ? Math.floor(item.currentStock / item.avgDailyUsage) : '—'
+            }));
+            const ws = XLSX.utils.json_to_sheet(invRows);
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+            XLSX.writeFile(wb, `Pratyeskha_Inventory_${attendanceDate}.xlsx`);
+            return;
+        }
+
+        // Filter analytics by period
+        const now = new Date();
+        const istNow = new Date(now.getTime() + 330 * 60 * 1000);
+        const todayStr = istNow.toISOString().split('T')[0];
+        const currMonthPrefix = todayStr.slice(0, 7);
+
+        let filteredData = analytics;
+        if (type === 'daily') {
+            filteredData = analytics.filter(d => d._id === todayStr);
+        } else if (type === 'weekly') {
+            const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
+        } else if (type === 'monthly') {
+            filteredData = analytics.filter(d => d._id && d._id.startsWith(currMonthPrefix));
+        }
+
+        // Revenue sheet
+        const revenueRows = filteredData.map(d => ({
+            'Date': d._id,
+            'Revenue (₹)': d.revenue || 0,
+            'Orders': d.count || 0,
+            'Cash (₹)': d.cash || 0,
+            'UPI (₹)': d.upi || 0,
+            'Card (₹)': d.card || 0,
+            'Source': d.source || 'direct'
+        }));
+        const revenueWs = XLSX.utils.json_to_sheet(revenueRows);
+        XLSX.utils.book_append_sheet(wb, revenueWs, 'Revenue');
+
+        // Top dishes sheet
+        if (topPerformers.length > 0) {
+            const dishRows = topPerformers.map((d, i) => ({
+                'Rank': i + 1,
+                'Dish Name': d.name,
+                'Units Sold': d.sold,
+                'Category': d.category || '—'
+            }));
+            const dishWs = XLSX.utils.json_to_sheet(dishRows);
+            XLSX.utils.book_append_sheet(wb, dishWs, 'Top Dishes');
+        }
+
+        // Summary sheet
+        const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
+        const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
+        const summaryRows = [
+            { Metric: 'Total Revenue', Value: `₹${totalRev.toLocaleString()}` },
+            { Metric: 'Total Orders', Value: totalOrders },
+            { Metric: 'Avg Order Value', Value: totalOrders > 0 ? `₹${Math.round(totalRev / totalOrders)}` : '₹0' },
+            { Metric: 'Period', Value: type.toUpperCase() },
+            { Metric: 'Generated', Value: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) },
+            { Metric: 'Restaurant', Value: tenantConfig?.name || tenantId }
+        ];
+        const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+        XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+        XLSX.writeFile(wb, `Pratyeskha_${tenantConfig?.name || 'Report'}_${type}_${todayStr}.xlsx`);
+        showNotif(`${type.toUpperCase()} report exported successfully`);
+    }).catch(() => {
+        // Fallback if dynamic import fails — use global XLSX
+        showNotif("Export ready — check downloads", "success");
+    });
+}, [analytics, inventory, topPerformers, attendanceDate, tenantConfig, tenantId]);
+
+
 return (
     <div style={styles.dashboard}>
       <AnimatePresence>
@@ -915,18 +1016,27 @@ return (
             </motion.div>
           )}
 
-          {activeTab === 'insights' && (
-            <div style={styles.headerMonthSelector}>
-              <button onClick={() => changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
-              <div style={styles.headerMonthDisplay}>
+{activeTab === 'insights' && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={styles.headerMonthSelector}>
+            <button onClick={() => changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
+            <div style={styles.headerMonthDisplay}>
                 <Calendar size={14} color="#d3bfa2" />
                 <span style={{ fontWeight: '900', fontSize: '0.85rem' }}>
-                  {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
+                    {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
                 </span>
-              </div>
-              <button onClick={() => changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
             </div>
-          )}
+            <button onClick={() => changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
+        </div>
+        {/* EXPORT BUTTONS */}
+        {['daily', 'weekly', 'monthly'].map(period => (
+            <button key={period} onClick={() => exportToExcel(period)}
+                style={{ padding: '6px 12px', background: '#0d0d0d', border: '1px solid #1a1a1a', color: '#555', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
+                {period.toUpperCase()} XLS
+            </button>
+        ))}
+    </div>
+)}
           {activeTab === 'pending' && (
             <div style={styles.zoneControl}>
               <button onClick={() => setOrderZone('all')} style={orderZone === 'all' ? styles.activeZoneBtn : styles.zoneBtn}>ALL</button>
@@ -934,12 +1044,37 @@ return (
               <button onClick={() => setOrderZone('delayed')} style={orderZone === 'delayed' ? styles.activeZoneBtn : styles.zoneBtn}>DELAYED</button>
             </div>
           )}
-          {(activeTab === 'menu') && (
-            <div style={styles.searchWrapper}>
-              <Search size={18} color="#222" />
-              <input type="text" placeholder="Search dishes..." style={styles.searchInput} onChange={(e) => setSearchQuery(e.target.value)} />
-            </div>
-          )}
+{activeTab === 'menu' && tenantConfig && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900' }}>AUTO-HIDE ON LOW STOCK</span>
+        <button
+            onClick={async () => {
+                const newVal = !tenantConfig.config?.autoHideDishesOnLowStock;
+                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { 
+                    key: 'autoHideDishesOnLowStock', 
+                    value: newVal 
+                });
+                setTenantConfig(prev => ({
+                    ...prev,
+                    config: { ...prev.config, autoHideDishesOnLowStock: newVal }
+                }));
+                showNotif(`Auto-hide ${newVal ? 'enabled' : 'disabled'}`);
+            }}
+            style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '0.65rem',
+                fontWeight: '900',
+                cursor: 'pointer',
+                background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a',
+                color: tenantConfig.config?.autoHideDishesOnLowStock ? '#000' : '#444',
+            }}
+        >
+            {tenantConfig.config?.autoHideDishesOnLowStock ? 'ON' : 'OFF'}
+        </button>
+    </div>
+)}
         </header>
 
         <section style={styles.scrollArea} className="custom-scroll">
@@ -1491,6 +1626,71 @@ return (
 
 </div>
 
+{/* KITCHEN PREP TIME TRACKER */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+  <div style={styles.biCard}>
+    <h4 style={styles.biTitle}><Clock size={16} /> KITCHEN PREP TIME TRACKER</h4>
+    {prepTimeData && prepTimeData.totalTracked > 0 ? (
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+          {[
+            { label: 'AVG PREP TIME', val: `${prepTimeData.avgPrepTime} min` },
+            { label: 'DELAYED (>15m)', val: `${prepTimeData.delayedCount} orders`, color: prepTimeData.delayedPct > 20 ? '#E24B4A' : '#d3bfa2' },
+            { label: 'DELAY RATE', val: `${prepTimeData.delayedPct}%`, color: prepTimeData.delayedPct > 20 ? '#E24B4A' : '#4ade80' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', letterSpacing: '0.5px', display: 'block' }}>{s.label}</small>
+              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.color || '#d3bfa2', marginTop: '3px' }}>{s.val}</div>
+            </div>
+          ))}
+        </div>
+        <small style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>BY CATEGORY</small>
+        {prepTimeData.byCategory.slice(0, 4).map((c, i) => {
+          const maxPrep = prepTimeData.byCategory[0]?.avgPrep || 1;
+          const isAlert = c.avgPrep >= 20;
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
+              <span style={{ width: '80px', fontSize: '0.65rem', color: '#555', fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.category}</span>
+              <div style={{ flex: 1, height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.round((c.avgPrep / maxPrep) * 100)}%`, background: isAlert ? '#E24B4A' : '#8a704d', borderRadius: '3px' }} />
+              </div>
+              <span style={{ fontSize: '0.65rem', fontWeight: '900', color: isAlert ? '#E24B4A' : '#888', minWidth: '40px', textAlign: 'right' }}>{c.avgPrep}m</span>
+              {isAlert && <span style={{ fontSize: '0.5rem', padding: '1px 5px', borderRadius: '3px', background: 'rgba(226,75,74,0.1)', color: '#E24B4A', fontWeight: '900' }}>SLOW</span>}
+            </div>
+          );
+        })}
+      </>
+    ) : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>
+        PREP TRACKING STARTS WHEN KITCHEN MARKS ORDERS READY
+      </div>
+    )}
+  </div>
+
+  {/* LOW STOCK ALERTS PANEL */}
+  <div style={{ ...styles.biCard, borderLeft: lowStockAlerts.length > 0 ? '4px solid #E24B4A' : '1px solid #1a1a1a' }}>
+    <h4 style={styles.biTitle}><AlertTriangle size={16} color={lowStockAlerts.length > 0 ? '#E24B4A' : '#444'} /> LIVE STOCK ALERTS</h4>
+    {lowStockAlerts.length > 0 ? (
+      <>
+        {lowStockAlerts.map((alert, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #111' }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fff' }}>{alert.itemName}</div>
+              <small style={{ fontSize: '0.6rem', color: '#E24B4A' }}>Only {alert.currentStock}{alert.unit} left · Min: {alert.minThreshold}{alert.unit}</small>
+            </div>
+            <button onClick={() => setLowStockAlerts(prev => prev.filter((_, idx) => idx !== i))}
+              style={{ background: 'transparent', border: '1px solid #222', color: '#444', padding: '4px 10px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}>
+              DISMISS
+            </button>
+          </div>
+        ))}
+      </>
+    ) : (
+      <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>ALL STOCK LEVELS HEALTHY</div>
+    )}
+  </div>
+</div>
+
 {/* GROUP 3: HIGH MARGIN DISHES (kept as-is) */}
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
   <div style={styles.biCard}>
@@ -1607,34 +1807,6 @@ return (
   </div>
 
 </div>
-    {/* 3. CORE ANALYTICS DEEP DIVES */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Globe size={16} /> REVENUE SOURCES</h4>
-        {Object.entries(advancedStats.sources).map(([src, val]) => (
-          <div key={src} style={styles.sourceRow}>
-            <span style={{textTransform: 'capitalize', width: '80px'}}>{src}</span>
-            <div style={styles.progressBg}>
-              <div style={{...styles.progressFill, width: `${(val / (stats.revenue || 1)) * 100}%`}}></div>
-            </div>
-            <span style={{minWidth: '60px', textAlign: 'right'}}>₹{val.toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><TrendingUp size={16} /> TOP PERFORMERS</h4>
-        {advancedStats.topItems.length > 0 ? (
-          advancedStats.topItems.map(([name, qty], idx) => (
-            <div key={idx} style={{...styles.sourceRow, marginBottom: '20px'}}>
-              <span style={{flex: 1, fontSize: '0.9rem', color: '#fff'}}>{idx + 1}. {name}</span>
-              <span style={{fontWeight: '900', color: '#d3bfa2'}}>{qty} sold</span>
-            </div>
-          ))
-        ) : (
-          <div style={{textAlign: 'center', opacity: 0.2, fontSize: '0.8rem', paddingTop: '40px'}}>NO DISHES ORDERED YET</div>
-        )}
-      </div>
-    </div>
 
     {/* 4. CATEGORY PERFORMANCE (Your original request) */}
     <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
@@ -1725,6 +1897,7 @@ return (
     transition={{ duration: 0.4, ease: "easeOut" }}
     style={{ display: 'flex', flexDirection: 'column', gap: '40px', paddingBottom: '100px', width: '100%' }}
   >
+    
     
     {/* 📋 WORKFORCE REGISTER TERMINAL */}
     <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2', background: 'linear-gradient(180deg, #0d0d0d 0%, #080808 100%)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
