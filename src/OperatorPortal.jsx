@@ -143,6 +143,7 @@ const OperatorPortal = () => {
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [ledgerSortConfig, setLedgerSortConfig] = useState({ key: 'name', direction: 'asc' });
 
+  const [inventoryLoading, setInventoryLoading] = useState(false);
   // ─────────────────────────────────────────────────────
   // FETCH FUNCTIONS
   // ─────────────────────────────────────────────────────
