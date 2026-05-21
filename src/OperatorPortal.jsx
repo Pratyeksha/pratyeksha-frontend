@@ -998,51 +998,163 @@ setTimeout(async () => {
               {/* HOURLY + DOW */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
                 <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
-                  {hourlyAnalytics.hourly.length>0 ? (()=>{
-                    const maxO=Math.max(...hourlyAnalytics.hourly.map(d=>d.orderCount),1);
-                    const peak=hourlyAnalytics.hourly.reduce((a,b)=>b.orderCount>a.orderCount?b:a,hourlyAnalytics.hourly[0]);
-                    const total=hourlyAnalytics.hourly.reduce((a,b)=>a+b.orderCount,0);
-                    const fmt=h=>h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
-                    const col=c=>{const r=c/maxO;return r===0?'#111':r<0.25?'#2a1f0a':r<0.5?'#633806':r<0.75?'#BA7517':'#d3bfa2';};
-                    return (<>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'20px'}}>
-                        {[{l:'TOTAL TODAY',v:total+' orders'},{l:'PEAK HOUR',v:fmt(peak?.hour||0)},{l:'PEAK COUNT',v:peak?.orderCount||0}].map(s=>(
-                          <div key={s.l} style={{background:'#050505',padding:'10px',borderRadius:'10px',border:'1px solid #111'}}>
-                            <small style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',display:'block'}}>{s.l}</small>
-                            <div style={{fontSize:'0.9rem',fontWeight:'900',color:'#d3bfa2',marginTop:'3px'}}>{s.v}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{display:'flex',alignItems:'flex-end',gap:'3px',height:'80px'}}>
-                        {hourlyAnalytics.hourly.map(d=>(
-                          <div key={d.hour} title={`${fmt(d.hour)}: ${d.orderCount}`}
-                            style={{flex:1,height:`${Math.max(3,Math.round((d.orderCount/maxO)*100))}%`,background:col(d.orderCount),borderRadius:'3px 3px 0 0',minWidth:0}}/>
-                        ))}
-                      </div>
-                    </>);
-                  })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'40px'}}>NO ORDERS TODAY</div>}
+  <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
+  {hourlyAnalytics.hourly.length > 0 ? (() => {
+    const maxO = Math.max(...hourlyAnalytics.hourly.map(d => d.orderCount), 1);
+    const maxR = Math.max(...hourlyAnalytics.hourly.map(d => d.revenue), 1);
+    const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
+    const total = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
+    const totalRev = hourlyAnalytics.hourly.reduce((a, b) => a + b.revenue, 0);
+    const fmt = h => h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
+    const col = c => { const r = c / maxO; return r === 0 ? '#111' : r < 0.25 ? '#2a1f0a' : r < 0.5 ? '#633806' : r < 0.75 ? '#BA7517' : '#d3bfa2'; };
+    
+    // Dead hours = hours with 0 orders during operating window (8am-11pm)
+    const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
+    const deadHours = operatingHours.filter(h => h.orderCount === 0);
+    const slowHours = operatingHours.filter(h => h.orderCount > 0 && h.orderCount < (maxO * 0.25));
+    const avgRevenuePerHour = total > 0 ? Math.round(totalRev / operatingHours.filter(h => h.orderCount > 0).length) : 0;
+    const peakRevenue = hourlyAnalytics.hourly.find(h => h.hour === peak?.hour)?.revenue || 0;
+
+    return (
+      <>
+        {/* KPI strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+          {[
+            { l: 'TOTAL TODAY', v: total + ' orders' },
+            { l: 'PEAK HOUR', v: fmt(peak?.hour || 0) },
+            { l: 'PEAK ORDERS', v: peak?.orderCount || 0 }
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2', marginTop: '3px' }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Revenue KPI strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+          {[
+            { l: 'PEAK HR REVENUE', v: `₹${peakRevenue.toLocaleString()}` },
+            { l: 'AVG REV/ACTIVE HR', v: `₹${avgRevenuePerHour.toLocaleString()}` },
+            { l: 'DEAD HOURS (8a-11p)', v: deadHours.length + ' hrs', c: deadHours.length > 4 ? '#BA7517' : '#4ade80' }
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bar chart — dual layer: orders + revenue */}
+        <div style={{ position: 'relative', height: '80px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+            {hourlyAnalytics.hourly.map(d => (
+              <div key={d.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                <div title={`${fmt(d.hour)}: ${d.orderCount} orders · ₹${d.revenue}`}
+                  style={{ width: '100%', height: `${Math.max(3, Math.round((d.orderCount / maxO) * 100))}%`, background: col(d.orderCount), borderRadius: '3px 3px 0 0', position: 'relative', minWidth: 0 }}>
+                  {d.hour === peak?.hour && (
+                    <div style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', whiteSpace: 'nowrap' }}>PEAK</div>
+                  )}
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Hour labels — only show every 3 hours */}
+        <div style={{ display: 'flex', gap: '3px', marginBottom: '12px' }}>
+          {hourlyAnalytics.hourly.map(d => (
+            <div key={d.hour} style={{ flex: 1, textAlign: 'center', fontSize: '0.45rem', color: d.hour % 3 === 0 ? '#333' : 'transparent', minWidth: 0 }}>
+              {fmt(d.hour)}
+            </div>
+          ))}
+        </div>
+
+        {/* Insight callouts */}
+        {slowHours.length > 0 && (
+          <div style={{ background: 'rgba(186,117,23,0.05)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '8px', padding: '10px 12px', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.6rem', color: '#BA7517', fontWeight: '900', marginBottom: '4px' }}>⚡ SLOW HOUR OPPORTUNITIES</div>
+            <div style={{ fontSize: '0.65rem', color: '#666' }}>
+              {slowHours.slice(0, 3).map(h => fmt(h.hour)).join(', ')} — consider happy hour promos or staff reallocation
+            </div>
+          </div>
+        )}
+      </>
+    );
+  })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS TODAY</div>}
+</div>
                 <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
-                  {hourlyAnalytics.dayOfWeek.length>0 ? (()=>{
-                    const maxR=Math.max(...hourlyAnalytics.dayOfWeek.map(d=>d.revenue),1);
-                    const peak=hourlyAnalytics.dayOfWeek.reduce((a,b)=>b.revenue>a.revenue?b:a,hourlyAnalytics.dayOfWeek[0]);
-                    const weak=hourlyAnalytics.dayOfWeek.reduce((a,b)=>b.revenue<a.revenue?b:a,hourlyAnalytics.dayOfWeek[0]);
-                    return hourlyAnalytics.dayOfWeek.map(d=>{
-                      const isPk=d.day===peak.day, isWk=d.day===weak.day&&d.revenue<peak.revenue;
-                      return (
-                        <div key={d.day} style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px'}}>
-                          <span style={{width:'32px',fontSize:'0.7rem',color:'#555',fontWeight:'800'}}>{d.day}</span>
-                          <div style={{flex:1,height:'8px',background:'#111',borderRadius:'4px',overflow:'hidden'}}>
-                            <div style={{height:'100%',width:`${Math.round((d.revenue/maxR)*100)}%`,background:isPk?'#d3bfa2':isWk?'#633806':'#8a704d',borderRadius:'4px'}}/>
-                          </div>
-                          <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#fff',minWidth:'70px',textAlign:'right'}}>₹{d.revenue.toLocaleString()}</span>
-                        </div>
-                      );
-                    });
-                  })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'40px'}}>NO DATA YET</div>}
+  <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
+  {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
+    const maxR = Math.max(...hourlyAnalytics.dayOfWeek.map(d => d.revenue), 1);
+    const peak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+    const weak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue < a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+    const totalWeekRev = hourlyAnalytics.dayOfWeek.reduce((a, b) => a + b.revenue, 0);
+    const activeDays = hourlyAnalytics.dayOfWeek.filter(d => d.orders > 0).length;
+    const avgPerActiveDay = activeDays > 0 ? Math.round(totalWeekRev / activeDays) : 0;
+    const weekendDays = hourlyAnalytics.dayOfWeek.filter(d => ['Sat', 'Sun'].includes(d.day));
+    const weekdayDays = hourlyAnalytics.dayOfWeek.filter(d => !['Sat', 'Sun'].includes(d.day));
+    const weekendRev = weekendDays.reduce((a, b) => a + b.revenue, 0);
+    const weekdayRev = weekdayDays.reduce((a, b) => a + b.revenue, 0);
+
+    return (
+      <>
+        {/* Summary strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+          {[
+            { l: 'BEST DAY', v: peak.day, sub: `₹${peak.revenue.toLocaleString()}`, c: '#d3bfa2' },
+            { l: 'AVG/ACTIVE DAY', v: `₹${avgPerActiveDay.toLocaleString()}`, sub: `${activeDays} active days` },
+            { l: 'SLOWEST DAY', v: weak.day, sub: `₹${weak.revenue.toLocaleString()}`, c: '#633806' }
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
+              <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '2px' }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Day bars */}
+        {hourlyAnalytics.dayOfWeek.map(d => {
+          const isPk = d.day === peak.day, isWk = d.day === weak.day && d.revenue < peak.revenue;
+          const avgOrder = d.orders > 0 ? Math.round(d.revenue / d.orders) : 0;
+          return (
+            <div key={d.day} style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                <span style={{ width: '32px', fontSize: '0.7rem', color: isPk ? '#d3bfa2' : isWk ? '#633806' : '#555', fontWeight: '800' }}>{d.day}</span>
+                <div style={{ flex: 1, height: '8px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.round((d.revenue / maxR) * 100)}%`, background: isPk ? '#d3bfa2' : isWk ? '#633806' : '#8a704d', borderRadius: '4px', transition: 'width 0.6s ease' }} />
                 </div>
+                <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', minWidth: '70px', textAlign: 'right' }}>₹{d.revenue.toLocaleString()}</span>
+              </div>
+              {/* Sub-row: orders + avg */}
+              <div style={{ display: 'flex', paddingLeft: '42px', gap: '16px' }}>
+                <span style={{ fontSize: '0.58rem', color: '#333' }}>{d.orders || 0} orders</span>
+                {avgOrder > 0 && <span style={{ fontSize: '0.58rem', color: '#333' }}>avg ₹{avgOrder}</span>}
+                {isPk && <span style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900' }}>▲ BEST</span>}
+                {isWk && d.revenue > 0 && <span style={{ fontSize: '0.58rem', color: '#633806', fontWeight: '900' }}>▼ LOWEST</span>}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Weekend vs Weekday split */}
+        <div style={{ borderTop: '1px solid #111', paddingTop: '12px', marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {[
+            { l: 'WEEKDAY TOTAL', v: `₹${weekdayRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekdayRev / totalWeekRev) * 100) : 0 },
+            { l: 'WEEKEND TOTAL', v: `₹${weekendRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekendRev / totalWeekRev) * 100) : 0 }
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '8px 10px', borderRadius: '8px', border: '1px solid #111' }}>
+              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+              <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>{s.v}</div>
+              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '1px' }}>{s.pct}% of week</div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO DATA YET</div>}
+</div>
               </div>
 
               {/* TABLE PERF + DWELL */}
@@ -1120,20 +1232,86 @@ setTimeout(async () => {
               {/* PROFITABILITY + REVENUE TREND */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
                 <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY</h4>
-                  {profitabilityData.length>0 ? profitabilityData.slice(0,6).map(d=>(
-                    <div key={d._id} style={{padding:'8px 0',borderBottom:'1px solid #111'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
-                        <span style={{color:'#fff',fontSize:'0.78rem',fontWeight:'700'}}>{d.name}</span>
-                        <span style={{fontWeight:'900',fontSize:'0.78rem',color:d.profit<0?'#BA7517':'#d3bfa2'}}>{d.marginPct}%</span>
-                      </div>
-                      <div style={{height:'3px',background:'#111',borderRadius:'2px',overflow:'hidden'}}>
-                        <div style={{height:'100%',width:`${Math.max(0,Math.min(100,d.marginPct))}%`,background:d.profit<0?'#633806':'#8a704d'}}/>
-                      </div>
-                      {!d.hasRecipe&&<div style={{fontSize:'0.55rem',color:'#333',marginTop:'3px'}}>No recipe — cost estimated</div>}
-                    </div>
-                  )) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>LINK RECIPES TO COMPUTE MARGINS</div>}
-                </div>
+  <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY — RECIPE COSTING</h4>
+  {profitabilityData.length > 0 ? (
+    <>
+      {/* Summary bar */}
+      {(() => {
+        const withRecipe = profitabilityData.filter(d => d.hasRecipe);
+        const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
+        const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+        const totalCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
+        const overallMargin = totalRevenue > 0 ? Math.round((totalGrossProfit / totalRevenue) * 100) : 0;
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px', padding: '12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+            {[
+              { l: 'TOTAL REVENUE', v: `₹${totalRevenue.toLocaleString()}` },
+              { l: 'INGREDIENT COST', v: `₹${totalCost.toLocaleString()}`, c: '#BA7517' },
+              { l: 'GROSS PROFIT', v: `₹${totalGrossProfit.toLocaleString()}`, c: overallMargin > 50 ? '#4ade80' : '#d3bfa2' }
+            ].map(s => (
+              <div key={s.l} style={{ textAlign: 'center' }}>
+                <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                <div style={{ fontSize: '0.85rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Per-dish breakdown */}
+      {profitabilityData.slice(0, 8).map((d, idx) => (
+        <div key={d._id} style={{ padding: '10px 0', borderBottom: '1px solid #111' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '900', minWidth: '16px' }}>#{idx + 1}</span>
+              <span style={{ color: '#fff', fontSize: '0.78rem', fontWeight: '700' }}>{d.name}</span>
+              {!d.hasRecipe && <span style={{ fontSize: '0.5rem', padding: '1px 5px', background: 'rgba(138,112,77,0.1)', color: '#555', borderRadius: '3px', border: '1px solid #1a1a1a' }}>NO RECIPE</span>}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', color: '#555' }}>{d.totalQtySold || 0} sold</span>
+              <span style={{ fontWeight: '900', fontSize: '0.78rem', color: d.grossProfit > 0 ? '#d3bfa2' : '#BA7517' }}>
+                {d.realizedMarginPct ?? d.marginPct}%
+              </span>
+            </div>
+          </div>
+
+          {/* Progress bar — margin */}
+          <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
+            <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, d.marginPct))}%`, background: d.grossProfit < 0 ? '#633806' : d.marginPct > 60 ? '#4ade80' : '#8a704d' }} />
+          </div>
+
+          {/* Cost breakdown row */}
+          {d.hasRecipe && (
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.6rem', color: '#444' }}>Sell ₹{d.sellingPrice}</span>
+              <span style={{ fontSize: '0.6rem', color: '#BA7517' }}>Cost ₹{d.ingredientCostPerServing}</span>
+              <span style={{ fontSize: '0.6rem', color: '#555' }}>→ ₹{d.profit}/serving</span>
+              {d.totalQtySold > 0 && (
+                <span style={{ fontSize: '0.6rem', color: d.grossProfit > 0 ? '#4ade80' : '#BA7517', fontWeight: '900' }}>
+                  Total P&L: ₹{d.grossProfit?.toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Ingredient pills — top 3 */}
+          {d.ingredientBreakdown?.length > 0 && (
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '5px' }}>
+              {d.ingredientBreakdown.slice(0, 3).map((ing, i) => (
+                <span key={i} style={{ fontSize: '0.5rem', padding: '2px 6px', background: '#080808', border: '1px solid #151515', borderRadius: '4px', color: '#444' }}>
+                  {ing.name} {ing.qty}{ing.unit} = ₹{ing.lineCost}
+                </span>
+              ))}
+              {d.ingredientBreakdown.length > 3 && (
+                <span style={{ fontSize: '0.5rem', color: '#333' }}>+{d.ingredientBreakdown.length - 3} more</span>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>LINK RECIPES TO COMPUTE MARGINS</div>}
+</div>
                 <div style={styles.biCard}>
                   <h4 style={styles.biTitle}><TrendingUp size={16}/> REVENUE TREND</h4>
                   {trendsData?.revenue ? (()=>{
