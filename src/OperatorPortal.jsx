@@ -418,16 +418,18 @@ const stats = useMemo(() => {
 const [categoryRankings, setCategoryRankings] = useState({}); // 🚀 Add this hook right below topPerformers state
 const [profitabilityData, setProfitabilityData] = useState([]);
 const [procurementData, setProcurementData] = useState([]);
+const [staffEfficiency, setStaffEfficiency] = useState([]);
 
 const fetchAnalytics = useCallback(async () => {
     try {
-        const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes] = await Promise.all([
+        const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes] = await Promise.all([
             axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
             axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${attendanceDate}`),
             axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}`),
             axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}`).catch(() => ({ data: null })),
             axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}`).catch(() => ({ data: [] })),
-            axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] }))
+            axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] })),
+            axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}`).catch(() => ({ data: { efficiency: [] } }))
         ]);
         setAnalytics(analyticsRes.data.salesData || []);
         setTopPerformers(analyticsRes.data.topItems || []);
@@ -438,9 +440,9 @@ const fetchAnalytics = useCallback(async () => {
         setPrepTimeData(prepRes.data);
         setProfitabilityData(profitRes.data || []);
         setProcurementData(procureRes.data || []);
+        setStaffEfficiency(staffEffRes.data?.efficiency || []);
     } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, attendanceDate]);
-
 
 const fetchManagementData = useCallback(async () => {
     try {
@@ -799,9 +801,19 @@ const fetchAttendanceForDate = useCallback(async (targetDate) => {
 // Trigger initial attendance pull when Management tab mounts
 useEffect(() => {
     if (activeTab === 'management') {
+        // Fetch MONTHLY logs so attendance count is accurate for the selected month
+        const monthPrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+        const fetchMonthlyAttendance = async () => {
+            try {
+                const res = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`);
+                setAttendanceLogs(res.data || []);
+            } catch (err) { console.error("Monthly attendance fetch error:", err); }
+        };
+        fetchMonthlyAttendance();
+        // Also fetch today for the attendance clock-in panel
         fetchAttendanceForDate(attendanceDate);
     }
-}, [activeTab, attendanceDate, fetchAttendanceForDate]);
+}, [activeTab, attendanceDate, viewDate, fetchAttendanceForDate, tenantId]);
 
 
 const insightsData = useMemo(() => {
@@ -858,28 +870,27 @@ const insightsData = useMemo(() => {
 
 
 const exportToExcel = useCallback((type = 'daily') => {
-    // Dynamic import pattern — SheetJS is available as XLSX in your React env
     import('xlsx').then(XLSX => {
         const wb = XLSX.utils.book_new();
 
         if (type === 'inventory') {
             const invRows = inventory.map(item => ({
-                'Item Name': item.itemName,
+                'Ingredient': item.itemName,
                 'Unit': item.unit,
                 'Current Stock': item.currentStock,
                 'Min Threshold': item.minThreshold,
-                'Cost Price (₹)': item.costPrice,
+                'Cost Price (₹/unit)': item.costPrice,
                 'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
                 'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK',
-                'Days Remaining (est)': item.avgDailyUsage ? Math.floor(item.currentStock / item.avgDailyUsage) : '—'
             }));
             const ws = XLSX.utils.json_to_sheet(invRows);
+            ws['!cols'] = [20,10,14,14,18,16,12].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-            XLSX.writeFile(wb, `Pratyeskha_Inventory_${attendanceDate}.xlsx`);
+            XLSX.writeFile(wb, `Pratyeksha_Inventory_${attendanceDate}.xlsx`);
+            showNotif("Inventory report exported");
             return;
         }
 
-        // Filter analytics by period
         const now = new Date();
         const istNow = new Date(now.getTime() + 330 * 60 * 1000);
         const todayStr = istNow.toISOString().split('T')[0];
@@ -892,23 +903,25 @@ const exportToExcel = useCallback((type = 'daily') => {
             const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
         } else if (type === 'monthly') {
-            filteredData = analytics.filter(d => d._id && d._id.startsWith(currMonthPrefix));
+            filteredData = analytics.filter(d => d._id?.startsWith(currMonthPrefix));
         }
 
-        // Revenue sheet
-        const revenueRows = filteredData.map(d => ({
+        // ── Sheet 1: Revenue breakdown ──
+        const revRows = filteredData.map(d => ({
             'Date': d._id,
             'Revenue (₹)': d.revenue || 0,
             'Orders': d.count || 0,
+            'Avg Order (₹)': d.count > 0 ? Math.round((d.revenue || 0) / d.count) : 0,
             'Cash (₹)': d.cash || 0,
             'UPI (₹)': d.upi || 0,
             'Card (₹)': d.card || 0,
             'Source': d.source || 'direct'
         }));
-        const revenueWs = XLSX.utils.json_to_sheet(revenueRows);
-        XLSX.utils.book_append_sheet(wb, revenueWs, 'Revenue');
+        const revWs = XLSX.utils.json_to_sheet(revRows);
+        revWs['!cols'] = [12,14,8,14,12,12,12,10].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, revWs, 'Revenue');
 
-        // Top dishes sheet
+        // ── Sheet 2: Top dishes ──
         if (topPerformers.length > 0) {
             const dishRows = topPerformers.map((d, i) => ({
                 'Rank': i + 1,
@@ -920,27 +933,77 @@ const exportToExcel = useCallback((type = 'daily') => {
             XLSX.utils.book_append_sheet(wb, dishWs, 'Top Dishes');
         }
 
-        // Summary sheet
+        // ── Sheet 3: Profitability ──
+        if (profitabilityData.length > 0) {
+            const profRows = profitabilityData.map(d => ({
+                'Dish': d.name,
+                'Selling Price (₹)': d.sellingPrice,
+                'Ingredient Cost (₹)': d.ingredientCost,
+                'Profit (₹)': d.profit,
+                'Margin %': d.marginPct,
+                'Recipe Linked': d.hasRecipe ? 'Yes' : 'No (estimated)'
+            }));
+            const profWs = XLSX.utils.json_to_sheet(profRows);
+            XLSX.utils.book_append_sheet(wb, profWs, 'Profitability');
+        }
+
+        // ── Sheet 4: Inventory status ──
+        if (inventory.length > 0) {
+            const invRows = inventory.map(item => ({
+                'Ingredient': item.itemName,
+                'Unit': item.unit,
+                'Current Stock': item.currentStock,
+                'Min Threshold': item.minThreshold,
+                'Cost (₹)': item.costPrice,
+                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
+                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK'
+            }));
+            const invWs = XLSX.utils.json_to_sheet(invRows);
+            XLSX.utils.book_append_sheet(wb, invWs, 'Inventory');
+        }
+
+        // ── Sheet 5: Staff efficiency ──
+        if (staffEfficiency.length > 0) {
+            const staffRows = staffEfficiency.map(s => ({
+                'Name': s.name,
+                'Role': s.role,
+                'Days Present': s.daysPresent,
+                'Hours Logged': s.totalHours,
+                'Base Salary (₹)': s.baseSalary,
+                'Salary Status': s.salaryStatus,
+                'Rev Attributed (₹)': s.revenueAttributed,
+                'Rev/Hour (₹)': s.revenuePerHour
+            }));
+            const staffWs = XLSX.utils.json_to_sheet(staffRows);
+            XLSX.utils.book_append_sheet(wb, staffWs, 'Staff Efficiency');
+        }
+
+        // ── Sheet 6: Summary ──
         const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
         const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
+        const totalCash = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
+        const totalUPI = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
+        const totalCard = filteredData.reduce((a, b) => a + (b.card || 0), 0);
         const summaryRows = [
-            { Metric: 'Total Revenue', Value: `₹${totalRev.toLocaleString()}` },
-            { Metric: 'Total Orders', Value: totalOrders },
-            { Metric: 'Avg Order Value', Value: totalOrders > 0 ? `₹${Math.round(totalRev / totalOrders)}` : '₹0' },
             { Metric: 'Period', Value: type.toUpperCase() },
-            { Metric: 'Generated', Value: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) },
-            { Metric: 'Restaurant', Value: tenantConfig?.name || tenantId }
+            { Metric: 'Total Revenue (₹)', Value: totalRev },
+            { Metric: 'Total Orders', Value: totalOrders },
+            { Metric: 'Avg Order Value (₹)', Value: totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0 },
+            { Metric: 'Cash Collections (₹)', Value: totalCash },
+            { Metric: 'UPI Collections (₹)', Value: totalUPI },
+            { Metric: 'Card Collections (₹)', Value: totalCard },
+            { Metric: 'Total Inventory Value (₹)', Value: inventory.reduce((a, i) => a + Math.round(i.currentStock * i.costPrice), 0) },
+            { Metric: 'Restaurant', Value: tenantConfig?.name || tenantId },
+            { Metric: 'Generated At', Value: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) }
         ];
         const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+        summaryWs['!cols'] = [30, 30].map(w => ({ wch: w }));
         XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
 
-        XLSX.writeFile(wb, `Pratyeskha_${tenantConfig?.name || 'Report'}_${type}_${todayStr}.xlsx`);
-        showNotif(`${type.toUpperCase()} report exported successfully`);
-    }).catch(() => {
-        // Fallback if dynamic import fails — use global XLSX
-        showNotif("Export ready — check downloads", "success");
-    });
-}, [analytics, inventory, topPerformers, attendanceDate, tenantConfig, tenantId]);
+        XLSX.writeFile(wb, `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${todayStr}.xlsx`);
+        showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
+    }).catch(err => { console.error(err); showNotif("Export failed — check xlsx install", "error"); });
+}, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, attendanceDate, tenantConfig, tenantId]);
 
 
 return (
@@ -1916,7 +1979,147 @@ return (
         <span>More</span>
       </div>
     </div>
-    
+    {/* STAFF EFFICIENCY SCOREBOARD */}
+{staffEfficiency.length > 0 && (
+  <div style={{ ...styles.biCard, marginBottom: '20px', marginTop: '20px' }}>
+    <h4 style={styles.biTitle}><Zap size={16} /> STAFF EFFICIENCY — REVENUE PER HOUR</h4>
+    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+      Monthly hours logged vs revenue generated. Waiters with most floor hours tracked.
+    </p>
+    <div style={{ overflowX: 'auto' }} className="custom-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            {['Name', 'Role', 'Days Present', 'Hours Logged', 'Rev/Hour', 'Salary', 'Status'].map(h => (
+              <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {staffEfficiency.map(s => (
+            <tr key={s._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+              <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{s.name}</td>
+              <td style={{ color: '#555', fontWeight: '800' }}>{s.role}</td>
+              <td style={{ color: '#d3bfa2', fontWeight: '900' }}>{s.daysPresent}d</td>
+              <td style={{ color: '#888' }}>{s.totalHours}h</td>
+              <td style={{ fontWeight: '900', color: s.revenuePerHour > 0 ? '#d3bfa2' : '#333' }}>
+                {s.revenuePerHour > 0 ? `₹${s.revenuePerHour.toLocaleString()}` : '—'}
+              </td>
+              <td style={{ color: '#fff', fontWeight: '800' }}>₹{s.baseSalary.toLocaleString()}</td>
+              <td>
+                <span style={{
+                  fontSize: '0.6rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
+                  background: s.salaryStatus === 'Paid' ? 'rgba(211,191,162,0.08)' : 'rgba(138,112,77,0.1)',
+                  color: s.salaryStatus === 'Paid' ? '#d3bfa2' : '#8a704d',
+                  border: `1px solid ${s.salaryStatus === 'Paid' ? 'rgba(211,191,162,0.2)' : 'rgba(138,112,77,0.2)'}`
+                }}>{s.salaryStatus?.toUpperCase()}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+{/* DISH PROFITABILITY MATRIX */}
+{profitabilityData.length > 0 && (
+  <div style={{ ...styles.biCard, marginBottom: '20px' }}>
+    <h4 style={styles.biTitle}><Percent size={16} /> DISH PROFITABILITY MATRIX</h4>
+    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+      Selling price minus actual ingredient cost. Items without recipes use 50% cost estimate.
+    </p>
+    <div style={{ overflowX: 'auto' }} className="custom-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            {['Dish', 'Selling Price', 'Ingredient Cost', 'Profit', 'Margin %', 'Recipe'].map(h => (
+              <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {profitabilityData.slice(0, 10).map(d => {
+            const isLowMargin = d.marginPct < 30;
+            return (
+              <tr key={d._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+                <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{d.name}</td>
+                <td style={{ color: '#888' }}>₹{d.sellingPrice}</td>
+                <td style={{ color: '#555' }}>₹{d.ingredientCost}</td>
+                <td style={{ fontWeight: '900', color: d.profit >= 0 ? '#d3bfa2' : '#BA7517' }}>
+                  ₹{d.profit}
+                </td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '60px', height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, d.marginPct))}%`, background: isLowMargin ? '#633806' : '#8a704d', borderRadius: '2px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: '900', color: isLowMargin ? '#8a704d' : '#d3bfa2' }}>{d.marginPct}%</span>
+                  </div>
+                </td>
+                <td>
+                  <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '4px', fontWeight: '800',
+                    background: d.hasRecipe ? 'rgba(211,191,162,0.06)' : 'rgba(138,112,77,0.06)',
+                    color: d.hasRecipe ? '#d3bfa2' : '#8a704d',
+                    border: `1px solid ${d.hasRecipe ? 'rgba(211,191,162,0.15)' : 'rgba(138,112,77,0.15)'}`
+                  }}>
+                    {d.hasRecipe ? 'LINKED' : 'ESTIMATED'}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+{/* PROCUREMENT PREDICTOR */}
+{procurementData.length > 0 && (
+  <div style={{ ...styles.biCard, marginBottom: '20px' }}>
+    <h4 style={styles.biTitle}><Truck size={16} /> PROCUREMENT PREDICTOR</h4>
+    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+      Based on avg daily consumption from last 30 days. Items sorted by urgency.
+    </p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+      {procurementData.slice(0, 9).map(item => {
+        const isUrgent = item.daysRemaining !== null && item.daysRemaining <= 3;
+        const isWarning = item.daysRemaining !== null && item.daysRemaining <= 7;
+        const fillPct = item.daysRemaining !== null ? Math.min(100, Math.round((item.daysRemaining / 30) * 100)) : 100;
+        return (
+          <div key={item._id} style={{
+            background: '#050505',
+            border: `1px solid ${isUrgent ? 'rgba(138,112,77,0.35)' : '#111'}`,
+            padding: '14px', borderRadius: '12px'
+          }}>
+            <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.8rem', marginBottom: '8px' }}>{item.itemName}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.62rem', color: '#444' }}>{item.currentStock} {item.unit} left</span>
+              {item.daysRemaining !== null ? (
+                <span style={{ fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
+                  background: isUrgent ? 'rgba(138,112,77,0.15)' : 'rgba(211,191,162,0.04)',
+                  color: isUrgent ? '#BA7517' : isWarning ? '#d3bfa2' : '#555',
+                  border: `1px solid ${isUrgent ? 'rgba(138,112,77,0.3)' : '#1a1a1a'}`
+                }}>
+                  {item.daysRemaining}d left
+                </span>
+              ) : (
+                <span style={{ fontSize: '0.6rem', color: '#333' }}>No usage data</span>
+              )}
+            </div>
+            <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${fillPct}%`, background: isUrgent ? '#8a704d' : '#2a2a2a', borderRadius: '2px', transition: 'width 0.5s ease' }} />
+            </div>
+            <div style={{ fontSize: '0.55rem', color: '#333', marginTop: '5px' }}>
+              Stock value: ₹{item.stockValue.toLocaleString()}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
   </motion.div>
 )}
 
@@ -2191,8 +2394,10 @@ return (
                         const currentMonthStr = String(viewDate.getMonth() + 1).padStart(2, '0');
                         const targetMonthPrefix = `${currentYearStr}-${currentMonthStr}`;
                         
-                        const monthlyPresentDays = attendanceLogs.filter(log => log.staffId === member._id && log.date?.startsWith(targetMonthPrefix)).length;
-                        const pureStaffName = member.name.includes(' (') ? member.name.split(' (')[0] : member.name;
+const monthlyPresentDays = attendanceLogs.filter(log => 
+    (log.staffId === member._id || log.staffId?.toString() === member._id?.toString()) && 
+    log.date?.startsWith(targetMonthPrefix)
+).length;                        const pureStaffName = member.name.includes(' (') ? member.name.split(' (')[0] : member.name;
                         const explicitCuisines = member.cookingRole || (member.name.includes(' (') ? member.name.split('(')[1]?.replace(')', '') : '');
 
                         return (
@@ -2520,136 +2725,158 @@ return (
         )}
 
 
-        {activeTab === 'inventory' && (
+{activeTab === 'inventory' && (
   <motion.div key="inventory" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-    style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '100px', width: '100%' }}>
+    style={{ display: 'flex', flexDirection: 'column', gap: '25px', paddingBottom: '100px', width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
 
-    {/* ADD NEW INVENTORY ITEM */}
-    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff' }}><Layers size={18} color="#d3bfa2" /> &nbsp; INGREDIENT REGISTER</h4>
+    {/* SECTION HEADER */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '20px', borderBottom: '1px solid #151515' }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>INGREDIENT REGISTER</h2>
+        <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#555' }}>Manage stock levels, cost prices and procurement thresholds for your kitchen.</p>
+      </div>
+      <div style={{ display: 'flex', gap: '10px' }}>
         <button onClick={() => exportToExcel('inventory')}
-          style={{ padding: '8px 16px', background: 'transparent', border: '1px solid rgba(211,191,162,0.3)', color: '#d3bfa2', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer' }}>
+          style={{ padding: '10px 18px', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
           EXPORT XLS
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+    </div>
+
+    {/* ADD FORM — inline horizontal */}
+    <div style={{ ...styles.biCard, padding: '20px 25px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
         {[
-          { label: 'INGREDIENT NAME', key: 'itemName', placeholder: 'Tomato', type: 'text' },
+          { label: 'INGREDIENT NAME', key: 'itemName', placeholder: 'e.g. Tomato', type: 'text' },
           { label: 'CURRENT STOCK', key: 'currentStock', placeholder: '500', type: 'number' },
           { label: 'MIN THRESHOLD', key: 'minThreshold', placeholder: '100', type: 'number' },
-          { label: 'COST PRICE (₹/unit)', key: 'costPrice', placeholder: '2.50', type: 'number' },
+          { label: 'COST PRICE (₹)', key: 'costPrice', placeholder: '2.50', type: 'number' },
         ].map(f => (
           <div key={f.key}>
-            <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '6px' }}>{f.label}</label>
+            <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>{f.label}</label>
             <input type={f.type} placeholder={f.placeholder}
-              style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem' }}
+              style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
               value={newInventoryItem[f.key]}
               onChange={e => setNewInventoryItem({ ...newInventoryItem, [f.key]: e.target.value })} />
           </div>
         ))}
         <div>
-          <label style={{ ...styles.statLabel, color: '#888', display: 'block', marginBottom: '6px' }}>UNIT</label>
-          <select style={{ ...styles.input, marginBottom: 0, background: '#000', borderColor: '#151515', fontSize: '0.8rem', cursor: 'pointer' }}
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
+          <select style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
             value={newInventoryItem.unit}
             onChange={e => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}>
             {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
           </select>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ paddingBottom: '0' }}>
+          <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
           <button onClick={async () => {
-            if (!newInventoryItem.itemName || !newInventoryItem.currentStock) return showNotif("Fill all required fields", "error");
+            if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) {
+              return showNotif("Name and stock are required", "error");
+            }
             try {
-              await axios.post(`${BASE_URL}/inventory/${tenantId}`, {
+              const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, {
                 ...newInventoryItem,
                 currentStock: Number(newInventoryItem.currentStock),
-                minThreshold: Number(newInventoryItem.minThreshold),
-                costPrice: Number(newInventoryItem.costPrice)
+                minThreshold: Number(newInventoryItem.minThreshold) || 0,
+                costPrice: Number(newInventoryItem.costPrice) || 0
               });
-              showNotif(`${newInventoryItem.itemName} added to inventory`);
+              showNotif(res.data.merged ? `${newInventoryItem.itemName} stock merged (+${newInventoryItem.currentStock})` : `${newInventoryItem.itemName} added`);
               setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
               fetchManagementData();
             } catch (e) { showNotif("Failed to add ingredient", "error"); }
-          }} style={{ ...styles.mainBtn, background: 'linear-gradient(135deg, #d3bfa2, #bda88a)', width: '100%' }}>
-            ADD INGREDIENT
+          }} style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #d3bfa2, #bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            + ADD
           </button>
         </div>
       </div>
     </div>
 
-    {/* INVENTORY TABLE */}
-    <div style={{ ...styles.biCard }}>
+    {/* STOCK LEDGER TABLE */}
+    <div style={styles.biCard}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff' }}>CURRENT STOCK LEDGER</h4>
-        <div style={{ ...styles.searchWrapper, padding: '8px 14px', background: '#000', border: '1px solid #121212', borderRadius: '8px' }}>
-          <Search size={14} color="#444" />
+        <h4 style={{ ...styles.biTitle, margin: 0, color: '#fff', fontSize: '0.85rem' }}>CURRENT STOCK LEDGER</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #121212', borderRadius: '8px', padding: '8px 14px' }}>
+          <Search size={13} color="#444" />
           <input type="text" placeholder="Search ingredient..." value={inventorySearchQuery}
             onChange={e => setInventorySearchQuery(e.target.value)}
-            style={{ ...styles.searchInput, width: '160px', fontSize: '0.75rem', color: '#fff' }} />
+            style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '150px' }} />
         </div>
       </div>
       <div style={{ overflowX: 'auto' }} className="custom-scroll">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
           <thead>
-            <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'left' }}>
+            <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               {['Ingredient', 'Unit', 'Current Stock', 'Min Threshold', 'Cost/Unit', 'Stock Value', 'Status', 'Action'].map(h => (
-                <th key={h} style={{ padding: '0 12px 12px 0' }}>{h}</th>
+                <th key={h} style={{ padding: '0 0 12px 0', textAlign: 'left', paddingRight: '16px' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {inventory.filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).map(item => {
-              const isLow = item.currentStock <= item.minThreshold;
-              const stockValue = Math.round(item.currentStock * item.costPrice);
-              return (
-                <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.8rem' }}>
-                  <td style={{ padding: '14px 12px 14px 0', fontWeight: '900', color: '#fff' }}>{item.itemName}</td>
-                  <td style={{ color: '#555', fontWeight: '800' }}>{item.unit}</td>
-                  <td>
-                    <input type="number" defaultValue={item.currentStock}
-                      style={{ width: '80px', background: '#000', border: '1px solid #1a1a1a', color: '#d3bfa2', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '900' }}
-                      onBlur={async (e) => {
-                        const val = Number(e.target.value);
-                        if (val === item.currentStock) return;
-                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
-                        fetchManagementData();
-                        showNotif(`${item.itemName} stock updated`);
-                      }} />
-                  </td>
-                  <td style={{ color: '#555' }}>{item.minThreshold} {item.unit}</td>
-                  <td style={{ color: '#888' }}>₹{item.costPrice}</td>
-                  <td style={{ color: '#d3bfa2', fontWeight: '900' }}>₹{stockValue.toLocaleString()}</td>
-                  <td>
-                    <span style={{
-                      fontSize: '0.6rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
-                      background: isLow ? 'rgba(138,112,77,0.15)' : 'rgba(211,191,162,0.05)',
-                      color: isLow ? '#BA7517' : '#555',
-                      border: `1px solid ${isLow ? 'rgba(186,117,23,0.3)' : '#1a1a1a'}`
-                    }}>
-                      {isLow ? 'LOW STOCK' : 'OK'}
-                    </span>
-                  </td>
-                  <td>
-                    <button onClick={async () => {
-                      if (!window.confirm(`Delete ${item.itemName}?`)) return;
-                      await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
-                      fetchManagementData();
-                      showNotif(`${item.itemName} removed`);
-                    }} style={{ background: 'transparent', border: '1px solid #151515', color: '#444', padding: '4px 10px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#151515'; }}>
-                      REMOVE
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {inventory
+              .filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase()))
+              .map(item => {
+                const isLow = item.currentStock <= item.minThreshold;
+                const stockValue = Math.round(item.currentStock * item.costPrice);
+                return (
+                  <tr key={item._id} style={{ borderBottom: '1px solid #0d0d0d' }}>
+                    <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>{item.itemName}</td>
+                    <td style={{ color: '#555', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>{item.unit}</td>
+                    <td style={{ paddingRight: '16px' }}>
+                      <input type="number" defaultValue={item.currentStock}
+                        key={`${item._id}-${item.currentStock}`}
+                        style={{ width: '80px', background: '#000', border: '1px solid #1a1a1a', color: '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
+                        onBlur={async (e) => {
+                          const val = Number(e.target.value);
+                          if (val === item.currentStock) return;
+                          await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
+                          fetchManagementData();
+                          showNotif(`${item.itemName} updated to ${val} ${item.unit}`);
+                        }} />
+                    </td>
+                    <td style={{ color: '#444', fontSize: '0.75rem', paddingRight: '16px' }}>{item.minThreshold} {item.unit}</td>
+                    <td style={{ color: '#666', fontSize: '0.75rem', paddingRight: '16px' }}>₹{item.costPrice}</td>
+                    <td style={{ color: stockValue >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px' }}>
+                      ₹{Math.abs(stockValue).toLocaleString()}{stockValue < 0 ? ' ⚠' : ''}
+                    </td>
+                    <td style={{ paddingRight: '16px' }}>
+                      <span style={{
+                        fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
+                        background: isLow ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)',
+                        color: isLow ? '#BA7517' : '#444',
+                        border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}`
+                      }}>
+                        {isLow ? 'LOW STOCK' : 'OK'}
+                      </span>
+                    </td>
+                    <td>
+                      <button onClick={async () => {
+                        setConfirmModal({
+                          show: true, title: `Remove ${item.itemName}?`,
+                          subtitle: 'This will permanently delete this ingredient from your inventory.',
+                          onConfirm: async () => {
+                            await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
+                            fetchManagementData();
+                            showNotif(`${item.itemName} removed`);
+                          }
+                        });
+                      }} style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 12px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}>
+                        REMOVE
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
           <tfoot>
-            <tr style={{ borderTop: '2px solid #111' }}>
-              <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.7rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
-              <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
-                ₹{inventory.reduce((a, i) => a + Math.round(i.currentStock * i.costPrice), 0).toLocaleString()}
+            <tr style={{ borderTop: '2px solid #1a1a1a' }}>
+              <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.65rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                TOTAL STOCK VALUE
+              </td>
+              <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
+                ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0).toLocaleString()}
               </td>
               <td colSpan="2" />
             </tr>
@@ -2657,45 +2884,19 @@ return (
         </table>
       </div>
     </div>
-
-    {/* PROCUREMENT PREDICTOR */}
-    {procurementData.length > 0 && (
-      <div style={{ ...styles.biCard, borderLeft: '4px solid #8a704d' }}>
-        <h4 style={styles.biTitle}><Truck size={16} /> PROCUREMENT PREDICTOR — DAYS REMAINING</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
-          {procurementData.filter(d => d.daysRemaining !== null).slice(0, 8).map(item => {
-            const isUrgent = item.daysRemaining !== null && item.daysRemaining <= 3;
-            const isWarning = item.daysRemaining !== null && item.daysRemaining <= 7;
-            return (
-              <div key={item._id} style={{ background: '#050505', border: `1px solid ${isUrgent ? 'rgba(138,112,77,0.4)' : '#111'}`, padding: '14px', borderRadius: '12px' }}>
-                <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.8rem', marginBottom: '6px' }}>{item.itemName}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.65rem', color: '#555' }}>{item.currentStock} {item.unit} left</span>
-                  <span style={{
-                    fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
-                    background: isUrgent ? 'rgba(138,112,77,0.15)' : 'rgba(211,191,162,0.05)',
-                    color: isUrgent ? '#BA7517' : isWarning ? '#d3bfa2' : '#555'
-                  }}>
-                    {item.daysRemaining}d left
-                  </span>
-                </div>
-                <div style={{ height: '4px', background: '#111', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, (item.daysRemaining / 30) * 100)}%`, background: isUrgent ? '#8a704d' : '#333', borderRadius: '2px' }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    )}
   </motion.div>
 )}
-
 {activeTab === 'recipes' && (
   <motion.div key="recipes" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-    style={{ display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '100px', width: '100%' }}>
+    style={{ display: 'flex', flexDirection: 'column', gap: '25px', paddingBottom: '100px', width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
 
-    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2' }}>
+    {/* HEADER */}
+    <div style={{ paddingBottom: '20px', borderBottom: '1px solid #151515' }}>
+      <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>RECIPE ENGINE</h2>
+      <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#555' }}>
+        Link each menu item to its ingredients + quantities per serving. Powers auto stock deduction and profitability reports.
+      </p>
+    </div>    <div style={{ ...styles.biCard, borderTop: '3px solid #d3bfa2' }}>
       <h4 style={{ ...styles.biTitle, color: '#fff' }}><ChefHat size={18} color="#d3bfa2" /> &nbsp; RECIPE BUILDER — LINK DISH → INGREDIENTS</h4>
       <p style={{ fontSize: '0.75rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>Each recipe tells the system how much of each ingredient is consumed per serving. This powers auto-deduction and profitability reports.</p>
 

@@ -259,30 +259,30 @@ const KitchenView = () => {
     };
   }, [tenantId]);
 
-  const markAsReady = async (orderId) => {
+const markAsReady = async (orderId) => {
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
-    
-    const durationSec = Math.floor((new Date() - new Date(order.createdAt)) / 1000);
-    
-    setTotalProcessingTime(prev => {
-      const nextTime = prev + durationSec;
-      localStorage.setItem(`kds_processing_time_${tenantId}`, nextTime);
-      return nextTime;
-    });
 
+    const durationSec = Math.floor((new Date() - new Date(order.createdAt)) / 1000);
+
+    setTotalProcessingTime(prev => {
+        const nextTime = prev + durationSec;
+        localStorage.setItem(`kds_processing_time_${tenantId}`, nextTime);
+        return nextTime;
+    });
     setCompletedTicketsCount(prev => {
-      const nextCount = prev + 1;
-      localStorage.setItem(`kds_completed_count_${tenantId}`, nextCount);
-      return nextCount;
+        const nextCount = prev + 1;
+        localStorage.setItem(`kds_completed_count_${tenantId}`, nextCount);
+        return nextCount;
     });
 
     try {
-      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
-      setOrders(prev => prev.filter(o => o._id !== orderId));
+        // 🚀 FIXED: 'ready' status captures prepTimeMinutes on backend, then waiter marks 'served'
+        await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
+        setOrders(prev => prev.filter(o => o._id !== orderId));
     } catch (err) { console.error(err); }
-  };
+};
 
   const handleRecall = () => {
     if (recallQueue.length === 0) return;
