@@ -571,40 +571,141 @@ setTimeout(async () => {
     finally { setIsBroadcasting(false); }
   };
 
-  const exportToExcel = useCallback((type='daily') => {
+ const exportToExcel = useCallback((type = 'daily') => {
     import('xlsx').then(XLSX => {
-      const wb = XLSX.utils.book_new();
-      if (type==='inventory') {
-        const ws = XLSX.utils.json_to_sheet(inventory.map(i=>({
-          'Ingredient':i.itemName, 'Unit':i.unit, 'Stock':i.currentStock,
-          'Min Threshold':i.minThreshold, 'Cost(₹)':i.costPrice,
-          'Value(₹)':Math.round(i.currentStock*i.costPrice),
-          'Status':i.currentStock<=i.minThreshold?'LOW':'OK'
-        })));
-        XLSX.utils.book_append_sheet(wb,ws,'Inventory');
-        XLSX.writeFile(wb,`Pratyeksha_Inventory_${attendanceDate}.xlsx`);
-        showNotif("Inventory exported"); return;
-      }
-      const istNow = new Date(Date.now()+330*60*1000);
-      const todayStr = istNow.toISOString().split('T')[0];
-      let fd = analytics;
-      if (type==='daily') fd=analytics.filter(d=>d._id===todayStr);
-      else if (type==='weekly') { const w=new Date(istNow-7*86400000).toISOString().split('T')[0]; fd=analytics.filter(d=>d._id>=w&&d._id<=todayStr); }
-      else if (type==='monthly') fd=analytics.filter(d=>d._id?.startsWith(todayStr.slice(0,7)));
-      const revWs = XLSX.utils.json_to_sheet(fd.map(d=>({ Date:d._id, 'Revenue(₹)':d.revenue||0, Orders:d.count||0, 'Cash(₹)':d.cash||0, 'UPI(₹)':d.upi||0, 'Card(₹)':d.card||0 })));
-      XLSX.utils.book_append_sheet(wb,revWs,'Revenue');
-      const totalRev=fd.reduce((a,b)=>a+(b.revenue||0),0), totalOrd=fd.reduce((a,b)=>a+(b.count||0),0);
-      const sumWs=XLSX.utils.json_to_sheet([
-        {Metric:'Period',Value:type.toUpperCase()},{Metric:'Total Revenue(₹)',Value:totalRev},
-        {Metric:'Total Orders',Value:totalOrd},{Metric:'Avg Order(₹)',Value:totalOrd>0?Math.round(totalRev/totalOrd):0},
-        {Metric:'Restaurant',Value:tenantConfig?.name||tenantId},
-        {Metric:'Generated',Value:new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
-      ]);
-      XLSX.utils.book_append_sheet(wb,sumWs,'Summary');
-      XLSX.writeFile(wb,`Pratyeksha_${type}_${todayStr}.xlsx`);
-      showNotif(`${type.toUpperCase()} report exported`);
-    }).catch(()=>showNotif("Export failed","error"));
-  }, [analytics, inventory, attendanceDate, tenantConfig, tenantId]);
+        const wb = XLSX.utils.book_new();
+
+        if (type === 'inventory') {
+            const invRows = inventory.map(item => ({
+                'Ingredient': item.itemName,
+                'Unit': item.unit,
+                'Current Stock': item.currentStock,
+                'Min Threshold': item.minThreshold,
+                'Cost Price (₹/unit)': item.costPrice,
+                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
+                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK',
+            }));
+            const ws = XLSX.utils.json_to_sheet(invRows);
+            ws['!cols'] = [20,10,14,14,18,16,12].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+            XLSX.writeFile(wb, `Pratyeksha_Inventory_${attendanceDate}.xlsx`);
+            showNotif("Inventory report exported");
+            return;
+        }
+
+        const now = new Date();
+        const istNow = new Date(now.getTime() + 330 * 60 * 1000);
+        const todayStr = istNow.toISOString().split('T')[0];
+        const currMonthPrefix = todayStr.slice(0, 7);
+
+        let filteredData = analytics;
+        if (type === 'daily') {
+            filteredData = analytics.filter(d => d._id === todayStr);
+        } else if (type === 'weekly') {
+            const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
+        } else if (type === 'monthly') {
+            filteredData = analytics.filter(d => d._id?.startsWith(currMonthPrefix));
+        }
+
+        // ── Sheet 1: Revenue breakdown ──
+        const revRows = filteredData.map(d => ({
+            'Date': d._id,
+            'Revenue (₹)': d.revenue || 0,
+            'Orders': d.count || 0,
+            'Avg Order (₹)': d.count > 0 ? Math.round((d.revenue || 0) / d.count) : 0,
+            'Cash (₹)': d.cash || 0,
+            'UPI (₹)': d.upi || 0,
+            'Card (₹)': d.card || 0,
+            'Source': d.source || 'direct'
+        }));
+        const revWs = XLSX.utils.json_to_sheet(revRows);
+        revWs['!cols'] = [12,14,8,14,12,12,12,10].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, revWs, 'Revenue');
+
+        // ── Sheet 2: Top dishes ──
+        if (topPerformers.length > 0) {
+            const dishRows = topPerformers.map((d, i) => ({
+                'Rank': i + 1,
+                'Dish Name': d.name,
+                'Units Sold': d.sold,
+                'Category': d.category || '—'
+            }));
+            const dishWs = XLSX.utils.json_to_sheet(dishRows);
+            XLSX.utils.book_append_sheet(wb, dishWs, 'Top Dishes');
+        }
+
+        // ── Sheet 3: Profitability ──
+        if (profitabilityData.length > 0) {
+            const profRows = profitabilityData.map(d => ({
+                'Dish': d.name,
+                'Selling Price (₹)': d.sellingPrice,
+                'Ingredient Cost (₹)': d.ingredientCost,
+                'Profit (₹)': d.profit,
+                'Margin %': d.marginPct,
+                'Recipe Linked': d.hasRecipe ? 'Yes' : 'No (estimated)'
+            }));
+            const profWs = XLSX.utils.json_to_sheet(profRows);
+            XLSX.utils.book_append_sheet(wb, profWs, 'Profitability');
+        }
+
+        // ── Sheet 4: Inventory status ──
+        if (inventory.length > 0) {
+            const invRows = inventory.map(item => ({
+                'Ingredient': item.itemName,
+                'Unit': item.unit,
+                'Current Stock': item.currentStock,
+                'Min Threshold': item.minThreshold,
+                'Cost (₹)': item.costPrice,
+                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
+                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK'
+            }));
+            const invWs = XLSX.utils.json_to_sheet(invRows);
+            XLSX.utils.book_append_sheet(wb, invWs, 'Inventory');
+        }
+
+        // ── Sheet 5: Staff efficiency ──
+        if (staffEfficiency.length > 0) {
+            const staffRows = staffEfficiency.map(s => ({
+                'Name': s.name,
+                'Role': s.role,
+                'Days Present': s.daysPresent,
+                'Hours Logged': s.totalHours,
+                'Base Salary (₹)': s.baseSalary,
+                'Salary Status': s.salaryStatus,
+                'Rev Attributed (₹)': s.revenueAttributed,
+                'Rev/Hour (₹)': s.revenuePerHour
+            }));
+            const staffWs = XLSX.utils.json_to_sheet(staffRows);
+            XLSX.utils.book_append_sheet(wb, staffWs, 'Staff Efficiency');
+        }
+
+        // ── Sheet 6: Summary ──
+        const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
+        const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
+        const totalCash = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
+        const totalUPI = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
+        const totalCard = filteredData.reduce((a, b) => a + (b.card || 0), 0);
+        const summaryRows = [
+            { Metric: 'Period', Value: type.toUpperCase() },
+            { Metric: 'Total Revenue (₹)', Value: totalRev },
+            { Metric: 'Total Orders', Value: totalOrders },
+            { Metric: 'Avg Order Value (₹)', Value: totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0 },
+            { Metric: 'Cash Collections (₹)', Value: totalCash },
+            { Metric: 'UPI Collections (₹)', Value: totalUPI },
+            { Metric: 'Card Collections (₹)', Value: totalCard },
+            { Metric: 'Total Inventory Value (₹)', Value: inventory.reduce((a, i) => a + Math.round(i.currentStock * i.costPrice), 0) },
+            { Metric: 'Restaurant', Value: tenantConfig?.name || tenantId },
+            { Metric: 'Generated At', Value: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) }
+        ];
+        const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+        summaryWs['!cols'] = [30, 30].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+        XLSX.writeFile(wb, `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${todayStr}.xlsx`);
+        showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
+    }).catch(err => { console.error(err); showNotif("Export failed — check xlsx install", "error"); });
+}, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, attendanceDate, tenantConfig, tenantId]);
 
   const renderMonthHeatmap = () => {
     const year=viewDate.getFullYear(), month=viewDate.getMonth();
