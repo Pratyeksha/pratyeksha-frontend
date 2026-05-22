@@ -1086,7 +1086,7 @@ setTimeout(async () => {
                 <div style={styles.glassStat}>
                   <small style={styles.statLabel}>AVG TICKET</small>
                   <h2 style={styles.statVal}>₹{stats.avg}</h2>
-                  <div style={{color:'#888',fontSize:'0.7rem'}}>Per Settlement</div>
+                  <div style={{color:'#888',fontSize:'0.7rem'}}>Per Table</div>
                 </div>
               </div>
 
