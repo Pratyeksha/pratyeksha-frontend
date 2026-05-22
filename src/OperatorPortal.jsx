@@ -125,6 +125,8 @@ const OperatorPortal = () => {
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
 
+  const [isSettling, setIsSettling] = useState(false);
+
   const [newStaff, setNewStaff] = useState({
     name: '', role: 'Waiter', age: '', contact: '', address: '',
     shiftType: 'Day Shift',
@@ -493,16 +495,19 @@ const liveFloorIntelligence = useMemo(() => {
     } catch (err) { console.error("Bill Error:", err); }
   };
 
-  const settleBill = () => {
-    const finalAmt = Math.round(tableBill.total - (tableBill.total*(discount/100)));
-    if (activePaymentType==='split') {
-      const total = Number(paymentModes.cash||0)+Number(paymentModes.upi||0)+Number(paymentModes.card||0);
-      if (Math.abs(total-finalAmt)>1) { showNotif(`Mismatch: ₹${total} vs ₹${finalAmt}`,"error"); return; }
+const settleBill = () => {
+    if (isSettling) return; // Guard here too
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    if (activePaymentType === 'split') {
+        const total = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
+        if (Math.abs(total - finalAmt) > 1) { showNotif(`Mismatch: ₹${total} vs ₹${finalAmt}`, "error"); return; }
     }
-    setConfirmModal({ show:true, title:'Finalize Table Settlement?',
-      subtitle:`Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
-      onConfirm: handleFinalSettle });
-  };
+    setConfirmModal({
+        show: true, title: 'Finalize Table Settlement?',
+        subtitle: `Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
+        onConfirm: handleFinalSettle
+    });
+};
 
     useEffect(() => {
   if (activeTab === 'inventory' || activeTab === 'recipes') {
@@ -511,38 +516,59 @@ const liveFloorIntelligence = useMemo(() => {
 }, [activeTab, fetchManagementData]);
 
 
-  const handleFinalSettle = async () => {
-    const finalAmt = Math.round(tableBill.total-(tableBill.total*(discount/100)));
-    const paymentMethodDetails = activePaymentType==='split'
-      ? { type:'split', breakdown:{ cash:Number(paymentModes.cash||0), upi:Number(paymentModes.upi||0), card:Number(paymentModes.card||0) } }
-      : { type:'full', method:selectedSingleMode };
+const handleFinalSettle = async () => {
+    // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
+    if (isSettling) return;
+    setIsSettling(true);
+    
+    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
+    const paymentMethodDetails = activePaymentType === 'split'
+        ? { type: 'split', breakdown: { cash: Number(paymentModes.cash || 0), upi: Number(paymentModes.upi || 0), card: Number(paymentModes.card || 0) } }
+        : { type: 'full', method: selectedSingleMode };
+    
+    // Close modal immediately to prevent re-trigger
+    setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
+    
     try {
-      const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
-        discount, finalAmount:finalAmt, paymentMethods:paymentMethodDetails, customerPhone:""
-      });
-      if (res.data?.billNo) {
-        setTableBill(p=>({...p, billNo:res.data.billNo}));
-        showNotif(`Invoice #${res.data.billNo} Generated`,"success");
-setTimeout(async () => {
-  setTableBill(null);
-  setSelectedTable(null);
-  setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
-  setPaymentModes({ cash: 0, upi: 0, card: 0 });
-  setActivePaymentType('full');
-  
-  // 🚀 Force clear the settled table from occupiedTables immediately
-  setOrders(prev => prev.filter(o => 
-    !(o.tableNumber === selectedTable && (o.status === 'served' || o.status === 'settled'))
-  ));
-  
-  await fetchInitialData();
-  await fetchAnalytics();
-  fetchManagementData();
-}, 1500);
-      }
-    } catch { showNotif("Failed to save to database","error"); }
-  };
-
+        const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
+            discount, finalAmount: finalAmt, paymentMethods: paymentMethodDetails, customerPhone: ""
+        });
+        
+        if (res.data?.duplicate) {
+            showNotif(`Already settled — Invoice #${res.data.billNo}`, "info");
+            setTableBill(null);
+            setSelectedTable(null);
+            await fetchInitialData();
+            await fetchAnalytics();
+            return;
+        }
+        
+        if (res.data?.billNo) {
+            setTableBill(p => ({ ...p, billNo: res.data.billNo }));
+            showNotif(`Invoice #${res.data.billNo} Generated`, "success");
+            
+            // Immediately remove from local state so table goes dark NOW
+            setOrders(prev => prev.filter(o =>
+                !(o.tableNumber === selectedTable)
+            ));
+            
+            // Delay cleanup to show success briefly
+            setTimeout(async () => {
+                setTableBill(null);
+                setSelectedTable(null);
+                setPaymentModes({ cash: 0, upi: 0, card: 0 });
+                setActivePaymentType('full');
+                await fetchInitialData();
+                await fetchAnalytics();
+                fetchManagementData();
+            }, 1500);
+        }
+    } catch (err) {
+        showNotif("Failed to save to database", "error");
+    } finally {
+        setIsSettling(false);
+    }
+};
   const updateMenu = async (itemId, updateData) => {
     try {
       const res = await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData);
@@ -1040,8 +1066,17 @@ setTimeout(async () => {
                       MODE: {activePaymentType==='split'?'SPLIT PAYMENT':selectedSingleMode.toUpperCase()}
                     </div>
                   </div>
-                  <button onClick={settleBill} style={{...styles.settleBtn,marginTop:'20px'}}>FINALIZE SETTLEMENT</button>
-                  <div style={{textAlign:'center',marginTop:'20px',fontSize:'0.6rem',fontWeight:'900',color:'#ccc',letterSpacing:'1px'}}>POWERED BY PRATYEKSHA</div>
+<button 
+    onClick={settleBill} 
+    style={{
+        ...styles.settleBtn, marginTop: '20px',
+        opacity: isSettling ? 0.5 : 1,
+        cursor: isSettling ? 'not-allowed' : 'pointer'
+    }}
+    disabled={isSettling}
+>
+    {isSettling ? 'PROCESSING...' : 'FINALIZE SETTLEMENT'}
+</button>                  <div style={{textAlign:'center',marginTop:'20px',fontSize:'0.6rem',fontWeight:'900',color:'#ccc',letterSpacing:'1px'}}>POWERED BY PRATYEKSHA</div>
                 </motion.div>
               )}
             </motion.div>
