@@ -1999,63 +1999,91 @@ const handleFinalSettle = async () => {
                   <div style={{overflowX:'auto'}} className="custom-scroll">
                     <table style={{width:'100%',borderCollapse:'collapse',minWidth:'700px'}}>
                       <thead>
-                        <tr style={{fontSize:'0.58rem',color:'#444',borderBottom:'1px solid #1a1a1a',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-                          {['Ingredient','Unit','Current Stock','Min Threshold','Cost/Unit','Stock Value','Status','Action'].map(h=>(
-                            <th key={h} style={{padding:'0 16px 12px 0',textAlign:'left'}}>{h}</th>
-                          ))}
-                        </tr>
+{/* Replace the thead tr in the inventory table */}
+<tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+    {['Ingredient', 'Unit', 'Current Stock', 'Min Threshold ✎', 'Cost/Unit ✎', 'Stock Value', 'Status', 'Action'].map(h => (
+        <th key={h} style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>{h}</th>
+    ))}
+</tr>
                       </thead>
                       <tbody>
-                        {inventory.filter(i=>i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).map(item=>{
-                          const isLow=item.currentStock<=item.minThreshold;
-                          const sv=Math.round(item.currentStock*item.costPrice);
-                          return (
-                            <tr key={item._id} style={{borderBottom:'1px solid #0d0d0d'}}>
-                              <td style={{padding:'14px 16px 14px 0',fontWeight:'900',color:'#fff',fontSize:'0.82rem'}}>{item.itemName}</td>
-                              <td style={{color:'#555',fontSize:'0.75rem',fontWeight:'800',paddingRight:'16px'}}>{item.unit}</td>
-                              {/* Replace the Current Stock input cell */}
-<td style={{ paddingRight: '16px' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-    <input type="number" key={`${item._id}-${item.currentStock}`}
-      defaultValue={Math.max(0, item.currentStock)}
-      style={{ width: '80px', background: '#000', border: `1px solid ${item.currentStock < 0 ? 'rgba(186,117,23,0.4)' : '#1a1a1a'}`, color: item.currentStock < 0 ? '#BA7517' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
-      onBlur={async e => {
-        const val = Number(e.target.value);
-        await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
-        fetchManagementData();
-        showNotif(`${item.itemName} → ${val} ${item.unit}`);
-      }} />
-    {item.currentStock < 0 && (
-      <span title="Stock depleted" style={{ fontSize: '0.7rem', color: '#BA7517' }}>⚠</span>
-    )}
-  </div>
-</td>
-                              <td style={{color:'#444',fontSize:'0.75rem',paddingRight:'16px'}}>{item.minThreshold} {item.unit}</td>
-                              <td style={{color:'#666',fontSize:'0.75rem',paddingRight:'16px'}}>₹{item.costPrice}</td>
-                              <td style={{color:sv>=0?'#d3bfa2':'#8a704d',fontWeight:'900',fontSize:'0.82rem',paddingRight:'16px'}}>
-                                ₹{Math.abs(sv).toLocaleString()}{sv<0?' ⚠':''}
-                              </td>
-                              <td style={{paddingRight:'16px'}}>
-                                <span style={{fontSize:'0.58rem',padding:'3px 8px',borderRadius:'4px',fontWeight:'900',
-                                  background:isLow?'rgba(138,112,77,0.12)':'rgba(211,191,162,0.04)',
-                                  color:isLow?'#BA7517':'#444',
-                                  border:`1px solid ${isLow?'rgba(186,117,23,0.25)':'#1a1a1a'}`}}>
-                                  {isLow?'LOW STOCK':'OK'}
-                                </span>
-                              </td>
-                              <td>
-                                <button onClick={()=>setConfirmModal({show:true,title:`Remove ${item.itemName}?`,
-                                  subtitle:'Permanently delete this ingredient.',
-                                  onConfirm:async()=>{await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);fetchManagementData();showNotif(`${item.itemName} removed`);}
-                                })} style={{background:'transparent',border:'1px solid #1a1a1a',color:'#444',padding:'5px 12px',borderRadius:'6px',fontSize:'0.6rem',cursor:'pointer'}}
-                                  onMouseEnter={e=>{e.currentTarget.style.color='#BA7517';e.currentTarget.style.borderColor='rgba(186,117,23,0.3)';}}
-                                  onMouseLeave={e=>{e.currentTarget.style.color='#444';e.currentTarget.style.borderColor='#1a1a1a';}}>
-                                  REMOVE
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {inventory.filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).map(item => {
+    const isLow = item.currentStock <= item.minThreshold;
+    const sv = Math.round(item.currentStock * item.costPrice);
+    return (
+        <tr key={item._id} style={{ borderBottom: '1px solid #0d0d0d' }}>
+            <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>{item.itemName}</td>
+            <td style={{ color: '#555', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>{item.unit}</td>
+
+            {/* Current Stock — editable, updates stock only */}
+            <td style={{ paddingRight: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input type="number"
+                        key={`${item._id}-stock-${item.currentStock}`}
+                        defaultValue={Math.max(0, item.currentStock)}
+                        style={{ width: '80px', background: '#000', border: `1px solid ${item.currentStock < 0 ? 'rgba(186,117,23,0.4)' : '#1a1a1a'}`, color: item.currentStock < 0 ? '#BA7517' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
+                        onBlur={async e => {
+                            const val = Number(e.target.value);
+                            await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
+                            fetchManagementData();
+                            showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
+                        }} />
+                    {item.currentStock < 0 && <span title="Stock depleted" style={{ fontSize: '0.7rem', color: '#BA7517' }}>⚠</span>}
+                </div>
+            </td>
+
+            {/* Min Threshold — separately editable, calls config route */}
+            <td style={{ paddingRight: '16px' }}>
+                <input type="number"
+                    key={`${item._id}-thresh-${item.minThreshold}`}
+                    defaultValue={item.minThreshold}
+                    title="Edit min threshold — click away to save"
+                    style={{ width: '70px', background: '#000', border: '1px solid #1a1a1a', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                    onBlur={async e => {
+                        const val = Number(e.target.value);
+                        if (val === item.minThreshold) return; // no change
+                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val });
+                        fetchManagementData();
+                        showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
+                    }} />
+            </td>
+
+            {/* Cost Price — separately editable, calls config route */}
+            <td style={{ paddingRight: '16px' }}>
+                <input type="number"
+                    key={`${item._id}-cost-${item.costPrice}`}
+                    defaultValue={item.costPrice}
+                    step="0.01"
+                    title="Edit cost per unit — click away to save"
+                    style={{ width: '70px', background: '#000', border: '1px solid #1a1a1a', color: '#666', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                    onBlur={async e => {
+                        const val = Number(e.target.value);
+                        if (val === item.costPrice) return; // no change
+                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
+                        fetchManagementData();
+                        showNotif(`${item.itemName} cost → ₹${val}/${item.unit}`);
+                    }} />
+            </td>
+
+            <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px' }}>
+                ₹{Math.abs(sv).toLocaleString()}{sv < 0 ? ' ⚠' : ''}
+            </td>
+            <td style={{ paddingRight: '16px' }}>
+                <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', background: isLow ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', color: isLow ? '#BA7517' : '#444', border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
+                    {isLow ? 'LOW STOCK' : 'OK'}
+                </span>
+            </td>
+            <td>
+                <button onClick={() => setConfirmModal({ show: true, title: `Remove ${item.itemName}?`, subtitle: 'Permanently delete this ingredient.', onConfirm: async () => { await axios.delete(`${BASE_URL}/inventory/item/${item._id}`); fetchManagementData(); showNotif(`${item.itemName} removed`); } })}
+                    style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 12px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}>
+                    REMOVE
+                </button>
+            </td>
+        </tr>
+    );
+})}
                       </tbody>
                       <tfoot>
                         <tr style={{borderTop:'2px solid #1a1a1a'}}>
