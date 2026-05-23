@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@300;400&display=swap');
 
@@ -28,8 +30,8 @@ const css = `
   --r-lg:18px;
   --r-xl:24px;
 }
-html{scroll-behavior:smooth;overflow-x:hidden;}
-body{background:var(--cream);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;line-height:1.65;cursor:none;}
+html{scroll-behavior:smooth;overflow-x:hidden;width:100%;max-width:100%;}
+body{background:var(--cream);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;width:100%;max-width:100%;line-height:1.65;cursor:none;position:relative;}
 img{max-width:100%;display:block;}
 
 #cur-dot{position:fixed;width:7px;height:7px;background:var(--gold);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);transition:width .15s,height .15s;}
@@ -38,7 +40,7 @@ body.ch #cur-dot{width:10px;height:10px;}
 body.ch #cur-ring{width:48px;height:48px;border-color:var(--gold);}
 @media(max-width:768px){#cur-dot,#cur-ring{display:none;}body{cursor:auto;}}
 
-#loader{position:fixed;inset:0;z-index:9999;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;transition:opacity .6s ease,transform .6s ease;}
+#loader{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;transition:opacity .6s ease,transform .6s ease;}
 #loader.out{opacity:0;pointer-events:none;}
 .l-logo{font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--gold);letter-spacing:3px;}
 .l-sub{font-size:.6rem;letter-spacing:5px;text-transform:uppercase;color:rgba(184,151,90,.4);}
@@ -68,7 +70,7 @@ nav.s{background:rgba(250,248,244,.97);backdrop-filter:blur(20px);border-bottom:
 #mmenu a:hover{color:var(--gold);}
 .mm-close{position:absolute;top:24px;right:24px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text2);}
 
-.hero{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;position:relative;overflow:hidden;}
+.hero{min-height:100vh;width:100%;display:grid;grid-template-columns:1fr 1fr;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 30% 60%,rgba(184,151,90,.04),transparent);pointer-events:none;}
 .hero-l{display:flex;flex-direction:column;justify-content:center;padding:140px 64px 80px 80px;position:relative;z-index:2;}
 .hero-r{background:var(--ink2);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
@@ -524,6 +526,13 @@ export default function Pratyeksha() {
   const [showThanks, setShowThanks] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // REALTIME STATS STATE 
+  const [platformStats, setPlatformStats] = useState({
+      tenantCount: 47,
+      ordersCount: 15000,
+      citiesCount: 4
+  });
+
   // Form state
   const [form, setForm] = useState({ name: '', restaurant: '', phone: '', email: '', type: '', tables: '', city: '' });
 
@@ -537,10 +546,19 @@ export default function Pratyeksha() {
     style.textContent = css;
     document.head.appendChild(style);
 
-    // Load fonts + EmailJS
-    const ejsScript = document.createElement('script');
-    ejsScript.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
-    document.head.appendChild(ejsScript);
+    // FETCH REALTIME STATS
+    const fetchStats = async () => {
+        try {
+            const res = await fetch(`${BASE_URL}/platform-stats`);
+            const data = await res.json();
+            if(data.success && data.stats) {
+                setPlatformStats(data.stats);
+            }
+        } catch (error) {
+            console.error('Failed to load platform stats', error);
+        }
+    };
+    fetchStats();
 
     // Loader
     const t = setTimeout(() => {
@@ -590,23 +608,24 @@ export default function Pratyeksha() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    const EMAILJS_SERVICE_ID = 'YOUR_SERVICE_ID';
-    const EMAILJS_TEMPLATE_ID = 'YOUR_TEMPLATE_ID';
-    const EMAILJS_PUBLIC_KEY = 'YOUR_PUBLIC_KEY';
+    
     try {
-      if (EMAILJS_SERVICE_ID !== 'YOUR_SERVICE_ID' && window.emailjs) {
-        window.emailjs.init(EMAILJS_PUBLIC_KEY);
-        await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-          name: form.name, restaurant: form.restaurant, phone: form.phone,
-          email: form.email, type: form.type || 'Not specified',
-          tables: form.tables || 'Not specified', city: form.city,
-          to_email: 'hello.pratyeksha@gmail.com',
+        const response = await fetch(`${BASE_URL}/demo-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(form)
         });
-      }
-    } catch (err) { console.error('EmailJS error:', err); }
-    setShowThanks(true);
-    setForm({ name: '', restaurant: '', phone: '', email: '', type: '', tables: '', city: '' });
-    setSubmitting(false);
+        
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        setShowThanks(true);
+        setForm({ name: '', restaurant: '', phone: '', email: '', type: '', tables: '', city: '' });
+    } catch (err) { 
+        console.error('Demo request error:', err);
+        alert('There was an issue submitting your request. Please call us directly.');
+    } finally {
+        setSubmitting(false);
+    }
   };
 
   return (
@@ -743,7 +762,10 @@ export default function Pratyeksha() {
           ))}
         </div>
         <div className="nums reveal">
-          {[['47+','Active Establishments','Cafes & Restaurants'],['₹2Cr+','Revenue Processed','Monthly via Pratyeksha'],['40%','Faster Kitchen','Avg across customers'],['4.9★','Customer Rating','From 47 reviews']].map(([v,l,s]) => (
+          {[[`${platformStats.tenantCount}+`,'Active Establishments','Cafes & Restaurants'],
+            [`${platformStats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
+            [`${platformStats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
+            ['4.9★','Customer Rating',`From ${platformStats.tenantCount} reviews`]].map(([v,l,s]) => (
             <div className="nc" key={l}><div className="nv">{v}</div><div className="nl">{l}</div><div className="ns">{s}</div></div>
           ))}
         </div>
@@ -988,7 +1010,7 @@ export default function Pratyeksha() {
         <div className="center reveal" style={{ marginBottom: 72 }}>
           <div className="eye" style={{ color: 'rgba(184,151,90,.6)' }}>Our Story</div>
           <h2 className="sh2" style={{ color: '#fff' }}>We help restaurants <em>grow</em><br/>and guests <em>remember</em></h2>
-          <p className="sdesc" style={{ color: 'rgba(255,255,255,.38)' }}>From a simple idea in Kolhapur to a platform serving 47+ establishments across Maharashtra — built by people who understand the dinner rush firsthand.</p>
+          <p className="sdesc" style={{ color: 'rgba(255,255,255,.38)' }}>From a simple idea in Kolhapur to a platform serving {platformStats.tenantCount}+ establishments across Maharashtra — built by people who understand the dinner rush firsthand.</p>
         </div>
         <div className="about-grid reveal">
           <div className="about-img-wrap">
@@ -1000,7 +1022,7 @@ export default function Pratyeksha() {
             </div>
             <div className="about-badge">
               <div>
-                <div className="about-badge-num">47+</div>
+                <div className="about-badge-num">{platformStats.tenantCount}+</div>
                 <div className="about-badge-lbl">Active<br/>Clients</div>
               </div>
             </div>
@@ -1028,7 +1050,10 @@ export default function Pratyeksha() {
         </div>
 
         <div className="about-stats reveal">
-          {[['47+','Active Clients','Cafes & Restaurants'],['₹2Cr+','Revenue Processed','Monthly via Pratyeksha'],['40%','Faster Kitchen','Avg across customers'],['4.9★','Customer Rating','From 47 reviews']].map(([v,l,s]) => (
+          {[[`${platformStats.tenantCount}+`,'Active Clients','Cafes & Restaurants'],
+            [`${platformStats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
+            [`${platformStats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
+            ['4.9★','Customer Rating',`From ${platformStats.tenantCount} reviews`]].map(([v,l,s]) => (
             <div className="as" key={l}><div className="as-v">{v}</div><div className="as-l">{l}</div><div className="as-s">{s}</div></div>
           ))}
         </div>
