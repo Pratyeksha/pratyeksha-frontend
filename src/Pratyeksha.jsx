@@ -30,8 +30,8 @@ const css = `
   --r-lg:18px;
   --r-xl:24px;
 }
-html{scroll-behavior:smooth;overflow-x:hidden;width:100%;max-width:100%;}
-body{background:var(--cream);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;width:100%;max-width:100%;line-height:1.65;cursor:none;position:relative;}
+html{scroll-behavior:smooth;overflow-x:hidden;width:100%;max-width:100%;position:'fixed';top:0;left:0;display:'flex';}
+body{background:var(--cream);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;width:100%;max-width:100%;display:'flex';line-height:1.65;cursor:none;position:'fixed';top:0;left:0;}
 img{max-width:100%;display:block;}
 
 #cur-dot{position:fixed;width:7px;height:7px;background:var(--gold);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);transition:width .15s,height .15s;}
