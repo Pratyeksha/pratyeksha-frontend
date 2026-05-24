@@ -127,6 +127,19 @@ const OperatorPortal = () => {
 
   const [isSettling, setIsSettling] = useState(false);
 
+  const [inventorySuggestions, setInventorySuggestions] = useState([]);
+const [showSuggestions, setShowSuggestions] = useState(false);
+const [selectedExistingItem, setSelectedExistingItem] = useState(null);
+
+const [showAddDishModal, setShowAddDishModal] = useState(false);
+const [newDish, setNewDish] = useState({
+  name: '', name_mr: '', categoryId: '', price: '', priceHalf: '', priceFull: '',
+  isVeg: false, isChefSpecial: false, isAvailable: true,
+  ingredients: { en: '', mr: '' }, spicylevel: '', tags: ''
+});
+const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
+const [categories, setCategories] = useState([]);
+
   const [newStaff, setNewStaff] = useState({
     name: '', role: 'Waiter', age: '', contact: '', address: '',
     shiftType: 'Day Shift',
@@ -200,18 +213,19 @@ const OperatorPortal = () => {
 const fetchManagementData = useCallback(async () => {
   setInventoryLoading(true);
   try {
-    const [invRes, staffRes, menuRes] = await Promise.all([
+    const [invRes, staffRes, menuRes, catRes] = await Promise.all([
       axios.get(`${BASE_URL}/inventory/${tenantId}`).catch(() => ({ data: [] })),
       axios.get(`${BASE_URL}/staff/${tenantId}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] }))
+      axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] }))
     ]);
     setInventory(invRes.data || []);
     setStaff(staffRes.data || []);
     setMenuItems(menuRes.data || []);
+    setCategories(catRes.data || []);
   } catch (err) { console.error("Management Sync Error", err); }
   finally { setInventoryLoading(false); }
 }, [tenantId]);
-
   // ── Re-fetch analytics whenever viewDate (month) changes
   useEffect(() => {
     if (isAuthenticated) {
@@ -930,27 +944,160 @@ const handleFinalSettle = async () => {
               </div>
             </motion.div>
           )}
+{/* ── MENU ── */}
+{activeTab==='menu' && (
+  <motion.div key="menu" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+    
+    {/* MENU TOOLBAR */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 0 20px',borderBottom:'1px solid #151515'}}>
+      <div>
+        <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>MENU REGISTRY</h2>
+        <p style={{margin:'4px 0 0',fontSize:'0.7rem',color:'#555'}}>{menuItems.length} dishes configured · Edit pricing, visibility, or add new items</p>
+      </div>
+      <div style={{display:'flex',gap:'12px',alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#000',border:'1px solid #121212',borderRadius:'8px',padding:'8px 14px'}}>
+          <Search size={13} color="#444"/>
+          <input type="text" placeholder="Search dishes..." value={searchQuery}
+            onChange={e=>setSearchQuery(e.target.value)}
+            style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'160px'}}/>
+        </div>
+        <button
+          onClick={() => setShowAddDishModal(true)}
+          style={{
+            padding:'10px 20px',
+            background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
+            border:'none',color:'#000',borderRadius:'10px',
+            fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',
+            display:'flex',alignItems:'center',gap:'8px',
+            letterSpacing:'0.5px'
+          }}
+        >
+          <UtensilsCrossed size={14}/> + ADD DISH
+        </button>
+      </div>
+    </div>
 
-          {/* ── MENU ── */}
-          {activeTab==='menu' && (
-            <motion.div key="menu" initial={{opacity:0}} animate={{opacity:1}} style={styles.fullWidthGrid}>
-              {menuItems.filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item=>(
-                <div key={item._id} style={{...styles.premiumCard,opacity:item.isAvailable?1:0.4}}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'15px'}}>
-                    <h3 style={{margin:0,fontSize:'1rem',fontWeight:'900'}}>{item.name}</h3>
-                    <span style={{color:'#d3bfa2',fontWeight:'bold'}}>₹{item.price}</span>
-                  </div>
-                  <div style={{display:'flex',gap:'10px'}}>
-                    <button onClick={()=>setActivePriceEditItem(item)} style={styles.ghostBtn}>PRICING</button>
-                    <button onClick={()=>updateMenu(item._id,{isAvailable:!item.isAvailable})}
-                      style={item.isAvailable?styles.toggleHideBtn:styles.toggleShowBtn}>
-                      {item.isAvailable?"VISIBILITY ON":"VISIBILITY OFF"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          )}
+    {/* MENU GRID */}
+    <div style={styles.fullWidthGrid}>
+      {menuItems.filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item=>(
+        <div key={item._id} style={{
+          ...styles.premiumCard,
+          opacity: item.isAvailable ? 1 : 0.5,
+          position: 'relative',
+          borderTop: `2px solid ${item.isAvailable ? '#1a1a1a' : '#0d0d0d'}`,
+          transition: 'all 0.2s ease'
+        }}>
+          {/* AVAILABILITY INDICATOR */}
+          <div style={{
+            position: 'absolute', top: '14px', right: '14px',
+            width: '7px', height: '7px', borderRadius: '50%',
+            background: item.isAvailable ? '#d3bfa2' : '#333',
+            boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none'
+          }}/>
+
+          {/* DISH NAME + PRICE */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px',paddingRight:'20px'}}>
+            <div>
+              <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#fff',lineHeight:'1.3'}}>{item.name}</h3>
+              {item.name_mr && <div style={{fontSize:'0.65rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>{item.name_mr}</div>}
+            </div>
+          </div>
+
+          {/* PRICE ROW */}
+          <div style={{display:'flex',gap:'8px',marginBottom:'16px',flexWrap:'wrap'}}>
+            {item.priceHalf ? (
+              <>
+                <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
+                  H ₹{item.priceHalf}
+                </span>
+                <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
+                  F ₹{item.priceFull||item.price}
+                </span>
+              </>
+            ) : (
+              <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
+                ₹{item.price}
+              </span>
+            )}
+            {item.categoryId && (
+              <span style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(211,191,162,0.04)',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#555',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>
+                {item.categoryId.replace(/^cat_/i,'').replace(/_/g,' ')}
+              </span>
+            )}
+            {item.isChefSpecial && (
+              <span style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.2)',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800',display:'flex',alignItems:'center',gap:'4px'}}>
+                <Sparkles size={9}/> CHEF'S
+              </span>
+            )}
+          </div>
+
+          {/* ACTION BUTTONS */}
+          <div style={{display:'flex',gap:'8px'}}>
+            <button
+              onClick={() => setActivePriceEditItem(item)}
+              style={{
+                flex:1, padding:'10px 8px',
+                background:'transparent',border:'1px solid #222',
+                color:'#888',borderRadius:'8px',fontSize:'0.62rem',
+                fontWeight:'900',cursor:'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
+                transition:'all 0.15s'
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor='#222';e.currentTarget.style.color='#888';}}
+            >
+              PRICING
+            </button>
+            <button
+              onClick={() => updateMenu(item._id, {isAvailable: !item.isAvailable})}
+              style={{
+                flex:1.2, padding:'10px 8px',
+                background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)',
+                border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)',
+                color: item.isAvailable ? '#444' : '#d3bfa2',
+                borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
+                transition:'all 0.15s'
+              }}
+            >
+              {item.isAvailable ? 'HIDE' : 'SHOW'}
+            </button>
+            <button
+              onClick={() => setPendingDeleteDish(item)}
+              style={{
+                width:'36px',height:'36px',
+                background:'transparent',border:'1px solid #1a1a1a',
+                color:'#333',borderRadius:'8px',fontSize:'0.7rem',
+                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                transition:'all 0.15s',flexShrink:0
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#8a704d';}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}
+              title="Remove dish"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* EMPTY STATE */}
+      {menuItems.filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+        <div style={{
+          gridColumn:'1/-1',textAlign:'center',padding:'60px',
+          background:'#0d0d0d',borderRadius:'20px',border:'1px dashed #1a1a1a'
+        }}>
+          <UtensilsCrossed size={32} color="#222" style={{marginBottom:'16px'}}/>
+          <div style={{color:'#333',fontSize:'0.85rem',fontWeight:'700'}}>
+            {searchQuery ? `NO DISHES MATCH "${searchQuery.toUpperCase()}"` : 'NO DISHES YET'}
+          </div>
+          <div style={{color:'#222',fontSize:'0.7rem',marginTop:'8px'}}>
+            {!searchQuery && 'Click + ADD DISH to register your first menu item'}
+          </div>
+        </div>
+      )}
+    </div>
+  </motion.div>
+)}
 
           {/* ── BILLING ── */}
           {activeTab==='billing' && (
@@ -1936,48 +2083,240 @@ const handleFinalSettle = async () => {
                 </button>
               </div>
 
-              {/* ADD FORM */}
-              <div style={{...styles.biCard,padding:'20px 25px'}}>
-                <h4 style={{...styles.biTitle,marginBottom:'16px',color:'#d3bfa2'}}>ADD / RESTOCK INGREDIENT</h4>
-                <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr auto',gap:'12px',alignItems:'flex-end'}}>
-                  {[{l:'NAME',k:'itemName',p:'e.g. Tomato',t:'text'},{l:'STOCK',k:'currentStock',p:'500',t:'number'},{l:'MIN THRESHOLD',k:'minThreshold',p:'100',t:'number'},{l:'COST (₹/unit)',k:'costPrice',p:'2.50',t:'number'}].map(f=>(
-                    <div key={f.k}>
-                      <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'6px',textTransform:'uppercase'}}>{f.l}</label>
-                      <input type={f.t} placeholder={f.p}
-                        style={{width:'100%',padding:'10px 12px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
-                        value={newInventoryItem[f.k]} onChange={e=>setNewInventoryItem({...newInventoryItem,[f.k]:e.target.value})}/>
-                    </div>
-                  ))}
-                  <div>
-                    <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'6px',textTransform:'uppercase'}}>UNIT</label>
-                    <select style={{width:'100%',padding:'10px 12px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
-                      value={newInventoryItem.unit} onChange={e=>setNewInventoryItem({...newInventoryItem,unit:e.target.value})}>
-                      {['gm','kg','ml','l','pcs'].map(u=><option key={u} value={u}>{u.toUpperCase()}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:'0.55rem',color:'transparent',display:'block',marginBottom:'6px'}}>_</label>
-                    <button onClick={async()=>{
-                      if(!newInventoryItem.itemName?.trim()||!newInventoryItem.currentStock) return showNotif("Name and stock are required","error");
-                      try {
-                        const res=await axios.post(`${BASE_URL}/inventory/${tenantId}`,{
-                          ...newInventoryItem,
-                          currentStock:Number(newInventoryItem.currentStock),
-                          minThreshold:Number(newInventoryItem.minThreshold)||0,
-                          costPrice:Number(newInventoryItem.costPrice)||0
-                        });
-                        showNotif(res.data.merged?`${newInventoryItem.itemName} stock merged (+${newInventoryItem.currentStock})`:`${newInventoryItem.itemName} added`);
-                        setNewInventoryItem({itemName:'',unit:'gm',currentStock:'',minThreshold:'',costPrice:''});
-                        // ── Immediately refresh so the item appears in the ledger below
-                        fetchManagementData();
-                      } catch { showNotif("Failed to add ingredient","error"); }
-                    }} style={{padding:'10px 20px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',color:'#000',border:'none',borderRadius:'8px',fontWeight:'900',fontSize:'0.75rem',cursor:'pointer',whiteSpace:'nowrap'}}>
-                      + ADD
-                    </button>
-                  </div>
+{/* ADD FORM */}
+<div style={{...styles.biCard, padding:'20px 25px'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
+    <h4 style={{...styles.biTitle, marginBottom:0, color: selectedExistingItem ? '#d3bfa2' : '#fff'}}>
+      {selectedExistingItem
+        ? `RESTOCK: ${selectedExistingItem.itemName.toUpperCase()} (Current: ${selectedExistingItem.currentStock} ${selectedExistingItem.unit})`
+        : 'ADD / RESTOCK INGREDIENT'}
+    </h4>
+    {selectedExistingItem && (
+      <button
+        onClick={() => {
+          setSelectedExistingItem(null);
+          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
+        }}
+        style={{ background: 'transparent', border: '1px solid #333', color: '#555', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}
+      >
+        CLEAR ✕
+      </button>
+    )}
+  </div>
+ 
+  {/* RESTOCK BANNER — shows when existing item is selected */}
+  {selectedExistingItem && (
+    <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+      <div>
+        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>{selectedExistingItem.currentStock} {selectedExistingItem.unit}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>MIN THRESHOLD</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>{selectedExistingItem.minThreshold} {selectedExistingItem.unit}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>COST/UNIT</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>₹{selectedExistingItem.costPrice}/{selectedExistingItem.unit}</div>
+      </div>
+    </div>
+  )}
+ 
+  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
+ 
+    {/* NAME with autocomplete */}
+    <div style={{ position: 'relative' }}>
+      <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        NAME {selectedExistingItem && <span style={{ color: '#d3bfa2' }}>✓ MATCHED</span>}
+      </label>
+      <input
+        type="text"
+        placeholder="e.g. Tomato"
+        style={{
+          width: '100%', padding: '10px 12px',
+          background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#000',
+          border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#1a1a1a'}`,
+          color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box'
+        }}
+        value={newInventoryItem.itemName}
+        onChange={e => {
+          const val = e.target.value;
+          setNewInventoryItem({ ...newInventoryItem, itemName: val });
+          setSelectedExistingItem(null); // clear match when user types
+          if (val.trim().length >= 1) {
+            const matches = inventory.filter(i =>
+              i.itemName.toLowerCase().includes(val.toLowerCase())
+            );
+            setInventorySuggestions(matches);
+            setShowSuggestions(matches.length > 0);
+          } else {
+            setShowSuggestions(false);
+            setInventorySuggestions([]);
+          }
+        }}
+        onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+        onFocus={() => {
+          if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) {
+            setShowSuggestions(true);
+          }
+        }}
+      />
+ 
+      {/* SUGGESTIONS DROPDOWN */}
+      {showSuggestions && inventorySuggestions.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
+          background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)',
+          borderRadius: '8px', marginTop: '4px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden'
+        }}>
+          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid #151515' }}>
+            EXISTING ITEMS — CLICK TO RESTOCK
+          </div>
+          {inventorySuggestions.map(item => (
+            <div
+              key={item._id}
+              onMouseDown={() => {
+                // Select existing item → prefill form, set restock mode
+                setSelectedExistingItem(item);
+                setNewInventoryItem({
+                  itemName: item.itemName,
+                  unit: item.unit,
+                  currentStock: '',         // user enters AMOUNT TO ADD
+                  minThreshold: item.minThreshold,
+                  costPrice: item.costPrice
+                });
+                setShowSuggestions(false);
+                setInventorySuggestions([]);
+              }}
+              style={{
+                padding: '10px 12px', cursor: 'pointer',
+                borderBottom: '1px solid #111', transition: 'background 0.1s',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff' }}>{item.itemName}</div>
+                <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '2px' }}>
+                  Stock: {item.currentStock} {item.unit} · ₹{item.costPrice}/{item.unit}
                 </div>
               </div>
-
+              <div style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#BA7517' : '#555', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
+                {item.currentStock <= item.minThreshold ? 'LOW' : 'OK'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+ 
+    {/* STOCK TO ADD */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        {selectedExistingItem ? 'QTY TO ADD' : 'STOCK'}
+      </label>
+      <input
+        type="number"
+        placeholder={selectedExistingItem ? `+ add to ${selectedExistingItem.currentStock}` : '500'}
+        style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        value={newInventoryItem.currentStock}
+        onChange={e => setNewInventoryItem({ ...newInventoryItem, currentStock: e.target.value })}
+      />
+    </div>
+ 
+    {/* MIN THRESHOLD — greyed out and labelled "unchanged" in restock mode */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#333' : '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        {selectedExistingItem ? 'THRESHOLD (edit in ledger ↓)' : 'MIN THRESHOLD'}
+      </label>
+      <input
+        type="number"
+        placeholder="100"
+        disabled={!!selectedExistingItem}
+        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', cursor: selectedExistingItem ? 'not-allowed' : 'text' }}
+        value={newInventoryItem.minThreshold}
+        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, minThreshold: e.target.value })}
+      />
+    </div>
+ 
+    {/* COST PRICE — greyed out in restock mode, edit in ledger */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#333' : '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        {selectedExistingItem ? 'COST (edit in ledger ↓)' : 'COST (₹/unit)'}
+      </label>
+      <input
+        type="number"
+        placeholder="2.50"
+        disabled={!!selectedExistingItem}
+        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', cursor: selectedExistingItem ? 'not-allowed' : 'text' }}
+        value={newInventoryItem.costPrice}
+        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, costPrice: e.target.value })}
+      />
+    </div>
+ 
+    {/* UNIT */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
+      <select
+        disabled={!!selectedExistingItem}
+        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: selectedExistingItem ? 'not-allowed' : 'pointer' }}
+        value={newInventoryItem.unit}
+        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}
+      >
+        {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+      </select>
+    </div>
+ 
+    {/* ADD BUTTON */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
+      <button
+        onClick={async () => {
+          if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) {
+            return showNotif("Name and stock are required", "error");
+          }
+          try {
+            const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, {
+              itemName: newInventoryItem.itemName,
+              unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
+              currentStock: Number(newInventoryItem.currentStock),
+              // Never send threshold/price on restock — server ignores them anyway
+              minThreshold: selectedExistingItem ? undefined : (Number(newInventoryItem.minThreshold) || 0),
+              costPrice: selectedExistingItem ? undefined : (Number(newInventoryItem.costPrice) || 0),
+            });
+ 
+            if (res.data.merged) {
+              showNotif(`✓ ${res.data.item.itemName} restocked +${newInventoryItem.currentStock} ${res.data.item.unit} → Total: ${res.data.item.currentStock} ${res.data.item.unit}`);
+            } else {
+              showNotif(`✓ ${res.data.item.itemName} added to inventory`);
+            }
+ 
+            // Reset form
+            setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
+            setSelectedExistingItem(null);
+            setInventorySuggestions([]);
+            setShowSuggestions(false);
+            fetchManagementData();
+          } catch {
+            showNotif("Failed to add ingredient", "error");
+          }
+        }}
+        style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+      >
+        {selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
+      </button>
+    </div>
+  </div>
+ 
+  {/* RESTOCK HINT */}
+  {!selectedExistingItem && (
+    <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#333', fontWeight: '600' }}>
+      💡 Type an ingredient name to see existing matches. Select one to restock safely without changing price or threshold.
+    </div>
+  )}
+</div>
               {/* LEDGER TABLE */}
               <div style={styles.biCard}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
@@ -1997,105 +2336,161 @@ const handleFinalSettle = async () => {
                   </div>
                 ) : (
                   <div style={{overflowX:'auto'}} className="custom-scroll">
-                    <table style={{width:'100%',borderCollapse:'collapse',minWidth:'700px'}}>
-                      <thead>
-{/* Replace the thead tr in the inventory table */}
-<tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-    {['Ingredient', 'Unit', 'Current Stock', 'Min Threshold ✎', 'Cost/Unit ✎', 'Stock Value', 'Status', 'Action'].map(h => (
-        <th key={h} style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>{h}</th>
-    ))}
-</tr>
-                      </thead>
-                      <tbody>
-                        {inventory.filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).map(item => {
-    const isLow = item.currentStock <= item.minThreshold;
-    const sv = Math.round(item.currentStock * item.costPrice);
-    return (
-        <tr key={item._id} style={{ borderBottom: '1px solid #0d0d0d' }}>
-            <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>{item.itemName}</td>
-            <td style={{ color: '#555', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>{item.unit}</td>
-
-            {/* Current Stock — editable, updates stock only */}
-            <td style={{ paddingRight: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <input type="number"
-                        key={`${item._id}-stock-${item.currentStock}`}
-                        defaultValue={Math.max(0, item.currentStock)}
-                        style={{ width: '80px', background: '#000', border: `1px solid ${item.currentStock < 0 ? 'rgba(186,117,23,0.4)' : '#1a1a1a'}`, color: item.currentStock < 0 ? '#BA7517' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
-                        onBlur={async e => {
-                            const val = Number(e.target.value);
-                            await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
-                            fetchManagementData();
-                            showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
-                        }} />
-                    {item.currentStock < 0 && <span title="Stock depleted" style={{ fontSize: '0.7rem', color: '#BA7517' }}>⚠</span>}
-                </div>
+<table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+  <thead>
+    <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Ingredient</th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Unit</th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Current Stock</th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
+        Min Threshold
+        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}>✎ editable</span>
+      </th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
+        Cost/Unit
+        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}>✎ editable</span>
+      </th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Stock Value</th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Status</th>
+      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {inventory
+      .filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase()))
+      .map(item => {
+        const isLow = item.currentStock <= item.minThreshold;
+        const sv = Math.round(item.currentStock * item.costPrice);
+        return (
+          <tr key={item._id} style={{ borderBottom: '1px solid #0d0d0d' }}>
+ 
+            {/* INGREDIENT NAME */}
+            <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>
+              {item.itemName}
             </td>
-
-            {/* Min Threshold — separately editable, calls config route */}
-            <td style={{ paddingRight: '16px' }}>
-                <input type="number"
-                    key={`${item._id}-thresh-${item.minThreshold}`}
-                    defaultValue={item.minThreshold}
-                    title="Edit min threshold — click away to save"
-                    style={{ width: '70px', background: '#000', border: '1px solid #1a1a1a', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
-                    onBlur={async e => {
-                        const val = Number(e.target.value);
-                        if (val === item.minThreshold) return; // no change
-                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val });
-                        fetchManagementData();
-                        showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
-                    }} />
+ 
+            {/* UNIT */}
+            <td style={{ color: '#555', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>
+              {item.unit}
             </td>
-
-            {/* Cost Price — separately editable, calls config route */}
+ 
+            {/* CURRENT STOCK — edits stock value only */}
             <td style={{ paddingRight: '16px' }}>
-                <input type="number"
-                    key={`${item._id}-cost-${item.costPrice}`}
-                    defaultValue={item.costPrice}
-                    step="0.01"
-                    title="Edit cost per unit — click away to save"
-                    style={{ width: '70px', background: '#000', border: '1px solid #1a1a1a', color: '#666', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
-                    onBlur={async e => {
-                        const val = Number(e.target.value);
-                        if (val === item.costPrice) return; // no change
-                        await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
-                        fetchManagementData();
-                        showNotif(`${item.itemName} cost → ₹${val}/${item.unit}`);
-                    }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="number"
+                  key={`${item._id}-stock-${item.currentStock}`}
+                  defaultValue={Math.max(0, item.currentStock)}
+                  title="Edit current stock level directly"
+                  style={{ width: '80px', background: '#000', border: `1px solid ${item.currentStock < 0 ? 'rgba(186,117,23,0.4)' : '#1a1a1a'}`, color: item.currentStock < 0 ? '#BA7517' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
+                  onBlur={async e => {
+                    const val = Number(e.target.value);
+                    if (val === item.currentStock) return;
+                    // Use general patch — stock only
+                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
+                    fetchManagementData();
+                    showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
+                  }}
+                />
+                {item.currentStock < 0 && (
+                  <span title="Stock depleted" style={{ fontSize: '0.7rem', color: '#BA7517' }}>⚠</span>
+                )}
+              </div>
             </td>
-
+ 
+            {/* MIN THRESHOLD — uses /config route, does NOT touch stock */}
+            <td style={{ paddingRight: '16px' }}>
+              <input
+                type="number"
+                key={`${item._id}-thresh-${item.minThreshold}`}
+                defaultValue={item.minThreshold}
+                title="Click to edit minimum threshold — saves on click-away"
+                style={{ width: '70px', background: '#000', border: '1px solid rgba(211,191,162,0.15)', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
+                onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
+                onBlur={async e => {
+                  e.target.style.borderColor = 'rgba(211,191,162,0.15)';
+                  e.target.style.color = '#888';
+                  const val = Number(e.target.value);
+                  if (val === item.minThreshold) return;
+                  await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val });
+                  fetchManagementData();
+                  showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
+                }}
+              />
+            </td>
+ 
+            {/* COST PRICE — uses /config route, does NOT touch stock */}
+            <td style={{ paddingRight: '16px' }}>
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '8px', color: '#555', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  key={`${item._id}-cost-${item.costPrice}`}
+                  defaultValue={item.costPrice}
+                  title="Click to edit cost per unit — affects profitability calculations"
+                  style={{ width: '80px', paddingLeft: '20px', padding: '6px 10px 6px 18px', background: '#000', border: '1px solid rgba(211,191,162,0.15)', color: '#666', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
+                  onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
+                  onBlur={async e => {
+                    e.target.style.borderColor = 'rgba(211,191,162,0.15)';
+                    e.target.style.color = '#666';
+                    const val = Number(e.target.value);
+                    if (val === item.costPrice) return;
+                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
+                    fetchManagementData();
+                    showNotif(`${item.itemName} cost → ₹${val}/${item.unit} (profitability updated)`);
+                  }}
+                />
+              </div>
+            </td>
+ 
+            {/* STOCK VALUE */}
             <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px' }}>
-                ₹{Math.abs(sv).toLocaleString()}{sv < 0 ? ' ⚠' : ''}
+              ₹{Math.abs(sv).toLocaleString()}{sv < 0 ? ' ⚠' : ''}
             </td>
+ 
+            {/* STATUS */}
             <td style={{ paddingRight: '16px' }}>
-                <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', background: isLow ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', color: isLow ? '#BA7517' : '#444', border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
-                    {isLow ? 'LOW STOCK' : 'OK'}
-                </span>
+              <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', background: isLow ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', color: isLow ? '#BA7517' : '#444', border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
+                {isLow ? 'LOW STOCK' : 'OK'}
+              </span>
             </td>
+ 
+            {/* ACTION */}
             <td>
-                <button onClick={() => setConfirmModal({ show: true, title: `Remove ${item.itemName}?`, subtitle: 'Permanently delete this ingredient.', onConfirm: async () => { await axios.delete(`${BASE_URL}/inventory/item/${item._id}`); fetchManagementData(); showNotif(`${item.itemName} removed`); } })}
-                    style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 12px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}>
-                    REMOVE
-                </button>
+              <button
+                onClick={() => setConfirmModal({
+                  show: true,
+                  title: `Remove ${item.itemName}?`,
+                  subtitle: 'Permanently delete this ingredient and all linked recipe references.',
+                  onConfirm: async () => {
+                    await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
+                    fetchManagementData();
+                    showNotif(`${item.itemName} removed`);
+                  }
+                })}
+                style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 12px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
+              >
+                REMOVE
+              </button>
             </td>
-        </tr>
-    );
-})}
-                      </tbody>
-                      <tfoot>
-                        <tr style={{borderTop:'2px solid #1a1a1a'}}>
-                          <td colSpan="5" style={{padding:'14px 0',fontSize:'0.65rem',color:'#8a704d',fontWeight:'900',textTransform:'uppercase'}}>TOTAL STOCK VALUE</td>
-                          <td style={{padding:'14px 0',fontWeight:'900',color:'#d3bfa2',fontSize:'0.95rem'}}>
-                            ₹{inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*i.costPrice)),0).toLocaleString()}
-                          </td>
-                          <td colSpan="2"/>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+          </tr>
+        );
+      })}
+  </tbody>
+  <tfoot>
+    <tr style={{ borderTop: '2px solid #1a1a1a' }}>
+      <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.65rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
+      <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
+        ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0).toLocaleString()}
+      </td>
+      <td colSpan="2" />
+    </tr>
+  </tfoot>
+</table>
+                   </div>
                 )}
               </div>
 
@@ -2318,7 +2713,276 @@ const handleFinalSettle = async () => {
           </div>
         )}
       </AnimatePresence>
+        {/* ADD DISH MODAL */}
+<AnimatePresence>
+  {showAddDishModal && (
+    <div style={styles.modalBackdrop}>
+      <motion.div
+        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        style={{
+          ...styles.confirmBox,
+          width:'560px',textAlign:'left',
+          maxHeight:'85vh',overflowY:'auto',
+          padding:'40px'
+        }}
+        className="custom-scroll"
+      >
+        {/* HEADER */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
+          <div>
+            <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>MENU REGISTRY</div>
+            <h3 style={{color:'#fff',margin:0,fontSize:'1.15rem',fontWeight:'900'}}>ADD NEW DISH</h3>
+          </div>
+          <button onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:''});}}
+            style={{background:'#111',border:'1px solid #1a1a1a',color:'#555',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
+            <X size={16}/>
+          </button>
+        </div>
 
+        {/* FORM GRID */}
+        <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+
+          {/* NAME ROW */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
+            <div>
+              <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (English) *</label>
+              <input type="text" placeholder="e.g. Paneer Tikka"
+                style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                value={newDish.name} onChange={e=>setNewDish({...newDish,name:e.target.value})}/>
+            </div>
+            <div>
+              <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (Marathi)</label>
+              <input type="text" placeholder="e.g. पनीर टिक्का"
+                style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                value={newDish.name_mr} onChange={e=>setNewDish({...newDish,name_mr:e.target.value})}/>
+            </div>
+          </div>
+
+          {/* CATEGORY */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>CATEGORY *</label>
+            <select
+              style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:newDish.categoryId?'#fff':'#444',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+              value={newDish.categoryId} onChange={e=>setNewDish({...newDish,categoryId:e.target.value})}>
+              <option value="">-- Select category --</option>
+              {categories.map(c=><option key={c.categoryId} value={c.categoryId}>{c.name}</option>)}
+            </select>
+          </div>
+
+          {/* PRICING MODE TOGGLE */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>PRICING MODE</label>
+            <div style={{display:'flex',gap:'8px',marginBottom:'14px'}}>
+              {['single','half-full'].map(mode=>(
+                <button key={mode} type="button"
+                  onClick={()=>setNewDish({...newDish,_priceMode:mode,price:'',priceHalf:'',priceFull:''})}
+                  style={{
+                    padding:'8px 18px',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
+                    background: (newDish._priceMode||'single')===mode ? 'rgba(211,191,162,0.1)' : 'transparent',
+                    border: (newDish._priceMode||'single')===mode ? '1px solid rgba(211,191,162,0.3)' : '1px solid #222',
+                    color: (newDish._priceMode||'single')===mode ? '#d3bfa2' : '#444',
+                    transition:'all 0.15s'
+                  }}>
+                  {mode === 'single' ? 'SINGLE PRICE' : 'HALF / FULL'}
+                </button>
+              ))}
+            </div>
+
+            {(newDish._priceMode||'single') === 'single' ? (
+              <div>
+                <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>PRICE (₹) *</label>
+                <input type="number" placeholder="e.g. 180"
+                  style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                  value={newDish.price} onChange={e=>setNewDish({...newDish,price:e.target.value})}/>
+              </div>
+            ) : (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
+                <div>
+                  <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>HALF PRICE (₹) *</label>
+                  <input type="number" placeholder="e.g. 120"
+                    style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                    value={newDish.priceHalf} onChange={e=>setNewDish({...newDish,priceHalf:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>FULL PRICE (₹) *</label>
+                  <input type="number" placeholder="e.g. 220"
+                    style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                    value={newDish.priceFull} onChange={e=>setNewDish({...newDish,priceFull:e.target.value,price:e.target.value})}/>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SPICE LEVEL */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>SPICE LEVEL</label>
+            <div style={{display:'flex',gap:'8px'}}>
+              {['','Low','Medium','High'].map(level=>(
+                <button key={level} type="button"
+                  onClick={()=>setNewDish({...newDish,spicylevel:level})}
+                  style={{
+                    flex:1,padding:'8px 6px',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
+                    background: newDish.spicylevel===level ? 'rgba(211,191,162,0.08)' : 'transparent',
+                    border: newDish.spicylevel===level ? '1px solid rgba(211,191,162,0.25)' : '1px solid #1a1a1a',
+                    color: newDish.spicylevel===level ? '#d3bfa2' : '#444',
+                    transition:'all 0.15s'
+                  }}>
+                  {level === '' ? 'NONE' : level.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* INGREDIENTS */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
+            <div>
+              <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (English, comma separated)</label>
+              <input type="text" placeholder="e.g. Paneer, Tomato, Capsicum"
+                style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+                value={newDish.ingredients.en} onChange={e=>setNewDish({...newDish,ingredients:{...newDish.ingredients,en:e.target.value}})}/>
+            </div>
+            <div>
+              <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (Marathi)</label>
+              <input type="text" placeholder="e.g. पनीर, टोमॅटो, कॅप्सिकम"
+                style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+                value={newDish.ingredients.mr} onChange={e=>setNewDish({...newDish,ingredients:{...newDish.ingredients,mr:e.target.value}})}/>
+            </div>
+          </div>
+
+          {/* TOGGLES ROW */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
+            {[
+              {label:'VEG ITEM',key:'isVeg',desc:'Shows veg indicator on menu'},
+              {label:"CHEF'S SPECIAL",key:'isChefSpecial',desc:'Highlighted with Sparkle badge'},
+            ].map(({label,key,desc})=>(
+              <div key={key} style={{
+                display:'flex',justifyContent:'space-between',alignItems:'center',
+                padding:'14px',background:'#000',border:'1px solid #1a1a1a',borderRadius:'10px'
+              }}>
+                <div>
+                  <div style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>{label}</div>
+                  <div style={{fontSize:'0.58rem',color:'#444',marginTop:'3px'}}>{desc}</div>
+                </div>
+                <button type="button" onClick={()=>setNewDish({...newDish,[key]:!newDish[key]})}
+                  style={{
+                    width:'40px',height:'22px',borderRadius:'11px',border:'none',cursor:'pointer',
+                    background:newDish[key]?'#d3bfa2':'#1a1a1a',
+                    position:'relative',transition:'background 0.2s',flexShrink:0
+                  }}>
+                  <div style={{
+                    position:'absolute',top:'3px',
+                    left:newDish[key]?'20px':'3px',
+                    width:'16px',height:'16px',borderRadius:'50%',
+                    background:newDish[key]?'#000':'#444',
+                    transition:'left 0.2s'
+                  }}/>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* TAGS */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>TAGS (optional, comma separated)</label>
+            <input type="text" placeholder="e.g. bestseller, must-try, new"
+              style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+              value={newDish.tags} onChange={e=>setNewDish({...newDish,tags:e.target.value})}/>
+          </div>
+
+          {/* ACTIONS */}
+          <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid #111'}}>
+            <button
+              onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});}}
+              style={styles.cancelBtn}>
+              CANCEL
+            </button>
+            <button
+              onClick={async()=>{
+                if(!newDish.name?.trim()) return showNotif("Dish name is required","error");
+                if(!newDish.categoryId) return showNotif("Select a category","error");
+                const priceMode = newDish._priceMode || 'single';
+                if(priceMode==='single' && !newDish.price) return showNotif("Price is required","error");
+                if(priceMode==='half-full' && (!newDish.priceHalf||!newDish.priceFull)) return showNotif("Both Half and Full prices required","error");
+                try {
+                  const payload = {
+                    tenantId,
+                    name: newDish.name.trim(),
+                    name_mr: newDish.name_mr?.trim() || '',
+                    categoryId: newDish.categoryId,
+                    price: priceMode==='single' ? Number(newDish.price) : Number(newDish.priceFull),
+                    priceHalf: priceMode==='half-full' ? Number(newDish.priceHalf) : null,
+                    priceFull: priceMode==='half-full' ? Number(newDish.priceFull) : null,
+                    isVeg: newDish.isVeg,
+                    isChefSpecial: newDish.isChefSpecial,
+                    isAvailable: true,
+                    spicylevel: newDish.spicylevel || '',
+                    ingredients: {
+                      en: newDish.ingredients.en ? newDish.ingredients.en.split(',').map(s=>s.trim()).filter(Boolean) : [],
+                      mr: newDish.ingredients.mr ? newDish.ingredients.mr.split(',').map(s=>s.trim()).filter(Boolean) : []
+                    },
+                    tags: newDish.tags ? newDish.tags.split(',').map(s=>s.trim()).filter(Boolean) : []
+                  };
+                  await axios.post(`${BASE_URL}/menu`, payload);
+                  showNotif(`${newDish.name} added to menu`,"success");
+                  setShowAddDishModal(false);
+                  setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});
+                  fetchInitialData();
+                  fetchManagementData();
+                } catch(err) {
+                  console.error(err);
+                  showNotif("Failed to add dish","error");
+                }
+              }}
+              style={{...styles.confirmBtn,flex:2,letterSpacing:'1px'}}>
+              REGISTER DISH
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
+
+{/* DELETE DISH MODAL */}
+<AnimatePresence>
+  {pendingDeleteDish && (
+    <div style={styles.modalBackdrop}>
+      <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
+        <div style={{display:'flex',justifyContent:'center',marginBottom:'20px'}}>
+          <div style={{width:'50px',height:'50px',borderRadius:'50%',background:'rgba(138,112,77,0.1)',border:'1px solid rgba(138,112,77,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <UtensilsCrossed size={22} color="#8a704d"/>
+          </div>
+        </div>
+        <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.05rem',fontWeight:'900'}}>REMOVE DISH</h3>
+        <p style={{color:'#555',fontSize:'0.82rem',marginBottom:'8px',lineHeight:'1.5'}}>
+          Permanently delete <b style={{color:'#d3bfa2'}}>{pendingDeleteDish.name}</b> from the menu?
+        </p>
+        <p style={{color:'#333',fontSize:'0.72rem',marginBottom:'28px',lineHeight:'1.5'}}>
+          This will remove the dish from customer menus immediately. Settled order history is unaffected.
+        </p>
+        <div style={{display:'flex',gap:'12px'}}>
+          <button onClick={()=>setPendingDeleteDish(null)} style={styles.cancelBtn}>ABORT</button>
+          <button
+            onClick={async()=>{
+              try {
+                await axios.delete(`${BASE_URL}/menu-item/${pendingDeleteDish._id}`);
+                setMenuItems(prev=>prev.filter(m=>m._id!==pendingDeleteDish._id));
+                socket.emit("menu_change_detected",{tenantId,itemId:pendingDeleteDish._id,updateData:{...pendingDeleteDish,isAvailable:false,_deleted:true}});
+                showNotif(`${pendingDeleteDish.name} removed from menu`,"success");
+              } catch {
+                showNotif("Failed to remove dish","error");
+              } finally {
+                setPendingDeleteDish(null);
+              }
+            }}
+            style={{...styles.confirmBtn,background:'#8a704d',color:'#000'}}>
+            REMOVE
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
       {/* DELETE STAFF MODAL */}
       <AnimatePresence>
         {pendingDeleteStaff && (
