@@ -998,8 +998,20 @@ const handleFinalSettle = async () => {
           {/* DISH NAME + PRICE */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px',paddingRight:'20px'}}>
             <div>
-              <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#fff',lineHeight:'1.3'}}>{item.name}</h3>
-              {item.name_mr && <div style={{fontSize:'0.65rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>{item.name_mr}</div>}
+<div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'2px'}}>
+  {/* Veg/NonVeg indicator */}
+  <span title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'} style={{
+    width:'13px',height:'13px',
+    border:`2px solid ${item.isVeg !== false ? '#4a7c3f' : '#8a3030'}`,
+    borderRadius:'2px',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0
+  }}>
+    {item.isVeg !== false
+      ? <span style={{width:'5px',height:'5px',borderRadius:'50%',background:'#4a7c3f'}}/>
+      : <span style={{width:0,height:0,borderLeft:'3px solid transparent',borderRight:'3px solid transparent',borderBottom:`5px solid #8a3030`}}/>
+    }
+  </span>
+  <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#fff',lineHeight:'1.3'}}>{item.name}</h3>
+</div>              {item.name_mr && <div style={{fontSize:'0.65rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>{item.name_mr}</div>}
             </div>
           </div>
 
@@ -2849,37 +2861,100 @@ const handleFinalSettle = async () => {
             </div>
           </div>
 
-          {/* TOGGLES ROW */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
-            {[
-              {label:'VEG ITEM',key:'isVeg',desc:'Shows veg indicator on menu'},
-              {label:"CHEF'S SPECIAL",key:'isChefSpecial',desc:'Highlighted with Sparkle badge'},
-            ].map(({label,key,desc})=>(
-              <div key={key} style={{
-                display:'flex',justifyContent:'space-between',alignItems:'center',
-                padding:'14px',background:'#000',border:'1px solid #1a1a1a',borderRadius:'10px'
-              }}>
-                <div>
-                  <div style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>{label}</div>
-                  <div style={{fontSize:'0.58rem',color:'#444',marginTop:'3px'}}>{desc}</div>
-                </div>
-                <button type="button" onClick={()=>setNewDish({...newDish,[key]:!newDish[key]})}
-                  style={{
-                    width:'40px',height:'22px',borderRadius:'11px',border:'none',cursor:'pointer',
-                    background:newDish[key]?'#d3bfa2':'#1a1a1a',
-                    position:'relative',transition:'background 0.2s',flexShrink:0
-                  }}>
-                  <div style={{
-                    position:'absolute',top:'3px',
-                    left:newDish[key]?'20px':'3px',
-                    width:'16px',height:'16px',borderRadius:'50%',
-                    background:newDish[key]?'#000':'#444',
-                    transition:'left 0.2s'
-                  }}/>
-                </button>
-              </div>
-            ))}
+{/* TOGGLES ROW */}
+<div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+
+  {/* VEG / NON-VEG SELECTOR */}
+  <div>
+    <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>DISH TYPE *</label>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+      <button type="button"
+        onClick={() => setNewDish({...newDish, isVeg: true})}
+        style={{
+          padding: '14px', borderRadius: '10px', cursor: 'pointer',
+          border: newDish.isVeg === true ? '1px solid rgba(74,124,63,0.5)' : '1px solid #1a1a1a',
+          background: newDish.isVeg === true ? 'rgba(74,124,63,0.08)' : 'transparent',
+          display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s'
+        }}
+      >
+        {/* Veg symbol */}
+        <div style={{
+          width: '22px', height: '22px', border: `2px solid #4a7c3f`,
+          borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, background: newDish.isVeg === true ? 'rgba(74,124,63,0.15)' : 'transparent'
+        }}>
+          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4a7c3f' }} />
+        </div>
+        <div style={{textAlign:'left'}}>
+          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === true ? '#fff' : '#555'}}>VEGETARIAN</div>
+          <div style={{fontSize:'0.58rem',color:'#444',marginTop:'2px'}}>No meat or eggs</div>
+        </div>
+        {newDish.isVeg === true && (
+          <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(74,124,63,0.2)',border:'1px solid #4a7c3f',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#4a7c3f'}}/>
           </div>
+        )}
+      </button>
+
+      <button type="button"
+        onClick={() => setNewDish({...newDish, isVeg: false})}
+        style={{
+          padding: '14px', borderRadius: '10px', cursor: 'pointer',
+          border: newDish.isVeg === false ? '1px solid rgba(138,48,48,0.5)' : '1px solid #1a1a1a',
+          background: newDish.isVeg === false ? 'rgba(138,48,48,0.06)' : 'transparent',
+          display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s'
+        }}
+      >
+        {/* Non-veg symbol */}
+        <div style={{
+          width: '22px', height: '22px', border: `2px solid #8a3030`,
+          borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, background: newDish.isVeg === false ? 'rgba(138,48,48,0.12)' : 'transparent'
+        }}>
+          <div style={{ width: '0', height: '0',
+            borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+            borderBottom: '9px solid #8a3030'
+          }} />
+        </div>
+        <div style={{textAlign:'left'}}>
+          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === false ? '#fff' : '#555'}}>NON-VEGETARIAN</div>
+          <div style={{fontSize:'0.58rem',color:'#444',marginTop:'2px'}}>Contains meat or eggs</div>
+        </div>
+        {newDish.isVeg === false && (
+          <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(138,48,48,0.15)',border:'1px solid #8a3030',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#8a3030'}}/>
+          </div>
+        )}
+      </button>
+    </div>
+  </div>
+
+  {/* CHEF'S SPECIAL TOGGLE */}
+  <div style={{
+    display:'flex',justifyContent:'space-between',alignItems:'center',
+    padding:'14px',background:'#000',border:'1px solid #1a1a1a',borderRadius:'10px'
+  }}>
+    <div>
+      <div style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>CHEF'S SPECIAL</div>
+      <div style={{fontSize:'0.58rem',color:'#444',marginTop:'3px'}}>Highlighted with Sparkle badge on customer menu</div>
+    </div>
+    <button type="button" onClick={()=>setNewDish({...newDish,isChefSpecial:!newDish.isChefSpecial})}
+      style={{
+        width:'40px',height:'22px',borderRadius:'11px',border:'none',cursor:'pointer',
+        background:newDish.isChefSpecial?'#d3bfa2':'#1a1a1a',
+        position:'relative',transition:'background 0.2s',flexShrink:0
+      }}>
+      <div style={{
+        position:'absolute',top:'3px',
+        left:newDish.isChefSpecial?'20px':'3px',
+        width:'16px',height:'16px',borderRadius:'50%',
+        background:newDish.isChefSpecial?'#000':'#444',
+        transition:'left 0.2s'
+      }}/>
+    </button>
+  </div>
+
+</div>
 
           {/* TAGS */}
           <div>
@@ -2925,8 +3000,7 @@ const handleFinalSettle = async () => {
                   await axios.post(`${BASE_URL}/menu`, payload);
                   showNotif(`${newDish.name} added to menu`,"success");
                   setShowAddDishModal(false);
-                  setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});
-                  fetchInitialData();
+setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:true,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});                  fetchInitialData();
                   fetchManagementData();
                 } catch(err) {
                   console.error(err);

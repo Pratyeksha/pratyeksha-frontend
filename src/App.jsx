@@ -43,6 +43,8 @@ const PratyekshaPremiumMenu = () => {
   const navRef = useRef(null);
   const activeTabRef = useRef(null);
 
+  const [filterVegOnly, setFilterVegOnly] = useState(false);
+
   const t = {
     en: {
       all: "ALL",
@@ -411,11 +413,19 @@ const sendBatchToKitchen = async () => {
     } catch (error) { setBillRequested(true); }
   };
 
-  const filteredMenuItems = allMenuItems.filter(i => {
+const filteredMenuItems = allMenuItems.filter(i => {
+  const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
+  const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
+  const matchesVeg = !filterVegOnly || i.isVeg === true;
+  return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
+});
+// Only show veg toggle if there are ACTUALLY non-veg items in current category
+const hasNonVegInView = useMemo(() => {
+  return allMenuItems.some(i => {
     const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
-    const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
-    return matchesCategory && matchesSearch && i.isAvailable !== false;
+    return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
   });
+}, [allMenuItems, selectedCategoryId]);
 
   if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATYEKSHA...</div>;
 
@@ -445,13 +455,64 @@ const sendBatchToKitchen = async () => {
         <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
 
-      {/* SEARCH BAR */}
-      <div style={styles.searchWrapper}>
-        <div style={styles.searchContainer}>
-          <Search size={18} color={primaryColor} />
-          <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+{/* SEARCH BAR + VEG FILTER */}
+<div style={styles.searchWrapper}>
+  <div style={styles.searchContainer}>
+    <Search size={18} color={primaryColor} />
+    <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+  </div>
+
+  {/* VEG FILTER TOGGLE — only renders when non-veg items exist in current view */}
+  {hasNonVegInView && (
+    <motion.button
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      onClick={() => setFilterVegOnly(prev => !prev)}
+      style={{
+        marginTop: '10px',
+        width: '100%',
+        padding: '10px 16px',
+        borderRadius: '12px',
+        border: `1px solid ${filterVegOnly ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.15)'}`,
+        background: filterVegOnly ? 'rgba(211,191,162,0.08)' : 'transparent',
+        color: filterVegOnly ? primaryColor : '#666',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Veg symbol — green square with circle inside, standard Indian food symbol */}
+        <div style={{
+          width: '18px', height: '18px', border: '2px solid #4a7c3f',
+          borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: filterVegOnly ? 'rgba(74,124,63,0.1)' : 'transparent'
+        }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4a7c3f' }} />
         </div>
+        <span style={{ fontSize: '0.72rem', fontWeight: '800', letterSpacing: '0.5px' }}>
+          {language === 'mr' ? 'फक्त शाकाहारी' : 'VEG ONLY'}
+        </span>
       </div>
+      {/* Toggle pill */}
+      <div style={{
+        width: '36px', height: '20px', borderRadius: '10px',
+        background: filterVegOnly ? primaryColor : '#333',
+        position: 'relative', transition: 'background 0.2s'
+      }}>
+        <div style={{
+          position: 'absolute', top: '3px',
+          left: filterVegOnly ? '18px' : '3px',
+          width: '14px', height: '14px', borderRadius: '50%',
+          background: filterVegOnly ? '#000' : '#666',
+          transition: 'left 0.2s'
+        }} />
+      </div>
+    </motion.button>
+  )}
+</div>
 
       {/* CATEGORY NAV */}
       <div style={{...styles.navContainer, backgroundColor: secondaryColor}}>
@@ -477,26 +538,37 @@ const sendBatchToKitchen = async () => {
                   {item.isChefSpecial === true && <div style={styles.chefTag}><Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}</div>}
                 </div>
 <div style={styles.itemContentLeft}>
-  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-    {language === 'mr' ? item.name_mr : item.name}
-    
-    {/* 🌶️ DYNAMIC SPICY LEVEL HIGHLIGHT INDICATOR */}
-    {item.spicylevel && (
-      <span style={{
-        fontSize: '0.58rem',
-        fontWeight: '900',
-        padding: '2px 6px',
-        borderRadius: '4px',
-        background: item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(255,77,77,0.15)' : 'rgba(211,191,162,0.15)',
-        color: item.spicylevel.toUpperCase() === 'HIGH' ? '#ff4d4d' : '#d3bfa2',
-        border: item.spicylevel.toUpperCase() === 'HIGH' ? '1px solid rgba(255,77,77,0.3)' : '1px solid rgba(211,191,162,0.3)',
-        letterSpacing: '0.5px'
-      }}>
-        🔥 {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
-      </span>
-    )}
-  </p>
+  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+  {/* VEG / NON-VEG INDICATOR */}
+  <span title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'} style={{
+    width: '14px', height: '14px', border: `2px solid ${item.isVeg !== false ? '#4a7c3f' : '#8a3030'}`,
+    borderRadius: '2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0
+  }}>
+    <span style={{
+      width: '6px', height: '6px', borderRadius: '50%',
+      background: item.isVeg !== false ? '#4a7c3f' : '#8a3030'
+    }} />
+  </span>
+
+  {language === 'mr' ? item.name_mr : item.name}
   
+  {/* 🌶️ DYNAMIC SPICY LEVEL HIGHLIGHT INDICATOR */}
+  {item.spicylevel && (
+    <span style={{
+      fontSize: '0.58rem',
+      fontWeight: '900',
+      padding: '2px 6px',
+      borderRadius: '4px',
+      background: item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(255,77,77,0.15)' : 'rgba(211,191,162,0.15)',
+      color: item.spicylevel.toUpperCase() === 'HIGH' ? '#ff4d4d' : '#d3bfa2',
+      border: item.spicylevel.toUpperCase() === 'HIGH' ? '1px solid rgba(255,77,77,0.3)' : '1px solid rgba(211,191,162,0.3)',
+      letterSpacing: '0.5px'
+    }}>
+      🔥 {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
+    </span>
+  )}
+</p>
   {/* 📋 PREMIUM INGREDIENTS LAYOUT BADGE ARRAYS */}
   <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
     <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
