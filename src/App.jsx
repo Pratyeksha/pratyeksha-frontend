@@ -335,7 +335,8 @@ const sendBatchToKitchen = async () => {
             portion: portion, 
             pricePerUnit: unitPrice, 
             subtotal: 0,
-            suggestion: suggestions[key] || "" 
+            suggestion: suggestions[key] || "",
+            isVeg: item.isVeg !== false   // ← ADD THIS
           };
         }
         summary[summaryKey].quantity += qty;

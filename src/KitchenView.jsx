@@ -54,6 +54,17 @@ const KitchenView = () => {
   const isSpeakingRef = useRef(false);
   const synthVoicesRef = useRef([]);
 
+
+  // NEW: Maps dish name → isVeg boolean for sidebar veg/nonveg filtering
+const dishToVegMap = useMemo(() => {
+  const map = {};
+  menuItems.forEach(item => {
+    if (item.name) {
+      map[item.name.toLowerCase().trim()] = item.isVeg !== false;
+    }
+  });
+  return map;
+}, [menuItems]);
   // 🎙️ PRE-LOAD & CACHE CHROMIUM ASYNC VOICES
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
@@ -332,45 +343,78 @@ const KitchenView = () => {
     return lookupMap;
   }, [menuItems]);
 
-  const categoryPendingCounts = useMemo(() => {
-    const counts = {};
-    orders.forEach(order => {
-      const orderIsTakeawayParcel = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-      if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return;
-      if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && order.items.every(i => !i.isParcel)) return;
+const categoryPendingCounts = useMemo(() => {
+  const counts = {};
+  orders.forEach(order => {
+    const orderIsTakeawayParcel = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
+    if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return;
+    if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && order.items.every(i => !i.isParcel)) return;
 
-      order.items.forEach((item, idx) => {
-        if (checkedItemsGlobal[`${order._id}-${idx}`]) return;
-        let finalId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
-        if (!finalId && item.name) {
-          finalId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
-        }
-        if (finalId) {
-          counts[finalId] = (counts[finalId] || 0) + (Number(item.quantity) || 0);
-        }
-      });
-    });
-    return counts;
-  }, [orders, stationFilter, dishToCategoryMap, checkedItemsGlobal]);
-
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const orderIsTakeawayParcel = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-      if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return false;
-      if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && order.items.every(i => !i.isParcel)) return false;
-
-      if (selectedCategory !== 'ALL') {
-        return order.items.some(item => {
-          let itemCatId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
-          if (!itemCatId && item.name) {
-            itemCatId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
-          }
-          return itemCatId === selectedCategory.toLowerCase().trim();
-        });
+    order.items.forEach((item, idx) => {
+      if (checkedItemsGlobal[`${order._id}-${idx}`]) return;
+      
+      let finalId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
+      if (!finalId && item.name) {
+        finalId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
       }
-      return true;
+      
+      // 🚀 NEW: Also count into synthetic veg/nonveg buckets
+      const itemIsVeg = item.isVeg !== undefined 
+        ? item.isVeg !== false 
+        : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+      
+      const vegBucket = itemIsVeg ? '__veg__' : '__nonveg__';
+      counts[vegBucket] = (counts[vegBucket] || 0) + (Number(item.quantity) || 0);
+
+      if (finalId) {
+        counts[finalId] = (counts[finalId] || 0) + (Number(item.quantity) || 0);
+      }
     });
-  }, [orders, stationFilter, selectedCategory, dishToCategoryMap]);
+  });
+  return counts;
+}, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal]);
+
+const filteredOrders = useMemo(() => {
+  return orders.filter(order => {
+    const orderIsTakeawayParcel = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
+    if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return false;
+    if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && order.items.every(i => !i.isParcel)) return false;
+
+    if (selectedCategory === '__veg__') {
+      // Show ticket if it has ANY veg item not yet crossed
+      return order.items.some((item, idx) => {
+        if (checkedItemsGlobal[`${order._id}-${idx}`]) return false;
+        const itemIsVeg = item.isVeg !== undefined 
+          ? item.isVeg !== false 
+          : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+        return itemIsVeg;
+      });
+    }
+
+    if (selectedCategory === '__nonveg__') {
+      // Show ticket if it has ANY non-veg item not yet crossed
+      return order.items.some((item, idx) => {
+        if (checkedItemsGlobal[`${order._id}-${idx}`]) return false;
+        const itemIsVeg = item.isVeg !== undefined 
+          ? item.isVeg !== false 
+          : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+        return !itemIsVeg;
+      });
+    }
+
+    if (selectedCategory !== 'ALL') {
+      return order.items.some(item => {
+        let itemCatId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
+        if (!itemCatId && item.name) {
+          itemCatId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
+        }
+        return itemCatId === selectedCategory.toLowerCase().trim();
+      });
+    }
+    return true;
+  });
+}, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, checkedItemsGlobal]);
+
 
   const masterPrepMarqueeList = useMemo(() => {
     const queueMap = {};
@@ -511,6 +555,67 @@ const KitchenView = () => {
                 }, 0)}
               </span>
             </button>
+
+            {/* 🥦 VEG STATION NODE */}
+{categoryPendingCounts['__veg__'] > 0 && (
+  <button
+    onClick={() => { setSelectedCategory('__veg__'); setShowMetricsDashboard(false); }}
+    style={selectedCategory === '__veg__' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {/* Veg dot symbol */}
+      <div style={{
+        width: '14px', height: '14px', border: '2px solid',
+        borderColor: selectedCategory === '__veg__' ? '#0f1013' : '#4a7c3f',
+        borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+      }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedCategory === '__veg__' ? '#0f1013' : '#4a7c3f' }} />
+      </div>
+      <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>VEG STATION</span>
+    </div>
+    <span style={{
+      ...styles.categoryCountBadge,
+      background: selectedCategory === '__veg__' ? '#0f1013' : '#1a1c23',
+      color: selectedCategory === '__veg__' ? '#d3bfa2' : '#8e94a4',
+      border: selectedCategory === '__veg__' ? '1px solid #d3bfa2' : '1px solid #232730'
+    }}>
+      {categoryPendingCounts['__veg__'] || 0}
+    </span>
+  </button>
+)}
+
+{/* 🍖 NON-VEG STATION NODE */}
+{categoryPendingCounts['__nonveg__'] > 0 && (
+  <button
+    onClick={() => { setSelectedCategory('__nonveg__'); setShowMetricsDashboard(false); }}
+    style={selectedCategory === '__nonveg__' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {/* Non-veg triangle symbol */}
+      <div style={{
+        width: '14px', height: '14px', border: '2px solid',
+        borderColor: selectedCategory === '__nonveg__' ? '#0f1013' : '#8a3030',
+        borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+      }}>
+        <div style={{
+          width: 0, height: 0,
+          borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
+          borderBottom: `6px solid ${selectedCategory === '__nonveg__' ? '#0f1013' : '#8a3030'}`
+        }} />
+      </div>
+      <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>NON-VEG STATION</span>
+    </div>
+    <span style={{
+      ...styles.categoryCountBadge,
+      background: selectedCategory === '__nonveg__' ? '#0f1013' : '#1a1c23',
+      color: selectedCategory === '__nonveg__' ? '#d3bfa2' : '#8e94a4',
+      border: selectedCategory === '__nonveg__' ? '1px solid #d3bfa2' : '1px solid #232730'
+    }}>
+      {categoryPendingCounts['__nonveg__'] || 0}
+    </span>
+  </button>
+)}
+
 
             {categories.map(cat => {
               const lookupKey = cat.categoryId ? cat.categoryId.toLowerCase().trim() : '';
@@ -726,10 +831,38 @@ const KDSOrderCard = ({ order, onReady, isNewest, dishToCategoryMap, selectedCat
           if (!calculatedItemCatId && item.name) {
             calculatedItemCatId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
           }
-          if (selectedCategory !== 'ALL' && calculatedItemCatId !== selectedCategory.toLowerCase().trim()) {
-            return null; 
-          }
+// 🚀 NEW: Veg/NonVeg station filtering — dim non-matching items instead of hiding the ticket
+const itemIsVeg = item.isVeg !== undefined
+  ? item.isVeg !== false
+  : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
 
+if (selectedCategory === '__veg__' && !itemIsVeg) {
+  // Dim but show so chef sees the full ticket context
+  return (
+    <div key={idx} style={{ ...styles.itemRow, opacity: 0.18, pointerEvents: 'none' }}>
+      <div style={{ ...styles.qtyBox, background: '#0d0e11' }}>{item.quantity}</div>
+      <div style={{ flex: 1 }}>
+        <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
+      </div>
+    </div>
+  );
+}
+
+if (selectedCategory === '__nonveg__' && itemIsVeg) {
+  return (
+    <div key={idx} style={{ ...styles.itemRow, opacity: 0.18, pointerEvents: 'none' }}>
+      <div style={{ ...styles.qtyBox, background: '#0d0e11' }}>{item.quantity}</div>
+      <div style={{ flex: 1 }}>
+        <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
+      </div>
+    </div>
+  );
+}
+
+if (selectedCategory !== 'ALL' && selectedCategory !== '__veg__' && selectedCategory !== '__nonveg__' 
+    && calculatedItemCatId !== selectedCategory.toLowerCase().trim()) {
+  return null;
+}
           const forceParcelMode = order.tableNumber?.toLowerCase() === 'takeaway' || item.isParcel;
           const isItemCrossed = checkedItemsGlobal[`${order._id}-${idx}`];
 
