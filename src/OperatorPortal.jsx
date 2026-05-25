@@ -140,6 +140,7 @@ const [newDish, setNewDish] = useState({
 const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 
+const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
     name: '', role: 'Waiter', age: '', contact: '', address: '',
     shiftType: 'Day Shift',
@@ -882,21 +883,47 @@ const handleFinalSettle = async () => {
               ))}
             </div>
           )}
-          {activeTab==='menu' && tenantConfig && (
-            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-              <span style={{fontSize:'0.65rem',color:'#555',fontWeight:'900'}}>AUTO-HIDE ON LOW STOCK</span>
-              <button onClick={async()=>{
-                const nv=!tenantConfig.config?.autoHideDishesOnLowStock;
-                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});
-                setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));
-                showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);
-              }} style={{padding:'6px 14px',borderRadius:'8px',border:'none',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
-                background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#1a1a1a',
-                color:tenantConfig.config?.autoHideDishesOnLowStock?'#000':'#444'}}>
-                {tenantConfig.config?.autoHideDishesOnLowStock?'ON':'OFF'}
-              </button>
-            </div>
-          )}
+   {activeTab === 'menu' && (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+    {/* VEG / NON-VEG FILTER */}
+    <div style={{ display: 'flex', background: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '4px', gap: '4px' }}>
+      {[
+        { val: 'all',    label: 'ALL' },
+        { val: 'veg',    label: '🌿 VEG' },
+        { val: 'nonveg', label: '🍖 NON-VEG' },
+      ].map(f => (
+        <button key={f.val} onClick={() => setMenuVegFilter(f.val)} style={{
+          padding: '7px 14px', border: 'none', borderRadius: '7px', cursor: 'pointer',
+          fontSize: '0.65rem', fontWeight: '900',
+          background: menuVegFilter === f.val ? '#d3bfa2' : 'transparent',
+          color: menuVegFilter === f.val ? '#000' : '#444',
+          transition: 'all 0.15s'
+        }}>
+          {f.label}
+        </button>
+      ))}
+    </div>
+
+    {/* existing auto-hide toggle — keep as-is */}
+    {tenantConfig && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900' }}>AUTO-HIDE ON LOW STOCK</span>
+        <button onClick={async () => {
+          const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
+          await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
+          setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
+          showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
+        }} style={{
+          padding: '6px 14px', borderRadius: '8px', border: 'none', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer',
+          background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a',
+          color: tenantConfig.config?.autoHideDishesOnLowStock ? '#000' : '#444'
+        }}>
+          {tenantConfig.config?.autoHideDishesOnLowStock ? 'ON' : 'OFF'}
+        </button>
+      </div>
+    )}
+  </div>
+)}
         </header>
 
         {/* ════════════════════════════════════════════════
@@ -979,7 +1006,12 @@ const handleFinalSettle = async () => {
 
     {/* MENU GRID */}
     <div style={styles.fullWidthGrid}>
-      {menuItems.filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item=>(
+      {menuItems.filter(i => {
+  if (!i.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+  if (menuVegFilter === 'veg')    return i.isVeg === true;
+  if (menuVegFilter === 'nonveg') return i.isVeg === false;
+  return true;
+}).map(item => (
         <div key={item._id} style={{
           ...styles.premiumCard,
           opacity: item.isAvailable ? 1 : 0.5,

@@ -20,6 +20,8 @@ const PratyekshaPremiumMenu = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const [filterVegOnly, setFilterVegOnly] = useState(true);
+  
   const [language, setLanguage] = useState('en'); 
   const [tenantId, setTenantId] = useState('');
   const [tableNumber, setTableNumber] = useState('');
@@ -42,8 +44,6 @@ const PratyekshaPremiumMenu = () => {
 
   const navRef = useRef(null);
   const activeTabRef = useRef(null);
-
-  const [filterVegOnly, setFilterVegOnly] = useState(false);
 
   const t = {
     en: {
@@ -168,6 +168,23 @@ const PratyekshaPremiumMenu = () => {
     setTableNumber(params.get('table') || 'Takeaway');
   }, [urlTenantId]);
 
+  const isOnlyVegTenant = restaurantData?.config?.onlyVeg === true;
+
+  // Reset to veg when switching categories, if non-veg has no items there
+useEffect(() => {
+  if (isOnlyVegTenant) {
+    setFilterVegOnly(true);
+    return;
+  }
+  const hasNonVegInCategory = allMenuItems.some(i => {
+    const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
+    return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
+  });
+  if (!hasNonVegInCategory) {
+    setFilterVegOnly(true);
+  }
+}, [selectedCategoryId, allMenuItems, isOnlyVegTenant]);
+
 // 🚀 UNIFIED ENGINE: HANDLES INITIAL HTTP REST CONTENT LOADS & LIVE REAL-TIME SOCKET BROADCASTS
   useEffect(() => {
     if (!tenantId) return;
@@ -206,8 +223,6 @@ const PratyekshaPremiumMenu = () => {
             item._id === updatedItem._id ? { ...item, ...updatedItem } : item
           )
         );
-        
-    
       }
     });
 
@@ -416,16 +431,15 @@ const sendBatchToKitchen = async () => {
 const filteredMenuItems = allMenuItems.filter(i => {
   const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
   const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
-  const matchesVeg = !filterVegOnly || i.isVeg === true;
+  const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
   return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
 });
-// Only show veg toggle if there are ACTUALLY non-veg items in current category
+
+
 const hasNonVegInView = useMemo(() => {
-  return allMenuItems.some(i => {
-    const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
-    return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
-  });
-}, [allMenuItems, selectedCategoryId]);
+  if (isOnlyVegTenant) return false;
+  return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
+}, [allMenuItems, isOnlyVegTenant]);
 
   if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATYEKSHA...</div>;
 
@@ -457,61 +471,85 @@ const hasNonVegInView = useMemo(() => {
 
 {/* SEARCH BAR + VEG FILTER */}
 <div style={styles.searchWrapper}>
+  {/* SEARCH BAR */}
+<div style={styles.searchWrapper}>
   <div style={styles.searchContainer}>
     <Search size={18} color={primaryColor} />
     <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
   </div>
+</div>
 
-  {/* VEG FILTER TOGGLE — only renders when non-veg items exist in current view */}
-  {hasNonVegInView && (
-    <motion.button
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      onClick={() => setFilterVegOnly(prev => !prev)}
+{/* VEG / NON-VEG MODE SWITCHER — only show when non-veg items exist in current view */}
+{hasNonVegInView && (
+  <div style={{
+    display: 'flex',
+    margin: '0 20px 12px',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(211,191,162,0.12)',
+    borderRadius: '14px',
+    padding: '5px',
+    gap: '5px'
+  }}>
+    {/* VEG button */}
+    <button
+      onClick={() => setFilterVegOnly(true)}
       style={{
-        marginTop: '10px',
-        width: '100%',
-        padding: '10px 16px',
-        borderRadius: '12px',
-        border: `1px solid ${filterVegOnly ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.15)'}`,
-        background: filterVegOnly ? 'rgba(211,191,162,0.08)' : 'transparent',
-        color: filterVegOnly ? primaryColor : '#666',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        cursor: 'pointer',
+        flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none',
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        background: filterVegOnly ? 'rgba(74,124,63,0.15)' : 'transparent',
+        outline: filterVegOnly ? '1px solid rgba(74,124,63,0.4)' : '1px solid transparent',
         transition: 'all 0.2s ease'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Veg symbol — green square with circle inside, standard Indian food symbol */}
-        <div style={{
-          width: '18px', height: '18px', border: '2px solid #4a7c3f',
-          borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: filterVegOnly ? 'rgba(74,124,63,0.1)' : 'transparent'
-        }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4a7c3f' }} />
-        </div>
-        <span style={{ fontSize: '0.72rem', fontWeight: '800', letterSpacing: '0.5px' }}>
-          {language === 'mr' ? 'फक्त शाकाहारी' : 'VEG ONLY'}
-        </span>
-      </div>
-      {/* Toggle pill */}
+      {/* Veg symbol */}
       <div style={{
-        width: '36px', height: '20px', borderRadius: '10px',
-        background: filterVegOnly ? primaryColor : '#333',
-        position: 'relative', transition: 'background 0.2s'
+        width: '16px', height: '16px',
+        border: '2px solid #4a7c3f', borderRadius: '3px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+      }}>
+        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#4a7c3f' }} />
+      </div>
+      <span style={{
+        fontSize: '0.72rem', fontWeight: '900', letterSpacing: '0.5px',
+        color: filterVegOnly ? '#d3bfa2' : '#666'
+      }}>
+        {language === 'mr' ? 'शाकाहारी' : 'VEG'}
+      </span>
+    </button>
+
+    {/* NON-VEG button */}
+    <button
+      onClick={() => setFilterVegOnly(false)}
+      style={{
+        flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none',
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        background: !filterVegOnly ? 'rgba(138,48,48,0.12)' : 'transparent',
+        outline: !filterVegOnly ? '1px solid rgba(138,48,48,0.4)' : '1px solid transparent',
+        transition: 'all 0.2s ease'
+      }}
+    >
+      {/* Non-veg symbol — triangle */}
+      <div style={{
+        width: '16px', height: '16px',
+        border: '2px solid #8a3030', borderRadius: '3px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
       }}>
         <div style={{
-          position: 'absolute', top: '3px',
-          left: filterVegOnly ? '18px' : '3px',
-          width: '14px', height: '14px', borderRadius: '50%',
-          background: filterVegOnly ? '#000' : '#666',
-          transition: 'left 0.2s'
+          width: 0, height: 0,
+          borderLeft: '4px solid transparent',
+          borderRight: '4px solid transparent',
+          borderBottom: '7px solid #8a3030'
         }} />
       </div>
-    </motion.button>
-  )}
+      <span style={{
+        fontSize: '0.72rem', fontWeight: '900', letterSpacing: '0.5px',
+        color: !filterVegOnly ? '#d3bfa2' : '#666'
+      }}>
+        {language === 'mr' ? 'मांसाहारी' : 'NON-VEG'}
+      </span>
+    </button>
+  </div>
+)}
 </div>
 
       {/* CATEGORY NAV */}
@@ -520,11 +558,20 @@ const hasNonVegInView = useMemo(() => {
           <button ref={selectedCategoryId === 'all' ? activeTabRef : null} onClick={() => setSelectedCategoryId('all')} style={{...styles.navItem, color: selectedCategoryId === 'all' ? primaryColor : '#888'}}>
             {t[language].all} {selectedCategoryId === 'all' && <motion.div layoutId="underline" style={styles.activeUnderline} />}
           </button>
-          {categoryList.map(cat => (
-            <button key={cat.categoryId} ref={selectedCategoryId === cat.categoryId ? activeTabRef : null} onClick={() => setSelectedCategoryId(cat.categoryId)} style={{...styles.navItem, color: selectedCategoryId === cat.categoryId ? primaryColor : '#888'}}>
-              {(language === 'mr' ? cat.name_mr : cat.name).toUpperCase()} {selectedCategoryId === cat.categoryId && <motion.div layoutId="underline" style={styles.activeUnderline} />}
-            </button>
-          ))}
+{categoryList
+  .filter(cat =>
+    allMenuItems.some(i =>
+      i.categoryId === cat.categoryId &&
+      i.isAvailable !== false &&
+      (filterVegOnly ? i.isVeg === true : i.isVeg !== true)
+    )
+  )
+  .map(cat => (
+    <button key={cat.categoryId} ref={selectedCategoryId === cat.categoryId ? activeTabRef : null} onClick={() => setSelectedCategoryId(cat.categoryId)} style={{...styles.navItem, color: selectedCategoryId === cat.categoryId ? primaryColor : '#888'}}>
+      {(language === 'mr' ? cat.name_mr : cat.name).toUpperCase()} {selectedCategoryId === cat.categoryId && <motion.div layoutId="underline" style={styles.activeUnderline} />}
+    </button>
+  ))
+}
         </nav>
       </div>
 
@@ -961,14 +1008,31 @@ const hasNonVegInView = useMemo(() => {
         )}
       </AnimatePresence>
 
-      <style>{` .no-scrollbar::-webkit-scrollbar { display: none; } `}</style>
-    </div>
+<style>{`
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  * { -webkit-tap-highlight-color: transparent; }
+  html, body, #root { 
+    height: 100%; 
+    overflow-x: hidden; 
+  }
+`}</style>
+</div>
   );
 };
 
 const styles = {
-  body: { minHeight: '100vh', fontFamily: 'Poppins, sans-serif', color: '#fff', overflowX: 'hidden' },
-  header: { padding: '50px 20px 10px', textAlign: 'center' },
+body: { 
+  minHeight: '100vh', 
+  fontFamily: 'Poppins, sans-serif', 
+  color: '#fff', 
+  overflowX: 'hidden',
+  overflowY: 'auto',          // ← ADD THIS
+  WebkitOverflowScrolling: 'touch'  // ← ADD THIS for iOS momentum scroll
+},
+contentWrapper: { 
+  touchAction: 'pan-y',       // keep existing
+  overflowY: 'visible',       // ← ADD THIS — don't clip children
+},  header: { padding: '50px 20px 10px', textAlign: 'center' },
   searchWrapper: { padding: '0 20px 15px' },
   searchContainer: { display: 'flex', alignItems: 'center', background: 'rgba(211, 191, 162, 0.05)', border: '1px solid rgba(211, 191, 162, 0.2)', borderRadius: '15px', padding: '12px 15px', gap: '10px' },
   searchInput: { background: 'none', border: 'none', color: '#fff', outline: 'none', width: '100%', fontSize: '0.9rem' },
@@ -980,7 +1044,6 @@ const styles = {
   navScroll: { display: 'flex', overflowX: 'auto', padding: '16px 10px', gap: '20px', whiteSpace: 'nowrap' },
   navItem: { background: 'none', border: 'none', fontWeight: '800', fontSize: '0.72rem', flexShrink: 0, padding: '6px 5px', position: 'relative', outline: 'none' },
   activeUnderline: { position: 'absolute', bottom: '-8px', left: '0', right: '0', height: '3px', background: '#d3bfa2', borderRadius: '10px' },
-  contentWrapper: { touchAction: 'pan-y' }, 
   menuContainer: { padding: '10px 15px 120px', maxWidth: '600px', margin: '0 auto' },
   menuCard: { borderRadius: '24px', padding: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', border: '1px solid', position: 'relative' },
   itemContentLeft: { flex: 1, paddingRight: '12px', textAlign: 'left' },
