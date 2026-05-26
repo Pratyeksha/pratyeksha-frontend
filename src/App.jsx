@@ -472,8 +472,7 @@ const hasNonVegInView = useMemo(() => {
 
 {/* SEARCH BAR + VEG FILTER */}
 <div style={styles.searchWrapper}>
-  {/* SEARCH BAR */}
-<div style={styles.searchWrapper}>
+
   <div style={styles.searchContainer}>
     <Search size={18} color={primaryColor} />
     <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -551,7 +550,6 @@ const hasNonVegInView = useMemo(() => {
     </button>
   </div>
 )}
-</div>
 
       {/* CATEGORY NAV */}
       <div style={{...styles.navContainer, backgroundColor: secondaryColor}}>

@@ -24,6 +24,9 @@ const KitchenView = () => {
   const [waiterCalls, setWaiterCalls] = useState([]);
   const [recallQueue, setRecallQueue] = useState([]);
   const [isAggregateView, setIsAggregateView] = useState(false);
+
+  const [isNonVegMode, setIsNonVegMode] = useState(false); // false = VEG (default)
+const [tenantOnlyVeg, setTenantOnlyVeg] = useState(true); // default safe
   
   // 🚀 CORE ROUTING & FILTER STATE LAYERS
   const [categories, setCategories] = useState([]);
@@ -123,32 +126,38 @@ const dishToVegMap = useMemo(() => {
     }
   };
 
-  const fetchActiveOrders = async () => {
-    try {
-      const [ordersRes, categoriesRes, menuRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
-        axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] }))
-      ]);
-      
-      const incomingOrders = ordersRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setOrders(incomingOrders);
-      setCategories(categoriesRes.data || []);
-      setMenuItems(menuRes.data || []);
+const fetchActiveOrders = async () => {
+  try {
+    const [ordersRes, categoriesRes, menuRes, tenantRes] = await Promise.all([
+      axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
+      axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
+    ]);
+    
+    const incomingOrders = ordersRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setOrders(incomingOrders);
+    setCategories(categoriesRes.data || []);
+    setMenuItems(menuRes.data || []);
+    
+    // Read onlyVeg from tenant config
+    if (tenantRes.data?.config?.onlyVeg !== undefined) {
+      setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
+    }
 
-      const refreshHydrationMap = {};
-      incomingOrders.forEach(order => {
-        if (order.items && Array.isArray(order.items)) {
-          order.items.forEach((item, index) => {
-            if (item.isCrossedLocal === true) {
-              refreshHydrationMap[`${order._id}-${index}`] = true;
-            }
-          });
-        }
-      });
-      setCheckedItemsGlobal(refreshHydrationMap);
-    } catch (err) { console.error("KDS Data Compilation Framework Error."); }
-  };
+    const refreshHydrationMap = {};
+    incomingOrders.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach((item, index) => {
+          if (item.isCrossedLocal === true) {
+            refreshHydrationMap[`${order._id}-${index}`] = true;
+          }
+        });
+      }
+    });
+    setCheckedItemsGlobal(refreshHydrationMap);
+  } catch (err) { console.error("KDS Data Compilation Framework Error."); }
+};
 
   // 🎙️ HANDS-FREE VOICE CONTROL RUNTIME CORE ENGINE
   useEffect(() => {
@@ -343,6 +352,19 @@ const dishToVegMap = useMemo(() => {
     return lookupMap;
   }, [menuItems]);
 
+// Which categories have ONLY veg items, only nonveg, or mixed?
+const categoryVegProfile = useMemo(() => {
+  const profile = {}; // categoryId -> { hasVeg, hasNonVeg }
+  menuItems.forEach(item => {
+    const catId = item.categoryId?.toLowerCase().trim();
+    if (!catId) return;
+    if (!profile[catId]) profile[catId] = { hasVeg: false, hasNonVeg: false };
+    if (item.isVeg !== false) profile[catId].hasVeg = true;
+    else profile[catId].hasNonVeg = true;
+  });
+  return profile;
+}, [menuItems]);
+
 const categoryPendingCounts = useMemo(() => {
   const counts = {};
   orders.forEach(order => {
@@ -357,22 +379,22 @@ const categoryPendingCounts = useMemo(() => {
       if (!finalId && item.name) {
         finalId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
       }
-      
-      // 🚀 NEW: Also count into synthetic veg/nonveg buckets
-      const itemIsVeg = item.isVeg !== undefined 
-        ? item.isVeg !== false 
-        : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-      
-      const vegBucket = itemIsVeg ? '__veg__' : '__nonveg__';
-      counts[vegBucket] = (counts[vegBucket] || 0) + (Number(item.quantity) || 0);
 
-      if (finalId) {
+      const itemIsVeg = item.isVeg !== undefined
+        ? item.isVeg !== false
+        : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+
+      // Only count into the category if it matches current veg/nonveg mode
+      const matchesMode = isNonVegMode ? !itemIsVeg : itemIsVeg;
+      
+      if (finalId && matchesMode) {
         counts[finalId] = (counts[finalId] || 0) + (Number(item.quantity) || 0);
       }
     });
   });
   return counts;
-}, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal]);
+}, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
+
 
 const filteredOrders = useMemo(() => {
   return orders.filter(order => {
@@ -380,28 +402,19 @@ const filteredOrders = useMemo(() => {
     if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return false;
     if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && order.items.every(i => !i.isParcel)) return false;
 
-    if (selectedCategory === '__veg__') {
-      // Show ticket if it has ANY veg item not yet crossed
-      return order.items.some((item, idx) => {
-        if (checkedItemsGlobal[`${order._id}-${idx}`]) return false;
-        const itemIsVeg = item.isVeg !== undefined 
-          ? item.isVeg !== false 
-          : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-        return itemIsVeg;
-      });
-    }
-
-    if (selectedCategory === '__nonveg__') {
-      // Show ticket if it has ANY non-veg item not yet crossed
-      return order.items.some((item, idx) => {
-        if (checkedItemsGlobal[`${order._id}-${idx}`]) return false;
-        const itemIsVeg = item.isVeg !== undefined 
-          ? item.isVeg !== false 
+    // In non-veg mode, only show tickets that have at least one non-veg item (crossed or not)
+    // In veg mode, show all tickets (since veg is the default)
+    if (isNonVegMode) {
+      const hasNonVeg = order.items.some((item) => {
+        const itemIsVeg = item.isVeg !== undefined
+          ? item.isVeg !== false
           : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
         return !itemIsVeg;
       });
+      if (!hasNonVeg) return false;
     }
 
+    // Category filter — only filter if a specific category is selected
     if (selectedCategory !== 'ALL') {
       return order.items.some(item => {
         let itemCatId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
@@ -413,7 +426,7 @@ const filteredOrders = useMemo(() => {
     }
     return true;
   });
-}, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, checkedItemsGlobal]);
+}, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
 
 
   const masterPrepMarqueeList = useMemo(() => {
@@ -524,133 +537,132 @@ const filteredOrders = useMemo(() => {
       <div style={styles.layoutBodyWrapper}>
         
         {/* --- LEFT SIDE MENU CATEGORIES SIDEBAR --- */}
-        <aside style={styles.leftCategorySidebar}>
-          <div style={styles.sidebarHeader}>
-            <Layers size={14} color="#d3bfa2" />
-            <span>KITCHEN SECTIONS</span>
-          </div>
+      <aside style={styles.leftCategorySidebar}>
+  <div style={styles.sidebarHeader}>
+    <Layers size={14} color="#d3bfa2" />
+    <span>KITCHEN SECTIONS</span>
+  </div>
 
-          <div style={styles.sidebarMenuStack} className="no-scrollbar">
-            <button 
-              onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); }}
-              style={selectedCategory === 'ALL' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
-                <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>ALL SECTIONS</span>
-              </div>
-              <span style={{ 
-                ...styles.categoryCountBadge, 
-                background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129',
-                color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f',
-                border: selectedCategory === 'ALL' && !showMetricsDashboard ? '1px solid rgba(211,191,162,0.4)' : '1px solid #232730'
-              }}>
-                {orders.reduce((sum, o) => {
-                  const orderIsTakeawayParcel = o.tableNumber?.toLowerCase() === 'takeaway' || o.items.some(i => i.isParcel);
-                  if (stationFilter === 'DINEIN' && orderIsTakeawayParcel) return sum;
-                  if (stationFilter === 'PARCEL' && !orderIsTakeawayParcel && o.items.every(i => !i.isParcel)) return sum;
-                  
-                  const realCount = o.items.reduce((s, item, idx) => s + (checkedItemsGlobal[`${o._id}-${idx}`] ? 0 : item.quantity), 0);
-                  return sum + realCount;
-                }, 0)}
-              </span>
-            </button>
-
-            {/* 🥦 VEG STATION NODE */}
-{categoryPendingCounts['__veg__'] > 0 && (
-  <button
-    onClick={() => { setSelectedCategory('__veg__'); setShowMetricsDashboard(false); }}
-    style={selectedCategory === '__veg__' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      {/* Veg dot symbol */}
-      <div style={{
-        width: '14px', height: '14px', border: '2px solid',
-        borderColor: selectedCategory === '__veg__' ? '#0f1013' : '#4a7c3f',
-        borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}>
-        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedCategory === '__veg__' ? '#0f1013' : '#4a7c3f' }} />
-      </div>
-      <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>VEG STATION</span>
-    </div>
-    <span style={{
-      ...styles.categoryCountBadge,
-      background: selectedCategory === '__veg__' ? '#0f1013' : '#1a1c23',
-      color: selectedCategory === '__veg__' ? '#d3bfa2' : '#8e94a4',
-      border: selectedCategory === '__veg__' ? '1px solid #d3bfa2' : '1px solid #232730'
+  {/* VEG / NON-VEG TOGGLE — hidden if restaurant is onlyVeg */}
+  {!tenantOnlyVeg && (
+    <div style={{
+      display: 'flex', background: '#0d0e11', borderRadius: '10px',
+      border: '1px solid #1f222a', padding: '4px', marginBottom: '14px', flexShrink: 0
     }}>
-      {categoryPendingCounts['__veg__'] || 0}
-    </span>
-  </button>
-)}
-
-{/* 🍖 NON-VEG STATION NODE */}
-{categoryPendingCounts['__nonveg__'] > 0 && (
-  <button
-    onClick={() => { setSelectedCategory('__nonveg__'); setShowMetricsDashboard(false); }}
-    style={selectedCategory === '__nonveg__' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      {/* Non-veg triangle symbol */}
-      <div style={{
-        width: '14px', height: '14px', border: '2px solid',
-        borderColor: selectedCategory === '__nonveg__' ? '#0f1013' : '#8a3030',
-        borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}>
+      <button
+        onClick={() => { setIsNonVegMode(false); setSelectedCategory('ALL'); }}
+        style={{
+          flex: 1, padding: '8px 6px', borderRadius: '7px', border: 'none',
+          cursor: 'pointer', fontSize: '0.65rem', fontWeight: '900',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          background: !isNonVegMode ? 'linear-gradient(135deg, #2a4a28, #3a6435)' : 'transparent',
+          color: !isNonVegMode ? '#7ec87a' : '#555',
+          transition: 'all 0.15s'
+        }}
+      >
+        {/* Veg square symbol */}
         <div style={{
-          width: 0, height: 0,
-          borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
-          borderBottom: `6px solid ${selectedCategory === '__nonveg__' ? '#0f1013' : '#8a3030'}`
-        }} />
-      </div>
-      <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>NON-VEG STATION</span>
+          width: '12px', height: '12px', border: `2px solid ${!isNonVegMode ? '#7ec87a' : '#444'}`,
+          borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
+        </div>
+        VEG
+      </button>
+      <button
+        onClick={() => { setIsNonVegMode(true); setSelectedCategory('ALL'); }}
+        style={{
+          flex: 1, padding: '8px 6px', borderRadius: '7px', border: 'none',
+          cursor: 'pointer', fontSize: '0.65rem', fontWeight: '900',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          background: isNonVegMode ? 'rgba(138,48,48,0.35)' : 'transparent',
+          color: isNonVegMode ? '#e07070' : '#555',
+          transition: 'all 0.15s'
+        }}
+      >
+        {/* Non-veg triangle symbol */}
+        <div style={{
+          width: '12px', height: '12px', border: `2px solid ${isNonVegMode ? '#e07070' : '#444'}`,
+          borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            width: 0, height: 0,
+            borderLeft: '3px solid transparent', borderRight: '3px solid transparent',
+            borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}`
+          }} />
+        </div>
+        NON-VEG
+      </button>
     </div>
-    <span style={{
-      ...styles.categoryCountBadge,
-      background: selectedCategory === '__nonveg__' ? '#0f1013' : '#1a1c23',
-      color: selectedCategory === '__nonveg__' ? '#d3bfa2' : '#8e94a4',
-      border: selectedCategory === '__nonveg__' ? '1px solid #d3bfa2' : '1px solid #232730'
-    }}>
-      {categoryPendingCounts['__nonveg__'] || 0}
-    </span>
-  </button>
-)}
+  )}
 
+  <div style={styles.sidebarMenuStack} className="no-scrollbar">
+    {/* ALL SECTIONS button */}
+    <button
+      onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); }}
+      style={selectedCategory === 'ALL' && !showMetricsDashboard ? styles.activeSidebarNode : styles.sidebarNode}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
+        <span style={{ fontWeight: '900', fontSize: '0.72rem' }}>ALL SECTIONS</span>
+      </div>
+      <span style={{
+        ...styles.categoryCountBadge,
+        background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129',
+        color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f',
+        border: selectedCategory === 'ALL' && !showMetricsDashboard ? '1px solid rgba(211,191,162,0.4)' : '1px solid #232730'
+      }}>
+        {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
+      </span>
+    </button>
 
-            {categories.map(cat => {
-              const lookupKey = cat.categoryId ? cat.categoryId.toLowerCase().trim() : '';
-              const pendingCount = categoryPendingCounts[lookupKey] || 0;
-              const isSelected = selectedCategory === lookupKey && !showMetricsDashboard;
-              
-              return (
-                <button 
-                  key={cat._id}
-                  onClick={() => { setSelectedCategory(lookupKey); setShowMetricsDashboard(false); }}
-                  style={isSelected ? styles.activeSidebarNode : styles.sidebarNode}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Flame size={14} color={isSelected ? '#0f1013' : '#bda88a'} />
-                    <span style={{ textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: 'bold' }}>{cat.name}</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }} style={styles.mini86ToggleTrigger} title="Click to set out of stock (86 item)">
-                      <EyeOff size={10} />
-                    </span>
-                    <span style={{ 
-                      ...styles.categoryCountBadge, 
-                      background: isSelected ? '#0f1013' : '#1a1c23',
-                      color: isSelected ? '#d3bfa2' : '#8e94a4',
-                      border: isSelected ? '1px solid #d3bfa2' : '1px solid #232730'
-                    }}>
-                      {pendingCount < 10 ? `0${pendingCount}` : pendingCount}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+    {/* Category nodes — only show categories that have items matching current veg/nonveg mode */}
+    {categories.filter(cat => {
+      const lookupKey = cat.categoryId?.toLowerCase().trim() || '';
+      const profile = categoryVegProfile[lookupKey];
+      if (!profile) return false;
+      // In veg mode: show categories that have veg items
+      // In non-veg mode: show categories that have non-veg items
+      // If tenant is onlyVeg: always show all (veg mode, no toggle)
+      if (tenantOnlyVeg) return profile.hasVeg;
+      return isNonVegMode ? profile.hasNonVeg : profile.hasVeg;
+    }).map(cat => {
+      const lookupKey = cat.categoryId ? cat.categoryId.toLowerCase().trim() : '';
+      const pendingCount = categoryPendingCounts[lookupKey] || 0;
+      const isSelected = selectedCategory === lookupKey && !showMetricsDashboard;
+
+      return (
+        <button
+          key={cat._id}
+          onClick={() => { setSelectedCategory(lookupKey); setShowMetricsDashboard(false); }}
+          style={isSelected ? styles.activeSidebarNode : styles.sidebarNode}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Flame size={14} color={isSelected ? '#0f1013' : '#bda88a'} />
+            <span style={{ textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: 'bold' }}>{cat.name}</span>
           </div>
-        </aside>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
+              style={styles.mini86ToggleTrigger}
+              title="Click to set out of stock (86 item)"
+            >
+              <EyeOff size={10} />
+            </span>
+            <span style={{
+              ...styles.categoryCountBadge,
+              background: isSelected ? '#0f1013' : '#1a1c23',
+              color: isSelected ? '#d3bfa2' : '#8e94a4',
+              border: isSelected ? '1px solid #d3bfa2' : '1px solid #232730'
+            }}>
+              {pendingCount < 10 ? `0${pendingCount}` : pendingCount}
+            </span>
+          </div>
+        </button>
+      );
+    })}
+  </div>
+</aside>
 
         {/* --- MAIN WORKSPACE DATA SLOTS --- */}
         <main style={styles.workspace} className="no-scrollbar">
@@ -688,16 +700,19 @@ const filteredOrders = useMemo(() => {
               <AnimatePresence mode="popLayout">
                 {filteredOrders.map((order, index) => (
                   <KDSOrderCard 
-                    key={order._id} 
-                    order={order} 
-                    isNewest={index === 0} 
-                    onReady={markAsReady} 
-                    dishToCategoryMap={dishToCategoryMap}
-                    selectedCategory={selectedCategory}
-                    checkedItemsGlobal={checkedItemsGlobal}
-                    setCheckedItemsGlobal={setCheckedItemsGlobal}
-                    socketInstance={socketRef.current}
-                  />
+  key={order._id} 
+  order={order} 
+  isNewest={index === 0} 
+  onReady={markAsReady} 
+  dishToCategoryMap={dishToCategoryMap}
+  dishToVegMap={dishToVegMap}
+  selectedCategory={selectedCategory}
+  checkedItemsGlobal={checkedItemsGlobal}
+  setCheckedItemsGlobal={setCheckedItemsGlobal}
+  socketInstance={socketRef.current}
+  isNonVegMode={isNonVegMode}          // ← ADD
+  tenantOnlyVeg={tenantOnlyVeg}        // ← ADD
+/>
                 ))}
               </AnimatePresence>
             </div>
@@ -742,8 +757,10 @@ const filteredOrders = useMemo(() => {
   );
 };
 
-const KDSOrderCard = ({ order, onReady, isNewest, dishToCategoryMap, selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal, socketInstance }) => {
-  const [seconds, setSeconds] = useState(0);
+const KDSOrderCard = ({ order, onReady, isNewest, dishToCategoryMap, dishToVegMap,
+  selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal, socketInstance,
+  isNonVegMode, tenantOnlyVeg }) => {
+      const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
     const update = () => setSeconds(Math.floor((new Date() - new Date(order.createdAt)) / 1000));
@@ -826,84 +843,108 @@ const KDSOrderCard = ({ order, onReady, isNewest, dishToCategoryMap, selectedCat
       </div>
 
       <div style={styles.itemList} className="custom-scroll">
-        {order.items.map((item, idx) => {
-          let calculatedItemCatId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
-          if (!calculatedItemCatId && item.name) {
-            calculatedItemCatId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
-          }
-// 🚀 NEW: Veg/NonVeg station filtering — dim non-matching items instead of hiding the ticket
-const itemIsVeg = item.isVeg !== undefined
-  ? item.isVeg !== false
-  : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
+      {order.items.map((item, idx) => {
+        let calculatedItemCatId = item.categoryId ? item.categoryId.toLowerCase().trim() : null;
+        if (!calculatedItemCatId && item.name) {
+          calculatedItemCatId = dishToCategoryMap[item.name.toLowerCase().trim()] || null;
+        }
 
-if (selectedCategory === '__veg__' && !itemIsVeg) {
-  // Dim but show so chef sees the full ticket context
-  return (
-    <div key={idx} style={{ ...styles.itemRow, opacity: 0.18, pointerEvents: 'none' }}>
-      <div style={{ ...styles.qtyBox, background: '#0d0e11' }}>{item.quantity}</div>
-      <div style={{ flex: 1 }}>
-        <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
-      </div>
-    </div>
-  );
-}
+        const itemIsVeg = item.isVeg !== undefined
+          ? item.isVeg !== false
+          : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
 
-if (selectedCategory === '__nonveg__' && itemIsVeg) {
-  return (
-    <div key={idx} style={{ ...styles.itemRow, opacity: 0.18, pointerEvents: 'none' }}>
-      <div style={{ ...styles.qtyBox, background: '#0d0e11' }}>{item.quantity}</div>
-      <div style={{ flex: 1 }}>
-        <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
-      </div>
-    </div>
-  );
-}
+        // Category filter dim (existing logic, keep as-is)
+        if (selectedCategory !== 'ALL'
+          && selectedCategory !== '__veg__'
+          && selectedCategory !== '__nonveg__'
+          && calculatedItemCatId !== selectedCategory.toLowerCase().trim()) {
+          return null;
+        }
 
-if (selectedCategory !== 'ALL' && selectedCategory !== '__veg__' && selectedCategory !== '__nonveg__' 
-    && calculatedItemCatId !== selectedCategory.toLowerCase().trim()) {
-  return null;
-}
-          const forceParcelMode = order.tableNumber?.toLowerCase() === 'takeaway' || item.isParcel;
-          const isItemCrossed = checkedItemsGlobal[`${order._id}-${idx}`];
+        // Veg/NonVeg mode: dim the "other side" items — but still show them
+        // so chef sees full ticket context; dimmed items are non-interactive
+        const modeMatch = tenantOnlyVeg
+          ? true // onlyVeg restaurant — show everything normally
+          : isNonVegMode
+            ? !itemIsVeg  // non-veg mode → nonveg items are "active", veg are dimmed
+            : itemIsVeg;  // veg mode → veg items are "active", nonveg are dimmed
 
+        const isItemCrossed = checkedItemsGlobal[`${order._id}-${idx}`];
+        const forceParcelMode = order.tableNumber?.toLowerCase() === 'takeaway' || item.isParcel;
+
+        // Show dimmed (non-interactive) for items that don't match current mode
+        if (!modeMatch) {
           return (
-            <div key={idx} onClick={() => toggleItemCrossedState(idx)} style={{...styles.itemRow, opacity: isItemCrossed ? 0.2 : 1}}>
-              <div style={{...styles.qtyBox, background: isItemCrossed ? '#0d0e11' : '#1e2129'}}>{item.quantity}</div>
-              <div style={{flex:1}}>
-                <div style={{display:'flex', alignItems:'center', gap: 8, flexWrap: 'wrap'}}>
-                  <span style={{
-                    ...styles.itemName, 
-                    textDecoration: isItemCrossed ? 'line-through' : 'none', 
-                    color: item.isChefSpecial ? '#0f1013' : '#fff',
-                    background: item.isChefSpecial ? 'linear-gradient(135deg, #bda88a, #d3bfa2)' : 'transparent',
-                    padding: item.isChefSpecial ? '3px 8px' : '0',
-                    borderRadius: item.isChefSpecial ? '6px' : '0',
-                    fontWeight: item.isChefSpecial ? '900' : '700'
-                  }}>
-                    {item.isChefSpecial && <Sparkles size={12} style={{ display: 'inline', marginRight: '4px' }} />}
-                    {item.name}
-                  </span>
-                  {forceParcelMode ? (
-                      <div style={styles.parcelBadge}><Package size={10} /> PARCEL</div>
-                  ) : (
-                      <div style={styles.dineBadge}><UtensilsCrossed size={10} /> DINE-IN</div>
-                  )}
-                </div>
-                <span style={{...styles.portion, color: item.portion?.toLowerCase() === 'half' ? '#d3bfa2' : '#7c8291'}}>
-                  {item.portion?.toUpperCase() || 'STANDARD'}
+            <div key={idx} style={{
+              ...styles.itemRow,
+              opacity: isItemCrossed ? 0.08 : 0.22,
+              pointerEvents: 'none',
+              filter: 'grayscale(1)'
+            }}>
+              <div style={{ ...styles.qtyBox, background: '#0d0e11' }}>{item.quantity}</div>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>
+                  {item.name}
                 </span>
-                {item.suggestion && (
-                  <div style={styles.note}>
-                    <StickyNote size={10} /> 
-                    <span style={{textTransform: 'uppercase'}}>{item.suggestion}</span>
-                  </div>
+                {isItemCrossed && (
+                  <span style={{ marginLeft: '8px', fontSize: '0.6rem', color: '#d3bfa2' }}>✓ DONE</span>
                 )}
               </div>
-              {isItemCrossed && <CheckSquare size={18} color="#d3bfa2" />}
             </div>
           );
-        })}
-      </div>
+        }
+
+        // Normal interactive item
+        return (
+          <div key={idx} onClick={() => toggleItemCrossedState(idx)} style={{ ...styles.itemRow, opacity: isItemCrossed ? 0.2 : 1 }}>
+            <div style={{ ...styles.qtyBox, background: isItemCrossed ? '#0d0e11' : '#1e2129' }}>{item.quantity}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  ...styles.itemName,
+                  textDecoration: isItemCrossed ? 'line-through' : 'none',
+                  color: item.isChefSpecial ? '#0f1013' : '#fff',
+                  background: item.isChefSpecial ? 'linear-gradient(135deg, #bda88a, #d3bfa2)' : 'transparent',
+                  padding: item.isChefSpecial ? '3px 8px' : '0',
+                  borderRadius: item.isChefSpecial ? '6px' : '0',
+                  fontWeight: item.isChefSpecial ? '900' : '700'
+                }}>
+                  {item.isChefSpecial && <Sparkles size={12} style={{ display: 'inline', marginRight: '4px' }} />}
+                  {item.name}
+                </span>
+                {/* Veg/NonVeg indicator dot on item */}
+                {!tenantOnlyVeg && (
+                  <div style={{
+                    width: '10px', height: '10px',
+                    border: `1.5px solid ${itemIsVeg ? '#4a7c3f' : '#8a3030'}`,
+                    borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                  }}>
+                    {itemIsVeg
+                      ? <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#4a7c3f' }} />
+                      : <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '4px solid #8a3030' }} />
+                    }
+                  </div>
+                )}
+                {forceParcelMode
+                  ? <div style={styles.parcelBadge}><Package size={10} /> PARCEL</div>
+                  : <div style={styles.dineBadge}><UtensilsCrossed size={10} /> DINE-IN</div>
+                }
+              </div>
+              <span style={{ ...styles.portion, color: item.portion?.toLowerCase() === 'half' ? '#d3bfa2' : '#7c8291' }}>
+                {item.portion?.toUpperCase() || 'STANDARD'}
+              </span>
+              {item.suggestion && (
+                <div style={styles.note}>
+                  <StickyNote size={10} />
+                  <span style={{ textTransform: 'uppercase' }}>{item.suggestion}</span>
+                </div>
+              )}
+            </div>
+            {isItemCrossed && <CheckSquare size={18} color="#d3bfa2" />}
+          </div>
+        );
+      })}
+    </div>
 
       <button 
         style={{...styles.doneBtn, background: urgencyTier === 'high' ? 'linear-gradient(135deg, #bda88a, #d3bfa2)' : 'transparent', color: urgencyTier === 'high' ? '#0f1013' : '#d3bfa2', borderColor: 'rgba(211,191,162,0.3)'}} 
