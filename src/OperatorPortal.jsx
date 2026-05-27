@@ -123,8 +123,7 @@ const istTodayStr = useMemo(() => {
   const [staffEfficiency, setStaffEfficiency] = useState([]);
   const [categoryRankings, setCategoryRankings] = useState({});
 
-  const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
-  const [activeRecipeItemId, setActiveRecipeItemId] = useState('');
+const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });  const [activeRecipeItemId, setActiveRecipeItemId] = useState('');
   const [recipeIngredientRows, setRecipeIngredientRows] = useState([{ inventoryId: '', quantityUsed: '' }]);
   const [inventorySearchQuery, setInventorySearchQuery] = useState('');
   // ── NEW: recipe search
@@ -135,6 +134,10 @@ const istTodayStr = useMemo(() => {
 
   const [inventorySuggestions, setInventorySuggestions] = useState([]);
 const [showSuggestions, setShowSuggestions] = useState(false);
+// ADD after: const [showSuggestions, setShowSuggestions] = useState(false);
+const [purchaseHistoryItem, setPurchaseHistoryItem] = useState(null); // drawer
+const [purchaseHistoryData, setPurchaseHistoryData] = useState(null);
+const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
 const [selectedExistingItem, setSelectedExistingItem] = useState(null);
 
 const [showAddDishModal, setShowAddDishModal] = useState(false);
@@ -233,6 +236,19 @@ const fetchManagementData = useCallback(async () => {
   } catch (err) { console.error("Management Sync Error", err); }
   finally { setInventoryLoading(false); }
 }, [tenantId]);
+
+
+// ADD after fetchManagementData:
+const fetchPurchaseHistory = useCallback(async (itemId) => {
+    setPurchaseHistoryLoading(true);
+    try {
+        const res = await axios.get(`${BASE_URL}/inventory/item/${itemId}/history`);
+        setPurchaseHistoryData(res.data);
+    } catch { setPurchaseHistoryData(null); }
+    finally { setPurchaseHistoryLoading(false); }
+}, []);
+
+
   // ── Re-fetch analytics whenever viewDate (month) changes
   useEffect(() => {
     if (isAuthenticated) {
@@ -2441,65 +2457,95 @@ setNewStaff({
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
     <h4 style={{...styles.biTitle, marginBottom:0, color: selectedExistingItem ? '#d3bfa2' : '#fff'}}>
       {selectedExistingItem
-        ? `RESTOCK: ${selectedExistingItem.itemName.toUpperCase()} (Current: ${selectedExistingItem.currentStock} ${selectedExistingItem.unit})`
+        ? `RESTOCK: ${selectedExistingItem.itemName.toUpperCase()}`
         : 'ADD / RESTOCK INGREDIENT'}
     </h4>
     {selectedExistingItem && (
-      <button
-        onClick={() => {
-          setSelectedExistingItem(null);
-          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
-        }}
-        style={{ background: 'transparent', border: '1px solid #333', color: '#555', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}
-      >
+      <button onClick={() => {
+        setSelectedExistingItem(null);
+        setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
+      }} style={{ background: 'transparent', border: '1px solid #333', color: '#555', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
         CLEAR ✕
       </button>
     )}
   </div>
- 
-  {/* RESTOCK BANNER — shows when existing item is selected */}
+
+  {/* RESTOCK BANNER */}
   {selectedExistingItem && (
-    <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
-      <div>
-        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
-        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>{selectedExistingItem.currentStock} {selectedExistingItem.unit}</div>
+    <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+        <div>
+          <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>{selectedExistingItem.currentStock} {selectedExistingItem.unit}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>WAC (CURRENT)</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
+            ₹{(selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>LAST BUY PRICE</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
+            ₹{(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>STOCK VALUE</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#8a704d' }}>
+            ₹{((selectedExistingItem.currentStock || 0) * (selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0)).toFixed(0)}
+          </div>
+        </div>
       </div>
-      <div>
-        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>MIN THRESHOLD</div>
-        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>{selectedExistingItem.minThreshold} {selectedExistingItem.unit}</div>
-      </div>
-      <div>
-        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>COST/UNIT</div>
-        <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>₹{selectedExistingItem.costPrice}/{selectedExistingItem.unit}</div>
-      </div>
+      {/* WAC PREVIEW — show new WAC as user types purchase price */}
+      {newInventoryItem.currentStock && newInventoryItem.purchasePrice && (() => {
+        const addQty = Number(newInventoryItem.currentStock);
+        const buyPrice = Number(newInventoryItem.purchasePrice);
+        const oldStock = selectedExistingItem.currentStock;
+        const oldWAC = selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0;
+        const newStock = oldStock + addQty;
+        const newWAC = newStock > 0 ? ((oldStock * oldWAC) + (addQty * buyPrice)) / newStock : buyPrice;
+        const changePct = oldWAC > 0 ? ((buyPrice - oldWAC) / oldWAC) * 100 : 0;
+        return (
+          <div style={{ marginTop: '12px', padding: '10px 12px', background: '#080808', borderRadius: '8px', border: '1px solid #1a1a1a', display: 'flex', gap: '24px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.62rem', color: '#555' }}>NEW WAC PREVIEW</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{newWAC.toFixed(2)}/{selectedExistingItem.unit}</span>
+            <span style={{ fontSize: '0.62rem', color: '#555' }}>New stock: {newStock} {selectedExistingItem.unit}</span>
+            {Math.abs(changePct) > 0.5 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
+                color: changePct > 25 ? '#BA7517' : changePct > 10 ? '#d3bfa2' : '#4ade80',
+                background: changePct > 25 ? 'rgba(186,117,23,0.1)' : changePct > 10 ? 'rgba(211,191,162,0.06)' : 'rgba(74,222,128,0.06)',
+                border: `1px solid ${changePct > 25 ? 'rgba(186,117,23,0.3)' : changePct > 10 ? 'rgba(211,191,162,0.15)' : 'rgba(74,222,128,0.2)'}`
+              }}>
+                {changePct > 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}% vs WAC
+              </span>
+            )}
+          </div>
+        );
+      })()}
     </div>
   )}
- 
-  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
- 
+
+  <div style={{ display: 'grid', gridTemplateColumns: selectedExistingItem ? '2fr 1fr 1fr 1fr auto' : '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
+
     {/* NAME with autocomplete */}
     <div style={{ position: 'relative' }}>
       <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         NAME {selectedExistingItem && <span style={{ color: '#d3bfa2' }}>✓ MATCHED</span>}
       </label>
-      <input
-        type="text"
-        placeholder="e.g. Tomato"
-        style={{
-          width: '100%', padding: '10px 12px',
-          background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#000',
-          border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#1a1a1a'}`,
-          color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box'
-        }}
+      <input type="text" placeholder="e.g. Tomato" style={{
+        width: '100%', padding: '10px 12px',
+        background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#000',
+        border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#1a1a1a'}`,
+        color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box'
+      }}
         value={newInventoryItem.itemName}
         onChange={e => {
           const val = e.target.value;
           setNewInventoryItem({ ...newInventoryItem, itemName: val });
-          setSelectedExistingItem(null); // clear match when user types
+          setSelectedExistingItem(null);
           if (val.trim().length >= 1) {
-            const matches = inventory.filter(i =>
-              i.itemName.toLowerCase().includes(val.toLowerCase())
-            );
+            const matches = inventory.filter(i => i.itemName.toLowerCase().includes(val.toLowerCase()));
             setInventorySuggestions(matches);
             setShowSuggestions(matches.length > 0);
           } else {
@@ -2507,168 +2553,151 @@ setNewStaff({
             setInventorySuggestions([]);
           }
         }}
-        onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-        onFocus={() => {
-          if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) {
-            setShowSuggestions(true);
-          }
-        }}
+        onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
+        onFocus={() => { if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) setShowSuggestions(true); }}
       />
- 
-      {/* SUGGESTIONS DROPDOWN */}
       {showSuggestions && inventorySuggestions.length > 0 && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
-          background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)',
-          borderRadius: '8px', marginTop: '4px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden'
-        }}>
-          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid #151515' }}>
-            EXISTING ITEMS — CLICK TO RESTOCK
-          </div>
-          {inventorySuggestions.map(item => (
-            <div
-              key={item._id}
-              onMouseDown={() => {
-                // Select existing item → prefill form, set restock mode
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '8px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#555', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid #151515' }}>EXISTING — CLICK TO RESTOCK</div>
+          {inventorySuggestions.map(item => {
+            const wac = item.weightedAvgCost || item.costPrice || 0;
+            const lastPrice = item.lastPurchasePrice || wac;
+            const drift = wac > 0 ? ((lastPrice - wac) / wac) * 100 : 0;
+            return (
+              <div key={item._id} onMouseDown={() => {
                 setSelectedExistingItem(item);
-                setNewInventoryItem({
-                  itemName: item.itemName,
-                  unit: item.unit,
-                  currentStock: '',         // user enters AMOUNT TO ADD
-                  minThreshold: item.minThreshold,
-                  costPrice: item.costPrice
-                });
+                setNewInventoryItem({ itemName: item.itemName, unit: item.unit, currentStock: '', minThreshold: item.minThreshold, costPrice: item.costPrice, purchasePrice: '', vendor: '' });
                 setShowSuggestions(false);
                 setInventorySuggestions([]);
-              }}
-              style={{
-                padding: '10px 12px', cursor: 'pointer',
-                borderBottom: '1px solid #111', transition: 'background 0.1s',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <div>
-                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff' }}>{item.itemName}</div>
-                <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '2px' }}>
-                  Stock: {item.currentStock} {item.unit} · ₹{item.costPrice}/{item.unit}
+              }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #111', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff' }}>{item.itemName}</div>
+                  <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '2px' }}>
+                    {item.currentStock} {item.unit} · WAC ₹{wac.toFixed(2)}
+                    {Math.abs(drift) > 0.5 && <span style={{ color: drift > 0 ? '#BA7517' : '#4ade80', marginLeft: '6px' }}>({drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(1)}% drift)</span>}
+                  </div>
                 </div>
+                <span style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#BA7517' : '#555', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
+                  {item.currentStock <= item.minThreshold ? 'LOW' : 'OK'}
+                </span>
               </div>
-              <div style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#BA7517' : '#555', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
-                {item.currentStock <= item.minThreshold ? 'LOW' : 'OK'}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
- 
-    {/* STOCK TO ADD */}
+
+    {/* QTY TO ADD */}
     <div>
       <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         {selectedExistingItem ? 'QTY TO ADD' : 'STOCK'}
       </label>
-      <input
-        type="number"
-        placeholder={selectedExistingItem ? `+ add to ${selectedExistingItem.currentStock}` : '500'}
+      <input type="number" placeholder={selectedExistingItem ? `+ to ${selectedExistingItem.currentStock}` : '500'}
         style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.currentStock}
         onChange={e => setNewInventoryItem({ ...newInventoryItem, currentStock: e.target.value })}
       />
     </div>
- 
-    {/* MIN THRESHOLD — greyed out and labelled "unchanged" in restock mode */}
+
+    {/* PURCHASE PRICE — replaces "cost/unit" in restock mode */}
     <div>
-      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#333' : '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        {selectedExistingItem ? 'THRESHOLD (edit in ledger ↓)' : 'MIN THRESHOLD'}
+      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#d3bfa2' : '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        {selectedExistingItem ? 'BUY PRICE (₹/unit) *' : 'COST (₹/unit)'}
       </label>
-      <input
-        type="number"
-        placeholder="100"
-        disabled={!!selectedExistingItem}
-        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', cursor: selectedExistingItem ? 'not-allowed' : 'text' }}
-        value={newInventoryItem.minThreshold}
-        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, minThreshold: e.target.value })}
-      />
-    </div>
- 
-    {/* COST PRICE — greyed out in restock mode, edit in ledger */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#333' : '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        {selectedExistingItem ? 'COST (edit in ledger ↓)' : 'COST (₹/unit)'}
-      </label>
-      <input
-        type="number"
-        placeholder="2.50"
-        disabled={!!selectedExistingItem}
-        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', cursor: selectedExistingItem ? 'not-allowed' : 'text' }}
-        value={newInventoryItem.costPrice}
-        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, costPrice: e.target.value })}
-      />
-    </div>
- 
-    {/* UNIT */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
-      <select
-        disabled={!!selectedExistingItem}
-        style={{ width: '100%', padding: '10px 12px', background: selectedExistingItem ? '#050505' : '#000', border: '1px solid #1a1a1a', color: selectedExistingItem ? '#333' : '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: selectedExistingItem ? 'not-allowed' : 'pointer' }}
-        value={newInventoryItem.unit}
-        onChange={e => !selectedExistingItem && setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}
-      >
-        {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
-      </select>
-    </div>
- 
-    {/* ADD BUTTON */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
-      <button
-        onClick={async () => {
-          if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) {
-            return showNotif("Name and stock are required", "error");
-          }
-          try {
-            const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, {
-              itemName: newInventoryItem.itemName,
-              unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
-              currentStock: Number(newInventoryItem.currentStock),
-              // Never send threshold/price on restock — server ignores them anyway
-              minThreshold: selectedExistingItem ? undefined : (Number(newInventoryItem.minThreshold) || 0),
-              costPrice: selectedExistingItem ? undefined : (Number(newInventoryItem.costPrice) || 0),
-            });
- 
-            if (res.data.merged) {
-              showNotif(`✓ ${res.data.item.itemName} restocked +${newInventoryItem.currentStock} ${res.data.item.unit} → Total: ${res.data.item.currentStock} ${res.data.item.unit}`);
-            } else {
-              showNotif(`✓ ${res.data.item.itemName} added to inventory`);
-            }
- 
-            // Reset form
-            setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '' });
-            setSelectedExistingItem(null);
-            setInventorySuggestions([]);
-            setShowSuggestions(false);
-            fetchManagementData();
-          } catch {
-            showNotif("Failed to add ingredient", "error");
+      <input type="number" step="0.01"
+        placeholder={selectedExistingItem ? `last: ₹${(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}` : '2.50'}
+        style={{ width: '100%', padding: '10px 12px', background: '#000', border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#1a1a1a'}`, color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        value={selectedExistingItem ? newInventoryItem.purchasePrice : newInventoryItem.costPrice}
+        onChange={e => {
+          if (selectedExistingItem) {
+            setNewInventoryItem({ ...newInventoryItem, purchasePrice: e.target.value });
+          } else {
+            setNewInventoryItem({ ...newInventoryItem, costPrice: e.target.value });
           }
         }}
-        style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-      >
+      />
+    </div>
+
+    {/* VENDOR (restock only) OR MIN THRESHOLD (new item) */}
+    {selectedExistingItem ? (
+      <div>
+        <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>VENDOR (optional)</label>
+        <input type="text" placeholder="e.g. Rajesh Traders"
+          style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+          value={newInventoryItem.vendor || ''}
+          onChange={e => setNewInventoryItem({ ...newInventoryItem, vendor: e.target.value })}
+        />
+      </div>
+    ) : (
+      <>
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>MIN THRESHOLD</label>
+          <input type="number" placeholder="100"
+            style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newInventoryItem.minThreshold}
+            onChange={e => setNewInventoryItem({ ...newInventoryItem, minThreshold: e.target.value })}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
+          <select style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
+            value={newInventoryItem.unit}
+            onChange={e => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}>
+            {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+          </select>
+        </div>
+      </>
+    )}
+
+    {/* ADD / RESTOCK BUTTON */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
+      <button onClick={async () => {
+        if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif("Name and quantity are required", "error");
+        if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
+        try {
+          const payload = {
+            itemName: newInventoryItem.itemName,
+            unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
+            currentStock: Number(newInventoryItem.currentStock),
+            vendor: newInventoryItem.vendor || '',
+            ...(selectedExistingItem
+              ? { costPrice: Number(newInventoryItem.purchasePrice) }  // purchase price → WAC calc on server
+              : { minThreshold: Number(newInventoryItem.minThreshold) || 0, costPrice: Number(newInventoryItem.costPrice) || 0 }
+            )
+          };
+          const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, payload);
+          if (res.data.merged) {
+            const msg = res.data.wacUpdated
+              ? `✓ Restocked · WAC updated: ${res.data.note}`
+              : `✓ ${res.data.item.itemName} restocked at existing WAC`;
+            showNotif(msg);
+            // Cost spike alert
+            if (res.data.priceChangePct > 25) showNotif(`⚠ Price spike: +${res.data.priceChangePct}% vs WAC — check supplier`, "error");
+            else if (res.data.priceChangePct > 10) showNotif(`⚡ Price up ${res.data.priceChangePct}% vs WAC`, "info");
+          } else {
+            showNotif(`✓ ${res.data.item.itemName} added to inventory`);
+          }
+          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
+          setSelectedExistingItem(null);
+          setInventorySuggestions([]);
+          setShowSuggestions(false);
+          fetchManagementData();
+        } catch { showNotif("Failed to add ingredient", "error"); }
+      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
         {selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
       </button>
     </div>
   </div>
- 
-  {/* RESTOCK HINT */}
-  {!selectedExistingItem && (
-    <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#333', fontWeight: '600' }}>
-      💡 Type an ingredient name to see existing matches. Select one to restock safely without changing price or threshold.
-    </div>
-  )}
+
+  <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#333', fontWeight: '600' }}>
+    {selectedExistingItem
+      ? '💡 Enter the price you paid THIS time — WAC auto-recalculates weighted average across all batches.'
+      : '💡 Type an ingredient name to see existing matches and restock with WAC calculation.'}
+  </div>
 </div>
               {/* LEDGER TABLE */}
               <div style={styles.biCard}>
@@ -2772,30 +2801,49 @@ setNewStaff({
               />
             </td>
  
-            {/* COST PRICE — uses /config route, does NOT touch stock */}
-            <td style={{ paddingRight: '16px' }}>
-              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                <span style={{ position: 'absolute', left: '8px', color: '#555', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  key={`${item._id}-cost-${item.costPrice}`}
-                  defaultValue={item.costPrice}
-                  title="Click to edit cost per unit — affects profitability calculations"
-                  style={{ width: '80px', paddingLeft: '20px', padding: '6px 10px 6px 18px', background: '#000', border: '1px solid rgba(211,191,162,0.15)', color: '#666', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
-                  onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
-                  onBlur={async e => {
-                    e.target.style.borderColor = 'rgba(211,191,162,0.15)';
-                    e.target.style.color = '#666';
-                    const val = Number(e.target.value);
-                    if (val === item.costPrice) return;
-                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
-                    fetchManagementData();
-                    showNotif(`${item.itemName} cost → ₹${val}/${item.unit} (profitability updated)`);
-                  }}
-                />
-              </div>
-            </td>
+{/* WAC + LAST PRICE */}
+<td style={{ paddingRight: '16px' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+    {/* WAC — editable */}
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <span style={{ position: 'absolute', left: '8px', color: '#555', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
+      <input type="number" step="0.01"
+        key={`${item._id}-wac-${item.weightedAvgCost || item.costPrice}`}
+        defaultValue={(item.weightedAvgCost || item.costPrice || 0).toFixed(2)}
+        title="Weighted Average Cost — auto-updated on every restock. Edit to manually correct."
+        style={{ width: '82px', paddingLeft: '18px', padding: '6px 10px 6px 18px', background: '#000', border: '1px solid rgba(211,191,162,0.15)', color: '#666', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
+        onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
+        onBlur={async e => {
+          e.target.style.borderColor = 'rgba(211,191,162,0.15)';
+          e.target.style.color = '#666';
+          const val = Number(e.target.value);
+          const current = item.weightedAvgCost || item.costPrice || 0;
+          if (Math.abs(val - current) < 0.001) return;
+          await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
+          fetchManagementData();
+          showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
+        }}
+      />
+    </div>
+    {/* Last purchase price + drift indicator */}
+    {item.lastPurchasePrice && item.lastPurchasePrice !== (item.weightedAvgCost || item.costPrice) && (() => {
+      const wac = item.weightedAvgCost || item.costPrice || 0;
+      const last = item.lastPurchasePrice;
+      const drift = wac > 0 ? ((last - wac) / wac) * 100 : 0;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '0.52rem', color: '#444' }}>last ₹{last.toFixed(2)}</span>
+          <span style={{ fontSize: '0.5rem', fontWeight: '900',
+            color: Math.abs(drift) > 25 ? '#BA7517' : Math.abs(drift) > 10 ? '#d3bfa2' : '#555'
+          }}>
+            {drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(0)}%
+          </span>
+        </div>
+      );
+    })()}
+    <span style={{ fontSize: '0.5rem', color: '#2a2a2a', letterSpacing: '0.5px' }}>WAC ✎</span>
+  </div>
+</td>
  
             {/* STOCK VALUE */}
             <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px' }}>
@@ -2809,26 +2857,38 @@ setNewStaff({
               </span>
             </td>
  
-            {/* ACTION */}
-            <td>
-              <button
-                onClick={() => setConfirmModal({
-                  show: true,
-                  title: `Remove ${item.itemName}?`,
-                  subtitle: 'Permanently delete this ingredient and all linked recipe references.',
-                  onConfirm: async () => {
-                    await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
-                    fetchManagementData();
-                    showNotif(`${item.itemName} removed`);
-                  }
-                })}
-                style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 12px', borderRadius: '6px', fontSize: '0.6rem', cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
-              >
-                REMOVE
-              </button>
-            </td>
+{/* ACTION */}
+<td>
+  <div style={{ display: 'flex', gap: '6px' }}>
+    <button
+      onClick={async () => {
+        setPurchaseHistoryItem(item);
+        await fetchPurchaseHistory(item._id);
+      }}
+      style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer', fontWeight: '800', whiteSpace: 'nowrap' }}
+      title="View purchase history"
+    >
+      HISTORY
+    </button>
+    <button
+      onClick={() => setConfirmModal({
+        show: true,
+        title: `Remove ${item.itemName}?`,
+        subtitle: 'Permanently delete this ingredient and all linked recipe references.',
+        onConfirm: async () => {
+          await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
+          fetchManagementData();
+          showNotif(`${item.itemName} removed`);
+        }
+      })}
+      style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#444', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer' }}
+      onMouseEnter={e => { e.currentTarget.style.color = '#BA7517'; e.currentTarget.style.borderColor = 'rgba(186,117,23,0.3)'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
+    >
+      REMOVE
+    </button>
+  </div>
+</td>
           </tr>
         );
       })}
@@ -2843,6 +2903,113 @@ setNewStaff({
     </tr>
   </tfoot>
 </table>
+{/* PURCHASE HISTORY DRAWER */}
+<AnimatePresence>
+  {purchaseHistoryItem && (
+    <div style={styles.modalBackdrop} onClick={() => setPurchaseHistoryItem(null)}>
+      <motion.div
+        initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }}
+        transition={{ type: 'tween', duration: 0.25 }}
+        onClick={e => e.stopPropagation()}
+        style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '420px', background: '#080808', borderLeft: '1px solid #151515', display: 'flex', flexDirection: 'column', zIndex: 9100 }}
+      >
+        {/* HEADER */}
+        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #111', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>PURCHASE LEDGER</div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>{purchaseHistoryItem.itemName}</h3>
+              <div style={{ fontSize: '0.75rem', color: '#8a704d', marginTop: '3px' }}>{purchaseHistoryItem.unit}</div>
+            </div>
+            <button onClick={() => setPurchaseHistoryItem(null)} style={{ background: '#111', border: '1px solid #1a1a1a', color: '#555', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* SUMMARY STATS */}
+          {purchaseHistoryData && !purchaseHistoryLoading && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginTop: '16px' }}>
+              {[
+                { l: 'CURRENT WAC', v: `₹${(purchaseHistoryData.weightedAvgCost || 0).toFixed(2)}` },
+                { l: 'LAST BUY', v: `₹${(purchaseHistoryData.lastPurchasePrice || 0).toFixed(2)}` },
+                { l: 'STOCK VALUE', v: `₹${((purchaseHistoryData.currentStock || 0) * (purchaseHistoryData.weightedAvgCost || 0)).toFixed(0)}` },
+              ].map(s => (
+                <div key={s.l} style={{ background: '#0d0d0d', padding: '10px', borderRadius: '8px', border: '1px solid #1a1a1a' }}>
+                  <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '3px' }}>{s.l}</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* HISTORY LIST */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 40px' }} className="custom-scroll">
+          {purchaseHistoryLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#333', fontSize: '0.8rem' }}>LOADING...</div>
+          ) : !purchaseHistoryData?.purchaseHistory?.length ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#222', fontSize: '0.8rem', fontWeight: '700' }}>
+              NO PURCHASE HISTORY YET<br/>
+              <span style={{ fontSize: '0.65rem', color: '#1a1a1a', marginTop: '8px', display: 'block' }}>History recorded from next restock</span>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>
+                {purchaseHistoryData.purchaseHistory.length} PURCHASE{purchaseHistoryData.purchaseHistory.length > 1 ? 'S' : ''} RECORDED
+              </div>
+              {purchaseHistoryData.purchaseHistory.map((entry, idx) => {
+                const driftPct = entry.wacBefore > 0
+                  ? ((entry.unitPrice - entry.wacBefore) / entry.wacBefore) * 100
+                  : 0;
+                const isFirst = idx === purchaseHistoryData.purchaseHistory.length - 1;
+                return (
+                  <div key={idx} style={{ padding: '16px', background: '#0a0a0a', border: '1px solid #111', borderRadius: '12px', marginBottom: '10px' }}>
+                    {/* DATE + VENDOR */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>
+                          {new Date(entry.purchaseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        {entry.vendor && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px' }}>{entry.vendor}</div>}
+                        {entry.batchId && <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '1px' }}>Batch: {entry.batchId}</div>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.unitPrice?.toFixed(2)}/{purchaseHistoryItem.unit}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '2px' }}>× {entry.qty} {purchaseHistoryItem.unit} = ₹{entry.totalCost?.toFixed(0)}</div>
+                      </div>
+                    </div>
+                    {/* WAC MOVEMENT */}
+                    {!isFirst && entry.wacBefore > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: '#050505', borderRadius: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.62rem', color: '#444' }}>WAC</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#666' }}>₹{entry.wacBefore?.toFixed(2)}</span>
+                        <span style={{ fontSize: '0.6rem', color: '#2a2a2a' }}>→</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.wacAfter?.toFixed(2)}</span>
+                        {Math.abs(driftPct) > 0.5 && (
+                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px',
+                            color: driftPct > 25 ? '#BA7517' : driftPct > 10 ? '#d3bfa2' : driftPct < -10 ? '#4ade80' : '#555',
+                            background: driftPct > 25 ? 'rgba(186,117,23,0.1)' : driftPct > 10 ? 'rgba(211,191,162,0.06)' : driftPct < -10 ? 'rgba(74,222,128,0.06)' : 'transparent',
+                            border: `1px solid ${driftPct > 25 ? 'rgba(186,117,23,0.3)' : driftPct > 10 ? 'rgba(211,191,162,0.15)' : driftPct < -10 ? 'rgba(74,222,128,0.2)' : '#1a1a1a'}`
+                          }}>
+                            {driftPct > 0 ? '▲' : '▼'} {Math.abs(driftPct).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* STOCK BEFORE */}
+                    <div style={{ fontSize: '0.58rem', color: '#333' }}>
+                      Stock before: {entry.stockBefore} → {(entry.stockBefore || 0) + (entry.qty || 0)} {purchaseHistoryItem.unit}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
                    </div>
                 )}
               </div>
@@ -2877,6 +3044,8 @@ setNewStaff({
                   </div>
                 </div>
               )}
+
+              
             </motion.div>
           )}
 
