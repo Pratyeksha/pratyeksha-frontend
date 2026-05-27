@@ -102,7 +102,6 @@ const istTodayStr = useMemo(() => {
 }, []);
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
-  const tableCount = parseInt(localStorage.getItem('table_count')) || 12; 
   const logoPath = `${import.meta.env.BASE_URL}logo.png`;
 
   const [inventory, setInventory] = useState([]);
@@ -139,6 +138,12 @@ const [purchaseHistoryItem, setPurchaseHistoryItem] = useState(null); // drawer
 const [purchaseHistoryData, setPurchaseHistoryData] = useState(null);
 const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
 const [selectedExistingItem, setSelectedExistingItem] = useState(null);
+
+const [monthlySalaryRecords, setMonthlySalaryRecords] = useState([]); // per-month records
+const [salaryEditModal, setSalaryEditModal] = useState(null); // { staffId, name, currentSalary }
+const [salaryEditValue, setSalaryEditValue] = useState('');
+const [salaryEditPassword, setSalaryEditPassword] = useState('');
+const tableCount = parseInt(localStorage.getItem('table_count')) || 12;
 
 const [showAddDishModal, setShowAddDishModal] = useState(false);
 const [newDish, setNewDish] = useState({
@@ -240,7 +245,12 @@ const fetchManagementData = useCallback(async () => {
   finally { setInventoryLoading(false); }
 }, [tenantId]);
 
-
+const fetchMonthlySalary = useCallback(async (monthStr) => {
+  try {
+    const res = await axios.get(`${BASE_URL}/staff/salary/${tenantId}/${monthStr}`);
+    setMonthlySalaryRecords(res.data || []);
+  } catch { setMonthlySalaryRecords([]); }
+}, [tenantId]);
 // ADD after fetchManagementData:
 const fetchPurchaseHistory = useCallback(async (itemId) => {
     setPurchaseHistoryLoading(true);
@@ -252,12 +262,15 @@ const fetchPurchaseHistory = useCallback(async (itemId) => {
 }, []);
 
 
-  // ── Re-fetch analytics whenever viewDate (month) changes
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchAnalytics();
-    }
-  }, [isAuthenticated, viewDate, fetchAnalytics]);
+// Inside the existing useEffect that watches viewDate:
+useEffect(() => {
+  if (isAuthenticated) {
+    fetchAnalytics();
+    // Also refresh monthly salary when month changes
+    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
+  }
+}, [isAuthenticated, viewDate, fetchAnalytics]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -347,17 +360,16 @@ socket.on("menu_updated", (updatedItem) => {
     } catch (err) { console.error(err); }
   }, [tenantId]);
 
-  useEffect(() => {
-    if (activeTab === 'management') {
-      const monthPrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth()+1).padStart(2,'0');
-      // Fetch all logs for the selected month (for the ledger count column)
-      axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`)
-        .then(r => setAttendanceLogs(r.data || []))
-        .catch(()=>{});
-      // Also fetch today so clock-in panel is accurate
-      fetchAttendanceForDate(attendanceDate);
-    }
-  }, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, tenantId]);
+useEffect(() => {
+  if (activeTab === 'management') {
+    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`)
+      .then(r => setAttendanceLogs(r.data || []))
+      .catch(()=>{});
+    fetchAttendanceForDate(attendanceDate);
+    fetchMonthlySalary(monthPrefix); // ← ADD THIS
+  }
+}, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, fetchMonthlySalary, tenantId]);
 
   // ─────────────────────────────────────────────────────
   // COMPUTED VALUES
@@ -450,9 +462,19 @@ const dailySettlementBreakdown = useMemo(() => {
     return list;
   }, [staff, rosterSearchQuery, ledgerSortConfig, attendanceLogs, viewDate]);
 
-  const totalPayrollValue = useMemo(() =>
-    filteredStaff.reduce((acc,m) => m.salaryStatus==='Paid' ? acc : acc+(Number(m.baseSalary)||0), 0)
-  , [filteredStaff]);
+// Replace existing totalPayrollValue useMemo
+const totalPayrollValue = useMemo(() => {
+  const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+  
+  return filteredStaff.reduce((acc, m) => {
+    const monthRec = monthlySalaryRecords.find(r =>
+      r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr
+    );
+    const status  = monthRec?.status  || 'Unpaid';
+    const salary  = monthRec?.baseSalary || m.baseSalary;
+    return status === 'Paid' ? acc : acc + (Number(salary) || 0);
+  }, 0);
+}, [filteredStaff, monthlySalaryRecords, viewDate]);
 
 const liveFloorIntelligence = useMemo(() => {
   // Only use TODAY's attendance for live count
@@ -831,6 +853,11 @@ const [acknowledgedTables, setAcknowledgedTables] = useState({});
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
   const monthName = viewDate.toLocaleString('default',{month:'long',year:'numeric'});
+  // Use monthly salary record if available (captures salary as it was that month)
+const monthRec = monthlySalaryRecords.find(r =>
+  r.staffId?.toString() === member._id?.toString() && r.monthStr === monthPrefix
+);
+const salaryForSlip = monthRec?.baseSalary || Number(member.baseSalary);
   const daysPresent = attendanceLogs.filter(l =>
     (l.staffId===member._id || l.staffId?.toString()===member._id?.toString()) &&
     l.date?.startsWith(monthPrefix)
@@ -2366,46 +2393,46 @@ setNewStaff({
                                   <td style={{fontSize:'0.75rem',color:'#888'}}>{calculateTenure(m.joiningDate)}</td>
                                   <td style={{fontWeight:'800',color:'#fff'}}>₹{Number(m.baseSalary).toLocaleString()}<small style={{color:'#444',fontSize:'0.6rem'}}>/mo</small></td>
                                   {/* Replace the payroll <td> */}
+{/* PAYROLL TD — per-month status from MonthlySalary collection */}
 <td>
   {(() => {
-    // Check if selected month is current or past
-    const now = new Date(new Date().getTime() + 330*60*1000); // IST
+    const istNow = new Date(new Date().getTime() + 330*60*1000);
     const selectedMonthDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-    const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthDate  = new Date(istNow.getFullYear(), istNow.getMonth(), 1);
     const isFutureMonth = selectedMonthDate > currentMonthDate;
-    
-    // For future months, always show UNPAID (greyed out)
+    const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+
     if (isFutureMonth) {
       return (
         <span style={{
           fontSize:'0.65rem',padding:'6px 10px',borderRadius:'6px',fontWeight:'900',
-          background:'#0a0a0a',color:'#222',border:'1px solid #111',
-          display:'inline-block'
+          background:'#0a0a0a',color:'#222',border:'1px solid #111',display:'inline-block'
         }}>
           UNPAID
         </span>
       );
     }
-    
-    // For current/past months, use per-month salary status
-    // Key: we store salary status as salaryStatus (current month default)
-    // For past months we'd need per-month storage — for now show current status
-    // with a visual indicator of the selected month
-    const isCurrentMonth = selectedMonthDate.getTime() === currentMonthDate.getTime();
-    
+
+    // Find monthly record for this staff
+    const monthRec = monthlySalaryRecords.find(r =>
+      r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr
+    );
+    const currentStatus = monthRec?.status || 'Unpaid';
+    const recordedSalary = monthRec?.baseSalary || m.baseSalary;
+
     return (
-      <select 
-        value={m.salaryStatus || 'Unpaid'} 
+      <select
+        value={currentStatus}
         onChange={async e => {
-          await axios.patch(`${BASE_URL}/staff/salary-status/${m._id}`, {salaryStatus: e.target.value});
-          fetchManagementData();
-          showNotif(`${pureName} payroll updated`);
+          const newStatus = e.target.value;
+          await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${m._id}/${monthStr}`, { status: newStatus });
+          fetchMonthlySalary(monthStr);
+          showNotif(`${pureName} — ${monthStr} marked ${newStatus}`);
         }}
-        disabled={isFutureMonth}
         style={{
           background:'#000',
-          color: m.salaryStatus==='Paid' ? '#d3bfa2' : '#444',
-          border: m.salaryStatus==='Paid' ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
+          color: currentStatus === 'Paid' ? '#d3bfa2' : '#444',
+          border: currentStatus === 'Paid' ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
           padding:'6px 10px',borderRadius:'6px',
           fontSize:'0.65rem',fontWeight:'900',
           outline:'none',cursor:'pointer'
@@ -2417,16 +2444,32 @@ setNewStaff({
     );
   })()}
 </td>
-<td style={{textAlign:'right',paddingRight:'12px',display:'flex',gap:'8px',justifyContent:'flex-end',alignItems:'center'}}>
+<td style={{textAlign:'right',paddingRight:'12px',display:'flex',gap:'6px',justifyContent:'flex-end',alignItems:'center'}}>
+  {/* EDIT SALARY */}
   <button
-    onClick={()=>generateSalarySlip(m)}
-    style={{background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'6px 12px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'800',cursor:'pointer'}}
-    title="Generate salary slip PDF"
+    onClick={() => {
+      setSalaryEditModal({ staffId: m._id, name: pureName, currentSalary: m.baseSalary });
+      setSalaryEditValue(m.baseSalary.toString());
+      setSalaryEditPassword('');
+    }}
+    style={{
+      background:'transparent',border:'1px solid #1a1a1a',color:'#555',
+      padding:'6px 10px',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
+    }}
+    onMouseEnter={e=>{e.currentTarget.style.color='#d3bfa2';e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';}}
+    onMouseLeave={e=>{e.currentTarget.style.color='#555';e.currentTarget.style.borderColor='#1a1a1a';}}
+    title="Edit base salary"
+  >
+    ₹ EDIT
+  </button>
+  <button
+    onClick={() => generateSalarySlip(m)}
+    style={{background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'6px 10px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'800',cursor:'pointer'}}
   >
     SLIP
   </button>
-  <button onClick={()=>setPendingDeleteStaff(m)}
-    style={{background:'transparent',border:'1px solid #151515',color:'#444',padding:'6px 14px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'800',cursor:'pointer'}}
+  <button onClick={() => setPendingDeleteStaff(m)}
+    style={{background:'transparent',border:'1px solid #151515',color:'#444',padding:'6px 12px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'800',cursor:'pointer'}}
     onMouseEnter={e=>{e.currentTarget.style.color='#ff4d4d';e.currentTarget.style.borderColor='rgba(255,77,77,0.3)';}}
     onMouseLeave={e=>{e.currentTarget.style.color='#444';e.currentTarget.style.borderColor='#151515';}}>
     WIPE
@@ -3836,6 +3879,118 @@ style={{
           </div>
         )}
       </AnimatePresence>
+      {/* SALARY EDIT MODAL */}
+<AnimatePresence>
+  {salaryEditModal && (
+    <div style={styles.modalBackdrop}>
+      <motion.div
+        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        style={{...styles.confirmBox, width:'400px', textAlign:'left'}}
+      >
+        {/* HEADER */}
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}}>
+          <div style={{
+            width:'36px',height:'36px',borderRadius:'10px',
+            background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.15)',
+            display:'flex',alignItems:'center',justifyContent:'center',color:'#d3bfa2',fontSize:'1rem'
+          }}>₹</div>
+          <div>
+            <h3 style={{color:'#fff',margin:0,fontSize:'1rem',fontWeight:'900'}}>EDIT BASE SALARY</h3>
+            <div style={{fontSize:'0.62rem',color:'#555',marginTop:'2px'}}>{salaryEditModal.name}</div>
+          </div>
+        </div>
+
+        <p style={{fontSize:'0.7rem',color:'#444',marginBottom:'20px',lineHeight:'1.6',borderLeft:'2px solid #1a1a1a',paddingLeft:'10px'}}>
+          Changing base salary requires authorization.<br/>
+
+        </p>
+
+        {/* NEW SALARY */}
+        <div style={{marginBottom:'16px'}}>
+          <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>
+            NEW BASE SALARY (₹)
+          </label>
+          <input
+            type="number"
+            value={salaryEditValue}
+            onChange={e => setSalaryEditValue(e.target.value)}
+            placeholder="e.g. 28000"
+            style={{
+              width:'100%',padding:'12px 14px',background:'#000',
+              border:'1px solid rgba(211,191,162,0.2)',color:'#fff',
+              borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',
+              outline:'none',boxSizing:'border-box'
+            }}
+          />
+          <div style={{fontSize:'0.6rem',color:'#333',marginTop:'4px'}}>
+            Current: ₹{Number(salaryEditModal.currentSalary).toLocaleString()}/mo
+          </div>
+        </div>
+
+        {/* PASSWORD */}
+        <div style={{marginBottom:'24px'}}>
+          <label style={{fontSize:'0.55rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>
+            AUTHORIZATION PASSWORD *
+          </label>
+          <input
+            type="password"
+            value={salaryEditPassword}
+            onChange={e => setSalaryEditPassword(e.target.value)}
+
+            style={{
+              width:'100%',padding:'12px 14px',background:'#000',
+              border:'1px solid rgba(211,191,162,0.2)',color:'#fff',
+              borderRadius:'8px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box'
+            }}
+          />
+        </div>
+
+        <div style={{display:'flex',gap:'12px'}}>
+          <button
+            onClick={() => {setSalaryEditModal(null); setSalaryEditPassword('');}}
+            style={styles.cancelBtn}
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={async () => {
+              const expectedPass = `${tenantId}@${tableCount}`;
+              if (salaryEditPassword !== expectedPass) {
+                showNotif('Incorrect authorization password', 'error');
+                return;
+              }
+              if (!salaryEditValue || Number(salaryEditValue) <= 0) {
+                showNotif('Enter a valid salary amount', 'error');
+                return;
+              }
+              try {
+                // Update base salary on staff record
+                await axios.patch(`${BASE_URL}/staff/salary-status/${salaryEditModal.staffId}`, {
+                  baseSalary: Number(salaryEditValue)
+                });
+                // Also update the monthly salary record for current month
+                const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+                await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${salaryEditModal.staffId}/${monthStr}`, {
+                  baseSalary: Number(salaryEditValue)
+                });
+                showNotif(`${salaryEditModal.name} salary updated to ₹${Number(salaryEditValue).toLocaleString()}`);
+                setSalaryEditModal(null);
+                setSalaryEditPassword('');
+                fetchManagementData();
+                fetchMonthlySalary(monthStr);
+              } catch {
+                showNotif('Failed to update salary', 'error');
+              }
+            }}
+            style={{...styles.confirmBtn, flex: 2}}
+          >
+            AUTHORIZE & SAVE
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
 
 <style>{`
 
