@@ -58,7 +58,7 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@300;400&display=swap');
 
 html,body{overflow-anchor:none;}
-#root,#root>*{overflow:visible !important;}
+#root{min-height:100vh;overflow:visible;}
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -461,24 +461,24 @@ export default function Pratyeksha() {
   const ringRef = useRef(null);
 
 useEffect(()=>{
-    /* inject CSS once */
-    const el = document.createElement('style');
-    el.id = 'pratyeksha-css';
+    /* inject main CSS */
     if (!document.getElementById('pratyeksha-css')) {
+      const el = document.createElement('style');
+      el.id = 'pratyeksha-css';
       el.textContent = CSS;
       document.head.appendChild(el);
     }
 
-    /* ── SCROLLING FIX: run AFTER CSS injection so it wins ── */
-    document.documentElement.style.overflowY = 'scroll';
-    document.documentElement.style.overflowX = 'hidden';
-    document.body.style.overflow = 'visible';
-    document.body.style.overflowX = 'hidden';
-    const root = document.getElementById('root');
-    if (root) {
-      root.style.overflow = 'visible';
-      root.style.height = 'auto';
-      root.style.minHeight = '100vh';
+    /* inject scroll-unlock AFTER main CSS so it wins */
+    if (!document.getElementById('pratyeksha-scroll-fix')) {
+      const sf = document.createElement('style');
+      sf.id = 'pratyeksha-scroll-fix';
+      sf.textContent = `
+        html { overflow-y: scroll !important; overflow-x: hidden !important; height: auto !important; }
+        body { overflow-y: auto !important; overflow-x: hidden !important; height: auto !important; min-height: 100vh !important; }
+        #root { overflow: visible !important; height: auto !important; min-height: 100vh !important; }
+      `;
+      document.head.appendChild(sf);
     }
 
     /* stats */
@@ -509,14 +509,8 @@ useEffect(()=>{
       clearTimeout(t); cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('mousemove', onMove);
-      const s = document.getElementById('pratyeksha-css');
-      if (s) s.remove();
-      document.documentElement.style.overflowY = '';
-      document.documentElement.style.overflowX = '';
-      document.body.style.overflow = '';
-      document.body.style.overflowX = '';
-      const root = document.getElementById('root');
-      if (root) { root.style.overflow = ''; root.style.height = ''; root.style.minHeight = ''; }
+      document.getElementById('pratyeksha-css')?.remove();
+      document.getElementById('pratyeksha-scroll-fix')?.remove();
     };
   },[]);
 
