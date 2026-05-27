@@ -4,11 +4,11 @@ import { io } from "socket.io-client";
 import { QRCodeSVG } from 'qrcode.react'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LayoutDashboard, UtensilsCrossed, ReceiptIndianRupee, BarChart3, LogOut, 
+  UtensilsCrossed, ReceiptIndianRupee, BarChart3,
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
-  Info, SendHorizontal, CookingPot, Percent, Smartphone, QrCode, RefreshCcw,
-  Timer, Clock, Flame, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
-  User, ShieldCheck, Zap, MousePointer2, Filter, ShoppingBag, Truck, X, CreditCard, Wallet, Banknote,
+  SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
+  Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
+  User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat
 } from 'lucide-react';
 
@@ -94,6 +94,12 @@ const OperatorPortal = () => {
   const [broadcastText, setBroadcastMsg] = useState("");
   const [notif, setNotif] = useState({ show: false, msg: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
+  const [wipingStaffId, setWipingStaffId] = useState(null); 
+
+  // ── IST today string — used for billing HUD and daily breakdowns
+const istTodayStr = useMemo(() => {
+  return new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
+}, []);
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
   const tableCount = parseInt(localStorage.getItem('table_count')) || 12; 
@@ -265,10 +271,19 @@ const fetchManagementData = useCallback(async () => {
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
         setWaiterRequests(prev => [request, ...prev]);
       });
-      socket.on("menu_updated", (updatedItem) => {
+socket.on("menu_updated", (updatedItem) => {
+  if (!updatedItem) return;
+  setMenuItems(prev => {
+    const exists = prev.find(i => i._id === updatedItem._id);
+    if (exists) {
         setMenuItems(prev => prev.map(item => item._id === updatedItem._id ? updatedItem : item));
-      });
-      socket.on("table_occupied_live", (data) => {
+ return prev.map(item => item._id === updatedItem._id ? updatedItem : item);
+    } else {
+      // New dish added — append to list
+      return [...prev, updatedItem];
+    }
+  });
+});      socket.on("table_occupied_live", (data) => {
         setOrders(prevOrders => {
           const exists = prevOrders.some(o => o.tableNumber === data.tableNumber && o.status === 'pending');
           if (!exists) {
@@ -278,6 +293,12 @@ const fetchManagementData = useCallback(async () => {
         });
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
       });
+
+      socket.on("menu_item_deleted", ({ itemId }) => {
+  setMenuItems(prev => prev.filter(m => m._id !== itemId));
+  showNotif("Menu item removed by operator", "info");
+});
+
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
         new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
@@ -342,11 +363,8 @@ const fetchManagementData = useCallback(async () => {
 const hudLiveCounterBreakdown = useMemo(() => {
   const fallback = { total: 0, direct: 0, takeaway: 0, online: 0 };
   if (!analytics?.length) return fallback;
-  
-  // Count ALL entries for today (each settled order = one entry with count:1)
-  const todayEntries = analytics.filter(d => d._id === attendanceDate);
+  const todayEntries = analytics.filter(d => d._id === istTodayStr); // ← IST today
   if (!todayEntries.length) return fallback;
-
   let direct = 0, takeaway = 0, online = 0;
   todayEntries.forEach(entry => {
     const src = (entry.source || 'direct').toLowerCase();
@@ -354,9 +372,8 @@ const hudLiveCounterBreakdown = useMemo(() => {
     else if (src === 'zomato' || src === 'swiggy' || src === 'online') online += (entry.count || 1);
     else direct += (entry.count || 1);
   });
-
   return { total: direct + takeaway + online, direct, takeaway, online };
-}, [analytics, attendanceDate]);
+}, [analytics, istTodayStr]); // ← removed attendanceDate dependency
 
   const occupiedTables = useMemo(() => [
     ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
@@ -372,17 +389,17 @@ const hudLiveCounterBreakdown = useMemo(() => {
     });
   }, [orders, orderZone]);
 
-  const dailySettlementBreakdown = useMemo(() => {
-    let cashSum=0, upiSum=0, cardSum=0;
-    if (analytics?.length) {
-      analytics.filter(d => d._id === attendanceDate).forEach(r => {
-        cashSum += Number(r.cash || 0);
-        upiSum  += Number(r.upi  || 0);
-        cardSum += Number(r.card || 0);
-      });
-    }
-    return { cash: cashSum, upi: upiSum, card: cardSum, gross: cashSum+upiSum+cardSum };
-  }, [analytics, attendanceDate]);
+const dailySettlementBreakdown = useMemo(() => {
+  let cashSum=0, upiSum=0, cardSum=0;
+  if (analytics?.length) {
+    analytics.filter(d => d._id === istTodayStr).forEach(r => { // ← IST today
+      cashSum += Number(r.cash || 0);
+      upiSum  += Number(r.upi  || 0);
+      cardSum += Number(r.card || 0);
+    });
+  }
+  return { cash: cashSum, upi: upiSum, card: cardSum, gross: cashSum+upiSum+cardSum };
+}, [analytics, istTodayStr]);
 
   const advancedStats = useMemo(() => {
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
@@ -453,10 +470,10 @@ const liveFloorIntelligence = useMemo(() => {
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
-  const showNotif = (msg, type='success') => {
-    setNotif({ show: true, msg, type });
-    setTimeout(() => setNotif(p=>({...p, show:false})), 4000);
-  };
+const showNotif = useCallback((msg, type='success') => {
+  setNotif({ show: true, msg, type });
+  setTimeout(() => setNotif(p=>({...p, show:false})), 4000);
+}, []);
 
   const requestLedgerSort = (key) => {
     setLedgerSortConfig(prev => ({ key, direction: prev.key===key && prev.direction==='asc' ? 'desc' : 'asc' }));
@@ -483,32 +500,46 @@ const liveFloorIntelligence = useMemo(() => {
       onConfirm: ()=>{ localStorage.clear(); window.location.reload(); } });
   };
 
-  const generateBill = async (id) => {
-    setSelectedTable(id);
-    setDiscount(0);
-    setPaymentModes({ cash:0, upi:0, card:0 });
-    try {
-      const [res, countRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`),
-        axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(()=>({ data:{ nextBillNo:1 } }))
-      ]);
-      const rawItems = res.data.flatMap(o => o.items);
-      if (!rawItems.length) { setTableBill(null); return; }
-      const aggregated = rawItems.reduce((acc, item) => {
-        const ex = acc.find(i => i.name===item.name);
-        if (ex) { ex.quantity += Number(item.quantity||1); ex.subtotal += Number(item.subtotal||0); }
-        else acc.push({...item, quantity:Number(item.quantity||1), subtotal:Number(item.subtotal||0)});
-        return acc;
-      }, []);
-      setTableBill({
-        items: aggregated,
-        total: aggregated.reduce((a,i)=>a+i.subtotal, 0),
-        billNo: countRes.data.nextBillNo,
-        date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase(),
-        time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
-      });
-    } catch (err) { console.error("Bill Error:", err); }
-  };
+const generateBill = async (id) => {
+  setSelectedTable(id);
+  setDiscount(0);
+  setPaymentModes({ cash:0, upi:0, card:0 });
+  try {
+    const [res, countRes] = await Promise.all([
+      axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`),
+      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(()=>({ data:{ nextBillNo:1 } }))
+    ]);
+    const rawItems = res.data.flatMap(o => o.items);
+    if (!rawItems.length) { setTableBill(null); return; }
+    // ── Fix: aggregate by name + portion to avoid Half/Full merge
+    const aggregated = rawItems.reduce((acc, item) => {
+      const portionKey = item.portion || 'Single';
+      const ex = acc.find(i => i.name === item.name && (i.portion || 'Single') === portionKey);
+      if (ex) {
+        ex.quantity += Number(item.quantity || 1);
+        ex.subtotal += Number(item.subtotal || 0);
+      } else {
+        acc.push({
+          ...item,
+          quantity: Number(item.quantity || 1),
+          subtotal: Number(item.subtotal || 0),
+          pricePerUnit: item.pricePerUnit || (item.subtotal / (item.quantity || 1))
+        });
+      }
+      return acc;
+    }, []);
+    setTableBill({
+      items: aggregated,
+      total: aggregated.reduce((a,i) => a + i.subtotal, 0),
+      billNo: countRes.data.nextBillNo,
+      date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase(),
+      time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
+    });
+  } catch (err) {
+    console.error("Bill Error:", err);
+    setSelectedTable(null); // ← Fix: clear on error so table doesn't stay highlighted
+  }
+};
 
 const settleBill = () => {
     if (isSettling) return; // Guard here too
@@ -611,6 +642,8 @@ const handleFinalSettle = async () => {
     } catch { showNotif("Broadcast failed","error"); }
     finally { setIsBroadcasting(false); }
   };
+
+  
 
  const exportToExcel = useCallback((type = 'daily') => {
     import('xlsx').then(XLSX => {
@@ -1202,20 +1235,44 @@ const handleFinalSettle = async () => {
                   </div>
                   <div style={{padding:'10px 0'}}>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.6rem',fontWeight:'900',color:'#888',marginBottom:'10px'}}><span>ITEM DESCRIPTION</span><span>TOTAL</span></div>
-                    {tableBill.items.map((it,i)=>(
-                      <div key={i} style={{display:'flex',justifyContent:'space-between',marginBottom:'10px',fontSize:'0.85rem'}}>
-                        <span style={{fontWeight:'700'}}>{it.quantity}x {it.name}<br/><small style={{color:'#999'}}>@ ₹{it.pricePerUnit||(it.subtotal/it.quantity).toFixed(0)}</small></span>
-                        <b>₹{it.subtotal}</b>
-                      </div>
-                    ))}
+{tableBill.items.map((it,i)=>(
+  <div key={i} style={{display:'flex',justifyContent:'space-between',marginBottom:'10px',fontSize:'0.85rem'}}>
+    <span style={{fontWeight:'700'}}>
+      {it.quantity}x {it.name}
+      {it.portion && it.portion !== 'Single' && <span style={{fontSize:'0.7rem',color:'#999'}}> ({it.portion})</span>}
+      <br/>
+      <small style={{color:'#999'}}>
+        @ ₹{it.pricePerUnit
+          ? Number(it.pricePerUnit).toFixed(0)
+          : it.quantity > 0
+            ? (it.subtotal / it.quantity).toFixed(0)
+            : '—'
+        }
+      </small>
+    </span>
+    <b>₹{it.subtotal}</b>
+  </div>
+))}
                   </div>
                   <div style={{borderTop:'1px solid #eee',paddingTop:'15px',fontSize:'0.8rem'}}>
-                    <div style={styles.receiptRow}><span>Subtotal</span><span>₹{(tableBill.total/1.05).toFixed(2)}</span></div>
-                    <div style={styles.receiptRow}><span>CGST (2.5%)</span><span>₹{(tableBill.total*0.025).toFixed(2)}</span></div>
-                    <div style={styles.receiptRow}><span>SGST (2.5%)</span><span>₹{(tableBill.total*0.025).toFixed(2)}</span></div>
-                    <p style={{fontSize:'0.6rem',fontStyle:'italic',marginTop:'8px',fontWeight:'700',color:'#666'}}>
-                      Rupees: {numberToWords(Math.round(tableBill.total-(tableBill.total*(discount/100))))}
-                    </p>
+             {/* In receipt JSX — replace hardcoded 1.05 and 0.025 */}
+{(() => {
+  const taxPct = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
+  const halfTax = taxPct / 2;
+  const subtotalBeforeTax = tableBill.total / (1 + taxPct);
+  const cgst = tableBill.total * halfTax;
+  const sgst = tableBill.total * halfTax;
+  return (
+    <>
+      <div style={styles.receiptRow}><span>Subtotal</span><span>₹{subtotalBeforeTax.toFixed(2)}</span></div>
+      <div style={styles.receiptRow}><span>CGST ({(halfTax*100).toFixed(1)}%)</span><span>₹{cgst.toFixed(2)}</span></div>
+      <div style={styles.receiptRow}><span>SGST ({(halfTax*100).toFixed(1)}%)</span><span>₹{sgst.toFixed(2)}</span></div>
+      <p style={{fontSize:'0.6rem',fontStyle:'italic',marginTop:'8px',fontWeight:'700',color:'#666'}}>
+        Rupees: {numberToWords(Math.round(tableBill.total-(tableBill.total*(discount/100))))}
+      </p>
+    </>
+  );
+})()}
                   </div>
                   <div style={{borderTop:'1px dashed #ddd',marginTop:'15px',paddingTop:'15px'}}>
                     <div style={styles.receiptRow}>
@@ -1310,7 +1367,7 @@ const handleFinalSettle = async () => {
                   </div>
                 </div>
                 <div style={styles.glassStat}>
-                  <small style={styles.statLabel}>AVG TICKET</small>
+<div style={{color:'#888',fontSize:'0.7rem'}}>Per Order</div> {/* ← was "Per Table" */}
                   <h2 style={styles.statVal}>₹{stats.avg}</h2>
                   <div style={{color:'#888',fontSize:'0.7rem'}}>Per Table</div>
                 </div>
@@ -1904,14 +1961,25 @@ const handleFinalSettle = async () => {
                   <input type="text" placeholder="Residential address" style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',flex:1}}
                     value={newStaff.address} onChange={e=>setNewStaff({...newStaff,address:e.target.value})}/>
                   <button onClick={async()=>{
+
                     if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif("Fill all required fields","error");
                     try {
+                      
                       const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
                       if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
                         await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables});
                       showNotif(`${newStaff.name} enrolled`,"success");
-                      setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:new Date().toISOString().split('T')[0],baseSalary:'',assignedTables:[],cookingRole:''});
-                      fetchManagementData();
+const istResetDate = (() => {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+})();
+
+setNewStaff({
+  name:'', role:'Waiter', age:'', contact:'', address:'',
+  shiftType:'Day Shift',
+  joiningDate: istResetDate, // ← IST not UTC
+  baseSalary:'', assignedTables:[], cookingRole:''
+});                      fetchManagementData();
                     } catch { showNotif("Failed to enroll","error"); }
                   }} style={{...styles.mainBtn,width:'200px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>AUTHORIZE ROSTER</button>
                 </div>
@@ -2043,8 +2111,9 @@ const handleFinalSettle = async () => {
                     <tfoot>
                       <tr style={{background:'#050505',borderTop:'2px solid #111'}}>
                         <td colSpan="4" style={{padding:0}}/>
-                        <td style={{padding:'18px 12px',textAlign:'right',fontSize:'0.7rem',fontWeight:'900',color:'#8a704d',textTransform:'uppercase'}}>AGGREGATED PAYROLL:</td>
-                        <td style={{padding:'18px 10px',fontWeight:'900',color:'#d3bfa2',fontSize:'0.9rem'}}>₹{totalPayrollValue.toLocaleString()}</td>
+<td style={{padding:'18px 12px',textAlign:'right',fontSize:'0.7rem',fontWeight:'900',color:'#8a704d',textTransform:'uppercase'}}>
+  PENDING PAYROLL: {/* ← was "AGGREGATED PAYROLL" */}
+</td>                        <td style={{padding:'18px 10px',fontWeight:'900',color:'#d3bfa2',fontSize:'0.9rem'}}>₹{totalPayrollValue.toLocaleString()}</td>
                         <td style={{padding:0}}/><td style={{padding:0}}/>
                       </tr>
                     </tfoot>
@@ -2619,12 +2688,16 @@ const handleFinalSettle = async () => {
                     <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>INGREDIENTS PER SERVING</label>
                     {recipeIngredientRows.map((row,idx)=>(
                       <div key={idx} style={{display:'flex',gap:'10px',marginBottom:'10px',alignItems:'center'}}>
-                        <select style={{flex:2,...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem',cursor:'pointer'}}
-                          value={row.inventoryId}
-                          onChange={e=>{const u=[...recipeIngredientRows];u[idx].inventoryId=e.target.value;setRecipeIngredientRows(u);}}>
-                          <option value="">-- Select ingredient --</option>
-                          {inventory.map(i=><option key={i._id} value={i._id}>{i.itemName} ({i.unit})</option>)}
-                        </select>
+<select style={{flex:2,...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem',cursor:'pointer'}}
+  value={row.inventoryId}
+  onChange={e=>{const u=[...recipeIngredientRows];u[idx].inventoryId=e.target.value;setRecipeIngredientRows(u);}}>
+  <option value="">-- Select ingredient --</option>
+  {inventory.map(i=>(
+    <option key={i._id} value={i._id}>
+      {i.itemName} ({i.unit}){i.currentStock <= 0 ? ' ⚠ OUT OF STOCK' : i.currentStock <= i.minThreshold ? ' ⚠ LOW' : ''}
+    </option>
+  ))}
+</select>
                         <input type="number" placeholder="Qty" style={{flex:1,...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem'}}
                           value={row.quantityUsed} onChange={e=>{const u=[...recipeIngredientRows];u[idx].quantityUsed=e.target.value;setRecipeIngredientRows(u);}}/>
                         <button onClick={()=>setRecipeIngredientRows(p=>p.filter((_,i)=>i!==idx))}
@@ -2635,16 +2708,17 @@ const handleFinalSettle = async () => {
                       <button onClick={()=>setRecipeIngredientRows(p=>[...p,{inventoryId:'',quantityUsed:''}])}
                         style={{...styles.ghostBtn,flex:1}}>+ ADD INGREDIENT</button>
                       <button onClick={async()=>{
-                        if(!activeRecipeItemId) return showNotif("Select a menu item first","error");
-                        const valid=recipeIngredientRows.filter(r=>r.inventoryId&&r.quantityUsed);
-                        if(!valid.length) return showNotif("Add at least one ingredient","error");
-                        try {
-                          await axios.post(`${BASE_URL}/recipes/save`,{tenantId,menuItemId:activeRecipeItemId,
-                            ingredients:valid.map(r=>({inventoryId:r.inventoryId,quantityUsed:Number(r.quantityUsed)}))});
-                          showNotif("Recipe saved ✓");
-                          fetchAnalytics();
-                        } catch { showNotif("Failed to save recipe","error"); }
-                      }} style={{...styles.mainBtn,flex:2,background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>SAVE RECIPE</button>
+  if(!activeRecipeItemId) return showNotif("Select a menu item first","error");
+  const valid=recipeIngredientRows.filter(r=>r.inventoryId&&r.quantityUsed);
+  if(!valid.length) return showNotif("Add at least one ingredient","error");
+  try {
+    await axios.post(`${BASE_URL}/recipes/save`,{tenantId,menuItemId:activeRecipeItemId,
+      ingredients:valid.map(r=>({inventoryId:r.inventoryId,quantityUsed:Number(r.quantityUsed)}))});
+    showNotif("Recipe saved ✓");
+    fetchAnalytics();
+    fetchManagementData(); // ← ADD: refresh recipe cards list
+  } catch { showNotif("Failed to save recipe","error"); }
+}}style={{...styles.mainBtn,flex:2,background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>SAVE RECIPE</button>
                     </div>
                   </div>
                 </div>
@@ -3101,16 +3175,28 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
               </p>
               <div style={{display:'flex',gap:'12px'}}>
                 <button onClick={()=>setPendingDeleteStaff(null)} style={styles.cancelBtn}>ABORT</button>
-                <button onClick={async()=>{
-                  try {
-                    await axios.delete(`${BASE_URL}/staff/remove/${pendingDeleteStaff._id}`);
-                    setStaff(p=>p.filter(m=>m._id!==pendingDeleteStaff._id));
-                    setAttendanceLogs(p=>p.filter(l=>l.staffId!==pendingDeleteStaff._id));
-                    showNotif(`${pendingDeleteStaff.name.split(' (')[0]} removed`,"info");
-                    fetchManagementData();
-                  } catch { showNotif("Delete failed","error"); }
-                  finally { setPendingDeleteStaff(null); }
-                }} style={{...styles.confirmBtn,background:'#ff4d4d',color:'#fff'}}>PURGE</button>
+            <button onClick={async()=>{
+  if (wipingStaffId) return; // guard
+  setWipingStaffId(pendingDeleteStaff._id);
+  try {
+    await axios.delete(`${BASE_URL}/staff/remove/${pendingDeleteStaff._id}`);
+    setStaff(p=>p.filter(m=>m._id!==pendingDeleteStaff._id));
+    setAttendanceLogs(p=>p.filter(l=>l.staffId!==pendingDeleteStaff._id));
+    showNotif(`${pendingDeleteStaff.name.split(' (')[0]} removed`,"info");
+    fetchManagementData();
+  } catch { showNotif("Delete failed","error"); }
+  finally { setWipingStaffId(null); setPendingDeleteStaff(null); }
+}} 
+disabled={!!wipingStaffId}
+style={{
+  ...styles.confirmBtn,
+  background: wipingStaffId ? '#555' : '#ff4d4d',
+  color:'#fff',
+  cursor: wipingStaffId ? 'not-allowed' : 'pointer',
+  opacity: wipingStaffId ? 0.6 : 1
+}}>
+  {wipingStaffId ? 'REMOVING...' : 'PURGE'}
+</button>
               </div>
             </motion.div>
           </div>
