@@ -193,32 +193,35 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
   }, [tenantId]);
 
   // ── fetchAnalytics now takes an optional targetMonth (YYYY-MM) so it re-runs when viewDate changes
-  const fetchAnalytics = useCallback(async (targetMonthOverride) => {
-    try {
-      const istNow = new Date(new Date().getTime() + 330*60*1000);
-      const todayStr = istNow.toISOString().split('T')[0];
+const fetchAnalytics = useCallback(async () => {
+  try {
+    const istNow = new Date(new Date().getTime() + 330*60*1000);
+    const todayStr = istNow.toISOString().split('T')[0];
 
-      const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/analytics/${tenantId}`),
-        axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${todayStr}`),
-        axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}`),
-        axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}`).catch(() => ({ data: null })),
-        axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}`).catch(() => ({ data: { efficiency: [] } }))
-      ]);
-      setAnalytics(analyticsRes.data.salesData || []);
-      setTopPerformers(analyticsRes.data.topItems || []);
-      setBottomPerformers(analyticsRes.data.bottomItems || []);
-      setCategoryRankings(analyticsRes.data.categoryRankings || {});
-      setHourlyAnalytics({ hourly: hourlyRes.data.hourly || [], dayOfWeek: hourlyRes.data.dayOfWeek || [] });
-      setTrendsData(trendsRes.data);
-      setPrepTimeData(prepRes.data);
-      setProfitabilityData(profitRes.data || []);
-      setProcurementData(procureRes.data || []);
-      setStaffEfficiency(staffEffRes.data?.efficiency || []);
-    } catch (err) { console.error("Analytics fetch error:", err); }
-  }, [tenantId]);
+    // Selected month string for month-filtered endpoints
+    const selectedMonthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth()+1).padStart(2,'0');
+
+    const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes] = await Promise.all([
+      axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${todayStr}&month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}?month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: null })),
+      axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: { efficiency: [] } }))
+    ]);
+    setAnalytics(analyticsRes.data.salesData || []);
+    setTopPerformers(analyticsRes.data.topItems || []);
+    setBottomPerformers(analyticsRes.data.bottomItems || []);
+    setCategoryRankings(analyticsRes.data.categoryRankings || {});
+    setHourlyAnalytics({ hourly: hourlyRes.data.hourly || [], dayOfWeek: hourlyRes.data.dayOfWeek || [] });
+    setTrendsData(trendsRes.data);
+    setPrepTimeData(prepRes.data);
+    setProfitabilityData(profitRes.data || []);
+    setProcurementData(procureRes.data || []);
+    setStaffEfficiency(staffEffRes.data?.efficiency || []);
+  } catch (err) { console.error("Analytics fetch error:", err); }
+}, [tenantId, viewDate]);
 
 const fetchManagementData = useCallback(async () => {
   setInventoryLoading(true);
@@ -2283,16 +2286,26 @@ setNewStaff({
                 <div style={{overflowX:'auto'}} className="custom-scroll">
                   <table style={{width:'100%',borderCollapse:'collapse'}}>
                     <thead>
-                      <tr style={{textAlign:'left',fontSize:'0.65rem',color:'#555',borderBottom:'1px solid #121212',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-                        {[['name','Staff'],['','Assignments'],['','Shift'],['monthlyAttendance','Attendance',true],['joiningDate','Tenure'],['baseSalary','Salary'],['','Payroll'],['','Action']].map(([k,l,c],i)=>(
-                          <th key={i} onClick={k?()=>requestLedgerSort(k):undefined}
-                            style={{padding:i===0?'0 0 15px 12px':'0 0 15px 0',cursor:k?'pointer':'default',
-                              color:ledgerSortConfig.key===k?'#d3bfa2':'#555',
-                              textAlign:c?'center':'left'}}>
-                            {l} {ledgerSortConfig.key===k&&(ledgerSortConfig.direction==='asc'?'▲':'▼')}
-                          </th>
-                        ))}
-                      </tr>
+                      {/* Replace the existing thead tr */}
+<tr style={{textAlign:'left',fontSize:'0.65rem',color:'#555',borderBottom:'1px solid #121212',textTransform:'uppercase',letterSpacing:'0.8px'}}>
+  {[
+    ['name','Staff'],
+    ['','Assignments / Specialization'],
+    ['','Shift'],
+    ['monthlyAttendance','Attendance',true],
+    ['joiningDate','Tenure'],
+    ['baseSalary','Salary'],
+    ['','Payroll'],
+    ['','Action']
+  ].map(([k,l,c],i)=>(
+    <th key={i} onClick={k?()=>requestLedgerSort(k):undefined}
+      style={{padding:i===0?'0 0 15px 12px':'0 0 15px 0',cursor:k?'pointer':'default',
+        color:ledgerSortConfig.key===k?'#d3bfa2':'#555',
+        textAlign:c?'center':'left'}}>
+      {l} {ledgerSortConfig.key===k&&(ledgerSortConfig.direction==='asc'?'▲':'▼')}
+    </th>
+  ))}
+</tr>
                     </thead>
                     <tbody>
                       {filteredStaff.length>0 ? ['Chef','Waiter','Manager','Cashier','Helper'].map(role=>{
@@ -2316,13 +2329,34 @@ setNewStaff({
                                     <b style={{color:'#fff'}}>{pureName}</b>
                                     <span style={{fontSize:'0.65rem',color:'#666',display:'block',marginTop:'2px'}}>{m.role.toUpperCase()} {m.age?`• ${m.age}y`:''}</span>
                                   </td>
-                                  <td>
-                                    {m.role==='Waiter'&&m.assignedTables?.length>0 ? (
-                                      <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
-                                        {m.assignedTables.map(t=><span key={t} style={{fontSize:'0.62rem',padding:'2px 6px',background:'#111',border:'1px solid #161616',borderRadius:'4px',color:'#aaa'}}>T{t}</span>)}
-                                      </div>
-                                    ) : <span style={{fontSize:'0.65rem',color:'#333',fontStyle:'italic'}}>—</span>}
-                                  </td>
+                                 {/* Replace the second <td> — Assignments / Specialization */}
+<td style={{paddingRight:'16px', maxWidth:'180px'}}>
+  {m.role === 'Waiter' && m.assignedTables?.length > 0 ? (
+    <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
+      {m.assignedTables.map(t=>(
+        <span key={t} style={{fontSize:'0.62rem',padding:'2px 6px',background:'#111',border:'1px solid #161616',borderRadius:'4px',color:'#aaa'}}>
+          T{t}
+        </span>
+      ))}
+    </div>
+  ) : m.role === 'Chef' && m.cookingRole ? (
+    <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
+      {m.cookingRole.split(', ').filter(Boolean).map((cat, i) => (
+        <span key={i} style={{
+          fontSize:'0.58rem',padding:'2px 8px',
+          background:'rgba(211,191,162,0.06)',
+          border:'1px solid rgba(211,191,162,0.12)',
+          borderRadius:'4px',color:'#8a704d',fontWeight:'800',
+          textTransform:'uppercase'
+        }}>
+          {cat.replace(/^cat_/i,'').replace(/_/g,' ')}
+        </span>
+      ))}
+    </div>
+  ) : (
+    <span style={{fontSize:'0.65rem',color:'#333',fontStyle:'italic'}}>—</span>
+  )}
+</td>
                                   <td><span style={{display:'inline-flex',alignItems:'center',gap:'5px',fontSize:'0.7rem',fontWeight:'800',color:m.shiftType==='Night Shift'?'#8a704d':'#d3bfa2'}}><Clock size={11}/>{m.shiftType?.toUpperCase()}</span></td>
                                   <td style={{textAlign:'center'}}>
                                     <span style={{padding:'4px 10px',borderRadius:'12px',background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.08)',fontSize:'0.75rem',fontWeight:'800',color:'#fff'}}>
@@ -2331,15 +2365,58 @@ setNewStaff({
                                   </td>
                                   <td style={{fontSize:'0.75rem',color:'#888'}}>{calculateTenure(m.joiningDate)}</td>
                                   <td style={{fontWeight:'800',color:'#fff'}}>₹{Number(m.baseSalary).toLocaleString()}<small style={{color:'#444',fontSize:'0.6rem'}}>/mo</small></td>
-                                  <td>
-                                    <select value={m.salaryStatus||'Unpaid'} onChange={async e=>{
-                                      await axios.patch(`${BASE_URL}/staff/salary-status/${m._id}`,{salaryStatus:e.target.value});
-                                      fetchManagementData(); showNotif(`${pureName} payroll updated`);
-                                    }} style={{background:'#000',color:m.salaryStatus==='Paid'?'#d3bfa2':'#444',border:m.salaryStatus==='Paid'?'1px solid rgba(211,191,162,0.25)':'1px solid #151515',padding:'6px 10px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'900',outline:'none',cursor:'pointer'}}>
-                                      <option value="Unpaid">UNPAID</option>
-                                      <option value="Paid">PAID</option>
-                                    </select>
-                                  </td>
+                                  {/* Replace the payroll <td> */}
+<td>
+  {(() => {
+    // Check if selected month is current or past
+    const now = new Date(new Date().getTime() + 330*60*1000); // IST
+    const selectedMonthDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const isFutureMonth = selectedMonthDate > currentMonthDate;
+    
+    // For future months, always show UNPAID (greyed out)
+    if (isFutureMonth) {
+      return (
+        <span style={{
+          fontSize:'0.65rem',padding:'6px 10px',borderRadius:'6px',fontWeight:'900',
+          background:'#0a0a0a',color:'#222',border:'1px solid #111',
+          display:'inline-block'
+        }}>
+          UNPAID
+        </span>
+      );
+    }
+    
+    // For current/past months, use per-month salary status
+    // Key: we store salary status as salaryStatus (current month default)
+    // For past months we'd need per-month storage — for now show current status
+    // with a visual indicator of the selected month
+    const isCurrentMonth = selectedMonthDate.getTime() === currentMonthDate.getTime();
+    
+    return (
+      <select 
+        value={m.salaryStatus || 'Unpaid'} 
+        onChange={async e => {
+          await axios.patch(`${BASE_URL}/staff/salary-status/${m._id}`, {salaryStatus: e.target.value});
+          fetchManagementData();
+          showNotif(`${pureName} payroll updated`);
+        }}
+        disabled={isFutureMonth}
+        style={{
+          background:'#000',
+          color: m.salaryStatus==='Paid' ? '#d3bfa2' : '#444',
+          border: m.salaryStatus==='Paid' ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
+          padding:'6px 10px',borderRadius:'6px',
+          fontSize:'0.65rem',fontWeight:'900',
+          outline:'none',cursor:'pointer'
+        }}
+      >
+        <option value="Unpaid">UNPAID</option>
+        <option value="Paid">PAID</option>
+      </select>
+    );
+  })()}
+</td>
 <td style={{textAlign:'right',paddingRight:'12px',display:'flex',gap:'8px',justifyContent:'flex-end',alignItems:'center'}}>
   <button
     onClick={()=>generateSalarySlip(m)}
@@ -2377,60 +2454,208 @@ setNewStaff({
                 </div>
               </div>
 
-              {/* ATTENDANCE PANEL */}
-              <div style={{...styles.biCard,width:'100%',background:'#0d0d0d'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'20px',marginBottom:'20px'}}>
-                  <div>
-                    <h4 style={{...styles.biTitle,marginBottom:'4px',color:'#fff'}}><Calendar size={14} color="#8a704d"/> ATTENDANCE TRACKER</h4>
-                    <p style={{fontSize:'0.68rem',color:'#555',margin:0}}>Clock-in / clock-out for: {attendanceDate}</p>
+{/* ATTENDANCE PANEL */}
+<div style={{...styles.biCard, width:'100%', background:'#0d0d0d'}}>
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'20px',marginBottom:'20px'}}>
+    <div>
+      <h4 style={{...styles.biTitle,marginBottom:'4px',color:'#fff'}}>
+        <Calendar size={14} color="#8a704d"/> DAILY ATTENDANCE TRACKER
+      </h4>
+      <p style={{fontSize:'0.68rem',color:'#555',margin:0}}>
+        Showing: {new Date(attendanceDate).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+      </p>
+    </div>
+    <div style={{display:'flex',gap:'12px',alignItems:'center'}}>
+      {/* Date navigator */}
+      <button onClick={() => {
+        const d = new Date(attendanceDate);
+        d.setDate(d.getDate()-1);
+        const s = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        setAttendanceDate(s);
+        fetchAttendanceForDate(s);
+      }} style={{background:'#000',border:'1px solid #181818',color:'#555',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
+        ← PREV
+      </button>
+      <input type="date" value={attendanceDate}
+        onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
+        style={{...styles.input,colorScheme:'dark',border:'1px solid #181818',background:'#000',fontSize:'0.75rem',padding:'8px 12px',width:'160px',marginBottom:0,cursor:'pointer'}}/>
+      <button onClick={() => {
+        const istNow = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+        const s = istNow.getFullYear()+'-'+String(istNow.getMonth()+1).padStart(2,'0')+'-'+String(istNow.getDate()).padStart(2,'0');
+        setAttendanceDate(s);
+        fetchAttendanceForDate(s);
+      }} style={{background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
+        TODAY
+      </button>
+      <button onClick={() => {
+        const d = new Date(attendanceDate);
+        d.setDate(d.getDate()+1);
+        const s = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        setAttendanceDate(s);
+        fetchAttendanceForDate(s);
+      }} style={{background:'#000',border:'1px solid #181818',color:'#555',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
+        NEXT →
+      </button>
+    </div>
+  </div>
+
+  {/* DAILY SUMMARY BAR */}
+  {(() => {
+    const todayLogs = attendanceLogs.filter(l => l.date === attendanceDate);
+    const presentCount = todayLogs.filter(l => l.clockIn).length;
+    const completedCount = todayLogs.filter(l => l.clockOut).length;
+    const totalHours = todayLogs.reduce((a,l) => a + (l.totalWorkingHours||0), 0);
+    const absentCount = staff.length - presentCount;
+    return (
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'24px',padding:'16px',background:'#080808',borderRadius:'12px',border:'1px solid #111'}}>
+        {[
+          {l:'PRESENT TODAY', v:presentCount, c:'#d3bfa2'},
+          {l:'SHIFTS COMPLETED', v:completedCount, c:'#4ade80'},
+          {l:'ABSENT / NOT PUNCHED', v:absentCount, c:'#555'},
+          {l:'TOTAL HOURS LOGGED', v:`${totalHours.toFixed(1)}h`, c:'#8a704d'},
+        ].map(s=>(
+          <div key={s.l} style={{textAlign:'center'}}>
+            <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginBottom:'4px'}}>{s.l}</div>
+            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+    );
+  })()}
+
+  {/* PER-ROLE ATTENDANCE GRID */}
+  <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+    {['Chef','Waiter','Manager','Cashier','Helper'].map(role => {
+      const roleStaff = staff.filter(m=>(m.role||'Helper')===role);
+      if(!roleStaff.length) return null;
+      return (
+        <div key={role} style={{border:'1px solid #121212',padding:'16px',borderRadius:'12px',background:'#090909'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px',borderBottom:'1px solid #151515',paddingBottom:'8px'}}>
+            <Clock size={12} color="#8a704d"/>
+            <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#888',textTransform:'uppercase',letterSpacing:'0.8px'}}>
+              {role}S ({roleStaff.length})
+            </span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'12px'}}>
+            {roleStaff.map(m => {
+              // Find ALL logs for this staff on this date (could have multiple clock-ins)
+              const dayLogs = attendanceLogs.filter(l =>
+                l.date === attendanceDate &&
+                (l.staffId === m._id || l.staffId?.toString() === m._id?.toString())
+              ).sort((a,b) => new Date(a.clockIn) - new Date(b.clockIn));
+              
+              const activeLogs = dayLogs.filter(l => l.clockIn && !l.clockOut);
+              const completedLogs = dayLogs.filter(l => l.clockIn && l.clockOut);
+              const totalHoursToday = completedLogs.reduce((a,l) => a+(l.totalWorkingHours||0), 0);
+              const isCurrentlyClockedIn = activeLogs.length > 0;
+              const hasAnyPunch = dayLogs.length > 0;
+              const latestActiveLog = activeLogs[activeLogs.length - 1];
+              const name = m.name.includes(' (')?m.name.split(' (')[0]:m.name;
+
+              // Status label
+              let statusLabel = 'NOT PUNCHED';
+              let statusColor = '#333';
+              if (isCurrentlyClockedIn) { statusLabel = 'ON DUTY'; statusColor = '#d3bfa2'; }
+              else if (completedLogs.length > 0) { statusLabel = `DONE — ${totalHoursToday.toFixed(1)}h`; statusColor = '#4ade80'; }
+
+              return (
+                <div key={m._id} style={{
+                  padding:'14px',borderRadius:'10px',background:'#050505',
+                  border: isCurrentlyClockedIn ? '1px solid rgba(211,191,162,0.2)' : completedLogs.length > 0 ? '1px solid rgba(74,222,128,0.12)' : '1px solid #111',
+                }}>
+                  {/* Header row */}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+                    <div>
+                      <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff'}}>{name}</div>
+                      <div style={{fontSize:'0.62rem',color:statusColor,fontWeight:'700',marginTop:'2px'}}>{statusLabel}</div>
+                    </div>
+                    {/* Clock In / Out button */}
+                    <button
+                      onClick={async () => {
+                        if (!isCurrentlyClockedIn) {
+                          // Clock IN
+                          await axios.post(`${BASE_URL}/staff/attendance/clock-in`, {tenantId, staffId: m._id});
+                        } else {
+                          // Clock OUT of the active session
+                          await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`);
+                        }
+                        fetchAttendanceForDate(attendanceDate);
+                      }}
+                      style={{
+                        background: isCurrentlyClockedIn ? 'rgba(138,112,77,0.1)' : '#d3bfa2',
+                        color: isCurrentlyClockedIn ? '#8a704d' : '#000',
+                        border: isCurrentlyClockedIn ? '1px solid rgba(138,112,77,0.3)' : 'none',
+                        padding:'8px 14px',borderRadius:'8px',
+                        fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
+                        whiteSpace:'nowrap',flexShrink:0
+                      }}
+                    >
+                      {isCurrentlyClockedIn ? 'CLOCK OUT' : 'CLOCK IN'}
+                    </button>
                   </div>
-                  <input type="date" value={attendanceDate} onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
-                    style={{...styles.input,colorScheme:'dark',border:'1px solid #181818',background:'#000',fontSize:'0.75rem',padding:'8px 12px',width:'160px',marginBottom:0,cursor:'pointer'}}/>
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-                  {['Chef','Waiter','Manager','Cashier','Helper'].map(role=>{
-                    const roleStaff=staff.filter(m=>(m.role||'Helper')===role);
-                    if(!roleStaff.length) return null;
-                    return (
-                      <div key={role} style={{border:'1px solid #121212',padding:'16px',borderRadius:'12px',background:'#090909'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px',borderBottom:'1px solid #151515',paddingBottom:'8px'}}>
-                          <Clock size={12} color="#8a704d"/>
-                          <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#888',textTransform:'uppercase',letterSpacing:'0.8px'}}>{role}S ({roleStaff.length})</span>
+
+                  {/* Session history for today */}
+                  {dayLogs.length > 0 && (
+                    <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                      {dayLogs.map((log, idx) => {
+                        const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
+                        const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : null;
+                        const hrs = log.totalWorkingHours;
+                        return (
+                          <div key={log._id} style={{
+                            display:'flex',alignItems:'center',gap:'8px',
+                            padding:'6px 8px',background:'#0a0a0a',
+                            borderRadius:'6px',border:'1px solid #111'
+                          }}>
+                            <span style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',minWidth:'20px'}}>#{idx+1}</span>
+                            <div style={{display:'flex',alignItems:'center',gap:'6px',flex:1}}>
+                              <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{inTime}</span>
+                              <span style={{fontSize:'0.55rem',color:'#333'}}>→</span>
+                              {outTime ? (
+                                <>
+                                  <span style={{fontSize:'0.65rem',color:'#4ade80',fontWeight:'700'}}>{outTime}</span>
+                                  <span style={{marginLeft:'auto',fontSize:'0.6rem',color:'#4ade80',fontWeight:'900',
+                                    background:'rgba(74,222,128,0.06)',padding:'2px 6px',borderRadius:'4px',border:'1px solid rgba(74,222,128,0.12)'}}>
+                                    {hrs ? `${hrs.toFixed(1)}h` : '—'}
+                                  </span>
+                                </>
+                              ) : (
+                                <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontStyle:'italic',marginLeft:'auto'}}>IN PROGRESS...</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Total for day if multiple sessions */}
+                      {completedLogs.length > 1 && (
+                        <div style={{display:'flex',justifyContent:'flex-end',paddingTop:'4px'}}>
+                          <span style={{fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
+                            TOTAL: {totalHoursToday.toFixed(2)}h
+                          </span>
                         </div>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'12px'}}>
-                          {roleStaff.map(m=>{
-                            // Find today's log specifically (not the merged monthly set)
-                            const log=attendanceLogs.find(l=>l.date===attendanceDate&&(l.staffId===m._id||l.staffId?.toString()===m._id?.toString()));
-                            const isClockedIn=!!log&&!log.clockOut, isEnded=!!log&&!!log.clockOut;
-                            const name=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
-                            return (
-                              <div key={m._id} style={{display:'flex',justifyContent:'space-between',padding:'12px',borderRadius:'10px',background:'#050505',border:isClockedIn?'1px solid rgba(211,191,162,0.2)':'1px solid #111',alignItems:'center'}}>
-                                <div>
-                                  <div style={{fontSize:'0.8rem',fontWeight:'800',color:'#fff'}}>{name}</div>
-                                  <small style={{color:isClockedIn?'#d3bfa2':'#444',fontSize:'0.65rem',fontWeight:'700',display:'block',marginTop:'2px'}}>
-                                    {isEnded?`CLOSED (~${log.totalWorkingHours}h)`:isClockedIn?'ON DUTY':'NOT PUNCHED'}
-                                  </small>
-                                </div>
-                                <button onClick={async()=>{
-                                  if(!log) await axios.post(`${BASE_URL}/staff/attendance/clock-in`,{tenantId,staffId:m._id});
-                                  else if(isClockedIn) await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${log._id}`);
-                                  fetchAttendanceForDate(attendanceDate);
-                                }} disabled={isEnded}
-                                  style={{background:isEnded?'#111':isClockedIn?'rgba(138,112,77,0.08)':'#d3bfa2',
-                                    color:isEnded?'#333':isClockedIn?'#8a704d':'#000',
-                                    border:isClockedIn?'1px solid rgba(138,112,77,0.2)':'none',
-                                    padding:'8px 14px',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:isEnded?'default':'pointer'}}>
-                                  {isEnded?'DONE':isClockedIn?'CLOCK OUT':'CLOCK IN'}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  )}
+
+                  {/* Absent indicator */}
+                  {!hasAnyPunch && (
+                    <div style={{
+                      padding:'6px 8px',background:'#0a0a0a',borderRadius:'6px',
+                      border:'1px solid #0d0d0d',textAlign:'center'
+                    }}>
+                      <span style={{fontSize:'0.6rem',color:'#222',fontWeight:'700',letterSpacing:'0.5px'}}>NO PUNCH RECORDED</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
             </motion.div>
           )}
 
