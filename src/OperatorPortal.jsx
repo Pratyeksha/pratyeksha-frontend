@@ -467,6 +467,22 @@ const liveFloorIntelligence = useMemo(() => {
     return { margins, digest };
   }, [menuItems, stats.revenue, hourlyAnalytics]);
 
+  const hotDishes = useMemo(() => {
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  const recentOrders = orders.filter(o =>
+    new Date(o.createdAt).getTime() > twoHoursAgo &&
+    ['pending','ready','served','settled'].includes(o.status)
+  );
+  const countMap = {};
+  recentOrders.forEach(o => {
+    (o.items || []).forEach(it => {
+      countMap[it.name] = (countMap[it.name] || 0) + (Number(it.quantity) || 1);
+    });
+  });
+  // Return set of dish names ordered 3+ times in last 2h
+  return new Set(Object.entries(countMap).filter(([,v]) => v >= 3).map(([k]) => k));
+}, [orders]);
+
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
@@ -642,8 +658,20 @@ const handleFinalSettle = async () => {
     } catch { showNotif("Broadcast failed","error"); }
     finally { setIsBroadcasting(false); }
   };
-
-  
+const [acknowledgedTables, setAcknowledgedTables] = useState({});
+  const getTableMood = useCallback((tableId) => {
+  const tableOrders = orders.filter(o =>
+    o.tableNumber === tableId.toString() &&
+    ['pending','ready'].includes(o.status)
+  );
+  if (!tableOrders.length) return null;
+  const oldest = Math.min(...tableOrders.map(o => new Date(o.createdAt).getTime()));
+  const mins = (Date.now() - oldest) / 60000;
+  if (mins < 10) return { level: 'fresh',   color: 'rgba(211,191,162,0.12)', pulse: false };
+  if (mins < 20) return { level: 'warm',    color: 'rgba(186,117,23,0.25)',  pulse: false };
+  if (mins < 30) return { level: 'hot',     color: 'rgba(186,117,23,0.45)',  pulse: true  };
+  return           { level: 'critical', color: 'rgba(138,48,48,0.35)',  pulse: true  };
+}, [orders]);
 
  const exportToExcel = useCallback((type = 'daily') => {
     import('xlsx').then(XLSX => {
@@ -781,27 +809,176 @@ const handleFinalSettle = async () => {
     }).catch(err => { console.error(err); showNotif("Export failed — check xlsx install", "error"); });
 }, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, attendanceDate, tenantConfig, tenantId]);
 
-  const renderMonthHeatmap = () => {
-    const year=viewDate.getFullYear(), month=viewDate.getMonth();
-    const daysInMonth=new Date(year,month+1,0).getDate(), firstDay=new Date(year,month,1).getDay();
-    const maxRev=Math.max(...currentMonthAnalytics.map(a=>a.revenue||0),1);
-    const grid=[];
-    for(let x=0;x<firstDay;x++) grid.push(<div key={`p${x}`} style={styles.heatSquareEmpty}/>);
-    for(let i=1;i<=daysInMonth;i++){
-      const dateStr=`${year}-${(month+1).toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
-      const rev=(currentMonthAnalytics.find(d=>d._id===dateStr)||{}).revenue||0;
-      grid.push(
-        <motion.div key={i} whileHover={{scale:1.1,zIndex:10}} style={{
+const generateSalarySlip = useCallback((member) => {
+  const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+  const monthName = viewDate.toLocaleString('default',{month:'long',year:'numeric'});
+  const daysPresent = attendanceLogs.filter(l =>
+    (l.staffId===member._id || l.staffId?.toString()===member._id?.toString()) &&
+    l.date?.startsWith(monthPrefix)
+  ).length;
+  const workingDays = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
+  const dailyRate = Math.round(Number(member.baseSalary) / workingDays);
+  const absences = Math.max(0, workingDays - daysPresent);
+  const deductions = absences * dailyRate;
+  const netPay = Number(member.baseSalary) - deductions;
+  const pureName = member.name.includes(' (') ? member.name.split(' (')[0] : member.name;
+
+  const slipHTML = `
+    <div id="salary-slip-frame" style="width:210mm;min-height:148mm;background:#fff;padding:20mm;font-family:Arial,sans-serif;color:#000;box-sizing:border-box;">
+      <div style="border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:1.2rem;font-weight:900;text-transform:uppercase;">${tenantConfig?.name || tenantId}</div>
+          <div style="font-size:0.7rem;color:#555;margin-top:4px;">${tenantConfig?.address?.street||''}, ${tenantConfig?.address?.city||''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:0.65rem;font-weight:800;color:#555;letter-spacing:1px;">SALARY SLIP</div>
+          <div style="font-size:0.85rem;font-weight:900;margin-top:4px;">${monthName.toUpperCase()}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;padding:12px;background:#f9f9f9;border-radius:6px;">
+        ${[
+          ['Employee Name', pureName],
+          ['Role', member.role],
+          ['Contact', member.contact],
+          ['Joining Date', member.joiningDate ? new Date(member.joiningDate).toLocaleDateString('en-GB') : '—'],
+          ['Shift Type', member.shiftType],
+          ['Employee ID', member._id.toString().slice(-6).toUpperCase()]
+        ].map(([k,v]) => `
+          <div>
+            <div style="font-size:0.58rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${k}</div>
+            <div style="font-size:0.82rem;font-weight:800;margin-top:2px;">${v}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+        <thead>
+          <tr style="background:#000;color:#fff;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">
+            <th style="padding:8px 12px;text-align:left;">Description</th>
+            <th style="padding:8px 12px;text-align:right;">Days</th>
+            <th style="padding:8px 12px;text-align:right;">Rate (₹/day)</th>
+            <th style="padding:8px 12px;text-align:right;">Amount (₹)</th>
+          </tr>
+        </thead>
+        <tbody style="font-size:0.78rem;">
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:10px 12px;">Basic Salary</td>
+            <td style="padding:10px 12px;text-align:right;">${workingDays}</td>
+            <td style="padding:10px 12px;text-align:right;">₹${dailyRate.toLocaleString()}</td>
+            <td style="padding:10px 12px;text-align:right;">₹${Number(member.baseSalary).toLocaleString()}</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:10px 12px;">Days Present</td>
+            <td style="padding:10px 12px;text-align:right;">${daysPresent}</td>
+            <td style="padding:10px 12px;text-align:right;">—</td>
+            <td style="padding:10px 12px;text-align:right;color:#555;">—</td>
+          </tr>
+          ${deductions > 0 ? `
+          <tr style="border-bottom:1px solid #eee;color:#a33;">
+            <td style="padding:10px 12px;">Absent Deduction (${absences} day${absences>1?'s':''})</td>
+            <td style="padding:10px 12px;text-align:right;">${absences}</td>
+            <td style="padding:10px 12px;text-align:right;">₹${dailyRate.toLocaleString()}</td>
+            <td style="padding:10px 12px;text-align:right;">- ₹${deductions.toLocaleString()}</td>
+          </tr>` : ''}
+        </tbody>
+        <tfoot>
+          <tr style="background:#000;color:#fff;font-weight:900;font-size:0.85rem;">
+            <td colspan="3" style="padding:12px;">NET PAYABLE</td>
+            <td style="padding:12px;text-align:right;">₹${netPay.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;padding-top:16px;border-top:1px dashed #ccc;">
+        <div>
+          <div style="font-size:0.6rem;color:#888;margin-bottom:24px;">Employee Signature</div>
+          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${pureName}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:0.6rem;color:#888;margin-bottom:24px;">Authorized Signatory</div>
+          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${tenantConfig?.name || ''}</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:16px;font-size:0.55rem;color:#aaa;border-top:1px solid #eee;padding-top:8px;">
+        Generated by PRATYEKSHA · ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
+      </div>
+    </div>
+  `;
+
+  // Mount hidden, export, unmount
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+  container.innerHTML = slipHTML;
+  document.body.appendChild(container);
+
+  import('html2pdf.js').then(html2pdf => {
+    const el = container.querySelector('#salary-slip-frame');
+    html2pdf.default().set({
+      margin: 0,
+      filename: `SalarySlip_${pureName.replace(/\s/g,'_')}_${monthName.replace(/\s/g,'_')}.pdf`,
+      image: { type:'jpeg', quality:1.0 },
+      html2canvas: { scale:3, backgroundColor:'#ffffff', useCORS:true },
+      jsPDF: { unit:'mm', format:'a5', orientation:'landscape' }
+    }).from(el).save().then(() => {
+      document.body.removeChild(container);
+      showNotif(`Salary slip generated for ${pureName}`);
+    });
+  });
+}, [viewDate, attendanceLogs, tenantConfig, tenantId]);
+
+const renderMonthHeatmap = () => {
+  const year=viewDate.getFullYear(), month=viewDate.getMonth();
+  const daysInMonth=new Date(year,month+1,0).getDate(), firstDay=new Date(year,month,1).getDay();
+  const maxRev=Math.max(...currentMonthAnalytics.map(a=>a.revenue||0),1);
+
+  // ── Breakeven: estimate daily ingredient cost from profitabilityData
+  const totalRevenueAllTime = profitabilityData.reduce((a,b) => a+(b.totalRevenue||0), 0);
+  const totalCostAllTime = profitabilityData.reduce((a,b) => a+(b.totalIngredientCost||0), 0);
+  const costRatio = totalRevenueAllTime > 0 ? totalCostAllTime / totalRevenueAllTime : 0.4;
+
+  const grid=[];
+  for(let x=0;x<firstDay;x++) grid.push(<div key={`p${x}`} style={styles.heatSquareEmpty}/>);
+  for(let i=1;i<=daysInMonth;i++){
+    const dateStr=`${year}-${(month+1).toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
+    const dayData = currentMonthAnalytics.find(d=>d._id===dateStr);
+    const rev = dayData?.revenue || 0;
+    const estimatedCost = rev * costRatio;
+    const isProfitable = rev > 0 && rev > estimatedCost;
+    const isBreakeven  = rev > 0 && !isProfitable;
+
+    grid.push(
+      <motion.div key={i} whileHover={{scale:1.1,zIndex:10}}
+        title={rev > 0 ? `₹${rev.toLocaleString()} revenue · Est. cost ₹${Math.round(estimatedCost).toLocaleString()} · ${isProfitable?'PROFITABLE':'BREAK-EVEN'}` : 'No revenue'}
+        style={{
           ...styles.heatSquare,
-          background:rev>0?`rgba(211,191,162,${Math.max(0.15,rev/maxRev)})`:'#111',
-          border:rev>(maxRev*0.7)?'1px solid #d3bfa2':'1px solid #1a1a1a'
+          background: rev > 0
+            ? isProfitable
+              ? `rgba(211,191,162,${Math.max(0.2, rev/maxRev)})`
+              : 'rgba(138,112,77,0.2)'
+            : '#111',
+          border: isProfitable && rev>(maxRev*0.7)
+            ? '1px solid #d3bfa2'
+            : isBreakeven
+              ? '1px solid rgba(138,112,77,0.4)'
+              : '1px solid #1a1a1a',
+          position:'relative'
         }}>
-          <span style={{fontSize:'0.75rem',color:rev>(maxRev*0.5)?'#000':'#444',fontWeight:'800'}}>{i}</span>
-        </motion.div>
-      );
-    }
-    return grid;
-  };
+        <span style={{fontSize:'0.75rem',color:rev>(maxRev*0.5)?'#000':'#444',fontWeight:'800'}}>{i}</span>
+        {/* Breakeven indicator dot */}
+        {isBreakeven && (
+          <div style={{
+            position:'absolute',bottom:'4px',right:'4px',
+            width:'4px',height:'4px',borderRadius:'50%',
+            background:'#8a704d'
+          }}/>
+        )}
+      </motion.div>
+    );
+  }
+  return grid;
+};
 
   // ─────────────────────────────────────────────────────
   // LOGIN SCREEN
@@ -1060,6 +1237,18 @@ const handleFinalSettle = async () => {
             boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none'
           }}/>
 
+{/* HOT BADGE — dish sales velocity */}
+{hotDishes.has(item.name) && (
+  <div style={{
+    position:'absolute', top:'12px', left:'12px',
+    background:'rgba(186,117,23,0.15)', border:'1px solid rgba(186,117,23,0.4)',
+    padding:'2px 8px', borderRadius:'4px',
+    fontSize:'0.52rem', fontWeight:'900', color:'#BA7517',
+    display:'flex', alignItems:'center', gap:'4px'
+  }}>
+    🔥 HOT
+  </div>
+)}
           {/* DISH NAME + PRICE */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px',paddingRight:'20px'}}>
             <div>
@@ -1186,23 +1375,65 @@ const handleFinalSettle = async () => {
                 </div>
                 <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
                 <div style={styles.tableGrid}>
-                  {Array.from({length:tableCount},(_,i)=>i+1).map(n=>{
-                    const id=n.toString(), isOcc=occupiedTables.includes(id),
-                      hasChk=checkoutRequests.includes(id), isSel=selectedTable===id;
-                    return (
-                      <button key={n} onClick={()=>generateBill(id)} style={{
-                        ...styles.tableBtn, transition:'all 0.2s ease',
-                        display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'8px',
-                        background:isSel?'#d3bfa2':hasChk?'rgba(211,191,162,0.15)':isOcc?'#111111':'#0d0d0d',
-                        color:isSel?'#000':hasChk?'#d3bfa2':isOcc?'rgba(211,191,162,0.6)':'#333',
-                        border:isSel?'1px solid #d3bfa2':hasChk?'1px dashed #d3bfa2':isOcc?'1px solid rgba(211,191,162,0.25)':'1px solid #151515'
-                      }}>
-                        {hasChk && <motion.div animate={{scale:[1,1.1,1]}} transition={{repeat:Infinity,duration:2}}><BellRing size={16} style={{color:'#d3bfa2'}}/></motion.div>}
-                        <span style={{fontSize:'1.05rem',fontWeight:'900'}}>T{n}</span>
-                        {isOcc&&!hasChk&&!isSel&&<div style={{width:'5px',height:'5px',background:'#8a704d',borderRadius:'50%'}}/>}
-                      </button>
-                    );
-                  })}
+{Array.from({length:tableCount},(_,i)=>i+1).map(n=>{
+  const id=n.toString();
+  const isOcc=occupiedTables.includes(id);
+  const hasChk=checkoutRequests.includes(id);
+  const isSel=selectedTable===id;
+  const mood = isOcc ? getTableMood(id) : null;
+  const isAcked = acknowledgedTables[id] && (Date.now() - acknowledgedTables[id]) < 5*60*1000;
+  const showAlert = mood?.level === 'critical' && !isAcked;
+
+  return (
+    <div key={n} style={{position:'relative'}}>
+      {/* PULSING RING for hot/critical */}
+      {mood?.pulse && !isSel && !isAcked && (
+        <div style={{
+          position:'absolute',inset:'-3px',borderRadius:'18px',
+          border:`2px solid ${mood.level==='critical'?'rgba(138,48,48,0.6)':'rgba(186,117,23,0.5)'}`,
+          animation:'moodPulse 1.5s ease-in-out infinite',
+          pointerEvents:'none',zIndex:1
+        }}/>
+      )}
+      <button onClick={()=>generateBill(id)} style={{
+        ...styles.tableBtn, transition:'all 0.2s ease', width:'100%',
+        display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'6px',
+        background: isSel ? '#d3bfa2' : hasChk ? 'rgba(211,191,162,0.15)' : mood ? mood.color : '#0d0d0d',
+        color: isSel?'#000':hasChk?'#d3bfa2':isOcc?'rgba(211,191,162,0.7)':'#333',
+        border: isSel?'1px solid #d3bfa2':hasChk?'1px dashed #d3bfa2':isOcc?'1px solid rgba(211,191,162,0.25)':'1px solid #151515'
+      }}>
+        {hasChk && <motion.div animate={{scale:[1,1.1,1]}} transition={{repeat:Infinity,duration:2}}><BellRing size={14} style={{color:'#d3bfa2'}}/></motion.div>}
+        <span style={{fontSize:'1rem',fontWeight:'900'}}>T{n}</span>
+        {mood && !isSel && (
+          <span style={{
+            fontSize:'0.5rem',fontWeight:'900',letterSpacing:'0.5px',
+            color: mood.level==='critical'?'#c97070':mood.level==='hot'?'#BA7517':mood.level==='warm'?'#8a704d':'#666'
+          }}>
+            {mood.level==='critical'?'CRITICAL':mood.level==='hot'?'HOT':mood.level==='warm'?'WARM':'ACTIVE'}
+          </span>
+        )}
+      </button>
+      {/* ACKNOWLEDGE button for critical tables */}
+      {showAlert && (
+        <button
+          onClick={e=>{
+            e.stopPropagation();
+            setAcknowledgedTables(p=>({...p,[id]:Date.now()}));
+            showNotif(`T${n} alert snoozed 5 min`,"info");
+          }}
+          style={{
+            position:'absolute',bottom:'-10px',left:'50%',transform:'translateX(-50%)',
+            background:'rgba(138,48,48,0.8)',border:'none',color:'#fff',
+            padding:'2px 8px',borderRadius:'4px',fontSize:'0.5rem',fontWeight:'900',
+            cursor:'pointer',whiteSpace:'nowrap',zIndex:2
+          }}
+        >
+          ACK
+        </button>
+      )}
+    </div>
+  );
+})}
                 </div>
                 <div style={{...styles.biCard,marginTop:'25px',borderTop:'2px solid #d3bfa2',background:'#090909',padding:'20px'}}>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'15px',textAlign:'center'}}>
@@ -1817,13 +2048,15 @@ const handleFinalSettle = async () => {
                 <h4 style={styles.biTitle}><Calendar size={16}/> DAILY REVENUE HEATMAP — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
                 <div style={styles.calendarGridHeader}>{['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={styles.dayHeader}>{d}</div>)}</div>
                 <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
-                <div style={styles.heatmapLegend}>
-                  <span>Less</span>
-                  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#111'}}/>
-                  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
-                  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
-                  <span>More</span>
-                </div>
+<div style={styles.heatmapLegend}>
+  <span>Less</span>
+  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#111'}}/>
+  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
+  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
+  <span>More · </span>
+  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(138,112,77,0.2)',border:'1px solid rgba(138,112,77,0.4)'}}/>
+  <span style={{fontSize:'0.55rem',color:'#555'}}>≈ Break-even</span>
+</div>
               </div>
 
               {/* STAFF EFFICIENCY */}
@@ -2091,14 +2324,21 @@ setNewStaff({
                                       <option value="Paid">PAID</option>
                                     </select>
                                   </td>
-                                  <td style={{textAlign:'right',paddingRight:'12px'}}>
-                                    <button onClick={()=>setPendingDeleteStaff(m)}
-                                      style={{background:'transparent',border:'1px solid #151515',color:'#444',padding:'6px 14px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'800',cursor:'pointer'}}
-                                      onMouseEnter={e=>{e.currentTarget.style.color='#ff4d4d';e.currentTarget.style.borderColor='rgba(255,77,77,0.3)';}}
-                                      onMouseLeave={e=>{e.currentTarget.style.color='#444';e.currentTarget.style.borderColor='#151515';}}>
-                                      WIPE
-                                    </button>
-                                  </td>
+<td style={{textAlign:'right',paddingRight:'12px',display:'flex',gap:'8px',justifyContent:'flex-end',alignItems:'center'}}>
+  <button
+    onClick={()=>generateSalarySlip(m)}
+    style={{background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'6px 12px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'800',cursor:'pointer'}}
+    title="Generate salary slip PDF"
+  >
+    SLIP
+  </button>
+  <button onClick={()=>setPendingDeleteStaff(m)}
+    style={{background:'transparent',border:'1px solid #151515',color:'#444',padding:'6px 14px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'800',cursor:'pointer'}}
+    onMouseEnter={e=>{e.currentTarget.style.color='#ff4d4d';e.currentTarget.style.borderColor='rgba(255,77,77,0.3)';}}
+    onMouseLeave={e=>{e.currentTarget.style.color='#444';e.currentTarget.style.borderColor='#151515';}}>
+    WIPE
+  </button>
+</td>
                                 </tr>
                               );
                             })}
@@ -3204,6 +3444,12 @@ style={{
       </AnimatePresence>
 
 <style>{`
+
+@keyframes moodPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.03); }
+}
+
   /* Scrollbars */
   .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
   .custom-scroll::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
