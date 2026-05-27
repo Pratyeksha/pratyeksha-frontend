@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import logoImg from './assets/logos.png';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
@@ -921,7 +922,7 @@ useEffect(()=>{
         <div className="about-grid reveal">
           <div className="about-img-wrap">
             <div className="about-img-frame">
-              {/* UPDATE: swap for <img src="/images/founder.jpg" alt="Founder" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/> */}
+              UPDATE: swap for <img src={logoImg} alt="Founder" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
               <div className="about-ph"><IcoUser/><span>Founder Photo</span></div>
             </div>
             <div className="about-badge">

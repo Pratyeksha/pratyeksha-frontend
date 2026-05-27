@@ -177,12 +177,7 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
   // ─────────────────────────────────────────────────────
   // FETCH FUNCTIONS
   // ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (isAuthenticated) {
-      axios.get(`${BASE_URL}/tenant/${tenantId}`).then(r => setTenantConfig(r.data)).catch(()=>{});
-    }
-  }, [isAuthenticated, tenantId]);
-
+// REPLACE the existing viewDate useEffect with:
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -228,6 +223,7 @@ const fetchAnalytics = useCallback(async () => {
   } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, viewDate]);
 
+
 const fetchManagementData = useCallback(async () => {
   setInventoryLoading(true);
   try {
@@ -241,6 +237,8 @@ const fetchManagementData = useCallback(async () => {
     setStaff(staffRes.data || []);
     setMenuItems(menuRes.data || []);
     setCategories(catRes.data || []);
+    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    fetchMonthlySalary(monthPrefix);
   } catch (err) { console.error("Management Sync Error", err); }
   finally { setInventoryLoading(false); }
 }, [tenantId]);
@@ -461,6 +459,15 @@ const dailySettlementBreakdown = useMemo(() => {
     }
     return list;
   }, [staff, rosterSearchQuery, ledgerSortConfig, attendanceLogs, viewDate]);
+
+  
+useEffect(() => {
+  if (isAuthenticated) {
+    fetchAnalytics();
+    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
+  }
+}, [isAuthenticated, viewDate, fetchAnalytics, fetchMonthlySalary]);
 
 // Replace existing totalPayrollValue useMemo
 const totalPayrollValue = useMemo(() => {
@@ -845,7 +852,8 @@ const [acknowledgedTables, setAcknowledgedTables] = useState({});
         summaryWs['!cols'] = [30, 30].map(w => ({ wch: w }));
         XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
 
-        XLSX.writeFile(wb, `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${todayStr}.xlsx`);
+const exportMonthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+XLSX.writeFile(wb, `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${type === 'monthly' ? exportMonthStr : todayStr}.xlsx`);
         showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
     }).catch(err => { console.error(err); showNotif("Export failed — check xlsx install", "error"); });
 }, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, attendanceDate, tenantConfig, tenantId]);
@@ -863,10 +871,11 @@ const salaryForSlip = monthRec?.baseSalary || Number(member.baseSalary);
     l.date?.startsWith(monthPrefix)
   ).length;
   const workingDays = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
-  const dailyRate = Math.round(Number(member.baseSalary) / workingDays);
+const dailyRate = Math.round(salaryForSlip / workingDays);
+
   const absences = Math.max(0, workingDays - daysPresent);
-  const deductions = absences * dailyRate;
-  const netPay = Number(member.baseSalary) - deductions;
+const deductions = absences * dailyRate;
+const netPay = salaryForSlip - deductions;
   const pureName = member.name.includes(' (') ? member.name.split(' (')[0] : member.name;
 
   const slipHTML = `
@@ -912,7 +921,7 @@ const salaryForSlip = monthRec?.baseSalary || Number(member.baseSalary);
             <td style="padding:10px 12px;">Basic Salary</td>
             <td style="padding:10px 12px;text-align:right;">${workingDays}</td>
             <td style="padding:10px 12px;text-align:right;">₹${dailyRate.toLocaleString()}</td>
-            <td style="padding:10px 12px;text-align:right;">₹${Number(member.baseSalary).toLocaleString()}</td>
+            <td style="padding:10px 12px;text-align:right;">₹${salaryForSlip.toLocaleString()}</td>
           </tr>
           <tr style="border-bottom:1px solid #eee;">
             <td style="padding:10px 12px;">Days Present</td>
@@ -1200,7 +1209,7 @@ const renderMonthHeatmap = () => {
                     <div style={{flex:1}}>
                       <div style={{fontWeight:'900',fontSize:'0.9rem',color:'#fff'}}>TABLE {order.tableNumber}</div>
                       <div style={{color:'#d3bfa2',marginTop:'5px',fontSize:'0.8rem',fontWeight:'bold'}}>
-                        {order.items.map(it=>`${it.quantity}x ${it.name}`).join(' • ')}
+{(order.items || []).map(it=>`${it.quantity}x ${it.name}`).join(' • ')}
                       </div>
                     </div>
                     <OperatorLiveTimer createdAt={order.createdAt}/>
