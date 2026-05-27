@@ -83,7 +83,7 @@ body{
   color:var(--text);
   font-family:'DM Sans',sans-serif;
   overflow-x:hidden;
-  overflow-y:visible;
+  overflow-y:auto;   /* ← was 'visible', change to 'auto' */
   line-height:1.65;
   cursor:none;
   width:100%;
@@ -460,26 +460,25 @@ export default function Pratyeksha() {
   const dotRef = useRef(null);
   const ringRef = useRef(null);
 
-  useEffect(()=>{
+useEffect(()=>{
     /* inject CSS once */
-// ADD inside useEffect, right after the CSS injection block:
-document.documentElement.style.overflowY = 'scroll';
-document.documentElement.style.overflowX = 'hidden';
-document.body.style.overflowY = 'visible';
-document.body.style.overflowX = 'hidden';
-
-// Also unblock #root (Vite sets overflow:hidden on it sometimes)
-const root = document.getElementById('root');
-if (root) {
-  root.style.overflow = 'visible';
-  root.style.height = 'auto';
-  root.style.minHeight = '100vh';
-}
     const el = document.createElement('style');
     el.id = 'pratyeksha-css';
     if (!document.getElementById('pratyeksha-css')) {
       el.textContent = CSS;
       document.head.appendChild(el);
+    }
+
+    /* ── SCROLLING FIX: run AFTER CSS injection so it wins ── */
+    document.documentElement.style.overflowY = 'scroll';
+    document.documentElement.style.overflowX = 'hidden';
+    document.body.style.overflow = 'visible';
+    document.body.style.overflowX = 'hidden';
+    const root = document.getElementById('root');
+    if (root) {
+      root.style.overflow = 'visible';
+      root.style.height = 'auto';
+      root.style.minHeight = '100vh';
     }
 
     /* stats */
@@ -506,20 +505,19 @@ if (root) {
     raf=requestAnimationFrame(tick);
     document.addEventListener('mousemove', onMove, {passive:true});
 
-return () => {
-  clearTimeout(t); cancelAnimationFrame(raf);
-  window.removeEventListener('scroll', onScroll);
-  document.removeEventListener('mousemove', onMove);
-  const s = document.getElementById('pratyeksha-css');
-  if (s) s.remove();
-  // ADD these cleanup lines:
-  document.documentElement.style.overflowY = '';
-  document.documentElement.style.overflowX = '';
-  document.body.style.overflowY = '';
-  document.body.style.overflowX = '';
-  const root = document.getElementById('root');
-  if (root) { root.style.overflow = ''; root.style.height = ''; root.style.minHeight = ''; }
-};
+    return () => {
+      clearTimeout(t); cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('mousemove', onMove);
+      const s = document.getElementById('pratyeksha-css');
+      if (s) s.remove();
+      document.documentElement.style.overflowY = '';
+      document.documentElement.style.overflowX = '';
+      document.body.style.overflow = '';
+      document.body.style.overflowX = '';
+      const root = document.getElementById('root');
+      if (root) { root.style.overflow = ''; root.style.height = ''; root.style.minHeight = ''; }
+    };
   },[]);
 
   const initReveal = ()=>{
