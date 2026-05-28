@@ -96,6 +96,18 @@ const OperatorPortal = () => {
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
   const [wipingStaffId, setWipingStaffId] = useState(null); 
 
+  // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
+const [extraItems, setExtraItems] = useState([]);
+const [extraItemsLoading, setExtraItemsLoading] = useState(false);
+const [newExtraItem, setNewExtraItem] = useState({
+  name: '', category: 'Cold Drinks', price: '', unit: 'piece',
+  currentStock: '', description: '', isAvailable: true, image: ''
+});
+const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
+const [extraItemEditModal, setExtraItemEditModal] = useState(null);
+const [extraItemEditData, setExtraItemEditData] = useState({});
+const [activeExtraCategory, setActiveExtraCategory] = useState('All');
+
   // ── IST today string — used for billing HUD and daily breakdowns
 const istTodayStr = useMemo(() => {
   return new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
@@ -224,6 +236,13 @@ const fetchAnalytics = useCallback(async () => {
 }, [tenantId, viewDate]);
 
 
+const fetchMonthlySalary = useCallback(async (monthStr) => {
+  try {
+    const res = await axios.get(`${BASE_URL}/staff/salary/${tenantId}/${monthStr}`);
+    setMonthlySalaryRecords(res.data || []);
+  } catch { setMonthlySalaryRecords([]); }
+}, [tenantId]);
+
 const fetchManagementData = useCallback(async () => {
   setInventoryLoading(true);
   try {
@@ -237,18 +256,14 @@ const fetchManagementData = useCallback(async () => {
     setStaff(staffRes.data || []);
     setMenuItems(menuRes.data || []);
     setCategories(catRes.data || []);
-    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    // ← ENSURE THIS IS HERE:
+    const monthPrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
     fetchMonthlySalary(monthPrefix);
   } catch (err) { console.error("Management Sync Error", err); }
   finally { setInventoryLoading(false); }
-}, [tenantId]);
+}, [tenantId, viewDate, fetchMonthlySalary]);
 
-const fetchMonthlySalary = useCallback(async (monthStr) => {
-  try {
-    const res = await axios.get(`${BASE_URL}/staff/salary/${tenantId}/${monthStr}`);
-    setMonthlySalaryRecords(res.data || []);
-  } catch { setMonthlySalaryRecords([]); }
-}, [tenantId]);
+
 // ADD after fetchManagementData:
 const fetchPurchaseHistory = useCallback(async (itemId) => {
     setPurchaseHistoryLoading(true);
@@ -259,6 +274,14 @@ const fetchPurchaseHistory = useCallback(async (itemId) => {
     finally { setPurchaseHistoryLoading(false); }
 }, []);
 
+const fetchExtraItems = useCallback(async () => {
+  setExtraItemsLoading(true);
+  try {
+    const res = await axios.get(`${BASE_URL}/extra-items/${tenantId}`);
+    setExtraItems(res.data || []);
+  } catch { setExtraItems([]); }
+  finally { setExtraItemsLoading(false); }
+}, [tenantId]);
 
 // Inside the existing useEffect that watches viewDate:
 useEffect(() => {
@@ -619,12 +642,14 @@ const settleBill = () => {
     });
 };
 
-    useEffect(() => {
+useEffect(() => {
   if (activeTab === 'inventory' || activeTab === 'recipes') {
     fetchManagementData();
   }
-}, [activeTab, fetchManagementData]);
-
+  if (activeTab === 'extras') {       // ← ADD THIS
+    fetchExtraItems();
+  }
+}, [activeTab, fetchManagementData, fetchExtraItems]);
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
@@ -721,142 +746,579 @@ const [acknowledgedTables, setAcknowledgedTables] = useState({});
   return           { level: 'critical', color: 'rgba(138,48,48,0.35)',  pulse: true  };
 }, [orders]);
 
- const exportToExcel = useCallback((type = 'daily') => {
-    import('xlsx').then(XLSX => {
-        const wb = XLSX.utils.book_new();
+const exportToExcel = useCallback((type = 'daily') => {
+  import('xlsx').then(XLSX => {
+    const wb = XLSX.utils.book_new();
 
-        if (type === 'inventory') {
-            const invRows = inventory.map(item => ({
-                'Ingredient': item.itemName,
-                'Unit': item.unit,
-                'Current Stock': item.currentStock,
-                'Min Threshold': item.minThreshold,
-                'Cost Price (₹/unit)': item.costPrice,
-                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
-                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK',
-            }));
-            const ws = XLSX.utils.json_to_sheet(invRows);
-            ws['!cols'] = [20,10,14,14,18,16,12].map(w => ({ wch: w }));
-            XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-            XLSX.writeFile(wb, `Pratyeksha_Inventory_${attendanceDate}.xlsx`);
-            showNotif("Inventory report exported");
-            return;
-        }
+    // ── STYLE HELPERS ──
+    const GOLD  = 'C8A951';
+    const DARK  = '1A1A1A';
+    const MID   = '2A2A2A';
+    const WHITE = 'FFFFFF';
+    const GREEN = '1D9E75';
+    const RED   = 'C0392B';
+    const AMBER = 'BA7517';
+    const BLUE  = '2980B9';
 
-        const now = new Date();
-        const istNow = new Date(now.getTime() + 330 * 60 * 1000);
-        const todayStr = istNow.toISOString().split('T')[0];
-        const currMonthPrefix = todayStr.slice(0, 7);
+    const hdrStyle = (bgHex = DARK, fgHex = GOLD, bold = true, sz = 10) => ({
+      font: { name: 'Arial', bold, sz, color: { rgb: fgHex } },
+      fill: { patternType: 'solid', fgColor: { rgb: bgHex } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: { bottom: { style: 'medium', color: { rgb: GOLD } } }
+    });
 
-        let filteredData = analytics;
-        if (type === 'daily') {
-            filteredData = analytics.filter(d => d._id === todayStr);
-        } else if (type === 'weekly') {
-            const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
-        } else if (type === 'monthly') {
-            filteredData = analytics.filter(d => d._id?.startsWith(currMonthPrefix));
-        }
+    const cellStyle = (bold = false, fgHex = WHITE, bgHex = '111111', align = 'left') => ({
+      font: { name: 'Arial', bold, sz: 9, color: { rgb: fgHex } },
+      fill: { patternType: 'solid', fgColor: { rgb: bgHex } },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: { bottom: { style: 'thin', color: { rgb: '222222' } } }
+    });
 
-        // ── Sheet 1: Revenue breakdown ──
-        const revRows = filteredData.map(d => ({
-            'Date': d._id,
-            'Revenue (₹)': d.revenue || 0,
-            'Orders': d.count || 0,
-            'Avg Order (₹)': d.count > 0 ? Math.round((d.revenue || 0) / d.count) : 0,
-            'Cash (₹)': d.cash || 0,
-            'UPI (₹)': d.upi || 0,
-            'Card (₹)': d.card || 0,
-            'Source': d.source || 'direct'
-        }));
-        const revWs = XLSX.utils.json_to_sheet(revRows);
-        revWs['!cols'] = [12,14,8,14,12,12,12,10].map(w => ({ wch: w }));
-        XLSX.utils.book_append_sheet(wb, revWs, 'Revenue');
+    const numFmt = (bold = false, color = WHITE) => ({
+      font: { name: 'Arial', bold, sz: 9, color: { rgb: color } },
+      fill: { patternType: 'solid', fgColor: { rgb: '111111' } },
+      alignment: { horizontal: 'right', vertical: 'center' },
+      border: { bottom: { style: 'thin', color: { rgb: '222222' } } },
+      numFmt: '#,##0'
+    });
 
-        // ── Sheet 2: Top dishes ──
-        if (topPerformers.length > 0) {
-            const dishRows = topPerformers.map((d, i) => ({
-                'Rank': i + 1,
-                'Dish Name': d.name,
-                'Units Sold': d.sold,
-                'Category': d.category || '—'
-            }));
-            const dishWs = XLSX.utils.json_to_sheet(dishRows);
-            XLSX.utils.book_append_sheet(wb, dishWs, 'Top Dishes');
-        }
+    const titleStyle = () => ({
+      font: { name: 'Arial', bold: true, sz: 14, color: { rgb: GOLD } },
+      fill: { patternType: 'solid', fgColor: { rgb: '050505' } },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    });
 
-        // ── Sheet 3: Profitability ──
-        if (profitabilityData.length > 0) {
-            const profRows = profitabilityData.map(d => ({
-                'Dish': d.name,
-                'Selling Price (₹)': d.sellingPrice,
-                'Ingredient Cost (₹)': d.ingredientCost,
-                'Profit (₹)': d.profit,
-                'Margin %': d.marginPct,
-                'Recipe Linked': d.hasRecipe ? 'Yes' : 'No (estimated)'
-            }));
-            const profWs = XLSX.utils.json_to_sheet(profRows);
-            XLSX.utils.book_append_sheet(wb, profWs, 'Profitability');
-        }
+    const subStyle = () => ({
+      font: { name: 'Arial', bold: false, sz: 9, color: { rgb: '666666' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '050505' } },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    });
 
-        // ── Sheet 4: Inventory status ──
-        if (inventory.length > 0) {
-            const invRows = inventory.map(item => ({
-                'Ingredient': item.itemName,
-                'Unit': item.unit,
-                'Current Stock': item.currentStock,
-                'Min Threshold': item.minThreshold,
-                'Cost (₹)': item.costPrice,
-                'Stock Value (₹)': Math.round(item.currentStock * item.costPrice),
-                'Status': item.currentStock <= item.minThreshold ? 'LOW STOCK' : 'OK'
-            }));
-            const invWs = XLSX.utils.json_to_sheet(invRows);
-            XLSX.utils.book_append_sheet(wb, invWs, 'Inventory');
-        }
+    const kpiStyle = (color = GOLD) => ({
+      font: { name: 'Arial', bold: true, sz: 16, color: { rgb: color } },
+      fill: { patternType: 'solid', fgColor: { rgb: '0D0D0D' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: { style: 'medium', color: { rgb: color } }, bottom: { style: 'thin', color: { rgb: '1A1A1A' } }, left: { style: 'thin', color: { rgb: '1A1A1A' } }, right: { style: 'thin', color: { rgb: '1A1A1A' } } }
+    });
 
-        // ── Sheet 5: Staff efficiency ──
-        if (staffEfficiency.length > 0) {
-            const staffRows = staffEfficiency.map(s => ({
-                'Name': s.name,
-                'Role': s.role,
-                'Days Present': s.daysPresent,
-                'Hours Logged': s.totalHours,
-                'Base Salary (₹)': s.baseSalary,
-                'Salary Status': s.salaryStatus,
-                'Rev Attributed (₹)': s.revenueAttributed,
-                'Rev/Hour (₹)': s.revenuePerHour
-            }));
-            const staffWs = XLSX.utils.json_to_sheet(staffRows);
-            XLSX.utils.book_append_sheet(wb, staffWs, 'Staff Efficiency');
-        }
+    const kpiLabelStyle = () => ({
+      font: { name: 'Arial', bold: true, sz: 7, color: { rgb: '666666' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '0D0D0D' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { top: { style: 'thin', color: { rgb: '1A1A1A' } }, bottom: { style: 'medium', color: { rgb: GOLD } }, left: { style: 'thin', color: { rgb: '1A1A1A' } }, right: { style: 'thin', color: { rgb: '1A1A1A' } } }
+    });
 
-        // ── Sheet 6: Summary ──
-        const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
-        const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
-        const totalCash = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
-        const totalUPI = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
-        const totalCard = filteredData.reduce((a, b) => a + (b.card || 0), 0);
-        const summaryRows = [
-            { Metric: 'Period', Value: type.toUpperCase() },
-            { Metric: 'Total Revenue (₹)', Value: totalRev },
-            { Metric: 'Total Orders', Value: totalOrders },
-            { Metric: 'Avg Order Value (₹)', Value: totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0 },
-            { Metric: 'Cash Collections (₹)', Value: totalCash },
-            { Metric: 'UPI Collections (₹)', Value: totalUPI },
-            { Metric: 'Card Collections (₹)', Value: totalCard },
-            { Metric: 'Total Inventory Value (₹)', Value: inventory.reduce((a, i) => a + Math.round(i.currentStock * i.costPrice), 0) },
-            { Metric: 'Restaurant', Value: tenantConfig?.name || tenantId },
-            { Metric: 'Generated At', Value: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) }
+    const statusStyle = (isPaid) => ({
+      font: { name: 'Arial', bold: true, sz: 8, color: { rgb: isPaid ? GREEN : AMBER } },
+      fill: { patternType: 'solid', fgColor: { rgb: isPaid ? '0A1F17' : '1A1208' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: { bottom: { style: 'thin', color: { rgb: '222222' } } }
+    });
+
+    const barStyle = (pct, color = GOLD) => ({
+      font: { name: 'Arial', bold: false, sz: 8, color: { rgb: color } },
+      fill: { patternType: 'solid', fgColor: { rgb: '0D0D0D' } },
+      alignment: { horizontal: 'left', vertical: 'center' },
+      border: { bottom: { style: 'thin', color: { rgb: '222222' } } }
+    });
+
+    const styleCell = (ws, addr, style) => {
+      if (!ws[addr]) ws[addr] = { v: ws[addr]?.v ?? '', t: 's' };
+      ws[addr].s = style;
+    };
+
+    const setRange = (ws, data) => {
+      const rows = data.length;
+      const cols = data[0]?.length || 0;
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows - 1, c: cols - 1 } });
+    };
+
+    const addTitleBlock = (ws, title, subtitle, reportDate) => {
+      const r0 = [title, '', '', '', '', '', '', ''];
+      const r1 = [subtitle, '', '', '', '', '', '', ''];
+      const r2 = [`Report Period: ${reportDate} · Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, '', '', '', '', '', '', ''];
+      const r3 = new Array(8).fill('');
+      XLSX.utils.sheet_add_aoa(ws, [r0, r1, r2, r3], { origin: 'A1' });
+      styleCell(ws, 'A1', titleStyle());
+      styleCell(ws, 'A2', subStyle());
+      styleCell(ws, 'A3', subStyle());
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push(
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }
+      );
+    };
+
+    const istNow = new Date(new Date().getTime() + 330 * 60 * 1000);
+    const todayStr = istNow.toISOString().split('T')[0];
+    const exportMonthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+
+    // ── INVENTORY ONLY EXPORT ──
+    if (type === 'inventory') {
+      const ws = {};
+      const totalValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0);
+      const lowItems = inventory.filter(i => i.currentStock <= i.minThreshold).length;
+
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — INVENTORY REGISTER`, 'Full ingredient ledger with WAC, stock value, and status', todayStr);
+
+      // KPI row at row 5
+      const kpiData = [
+        ['TOTAL ITEMS', 'TOTAL VALUE', 'LOW STOCK', 'HEALTHY'],
+        [inventory.length, `₹${totalValue.toLocaleString()}`, lowItems, inventory.length - lowItems]
+      ];
+      XLSX.utils.sheet_add_aoa(ws, kpiData, { origin: 'A5' });
+      ['A5', 'C5', 'E5', 'G5'].forEach(addr => styleCell(ws, addr, kpiLabelStyle()));
+      ws['A6'] = { v: inventory.length, t: 'n', s: kpiStyle(GOLD) };
+      ws['C6'] = { v: `₹${totalValue.toLocaleString()}`, t: 's', s: kpiStyle(GREEN) };
+      ws['E6'] = { v: lowItems, t: 'n', s: kpiStyle(lowItems > 0 ? RED : GREEN) };
+      ws['G6'] = { v: inventory.length - lowItems, t: 'n', s: kpiStyle(GREEN) };
+      [['A5', 'B5'], ['C5', 'D5'], ['E5', 'F5'], ['G5', 'H5'],
+       ['A6', 'B6'], ['C6', 'D6'], ['E6', 'F6'], ['G6', 'H6']].forEach(([s, e]) => {
+        if (!ws['!merges']) ws['!merges'] = [];
+        const sr = parseInt(s[1]) - 1, sc = s.charCodeAt(0) - 65;
+        const er = parseInt(e[1]) - 1, ec = e.charCodeAt(0) - 65;
+        ws['!merges'].push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+      });
+
+      // Table headers at row 8
+      const headers = ['Ingredient', 'Unit', 'Current Stock', 'Min Threshold', 'WAC (₹/unit)', 'Last Buy (₹)', 'Stock Value (₹)', 'Status', 'Drift'];
+      XLSX.utils.sheet_add_aoa(ws, [headers], { origin: 'A8' });
+      headers.forEach((_, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: 7, c: ci });
+        styleCell(ws, addr, hdrStyle());
+      });
+
+      // Data rows
+      inventory.forEach((item, ri) => {
+        const row = ri + 9;
+        const isLow = item.currentStock <= item.minThreshold;
+        const wac = item.weightedAvgCost || item.costPrice || 0;
+        const last = item.lastPurchasePrice || wac;
+        const drift = wac > 0 ? ((last - wac) / wac * 100).toFixed(1) : '—';
+        const driftNum = wac > 0 ? (last - wac) / wac * 100 : 0;
+        const stockVal = Math.max(0, Math.round(item.currentStock * wac));
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+
+        const rowData = [
+          item.itemName, item.unit, item.currentStock, item.minThreshold,
+          wac.toFixed(2), last.toFixed(2), stockVal,
+          isLow ? '⚠ LOW STOCK' : '✓ OK',
+          drift !== '—' ? `${driftNum > 0 ? '+' : ''}${drift}%` : '—'
         ];
-        const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
-        summaryWs['!cols'] = [30, 30].map(w => ({ wch: w }));
-        XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
 
-const exportMonthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-XLSX.writeFile(wb, `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${type === 'monthly' ? exportMonthStr : todayStr}.xlsx`);
-        showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
-    }).catch(err => { console.error(err); showNotif("Export failed — check xlsx install", "error"); });
-}, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, attendanceDate, tenantConfig, tenantId]);
+        rowData.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: row - 1, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
+          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'center') };
+          else if ([2, 3].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, isLow && ci === 2 ? 'E74C3C' : GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if ([4, 5].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'right') };
+          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 7) ws[addr] = { v: val, t: 's', s: statusStyle(!isLow) };
+          else ws[addr] = { v: val, t: 's', s: cellStyle(false, driftNum > 25 ? RED : driftNum > 10 ? AMBER : GREEN, altBg, 'center') };
+        });
+      });
+
+      // Footer totals
+      const footerRow = inventory.length + 9;
+      const footerData = ['TOTAL STOCK VALUE', '', '', '', '', '', `₹${totalValue.toLocaleString()}`, '', ''];
+      XLSX.utils.sheet_add_aoa(ws, [footerData], { origin: `A${footerRow}` });
+      footerData.forEach((_, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: footerRow - 1, c: ci });
+        styleCell(ws, addr, ci === 0 ? hdrStyle(DARK, GOLD, true, 9) : ci === 6 ? hdrStyle('0A2A1A', GREEN, true, 10) : hdrStyle());
+      });
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: footerRow - 1, c: 0 }, e: { r: footerRow - 1, c: 5 } });
+      ws['!merges'].push({ s: { r: footerRow - 1, c: 6 }, e: { r: footerRow - 1, c: 8 } });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: footerRow, c: 8 } });
+      ws['!cols'] = [24, 8, 14, 14, 14, 14, 16, 12, 10].map(w => ({ wch: w }));
+      ws['!rows'] = [{ hpt: 28 }, { hpt: 14 }, { hpt: 14 }, { hpt: 8 }, { hpt: 20 }, { hpt: 28 }, { hpt: 8 }, { hpt: 20 }];
+
+      XLSX.utils.book_append_sheet(wb, ws, '📦 Inventory');
+      XLSX.writeFile(wb, `Pratyeksha_Inventory_${todayStr}.xlsx`);
+      showNotif('Inventory report exported — premium format');
+      return;
+    }
+
+    // ── FILTER DATA BY PERIOD ──
+    let filteredData = analytics;
+    let periodLabel = '';
+    if (type === 'daily') {
+      filteredData = analytics.filter(d => d._id === todayStr);
+      periodLabel = `Daily · ${todayStr}`;
+    } else if (type === 'weekly') {
+      const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
+      periodLabel = `Weekly · ${weekAgo} to ${todayStr}`;
+    } else if (type === 'monthly') {
+      filteredData = analytics.filter(d => d._id?.startsWith(exportMonthStr));
+      periodLabel = `Monthly · ${viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+    }
+
+    const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
+    const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
+    const totalCash = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
+    const totalUPI = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
+    const totalCard = filteredData.reduce((a, b) => a + (b.card || 0), 0);
+    const avgOrder = totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0;
+    const totalInvValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0);
+    const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
+    const overallMargin = totalRev > 0 ? Math.round((totalGrossProfit / totalRev) * 100) : 0;
+
+    // ══════════════════════════════════
+    // SHEET 1: EXECUTIVE DASHBOARD
+    // ══════════════════════════════════
+    {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — EXECUTIVE DASHBOARD`, `Performance summary for ${periodLabel}`, todayStr);
+
+      // KPI row: 4 mega-KPIs at row 5-6
+      const kpiLabels = ['TOTAL REVENUE', 'TOTAL ORDERS', 'AVG ORDER VALUE', 'GROSS MARGIN'];
+      const kpiValues = [`₹${totalRev.toLocaleString()}`, totalOrders, `₹${avgOrder.toLocaleString()}`, `${overallMargin}%`];
+      const kpiColors = [GREEN, GOLD, BLUE, overallMargin > 40 ? GREEN : AMBER];
+
+      kpiLabels.forEach((label, i) => {
+        const col = String.fromCharCode(65 + i * 2);
+        const endCol = String.fromCharCode(66 + i * 2);
+        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiColors[i]) };
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      });
+
+      // Payment breakdown at row 8
+      const payRow = [
+        ['PAYMENT BREAKDOWN', '', '', '', '', '', '', ''],
+        ['Mode', 'Amount (₹)', '% of Revenue', '', 'CHANNEL BREAKDOWN', '', '', ''],
+        ['💵 Cash', totalCash, totalRev > 0 ? `${Math.round((totalCash / totalRev) * 100)}%` : '0%', '', 'Dine-In', '', '', ''],
+        ['📱 UPI', totalUPI, totalRev > 0 ? `${Math.round((totalUPI / totalRev) * 100)}%` : '0%', '', 'Takeaway', '', '', ''],
+        ['💳 Card', totalCard, totalRev > 0 ? `${Math.round((totalCard / totalRev) * 100)}%` : '0%', '', 'Online', '', '', ''],
+      ];
+      XLSX.utils.sheet_add_aoa(ws, payRow, { origin: 'A8' });
+      styleCell(ws, 'A8', hdrStyle());
+      ws['!merges'].push({ s: { r: 7, c: 0 }, e: { r: 7, c: 7 } });
+      ['A9', 'B9', 'C9'].forEach(addr => styleCell(ws, addr, hdrStyle(MID, GOLD)));
+      [['A10', false], ['A11', false], ['A12', false]].forEach(([addr]) => styleCell(ws, addr, cellStyle(true, WHITE)));
+
+      // Revenue trend daily mini-chart (ASCII bar within cells)
+      const maxRev = Math.max(...filteredData.map(d => d.revenue || 0), 1);
+      const trendHeaders = ['Date', 'Revenue (₹)', 'Orders', 'Avg (₹)', 'Cash', 'UPI', 'Card', 'Bar Chart'];
+      XLSX.utils.sheet_add_aoa(ws, [[''], ['DAILY REVENUE BREAKDOWN', '', '', '', '', '', '', '']], { origin: 'A14' });
+      styleCell(ws, 'A15', hdrStyle());
+      ws['!merges'].push({ s: { r: 14, c: 0 }, e: { r: 14, c: 7 } });
+      XLSX.utils.sheet_add_aoa(ws, [trendHeaders], { origin: 'A16' });
+      trendHeaders.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 15, c: ci }), hdrStyle()));
+
+      filteredData.forEach((d, ri) => {
+        const barLen = Math.round((d.revenue / maxRev) * 20);
+        const bar = '█'.repeat(barLen) + '░'.repeat(20 - barLen);
+        const avg = d.count > 0 ? Math.round(d.revenue / d.count) : 0;
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const row = [d._id, d.revenue || 0, d.count || 0, avg, d.cash || 0, d.upi || 0, d.card || 0, bar];
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 16 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg) };
+          else if (ci === 7) ws[addr] = { v: val, t: 's', s: { ...cellStyle(false, GOLD, altBg), font: { name: 'Consolas', sz: 7, color: { rgb: GOLD } } } };
+          else ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 1 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+        });
+      });
+
+      // Summary footer
+      const sfRow = filteredData.length + 17;
+      const sfData = ['TOTALS / AVERAGES', totalRev, totalOrders, avgOrder, totalCash, totalUPI, totalCard, ''];
+      XLSX.utils.sheet_add_aoa(ws, [sfData], { origin: `A${sfRow}` });
+      sfData.forEach((val, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: sfRow - 1, c: ci });
+        ws[addr] = { v: val, t: ci === 0 ? 's' : 'n', s: ci === 0 ? hdrStyle(DARK, GOLD, true) : { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: DARK } } } };
+      });
+      if (!ws['!merges']) ws['!merges'] = [];
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sfRow + 2, c: 7 } });
+      ws['!cols'] = [16, 14, 10, 12, 12, 12, 12, 22].map(w => ({ wch: w }));
+      ws['!rows'] = [{ hpt: 30 }, { hpt: 14 }, { hpt: 12 }, { hpt: 8 }, { hpt: 22 }, { hpt: 30 }];
+      XLSX.utils.book_append_sheet(wb, ws, '📊 Dashboard');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 2: PROFITABILITY MATRIX
+    // ══════════════════════════════════
+    if (profitabilityData.length > 0) {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — DISH PROFITABILITY MATRIX`, 'Menu Engineering: Stars, Plowhorses, Puzzles & Dogs', periodLabel);
+
+      // Menu engineering quadrant classification
+      const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
+      const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
+
+      const classify = (d) => {
+        const highSales = (d.totalQtySold || 0) >= avgSold;
+        const highMargin = (d.marginPct || 0) >= avgMargin;
+        if (highSales && highMargin) return { label: '⭐ STAR', color: GREEN };
+        if (highSales && !highMargin) return { label: '🐄 PLOWHORSE', color: BLUE };
+        if (!highSales && highMargin) return { label: '❓ PUZZLE', color: AMBER };
+        return { label: '🐕 DOG', color: RED };
+      };
+
+      // KPI summary
+      const kpiLabels = ['AVG MARGIN', 'STARS', 'PLOWHORSES', 'DOGS'];
+      const starCount = profitabilityData.filter(d => classify(d).label.includes('STAR')).length;
+      const phCount = profitabilityData.filter(d => classify(d).label.includes('PLOWHORSE')).length;
+      const dogCount = profitabilityData.filter(d => classify(d).label.includes('DOG')).length;
+      const kpiValues = [`${Math.round(avgMargin)}%`, starCount, phCount, dogCount];
+      const kpiColors = [overallMargin > 40 ? GREEN : AMBER, GREEN, BLUE, RED];
+      kpiLabels.forEach((label, i) => {
+        const col = String.fromCharCode(65 + i * 2);
+        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiColors[i]) };
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      });
+
+      // Table
+      const headers = ['Rank', 'Dish Name', 'Category', 'Selling ₹', 'Cost ₹/serving', 'Margin %', 'Qty Sold', 'Total Revenue', 'Total Cost', 'Gross Profit', 'P&L', 'Recipe', 'Segment'];
+      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A8' });
+      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 8, c: ci }), hdrStyle()));
+
+      profitabilityData.forEach((d, ri) => {
+        const cls = classify(d);
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const profitColor = (d.grossProfit || 0) > 0 ? GREEN : RED;
+        const marginColor = (d.marginPct || 0) > 50 ? GREEN : (d.marginPct || 0) > 30 ? GOLD : RED;
+
+        const row = [
+          ri + 1, d.name, (d.category || '').replace('cat_', '').replace(/_/g, ' '),
+          d.sellingPrice || 0, d.ingredientCostPerServing || 0,
+          d.marginPct || 0, d.totalQtySold || 0,
+          d.totalRevenue || 0, Math.round(d.totalIngredientCost || 0),
+          Math.round(d.grossProfit || 0), (d.grossProfit || 0) > 0 ? 'PROFIT' : 'LOSS',
+          d.hasRecipe ? 'LINKED' : 'ESTIMATE',
+          cls.label
+        ];
+
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 9 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 'n', s: cellStyle(false, '555555', altBg, 'center') };
+          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
+          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg) };
+          else if ([3, 4].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 4 ? AMBER : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 5) ws[addr] = { v: `${val}%`, t: 's', s: cellStyle(true, marginColor, altBg, 'center') };
+          else if ([6, 7, 8, 9].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(ci === 9, ci === 9 ? profitColor : ci === 7 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 10) ws[addr] = { v: val, t: 's', s: statusStyle(val === 'PROFIT') };
+          else if (ci === 11) ws[addr] = { v: val, t: 's', s: cellStyle(false, d.hasRecipe ? GREEN : AMBER, altBg, 'center') };
+          else ws[addr] = { v: val, t: 's', s: { ...cellStyle(true, cls.color, altBg, 'center'), font: { name: 'Arial', bold: true, sz: 8, color: { rgb: cls.color } } } };
+        });
+      });
+
+      const lastRow = profitabilityData.length + 10;
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 12 } });
+      ws['!cols'] = [6, 22, 14, 10, 14, 10, 10, 14, 12, 14, 10, 10, 14].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '💰 Profitability');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 3: TOP DISHES
+    // ══════════════════════════════════
+    if (topPerformers.length > 0) {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — DISH PERFORMANCE`, 'Top and bottom performing menu items', periodLabel);
+
+      const maxSold = Math.max(...topPerformers.map(d => d.sold || 0), 1);
+      const headers = ['Rank', 'Dish Name', 'Category', 'Units Sold', 'Performance Bar', 'Contribution'];
+      XLSX.utils.sheet_add_aoa(ws, [[''], [''], headers], { origin: 'A5' });
+      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 6, c: ci }), hdrStyle()));
+
+      const totalSold = topPerformers.reduce((a, b) => a + (b.sold || 0), 0);
+      topPerformers.forEach((d, ri) => {
+        const barLen = Math.round((d.sold / maxSold) * 25);
+        const bar = '█'.repeat(barLen) + '░'.repeat(25 - barLen);
+        const pct = totalSold > 0 ? `${Math.round((d.sold / totalSold) * 100)}%` : '—';
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const medal = ri === 0 ? '🥇' : ri === 1 ? '🥈' : ri === 2 ? '🥉' : `#${ri + 1}`;
+
+        const row = [medal, d.name, (d.category || '').replace('cat_', '').replace(/_/g, ' '), d.sold || 0, bar, pct];
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 7 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, GOLD, altBg, 'center') };
+          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
+          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg) };
+          else if (ci === 3) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 4) ws[addr] = { v: val, t: 's', s: { font: { name: 'Consolas', sz: 7, color: { rgb: GOLD } }, fill: { patternType: 'solid', fgColor: { rgb: altBg } }, alignment: { horizontal: 'left', vertical: 'center' } } };
+          else ws[addr] = { v: val, t: 's', s: cellStyle(false, GREEN, altBg, 'center') };
+        });
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: topPerformers.length + 8, c: 5 } });
+      ws['!cols'] = [8, 26, 16, 12, 28, 12].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '🍽️ Top Dishes');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 4: STAFF EFFICIENCY
+    // ══════════════════════════════════
+    if (staffEfficiency.length > 0) {
+      const ws = {};
+      const monthStr = exportMonthStr;
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — STAFF PERFORMANCE`, `Workforce analytics for ${viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`, todayStr);
+
+      const totalHrAll = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
+      const paidCount = staffEfficiency.filter(s => {
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+        return (rec?.status || s.salaryStatus) === 'Paid';
+      }).length;
+      const pendingPayroll = filteredStaff.reduce((acc, m) => {
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
+        return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
+      }, 0);
+
+      const kpiLabels = ['TOTAL STAFF', 'TOTAL HOURS', 'SALARY PAID', 'PENDING PAYROLL'];
+      const kpiValues = [staffEfficiency.length, `${totalHrAll.toFixed(1)}h`, paidCount, `₹${pendingPayroll.toLocaleString()}`];
+      const kpiCols = [GREEN, BLUE, GREEN, pendingPayroll > 0 ? AMBER : GREEN];
+      kpiLabels.forEach((label, i) => {
+        const col = String.fromCharCode(65 + i * 2);
+        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiCols[i]) };
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      });
+
+      const headers = ['Name', 'Role', 'Shift', 'Days Present', 'Hours Logged', 'Rev/Hour (₹)', 'Base Salary (₹)', 'Salary Status', 'Efficiency Score'];
+      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A8' });
+      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 8, c: ci }), hdrStyle()));
+
+      staffEfficiency.forEach((s, ri) => {
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+        const salStatus = rec?.status || s.salaryStatus || 'Unpaid';
+        const isPaid = salStatus === 'Paid';
+        const effScore = s.totalHours > 0 ? Math.min(100, Math.round((s.daysPresent / 26) * 100)) : 0;
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+
+        const row = [
+          s.name, s.role, s.shiftType || 'Day Shift',
+          s.daysPresent, s.totalHours, s.revenuePerHour,
+          rec?.baseSalary || s.baseSalary, salStatus,
+          `${effScore}%`
+        ];
+
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 9 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
+          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, GOLD, altBg) };
+          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg, 'center') };
+          else if (ci === 3) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, s.daysPresent >= 20 ? GREEN : s.daysPresent >= 10 ? AMBER : RED), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 4) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, BLUE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 5) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, val > 0 ? GREEN : '444444'), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if (ci === 7) ws[addr] = { v: val, t: 's', s: statusStyle(isPaid) };
+          else ws[addr] = { v: val, t: 's', s: cellStyle(true, effScore >= 80 ? GREEN : effScore >= 50 ? GOLD : RED, altBg, 'center') };
+        });
+      });
+
+      const lastRow = staffEfficiency.length + 10;
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 8 } });
+      ws['!cols'] = [20, 12, 12, 12, 12, 14, 14, 14, 14].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '👥 Staff');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 5: INVENTORY SNAPSHOT
+    // ══════════════════════════════════
+    if (inventory.length > 0) {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — INVENTORY SNAPSHOT`, 'Current stock levels and WAC at time of export', todayStr);
+      const headers = ['Ingredient', 'Unit', 'Stock', 'Threshold', 'WAC (₹)', 'Last Buy (₹)', 'Value (₹)', 'Status'];
+      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A5' });
+      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 5, c: ci }), hdrStyle()));
+
+      inventory.forEach((item, ri) => {
+        const isLow = item.currentStock <= item.minThreshold;
+        const wac = item.weightedAvgCost || item.costPrice || 0;
+        const last = item.lastPurchasePrice || wac;
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const row = [item.itemName, item.unit, item.currentStock, item.minThreshold, wac.toFixed(2), last.toFixed(2), Math.max(0, Math.round(item.currentStock * wac)), isLow ? '⚠ LOW' : '✓ OK'];
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 6 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
+          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg, 'center') };
+          else if ([2, 3].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 2 && isLow ? RED : GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else if ([4, 5].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'right') };
+          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+          else ws[addr] = { v: val, t: 's', s: statusStyle(!isLow) };
+        });
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: inventory.length + 7, c: 7 } });
+      ws['!cols'] = [22, 8, 12, 12, 12, 12, 14, 12].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '📦 Stock');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 6: SUMMARY
+    // ══════════════════════════════════
+    {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — REPORT SUMMARY`, `Complete overview for ${periodLabel}`, todayStr);
+
+      const summaryData = [
+        ['', ''],
+        ['FINANCIAL SUMMARY', ''],
+        ['Period', periodLabel],
+        ['Total Revenue (₹)', totalRev],
+        ['Total Orders', totalOrders],
+        ['Avg Order Value (₹)', avgOrder],
+        ['Gross Profit (₹)', totalGrossProfit],
+        ['Overall Margin', `${overallMargin}%`],
+        ['', ''],
+        ['PAYMENT BREAKDOWN', ''],
+        ['Cash Collections (₹)', totalCash],
+        ['UPI Collections (₹)', totalUPI],
+        ['Card Collections (₹)', totalCard],
+        ['', ''],
+        ['INVENTORY SUMMARY', ''],
+        ['Total Ingredients', inventory.length],
+        ['Low Stock Items', inventory.filter(i => i.currentStock <= i.minThreshold).length],
+        ['Total Inventory Value (₹)', totalInvValue],
+        ['', ''],
+        ['STAFF SUMMARY', ''],
+        ['Total Staff', staff.length],
+        ['Active This Month', staffEfficiency.filter(s => s.daysPresent > 0).length],
+        ['Total Hours Logged', staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0).toFixed(1)],
+        ['', ''],
+        ['REPORT METADATA', ''],
+        ['Restaurant', tenantConfig?.name || tenantId],
+        ['Generated At (IST)', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })],
+        ['Generated By', 'PRATYEKSHA RESTAURANT OS'],
+      ];
+
+      XLSX.utils.sheet_add_aoa(ws, summaryData, { origin: 'A5' });
+      const sectionHeaders = ['FINANCIAL SUMMARY', 'PAYMENT BREAKDOWN', 'INVENTORY SUMMARY', 'STAFF SUMMARY', 'REPORT METADATA'];
+      summaryData.forEach((row, ri) => {
+        const addr = `A${ri + 5}`;
+        if (sectionHeaders.includes(row[0])) {
+          styleCell(ws, addr, hdrStyle(DARK, GOLD));
+          if (!ws['!merges']) ws['!merges'] = [];
+          ws['!merges'].push({ s: { r: ri + 4, c: 0 }, e: { r: ri + 4, c: 1 } });
+        } else if (row[0] && row[1] !== '') {
+          styleCell(ws, addr, cellStyle(false, '888888'));
+          const valAddr = `B${ri + 5}`;
+          styleCell(ws, valAddr, typeof row[1] === 'number' ? numFmt(true, WHITE) : cellStyle(true, WHITE, '111111', 'right'));
+        }
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summaryData.length + 6, c: 1 } });
+      ws['!cols'] = [30, 28].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '📋 Summary');
+    }
+
+    const filename = `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${type === 'monthly' ? exportMonthStr : todayStr}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    showNotif(`${type.toUpperCase()} premium report exported — ${Object.keys(wb.Sheets).length} sheets`);
+
+  }).catch(err => { console.error(err); showNotif('Export failed — check xlsx install', 'error'); });
+}, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, staff, filteredStaff, monthlySalaryRecords, attendanceDate, tenantConfig, tenantId, viewDate, showNotif]);
 
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
@@ -1077,11 +1539,13 @@ const renderMonthHeatmap = () => {
               {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
               {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
               {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
-              {id:'marketing',label:'CAMPAIGN HUB',  icon:<MessageSquare size={18}/>},
+              {id:'extras', label:'EXTRA ITEMS', icon:<ShoppingBag size={18}/>},
               {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
               {id:'management',label:'MANAGEMENT',   icon:<ShieldCheck size={18}/>},
               {id:'inventory',label:'INVENTORY',     icon:<Layers size={18}/>},
               {id:'recipes',  label:'RECIPES',       icon:<ChefHat size={18}/>},
+              {id:'marketing',label:'CAMPAIGN HUB',  icon:<MessageSquare size={18}/>},
+
             ].map(tab=>(
               <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
                 style={activeTab===tab.id?styles.activeTab:styles.navBtn}>
@@ -2114,38 +2578,303 @@ const renderMonthHeatmap = () => {
 </div>
               </div>
 
-              {/* STAFF EFFICIENCY */}
-              {staffEfficiency.length>0 && (
-                <div style={{...styles.biCard,marginTop:'20px',marginBottom:'20px'}}>
-                  <h4 style={styles.biTitle}><Zap size={16}/> STAFF EFFICIENCY — REVENUE PER HOUR</h4>
-                  <div style={{overflowX:'auto'}} className="custom-scroll">
-                    <table style={{width:'100%',borderCollapse:'collapse'}}>
-                      <thead>
-                        <tr style={{fontSize:'0.6rem',color:'#555',borderBottom:'1px solid #121212',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-                          {['Name','Role','Days Present','Hours','Rev/Hour','Salary','Status'].map(h=>(
-                            <th key={h} style={{padding:'0 12px 12px 0',textAlign:'left'}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {staffEfficiency.map(s=>(
-                          <tr key={s._id} style={{borderBottom:'1px solid #090909',fontSize:'0.78rem'}}>
-                            <td style={{padding:'12px 12px 12px 0',fontWeight:'900',color:'#fff'}}>{s.name}</td>
-                            <td style={{color:'#555',fontWeight:'800'}}>{s.role}</td>
-                            <td style={{color:'#d3bfa2',fontWeight:'900'}}>{s.daysPresent}d</td>
-                            <td style={{color:'#888'}}>{s.totalHours}h</td>
-                            <td style={{fontWeight:'900',color:s.revenuePerHour>0?'#d3bfa2':'#333'}}>{s.revenuePerHour>0?`₹${s.revenuePerHour.toLocaleString()}`:'—'}</td>
-                            <td style={{color:'#fff'}}>₹{s.baseSalary.toLocaleString()}</td>
-                            <td><span style={{fontSize:'0.6rem',padding:'2px 8px',borderRadius:'4px',fontWeight:'900',
-                              background:s.salaryStatus==='Paid'?'rgba(211,191,162,0.08)':'rgba(138,112,77,0.1)',
-                              color:s.salaryStatus==='Paid'?'#d3bfa2':'#8a704d'}}>{s.salaryStatus?.toUpperCase()}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+
+              {/* ── MENU ENGINEERING MATRIX ── */}
+{profitabilityData.length > 0 && (() => {
+  const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
+  const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
+  const classify = (d) => {
+    const highSales = (d.totalQtySold || 0) >= avgSold;
+    const highMargin = (d.marginPct || 0) >= avgMargin;
+    if (highSales && highMargin) return { label: '⭐ STAR', color: '#4ade80', bg: 'rgba(74,222,128,0.06)', desc: 'High volume + High margin — protect & promote' };
+    if (highSales && !highMargin) return { label: '🐄 PLOWHORSE', color: '#2980B9', bg: 'rgba(41,128,185,0.06)', desc: 'High volume, low margin — consider price increase' };
+    if (!highSales && highMargin) return { label: '❓ PUZZLE', color: '#BA7517', bg: 'rgba(186,117,23,0.06)', desc: 'High margin, low volume — needs promotion push' };
+    return { label: '🐕 DOG', color: '#c0392b', bg: 'rgba(192,57,43,0.06)', desc: 'Low volume + Low margin — review or remove' };
+  };
+
+  const quadrants = { STAR: [], PLOWHORSE: [], PUZZLE: [], DOG: [] };
+  profitabilityData.forEach(d => {
+    const cls = classify(d);
+    const key = cls.label.split(' ')[1];
+    quadrants[key]?.push({ ...d, cls });
+  });
+
+  return (
+    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+      <h4 style={styles.biTitle}><Sparkles size={16} /> MENU ENGINEERING MATRIX</h4>
+      <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+        Boston Matrix for your menu — classify dishes by profitability and popularity to make data-driven decisions.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        {[
+          { key: 'STAR', label: '⭐ STARS', color: '#4ade80', desc: 'High popularity + High margin → Protect & Promote' },
+          { key: 'PLOWHORSE', label: '🐄 PLOWHORSES', color: '#2980B9', desc: 'High popularity + Low margin → Price increase opportunity' },
+          { key: 'PUZZLE', label: '❓ PUZZLES', color: '#BA7517', desc: 'Low popularity + High margin → Needs marketing push' },
+          { key: 'DOG', label: '🐕 DOGS', color: '#c0392b', desc: 'Low popularity + Low margin → Review or replace' },
+        ].map(({ key, label, color, desc }) => (
+          <div key={key} style={{ background: '#050505', border: `1px solid ${color}22`, borderTop: `2px solid ${color}`, borderRadius: '12px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: '900', color }}>{label}</span>
+              <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '4px', background: `${color}15`, color, fontWeight: '900', border: `1px solid ${color}33` }}>
+                {quadrants[key]?.length || 0} dishes
+              </span>
+            </div>
+            <p style={{ fontSize: '0.6rem', color: '#444', marginBottom: '10px', lineHeight: '1.4' }}>{desc}</p>
+            {(quadrants[key] || []).slice(0, 4).map((d, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #0d0d0d', fontSize: '0.72rem' }}>
+                <span style={{ color: '#ccc' }}>{d.name}</span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <span style={{ color: '#555', fontSize: '0.65rem' }}>{d.totalQtySold || 0} sold</span>
+                  <span style={{ color, fontWeight: '800', fontSize: '0.65rem' }}>{d.marginPct || 0}%</span>
                 </div>
-              )}
+              </div>
+            ))}
+            {(quadrants[key]?.length || 0) > 4 && (
+              <div style={{ fontSize: '0.6rem', color: '#333', marginTop: '6px' }}>+{quadrants[key].length - 4} more</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+})()}
+
+{/* ── REVENUE FORECAST ── */}
+{currentMonthAnalytics.length > 0 && (() => {
+  const today = new Date(new Date().getTime() + 330 * 60 * 1000);
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+  const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+  if (!isCurrentMonth) return null;
+
+  const dailyRevenues = currentMonthAnalytics.map(d => d.revenue || 0).filter(v => v > 0);
+  if (dailyRevenues.length === 0) return null;
+  const avgDaily = dailyRevenues.reduce((a, b) => a + b, 0) / dailyRevenues.length;
+  const projectedMonthEnd = stats.revenue + (avgDaily * (daysInMonth - dayOfMonth));
+  const bestDay = Math.max(...dailyRevenues);
+  const bestCase = stats.revenue + (bestDay * (daysInMonth - dayOfMonth));
+  const daysLeft = daysInMonth - dayOfMonth;
+
+  return (
+    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderLeft: '4px solid #2980B9' }}>
+      <h4 style={styles.biTitle}><TrendingUp size={16} /> MONTH-END REVENUE FORECAST</h4>
+      <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
+        Based on {dailyRevenues.length} active days this month · {daysLeft} days remaining
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
+        {[
+          { l: 'CURRENT REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#d3bfa2', sub: `${dayOfMonth}/${daysInMonth} days` },
+          { l: 'PROJECTED (BASE)', v: `₹${Math.round(projectedMonthEnd).toLocaleString()}`, c: '#4ade80', sub: `avg ₹${Math.round(avgDaily).toLocaleString()}/day` },
+          { l: 'BEST CASE', v: `₹${Math.round(bestCase).toLocaleString()}`, c: '#2980B9', sub: `if best day repeats` },
+        ].map(s => (
+          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+      {/* Progress bar showing month completion */}
+      <div style={{ marginBottom: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <span style={{ fontSize: '0.6rem', color: '#555' }}>Month progress</span>
+          <span style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900' }}>{Math.round((dayOfMonth / daysInMonth) * 100)}% complete</span>
+        </div>
+        <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${(dayOfMonth / daysInMonth) * 100}%`, background: 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '3px' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#333', marginTop: '4px' }}>
+        <span>Day 1</span><span>Day {dayOfMonth} (today)</span><span>Day {daysInMonth}</span>
+      </div>
+    </div>
+  );
+})()}
+
+{/* ── WASTE COST ESTIMATOR ── */}
+{profitabilityData.length > 0 && inventory.length > 0 && (() => {
+  const lowStockItems = inventory.filter(i => i.currentStock < 0);
+  const negativeStockValue = lowStockItems.reduce((a, i) => a + Math.abs(i.currentStock * (i.weightedAvgCost || i.costPrice || 0)), 0);
+  const totalCostAllDishes = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
+  const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+  const wasteEstPct = totalRevAllDishes > 0 ? 100 - Math.round((totalCostAllDishes / totalRevAllDishes) * 100) : 0;
+
+  return (
+    <div style={{ ...styles.biCard, marginBottom: '20px' }}>
+      <h4 style={styles.biTitle}><AlertTriangle size={16} /> INGREDIENT COST INTELLIGENCE</h4>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>RECIPE-BASED FOOD COST</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: totalCostAllDishes / Math.max(totalRevAllDishes, 1) > 0.4 ? '#BA7517' : '#4ade80' }}>
+            {totalRevAllDishes > 0 ? `${Math.round((totalCostAllDishes / totalRevAllDishes) * 100)}%` : '—'}
+          </div>
+          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>of revenue · ideal: {'<'}35%</div>
+        </div>
+        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>OVER-DEPLETED STOCK</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: lowStockItems.length > 0 ? '#c0392b' : '#4ade80' }}>
+            {lowStockItems.length} items
+          </div>
+          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>stock below zero — check recipes</div>
+        </div>
+        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>EST. DEPLETION COST</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: negativeStockValue > 0 ? '#BA7517' : '#4ade80' }}>
+            ₹{Math.round(negativeStockValue).toLocaleString()}
+          </div>
+          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>untracked ingredient usage</div>
+        </div>
+      </div>
+      {lowStockItems.length > 0 && (
+        <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(192,57,43,0.05)', border: '1px solid rgba(192,57,43,0.2)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '0.6rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px' }}>⚠ OVER-DEPLETED INGREDIENTS (stock negative)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {lowStockItems.map((i, idx) => (
+              <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: '4px', color: '#c0392b', fontWeight: '800' }}>
+                {i.itemName}: {i.currentStock.toFixed(1)} {i.unit}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})()}
+
+
+{staffEfficiency.length > 0 && (
+  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <h4 style={{ ...styles.biTitle, margin: 0 }}>
+        <Zap size={16} /> STAFF EFFICIENCY — {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+      </h4>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900' }}>
+          SHOWING: {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
+        </div>
+        <button
+          onClick={() => {
+            const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+            fetchMonthlySalary(monthStr);
+            fetchAnalytics();
+            showNotif('Staff data refreshed');
+          }}
+          style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '6px 12px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}
+        >
+          ↻ REFRESH
+        </button>
+      </div>
+    </div>
+
+    {/* KPI STRIP */}
+    {(() => {
+      const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+      const totalHrs = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
+      const paidCount = staffEfficiency.filter(s => {
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+        return (rec?.status || s.salaryStatus) === 'Paid';
+      }).length;
+      const pendingPay = filteredStaff.reduce((acc, m) => {
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
+        return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
+      }, 0);
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+          {[
+            { l: 'TOTAL STAFF', v: staffEfficiency.length, c: '#d3bfa2' },
+            { l: 'HOURS LOGGED', v: `${totalHrs.toFixed(1)}h`, c: '#4ade80' },
+            { l: 'SALARIES PAID', v: `${paidCount}/${staffEfficiency.length}`, c: paidCount === staffEfficiency.length ? '#4ade80' : '#BA7517' },
+            { l: 'PENDING PAYROLL', v: `₹${pendingPay.toLocaleString()}`, c: pendingPay > 0 ? '#BA7517' : '#4ade80' }
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+              <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
+
+    <div style={{ overflowX: 'auto' }} className="custom-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            {['Name', 'Role', 'Days Present', 'Hours', 'Rev/Hour', 'Base Salary', 'Payroll Status'].map(h => (
+              <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {staffEfficiency.map(s => {
+            const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+            const monthRec = monthlySalaryRecords.find(r =>
+              r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
+            );
+            const salaryStatus = monthRec?.status || s.salaryStatus || 'Unpaid';
+            const isPaid = salaryStatus === 'Paid';
+            const recordedSalary = monthRec?.baseSalary || s.baseSalary;
+            const attendancePct = Math.round((s.daysPresent / 26) * 100);
+
+            return (
+              <tr key={s._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+                <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{s.name}</td>
+                <td style={{ color: '#555', fontWeight: '800' }}>{s.role}</td>
+                <td style={{ paddingRight: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{s.daysPresent}d</span>
+                    <div style={{ flex: 1, height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden', minWidth: '40px' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, attendancePct)}%`, background: attendancePct >= 80 ? '#4ade80' : attendancePct >= 50 ? '#d3bfa2' : '#BA7517', borderRadius: '2px', transition: 'width 0.6s ease' }} />
+                    </div>
+                    <span style={{ fontSize: '0.58rem', color: '#444' }}>{attendancePct}%</span>
+                  </div>
+                </td>
+                <td style={{ color: '#888' }}>{s.totalHours}h</td>
+                <td style={{ fontWeight: '900', color: s.revenuePerHour > 0 ? '#d3bfa2' : '#333' }}>
+                  {s.revenuePerHour > 0 ? `₹${s.revenuePerHour.toLocaleString()}` : '—'}
+                </td>
+                <td style={{ color: '#fff' }}>₹{Number(recordedSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small></td>
+                <td>
+                  {/* LIVE PAYROLL STATUS — reads from monthlySalaryRecords */}
+                  <select
+                    value={salaryStatus}
+                    onChange={async e => {
+                      const newStatus = e.target.value;
+                      await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`, { status: newStatus });
+                      fetchMonthlySalary(monthStr);
+                      showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
+                    }}
+                    style={{
+                      background: '#000',
+                      color: isPaid ? '#d3bfa2' : '#444',
+                      border: isPaid ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
+                      padding: '6px 10px', borderRadius: '6px',
+                      fontSize: '0.65rem', fontWeight: '900',
+                      outline: 'none', cursor: 'pointer'
+                    }}
+                  >
+                    <option value="Unpaid">UNPAID</option>
+                    <option value="Paid">PAID</option>
+                  </select>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
+            <td colSpan="4" style={{ padding: '14px 0' }} />
+            <td colSpan="2" style={{ padding: '14px 12px', fontSize: '0.65rem', fontWeight: '900', color: '#8a704d', textTransform: 'uppercase' }}>
+              PENDING PAYROLL:
+            </td>
+            <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
+              ₹{totalPayrollValue.toLocaleString()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+)}
             </motion.div>
           )}
 
@@ -3450,6 +4179,382 @@ setNewStaff({
             </motion.div>
           )}
 
+
+          {/* ════════════════════════════════════════════
+    EXTRA ITEMS — Cold drinks, Ice creams, etc.
+    ════════════════════════════════════════════ */}
+{activeTab === 'extras' && (
+  <motion.div key="extras" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: '100px', width: '100%' }}>
+
+    {/* ── HEADER ── */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '24px', borderBottom: '1px solid #151515' }}>
+      <div>
+        <div style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>SUPPLEMENTARY CATALOG</div>
+        <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '900', color: '#fff' }}>EXTRA ITEMS REGISTRY</h2>
+        <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#444', lineHeight: '1.5' }}>
+          Cold drinks, ice creams, packaged snacks and any add-on products sold alongside main menu.
+          Items added here are tracked for stock and sales independently.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>{extraItems.length}</div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>TOTAL ITEMS</div>
+        </div>
+        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#4ade80' }}>{extraItems.filter(i => i.isAvailable).length}</div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AVAILABLE</div>
+        </div>
+        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', borderTop: '2px solid #d3bfa2' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
+            ₹{extraItems.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>STOCK VALUE</div>
+        </div>
+      </div>
+    </div>
+
+    {/* ── ADD NEW ITEM FORM ── */}
+    <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '20px', padding: '28px', borderTop: '3px solid #d3bfa2' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ShoppingBag size={16} color="#d3bfa2" />
+        </div>
+        <div>
+          <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>ADD NEW EXTRA ITEM</h4>
+          <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '2px' }}>Fill all required fields and click register to add item to catalog</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        {/* ITEM NAME */}
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Item Name *
+          </label>
+          <input type="text" placeholder="e.g. Thums Up 300ml"
+            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newExtraItem.name}
+            onChange={e => setNewExtraItem({ ...newExtraItem, name: e.target.value })} />
+        </div>
+
+        {/* CATEGORY */}
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Category *
+          </label>
+          <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
+            value={newExtraItem.category}
+            onChange={e => setNewExtraItem({ ...newExtraItem, category: e.target.value })}>
+            {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* PRICE */}
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Price (₹) *
+          </label>
+          <input type="number" placeholder="e.g. 40"
+            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newExtraItem.price}
+            onChange={e => setNewExtraItem({ ...newExtraItem, price: e.target.value })} />
+        </div>
+
+        {/* UNIT */}
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Unit
+          </label>
+          <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
+            value={newExtraItem.unit}
+            onChange={e => setNewExtraItem({ ...newExtraItem, unit: e.target.value })}>
+            {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* STOCK */}
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Opening Stock
+          </label>
+          <input type="number" placeholder="e.g. 24"
+            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newExtraItem.currentStock}
+            onChange={e => setNewExtraItem({ ...newExtraItem, currentStock: e.target.value })} />
+        </div>
+      </div>
+
+      {/* DESCRIPTION ROW */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'flex-end' }}>
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+            Description (optional)
+          </label>
+          <input type="text" placeholder="e.g. Chilled carbonated drink, served in bottle"
+            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newExtraItem.description}
+            onChange={e => setNewExtraItem({ ...newExtraItem, description: e.target.value })} />
+        </div>
+        <button
+          onClick={async () => {
+            if (!newExtraItem.name?.trim()) return showNotif('Item name is required', 'error');
+            if (!newExtraItem.price || Number(newExtraItem.price) <= 0) return showNotif('Valid price is required', 'error');
+            try {
+              await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
+                name: newExtraItem.name.trim(),
+                category: newExtraItem.category,
+                price: Number(newExtraItem.price),
+                unit: newExtraItem.unit,
+                currentStock: Number(newExtraItem.currentStock) || 0,
+                description: newExtraItem.description.trim(),
+                isAvailable: true
+              });
+              showNotif(`${newExtraItem.name} added to catalog`);
+              setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
+              fetchExtraItems();
+            } catch { showNotif('Failed to add item', 'error'); }
+          }}
+          style={{ padding: '11px 28px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px' }}>
+          + REGISTER ITEM
+        </button>
+      </div>
+    </div>
+
+    {/* ── CATEGORY FILTER + SEARCH ── */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+      {/* Category pills */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+        {['All', ...new Set(extraItems.map(i => i.category))].map(cat => (
+          <button key={cat} onClick={() => setActiveExtraCategory(cat)} style={{
+            padding: '7px 16px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer',
+            border: activeExtraCategory === cat ? 'none' : '1px solid #1a1a1a',
+            background: activeExtraCategory === cat ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
+            color: activeExtraCategory === cat ? '#000' : '#444',
+            transition: 'all 0.15s'
+          }}>
+            {cat} {cat !== 'All' && `(${extraItems.filter(i => i.category === cat).length})`}
+          </button>
+        ))}
+      </div>
+      {/* Search */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #121212', borderRadius: '8px', padding: '8px 14px', flexShrink: 0 }}>
+        <Search size={13} color="#444" />
+        <input type="text" placeholder="Search items..." value={extraItemSearchQuery}
+          onChange={e => setExtraItemSearchQuery(e.target.value)}
+          style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
+      </div>
+    </div>
+
+    {/* ── ITEMS GRID ── */}
+    {extraItemsLoading ? (
+      <div style={{ textAlign: 'center', padding: '60px', color: '#333', fontSize: '0.8rem' }}>
+        <div className="spinner" style={{ margin: '0 auto 16px' }} />
+        LOADING CATALOG...
+      </div>
+    ) : (() => {
+      const filtered = extraItems.filter(i => {
+        const matchCat = activeExtraCategory === 'All' || i.category === activeExtraCategory;
+        const matchSearch = i.name.toLowerCase().includes(extraItemSearchQuery.toLowerCase());
+        return matchCat && matchSearch;
+      });
+
+      if (filtered.length === 0) return (
+        <div style={{ textAlign: 'center', padding: '60px', background: '#0d0d0d', borderRadius: '20px', border: '1px dashed #1a1a1a' }}>
+          <ShoppingBag size={32} color="#222" style={{ marginBottom: '16px' }} />
+          <div style={{ color: '#333', fontSize: '0.85rem', fontWeight: '700' }}>
+            {extraItemSearchQuery ? `NO ITEMS MATCH "${extraItemSearchQuery.toUpperCase()}"` : 'NO ITEMS IN THIS CATEGORY YET'}
+          </div>
+          <div style={{ color: '#222', fontSize: '0.7rem', marginTop: '8px' }}>Use the form above to add your first item</div>
+        </div>
+      );
+
+      // Group by category
+      const grouped = {};
+      filtered.forEach(item => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item);
+      });
+
+      const categoryEmojis = {
+        'Cold Drinks': '🥤', 'Ice Cream': '🍦', 'Packaged Snacks': '🍟',
+        'Juices': '🧃', 'Mineral Water': '💧', 'Tobacco': '🚬',
+        'Dairy': '🥛', 'Sweets': '🍬', 'Other': '📦'
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          {Object.entries(grouped).map(([cat, items]) => (
+            <div key={cat}>
+              {/* Category header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #151515' }}>
+                <span style={{ fontSize: '1.2rem' }}>{categoryEmojis[cat] || '📦'}</span>
+                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
+                <span style={{ fontSize: '0.62rem', padding: '2px 8px', background: 'rgba(211,191,162,0.06)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900' }}>
+                  {items.length} item{items.length !== 1 ? 's' : ''}
+                </span>
+                <div style={{ flex: 1, height: '1px', background: '#111' }} />
+                <span style={{ fontSize: '0.62rem', color: '#444' }}>
+                  Cat. value: ₹{items.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
+                </span>
+              </div>
+
+              {/* Items grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '16px' }}>
+                {items.map(item => {
+                  const isLowStock = item.currentStock <= 5;
+                  const isOutOfStock = item.currentStock <= 0;
+                  return (
+                    <div key={item._id} style={{
+                      background: '#0a0a0a', borderRadius: '16px', padding: '20px',
+                      border: `1px solid ${isOutOfStock ? 'rgba(192,57,43,0.2)' : isLowStock ? 'rgba(186,117,23,0.2)' : '#151515'}`,
+                      borderTop: `2px solid ${isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? 'rgba(211,191,162,0.3)' : '#1a1a1a'}`,
+                      opacity: item.isAvailable ? 1 : 0.55,
+                      position: 'relative', transition: 'all 0.2s'
+                    }}>
+                      {/* Availability dot */}
+                      <div style={{
+                        position: 'absolute', top: '16px', right: '16px',
+                        width: '7px', height: '7px', borderRadius: '50%',
+                        background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? '#4ade80' : '#333',
+                        boxShadow: item.isAvailable && !isOutOfStock ? '0 0 6px rgba(74,222,128,0.3)' : 'none'
+                      }} />
+
+                      {/* Category badge */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <span style={{ fontSize: '0.52rem', padding: '3px 8px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {categoryEmojis[item.category] || '📦'} {item.category}
+                        </span>
+                      </div>
+
+                      {/* Name + Price */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <h3 style={{ margin: '0 0 4px', fontSize: '0.95rem', fontWeight: '900', color: '#fff', paddingRight: '16px' }}>{item.name}</h3>
+                        {item.description && (
+                          <p style={{ margin: 0, fontSize: '0.65rem', color: '#444', lineHeight: '1.4' }}>{item.description}</p>
+                        )}
+                      </div>
+
+                      {/* Price + Unit */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                        <span style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>₹{item.price}</span>
+                        <span style={{ fontSize: '0.62rem', color: '#444' }}>per {item.unit}</span>
+                        {item.totalSold > 0 && (
+                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: '#555', padding: '2px 8px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '4px' }}>
+                            {item.totalSold} sold
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Stock bar */}
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900' }}>STOCK</span>
+                          <span style={{ fontSize: '0.65rem', fontWeight: '900', color: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : '#d3bfa2' }}>
+                            {isOutOfStock ? 'OUT OF STOCK' : isLowStock ? `LOW — ${item.currentStock} left` : `${item.currentStock} ${item.unit}s`}
+                          </span>
+                        </div>
+                        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${Math.min(100, Math.max(0, (item.currentStock / Math.max(item.currentStock, 20)) * 100))}%`,
+                            background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : 'linear-gradient(90deg,#8a704d,#d3bfa2)',
+                            borderRadius: '2px', transition: 'width 0.6s ease'
+                          }} />
+                        </div>
+                      </div>
+
+                      {/* Stock value */}
+                      <div style={{ fontSize: '0.6rem', color: '#333', marginBottom: '14px' }}>
+                        Stock value: <span style={{ color: '#555', fontWeight: '800' }}>₹{Math.round(item.currentStock * item.price).toLocaleString()}</span>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {/* Quick restock */}
+                        <button
+                          onClick={async () => {
+                            const qty = prompt(`Restock "${item.name}" — Enter quantity to add:`);
+                            if (!qty || isNaN(qty) || Number(qty) <= 0) return;
+                            await axios.patch(`${BASE_URL}/extra-items/item/${item._id}/restock`, { addQty: Number(qty) });
+                            fetchExtraItems();
+                            showNotif(`${item.name} restocked +${qty}`);
+                          }}
+                          style={{ flex: 1, padding: '9px 6px', background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8a704d'; }}
+                        >
+                          + RESTOCK
+                        </button>
+
+                        {/* Toggle availability */}
+                        <button
+                          onClick={async () => {
+                            await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`, { isAvailable: !item.isAvailable });
+                            fetchExtraItems();
+                            showNotif(`${item.name} ${!item.isAvailable ? 'activated' : 'hidden'}`);
+                          }}
+                          style={{
+                            flex: 1, padding: '9px 6px',
+                            background: item.isAvailable ? '#111' : 'rgba(74,222,128,0.06)',
+                            border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(74,222,128,0.2)',
+                            color: item.isAvailable ? '#444' : '#4ade80',
+                            borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s'
+                          }}
+                        >
+                          {item.isAvailable ? 'HIDE' : 'SHOW'}
+                        </button>
+
+                        {/* Edit */}
+                        <button
+                          onClick={() => {
+                            setExtraItemEditModal(item);
+                            setExtraItemEditData({ ...item });
+                          }}
+                          style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+                        >
+                          ✎
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => setConfirmModal({
+                            show: true,
+                            title: `Remove "${item.name}"?`,
+                            subtitle: 'This will permanently delete the item from your catalog.',
+                            onConfirm: async () => {
+                              await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);
+                              fetchExtraItems();
+                              showNotif(`${item.name} removed`);
+                            }
+                          })}
+                          style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
+
+  </motion.div>
+)}
+
         </section>{/* end scrollArea */}
       </main>
 
@@ -3458,6 +4563,129 @@ setNewStaff({
           ════════════════════════════════════════════ */}
 
       {/* CONFIRM MODAL */}
+
+      {/* EXTRA ITEM EDIT MODAL */}
+<AnimatePresence>
+  {extraItemEditModal && (
+    <div style={styles.modalBackdrop}>
+      <motion.div
+        initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
+        style={{ ...styles.confirmBox, width: '520px', textAlign: 'left', maxHeight: '85vh', overflowY: 'auto', padding: '40px' }}
+        className="custom-scroll"
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+          <div>
+            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>EXTRA ITEMS CATALOG</div>
+            <h3 style={{ color: '#fff', margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>EDIT ITEM</h3>
+            <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '4px' }}>{extraItemEditModal.name}</div>
+          </div>
+          <button onClick={() => setExtraItemEditModal(null)}
+            style={{ background: '#111', border: '1px solid #1a1a1a', color: '#555', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Name */}
+          <div>
+            <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Item Name *</label>
+            <input type="text" value={extraItemEditData.name || ''}
+              onChange={e => setExtraItemEditData({ ...extraItemEditData, name: e.target.value })}
+              style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
+          {/* Category + Unit */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category</label>
+              <select value={extraItemEditData.category || 'Cold Drinks'}
+                onChange={e => setExtraItemEditData({ ...extraItemEditData, category: e.target.value })}
+                style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
+                {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
+              <select value={extraItemEditData.unit || 'piece'}
+                onChange={e => setExtraItemEditData({ ...extraItemEditData, unit: e.target.value })}
+                style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
+                {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Price + Stock */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
+              <input type="number" value={extraItemEditData.price || ''}
+                onChange={e => setExtraItemEditData({ ...extraItemEditData, price: e.target.value })}
+                style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
+              <input type="number" value={extraItemEditData.currentStock ?? ''}
+                onChange={e => setExtraItemEditData({ ...extraItemEditData, currentStock: e.target.value })}
+                style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description</label>
+            <input type="text" value={extraItemEditData.description || ''}
+              onChange={e => setExtraItemEditData({ ...extraItemEditData, description: e.target.value })}
+              style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
+          {/* Availability toggle */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', background: '#000', border: '1px solid #1a1a1a', borderRadius: '10px' }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>ITEM AVAILABILITY</div>
+              <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '3px' }}>Toggle to show or hide from active catalog</div>
+            </div>
+            <button type="button" onClick={() => setExtraItemEditData({ ...extraItemEditData, isAvailable: !extraItemEditData.isAvailable })}
+              style={{ width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: extraItemEditData.isAvailable ? '#d3bfa2' : '#1a1a1a', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', top: '4px', left: extraItemEditData.isAvailable ? '22px' : '4px', width: '16px', height: '16px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#000' : '#444', transition: 'left 0.2s' }} />
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', paddingTop: '20px', borderTop: '1px solid #111' }}>
+            <button onClick={() => setExtraItemEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
+            <button
+              onClick={async () => {
+                if (!extraItemEditData.name?.trim()) return showNotif('Item name required', 'error');
+                if (!extraItemEditData.price || Number(extraItemEditData.price) <= 0) return showNotif('Valid price required', 'error');
+                try {
+                  await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`, {
+                    name: extraItemEditData.name.trim(),
+                    category: extraItemEditData.category,
+                    price: Number(extraItemEditData.price),
+                    unit: extraItemEditData.unit,
+                    currentStock: Number(extraItemEditData.currentStock) || 0,
+                    description: extraItemEditData.description || '',
+                    isAvailable: extraItemEditData.isAvailable
+                  });
+                  showNotif(`${extraItemEditData.name} updated`);
+                  setExtraItemEditModal(null);
+                  fetchExtraItems();
+                } catch { showNotif('Update failed', 'error'); }
+              }}
+              style={{ ...styles.confirmBtn, flex: 2 }}>
+              SAVE CHANGES
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
       <AnimatePresence>
         {confirmModal.show && (
           <div style={styles.modalBackdrop}>
