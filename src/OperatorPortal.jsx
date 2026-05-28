@@ -2081,21 +2081,488 @@ const renderMonthHeatmap = () => {
           )}
 
           {/* ── MARKETING ── */}
-          {activeTab==='marketing' && (
-            <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}} style={styles.marketingLayout}>
-              <div style={styles.botCard}>
-                <div style={styles.cardHeaderSmall}><QrCode size={18}/> SYNC DEVICE</div>
-                <div style={styles.qrContainer}>
-                  {isBotReady?<div style={{color:'#d3bfa2',fontWeight:'900'}}>BRIDGE ACTIVE</div>:qrCode?<QRCodeSVG value={qrCode} size={200} bgColor="#000" fgColor="#d3bfa2"/>:<div className="spinner"/>}
+{activeTab === 'marketing' && (() => {
+
+  // ── Derive category → dish map from live menuItems ──────────────
+  const vegDishes    = menuItems.filter(i => i.isAvailable !== false && i.isVeg  !== false);
+  const nonVegDishes = menuItems.filter(i => i.isAvailable !== false && i.isVeg  === false);
+  const allDishes    = menuItems.filter(i => i.isAvailable !== false);
+
+  // helpers
+  const pick = (arr, n = 2) => [...arr].sort(() => .5 - Math.random()).slice(0, n);
+  const fmt  = item => item ? `${item.name} @ ₹${item.price || item.priceFull || '—'}` : null;
+  const combo = (items, suffix = '') =>
+    items.filter(Boolean).map(fmt).filter(Boolean).map(s => `✦ ${s}${suffix}`);
+
+  // Build dynamic offer lines from real menu
+  const buildOffers = (theme, count = 3) => {
+    const lines = [];
+    if (theme === 'veg') {
+      pick(vegDishes, count).forEach(d => lines.push(`✦ ${d.name} — ₹${d.price || d.priceFull || '—'} (Festival Special)`));
+    } else if (theme === 'combo') {
+      const pair = pick(allDishes, 2);
+      if (pair.length === 2) lines.push(`✦ ${pair[0].name} + ${pair[1].name} Combo — ₹${Math.round(((pair[0].price||pair[0].priceFull||0)+(pair[1].price||pair[1].priceFull||0))*0.85)}`);
+      pick(allDishes, 2).forEach(d => lines.push(`✦ ${d.name} — Flat 15% Off Today`));
+    } else if (theme === 'bogo') {
+      pick(allDishes, 2).forEach(d => lines.push(`✦ Buy 1 Get 1 Free: ${d.name}`));
+      pick(vegDishes, 1).forEach(d => lines.push(`✦ Free ${d.name} on orders above ₹300`));
+    } else if (theme === 'dessert') {
+      pick(vegDishes, count).forEach(d => lines.push(`✦ ${d.name} Special — ₹${Math.round((d.price||d.priceFull||100)*0.9)}`));
+    } else {
+      pick(allDishes, count).forEach(d => lines.push(`✦ ${d.name} @ ₹${d.price || d.priceFull || '—'}`));
+    }
+    if (lines.length < count) pick(allDishes, count - lines.length).forEach(d => lines.push(`✦ ${d.name} @ ₹${d.price || d.priceFull || '—'}`));
+    return lines.slice(0, count);
+  };
+
+  // ── Festival calendar (IST-aware) ───────────────────────────────
+  const now = new Date();
+  const yr  = now.getFullYear();
+
+  const festivals = [
+    { date:`${yr}-01-14`, name:'Makar Sankranti',    icon:'🪁', season:'Winter',  color:'#BA7517', theme:'veg',     tagline:'Til-Gul & harvest specials' },
+    { date:`${yr}-01-26`, name:'Republic Day',        icon:'🇮🇳', season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Patriotic pride combo offers' },
+    { date:`${yr}-02-14`, name:"Valentine's Day",     icon:'❤️',  season:'Winter',  color:'#8a3030', theme:'combo',   tagline:'Couples dining special' },
+    { date:`${yr}-02-19`, name:'Shivaji Jayanti',     icon:'⚔️',  season:'Winter',  color:'#d3bfa2', theme:'veg',     tagline:'Maharashtra pride — traditional menu' },
+    { date:`${yr}-03-17`, name:'Holi',                icon:'🎨',  season:'Spring',  color:'#BA7517', theme:'bogo',    tagline:'Festival of colours feast' },
+    { date:`${yr}-03-31`, name:'Gudi Padwa',          icon:'🪔',  season:'Spring',  color:'#d3bfa2', theme:'veg',     tagline:'Maharashtrian New Year specials' },
+    { date:`${yr}-04-14`, name:'Ambedkar Jayanti',    icon:'📚',  season:'Spring',  color:'#4a7c3f', theme:'combo',   tagline:'Community appreciation day' },
+    { date:`${yr}-04-22`, name:'Ram Navami',          icon:'🙏',  season:'Spring',  color:'#BA7517', theme:'veg',     tagline:'Sattvic — no-onion no-garlic menu' },
+    { date:`${yr}-05-01`, name:'Maharashtra Day',     icon:'🧡',  season:'Summer',  color:'#d3bfa2', theme:'combo',   tagline:'Golden state pride day' },
+    { date:`${yr}-06-15`, name:'Monsoon Arrives',     icon:'🌧️',  season:'Monsoon', color:'#2a5a8a', theme:'combo',   tagline:'Chai-pakoda monsoon vibes' },
+    { date:`${yr}-07-10`, name:'Ashadhi Ekadashi',    icon:'🌿',  season:'Monsoon', color:'#4a7c3f', theme:'veg',     tagline:'Vrat-friendly menu day' },
+    { date:`${yr}-08-15`, name:'Independence Day',    icon:'🇮🇳', season:'Monsoon', color:'#4a7c3f', theme:'bogo',    tagline:'Freedom feast — BOGO specials' },
+    { date:`${yr}-08-27`, name:'Ganesh Chaturthi',    icon:'🐘',  season:'Monsoon', color:'#BA7517', theme:'veg',     tagline:'Bappa special day — modak & sweets' },
+    { date:`${yr}-09-07`, name:'Ganesh Visarjan',     icon:'🌊',  season:'Monsoon', color:'#BA7517', theme:'combo',   tagline:'Bappa farewell group feast' },
+    { date:`${yr}-10-02`, name:'Gandhi Jayanti',      icon:'🕊️',  season:'Autumn',  color:'#4a7c3f', theme:'veg',     tagline:'Simple sattvic — mindful dining' },
+    { date:`${yr}-10-13`, name:'Navratri',            icon:'🌺',  season:'Autumn',  color:'#d3bfa2', theme:'veg',     tagline:'9-day vrat special menu' },
+    { date:`${yr}-10-24`, name:'Dussehra',            icon:'🏹',  season:'Autumn',  color:'#BA7517', theme:'bogo',    tagline:'Vijaya Bhoj — victory celebration' },
+    { date:`${yr}-11-01`, name:'Diwali Week',         icon:'✨',  season:'Autumn',  color:'#d3bfa2', theme:'dessert', tagline:'Diwali pre-party specials' },
+    { date:`${yr}-11-03`, name:'Diwali',              icon:'🪔',  season:'Autumn',  color:'#d3bfa2', theme:'combo',   tagline:'Festival of lights — biggest dining day' },
+    { date:`${yr}-11-15`, name:'Chhath Puja',         icon:'🌅',  season:'Autumn',  color:'#BA7517', theme:'veg',     tagline:'Sun worship feast day' },
+    { date:`${yr}-12-25`, name:'Christmas',           icon:'🎄',  season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Festive cheer — holiday menu' },
+    { date:`${yr}-12-31`, name:'New Year Eve',        icon:'🎆',  season:'Winter',  color:'#8a704d', theme:'bogo',    tagline:'NYE countdown party platter' },
+    // next-year safeguard
+    { date:`${yr+1}-01-14`, name:'Makar Sankranti',   icon:'🪁', season:'Winter',  color:'#BA7517', theme:'veg',     tagline:'Til-Gul & harvest specials' },
+    { date:`${yr+1}-01-26`, name:'Republic Day',       icon:'🇮🇳',season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Patriotic pride combo offers' },
+  ].map(f => ({ ...f, dateObj: new Date(f.date), offers: buildOffers(f.theme, 3) }))
+   .sort((a, b) => a.dateObj - b.dateObj);
+
+  const daysUntil = dateObj => {
+    const diff = Math.ceil((dateObj - now) / 86400000);
+    if (diff === 0)  return 'TODAY';
+    if (diff === 1)  return 'TOMORROW';
+    if (diff < 0)   return `${Math.abs(diff)}d ago`;
+    return `in ${diff}d`;
+  };
+
+  const upcoming = festivals.filter(f => {
+    const diff = Math.ceil((f.dateObj - now) / 86400000);
+    return diff >= -1 && diff <= 90;
+  });
+  const next = festivals.find(f => f.dateObj >= now);
+
+  const seasonColors = { Winter:'#4a7c3f', Spring:'#BA7517', Summer:'#8a3030', Monsoon:'#2a5a8a', Autumn:'#8a704d' };
+
+  // ── Season performance tips referencing real dish names ──────────
+  const topDish  = allDishes[0]?.name || 'your top dish';
+  const vegHit   = vegDishes[0]?.name  || 'your veg special';
+  const nv1      = nonVegDishes[0]?.name || null;
+
+  const seasonTips = [
+    { season:'Monsoon (Jun–Sep)', color:'#2a5a8a',
+      tip:`Hot starters & soups lift avg order value 30–40%. Feature ${topDish} as a "Monsoon Warm Box". Chai combos drive repeat visits.` },
+    { season:'Festival (Oct–Nov)', color:'#BA7517',
+      tip:`Pre-order group meals with ${vegHit}. Offer loyalty rewards for customers who dine 3+ times in Diwali week. Gift-box bundling adds ₹80–₹150 per cover.` },
+    { season:'Winter (Dec–Jan)', color:'#4a7c3f',
+      tip:`Slow-cooked curries and warm beverages dominate. ${topDish} as a weekend winter special brings repeat footfall. Wedding catering inquiries peak — keep WhatsApp active.` },
+    { season:'Summer (Apr–May)', color:'#8a3030',
+      tip:`Cold drinks, lassi, and light salads increase demand. Bundle ${nv1 || topDish} with a cold drink at ₹20 less — drives 20% more summer orders.` },
+  ];
+
+  // ── Category performance hints from live menu ───────────────────
+  const categoryMap = {};
+  allDishes.forEach(d => {
+    const cat = d.categoryId || 'General';
+    if (!categoryMap[cat]) categoryMap[cat] = [];
+    categoryMap[cat].push(d);
+  });
+  const topCategories = Object.entries(categoryMap)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 4);
+
+  return (
+    <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
+      style={{display:'flex',flexDirection:'column',gap:'28px',maxWidth:'1200px',margin:'0 auto',width:'100%'}}>
+
+      {/* ══ HEADER ══ */}
+      <div style={{borderBottom:'1px solid #151515',paddingBottom:'20px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+        <div>
+          <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>CAMPAIGN INTELLIGENCE HUB</h2>
+          <p style={{margin:'5px 0 0',fontSize:'0.7rem',color:'#555'}}>
+            Festival calendar × your live menu × customer base — auto-generate dish-specific broadcast offers.
+          </p>
+        </div>
+        <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+          <div style={{padding:'7px 14px',background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'8px',fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
+            {allDishes.length} live dishes
+          </div>
+          <div style={{padding:'7px 14px',background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'8px',fontSize:'0.62rem',color:'#4a7c3f',fontWeight:'900'}}>
+            {vegDishes.length} veg · {nonVegDishes.length} non-veg
+          </div>
+        </div>
+      </div>
+
+      {/* ══ NEXT FESTIVAL HERO CARD ══ */}
+      {next && (() => {
+        const diff = Math.ceil((next.dateObj - now) / 86400000);
+        return (
+          <div style={{
+            background:'#0a0a0a',
+            border:`1px solid ${next.color}44`,
+            borderLeft:`4px solid ${next.color}`,
+            borderRadius:'18px',padding:'28px 32px',
+            display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:'32px',alignItems:'start'
+          }}>
+            {/* LEFT — festival info */}
+            <div>
+              <div style={{fontSize:'0.56rem',color:next.color,fontWeight:'900',letterSpacing:'2px',marginBottom:'10px',textTransform:'uppercase'}}>
+                NEXT FESTIVAL · {next.season.toUpperCase()}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:'14px',marginBottom:'8px'}}>
+                <span style={{fontSize:'2.2rem'}}>{next.icon}</span>
+                <div>
+                  <h3 style={{margin:0,fontSize:'1.5rem',fontWeight:'900',color:'#fff'}}>{next.name}</h3>
+                  <div style={{fontSize:'0.7rem',color:'#555',marginTop:'3px'}}>
+                    {next.dateObj.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})}
+                    &nbsp;·&nbsp;
+                    <span style={{color:next.color,fontWeight:'900'}}>{daysUntil(next.dateObj)}</span>
+                  </div>
                 </div>
               </div>
-              <div style={styles.botCard}>
-                <div style={styles.cardHeaderSmall}><SendHorizontal size={18}/> BROADCAST</div>
-                <textarea style={styles.input} value={broadcastText} onChange={e=>setBroadcastMsg(e.target.value)} placeholder="Promo message..."/>
-                <button onClick={handleBroadcast} style={styles.mainBtn}>LAUNCH CAMPAIGN</button>
+              <div style={{fontSize:'0.68rem',color:'#666',fontStyle:'italic',marginBottom:'6px'}}>"{next.tagline}"</div>
+              {/* countdown ring */}
+              <div style={{
+                display:'inline-flex',alignItems:'center',gap:'10px',
+                marginTop:'10px',padding:'10px 18px',
+                background:`rgba(${next.color==='#BA7517'?'186,117,23':next.color==='#4a7c3f'?'74,124,63':'211,191,162'},0.06)`,
+                border:`1px solid ${next.color}33`,borderRadius:'10px'
+              }}>
+                <div style={{fontSize:'2rem',fontWeight:'900',color:next.color,fontFamily:'monospace',lineHeight:1}}>
+                  {diff === 0 ? '!' : diff}
+                </div>
+                <div>
+                  <div style={{fontSize:'0.56rem',color:'#444',fontWeight:'900',letterSpacing:'1px'}}>{diff===0?'FESTIVAL TODAY':'DAYS TO PREPARE'}</div>
+                  <div style={{fontSize:'0.62rem',color:'#555',marginTop:'2px'}}>Start campaign {diff > 3 ? '3 days before' : 'NOW'}</div>
+                </div>
               </div>
-            </motion.div>
+            </div>
+
+            {/* MIDDLE — dish-specific auto-generated offers */}
+            <div>
+              <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'12px',textTransform:'uppercase'}}>
+                AUTO-GENERATED FROM YOUR MENU
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                {next.offers.map((offer, i) => (
+                  <div key={i} style={{
+                    padding:'11px 16px',
+                    background: i === 0 ? `${next.color}0d` : '#050505',
+                    border: i === 0 ? `1px solid ${next.color}33` : '1px solid #111',
+                    borderRadius:'10px',
+                    fontSize:'0.74rem',color: i === 0 ? '#fff' : '#888',fontWeight: i === 0 ? '800' : '600',
+                    display:'flex',alignItems:'center',gap:'8px'
+                  }}>
+                    <span style={{color:next.color,fontSize:'0.6rem',fontWeight:'900'}}>#{i+1}</span>
+                    {offer}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT — action */}
+            <div style={{display:'flex',flexDirection:'column',gap:'10px',minWidth:'120px'}}>
+              <button
+                onClick={() => {
+                  const msg = `${next.icon} *${next.name} Special!*\n\n${next.offers.join('\n')}\n\n📍 Come celebrate with us!\n${tenantConfig?.name || ''}`;
+                  setBroadcastMsg(msg);
+                  showNotif(`${next.name} offer loaded into broadcast`);
+                }}
+                style={{
+                  padding:'11px 20px',background:next.color,color:'#000',
+                  border:'none',borderRadius:'10px',fontSize:'0.68rem',
+                  fontWeight:'900',cursor:'pointer',whiteSpace:'nowrap'
+                }}
+              >
+                LOAD OFFER →
+              </button>
+              <div style={{fontSize:'0.56rem',color:'#333',textAlign:'center',lineHeight:1.5}}>
+                Loads into<br/>broadcast below
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══ MAIN 3-COLUMN LAYOUT ══ */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:'20px',alignItems:'start'}}>
+
+        {/* LEFT — 90-day calendar */}
+        <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'22px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
+            <h4 style={{margin:0,fontSize:'0.75rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
+              📅 90-DAY FESTIVAL CALENDAR
+            </h4>
+            <span style={{fontSize:'0.6rem',color:'#333',fontWeight:'700'}}>
+              {upcoming.length} events · offers from your menu
+            </span>
+          </div>
+
+          <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+            {upcoming.length === 0 ? (
+              <div style={{textAlign:'center',padding:'40px',color:'#333',fontSize:'0.75rem'}}>No festivals in next 90 days</div>
+            ) : upcoming.map((f, i) => {
+              const diff = Math.ceil((f.dateObj - now) / 86400000);
+              const isToday   = diff === 0;
+              const isUrgent  = diff <= 3 && diff >= 0;
+              const isComing  = diff <= 10 && diff > 3;
+              return (
+                <div key={i} style={{
+                  display:'grid',gridTemplateColumns:'88px 1fr auto',
+                  gap:'14px',alignItems:'start',
+                  padding:'14px 16px',
+                  background: isToday ? 'rgba(211,191,162,0.05)' : '#000',
+                  border: isToday ? `1px solid ${f.color}55` : isUrgent ? `1px solid ${f.color}22` : '1px solid #0d0d0d',
+                  borderRadius:'12px'
+                }}>
+                  {/* date block */}
+                  <div style={{textAlign:'center'}}>
+                    <div style={{fontSize:'1.5rem',fontWeight:'900',
+                      color: isToday ? f.color : isUrgent ? '#d3bfa2' : '#2a2a2a',lineHeight:1}}>
+                      {f.dateObj.getDate()}
+                    </div>
+                    <div style={{fontSize:'0.56rem',color:'#333',fontWeight:'900',letterSpacing:'1px',textTransform:'uppercase'}}>
+                      {f.dateObj.toLocaleString('default',{month:'short'})}
+                    </div>
+                    <div style={{
+                      fontSize:'0.5rem',fontWeight:'900',marginTop:'5px',
+                      padding:'2px 6px',borderRadius:'4px',display:'inline-block',
+                      background: isToday ? f.color : isUrgent ? 'rgba(211,191,162,0.08)' : 'transparent',
+                      color: isToday ? '#000' : isUrgent ? '#d3bfa2' : '#2a2a2a'
+                    }}>
+                      {daysUntil(f.dateObj)}
+                    </div>
+                  </div>
+
+                  {/* festival + offers */}
+                  <div>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
+                      <span style={{fontSize:'1.05rem'}}>{f.icon}</span>
+                      <span style={{fontSize:'0.86rem',fontWeight:'900',color:'#fff'}}>{f.name}</span>
+                      <span style={{
+                        fontSize:'0.5rem',padding:'2px 7px',borderRadius:'4px',fontWeight:'900',
+                        background:`${seasonColors[f.season]||'#555'}18`,
+                        color:seasonColors[f.season]||'#555',
+                        border:`1px solid ${seasonColors[f.season]||'#555'}33`
+                      }}>{f.season.toUpperCase()}</span>
+                    </div>
+                    <div style={{fontSize:'0.6rem',color:'#444',fontStyle:'italic',marginBottom:'8px'}}>{f.tagline}</div>
+                    {/* dish-specific offer pills */}
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'5px'}}>
+                      {f.offers.slice(0, isUrgent || isToday ? 3 : 2).map((offer, oi) => (
+                        <span key={oi} style={{
+                          fontSize:'0.58rem',padding:'3px 9px',
+                          background: oi === 0 && (isToday || isUrgent) ? `${f.color}14` : 'rgba(255,255,255,0.02)',
+                          border: oi === 0 && (isToday || isUrgent) ? `1px solid ${f.color}33` : '1px solid #111',
+                          borderRadius:'5px',
+                          color: oi === 0 && (isToday || isUrgent) ? '#d3bfa2' : '#444'
+                        }}>
+                          {offer.replace('✦ ','')}
+                        </span>
+                      ))}
+                      {f.offers.length > 2 && !isUrgent && !isToday &&
+                        <span style={{fontSize:'0.56rem',color:'#2a2a2a',padding:'3px 5px'}}>
+                          +{f.offers.length - 2} more
+                        </span>
+                      }
+                    </div>
+                  </div>
+
+                  {/* use button */}
+                  <button
+                    onClick={() => {
+                      const msg = `${f.icon} *${f.name} Special!*\n\n${f.offers.join('\n')}\n\nCome celebrate with us!\n${tenantConfig?.name || ''}`;
+                      setBroadcastMsg(msg);
+                      showNotif(`${f.name} offers loaded — edit & broadcast`);
+                    }}
+                    style={{
+                      padding:'8px 13px',background:'transparent',
+                      border:'1px solid #1a1a1a',color:'#444',
+                      borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',
+                      cursor:'pointer',whiteSpace:'nowrap',
+                      alignSelf:'flex-start',marginTop:'2px'
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}
+                  >
+                    USE →
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+
+          {/* BROADCAST COMPOSER */}
+          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'22px'}}>
+            <h4 style={{margin:'0 0 4px',fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px',display:'flex',alignItems:'center',gap:'8px'}}>
+              <SendHorizontal size={13}/> BROADCAST COMPOSER
+            </h4>
+            <div style={{fontSize:'0.58rem',color:'#444',marginBottom:'12px',fontWeight:'700'}}>
+              WhatsApp blast to all customers of {tenantConfig?.name || tenantId}
+            </div>
+            <textarea
+              value={broadcastText}
+              onChange={e=>setBroadcastMsg(e.target.value)}
+              placeholder="Select a festival above to auto-fill dish offers, or write a custom message..."
+              rows={7}
+              style={{
+                width:'100%',padding:'12px 14px',background:'#000',
+                border:'1px solid #1a1a1a',color:'#fff',
+                borderRadius:'10px',fontSize:'0.74rem',
+                outline:'none',resize:'vertical',boxSizing:'border-box',
+                lineHeight:1.6,fontFamily:'inherit'
+              }}
+            />
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'10px'}}>
+              <span style={{fontSize:'0.56rem',color:'#2a2a2a',fontWeight:'700'}}>
+                {broadcastText.length} chars
+              </span>
+              <div style={{display:'flex',gap:'8px'}}>
+                <button onClick={()=>setBroadcastMsg('')}
+                  style={{padding:'8px 14px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer'}}>
+                  CLEAR
+                </button>
+                <button onClick={handleBroadcast}
+                  disabled={isBroadcasting || !broadcastText.trim()}
+                  style={{
+                    padding:'8px 18px',
+                    background: broadcastText.trim() ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#111',
+                    color: broadcastText.trim() ? '#000' : '#333',
+                    border:'none',borderRadius:'8px',
+                    fontSize:'0.62rem',fontWeight:'900',
+                    cursor: broadcastText.trim() ? 'pointer' : 'not-allowed',
+                    opacity: isBroadcasting ? 0.6 : 1
+                  }}>
+                  {isBroadcasting ? 'SENDING...' : 'LAUNCH →'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* WHATSAPP BRIDGE */}
+          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px',textAlign:'center'}}>
+            <div style={{fontSize:'0.58rem',color:'#333',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'14px'}}>WHATSAPP BRIDGE</div>
+            {isBotReady ? (
+              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',color:'#4ade80'}}>
+                <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 8px #4ade80'}}/>
+                <span style={{fontWeight:'900',fontSize:'0.8rem'}}>BRIDGE ACTIVE</span>
+              </div>
+            ) : qrCode ? (
+              <div style={{background:'#fff',padding:'14px',borderRadius:'10px',display:'inline-block'}}>
+                <QRCodeSVG value={qrCode} size={150} bgColor="#fff" fgColor="#000"/>
+              </div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'8px',padding:'8px 0'}}>
+                <div className="spinner"/>
+                <span style={{fontSize:'0.6rem',color:'#2a2a2a'}}>Waiting for QR...</span>
+              </div>
+            )}
+          </div>
+
+          {/* MENU-BASED CATEGORY SPOTLIGHT */}
+          {topCategories.length > 0 && (
+            <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px'}}>
+              <h4 style={{margin:'0 0 14px',fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
+                🍽️ YOUR MENU CATEGORIES
+              </h4>
+              {topCategories.map(([cat, dishes], i) => {
+                const topIn = dishes.slice(0,2).map(d=>d.name).join(', ');
+                const avgP  = Math.round(dishes.reduce((a,d)=>a+(d.price||d.priceFull||0),0)/dishes.length);
+                return (
+                  <div key={i} style={{
+                    padding:'10px 12px',marginBottom:'8px',
+                    background:'#050505',borderRadius:'8px',
+                    borderLeft:`3px solid ${['#BA7517','#4a7c3f','#2a5a8a','#8a3030'][i%4]}55`
+                  }}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3px'}}>
+                      <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#fff',textTransform:'uppercase',letterSpacing:'0.5px'}}>
+                        {cat.replace(/^cat_/i,'').replace(/_/g,' ')}
+                      </span>
+                      <span style={{fontSize:'0.58rem',color:'#444',fontWeight:'700'}}>{dishes.length} dishes · avg ₹{avgP}</span>
+                    </div>
+                    <div style={{fontSize:'0.6rem',color:'#555',lineHeight:1.4}}>
+                      Star items: <span style={{color:'#8a704d'}}>{topIn || '—'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{marginTop:'10px',padding:'10px',background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.08)',borderRadius:'8px'}}>
+                <div style={{fontSize:'0.58rem',color:'#555',fontWeight:'700',marginBottom:'5px',letterSpacing:'1px'}}>QUICK BROADCAST IDEAS</div>
+                <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                  {topCategories.slice(0,2).map(([cat, dishes]) => {
+                    const d = dishes[0];
+                    if (!d) return null;
+                    const msg = `🌟 Today's Special: *${d.name}* — ₹${d.price||d.priceFull} only!\n\n${dishes.slice(1,3).map(x=>`• ${x.name} @ ₹${x.price||x.priceFull}`).join('\n')}\n\nVisit us today!\n${tenantConfig?.name||''}`;
+                    return (
+                      <button key={cat}
+                        onClick={()=>{setBroadcastMsg(msg);showNotif(`${cat} offer loaded`);}}
+                        style={{
+                          padding:'7px 12px',background:'transparent',
+                          border:'1px solid #1a1a1a',color:'#555',
+                          borderRadius:'7px',fontSize:'0.6rem',fontWeight:'800',
+                          cursor:'pointer',textAlign:'left',
+                          display:'flex',alignItems:'center',gap:'7px'
+                        }}
+                        onMouseEnter={e=>{e.currentTarget.style.color='#d3bfa2';e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';}}
+                        onMouseLeave={e=>{e.currentTarget.style.color='#555';e.currentTarget.style.borderColor='#1a1a1a';}}
+                      >
+                        <span style={{color:'#8a704d'}}>→</span>
+                        Broadcast {cat.replace(/^cat_/i,'').replace(/_/g,' ')} special
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           )}
+
+          {/* SEASONAL REVENUE TIPS using real dish names */}
+          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px'}}>
+            <h4 style={{margin:'0 0 14px',fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
+              📊 SEASONAL REVENUE GUIDE
+            </h4>
+            {seasonTips.map((t,i) => (
+              <div key={i} style={{
+                padding:'10px 12px',marginBottom:'8px',
+                background:'#050505',borderRadius:'8px',
+                borderLeft:`3px solid ${t.color}55`
+              }}>
+                <div style={{fontSize:'0.6rem',fontWeight:'900',color:t.color,marginBottom:'3px'}}>{t.season}</div>
+                <div style={{fontSize:'0.63rem',color:'#555',lineHeight:1.5}}>{t.tip}</div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </div>
+
+    </motion.div>
+  );
+})()}
 
           {/* ── INSIGHTS ── */}
           {activeTab==='insights' && (

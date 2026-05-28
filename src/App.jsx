@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
-  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers
+  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers,ShoppingBag
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -44,6 +44,13 @@ const PratyekshaPremiumMenu = () => {
 
   const navRef = useRef(null);
   const activeTabRef = useRef(null);
+
+  const [isExtraItemsOpen, setIsExtraItemsOpen] = useState(false);
+const [extraItems, setExtraItems] = useState([]);
+const [extraItemsLoading, setExtraItemsLoading] = useState(false);
+const [extraItemCart, setExtraItemCart] = useState({}); // { itemId: qty }
+const [activeExtraCategory, setActiveExtraCategory] = useState('All');
+const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 
   const t = {
     en: {
@@ -190,23 +197,24 @@ useEffect(() => {
     if (!tenantId) return;
 
     // 1. PHASE A: EXECUTE INITIAL REST DATA FETCH ON MOUNT
-    const fetchMenuContent = async () => {
-      try {
-        const [res, cat, menu] = await Promise.all([
-          axios.get(`${BASE_URL}/tenant/${tenantId}`),
-          axios.get(`${BASE_URL}/categories/${tenantId}`),
-          axios.get(`${BASE_URL}/menu/${tenantId}`)
-        ]);
-        setRestaurantData(res.data);
-        setCategoryList(cat.data);
-        setAllMenuItems(menu.data);
-      } catch (error) { 
-        console.error("Initial Setup Sync Error:", error); 
-      } finally { 
-        setIsLoading(false); 
-      }
-    };
-    
+const fetchMenuContent = async () => {
+  try {
+    const [res, cat, menu, extras] = await Promise.all([
+      axios.get(`${BASE_URL}/tenant/${tenantId}`),
+      axios.get(`${BASE_URL}/categories/${tenantId}`),
+      axios.get(`${BASE_URL}/menu/${tenantId}`),
+      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] }))  // ← ADD THIS
+    ]);
+    setRestaurantData(res.data);
+    setCategoryList(cat.data);
+    setAllMenuItems(menu.data);
+    setExtraItems(extras.data || []);  // ← ADD THIS
+  } catch (error) {
+    console.error("Initial Setup Sync Error:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
     fetchMenuContent();
 
     // 2. PHASE B: SPIN UP LONG-LIVED WEB SOCKET CHANNELS FOR LIVE DATA SYNCING
@@ -239,6 +247,30 @@ useEffect(() => {
     if (direction === 'left' && currentIndex < categories.length - 1) setSelectedCategoryId(categories[currentIndex + 1]);
     else if (direction === 'right' && currentIndex > 0) setSelectedCategoryId(categories[currentIndex - 1]);
   };
+
+  const sendExtraItemsRequest = async () => {
+  const activeItems = Object.entries(extraItemCart).filter(([, qty]) => qty > 0);
+  if (activeItems.length === 0) return;
+
+  const requestText = activeItems.map(([id, qty]) => {
+    const item = extraItems.find(i => i._id === id);
+    return `${item?.name} x${qty}`;
+  }).join(', ');
+
+  try {
+    await axios.post(`${BASE_URL}/waiter-requests`, {
+      tenantId,
+      tableNumber,
+      serviceRequest: `EXTRA ITEMS: ${requestText}`
+    });
+    triggerAlert('waiterSuccess');
+    setExtraItemCart({});
+    setIsExtraItemsOpen(false);
+  } catch {
+    triggerAlert('orderError', 'error');
+  }
+};
+
 const notifyWaiter = async (serviceType = "Custom") => {
   try {
     let requestText = serviceType;
@@ -710,17 +742,30 @@ const hasNonVegInView = useMemo(() => {
       </motion.div>
 
       {/* FABs RIGHT SIDE */}
-      <div style={styles.rightFabContainer}>
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsWaiterModalOpen(true)}>
-          <BellRing size={26} color={secondaryColor} />
-        </motion.div>
-        {(totalItemsInCart > 0 || hasPlacedInitialOrder) && (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsDrawerOpen(true)}>
-            <Utensils size={26} color={secondaryColor} strokeWidth={2.5} />
-            {totalItemsInCart > 0 && <span style={styles.fabBadge}>{convertToMrNumber(totalItemsInCart)}</span>}
-          </motion.div>
-        )}
-      </div>
+{/* FABs RIGHT SIDE */}
+<div style={styles.rightFabContainer}>
+  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsWaiterModalOpen(true)}>
+    <BellRing size={26} color={secondaryColor} />
+  </motion.div>
+
+  {/* EXTRA ITEMS FAB */}
+  {extraItems.filter(i => i.isAvailable).length > 0 && (
+    <motion.div
+      initial={{ scale: 0 }} animate={{ scale: 1 }}
+      style={{...styles.fabBase, background: primaryColor}}
+      onClick={() => { setIsExtraItemsOpen(true); setExtraItemCart({}); setActiveExtraCategory('All'); setExtraItemSearchQuery(''); }}
+    >
+      <ShoppingBag size={24} color={secondaryColor} strokeWidth={2.5} />
+    </motion.div>
+  )}
+
+  {(totalItemsInCart > 0 || hasPlacedInitialOrder) && (
+    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsDrawerOpen(true)}>
+      <Utensils size={26} color={secondaryColor} strokeWidth={2.5} />
+      {totalItemsInCart > 0 && <span style={styles.fabBadge}>{convertToMrNumber(totalItemsInCart)}</span>}
+    </motion.div>
+  )}
+</div>
 
       {/* WAITER MODAL */}
       <AnimatePresence>
@@ -759,6 +804,271 @@ const hasNonVegInView = useMemo(() => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* EXTRA ITEMS MODAL */}
+<AnimatePresence>
+  {isExtraItemsOpen && (
+    <motion.div
+      initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+      transition={{ type: 'tween', duration: 0.28 }}
+      style={{ ...styles.fullscreenModal, zIndex: 5200 }}
+    >
+      {/* HEADER */}
+      <div style={styles.modalHeader}>
+        <div>
+          <h2 style={{ color: primaryColor, margin: 0, fontSize: '1.2rem' }}>
+            {language === 'mr' ? 'अतिरिक्त वस्तू' : 'Extra Items'}
+          </h2>
+          <p style={{ color: '#555', fontSize: '0.65rem', margin: '4px 0 0', fontWeight: '700', letterSpacing: '0.5px' }}>
+            {language === 'mr' ? 'थंड पेये, आईस्क्रीम आणि इतर' : 'COLD DRINKS · ICE CREAM · SNACKS & MORE'}
+          </p>
+        </div>
+        <X size={28} color={primaryColor} onClick={() => setIsExtraItemsOpen(false)} />
+      </div>
+
+      <div style={styles.modalScrollBody}>
+
+        {/* SEARCH */}
+        <div style={{ padding: '16px 20px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', padding: '10px 14px', gap: '10px' }}>
+            <Search size={16} color={primaryColor} />
+            <input
+              type="text"
+              placeholder={language === 'mr' ? 'वस्तू शोधा...' : 'Search items...'}
+              value={extraItemSearchQuery}
+              onChange={e => setExtraItemSearchQuery(e.target.value)}
+              style={{ background: 'none', border: 'none', color: '#fff', outline: 'none', fontSize: '0.85rem', width: '100%' }}
+            />
+          </div>
+        </div>
+
+        {/* CATEGORY PILLS */}
+        {(() => {
+          const cats = ['All', ...new Set(extraItems.filter(i => i.isAvailable).map(i => i.category))];
+          return (
+            <div style={{ display: 'flex', gap: '8px', padding: '8px 20px 14px', overflowX: 'auto' }} className="no-scrollbar">
+              {cats.map(cat => (
+                <button key={cat} onClick={() => setActiveExtraCategory(cat)} style={{
+                  padding: '7px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                  fontSize: '0.65rem', fontWeight: '900', whiteSpace: 'nowrap', flexShrink: 0,
+                  background: activeExtraCategory === cat ? primaryColor : 'rgba(211,191,162,0.06)',
+                  color: activeExtraCategory === cat ? '#1a1a1a' : '#555',
+                  outline: activeExtraCategory === cat ? 'none' : '1px solid rgba(211,191,162,0.12)',
+                  transition: 'all 0.15s'
+                }}>
+                  {cat === 'All' ? (language === 'mr' ? 'सर्व' : 'ALL') : cat}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* ITEMS LIST */}
+        {(() => {
+          const categoryEmojis = {
+            'Cold Drinks': '🥤', 'Ice Cream': '🍦', 'Packaged Snacks': '🍟',
+            'Juices': '🧃', 'Mineral Water': '💧', 'Tobacco': '🚬',
+            'Dairy': '🥛', 'Sweets': '🍬', 'Other': '📦'
+          };
+
+          const filtered = extraItems.filter(i => {
+            if (!i.isAvailable) return false;
+            const matchCat = activeExtraCategory === 'All' || i.category === activeExtraCategory;
+            const matchSearch = i.name.toLowerCase().includes(extraItemSearchQuery.toLowerCase());
+            return matchCat && matchSearch;
+          });
+
+          if (filtered.length === 0) return (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#333' }}>
+              <ShoppingBag size={32} color="#2a2a2a" style={{ marginBottom: '14px' }} />
+              <div style={{ fontSize: '0.8rem', fontWeight: '700' }}>
+                {language === 'mr' ? 'कोणतीही वस्तू सापडली नाही' : 'No items found'}
+              </div>
+            </div>
+          );
+
+          // Group by category
+          const grouped = {};
+          filtered.forEach(item => {
+            const cat = item.category || 'Other';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(item);
+          });
+
+          return (
+            <div style={{ padding: '0 16px 120px' }}>
+              {Object.entries(grouped).map(([cat, items]) => (
+                <div key={cat} style={{ marginBottom: '28px' }}>
+                  {/* Category label */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '0 4px' }}>
+                    <span style={{ fontSize: '1rem' }}>{categoryEmojis[cat] || '📦'}</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#555', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(211,191,162,0.08)' }} />
+                  </div>
+
+                  {/* Items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {items.map(item => {
+                      const qty = extraItemCart[item._id] || 0;
+                      const isLow = item.currentStock > 0 && item.currentStock <= 5;
+                      const isOut = item.currentStock <= 0;
+                      return (
+                        <motion.div
+                          key={item._id}
+                          layout
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '14px',
+                            background: qty > 0 ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)',
+                            border: `1px solid ${qty > 0 ? 'rgba(211,191,162,0.25)' : 'rgba(211,191,162,0.07)'}`,
+                            borderRadius: '16px', padding: '14px 16px',
+                            opacity: isOut ? 0.4 : 1,
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {/* Emoji icon */}
+                          <div style={{
+                            width: '46px', height: '46px', borderRadius: '12px',
+                            background: 'rgba(211,191,162,0.06)',
+                            border: '1px solid rgba(211,191,162,0.1)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '1.4rem', flexShrink: 0
+                          }}>
+                            {categoryEmojis[item.category] || '📦'}
+                          </div>
+
+                          {/* Name + price */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#fff', marginBottom: '2px', lineHeight: '1.3' }}>
+                              {item.name}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.82rem', fontWeight: '800', color: primaryColor }}>
+                                ₹{item.price}
+                              </span>
+                              <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>
+                                / {item.unit}
+                              </span>
+                              {isOut && (
+                                <span style={{ fontSize: '0.55rem', padding: '2px 7px', background: 'rgba(192,57,43,0.12)', color: '#c0392b', borderRadius: '4px', fontWeight: '900', border: '1px solid rgba(192,57,43,0.25)' }}>
+                                  {language === 'mr' ? 'उपलब्ध नाही' : 'OUT OF STOCK'}
+                                </span>
+                              )}
+                              {isLow && !isOut && (
+                                <span style={{ fontSize: '0.55rem', padding: '2px 7px', background: 'rgba(186,117,23,0.1)', color: '#BA7517', borderRadius: '4px', fontWeight: '900', border: '1px solid rgba(186,117,23,0.2)' }}>
+                                  {language === 'mr' ? `फक्त ${item.currentStock} शिल्लक` : `Only ${item.currentStock} left`}
+                                </span>
+                              )}
+                            </div>
+                            {item.description && (
+                              <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '3px', lineHeight: '1.3' }}>
+                                {item.description}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Counter / Add button */}
+                          {isOut ? (
+                            <div style={{ width: '80px', textAlign: 'center', fontSize: '0.6rem', color: '#333', fontWeight: '900' }}>
+                              {language === 'mr' ? 'उपलब्ध नाही' : 'UNAVAILABLE'}
+                            </div>
+                          ) : qty === 0 ? (
+                            <button
+                              onClick={() => setExtraItemCart(prev => ({ ...prev, [item._id]: 1 }))}
+                              style={{
+                                padding: '9px 18px', borderRadius: '10px', border: `1px solid ${primaryColor}`,
+                                background: 'transparent', color: primaryColor, fontWeight: '900',
+                                fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0,
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {language === 'mr' ? 'निवडा' : 'ADD'}
+                            </button>
+                          ) : (
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              background: 'rgba(211,191,162,0.12)', padding: '6px 10px',
+                              borderRadius: '10px', flexShrink: 0
+                            }}>
+                              <button
+                                onClick={() => setExtraItemCart(prev => {
+                                  const newCart = { ...prev };
+                                  if (newCart[item._id] <= 1) delete newCart[item._id];
+                                  else newCart[item._id] -= 1;
+                                  return newCart;
+                                })}
+                                style={{ background: 'none', border: 'none', color: primaryColor, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
+                              >
+                                <Minus size={16} />
+                              </button>
+                              <span style={{ fontSize: '0.95rem', fontWeight: '900', color: '#fff', minWidth: '18px', textAlign: 'center' }}>
+                                {qty}
+                              </span>
+                              <button
+                                onClick={() => setExtraItemCart(prev => ({ ...prev, [item._id]: (prev[item._id] || 0) + 1 }))}
+                                style={{ background: 'none', border: 'none', color: primaryColor, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
+                              >
+                                <Plus size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* STICKY FOOTER — shows only when items selected */}
+      <AnimatePresence>
+        {Object.keys(extraItemCart).length > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+            style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              padding: '16px 20px 34px',
+              background: 'linear-gradient(to top, #1a1a1a 80%, transparent)',
+              borderTop: '1px solid rgba(211,191,162,0.08)'
+            }}
+          >
+            {/* Order summary line */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 4px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#555', fontWeight: '800' }}>
+                {Object.values(extraItemCart).reduce((a, b) => a + b, 0)} {language === 'mr' ? 'वस्तू निवडल्या' : 'items selected'}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: primaryColor, fontWeight: '900' }}>
+                {language === 'mr' ? 'अंदाजे' : 'Est.'} ₹{Object.entries(extraItemCart).reduce((acc, [id, qty]) => {
+                  const item = extraItems.find(i => i._id === id);
+                  return acc + (item?.price || 0) * qty;
+                }, 0).toLocaleString()}
+              </div>
+            </div>
+
+            <button
+              onClick={sendExtraItemsRequest}
+              style={{
+                width: '100%', padding: '18px',
+                background: `linear-gradient(135deg, ${primaryColor}, #bda88a)`,
+                border: 'none', borderRadius: '16px',
+                color: '#1a1a1a', fontWeight: '900', fontSize: '0.95rem',
+                cursor: 'pointer', letterSpacing: '0.5px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                boxShadow: '0 8px 24px rgba(211,191,162,0.2)'
+              }}
+            >
+              <BellRing size={18} color="#1a1a1a" />
+              {language === 'mr' ? 'वेटरला विनंती पाठवा' : 'REQUEST TO WAITER'}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* CHECKOUT / BILL SUMMARY PAGE */}
 {/* CHECKOUT / BILL SUMMARY PAGE */}
