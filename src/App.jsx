@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
-  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag 
+  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -886,8 +886,9 @@ if (isCounterScan && registrationStep !== 'menu') {
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.1)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <span style={{ fontSize: '2rem' }}>🪑</span>
-            <div>
+<div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  <Armchair size={26} color="#d3bfa2" />
+</div>            <div>
               <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px' }}>
                 {language === 'mr' ? 'टेबलसाठी रांगेत बसा' : 'JOIN WAITLIST'}
               </div>
@@ -909,8 +910,9 @@ if (isCounterScan && registrationStep !== 'menu') {
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.08)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(211,191,162,0.04)'}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <span style={{ fontSize: '2rem' }}>🛍️</span>
-            <div>
+<div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  <ShoppingBag size={26} color="#d3bfa2" />
+</div>            <div>
               <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px' }}>
                 {language === 'mr' ? 'टेकअवे / पिकअप' : 'TAKEAWAY / PICKUP'}
               </div>
