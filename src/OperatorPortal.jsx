@@ -163,6 +163,9 @@ const [salaryEditValue, setSalaryEditValue] = useState('');
 const [salaryEditPassword, setSalaryEditPassword] = useState('');
 const tableCount = parseInt(localStorage.getItem('table_count')) || 12;
 
+const [extraAnalytics, setExtraAnalytics] = useState(null);
+const [extraAnalyticsLoading, setExtraAnalyticsLoading] = useState(false);
+
 const [showAddDishModal, setShowAddDishModal] = useState(false);
 const [newDish, setNewDish] = useState({
   name: '', name_mr: '', categoryId: '', price: '', priceHalf: '', priceFull: '',
@@ -195,7 +198,37 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
   // ─────────────────────────────────────────────────────
   // FETCH FUNCTIONS
   // ─────────────────────────────────────────────────────
-// REPLACE the existing viewDate useEffect with:
+
+const [waitlistEntries,     setWaitlistEntries]     = useState([]);
+const [pickupEntries,       setPickupEntries]        = useState([]);
+const [avgWaitData,         setAvgWaitData]          = useState(null);
+const [counterQueueLoading, setCounterQueueLoading]  = useState(false);
+const [assignTableModal,    setAssignTableModal]      = useState(null); // entry
+
+const fetchCounterQueue = useCallback(async () => {
+  setCounterQueueLoading(true);
+  try {
+    const [queueRes, avgRes] = await Promise.all([
+      axios.get(`${BASE_URL}/waitlist/${tenantId}`),
+      axios.get(`${BASE_URL}/waitlist/avg-wait/${tenantId}`)
+    ]);
+    setWaitlistEntries(queueRes.data.waitlist    || []);
+    setPickupEntries  (queueRes.data.pickupQueue || []);
+    setAvgWaitData    (avgRes.data || null);
+  } catch { }
+  finally { setCounterQueueLoading(false); }
+}, [tenantId]);
+
+
+const fetchExtraAnalytics = useCallback(async () => {
+  setExtraAnalyticsLoading(true);
+  try {
+    const res = await axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`);
+    setExtraAnalytics(res.data || null);
+  } catch { setExtraAnalytics(null); }
+  finally { setExtraAnalyticsLoading(false); }
+}, [tenantId]);
+
 
   const fetchInitialData = useCallback(async () => {
     try {
@@ -207,8 +240,9 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
       setOrders(orderRes.data);
       setMenuItems(menuRes.data);
       setWaiterRequests(waiterRes.data); 
+      fetchCounterQueue();
     } catch (err) { console.error("Data Sync Error:", err); }
-  }, [tenantId]);
+  }, [tenantId,fetchCounterQueue ]);
 
   // ── fetchAnalytics now takes an optional targetMonth (YYYY-MM) so it re-runs when viewDate changes
 const fetchAnalytics = useCallback(async () => {
@@ -265,9 +299,10 @@ const fetchManagementData = useCallback(async () => {
     // ← ENSURE THIS IS HERE:
     const monthPrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
     fetchMonthlySalary(monthPrefix);
+    fetchCounterQueue ();
   } catch (err) { console.error("Management Sync Error", err); }
   finally { setInventoryLoading(false); }
-}, [tenantId, viewDate, fetchMonthlySalary]);
+}, [tenantId, viewDate, fetchMonthlySalary,fetchCounterQueue ]);
 
 
 // ADD after fetchManagementData:
@@ -289,15 +324,14 @@ const fetchExtraItems = useCallback(async () => {
   finally { setExtraItemsLoading(false); }
 }, [tenantId]);
 
-// Inside the existing useEffect that watches viewDate:
 useEffect(() => {
   if (isAuthenticated) {
     fetchAnalytics();
-    // Also refresh monthly salary when month changes
+    fetchExtraAnalytics();   // ← ADD THIS LINE
     const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
     if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
   }
-}, [isAuthenticated, viewDate, fetchAnalytics]);
+}, [isAuthenticated, viewDate, fetchAnalytics, fetchMonthlySalary, fetchExtraAnalytics]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -357,6 +391,11 @@ socket.on("menu_updated", (updatedItem) => {
   setMenuItems(prev => prev.filter(m => m._id !== itemId));
   showNotif("Menu item removed by operator", "info");
 });
+
+socket.on('new_waitlist_entry', () => fetchCounterQueue());
+socket.on('waitlist_cancelled',  () => fetchCounterQueue());
+socket.on('waitlist_assigned',   () => { fetchCounterQueue(); fetchInitialData(); });
+socket.on('waitlist_updated',    () => fetchCounterQueue());
 
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
@@ -648,14 +687,16 @@ const settleBill = () => {
     });
 };
 
+
 useEffect(() => {
-  if (activeTab === 'inventory' || activeTab === 'recipes') {
-    fetchManagementData();
+  if (activeTab === 'billing') fetchCounterQueue();
+  if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+  if (activeTab === 'extras') fetchExtraItems();
+    if (activeTab === 'insights') {    // ← ADD THIS
+    fetchExtraAnalytics();
   }
-  if (activeTab === 'extras') {       // ← ADD THIS
-    fetchExtraItems();
-  }
-}, [activeTab, fetchManagementData, fetchExtraItems]);
+}, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue,fetchExtraAnalytics]);
+
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
@@ -1667,45 +1708,214 @@ const renderMonthHeatmap = () => {
             ════════════════════════════════════════════════ */}
         <section style={styles.scrollArea} className="custom-scroll">
 
-          {/* ── PENDING ── */}
-          {activeTab==='pending' && (
-            <motion.div key="pending" initial={{opacity:0}} animate={{opacity:1}}
-              style={{display:'flex',gap:'30px',alignItems:'flex-start',width:'100%'}}>
-              <div style={{flex:1.2}}>
-                <h3 style={styles.gridLabel}>KITCHEN TICKETS</h3>
-                {filteredOrders.length>0 ? filteredOrders.map(order=>(
-                  <div key={order._id} style={styles.orderRow}>
-                    <div style={styles.tableCircle}>{order.tableNumber}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:'900',fontSize:'0.9rem',color:'#fff'}}>TABLE {order.tableNumber}</div>
-                      <div style={{color:'#d3bfa2',marginTop:'5px',fontSize:'0.8rem',fontWeight:'bold'}}>
-{(order.items || []).map(it=>`${it.quantity}x ${it.name}`).join(' • ')}
+{activeTab === 'pending' && (
+  <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '100%' }}>
+
+    {/* ── TOP ROW: Kitchen + Service calls ── */}
+    <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start', width: '100%' }}>
+      <div style={{ flex: 1.2 }}>
+        <h3 style={styles.gridLabel}>KITCHEN TICKETS</h3>
+        {filteredOrders.length > 0 ? filteredOrders.map(order => (
+          <div key={order._id} style={styles.orderRow}>
+            <div style={styles.tableCircle}>{order.tableNumber}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>TABLE {order.tableNumber}</div>
+              <div style={{ color: '#d3bfa2', marginTop: '5px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                {(order.items || []).map(it => `${it.quantity}x ${it.name}`).join(' • ')}
+              </div>
+            </div>
+            <OperatorLiveTimer createdAt={order.createdAt} />
+          </div>
+        )) : (
+          <div style={{ textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '40px', background: '#0d0d0d', borderRadius: '15px' }}>NO ACTIVE ORDERS</div>
+        )}
+      </div>
+      <div style={{ flex: 1, borderLeft: '1px solid #1a1a1a', paddingLeft: '30px' }}>
+        <h3 style={styles.gridLabel}>ACTIVE SERVICE CALLS</h3>
+        {waiterRequests.length > 0 ? waiterRequests.map(req => (
+          <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
+            style={{ ...styles.waiterRequestRow, gap: '15px', padding: '15px' }}>
+            <div style={{ ...styles.goldCircle, width: '35px', height: '35px' }}><BellRing size={16} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '900', color: '#d4af37', fontSize: '0.8rem' }}>TABLE {req.tableNumber}</div>
+              <div style={{ fontSize: '0.75rem', color: '#fff', marginTop: '2px' }}>{req.serviceRequest}</div>
+            </div>
+            <button onClick={() => completeWaiterRequest(req._id)} style={{ ...styles.doneBtn, padding: '6px 12px', fontSize: '0.6rem' }}>DONE</button>
+          </motion.div>
+        )) : (
+          <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', padding: '20px' }}>NO PENDING REQUESTS</div>
+        )}
+      </div>
+    </div>
+
+    {/* ── COUNTER QUEUE PANEL ── */}
+    {(waitlistEntries.length > 0 || pickupEntries.length > 0) && (
+      <div style={{ background: '#080808', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '20px', padding: '24px', borderTop: '3px solid #d3bfa2' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ShoppingBag size={18} color="#d3bfa2" />
+            <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1px' }}>COUNTER QUEUE</h3>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {avgWaitData && (
+              <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '800' }}>
+                Avg wait: ~{avgWaitData.avgWait || 20} min · {avgWaitData.tablesOccupied}/{avgWaitData.totalTables} tables occupied
+              </span>
+            )}
+            <button onClick={fetchCounterQueue} style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer' }}>
+              ↻
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+
+          {/* WAITLIST column */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #151515' }}>
+              <span style={{ fontSize: '0.9rem' }}>🪑</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                DINE-IN WAITLIST ({waitlistEntries.length})
+              </span>
+            </div>
+            {waitlistEntries.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#222', fontSize: '0.7rem', padding: '20px' }}>No one waiting</div>
+            ) : waitlistEntries.map((entry, i) => {
+              const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
+              const hasItems = entry.items?.length > 0;
+              return (
+                <div key={entry._id} style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '14px', padding: '16px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', background: 'rgba(211,191,162,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                          #{entry.waitlistPosition}
+                        </span>
+                        <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.88rem' }}>{entry.customerName}</span>
+                        <span style={{ fontSize: '0.6rem', color: '#555' }}>· {entry.partySize} pax</span>
+                      </div>
+                      <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '4px' }}>Waiting: {waitMins} min</div>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '900', color: waitMins > 25 ? '#c0392b' : waitMins > 15 ? '#BA7517' : '#555' }}>
+                      {waitMins}m
+                    </div>
+                  </div>
+
+                  {hasItems && (
+                    <div style={{ marginBottom: '10px', padding: '8px 10px', background: '#050505', borderRadius: '8px', fontSize: '0.65rem', color: '#666', lineHeight: 1.6 }}>
+                      {entry.items.slice(0, 3).map(i => `${i.quantity}x ${i.name}`).join(' · ')}
+                      {entry.items.length > 3 && ` +${entry.items.length - 3} more`}
+                      <div style={{ color: '#8a704d', fontWeight: '800', marginTop: '3px' }}>
+                        Est. bill: ₹{entry.totalAmount.toLocaleString()}
                       </div>
                     </div>
-                    <OperatorLiveTimer createdAt={order.createdAt}/>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => setAssignTableModal(entry)} style={{
+                      flex: 1, padding: '9px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                      border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem',
+                      fontWeight: '900', cursor: 'pointer'
+                    }}>
+                      ASSIGN TABLE ▼
+                    </button>
+                    <button onClick={() => setConfirmModal({
+                      show: true, title: 'Mark as No-Show?',
+                      subtitle: `${entry.customerName} will be removed from the waitlist.`,
+                      onConfirm: async () => {
+                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+                        fetchCounterQueue();
+                        showNotif(`${entry.customerName} marked no-show`);
+                      }
+                    })} style={{ padding: '9px 12px', background: 'transparent', border: '1px solid #222', color: '#444', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}>
+                      NO SHOW
+                    </button>
                   </div>
-                )) : (
-                  <div style={{textAlign:'center',opacity:0.5,fontSize:'0.8rem',padding:'40px',background:'#0d0d0d',borderRadius:'15px'}}>NO ACTIVE ORDERS</div>
-                )}
-              </div>
-              <div style={{flex:1,borderLeft:'1px solid #1a1a1a',paddingLeft:'30px'}}>
-                <h3 style={styles.gridLabel}>ACTIVE SERVICE CALLS</h3>
-                {waiterRequests.length>0 ? waiterRequests.map(req=>(
-                  <motion.div initial={{x:20,opacity:0}} animate={{x:0,opacity:1}} key={req._id}
-                    style={{...styles.waiterRequestRow,gap:'15px',padding:'15px'}}>
-                    <div style={{...styles.goldCircle,width:'35px',height:'35px'}}><BellRing size={16}/></div>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:'900',color:'#d4af37',fontSize:'0.8rem'}}>TABLE {req.tableNumber}</div>
-                      <div style={{fontSize:'0.75rem',color:'#fff',marginTop:'2px'}}>{req.serviceRequest}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* PICKUP column */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #151515' }}>
+              <span style={{ fontSize: '0.9rem' }}>🛍️</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                PICKUP QUEUE ({pickupEntries.length})
+              </span>
+            </div>
+            {pickupEntries.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#222', fontSize: '0.7rem', padding: '20px' }}>No pickup orders</div>
+            ) : pickupEntries.map(entry => {
+              const isReady = entry.status === 'pickup-ready';
+              const hasPickupTime = entry.scheduledPickupTime;
+              const pickupMinsLeft = hasPickupTime
+                ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
+              return (
+                <div key={entry._id} style={{
+                  background: '#0a0a0a', borderRadius: '14px', padding: '16px', marginBottom: '12px',
+                  border: `1px solid ${isReady ? 'rgba(74,222,128,0.25)' : '#1a1a1a'}`,
+                  borderTop: `2px solid ${isReady ? '#4ade80' : '#1a1a1a'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.88rem' }}>{entry.customerName}</div>
+                      {hasPickupTime && (
+                        <div style={{ fontSize: '0.62rem', marginTop: '3px', color: pickupMinsLeft !== null && pickupMinsLeft <= 10 ? '#BA7517' : '#555' }}>
+                          Pickup: {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                          {pickupMinsLeft !== null && ` · ${pickupMinsLeft > 0 ? `${pickupMinsLeft} min left` : 'Due now'}`}
+                        </div>
+                      )}
                     </div>
-                    <button onClick={()=>completeWaiterRequest(req._id)} style={{...styles.doneBtn,padding:'6px 12px',fontSize:'0.6rem'}}>DONE</button>
-                  </motion.div>
-                )) : (
-                  <div style={{textAlign:'center',opacity:0.3,fontSize:'0.7rem',padding:'20px'}}>NO PENDING REQUESTS</div>
-                )}
-              </div>
-            </motion.div>
-          )}
+                    {isReady && (
+                      <span style={{ fontSize: '0.55rem', padding: '3px 8px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '4px', fontWeight: '900' }}>
+                        READY
+                      </span>
+                    )}
+                  </div>
+
+                  {entry.items?.length > 0 && (
+                    <div style={{ marginBottom: '10px', padding: '8px 10px', background: '#050505', borderRadius: '8px', fontSize: '0.65rem', color: '#666', lineHeight: 1.6 }}>
+                      {entry.items.slice(0, 3).map(i => `${i.quantity}x ${i.name}`).join(' · ')}
+                      {entry.items.length > 3 && ` +${entry.items.length - 3} more`}
+                      <div style={{ color: '#8a704d', fontWeight: '800', marginTop: '3px' }}>₹{entry.totalAmount.toLocaleString()}</div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {!isReady && (
+                      <button onClick={async () => {
+                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
+                        fetchCounterQueue();
+                        showNotif(`${entry.customerName} notified — pickup ready`);
+                      }} style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg,#4ade80,#1D9E75)', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
+                        MARK READY
+                      </button>
+                    )}
+                    <button onClick={() => setConfirmModal({
+                      show: true, title: `Settle ${entry.customerName}?`,
+                      subtitle: `Collect ₹${entry.totalAmount} and mark as collected.`,
+                      onConfirm: async () => {
+                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount });
+                        fetchCounterQueue(); fetchAnalytics();
+                        showNotif(`${entry.customerName} — pickup settled`);
+                      }
+                    })} style={{ flex: 1, padding: '9px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
+                      SETTLE ₹{entry.totalAmount}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    )}
+
+  </motion.div>
+)}
 {/* ── MENU ── */}
 {activeTab==='menu' && (
   <motion.div key="menu" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
@@ -2881,53 +3091,47 @@ const renderMonthHeatmap = () => {
 })()}
 
 {/* ── EXTRA ITEMS INSIGHTS ── */}
-{(() => {
-  const [extraAnalytics, setExtraAnalytics] = React.useState(null);
-  React.useEffect(() => {
-    axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`)
-      .then(r => setExtraAnalytics(r.data)).catch(() => {});
-  }, [viewDate]);
+{extraAnalytics && extraAnalytics.totalSold > 0 && (
+  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+    <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
 
-  if (!extraAnalytics || extraAnalytics.totalSold === 0) return null;
+    {/* KPI strip */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+      {[
+        { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
+        { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
+        { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b' },
+        { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
+      ].map(s => (
+        <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
+          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+          <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+        </div>
+      ))}
+    </div>
 
-  return (
-    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-      <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
-      
-      {/* KPI strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-        {[
-          { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
-          { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
-          { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: extraAnalytics.totalProfit > 0 ? '#4ade80' : '#c0392b' },
-          { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
-        ].map(s => (
-          <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
-            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-            <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Per-item breakdown */}
-      <div style={{ overflowX: 'auto' }} className="custom-scroll">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-              {['Item', 'Category', 'Sell ₹', 'Cost ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
-                <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(extraAnalytics.items || []).filter(i => i.totalSold > 0).sort((a, b) => b.profit - a.profit).map((item, ri) => (
+    {/* Per-item breakdown */}
+    <div style={{ overflowX: 'auto' }} className="custom-scroll">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            {['Item', 'Category', 'Sell ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
+              <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {(extraAnalytics.items || [])
+            .filter(i => i.totalSold > 0)
+            .sort((a, b) => b.profit - a.profit)
+            .map(item => (
               <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
                 <td style={{ padding: '10px 12px 10px 0', fontWeight: '900', color: '#fff' }}>{item.name}</td>
-                <td style={{ color: '#555' }}>{item.category}</td>
-                <td style={{ color: '#d3bfa2', fontWeight: '800' }}>₹{item.price}</td>
-                <td style={{ color: '#BA7517' }}>₹{item.costPrice}</td>
-                <td>
-                  <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
+                <td style={{ color: '#555', paddingRight: '12px' }}>{item.category}</td>
+                <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{item.price}</td>
+                <td style={{ paddingRight: '12px' }}>
+                  <span style={{
+                    fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
                     background: item.margin > 40 ? 'rgba(74,222,128,0.08)' : 'rgba(186,117,23,0.08)',
                     color: item.margin > 40 ? '#4ade80' : '#BA7517',
                     border: `1px solid ${item.margin > 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`
@@ -2935,33 +3139,52 @@ const renderMonthHeatmap = () => {
                     {item.margin}%
                   </span>
                 </td>
-                <td style={{ color: '#888' }}>{item.totalSold}</td>
-                <td style={{ color: '#d3bfa2', fontWeight: '800' }}>₹{(item.revenue || 0).toLocaleString()}</td>
+                <td style={{ color: '#888', paddingRight: '12px' }}>{item.totalSold}</td>
+                <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{(item.revenue || 0).toLocaleString()}</td>
                 <td style={{ fontWeight: '900', color: item.profit > 0 ? '#4ade80' : '#c0392b' }}>
                   ₹{(item.profit || 0).toLocaleString()}
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* By category summary */}
-      {Object.entries(extraAnalytics.byCategory || {}).length > 1 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
-          {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
-            <div key={cat} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px' }}>{cat}</div>
-              <div style={{ fontSize: '0.75rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
-              <div style={{ fontSize: '0.6rem', color: '#4ade80', marginTop: '2px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
-              <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units sold</div>
-            </div>
-          ))}
-        </div>
-      )}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
+            <td colSpan="4" style={{ padding: '12px 0', fontSize: '0.6rem', color: '#8a704d', fontWeight: '900' }}>TOTALS</td>
+            <td style={{ padding: '12px 0', color: '#888', fontWeight: '800' }}>
+              {(extraAnalytics.items || []).filter(i => i.totalSold > 0).reduce((a, i) => a + i.totalSold, 0)}
+            </td>
+            <td style={{ padding: '12px 0', color: '#d3bfa2', fontWeight: '900' }}>
+              ₹{(extraAnalytics.totalRevenue || 0).toLocaleString()}
+            </td>
+            <td style={{ padding: '12px 0', color: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b', fontWeight: '900' }}>
+              ₹{(extraAnalytics.totalProfit || 0).toLocaleString()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
-  );
-})()}
+
+    {/* By category summary */}
+    {Object.keys(extraAnalytics.byCategory || {}).length > 1 && (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
+        {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
+          <div key={cat} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+            <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat}</div>
+            <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
+            <div style={{ fontSize: '0.62rem', color: '#4ade80', marginTop: '3px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
+            <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units</div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* Stock value footer */}
+    <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
+      <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
+    </div>
+  </div>
+)}
 
 {staffEfficiency.length > 0 && (
   <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px' }}>
@@ -5482,6 +5705,50 @@ style={{
           </div>
         )}
       </AnimatePresence>
+
+      {/* ASSIGN TABLE MODAL */}
+<AnimatePresence>
+  {assignTableModal && (
+    <div style={styles.modalBackdrop}>
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        style={{ ...styles.confirmBox, width: '420px', textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '1.5rem' }}>🪑</span>
+          <div>
+            <h3 style={{ color: '#fff', margin: 0, fontSize: '1rem', fontWeight: '900' }}>ASSIGN TABLE</h3>
+            <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px' }}>{assignTableModal.customerName} · {assignTableModal.partySize} pax</div>
+          </div>
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#444', marginBottom: '16px' }}>
+          Select a free table. Pre-ordered items will be sent to kitchen immediately.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '24px' }}>
+          {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
+            const id = n.toString();
+            const isOcc = occupiedTables.includes(id);
+            return (
+              <button key={n} disabled={isOcc} onClick={async () => {
+                await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, { tableNumber: id });
+                setAssignTableModal(null);
+                fetchCounterQueue(); fetchInitialData();
+                showNotif(`T${n} assigned to ${assignTableModal.customerName} — order sent to KDS`);
+              }} style={{
+                padding: '14px 8px', borderRadius: '10px', border: 'none', cursor: isOcc ? 'not-allowed' : 'pointer',
+                background: isOcc ? '#0d0d0d' : 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                color: isOcc ? '#2a2a2a' : '#000', fontWeight: '900', fontSize: '0.8rem',
+                opacity: isOcc ? 0.4 : 1
+              }}>
+                T{n}
+                {isOcc && <div style={{ fontSize: '0.45rem', marginTop: '2px', color: '#444' }}>OCC</div>}
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={() => setAssignTableModal(null)} style={styles.cancelBtn}>CANCEL</button>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
       {/* SALARY EDIT MODAL */}
 <AnimatePresence>
   {salaryEditModal && (
