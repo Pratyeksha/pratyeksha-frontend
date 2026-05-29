@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
-  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers
+  Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag 
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -176,6 +176,121 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
     }
   };
 
+  // =========================================================================
+  // ── HOOK CONFIGURATIONS (ALL HOOKS MUST STAY CONTINUOUSLY AT THE TOP) ──
+  // =========================================================================
+
+  const filteredMenuItems = allMenuItems.filter(i => {
+    const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
+    const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
+    const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
+    return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
+  });
+
+  useEffect(() => {
+    if (!isCounterScan || !sessionId) return;
+    waitlistSocket.emit('join_session', sessionId);
+
+    waitlistSocket.on('table_assigned', (data) => {
+      setNotificationBanner({ type: 'table', tableNumber: data.tableNumber, restaurantName: data.restaurantName });
+      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
+    });
+    waitlistSocket.on('pickup_ready', (data) => {
+      setNotificationBanner({ type: 'pickup', restaurantName: data.restaurantName });
+      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
+    });
+    waitlistSocket.on('position_updated', (data) => {
+      setWaitlistEntry(prev => prev ? { ...prev, waitlistPosition: data.position } : prev);
+      setAvgWaitData(prev => prev ? { ...prev, estimatedWait: data.estimatedWait } : prev);
+    });
+    waitlistSocket.on('pickup_reminder', (data) => {
+      triggerAlert(data.restaurantName ? `Your pickup will be ready in ~10 min at ${data.restaurantName}!` : 'Order ready soon!', 'success');
+    });
+
+    return () => {
+      waitlistSocket.off('table_assigned');
+      waitlistSocket.off('pickup_ready');
+      waitlistSocket.off('position_updated');
+      waitlistSocket.off('pickup_reminder');
+    };
+  }, [isCounterScan, sessionId, waitlistSocket]);
+
+  useEffect(() => {
+    const activeTenant = urlTenantId || 'jay_ambe_fusion';
+    setTenantId(activeTenant);
+    const params = new URLSearchParams(window.location.search);
+    const tableParam = params.get('table');
+    
+    if (tableParam) {
+      setTableNumber(tableParam);
+      setIsCounterScan(false);
+    } else {
+      setTableNumber('Counter');
+      setIsCounterScan(true);
+      
+      axios.get(`${BASE_URL}/waitlist/avg-wait/${activeTenant}`)
+        .then(r => setAvgWaitData(r.data))
+        .catch(() => {});
+        
+      axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
+        .then(r => {
+          if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
+            setWaitlistEntry(r.data);
+            setCounterMode(r.data.mode);
+            setRegistrationStep('confirm');
+          }
+        })
+        .catch((err) => {
+          console.warn("No active session found or backend unreachable. Resetting registration track.", err.message);
+          setRegistrationStep('mode');
+        });
+    }
+  }, [urlTenantId, sessionId]);
+
+
+
+
+  // =========================================================================
+  // ── CONDITIONAL RENDER LAYOUTS (MUST ALWAYS GO AFTER ALL HOOK DECLARATIONS) ──
+  // =========================================================================
+
+  // 1. Fullscreen Notification Banner Overlay
+  if (notificationBanner) {
+    const isTable  = notificationBanner.type === 'table';
+    const isPickup = notificationBanner.type === 'pickup';
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: isTable ? '#0a1f0a' : '#0a0f1f',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: '40px 24px', textAlign: 'center', fontFamily: 'Poppins, sans-serif' }}>
+        <div style={{ fontSize: '72px', marginBottom: '24px' }}>{isTable ? '🎉' : '✅'}</div>
+        <h1 style={{ fontSize: '2rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', lineHeight: 1.3 }}>
+          {isTable ? 'आपले टेबल तयार आहे!' : 'तुमची ORDER तयार आहे!'}
+        </h1>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: '600', color: '#888', marginBottom: '32px', lineHeight: 1.4 }}>
+          {isTable ? 'Your table is ready!' : 'Your order is ready for pickup!'}
+        </h2>
+        <p style={{ fontSize: '1rem', color: '#d3bfa2', marginBottom: '6px', fontWeight: '700' }}>
+          {isTable ? `टेबल नंबर ${notificationBanner.tableNumber} वर जा` : 'काउंटरवर येऊन ऑर्डर घ्या'}
+        </p>
+        <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '40px' }}>
+          {isTable ? `Please proceed to Table ${notificationBanner.tableNumber}` : 'Please collect your order at the counter'}
+        </p>
+        <button onClick={() => setNotificationBanner(null)} style={{
+          padding: '16px 40px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          color: '#000', border: 'none', borderRadius: '14px', fontSize: '1rem',
+          fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px'
+        }}>
+          {isTable ? 'टेबलकडे जा · Go to Table →' : "येतो · I'm On My Way →"}
+        </button>
+        <p style={{ position: 'absolute', bottom: '24px', fontSize: '0.7rem', color: '#333', letterSpacing: '1px', fontWeight: '900' }}>
+          {notificationBanner.restaurantName?.toUpperCase()}
+        </p>
+      </div>
+    );
+  }
+
+  
+  // 2. Counter Screen Flow Router Check
   const convertToMrNumber = (number) => {
     if (language === 'en') return number;
     const mrDigits = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
@@ -186,33 +301,7 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
     setAlert({ show: true, msg: t[language][msgKey] || msgKey, type });
     setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
   };
-useEffect(() => {
-  const activeTenant = urlTenantId || 'jay_ambe_fusion';
-  setTenantId(activeTenant);
-  const params = new URLSearchParams(window.location.search);
-  const tableParam = params.get('table');
-  if (tableParam) {
-    // Normal table/takeaway QR — existing flow
-    setTableNumber(tableParam);
-    setIsCounterScan(false);
-  } else {
-    // No table param = counter scan → show mode selector
-    setTableNumber('Counter');
-    setIsCounterScan(true);
-    // Fetch avg wait data
-    axios.get(`${BASE_URL}/waitlist/avg-wait/${activeTenant}`)
-      .then(r => setAvgWaitData(r.data)).catch(() => {});
-    // Check existing session
-    axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
-      .then(r => {
-        if (r.data && ['waiting','pickup-ready'].includes(r.data.status)) {
-          setWaitlistEntry(r.data);
-          setCounterMode(r.data.mode);
-          setRegistrationStep('confirm');
-        }
-      }).catch(() => {});
-  }
-}, [urlTenantId, sessionId]);
+
   const isOnlyVegTenant = restaurantData?.config?.onlyVeg === true;
 
   // Reset to veg when switching categories, if non-veg has no items there
@@ -441,6 +530,68 @@ const sendBatchToKitchen = async () => {
     }
   };
 
+  const placeWaitlistOrder = async () => {
+  if (!customerInfo.name.trim()) return;
+  const summary = {};
+  Object.entries(cart).forEach(([key, qty]) => {
+    const isMulti = key.includes('-');
+    const id = isMulti ? key.split('-')[0] : key;
+    const portion = isMulti ? key.split('-')[1] : 'Single';
+    const item = allMenuItems.find(i => i._id === id);
+    const summaryKey = `${id}-${portion}`;
+    if (!summary[summaryKey]) {
+      const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+      summary[summaryKey] = { menuItemId: item._id, name: item.name, quantity: 0, portion, pricePerUnit: unitPrice, subtotal: 0, price: unitPrice };
+    }
+    summary[summaryKey].quantity += qty;
+    summary[summaryKey].subtotal = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
+  });
+
+  const orderItems = Object.values(summary);
+  const total = orderItems.reduce((a, i) => a + i.subtotal, 0);
+
+  try {
+    const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
+      sessionId, customerName: customerInfo.name,
+      partySize, mode: counterMode,
+      items: orderItems, totalAmount: total,
+      scheduledPickupTime: scheduledPickupTime || null
+    });
+    setWaitlistEntry(res.data.entry);
+    setCart({}); setSuggestions({});
+    setRegistrationStep('confirm');
+    setIsDrawerOpen(false);
+    triggerAlert('orderSuccess');
+
+    // Subscribe to push after order placed
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const keyRes = await axios.get(`${BASE_URL}/waitlist/vapid-public-key`);
+        const vapidKey = keyRes.data?.publicKey;
+        if (vapidKey) {
+          const reg = await navigator.serviceWorker.register('/sw.js');
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') {
+            function urlBase64ToUint8Array(b) {
+              const pad = '='.repeat((4 - b.length % 4) % 4);
+              const base64 = (b + pad).replace(/-/g, '+').replace(/_/g, '/');
+              const raw = window.atob(base64);
+              const arr = new Uint8Array(raw.length);
+              for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+              return arr;
+            }
+            const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+            await axios.patch(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}/push-subscription`, { subscription: sub.toJSON(), pageUrl: window.location.href });
+          }
+        }
+      } catch (e) { console.warn('Push subscription failed:', e); }
+    }
+  } catch (err) {
+    console.error(err);
+    triggerAlert('orderError', 'error');
+  }
+};
+
   const calculateGrandTotal = () => {
     const subtotal = placedOrders.reduce((sum, item) => sum + item.subtotal, 0);
     return subtotal; // Assuming direct sum for simplicity as per UI requirement
@@ -499,77 +650,12 @@ const sendBatchToKitchen = async () => {
     } catch (error) { setBillRequested(true); }
   };
 
-const filteredMenuItems = allMenuItems.filter(i => {
-  const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
-  const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
-  const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
-  return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
-});
+  const hasNonVegInView = useMemo(() => {
+    if (isOnlyVegTenant) return false;
+    return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
+  }, [allMenuItems, isOnlyVegTenant]);
 
-useEffect(() => {
-  if (!isCounterScan || !sessionId) return;
-  waitlistSocket.emit('join_session', sessionId);
-
-  waitlistSocket.on('table_assigned', (data) => {
-    setNotificationBanner({ type: 'table', tableNumber: data.tableNumber, restaurantName: data.restaurantName });
-    if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
-  });
-  waitlistSocket.on('pickup_ready', (data) => {
-    setNotificationBanner({ type: 'pickup', restaurantName: data.restaurantName });
-    if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
-  });
-  waitlistSocket.on('position_updated', (data) => {
-    setWaitlistEntry(prev => prev ? { ...prev, waitlistPosition: data.position } : prev);
-    setAvgWaitData(prev => prev ? { ...prev, estimatedWait: data.estimatedWait } : prev);
-  });
-  waitlistSocket.on('pickup_reminder', (data) => {
-    triggerAlert(data.restaurantName ? `Your pickup will be ready in ~10 min at ${data.restaurantName}!` : 'Order ready soon!', 'success');
-  });
-
-  return () => {
-    waitlistSocket.off('table_assigned');
-    waitlistSocket.off('pickup_ready');
-    waitlistSocket.off('position_updated');
-    waitlistSocket.off('pickup_reminder');
-  };
-}, [isCounterScan, sessionId, waitlistSocket]);
-
-// ── NOTIFICATION BANNER (fullscreen overlay when assigned/pickup-ready) ──
-if (notificationBanner) {
-  const isTable  = notificationBanner.type === 'table';
-  const isPickup = notificationBanner.type === 'pickup';
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: isTable ? '#0a1f0a' : '#0a0f1f',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      zIndex: 9999, padding: '40px 24px', textAlign: 'center', fontFamily: 'Poppins, sans-serif' }}>
-      <div style={{ fontSize: '72px', marginBottom: '24px' }}>{isTable ? '🎉' : '✅'}</div>
-      <h1 style={{ fontSize: '2rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', lineHeight: 1.3 }}>
-        {isTable ? 'आपले टेबल तयार आहे!' : 'तुमची ऑर्डर तयार आहे!'}
-      </h1>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: '600', color: '#888', marginBottom: '32px', lineHeight: 1.4 }}>
-        {isTable ? 'Your table is ready!' : 'Your order is ready for pickup!'}
-      </h2>
-      <p style={{ fontSize: '1rem', color: '#d3bfa2', marginBottom: '6px', fontWeight: '700' }}>
-        {isTable ? `टेबल नंबर ${notificationBanner.tableNumber} वर जा` : 'काउंटरवर येऊन ऑर्डर घ्या'}
-      </p>
-      <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '40px' }}>
-        {isTable ? `Please proceed to Table ${notificationBanner.tableNumber}` : 'Please collect your order at the counter'}
-      </p>
-      <button onClick={() => setNotificationBanner(null)} style={{
-        padding: '16px 40px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-        color: '#000', border: 'none', borderRadius: '14px', fontSize: '1rem',
-        fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px'
-      }}>
-        {isTable ? 'टेबलकडे जा · Go to Table →' : "येतो · I'm On My Way →"}
-      </button>
-      <p style={{ position: 'absolute', bottom: '24px', fontSize: '0.7rem', color: '#333', letterSpacing: '1px', fontWeight: '900' }}>
-        {notificationBanner.restaurantName?.toUpperCase()}
-      </p>
-    </div>
-  );
-}
-
-// ── COUNTER SCAN FLOW ──
+  // ── COUNTER SCAN FLOW ──
 if (isCounterScan && registrationStep !== 'menu') {
 
   // CONFIRMATION SCREEN
@@ -848,12 +934,10 @@ if (isCounterScan && registrationStep !== 'menu') {
   );
 }
 
-const hasNonVegInView = useMemo(() => {
-  if (isOnlyVegTenant) return false;
-  return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
-}, [allMenuItems, isOnlyVegTenant]);
 
-  if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATYEKSHA...</div>;
+
+if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATYEKSHA...</div>;
+
 
   return (
     <div style={{...styles.body, backgroundColor: secondaryColor}}>
@@ -1684,7 +1768,7 @@ const hasNonVegInView = useMemo(() => {
                 })
               ) : ( <p style={{textAlign:'center', color:'#555', marginTop:'40px'}}>{t[language].emptyRound}</p> )}
             </div>
-            <div style={styles.drawerFooter}>
+
 <div style={styles.drawerFooter}>
   {totalItemsInCart > 0 && (
     <button style={{...styles.kitchenBtn, background: primaryColor}}
@@ -1701,8 +1785,7 @@ const hasNonVegInView = useMemo(() => {
       {t[language].viewFinalBill}
     </button>
   )}
-</div>              <button style={styles.billLinkBtn} onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}>{t[language].viewFinalBill}</button>
-            </div>
+</div>
           </motion.div>
         )}
       </AnimatePresence>
