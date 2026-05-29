@@ -99,10 +99,16 @@ const OperatorPortal = () => {
   // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
 const [extraItems, setExtraItems] = useState([]);
 const [extraItemsLoading, setExtraItemsLoading] = useState(false);
+// Replace existing newExtraItem state:
 const [newExtraItem, setNewExtraItem] = useState({
-  name: '', category: 'Cold Drinks', price: '', unit: 'piece',
-  currentStock: '', description: '', isAvailable: true, image: ''
+  name: '', category: 'Cold Drinks', price: '', costPrice: '', // ← ADD costPrice
+  unit: 'piece', currentStock: '', description: '', isAvailable: true, image: ''
 });
+
+const [extraItemsInBill, setExtraItemsInBill] = useState([]);
+const [showExtraItemPicker, setShowExtraItemPicker] = useState(false);
+const [extraItemPickerSearch, setExtraItemPickerSearch] = useState('');
+
 const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 const [extraItemEditModal, setExtraItemEditModal] = useState(null);
 const [extraItemEditData, setExtraItemEditData] = useState({});
@@ -2081,489 +2087,189 @@ const renderMonthHeatmap = () => {
           )}
 
           {/* ── MARKETING ── */}
-{activeTab === 'marketing' && (() => {
+{activeTab==='marketing' && (
+  <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
+    style={{display:'flex',flexDirection:'column',gap:'24px',maxWidth:'900px',margin:'0 auto',width:'100%'}}>
 
-  // ── Derive category → dish map from live menuItems ──────────────
-  const vegDishes    = menuItems.filter(i => i.isAvailable !== false && i.isVeg  !== false);
-  const nonVegDishes = menuItems.filter(i => i.isAvailable !== false && i.isVeg  === false);
-  const allDishes    = menuItems.filter(i => i.isAvailable !== false);
+    {/* ── SEASONAL INTELLIGENCE PANEL ── */}
+    {(() => {
+      const now = new Date(new Date().getTime() + 330*60*1000);
+      const month = now.getMonth(); // 0-indexed
+      const day = now.getDate();
 
-  // helpers
-  const pick = (arr, n = 2) => [...arr].sort(() => .5 - Math.random()).slice(0, n);
-  const fmt  = item => item ? `${item.name} @ ₹${item.price || item.priceFull || '—'}` : null;
-  const combo = (items, suffix = '') =>
-    items.filter(Boolean).map(fmt).filter(Boolean).map(s => `✦ ${s}${suffix}`);
+      const seasons = [
+        { name: 'SUMMER PEAK', months: [2,3,4], icon: '☀️', color: '#BA7517',
+          offers: ['Cold beverages combo — ₹99 deal', 'Free lassi with main course', 'Mango special thali launch', 'Cold drink + starter bundle'],
+          insight: 'Summer drives 35% more cold beverage sales. Push combo deals to increase ticket size.',
+          tips: ['Add seasonal drinks to menu', 'Run cold drink + meal combos', 'Promote morning breakfast deals'] },
+        { name: 'MONSOON SEASON', months: [5,6,7], icon: '🌧️', color: '#2980B9',
+          offers: ['Hot chai + snacks combo', 'Free hot soup with meal', 'Rainy day discount 10% off', 'Indoors cozy meal package'],
+          insight: 'Monsoon slows footfall 20%. Counter with delivery push and hot beverage promos.',
+          tips: ['Push Zomato/Swiggy offers', 'Hot soup combos', 'Weekend rain-day specials'] },
+        { name: 'FESTIVE SEASON', months: [8,9,10], icon: '🪔', color: '#d3bfa2',
+          offers: ['Diwali family meal pack', 'Festive thali special', 'Group booking discount 15%', 'Sweet box with every bill >₹500'],
+          insight: 'Festive months see 50%+ surge in group dining. Pre-book tables and launch thali packages.',
+          tips: ['Launch festive combos', 'Offer pre-booking discounts', 'Add mithai/sweets to menu'] },
+        { name: 'WINTER SEASON', months: [11,0,1], icon: '❄️', color: '#4ade80',
+          offers: ['Hot chocolate + dessert deal', 'Winter special soup thali', 'Evening snack combo 4-7pm', 'Birthday month 20% off'],
+          insight: 'Winter drives evening dining. Happy hour promos between 4-7 PM boost slow-period revenue.',
+          tips: ['Happy hour promos', 'Hot beverage menu', 'Evening snack specials'] }
+      ];
 
-  // Build dynamic offer lines from real menu
-  const buildOffers = (theme, count = 3) => {
-    const lines = [];
-    if (theme === 'veg') {
-      pick(vegDishes, count).forEach(d => lines.push(`✦ ${d.name} — ₹${d.price || d.priceFull || '—'} (Festival Special)`));
-    } else if (theme === 'combo') {
-      const pair = pick(allDishes, 2);
-      if (pair.length === 2) lines.push(`✦ ${pair[0].name} + ${pair[1].name} Combo — ₹${Math.round(((pair[0].price||pair[0].priceFull||0)+(pair[1].price||pair[1].priceFull||0))*0.85)}`);
-      pick(allDishes, 2).forEach(d => lines.push(`✦ ${d.name} — Flat 15% Off Today`));
-    } else if (theme === 'bogo') {
-      pick(allDishes, 2).forEach(d => lines.push(`✦ Buy 1 Get 1 Free: ${d.name}`));
-      pick(vegDishes, 1).forEach(d => lines.push(`✦ Free ${d.name} on orders above ₹300`));
-    } else if (theme === 'dessert') {
-      pick(vegDishes, count).forEach(d => lines.push(`✦ ${d.name} Special — ₹${Math.round((d.price||d.priceFull||100)*0.9)}`));
-    } else {
-      pick(allDishes, count).forEach(d => lines.push(`✦ ${d.name} @ ₹${d.price || d.priceFull || '—'}`));
-    }
-    if (lines.length < count) pick(allDishes, count - lines.length).forEach(d => lines.push(`✦ ${d.name} @ ₹${d.price || d.priceFull || '—'}`));
-    return lines.slice(0, count);
-  };
+      const current = seasons.find(s => s.months.includes(month));
+      const upcoming = seasons.find(s => s.months.includes((month + 1) % 12));
+      const daysToUpcoming = 30 - day + 1;
 
-  // ── Festival calendar (IST-aware) ───────────────────────────────
-  const now = new Date();
-  const yr  = now.getFullYear();
+      // Revenue growth suggestion based on stats
+      const growthPct = trendsData?.revenue?.growthPct;
+      const isGrowing = growthPct !== null && Number(growthPct) > 0;
 
-  const festivals = [
-    { date:`${yr}-01-14`, name:'Makar Sankranti',    icon:'🪁', season:'Winter',  color:'#BA7517', theme:'veg',     tagline:'Til-Gul & harvest specials' },
-    { date:`${yr}-01-26`, name:'Republic Day',        icon:'🇮🇳', season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Patriotic pride combo offers' },
-    { date:`${yr}-02-14`, name:"Valentine's Day",     icon:'❤️',  season:'Winter',  color:'#8a3030', theme:'combo',   tagline:'Couples dining special' },
-    { date:`${yr}-02-19`, name:'Shivaji Jayanti',     icon:'⚔️',  season:'Winter',  color:'#d3bfa2', theme:'veg',     tagline:'Maharashtra pride — traditional menu' },
-    { date:`${yr}-03-17`, name:'Holi',                icon:'🎨',  season:'Spring',  color:'#BA7517', theme:'bogo',    tagline:'Festival of colours feast' },
-    { date:`${yr}-03-31`, name:'Gudi Padwa',          icon:'🪔',  season:'Spring',  color:'#d3bfa2', theme:'veg',     tagline:'Maharashtrian New Year specials' },
-    { date:`${yr}-04-14`, name:'Ambedkar Jayanti',    icon:'📚',  season:'Spring',  color:'#4a7c3f', theme:'combo',   tagline:'Community appreciation day' },
-    { date:`${yr}-04-22`, name:'Ram Navami',          icon:'🙏',  season:'Spring',  color:'#BA7517', theme:'veg',     tagline:'Sattvic — no-onion no-garlic menu' },
-    { date:`${yr}-05-01`, name:'Maharashtra Day',     icon:'🧡',  season:'Summer',  color:'#d3bfa2', theme:'combo',   tagline:'Golden state pride day' },
-    { date:`${yr}-06-15`, name:'Monsoon Arrives',     icon:'🌧️',  season:'Monsoon', color:'#2a5a8a', theme:'combo',   tagline:'Chai-pakoda monsoon vibes' },
-    { date:`${yr}-07-10`, name:'Ashadhi Ekadashi',    icon:'🌿',  season:'Monsoon', color:'#4a7c3f', theme:'veg',     tagline:'Vrat-friendly menu day' },
-    { date:`${yr}-08-15`, name:'Independence Day',    icon:'🇮🇳', season:'Monsoon', color:'#4a7c3f', theme:'bogo',    tagline:'Freedom feast — BOGO specials' },
-    { date:`${yr}-08-27`, name:'Ganesh Chaturthi',    icon:'🐘',  season:'Monsoon', color:'#BA7517', theme:'veg',     tagline:'Bappa special day — modak & sweets' },
-    { date:`${yr}-09-07`, name:'Ganesh Visarjan',     icon:'🌊',  season:'Monsoon', color:'#BA7517', theme:'combo',   tagline:'Bappa farewell group feast' },
-    { date:`${yr}-10-02`, name:'Gandhi Jayanti',      icon:'🕊️',  season:'Autumn',  color:'#4a7c3f', theme:'veg',     tagline:'Simple sattvic — mindful dining' },
-    { date:`${yr}-10-13`, name:'Navratri',            icon:'🌺',  season:'Autumn',  color:'#d3bfa2', theme:'veg',     tagline:'9-day vrat special menu' },
-    { date:`${yr}-10-24`, name:'Dussehra',            icon:'🏹',  season:'Autumn',  color:'#BA7517', theme:'bogo',    tagline:'Vijaya Bhoj — victory celebration' },
-    { date:`${yr}-11-01`, name:'Diwali Week',         icon:'✨',  season:'Autumn',  color:'#d3bfa2', theme:'dessert', tagline:'Diwali pre-party specials' },
-    { date:`${yr}-11-03`, name:'Diwali',              icon:'🪔',  season:'Autumn',  color:'#d3bfa2', theme:'combo',   tagline:'Festival of lights — biggest dining day' },
-    { date:`${yr}-11-15`, name:'Chhath Puja',         icon:'🌅',  season:'Autumn',  color:'#BA7517', theme:'veg',     tagline:'Sun worship feast day' },
-    { date:`${yr}-12-25`, name:'Christmas',           icon:'🎄',  season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Festive cheer — holiday menu' },
-    { date:`${yr}-12-31`, name:'New Year Eve',        icon:'🎆',  season:'Winter',  color:'#8a704d', theme:'bogo',    tagline:'NYE countdown party platter' },
-    // next-year safeguard
-    { date:`${yr+1}-01-14`, name:'Makar Sankranti',   icon:'🪁', season:'Winter',  color:'#BA7517', theme:'veg',     tagline:'Til-Gul & harvest specials' },
-    { date:`${yr+1}-01-26`, name:'Republic Day',       icon:'🇮🇳',season:'Winter',  color:'#4a7c3f', theme:'combo',   tagline:'Patriotic pride combo offers' },
-  ].map(f => ({ ...f, dateObj: new Date(f.date), offers: buildOffers(f.theme, 3) }))
-   .sort((a, b) => a.dateObj - b.dateObj);
-
-  const daysUntil = dateObj => {
-    const diff = Math.ceil((dateObj - now) / 86400000);
-    if (diff === 0)  return 'TODAY';
-    if (diff === 1)  return 'TOMORROW';
-    if (diff < 0)   return `${Math.abs(diff)}d ago`;
-    return `in ${diff}d`;
-  };
-
-  const upcoming = festivals.filter(f => {
-    const diff = Math.ceil((f.dateObj - now) / 86400000);
-    return diff >= -1 && diff <= 90;
-  });
-  const next = festivals.find(f => f.dateObj >= now);
-
-  const seasonColors = { Winter:'#4a7c3f', Spring:'#BA7517', Summer:'#8a3030', Monsoon:'#2a5a8a', Autumn:'#8a704d' };
-
-  // ── Season performance tips referencing real dish names ──────────
-  const topDish  = allDishes[0]?.name || 'your top dish';
-  const vegHit   = vegDishes[0]?.name  || 'your veg special';
-  const nv1      = nonVegDishes[0]?.name || null;
-
-  const seasonTips = [
-    { season:'Monsoon (Jun–Sep)', color:'#2a5a8a',
-      tip:`Hot starters & soups lift avg order value 30–40%. Feature ${topDish} as a "Monsoon Warm Box". Chai combos drive repeat visits.` },
-    { season:'Festival (Oct–Nov)', color:'#BA7517',
-      tip:`Pre-order group meals with ${vegHit}. Offer loyalty rewards for customers who dine 3+ times in Diwali week. Gift-box bundling adds ₹80–₹150 per cover.` },
-    { season:'Winter (Dec–Jan)', color:'#4a7c3f',
-      tip:`Slow-cooked curries and warm beverages dominate. ${topDish} as a weekend winter special brings repeat footfall. Wedding catering inquiries peak — keep WhatsApp active.` },
-    { season:'Summer (Apr–May)', color:'#8a3030',
-      tip:`Cold drinks, lassi, and light salads increase demand. Bundle ${nv1 || topDish} with a cold drink at ₹20 less — drives 20% more summer orders.` },
-  ];
-
-  // ── Category performance hints from live menu ───────────────────
-  const categoryMap = {};
-  allDishes.forEach(d => {
-    const cat = d.categoryId || 'General';
-    if (!categoryMap[cat]) categoryMap[cat] = [];
-    categoryMap[cat].push(d);
-  });
-  const topCategories = Object.entries(categoryMap)
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 4);
-
-  return (
-    <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
-      style={{display:'flex',flexDirection:'column',gap:'28px',maxWidth:'1200px',margin:'0 auto',width:'100%'}}>
-
-      {/* ══ HEADER ══ */}
-      <div style={{borderBottom:'1px solid #151515',paddingBottom:'20px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
-        <div>
-          <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>CAMPAIGN INTELLIGENCE HUB</h2>
-          <p style={{margin:'5px 0 0',fontSize:'0.7rem',color:'#555'}}>
-            Festival calendar × your live menu × customer base — auto-generate dish-specific broadcast offers.
-          </p>
-        </div>
-        <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
-          <div style={{padding:'7px 14px',background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'8px',fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
-            {allDishes.length} live dishes
-          </div>
-          <div style={{padding:'7px 14px',background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'8px',fontSize:'0.62rem',color:'#4a7c3f',fontWeight:'900'}}>
-            {vegDishes.length} veg · {nonVegDishes.length} non-veg
-          </div>
-        </div>
-      </div>
-
-      {/* ══ NEXT FESTIVAL HERO CARD ══ */}
-      {next && (() => {
-        const diff = Math.ceil((next.dateObj - now) / 86400000);
-        return (
-          <div style={{
-            background:'#0a0a0a',
-            border:`1px solid ${next.color}44`,
-            borderLeft:`4px solid ${next.color}`,
-            borderRadius:'18px',padding:'28px 32px',
-            display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:'32px',alignItems:'start'
-          }}>
-            {/* LEFT — festival info */}
-            <div>
-              <div style={{fontSize:'0.56rem',color:next.color,fontWeight:'900',letterSpacing:'2px',marginBottom:'10px',textTransform:'uppercase'}}>
-                NEXT FESTIVAL · {next.season.toUpperCase()}
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:'14px',marginBottom:'8px'}}>
-                <span style={{fontSize:'2.2rem'}}>{next.icon}</span>
+      return (
+        <>
+          {/* CURRENT SEASON */}
+          {current && (
+            <div style={{ background: '#0a0a0a', border: `1px solid ${current.color}33`, borderTop: `3px solid ${current.color}`, borderRadius: '20px', padding: '28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                 <div>
-                  <h3 style={{margin:0,fontSize:'1.5rem',fontWeight:'900',color:'#fff'}}>{next.name}</h3>
-                  <div style={{fontSize:'0.7rem',color:'#555',marginTop:'3px'}}>
-                    {next.dateObj.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})}
-                    &nbsp;·&nbsp;
-                    <span style={{color:next.color,fontWeight:'900'}}>{daysUntil(next.dateObj)}</span>
-                  </div>
+                  <div style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>ACTIVE SEASON INTELLIGENCE</div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>{current.icon} {current.name}</h3>
+                  <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#666', lineHeight: '1.5', maxWidth: '500px' }}>{current.insight}</p>
+                </div>
+                <div style={{ textAlign: 'center', padding: '16px 20px', background: '#000', border: `1px solid ${current.color}44`, borderRadius: '12px' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '900', color: current.color }}>NOW</div>
+                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>ACTIVE SEASON</div>
                 </div>
               </div>
-              <div style={{fontSize:'0.68rem',color:'#666',fontStyle:'italic',marginBottom:'6px'}}>"{next.tagline}"</div>
-              {/* countdown ring */}
-              <div style={{
-                display:'inline-flex',alignItems:'center',gap:'10px',
-                marginTop:'10px',padding:'10px 18px',
-                background:`rgba(${next.color==='#BA7517'?'186,117,23':next.color==='#4a7c3f'?'74,124,63':'211,191,162'},0.06)`,
-                border:`1px solid ${next.color}33`,borderRadius:'10px'
-              }}>
-                <div style={{fontSize:'2rem',fontWeight:'900',color:next.color,fontFamily:'monospace',lineHeight:1}}>
-                  {diff === 0 ? '!' : diff}
-                </div>
-                <div>
-                  <div style={{fontSize:'0.56rem',color:'#444',fontWeight:'900',letterSpacing:'1px'}}>{diff===0?'FESTIVAL TODAY':'DAYS TO PREPARE'}</div>
-                  <div style={{fontSize:'0.62rem',color:'#555',marginTop:'2px'}}>Start campaign {diff > 3 ? '3 days before' : 'NOW'}</div>
-                </div>
-              </div>
-            </div>
 
-            {/* MIDDLE — dish-specific auto-generated offers */}
-            <div>
-              <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'12px',textTransform:'uppercase'}}>
-                AUTO-GENERATED FROM YOUR MENU
-              </div>
-              <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-                {next.offers.map((offer, i) => (
-                  <div key={i} style={{
-                    padding:'11px 16px',
-                    background: i === 0 ? `${next.color}0d` : '#050505',
-                    border: i === 0 ? `1px solid ${next.color}33` : '1px solid #111',
-                    borderRadius:'10px',
-                    fontSize:'0.74rem',color: i === 0 ? '#fff' : '#888',fontWeight: i === 0 ? '800' : '600',
-                    display:'flex',alignItems:'center',gap:'8px'
-                  }}>
-                    <span style={{color:next.color,fontSize:'0.6rem',fontWeight:'900'}}>#{i+1}</span>
-                    {offer}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* RIGHT — action */}
-            <div style={{display:'flex',flexDirection:'column',gap:'10px',minWidth:'120px'}}>
-              <button
-                onClick={() => {
-                  const msg = `${next.icon} *${next.name} Special!*\n\n${next.offers.join('\n')}\n\n📍 Come celebrate with us!\n${tenantConfig?.name || ''}`;
-                  setBroadcastMsg(msg);
-                  showNotif(`${next.name} offer loaded into broadcast`);
-                }}
-                style={{
-                  padding:'11px 20px',background:next.color,color:'#000',
-                  border:'none',borderRadius:'10px',fontSize:'0.68rem',
-                  fontWeight:'900',cursor:'pointer',whiteSpace:'nowrap'
-                }}
-              >
-                LOAD OFFER →
-              </button>
-              <div style={{fontSize:'0.56rem',color:'#333',textAlign:'center',lineHeight:1.5}}>
-                Loads into<br/>broadcast below
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ══ MAIN 3-COLUMN LAYOUT ══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:'20px',alignItems:'start'}}>
-
-        {/* LEFT — 90-day calendar */}
-        <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'22px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
-            <h4 style={{margin:0,fontSize:'0.75rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
-              📅 90-DAY FESTIVAL CALENDAR
-            </h4>
-            <span style={{fontSize:'0.6rem',color:'#333',fontWeight:'700'}}>
-              {upcoming.length} events · offers from your menu
-            </span>
-          </div>
-
-          <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-            {upcoming.length === 0 ? (
-              <div style={{textAlign:'center',padding:'40px',color:'#333',fontSize:'0.75rem'}}>No festivals in next 90 days</div>
-            ) : upcoming.map((f, i) => {
-              const diff = Math.ceil((f.dateObj - now) / 86400000);
-              const isToday   = diff === 0;
-              const isUrgent  = diff <= 3 && diff >= 0;
-              const isComing  = diff <= 10 && diff > 3;
-              return (
-                <div key={i} style={{
-                  display:'grid',gridTemplateColumns:'88px 1fr auto',
-                  gap:'14px',alignItems:'start',
-                  padding:'14px 16px',
-                  background: isToday ? 'rgba(211,191,162,0.05)' : '#000',
-                  border: isToday ? `1px solid ${f.color}55` : isUrgent ? `1px solid ${f.color}22` : '1px solid #0d0d0d',
-                  borderRadius:'12px'
-                }}>
-                  {/* date block */}
-                  <div style={{textAlign:'center'}}>
-                    <div style={{fontSize:'1.5rem',fontWeight:'900',
-                      color: isToday ? f.color : isUrgent ? '#d3bfa2' : '#2a2a2a',lineHeight:1}}>
-                      {f.dateObj.getDate()}
-                    </div>
-                    <div style={{fontSize:'0.56rem',color:'#333',fontWeight:'900',letterSpacing:'1px',textTransform:'uppercase'}}>
-                      {f.dateObj.toLocaleString('default',{month:'short'})}
-                    </div>
-                    <div style={{
-                      fontSize:'0.5rem',fontWeight:'900',marginTop:'5px',
-                      padding:'2px 6px',borderRadius:'4px',display:'inline-block',
-                      background: isToday ? f.color : isUrgent ? 'rgba(211,191,162,0.08)' : 'transparent',
-                      color: isToday ? '#000' : isUrgent ? '#d3bfa2' : '#2a2a2a'
-                    }}>
-                      {daysUntil(f.dateObj)}
-                    </div>
-                  </div>
-
-                  {/* festival + offers */}
-                  <div>
-                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
-                      <span style={{fontSize:'1.05rem'}}>{f.icon}</span>
-                      <span style={{fontSize:'0.86rem',fontWeight:'900',color:'#fff'}}>{f.name}</span>
-                      <span style={{
-                        fontSize:'0.5rem',padding:'2px 7px',borderRadius:'4px',fontWeight:'900',
-                        background:`${seasonColors[f.season]||'#555'}18`,
-                        color:seasonColors[f.season]||'#555',
-                        border:`1px solid ${seasonColors[f.season]||'#555'}33`
-                      }}>{f.season.toUpperCase()}</span>
-                    </div>
-                    <div style={{fontSize:'0.6rem',color:'#444',fontStyle:'italic',marginBottom:'8px'}}>{f.tagline}</div>
-                    {/* dish-specific offer pills */}
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'5px'}}>
-                      {f.offers.slice(0, isUrgent || isToday ? 3 : 2).map((offer, oi) => (
-                        <span key={oi} style={{
-                          fontSize:'0.58rem',padding:'3px 9px',
-                          background: oi === 0 && (isToday || isUrgent) ? `${f.color}14` : 'rgba(255,255,255,0.02)',
-                          border: oi === 0 && (isToday || isUrgent) ? `1px solid ${f.color}33` : '1px solid #111',
-                          borderRadius:'5px',
-                          color: oi === 0 && (isToday || isUrgent) ? '#d3bfa2' : '#444'
-                        }}>
-                          {offer.replace('✦ ','')}
-                        </span>
-                      ))}
-                      {f.offers.length > 2 && !isUrgent && !isToday &&
-                        <span style={{fontSize:'0.56rem',color:'#2a2a2a',padding:'3px 5px'}}>
-                          +{f.offers.length - 2} more
-                        </span>
-                      }
-                    </div>
-                  </div>
-
-                  {/* use button */}
-                  <button
-                    onClick={() => {
-                      const msg = `${f.icon} *${f.name} Special!*\n\n${f.offers.join('\n')}\n\nCome celebrate with us!\n${tenantConfig?.name || ''}`;
-                      setBroadcastMsg(msg);
-                      showNotif(`${f.name} offers loaded — edit & broadcast`);
-                    }}
-                    style={{
-                      padding:'8px 13px',background:'transparent',
-                      border:'1px solid #1a1a1a',color:'#444',
-                      borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',
-                      cursor:'pointer',whiteSpace:'nowrap',
-                      alignSelf:'flex-start',marginTop:'2px'
-                    }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}
-                  >
-                    USE →
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
-
-          {/* BROADCAST COMPOSER */}
-          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'22px'}}>
-            <h4 style={{margin:'0 0 4px',fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px',display:'flex',alignItems:'center',gap:'8px'}}>
-              <SendHorizontal size={13}/> BROADCAST COMPOSER
-            </h4>
-            <div style={{fontSize:'0.58rem',color:'#444',marginBottom:'12px',fontWeight:'700'}}>
-              WhatsApp blast to all customers of {tenantConfig?.name || tenantId}
-            </div>
-            <textarea
-              value={broadcastText}
-              onChange={e=>setBroadcastMsg(e.target.value)}
-              placeholder="Select a festival above to auto-fill dish offers, or write a custom message..."
-              rows={7}
-              style={{
-                width:'100%',padding:'12px 14px',background:'#000',
-                border:'1px solid #1a1a1a',color:'#fff',
-                borderRadius:'10px',fontSize:'0.74rem',
-                outline:'none',resize:'vertical',boxSizing:'border-box',
-                lineHeight:1.6,fontFamily:'inherit'
-              }}
-            />
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'10px'}}>
-              <span style={{fontSize:'0.56rem',color:'#2a2a2a',fontWeight:'700'}}>
-                {broadcastText.length} chars
-              </span>
-              <div style={{display:'flex',gap:'8px'}}>
-                <button onClick={()=>setBroadcastMsg('')}
-                  style={{padding:'8px 14px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer'}}>
-                  CLEAR
-                </button>
-                <button onClick={handleBroadcast}
-                  disabled={isBroadcasting || !broadcastText.trim()}
-                  style={{
-                    padding:'8px 18px',
-                    background: broadcastText.trim() ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#111',
-                    color: broadcastText.trim() ? '#000' : '#333',
-                    border:'none',borderRadius:'8px',
-                    fontSize:'0.62rem',fontWeight:'900',
-                    cursor: broadcastText.trim() ? 'pointer' : 'not-allowed',
-                    opacity: isBroadcasting ? 0.6 : 1
-                  }}>
-                  {isBroadcasting ? 'SENDING...' : 'LAUNCH →'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* WHATSAPP BRIDGE */}
-          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px',textAlign:'center'}}>
-            <div style={{fontSize:'0.58rem',color:'#333',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'14px'}}>WHATSAPP BRIDGE</div>
-            {isBotReady ? (
-              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',color:'#4ade80'}}>
-                <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 8px #4ade80'}}/>
-                <span style={{fontWeight:'900',fontSize:'0.8rem'}}>BRIDGE ACTIVE</span>
-              </div>
-            ) : qrCode ? (
-              <div style={{background:'#fff',padding:'14px',borderRadius:'10px',display:'inline-block'}}>
-                <QRCodeSVG value={qrCode} size={150} bgColor="#fff" fgColor="#000"/>
-              </div>
-            ) : (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'8px',padding:'8px 0'}}>
-                <div className="spinner"/>
-                <span style={{fontSize:'0.6rem',color:'#2a2a2a'}}>Waiting for QR...</span>
-              </div>
-            )}
-          </div>
-
-          {/* MENU-BASED CATEGORY SPOTLIGHT */}
-          {topCategories.length > 0 && (
-            <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px'}}>
-              <h4 style={{margin:'0 0 14px',fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
-                🍽️ YOUR MENU CATEGORIES
-              </h4>
-              {topCategories.map(([cat, dishes], i) => {
-                const topIn = dishes.slice(0,2).map(d=>d.name).join(', ');
-                const avgP  = Math.round(dishes.reduce((a,d)=>a+(d.price||d.priceFull||0),0)/dishes.length);
-                return (
-                  <div key={i} style={{
-                    padding:'10px 12px',marginBottom:'8px',
-                    background:'#050505',borderRadius:'8px',
-                    borderLeft:`3px solid ${['#BA7517','#4a7c3f','#2a5a8a','#8a3030'][i%4]}55`
-                  }}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3px'}}>
-                      <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#fff',textTransform:'uppercase',letterSpacing:'0.5px'}}>
-                        {cat.replace(/^cat_/i,'').replace(/_/g,' ')}
-                      </span>
-                      <span style={{fontSize:'0.58rem',color:'#444',fontWeight:'700'}}>{dishes.length} dishes · avg ₹{avgP}</span>
-                    </div>
-                    <div style={{fontSize:'0.6rem',color:'#555',lineHeight:1.4}}>
-                      Star items: <span style={{color:'#8a704d'}}>{topIn || '—'}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{marginTop:'10px',padding:'10px',background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.08)',borderRadius:'8px'}}>
-                <div style={{fontSize:'0.58rem',color:'#555',fontWeight:'700',marginBottom:'5px',letterSpacing:'1px'}}>QUICK BROADCAST IDEAS</div>
-                <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                  {topCategories.slice(0,2).map(([cat, dishes]) => {
-                    const d = dishes[0];
-                    if (!d) return null;
-                    const msg = `🌟 Today's Special: *${d.name}* — ₹${d.price||d.priceFull} only!\n\n${dishes.slice(1,3).map(x=>`• ${x.name} @ ₹${x.price||x.priceFull}`).join('\n')}\n\nVisit us today!\n${tenantConfig?.name||''}`;
-                    return (
-                      <button key={cat}
-                        onClick={()=>{setBroadcastMsg(msg);showNotif(`${cat} offer loaded`);}}
-                        style={{
-                          padding:'7px 12px',background:'transparent',
-                          border:'1px solid #1a1a1a',color:'#555',
-                          borderRadius:'7px',fontSize:'0.6rem',fontWeight:'800',
-                          cursor:'pointer',textAlign:'left',
-                          display:'flex',alignItems:'center',gap:'7px'
-                        }}
-                        onMouseEnter={e=>{e.currentTarget.style.color='#d3bfa2';e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';}}
-                        onMouseLeave={e=>{e.currentTarget.style.color='#555';e.currentTarget.style.borderColor='#1a1a1a';}}
+              {/* Suggested Offers */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '0.6rem', color: current.color, fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>💡 SUGGESTED OFFERS FOR THIS SEASON</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px' }}>
+                  {current.offers.map((offer, i) => (
+                    <div key={i} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#fff', fontWeight: '700' }}>🎯 {offer}</span>
+                      <button
+                        onClick={() => { setBroadcastMsg(`${current.icon} SPECIAL OFFER: ${offer}! Visit us today at ${tenantConfig?.name || tenantId}. Limited time only!`); showNotif('Offer copied to broadcast!'); }}
+                        style={{ background: 'transparent', border: `1px solid ${current.color}44`, color: current.color, padding: '4px 10px', borderRadius: '6px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: '8px' }}
                       >
-                        <span style={{color:'#8a704d'}}>→</span>
-                        Broadcast {cat.replace(/^cat_/i,'').replace(/_/g,' ')} special
+                        USE →
                       </button>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
+              </div>
+
+              {/* Action Tips */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {current.tips.map((tip, i) => (
+                  <span key={i} style={{ fontSize: '0.62rem', padding: '5px 12px', background: `${current.color}11`, border: `1px solid ${current.color}33`, borderRadius: '20px', color: current.color, fontWeight: '800' }}>
+                    ✓ {tip}
+                  </span>
+                ))}
               </div>
             </div>
           )}
 
-          {/* SEASONAL REVENUE TIPS using real dish names */}
-          <div style={{background:'#0a0a0a',border:'1px solid #151515',borderRadius:'16px',padding:'20px'}}>
-            <h4 style={{margin:'0 0 14px',fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1px'}}>
-              📊 SEASONAL REVENUE GUIDE
-            </h4>
-            {seasonTips.map((t,i) => (
-              <div key={i} style={{
-                padding:'10px 12px',marginBottom:'8px',
-                background:'#050505',borderRadius:'8px',
-                borderLeft:`3px solid ${t.color}55`
-              }}>
-                <div style={{fontSize:'0.6rem',fontWeight:'900',color:t.color,marginBottom:'3px'}}>{t.season}</div>
-                <div style={{fontSize:'0.63rem',color:'#555',lineHeight:1.5}}>{t.tip}</div>
+          {/* UPCOMING SEASON */}
+          {upcoming && upcoming !== current && (
+            <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '16px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+              <div>
+                <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>NEXT SEASON — PREPARE NOW</div>
+                <h4 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: '900', color: '#fff' }}>{upcoming.icon} {upcoming.name}</h4>
+                <p style={{ margin: 0, fontSize: '0.7rem', color: '#555', maxWidth: '500px' }}>
+                  Start preparing menu changes and offers now. {daysToUpcoming} days until next season begins.
+                </p>
               </div>
-            ))}
+              <div style={{ flexShrink: 0, textAlign: 'center', padding: '14px 20px', background: '#000', border: `1px solid ${upcoming.color}33`, borderRadius: '10px' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: '900', color: upcoming.color }}>{daysToUpcoming}d</div>
+                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AWAY</div>
+              </div>
+            </div>
+          )}
+
+          {/* GROWTH INTELLIGENCE */}
+          <div style={{ background: '#080808', border: `1px solid ${isGrowing ? 'rgba(74,222,128,0.2)' : 'rgba(192,57,43,0.2)'}`, borderRadius: '16px', padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <TrendingUp size={18} color={isGrowing ? '#4ade80' : '#c0392b'} />
+              <div>
+                <div style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '1.5px' }}>GROWTH INTELLIGENCE</div>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
+                  Revenue is {isGrowing ? '▲ Growing' : '▼ Declining'} {growthPct !== null ? `${Math.abs(growthPct)}%` : ''} vs last month
+                </h4>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
+              {(isGrowing ? [
+                { title: 'MAINTAIN MOMENTUM', tip: 'Introduce a loyalty punch card — every 5th visit earns a free starter', icon: '⭐' },
+                { title: 'UPSELL OPPORTUNITY', tip: 'Train staff to suggest add-ons: "Would you like a cold drink with that?"', icon: '📈' },
+                { title: 'GOOGLE REVIEW PUSH', tip: 'Ask happy customers for a Google review. Each review boosts local discovery.', icon: '⭐' }
+              ] : [
+                { title: 'RECOVER WITH OFFERS', tip: 'Run a "2nd visit discount" campaign — send WhatsApp to your customer list', icon: '🎯' },
+                { title: 'MENU REVIEW', tip: 'Remove dogs from your menu (low sales + low margin) — simplify to cut costs', icon: '🍽️' },
+                { title: 'PEAK HOUR PUSH', tip: 'Add a happy hour offer during your slowest time slot to fill dead hours', icon: '⏰' }
+              ]).map((s, i) => (
+                <div key={i} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+                  <div style={{ fontSize: '1rem', marginBottom: '6px' }}>{s.icon}</div>
+                  <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900', marginBottom: '5px' }}>{s.title}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#888', lineHeight: '1.5' }}>{s.tip}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
+          {/* PROFITABILITY ALERT */}
+          {profitabilityData.length > 0 && (() => {
+            const dogs = profitabilityData.filter(d => (d.totalQtySold||0) < (profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length) && (d.marginPct||0) < 30);
+            const stars = profitabilityData.filter(d => (d.totalQtySold||0) >= (profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length) && (d.marginPct||0) >= 50);
+            if (!dogs.length && !stars.length) return null;
+            return (
+              <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '16px', padding: '20px' }}>
+                <div style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>📊 MENU PROFITABILITY ALERTS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  {stars.length > 0 && (
+                    <div style={{ background: 'rgba(74,222,128,0.04)', border: '1px solid rgba(74,222,128,0.15)', borderRadius: '10px', padding: '14px' }}>
+                      <div style={{ fontSize: '0.62rem', color: '#4ade80', fontWeight: '900', marginBottom: '8px' }}>⭐ PROMOTE THESE (Star dishes)</div>
+                      {stars.slice(0,3).map((d,i) => <div key={i} style={{ fontSize: '0.72rem', color: '#ccc', padding: '3px 0' }}>→ {d.name} ({d.marginPct}% margin)</div>)}
+                    </div>
+                  )}
+                  {dogs.length > 0 && (
+                    <div style={{ background: 'rgba(192,57,43,0.04)', border: '1px solid rgba(192,57,43,0.15)', borderRadius: '10px', padding: '14px' }}>
+                      <div style={{ fontSize: '0.62rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px' }}>🐕 REVIEW THESE (Low margin + low sales)</div>
+                      {dogs.slice(0,3).map((d,i) => <div key={i} style={{ fontSize: '0.72rem', color: '#ccc', padding: '3px 0' }}>→ {d.name} ({d.marginPct}% margin)</div>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      );
+    })()}
+
+    {/* ── BROADCAST SECTION (kept) ── */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      <div style={styles.botCard}>
+        <div style={styles.cardHeaderSmall}><QrCode size={18}/> SYNC WHATSAPP DEVICE</div>
+        <div style={styles.qrContainer}>
+          {isBotReady ? <div style={{color:'#d3bfa2',fontWeight:'900'}}>BRIDGE ACTIVE</div> : qrCode ? <QRCodeSVG value={qrCode} size={180} bgColor="#000" fgColor="#d3bfa2"/> : <div className="spinner"/>}
         </div>
       </div>
-
-    </motion.div>
-  );
-})()}
-
+      <div style={styles.botCard}>
+        <div style={styles.cardHeaderSmall}><SendHorizontal size={18}/> BROADCAST CAMPAIGN</div>
+        <textarea
+          style={{...styles.input, height:'120px', resize:'none', fontSize:'0.8rem'}}
+          value={broadcastText}
+          onChange={e=>setBroadcastMsg(e.target.value)}
+          placeholder="Type your promo message here, or click USE → on any offer above to auto-fill..."
+        />
+        <button onClick={handleBroadcast} disabled={isBroadcasting}
+          style={{...styles.mainBtn, opacity: isBroadcasting ? 0.6 : 1, cursor: isBroadcasting ? 'not-allowed' : 'pointer'}}>
+          {isBroadcasting ? 'SENDING...' : '🚀 LAUNCH CAMPAIGN'}
+        </button>
+      </div>
+    </div>
+  </motion.div>
+)}
           {/* ── INSIGHTS ── */}
           {activeTab==='insights' && (
             <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
@@ -2793,40 +2499,6 @@ const renderMonthHeatmap = () => {
                       </div>
                     ))
                   ) : <div style={{opacity:0.3,fontSize:'0.75rem',paddingTop:'30px',textAlign:'center'}}>NO DATA</div>}
-                </div>
-              </div>
-
-              {/* PREP TIME + STOCK ALERTS */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Clock size={16}/> KITCHEN PREP TIME</h4>
-                  {prepTimeData?.totalTracked>0 ? (
-                    <>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'16px'}}>
-                        {[{l:'AVG PREP',v:`${prepTimeData.avgPrepTime} min`},{l:'DELAYED >15m',v:prepTimeData.delayedCount,c:prepTimeData.delayedPct>20?'#E24B4A':'#d3bfa2'},{l:'DELAY RATE',v:`${prepTimeData.delayedPct}%`,c:prepTimeData.delayedPct>20?'#E24B4A':'#4ade80'}].map(s=>(
-                          <div key={s.l} style={{background:'#050505',padding:'10px',borderRadius:'10px',border:'1px solid #111'}}>
-                            <small style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',display:'block'}}>{s.l}</small>
-                            <div style={{fontSize:'0.9rem',fontWeight:'900',color:s.c||'#d3bfa2',marginTop:'3px'}}>{s.v}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>PREP TRACKING STARTS WHEN KDS MARKS READY</div>}
-                </div>
-                <div style={{...styles.biCard,borderLeft:lowStockAlerts.length>0?'4px solid #E24B4A':'1px solid #1a1a1a'}}>
-                  <h4 style={styles.biTitle}><AlertTriangle size={16} color={lowStockAlerts.length>0?'#E24B4A':'#444'}/> LIVE STOCK ALERTS</h4>
-                  {lowStockAlerts.length>0 ? lowStockAlerts.map((a,i)=>(
-                    <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #111'}}>
-                      <div>
-                        <div style={{fontSize:'0.8rem',fontWeight:'900',color:'#fff'}}>{a.itemName}</div>
-                        <small style={{fontSize:'0.6rem',color:'#E24B4A'}}>Only {a.currentStock}{a.unit} left · Min: {a.minThreshold}{a.unit}</small>
-                      </div>
-                      <button onClick={()=>setLowStockAlerts(p=>p.filter((_,ix)=>ix!==i))}
-                        style={{background:'transparent',border:'1px solid #222',color:'#444',padding:'4px 10px',borderRadius:'6px',fontSize:'0.6rem',cursor:'pointer'}}>
-                        DISMISS
-                      </button>
-                    </div>
-                  )) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>ALL STOCK LEVELS HEALTHY</div>}
                 </div>
               </div>
 
@@ -3208,6 +2880,88 @@ const renderMonthHeatmap = () => {
   );
 })()}
 
+{/* ── EXTRA ITEMS INSIGHTS ── */}
+{(() => {
+  const [extraAnalytics, setExtraAnalytics] = React.useState(null);
+  React.useEffect(() => {
+    axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`)
+      .then(r => setExtraAnalytics(r.data)).catch(() => {});
+  }, [viewDate]);
+
+  if (!extraAnalytics || extraAnalytics.totalSold === 0) return null;
+
+  return (
+    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+      <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
+      
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+        {[
+          { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
+          { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
+          { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: extraAnalytics.totalProfit > 0 ? '#4ade80' : '#c0392b' },
+          { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
+        ].map(s => (
+          <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
+            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+            <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-item breakdown */}
+      <div style={{ overflowX: 'auto' }} className="custom-scroll">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+              {['Item', 'Category', 'Sell ₹', 'Cost ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
+                <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(extraAnalytics.items || []).filter(i => i.totalSold > 0).sort((a, b) => b.profit - a.profit).map((item, ri) => (
+              <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+                <td style={{ padding: '10px 12px 10px 0', fontWeight: '900', color: '#fff' }}>{item.name}</td>
+                <td style={{ color: '#555' }}>{item.category}</td>
+                <td style={{ color: '#d3bfa2', fontWeight: '800' }}>₹{item.price}</td>
+                <td style={{ color: '#BA7517' }}>₹{item.costPrice}</td>
+                <td>
+                  <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
+                    background: item.margin > 40 ? 'rgba(74,222,128,0.08)' : 'rgba(186,117,23,0.08)',
+                    color: item.margin > 40 ? '#4ade80' : '#BA7517',
+                    border: `1px solid ${item.margin > 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`
+                  }}>
+                    {item.margin}%
+                  </span>
+                </td>
+                <td style={{ color: '#888' }}>{item.totalSold}</td>
+                <td style={{ color: '#d3bfa2', fontWeight: '800' }}>₹{(item.revenue || 0).toLocaleString()}</td>
+                <td style={{ fontWeight: '900', color: item.profit > 0 ? '#4ade80' : '#c0392b' }}>
+                  ₹{(item.profit || 0).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* By category summary */}
+      {Object.entries(extraAnalytics.byCategory || {}).length > 1 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
+          {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
+            <div key={cat} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px' }}>{cat}</div>
+              <div style={{ fontSize: '0.75rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
+              <div style={{ fontSize: '0.6rem', color: '#4ade80', marginTop: '2px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
+              <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units sold</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+})()}
 
 {staffEfficiency.length > 0 && (
   <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px' }}>
@@ -3342,6 +3096,118 @@ const renderMonthHeatmap = () => {
     </div>
   </div>
 )}
+
+{/* ── INSIGHT: TOP TABLE REVENUE HOURS ── */}
+{hourlyAnalytics.hourly.length > 0 && (() => {
+  const topHours = [...hourlyAnalytics.hourly].sort((a,b)=>b.revenue-a.revenue).slice(0,3);
+  const fmt = h => h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+  return (
+    <div style={{...styles.biCard, marginBottom:'20px'}}>
+      <h4 style={styles.biTitle}><Zap size={16}/> REVENUE GOLDEN HOURS — TODAY</h4>
+      <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>Your 3 highest earning hours today. Schedule extra staff and stock accordingly.</p>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px'}}>
+        {topHours.map((h,i)=>(
+          <div key={h.hour} style={{background:'#050505',padding:'16px',borderRadius:'12px',border:`1px solid ${i===0?'rgba(211,191,162,0.3)':'#111'}`,borderTop:`2px solid ${i===0?'#d3bfa2':i===1?'#8a704d':'#333'}`}}>
+            <div style={{fontSize:'0.6rem',color:'#444',fontWeight:'900',marginBottom:'6px'}}>{i===0?'🥇 PEAK':i===1?'🥈 2ND':'🥉 3RD'}</div>
+            <div style={{fontSize:'1.5rem',fontWeight:'900',color:i===0?'#d3bfa2':'#fff'}}>{fmt(h.hour)}</div>
+            <div style={{fontSize:'0.75rem',color:'#4ade80',fontWeight:'800',marginTop:'4px'}}>₹{h.revenue.toLocaleString()}</div>
+            <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{h.orderCount} orders</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+})()}
+
+{/* ── INSIGHT: PAYMENT MODE TRENDS ── */}
+{analytics.length > 0 && (() => {
+  const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+  const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+  const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+  const grand  = totalC + totalU + totalK;
+  if (grand === 0) return null;
+  const modes = [
+    { label:'💵 Cash', val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
+    { label:'📱 UPI',  val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
+    { label:'💳 Card', val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
+  ];
+  return (
+    <div style={{...styles.biCard, marginBottom:'20px'}}>
+      <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
+      <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
+        Understanding how customers pay helps optimise cash flow and settlement timing.
+      </p>
+      <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
+        {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'16px'}}>
+        {modes.map(m=>(
+          <div key={m.label} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
+            <div style={{fontSize:'0.72rem',color:'#888',marginBottom:'4px'}}>{m.label}</div>
+            <div style={{fontSize:'1rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
+            <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
+          </div>
+        ))}
+      </div>
+      <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5'}}>
+        💡 <b style={{color:'#d3bfa2'}}>Insight:</b> {
+          totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
+          : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
+          : 'Balanced payment mix — good for cash flow predictability.'
+        }
+      </div>
+    </div>
+  );
+})()}
+
+{/* ── INSIGHT: INVENTORY HEALTH SCORECARD ── */}
+{inventory.length > 0 && (() => {
+  const totalItems   = inventory.length;
+  const lowItems     = inventory.filter(i=>i.currentStock<=i.minThreshold).length;
+  const depletedItems = inventory.filter(i=>i.currentStock<=0).length;
+  const healthyItems = totalItems - lowItems;
+  const healthScore  = Math.round((healthyItems/totalItems)*100);
+  const totalValue   = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
+  const criticals    = inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
+  return (
+    <div style={{...styles.biCard, marginBottom:'20px', borderLeft:`4px solid ${healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}`}}>
+      <h4 style={styles.biTitle}><Layers size={16}/> INVENTORY HEALTH SCORECARD</h4>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 3fr',gap:'20px',marginBottom:'16px',alignItems:'center'}}>
+        <div style={{textAlign:'center',background:'#050505',padding:'20px',borderRadius:'14px',border:'1px solid #111'}}>
+          <div style={{fontSize:'2.5rem',fontWeight:'900',color:healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}}>{healthScore}%</div>
+          <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',marginTop:'4px'}}>STOCK HEALTH</div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px'}}>
+          {[
+            {l:'TOTAL ITEMS', v:totalItems, c:'#fff'},
+            {l:'HEALTHY', v:healthyItems, c:'#4ade80'},
+            {l:'LOW STOCK', v:lowItems, c:'#BA7517'},
+            {l:'DEPLETED', v:depletedItems, c:'#c0392b'},
+          ].map(s=>(
+            <div key={s.l} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
+              <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'3px'}}>{s.l}</div>
+              <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {criticals.length > 0 && (
+        <div style={{background:'rgba(192,57,43,0.04)',border:'1px solid rgba(192,57,43,0.15)',borderRadius:'10px',padding:'14px'}}>
+          <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px'}}>⚠ NEEDS IMMEDIATE RESTOCK</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
+            {criticals.map(item=>(
+              <div key={item._id} style={{background:'#050505',padding:'10px',borderRadius:'8px',border:'1px solid #1a1a1a'}}>
+                <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{item.itemName}</div>
+                <div style={{fontSize:'0.62rem',color:'#c0392b',marginTop:'2px'}}>{item.currentStock<=0?'OUT OF STOCK':`Only ${item.currentStock} ${item.unit} left`}</div>
+                <div style={{fontSize:'0.58rem',color:'#444',marginTop:'1px'}}>Min: {item.minThreshold} {item.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})()}
             </motion.div>
           )}
 
@@ -4694,7 +4560,7 @@ setNewStaff({
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
         {/* ITEM NAME */}
         <div>
           <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
@@ -4730,6 +4596,22 @@ setNewStaff({
             value={newExtraItem.price}
             onChange={e => setNewExtraItem({ ...newExtraItem, price: e.target.value })} />
         </div>
+
+                      {/* COST PRICE — add after the PRICE field */}
+<div>
+  <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
+    Cost Price (₹) *
+  </label>
+  <input type="number" placeholder="e.g. 28"
+    style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+    value={newExtraItem.costPrice}
+    onChange={e => setNewExtraItem({ ...newExtraItem, costPrice: e.target.value })} />
+  {newExtraItem.price && newExtraItem.costPrice && (
+    <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
+      Margin: {Math.round(((newExtraItem.price - newExtraItem.costPrice) / newExtraItem.price) * 100)}%
+    </div>
+  )}
+</div>
 
         {/* UNIT */}
         <div>
@@ -4773,17 +4655,20 @@ setNewStaff({
             if (!newExtraItem.name?.trim()) return showNotif('Item name is required', 'error');
             if (!newExtraItem.price || Number(newExtraItem.price) <= 0) return showNotif('Valid price is required', 'error');
             try {
-              await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
-                name: newExtraItem.name.trim(),
-                category: newExtraItem.category,
-                price: Number(newExtraItem.price),
-                unit: newExtraItem.unit,
-                currentStock: Number(newExtraItem.currentStock) || 0,
-                description: newExtraItem.description.trim(),
-                isAvailable: true
-              });
+// In the register button onClick:
+await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
+    name: newExtraItem.name.trim(),
+    category: newExtraItem.category,
+    price: Number(newExtraItem.price),
+    costPrice: Number(newExtraItem.costPrice) || 0,   // ← ADD
+    unit: newExtraItem.unit,
+    currentStock: Number(newExtraItem.currentStock) || 0,
+    description: newExtraItem.description.trim(),
+    isAvailable: true
+});
+// Reset:
+setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
               showNotif(`${newExtraItem.name} added to catalog`);
-              setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
               fetchExtraItems();
             } catch { showNotif('Failed to add item', 'error'); }
           }}
@@ -4850,7 +4735,7 @@ setNewStaff({
 
       const categoryEmojis = {
         'Cold Drinks': '🥤', 'Ice Cream': '🍦', 'Packaged Snacks': '🍟',
-        'Juices': '🧃', 'Mineral Water': '💧', 'Tobacco': '🚬',
+        'Juices': '🧃', 'Mineral Water': '💧',
         'Dairy': '🥛', 'Sweets': '🍬', 'Other': '📦'
       };
 
@@ -4917,6 +4802,8 @@ setNewStaff({
                           </span>
                         )}
                       </div>
+
+
 
                       {/* Stock bar */}
                       <div style={{ marginBottom: '14px' }}>
@@ -5094,6 +4981,18 @@ setNewStaff({
                 onChange={e => setExtraItemEditData({ ...extraItemEditData, price: e.target.value })}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
+            {/* Add after Price field in edit modal */}
+<div>
+  <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
+  <input type="number" value={extraItemEditData.costPrice ?? ''}
+    onChange={e => setExtraItemEditData({ ...extraItemEditData, costPrice: e.target.value })}
+    style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+  {extraItemEditData.price && extraItemEditData.costPrice && (
+    <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
+      Margin: {Math.round(((extraItemEditData.price - extraItemEditData.costPrice) / extraItemEditData.price) * 100)}%
+    </div>
+  )}
+</div>
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
               <input type="number" value={extraItemEditData.currentStock ?? ''}
