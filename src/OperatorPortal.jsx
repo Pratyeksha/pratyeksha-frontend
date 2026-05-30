@@ -9,7 +9,8 @@ import {
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
-  ChefHat
+  ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
+Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -199,24 +200,22 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
   // FETCH FUNCTIONS
   // ─────────────────────────────────────────────────────
 
-const [waitlistEntries,     setWaitlistEntries]     = useState([]);
-const [pickupEntries,       setPickupEntries]        = useState([]);
-const [avgWaitData,         setAvgWaitData]          = useState(null);
-const [counterQueueLoading, setCounterQueueLoading]  = useState(false);
-const [assignTableModal,    setAssignTableModal]      = useState(null); // entry
+const [assignTableModal, setAssignTableModal] = useState(null);
+const [waitlistEntries,  setWaitlistEntries]  = useState([]);
+const [pickupEntries,    setPickupEntries]     = useState([]);
+const [avgWaitData,      setAvgWaitData]       = useState(null);
+const [queueTab,         setQueueTab]          = useState('waitlist');
 
 const fetchCounterQueue = useCallback(async () => {
-  setCounterQueueLoading(true);
   try {
-    const [queueRes, avgRes] = await Promise.all([
+    const [qRes, aRes] = await Promise.all([
       axios.get(`${BASE_URL}/waitlist/${tenantId}`),
       axios.get(`${BASE_URL}/waitlist/avg-wait/${tenantId}`)
     ]);
-    setWaitlistEntries(queueRes.data.waitlist    || []);
-    setPickupEntries  (queueRes.data.pickupQueue || []);
-    setAvgWaitData    (avgRes.data || null);
+    setWaitlistEntries(qRes.data.waitlist    || []);
+    setPickupEntries  (qRes.data.pickupQueue || []);
+    setAvgWaitData    (aRes.data);
   } catch { }
-  finally { setCounterQueueLoading(false); }
 }, [tenantId]);
 
 
@@ -696,6 +695,10 @@ useEffect(() => {
     fetchExtraAnalytics();
   }
 }, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue,fetchExtraAnalytics]);
+
+useEffect(() => {
+  if (activeTab === 'pending') fetchCounterQueue();
+}, [activeTab, fetchCounterQueue]);
 
 
 const handleFinalSettle = async () => {
@@ -1710,212 +1713,416 @@ const renderMonthHeatmap = () => {
 
 {activeTab === 'pending' && (
   <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-    style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '100%' }}>
-
-    {/* ── TOP ROW: Kitchen + Service calls ── */}
-    <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start', width: '100%' }}>
-      <div style={{ flex: 1.2 }}>
-        <h3 style={styles.gridLabel}>KITCHEN TICKETS</h3>
+    style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+ 
+    {/* ══════════════════════════════════════════════
+        ROW 1: Kitchen Tickets + Service Calls
+    ══════════════════════════════════════════════ */}
+    <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-start', width: '100%' }}>
+ 
+      {/* KITCHEN TICKETS */}
+      <div style={{ flex: 1.3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ChefHat size={14} color="#d3bfa2" />
+          </div>
+          <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#444', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+            Kitchen Tickets
+          </span>
+          <span style={{ fontSize: '0.54rem', padding: '2px 8px', background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#0d0d0d', color: filteredOrders.length > 0 ? '#d3bfa2' : '#333', borderRadius: '20px', fontWeight: '900', border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #1a1a1a' }}>
+            {filteredOrders.length}
+          </span>
+        </div>
         {filteredOrders.length > 0 ? filteredOrders.map(order => (
-          <div key={order._id} style={styles.orderRow}>
-            <div style={styles.tableCircle}>{order.tableNumber}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>TABLE {order.tableNumber}</div>
-              <div style={{ color: '#d3bfa2', marginTop: '5px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                {(order.items || []).map(it => `${it.quantity}x ${it.name}`).join(' • ')}
+          <div key={order._id} style={{
+            display: 'flex', alignItems: 'center', gap: '16px',
+            background: '#0a0a0a', padding: '16px 18px', borderRadius: '14px',
+            border: '1px solid #161616', marginBottom: '10px',
+            borderLeft: '3px solid rgba(211,191,162,0.2)'
+          }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '10px',
+              background: '#111', border: '1px solid rgba(211,191,162,0.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: '900', fontSize: '0.9rem', color: '#d3bfa2',
+              flexShrink: 0, fontFamily: 'monospace'
+            }}>
+              {order.tableNumber}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: '900', fontSize: '0.82rem', color: '#fff', marginBottom: '4px' }}>
+                Table {order.tableNumber}
+              </div>
+              <div style={{ color: '#555', fontSize: '0.7rem', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {(order.items || []).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
               </div>
             </div>
             <OperatorLiveTimer createdAt={order.createdAt} />
           </div>
         )) : (
-          <div style={{ textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', padding: '40px', background: '#0d0d0d', borderRadius: '15px' }}>NO ACTIVE ORDERS</div>
+          <div style={{ textAlign: 'center', padding: '40px 20px', background: '#080808', borderRadius: '14px', border: '1px dashed #161616' }}>
+            <ChefHat size={24} color="#1a1a1a" style={{ marginBottom: '10px' }} />
+            <div style={{ fontSize: '0.72rem', color: '#2a2a2a', fontWeight: '700' }}>No active kitchen tickets</div>
+          </div>
         )}
       </div>
-      <div style={{ flex: 1, borderLeft: '1px solid #1a1a1a', paddingLeft: '30px' }}>
-        <h3 style={styles.gridLabel}>ACTIVE SERVICE CALLS</h3>
+ 
+      {/* SERVICE CALLS */}
+      <div style={{ flex: 1, borderLeft: '1px solid #111', paddingLeft: '28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: waiterRequests.length > 0 ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.02)', border: waiterRequests.length > 0 ? '1px solid rgba(212,175,55,0.2)' : '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BellRing size={14} color={waiterRequests.length > 0 ? '#d4af37' : '#333'} />
+          </div>
+          <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#444', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Service Calls</span>
+          {waiterRequests.length > 0 && (
+            <span style={{ fontSize: '0.54rem', padding: '2px 8px', background: 'rgba(212,175,55,0.1)', color: '#d4af37', borderRadius: '20px', fontWeight: '900', border: '1px solid rgba(212,175,55,0.2)' }}>
+              {waiterRequests.length}
+            </span>
+          )}
+        </div>
         {waiterRequests.length > 0 ? waiterRequests.map(req => (
-          <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
-            style={{ ...styles.waiterRequestRow, gap: '15px', padding: '15px' }}>
-            <div style={{ ...styles.goldCircle, width: '35px', height: '35px' }}><BellRing size={16} /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: '900', color: '#d4af37', fontSize: '0.8rem' }}>TABLE {req.tableNumber}</div>
-              <div style={{ fontSize: '0.75rem', color: '#fff', marginTop: '2px' }}>{req.serviceRequest}</div>
+          <motion.div initial={{ x: 16, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#0a0a0a', padding: '14px 16px', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.12)', marginBottom: '10px', borderLeft: '3px solid rgba(212,175,55,0.3)' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <BellRing size={14} color="#d4af37" />
             </div>
-            <button onClick={() => completeWaiterRequest(req._id)} style={{ ...styles.doneBtn, padding: '6px 12px', fontSize: '0.6rem' }}>DONE</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: '900', color: '#d4af37', fontSize: '0.76rem', marginBottom: '2px' }}>Table {req.tableNumber}</div>
+              <div style={{ fontSize: '0.68rem', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
+            </div>
+            <button onClick={() => completeWaiterRequest(req._id)} style={{ padding: '6px 12px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)', color: '#d3bfa2', borderRadius: '7px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0 }}>
+              DONE
+            </button>
           </motion.div>
         )) : (
-          <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', padding: '20px' }}>NO PENDING REQUESTS</div>
+          <div style={{ textAlign: 'center', padding: '40px 20px', background: '#080808', borderRadius: '14px', border: '1px dashed #161616' }}>
+            <BellRing size={20} color="#1a1a1a" style={{ marginBottom: '8px' }} />
+            <div style={{ fontSize: '0.68rem', color: '#222', fontWeight: '700' }}>No pending requests</div>
+          </div>
         )}
       </div>
     </div>
-
-    {/* ── COUNTER QUEUE PANEL ── */}
-    {(waitlistEntries.length > 0 || pickupEntries.length > 0) && (
-      <div style={{ background: '#080808', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '20px', padding: '24px', borderTop: '3px solid #d3bfa2' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <ShoppingBag size={18} color="#d3bfa2" />
-            <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1px' }}>COUNTER QUEUE</h3>
+ 
+    {/* ══════════════════════════════════════════════
+        ROW 2: COUNTER QUEUE PANEL
+        Shows only when there is queue data
+        (always visible with live counter stats)
+    ══════════════════════════════════════════════ */}
+    <div style={{ background: '#080808', borderRadius: '20px', border: '1px solid #141414', overflow: 'hidden' }}>
+ 
+      {/* Panel header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #111', background: '#0a0a0a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Users size={16} color="#d3bfa2" />
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            {avgWaitData && (
-              <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '800' }}>
-                Avg wait: ~{avgWaitData.avgWait || 20} min · {avgWaitData.tablesOccupied}/{avgWaitData.totalTables} tables occupied
-              </span>
-            )}
-            <button onClick={fetchCounterQueue} style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer' }}>
-              ↻
-            </button>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
+            <div style={{ fontSize: '0.56rem', color: '#444', fontWeight: '700', marginTop: '2px' }}>
+              Waitlist · Pickup · Pre-orders
+            </div>
+          </div>
+          {/* Live counts pill */}
+          <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.07)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #161616', borderRadius: '20px' }}>
+              <UserCheck size={10} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#333'} />
+              <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#333' }}>{waitlistEntries.length} waiting</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: pickupEntries.length > 0 ? 'rgba(74,222,128,0.05)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(74,222,128,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
+              <PackageCheck size={10} color={pickupEntries.length > 0 ? '#4ade80' : '#333'} />
+              <span style={{ fontSize: '0.6rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#4ade80' : '#333' }}>{pickupEntries.length} pickup</span>
+            </div>
           </div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-
-          {/* WAITLIST column */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #151515' }}>
-              <span style={{ fontSize: '0.9rem' }}>🪑</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                DINE-IN WAITLIST ({waitlistEntries.length})
-              </span>
-            </div>
-            {waitlistEntries.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#222', fontSize: '0.7rem', padding: '20px' }}>No one waiting</div>
-            ) : waitlistEntries.map((entry, i) => {
-              const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
-              const hasItems = entry.items?.length > 0;
-              return (
-                <div key={entry._id} style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '14px', padding: '16px', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', background: 'rgba(211,191,162,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
-                          #{entry.waitlistPosition}
-                        </span>
-                        <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.88rem' }}>{entry.customerName}</span>
-                        <span style={{ fontSize: '0.6rem', color: '#555' }}>· {entry.partySize} pax</span>
-                      </div>
-                      <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '4px' }}>Waiting: {waitMins} min</div>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: '900', color: waitMins > 25 ? '#c0392b' : waitMins > 15 ? '#BA7517' : '#555' }}>
-                      {waitMins}m
-                    </div>
+ 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {avgWaitData && (
+            <div style={{ display: 'flex', align: 'center', gap: '16px' }}>
+              {[
+                { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={10} color="#555" /> },
+                { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={10} color="#555" /> },
+              ].map(s => (
+                <div key={s.label} style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                    {s.icon}
+                    <span style={{ fontSize: '0.5rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
                   </div>
-
-                  {hasItems && (
-                    <div style={{ marginBottom: '10px', padding: '8px 10px', background: '#050505', borderRadius: '8px', fontSize: '0.65rem', color: '#666', lineHeight: 1.6 }}>
-                      {entry.items.slice(0, 3).map(i => `${i.quantity}x ${i.name}`).join(' · ')}
-                      {entry.items.length > 3 && ` +${entry.items.length - 3} more`}
-                      <div style={{ color: '#8a704d', fontWeight: '800', marginTop: '3px' }}>
-                        Est. bill: ₹{entry.totalAmount.toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setAssignTableModal(entry)} style={{
-                      flex: 1, padding: '9px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                      border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem',
-                      fontWeight: '900', cursor: 'pointer'
-                    }}>
-                      ASSIGN TABLE ▼
-                    </button>
-                    <button onClick={() => setConfirmModal({
-                      show: true, title: 'Mark as No-Show?',
-                      subtitle: `${entry.customerName} will be removed from the waitlist.`,
-                      onConfirm: async () => {
-                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
-                        fetchCounterQueue();
-                        showNotif(`${entry.customerName} marked no-show`);
-                      }
-                    })} style={{ padding: '9px 12px', background: 'transparent', border: '1px solid #222', color: '#444', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}>
-                      NO SHOW
-                    </button>
-                  </div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#888' }}>{s.val}</div>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* PICKUP column */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid #151515' }}>
-              <span style={{ fontSize: '0.9rem' }}>🛍️</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                PICKUP QUEUE ({pickupEntries.length})
-              </span>
+              ))}
             </div>
-            {pickupEntries.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#222', fontSize: '0.7rem', padding: '20px' }}>No pickup orders</div>
-            ) : pickupEntries.map(entry => {
-              const isReady = entry.status === 'pickup-ready';
-              const hasPickupTime = entry.scheduledPickupTime;
-              const pickupMinsLeft = hasPickupTime
-                ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
-              return (
-                <div key={entry._id} style={{
-                  background: '#0a0a0a', borderRadius: '14px', padding: '16px', marginBottom: '12px',
-                  border: `1px solid ${isReady ? 'rgba(74,222,128,0.25)' : '#1a1a1a'}`,
-                  borderTop: `2px solid ${isReady ? '#4ade80' : '#1a1a1a'}`
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div>
-                      <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.88rem' }}>{entry.customerName}</div>
-                      {hasPickupTime && (
-                        <div style={{ fontSize: '0.62rem', marginTop: '3px', color: pickupMinsLeft !== null && pickupMinsLeft <= 10 ? '#BA7517' : '#555' }}>
-                          Pickup: {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                          {pickupMinsLeft !== null && ` · ${pickupMinsLeft > 0 ? `${pickupMinsLeft} min left` : 'Due now'}`}
+          )}
+          <button onClick={fetchCounterQueue}
+            style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
+      </div>
+ 
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', padding: '0 24px', background: '#080808', borderBottom: '1px solid #0d0d0d' }}>
+        {[
+          { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />, count: waitlistEntries.length },
+          { id: 'pickup',   label: 'PICKUP QUEUE',      icon: <PackageCheck size={12} />, count: pickupEntries.length },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setQueueTab(tab.id)} style={{
+            display: 'flex', alignItems: 'center', gap: '7px',
+            padding: '12px 16px', background: 'transparent', border: 'none',
+            cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.8px',
+            color: queueTab === tab.id ? '#d3bfa2' : '#333',
+            borderBottom: `2px solid ${queueTab === tab.id ? '#d3bfa2' : 'transparent'}`,
+            transition: 'all 0.15s', marginBottom: '-1px'
+          }}>
+            <span style={{ color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a' }}>{tab.icon}</span>
+            {tab.label}
+            <span style={{
+              fontSize: '0.52rem', padding: '1px 7px', borderRadius: '10px', fontWeight: '900',
+              background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.15)' : 'rgba(211,191,162,0.05)') : '#0d0d0d',
+              color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#555') : '#222',
+              border: tab.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #161616'
+            }}>{tab.count}</span>
+          </button>
+        ))}
+      </div>
+ 
+      {/* Queue content */}
+      <div style={{ padding: '20px 24px 24px' }}>
+ 
+        {/* ── DINE-IN WAITLIST ── */}
+        {queueTab === 'waitlist' && (
+          waitlistEntries.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <UserCheck size={20} color="#1e1e1e" />
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>No one in the waitlist</div>
+              <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>Customers joining from the counter page appear here</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+              {waitlistEntries.map((entry, i) => {
+                const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
+                const urgency  = waitMins > 30 ? 'critical' : waitMins > 20 ? 'high' : waitMins > 10 ? 'medium' : 'low';
+                const urgencyColor = { critical: '#c0392b', high: '#BA7517', medium: '#d3bfa2', low: '#555' }[urgency];
+                const accentColor  = { critical: 'rgba(192,57,43,0.35)', high: 'rgba(186,117,23,0.35)', medium: 'rgba(211,191,162,0.2)', low: 'rgba(211,191,162,0.08)' }[urgency];
+                return (
+                  <div key={entry._id} style={{
+                    background: '#0a0a0a', borderRadius: '16px',
+                    border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.2)' : '#161616'}`,
+                    borderTop: `3px solid ${accentColor}`,
+                    overflow: 'hidden', position: 'relative'
+                  }}>
+                    {/* Card header */}
+                    <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {/* Position badge */}
+                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: urgency === 'critical' ? 'rgba(192,57,43,0.1)' : 'rgba(211,191,162,0.06)', border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.25)' : 'rgba(211,191,162,0.12)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff' }}>{entry.customerName}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Users size={10} color="#555" />
+                              <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '700' }}>{entry.partySize} pax</span>
+                            </div>
+                            {entry.customerPhone && (
+                              <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '600' }}>{entry.customerPhone}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Wait timer */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: urgency === 'critical' ? 'rgba(192,57,43,0.08)' : urgency === 'high' ? 'rgba(186,117,23,0.08)' : '#0d0d0d', borderRadius: '8px', border: `1px solid ${urgency !== 'low' ? urgencyColor + '33' : '#161616'}` }}>
+                        <Hourglass size={11} color={urgencyColor} />
+                        <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
+                      </div>
+                    </div>
+ 
+                    {/* Pre-ordered items */}
+                    {entry.items?.length > 0 && (
+                      <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
+                          <UtensilsCrossed size={10} color="#444" />
+                          <span style={{ fontSize: '0.52rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
+                        </div>
+                        <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.6 }}>
+                          {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
+                          {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3} more</span>}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '5px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>
+                            Est. ₹{entry.totalAmount.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+ 
+                    {/* Actions */}
+                    <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
+                      <button onClick={() => setAssignTableModal(entry)} style={{
+                        flex: 1, padding: '11px', borderRadius: '10px', border: 'none',
+                        background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                        color: '#000', fontWeight: '900', fontSize: '0.66rem',
+                        cursor: 'pointer', letterSpacing: '0.5px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
+                      }}>
+                        <TableProperties size={13} />
+                        ASSIGN TABLE
+                        <ChevronRight size={13} />
+                      </button>
+                      <button onClick={() => setConfirmModal({
+                        show: true, title: 'Mark as No-Show?',
+                        subtitle: `${entry.customerName} will be removed from the waitlist.`,
+                        onConfirm: async () => {
+                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+                          fetchCounterQueue();
+                          showNotif(`${entry.customerName} — marked no-show`);
+                        }
+                      })} style={{
+                        padding: '11px 13px', background: 'transparent',
+                        border: '1px solid #1a1a1a', color: '#333',
+                        borderRadius: '10px', fontSize: '0.6rem', fontWeight: '900',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px',
+                        flexShrink: 0
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                      >
+                        <AlertOctagon size={12} />
+                        NO SHOW
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+ 
+        {/* ── PICKUP QUEUE ── */}
+        {queueTab === 'pickup' && (
+          pickupEntries.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <PackageCheck size={20} color="#1e1e1e" />
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>No pickup orders</div>
+              <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>Takeaway / scheduled pickups appear here</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+              {pickupEntries.map(entry => {
+                const isReady        = entry.status === 'pickup-ready';
+                const pickupMinsLeft = entry.scheduledPickupTime
+                  ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
+                const pickupDue      = pickupMinsLeft !== null && pickupMinsLeft <= 0;
+                const pickupSoon     = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 10;
+                return (
+                  <div key={entry._id} style={{
+                    background: '#0a0a0a', borderRadius: '16px',
+                    border: `1px solid ${isReady ? 'rgba(74,222,128,0.18)' : '#161616'}`,
+                    borderTop: `3px solid ${isReady ? 'rgba(74,222,128,0.5)' : pickupDue ? 'rgba(186,117,23,0.5)' : '#1a1a1a'}`,
+                    overflow: 'hidden'
+                  }}>
+                    {/* header */}
+                    <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff', marginBottom: '4px' }}>{entry.customerName}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {entry.scheduledPickupTime && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock3 size={10} color="#555" />
+                              <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '700' }}>
+                                {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </span>
+                            </div>
+                          )}
+                          {pickupMinsLeft !== null && (
+                            <span style={{
+                              fontSize: '0.56rem', padding: '2px 7px', borderRadius: '5px', fontWeight: '900',
+                              background: pickupDue ? 'rgba(186,117,23,0.1)' : pickupSoon ? 'rgba(186,117,23,0.06)' : '#0d0d0d',
+                              color: pickupDue ? '#BA7517' : pickupSoon ? '#8a704d' : '#333',
+                              border: (pickupDue || pickupSoon) ? '1px solid rgba(186,117,23,0.2)' : '1px solid #161616'
+                            }}>
+                              {pickupDue ? 'DUE NOW' : `${pickupMinsLeft} min left`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {isReady && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px' }}>
+                          <PackageCheck size={12} color="#4ade80" />
+                          <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#4ade80' }}>READY</span>
                         </div>
                       )}
                     </div>
-                    {isReady && (
-                      <span style={{ fontSize: '0.55rem', padding: '3px 8px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '4px', fontWeight: '900' }}>
-                        READY
-                      </span>
+ 
+                    {/* items */}
+                    {entry.items?.length > 0 && (
+                      <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+                        <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.7 }}>
+                          {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
+                          {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3}</span>}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
+                        </div>
+                      </div>
                     )}
-                  </div>
-
-                  {entry.items?.length > 0 && (
-                    <div style={{ marginBottom: '10px', padding: '8px 10px', background: '#050505', borderRadius: '8px', fontSize: '0.65rem', color: '#666', lineHeight: 1.6 }}>
-                      {entry.items.slice(0, 3).map(i => `${i.quantity}x ${i.name}`).join(' · ')}
-                      {entry.items.length > 3 && ` +${entry.items.length - 3} more`}
-                      <div style={{ color: '#8a704d', fontWeight: '800', marginTop: '3px' }}>₹{entry.totalAmount.toLocaleString()}</div>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {!isReady && (
-                      <button onClick={async () => {
-                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
-                        fetchCounterQueue();
-                        showNotif(`${entry.customerName} notified — pickup ready`);
-                      }} style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg,#4ade80,#1D9E75)', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
-                        MARK READY
+ 
+                    {/* actions */}
+                    <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
+                      {!isReady && (
+                        <button onClick={async () => {
+                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
+                          fetchCounterQueue();
+                          showNotif(`${entry.customerName} — notified, pickup ready`);
+                        }} style={{
+                          flex: 1, padding: '11px', background: 'rgba(74,222,128,0.08)',
+                          border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80',
+                          borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
+                        }}>
+                          <PackageCheck size={13} />
+                          MARK READY
+                        </button>
+                      )}
+                      <button onClick={() => setConfirmModal({
+                        show: true,
+                        title: `Settle ${entry.customerName}?`,
+                        subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} and mark order as collected.`,
+                        onConfirm: async () => {
+                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount });
+                          fetchCounterQueue(); fetchAnalytics();
+                          showNotif(`${entry.customerName} — pickup settled`);
+                        }
+                      })} style={{
+                        flex: 1, padding: '11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                        border: 'none', color: '#000', borderRadius: '10px',
+                        fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
+                      }}>
+                        <Store size={13} />
+                        SETTLE  ₹{entry.totalAmount.toLocaleString()}
                       </button>
-                    )}
-                    <button onClick={() => setConfirmModal({
-                      show: true, title: `Settle ${entry.customerName}?`,
-                      subtitle: `Collect ₹${entry.totalAmount} and mark as collected.`,
-                      onConfirm: async () => {
-                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount });
-                        fetchCounterQueue(); fetchAnalytics();
-                        showNotif(`${entry.customerName} — pickup settled`);
-                      }
-                    })} style={{ flex: 1, padding: '9px', background: '#d3bfa2', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
-                      SETTLE ₹{entry.totalAmount}
-                    </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                );
+              })}
+            </div>
+          )
+        )}
+ 
       </div>
-    )}
-
+    </div>
+ 
   </motion.div>
 )}
+ 
 {/* ── MENU ── */}
 {activeTab==='menu' && (
   <motion.div key="menu" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
@@ -4965,6 +5172,7 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {Object.entries(grouped).map(([cat, items]) => (
+
             <div key={cat}>
               {/* Category header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #151515' }}>
@@ -5706,49 +5914,139 @@ style={{
         )}
       </AnimatePresence>
 
-      {/* ASSIGN TABLE MODAL */}
+
 <AnimatePresence>
   {assignTableModal && (
     <div style={styles.modalBackdrop}>
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-        style={{ ...styles.confirmBox, width: '420px', textAlign: 'left' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          <span style={{ fontSize: '1.5rem' }}>🪑</span>
-          <div>
-            <h3 style={{ color: '#fff', margin: 0, fontSize: '1rem', fontWeight: '900' }}>ASSIGN TABLE</h3>
-            <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px' }}>{assignTableModal.customerName} · {assignTableModal.partySize} pax</div>
+      <motion.div
+        initial={{ scale: 0.94, opacity: 0, y: 10 }}
+        animate={{ scale: 1,    opacity: 1, y: 0  }}
+        exit={{   scale: 0.94, opacity: 0, y: 10  }}
+        style={{ ...styles.confirmBox, width: '480px', textAlign: 'left', padding: '0', overflow: 'hidden' }}
+      >
+        {/* Modal header */}
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #111', background: '#0a0a0a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <TableProperties size={18} color="#d3bfa2" />
+            </div>
+            <div>
+              <h3 style={{ color: '#fff', margin: 0, fontSize: '1rem', fontWeight: '900', letterSpacing: '0.3px' }}>ASSIGN TABLE</h3>
+              <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#d3bfa2', fontWeight: '800' }}>{assignTableModal.customerName}</span>
+                <span>·</span>
+                <Users size={10} color="#555" />
+                <span>{assignTableModal.partySize} pax</span>
+                {assignTableModal.items?.length > 0 && (
+                  <>
+                    <span>·</span>
+                    <UtensilsCrossed size={10} color="#555" />
+                    <span>{assignTableModal.items.length} items pre-ordered</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-        <p style={{ fontSize: '0.72rem', color: '#444', marginBottom: '16px' }}>
-          Select a free table. Pre-ordered items will be sent to kitchen immediately.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '24px' }}>
-          {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
-            const id = n.toString();
-            const isOcc = occupiedTables.includes(id);
-            return (
-              <button key={n} disabled={isOcc} onClick={async () => {
-                await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, { tableNumber: id });
-                setAssignTableModal(null);
-                fetchCounterQueue(); fetchInitialData();
-                showNotif(`T${n} assigned to ${assignTableModal.customerName} — order sent to KDS`);
-              }} style={{
-                padding: '14px 8px', borderRadius: '10px', border: 'none', cursor: isOcc ? 'not-allowed' : 'pointer',
-                background: isOcc ? '#0d0d0d' : 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                color: isOcc ? '#2a2a2a' : '#000', fontWeight: '900', fontSize: '0.8rem',
-                opacity: isOcc ? 0.4 : 1
-              }}>
-                T{n}
-                {isOcc && <div style={{ fontSize: '0.45rem', marginTop: '2px', color: '#444' }}>OCC</div>}
-              </button>
-            );
-          })}
+ 
+        {/* Pre-order summary */}
+        {assignTableModal.items?.length > 0 && (
+          <div style={{ margin: '16px 28px 0', padding: '12px 14px', background: '#050505', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <ArrowRightCircle size={12} color="#8a704d" />
+              <span style={{ fontSize: '0.56rem', color: '#8a704d', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order fires to KDS immediately on assign</span>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#666', lineHeight: 1.7 }}>
+              {assignTableModal.items.map(i => `${i.quantity}× ${i.name}`).join('  ·  ')}
+            </div>
+            <div style={{ textAlign: 'right', marginTop: '6px', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d' }}>
+              ₹{assignTableModal.totalAmount.toLocaleString()}
+            </div>
+          </div>
+        )}
+ 
+        {/* Instruction */}
+        <div style={{ padding: '14px 28px 10px' }}>
+          <p style={{ margin: 0, fontSize: '0.68rem', color: '#333', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Hash size={11} color="#333" />
+            Select a free table below — occupied tables are disabled
+          </p>
         </div>
-        <button onClick={() => setAssignTableModal(null)} style={styles.cancelBtn}>CANCEL</button>
+ 
+        {/* Table grid */}
+        <div style={{ padding: '8px 28px 24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
+            {Array.from({ length: tableCount }, (_, idx) => idx + 1).map(n => {
+              const id   = n.toString();
+              const isOcc = occupiedTables.includes(id);
+              return (
+                <button
+                  key={n}
+                  disabled={isOcc}
+                  onClick={async () => {
+                    try {
+                      await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, { tableNumber: id });
+                      setAssignTableModal(null);
+                      fetchCounterQueue();
+                      fetchInitialData();
+                      showNotif(`T${n} assigned to ${assignTableModal.customerName} — order sent to KDS`, 'success');
+                    } catch {
+                      showNotif('Failed to assign table', 'error');
+                    }
+                  }}
+                  style={{
+                    padding: '16px 8px', borderRadius: '12px', cursor: isOcc ? 'not-allowed' : 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
+                    transition: 'all 0.15s',
+                    background: isOcc ? '#0d0d0d' : 'rgba(211,191,162,0.05)',
+                    border: isOcc ? '1px solid #111' : '1px solid rgba(211,191,162,0.18)',
+                    opacity: isOcc ? 0.35 : 1,
+                    color: isOcc ? '#222' : '#d3bfa2',
+                  }}
+                  onMouseEnter={e => { if (!isOcc) { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}}
+                  onMouseLeave={e => { if (!isOcc) { e.currentTarget.style.background = 'rgba(211,191,162,0.05)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.18)'; e.currentTarget.style.transform = 'none'; }}}
+                >
+                  <span style={{ fontSize: '1rem', fontWeight: '900', fontFamily: 'monospace', lineHeight: 1 }}>
+                    {n}
+                  </span>
+                  <span style={{ fontSize: '0.46rem', fontWeight: '900', letterSpacing: '1px', color: isOcc ? '#2a2a2a' : '#555', textTransform: 'uppercase' }}>
+                    {isOcc ? 'OCCUPIED' : 'FREE'}
+                  </span>
+                  {!isOcc && (
+                    <span style={{ marginTop: '2px' }}>
+                      <CircleDot size={7} color="rgba(211,191,162,0.3)" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+ 
+        {/* Footer */}
+        <div style={{ padding: '16px 28px', borderTop: '1px solid #0d0d0d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#080808' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CircleDot size={10} color="#444" />
+            <span style={{ fontSize: '0.58rem', color: '#333', fontWeight: '700' }}>
+              {Array.from({ length: tableCount }, (_, i) => (i + 1).toString()).filter(id => !occupiedTables.includes(id)).length} tables free
+            </span>
+          </div>
+          <button onClick={() => setAssignTableModal(null)} style={{
+            padding: '10px 22px', background: 'transparent', border: '1px solid #1a1a1a',
+            color: '#444', borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer'
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#666'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+          >
+            CANCEL
+          </button>
+        </div>
       </motion.div>
     </div>
   )}
 </AnimatePresence>
+
+
       {/* SALARY EDIT MODAL */}
 <AnimatePresence>
   {salaryEditModal && (

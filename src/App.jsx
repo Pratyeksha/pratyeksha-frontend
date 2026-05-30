@@ -7,6 +7,9 @@ import {
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
+  Clock3, Users, ChevronLeft,
+  Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
+  Package, UserCheck, MinusCircle, PlusCircle
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -655,98 +658,198 @@ const sendBatchToKitchen = async () => {
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
   }, [allMenuItems, isOnlyVegTenant]);
 
-  // ── COUNTER SCAN FLOW ──
-if (isCounterScan && registrationStep !== 'menu') {
+{isCounterScan && registrationStep !== 'menu' && (() => {
 
-  // CONFIRMATION SCREEN
+  // ── SHARED LAYOUT WRAPPER ─────────────────────────────────────
+  const Shell = ({ children, centered = true }) => (
+    <div style={{
+      minHeight: '100vh', background: '#111', color: '#fff',
+      fontFamily: 'Poppins, sans-serif',
+      display: 'flex', flexDirection: 'column',
+      alignItems: centered ? 'center' : 'stretch',
+      justifyContent: centered ? 'center' : 'flex-start',
+      padding: centered ? '40px 24px' : '0',
+    }}>
+      {children}
+    </div>
+  );
+
+  // ── RESTAURANT HEADER BADGE ───────────────────────────────────
+  const RestaurantBadge = () => (
+    <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+      <div style={{
+        width: '52px', height: '52px', borderRadius: '14px',
+        background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 14px'
+      }}>
+        <UtensilsCrossed size={22} color="#d3bfa2" />
+      </div>
+      <h1 style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2', margin: 0, letterSpacing: '-0.3px' }}>
+        {restaurantData?.name || 'PRATYEKSHA'}
+      </h1>
+      <div style={{ fontSize: '0.58rem', letterSpacing: '3px', color: '#333', marginTop: '5px', textTransform: 'uppercase', fontWeight: '800' }}>
+        POWERED BY PRATYEKSHA
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════
+  // SCREEN 1 — CONFIRMATION / WAITING SCREEN
+  // ═══════════════════════════════════════════════
   if (registrationStep === 'confirm' && waitlistEntry) {
-    const isDineIn = waitlistEntry.mode === 'dine-in';
-    const hasItems = waitlistEntry.items?.length > 0;
+    const isDineIn  = waitlistEntry.mode === 'dine-in';
+    const hasItems  = waitlistEntry.items?.length > 0;
+    const estWait   = waitlistEntry.waitlistPosition * 20;
+
     return (
-      <div style={{ minHeight: '100vh', background: '#1a1a1a', color: '#fff', fontFamily: 'Poppins, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px' }}>
-          {language === 'mr' ? 'ऑर्डर दिली गेली!' : 'Order Placed!'}
-        </h1>
-        <p style={{ color: '#888', marginBottom: '28px', fontSize: '0.9rem' }}>
-          {language === 'mr' ? 'तुमची माहिती नोंदवली गेली आहे.' : 'Your details have been recorded.'}
-        </p>
-
-        {isDineIn && (
-          <div style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '16px', padding: '24px', marginBottom: '24px', width: '100%', maxWidth: '360px' }}>
-            <div style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '8px' }}>
-              {language === 'mr' ? 'रांगेतील स्थान' : 'QUEUE POSITION'}
-            </div>
-            <div style={{ fontSize: '3rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1 }}>
-              #{waitlistEntry.waitlistPosition}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '8px' }}>
-              {language === 'mr' ? `अंदाजे प्रतीक्षा: ~${waitlistEntry.waitlistPosition * 20} मिनिटे` : `Estimated wait: ~${waitlistEntry.waitlistPosition * 20} min`}
-            </div>
-          </div>
-        )}
-
-        {!isDineIn && waitlistEntry.scheduledPickupTime && (
-          <div style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '16px', padding: '24px', marginBottom: '24px', width: '100%', maxWidth: '360px' }}>
-            <div style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '8px' }}>PICKUP TIME</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
-              {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-            </div>
-          </div>
-        )}
-
-        {hasItems && (
-          <div style={{ background: '#0d0d0d', borderRadius: '14px', padding: '20px', marginBottom: '24px', width: '100%', maxWidth: '360px', textAlign: 'left' }}>
-            <div style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '12px' }}>YOUR PRE-ORDER</div>
-            {waitlistEntry.items.map((item, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
-                <span style={{ color: '#ccc' }}>{item.quantity}x {item.name}</span>
-                <span style={{ color: '#d3bfa2', fontWeight: '800' }}>₹{item.subtotal}</span>
-              </div>
-            ))}
-            <div style={{ borderTop: '1px solid #222', paddingTop: '8px', marginTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '900' }}>
-              <span>Total</span>
-              <span style={{ color: '#d3bfa2' }}>₹{waitlistEntry.totalAmount}</span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', padding: '16px', marginBottom: '28px', maxWidth: '360px', width: '100%', fontSize: '0.8rem', color: '#888', lineHeight: 1.6 }}>
-          🔔 {language === 'mr'
-            ? 'जेव्हा तुमचे टेबल / ऑर्डर तयार होईल तेव्हा तुम्हाला सूचना मिळेल (जरी हे पेज बंद केले तरी)'
-            : "You'll be notified when your table or order is ready — even if you close this page."}
+      <Shell>
+        {/* Success icon */}
+        <div style={{
+          width: '72px', height: '72px', borderRadius: '22px',
+          background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px'
+        }}>
+          <CheckCircle2 size={34} color="#4ade80" />
         </div>
 
+        <h1 style={{ fontSize: '1.7rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px', textAlign: 'center' }}>
+          {language === 'mr' ? 'ऑर्डर दिली गेली!' : 'Order Placed!'}
+        </h1>
+        <p style={{ color: '#555', marginBottom: '28px', fontSize: '0.84rem', textAlign: 'center', maxWidth: '300px' }}>
+          {language === 'mr' ? 'तुमची माहिती नोंदवली गेली आहे.' : 'Your details have been recorded successfully.'}
+        </p>
+
+        {/* STATUS CARD */}
+        <div style={{
+          background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
+          borderTop: '3px solid rgba(211,191,162,0.3)',
+          borderRadius: '18px', padding: '24px', marginBottom: '16px',
+          width: '100%', maxWidth: '360px', textAlign: 'center'
+        }}>
+          {isDineIn ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}>
+                <Hash size={12} color="#555" />
+                <span style={{ fontSize: '0.56rem', color: '#444', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  {language === 'mr' ? 'रांगेतील स्थान' : 'Queue Position'}
+                </span>
+              </div>
+              <div style={{ fontSize: '3.5rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1, fontFamily: 'monospace', marginBottom: '8px' }}>
+                #{waitlistEntry.waitlistPosition}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <Hourglass size={12} color="#555" />
+                <span style={{ fontSize: '0.74rem', color: '#666', fontWeight: '700' }}>
+                  {language === 'mr' ? `अंदाजे प्रतीक्षा: ~${estWait} मिनिटे` : `Estimated wait: ~${estWait} min`}
+                </span>
+              </div>
+            </>
+          ) : waitlistEntry.scheduledPickupTime && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}>
+                <CalendarClock size={12} color="#555" />
+                <span style={{ fontSize: '0.56rem', color: '#444', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  {language === 'mr' ? 'पिकअप वेळ' : 'Pickup Time'}
+                </span>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>
+                {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* PRE-ORDER SUMMARY */}
+        {hasItems && (
+          <div style={{
+            background: '#0a0a0a', border: '1px solid #161616',
+            borderRadius: '16px', padding: '18px 20px', marginBottom: '16px',
+            width: '100%', maxWidth: '360px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '12px' }}>
+              <UtensilsCrossed size={12} color="#444" />
+              <span style={{ fontSize: '0.56rem', color: '#444', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                {language === 'mr' ? 'तुमची प्री-ऑर्डर' : 'Your Pre-Order'}
+              </span>
+            </div>
+            {waitlistEntry.items.map((item, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>{item.quantity}× {item.name}</span>
+                <span style={{ fontSize: '0.8rem', color: '#d3bfa2', fontWeight: '800', fontFamily: 'monospace' }}>₹{item.subtotal}</span>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px solid #181818', paddingTop: '10px', marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.74rem', color: '#666', fontWeight: '700' }}>Total</span>
+              <span style={{ fontSize: '0.9rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>₹{waitlistEntry.totalAmount}</span>
+            </div>
+          </div>
+        )}
+
+        {/* NOTIFICATION INFO */}
+        <div style={{
+          background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
+          borderRadius: '14px', padding: '14px 16px', marginBottom: '24px',
+          maxWidth: '360px', width: '100%',
+          display: 'flex', alignItems: 'flex-start', gap: '12px'
+        }}>
+          <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+            <BellRing size={14} color="#8a704d" />
+          </div>
+          <p style={{ margin: 0, fontSize: '0.74rem', color: '#666', lineHeight: 1.6 }}>
+            {language === 'mr'
+              ? 'जेव्हा तुमचे टेबल / ऑर्डर तयार होईल तेव्हा तुम्हाला सूचना मिळेल — हे पेज बंद केले तरी.'
+              : "You'll be notified when your table or order is ready — even if you close this page."}
+          </p>
+        </div>
+
+        {/* Add pre-order CTA */}
         {!hasItems && (
           <button onClick={() => setRegistrationStep('menu')} style={{
             width: '100%', maxWidth: '360px', padding: '16px',
             background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
             color: '#000', border: 'none', borderRadius: '14px',
-            fontWeight: '900', fontSize: '0.9rem', cursor: 'pointer', marginBottom: '14px'
+            fontWeight: '900', fontSize: '0.88rem', cursor: 'pointer',
+            marginBottom: '12px', letterSpacing: '0.5px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px'
           }}>
-            {language === 'mr' ? '+ आधीच ऑर्डर द्या' : 'ADD PRE-ORDER →'}
+            <UtensilsCrossed size={16} />
+            {language === 'mr' ? 'आधीच ऑर्डर द्या' : 'ADD PRE-ORDER'}
+            <ChevronRight size={16} />
           </button>
         )}
 
+        {/* Cancel */}
         <button onClick={() => {
           axios.delete(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}`).catch(() => {});
           setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
-        }} style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>
+        }} style={{
+          background: 'transparent', border: '1px solid #1a1a1a', color: '#333',
+          fontSize: '0.72rem', cursor: 'pointer', padding: '10px 24px',
+          borderRadius: '10px', fontWeight: '700', marginTop: '4px',
+          display: 'flex', alignItems: 'center', gap: '6px'
+        }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+        >
+          <MinusCircle size={13} />
           {language === 'mr' ? 'रद्द करा' : 'Cancel'}
         </button>
-      </div>
+      </Shell>
     );
   }
 
-  // REGISTRATION SCREEN
+  // ═══════════════════════════════════════════════
+  // SCREEN 2 — REGISTRATION FORM
+  // ═══════════════════════════════════════════════
   if (registrationStep === 'register') {
     const isDineIn = counterMode === 'dine-in';
-    // Generate pickup time options (next 3 hours in 15-min increments)
+
     const pickupOptions = [];
-    const now = new Date();
-    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+    const base = new Date();
+    base.setMinutes(Math.ceil(base.getMinutes() / 15) * 15, 0, 0);
     for (let i = 0; i < 12; i++) {
-      const t = new Date(now.getTime() + i * 15 * 60000);
+      const t = new Date(base.getTime() + i * 15 * 60000);
       pickupOptions.push({
         value: t.toISOString(),
         label: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -754,44 +857,93 @@ if (isCounterScan && registrationStep !== 'menu') {
     }
 
     return (
-      <div style={{ minHeight: '100vh', background: '#1a1a1a', color: '#fff', fontFamily: 'Poppins, sans-serif', padding: '50px 24px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>{isDineIn ? '🪑' : '🛍️'}</div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
-            {isDineIn
-              ? (language === 'mr' ? 'रांगेत नोंदणी करा' : 'Join the Waitlist')
-              : (language === 'mr' ? 'पिकअप ऑर्डर द्या' : 'Place Pickup Order')}
-          </h1>
-          <p style={{ color: '#555', fontSize: '0.8rem', marginTop: '6px' }}>
-            {restaurantData?.name || 'PRATYEKSHA'}
-          </p>
+      <Shell centered={false}>
+        {/* Sticky top bar */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          background: '#111', borderBottom: '1px solid #161616',
+          padding: '16px 24px',
+          display: 'flex', alignItems: 'center', gap: '14px'
+        }}>
+          <button onClick={() => setRegistrationStep('mode')} style={{
+            width: '34px', height: '34px', borderRadius: '9px',
+            background: '#0d0d0d', border: '1px solid #1a1a1a',
+            color: '#555', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <div style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>
+              {isDineIn
+                ? (language === 'mr' ? 'रांगेत नोंदणी' : 'Join Waitlist')
+                : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')}
+            </div>
+            <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '2px' }}>{restaurantData?.name}</div>
+          </div>
         </div>
 
-        <div style={{ maxWidth: '400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Name */}
-          <div>
-            <label style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', letterSpacing: '1px', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
-              {language === 'mr' ? 'तुमचे नाव *' : 'Your Name *'}
-            </label>
-            <input type="text" placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
-              value={customerInfo.name}
-              onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-              style={{ width: '100%', padding: '14px 16px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '12px', fontSize: '1rem', outline: 'none', boxSizing: 'border-box' }} />
+        <div style={{ padding: '32px 24px 60px', maxWidth: '440px', margin: '0 auto', width: '100%' }}>
+
+          {/* Mode indicator */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '14px 18px', marginBottom: '28px',
+            background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)',
+            borderRadius: '14px'
+          }}>
+            <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {isDineIn ? <Armchair size={18} color="#d3bfa2" /> : <ShoppingBag size={18} color="#d3bfa2" />}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#d3bfa2' }}>
+                {isDineIn ? (language === 'mr' ? 'डाइन-इन वेटलिस्ट' : 'Dine-In Waitlist') : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '2px' }}>
+                {isDineIn
+                  ? (avgWaitData?.queueLength ? `${avgWaitData.queueLength} ahead · ~${avgWaitData.estimatedWait || 20} min` : 'Live queue')
+                  : 'Schedule your pickup time'}
+              </div>
+            </div>
           </div>
 
-          {/* Party size (dine-in only) */}
+          {/* Name field */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
+              {language === 'mr' ? 'तुमचे नाव *' : 'Your Name *'}
+            </label>
+            <input type="text"
+              placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
+              value={customerInfo.name}
+              onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+              style={{
+                width: '100%', padding: '14px 16px',
+                background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
+                color: '#fff', borderRadius: '12px', fontSize: '1rem',
+                outline: 'none', boxSizing: 'border-box',
+                transition: 'border-color 0.15s'
+              }}
+              onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(211,191,162,0.15)'}
+            />
+          </div>
+
+          {/* Party size — dine-in only */}
           {isDineIn && (
-            <div>
-              <label style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', letterSpacing: '1px', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
                 {language === 'mr' ? 'किती जण?' : 'Party Size'}
               </label>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {[1, 2, 3, 4, 5, 6].map(n => (
                   <button key={n} type="button" onClick={() => setPartySize(n)} style={{
-                    width: '52px', height: '52px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                    width: '52px', height: '52px', borderRadius: '12px', border: 'none',
+                    cursor: 'pointer', fontWeight: '900', fontSize: '1rem',
                     background: partySize === n ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
-                    color: partySize === n ? '#000' : '#555', fontWeight: '900', fontSize: '1rem',
-                    outline: partySize === n ? 'none' : '1px solid #222', transition: 'all 0.15s'
+                    color: partySize === n ? '#000' : '#444',
+                    outline: partySize === n ? 'none' : '1px solid #1a1a1a',
+                    transition: 'all 0.15s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}>
                     {n}{n === 6 ? '+' : ''}
                   </button>
@@ -800,141 +952,202 @@ if (isCounterScan && registrationStep !== 'menu') {
             </div>
           )}
 
-          {/* Pickup time (pickup only) */}
+          {/* Pickup time — pickup only */}
           {!isDineIn && (
-            <div>
-              <label style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', letterSpacing: '1px', display: 'block', marginBottom: '8px', textTransform: 'uppercase' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
                 {language === 'mr' ? 'पिकअप वेळ' : 'Pickup Time'}
               </label>
-              <select value={scheduledPickupTime}
-                onChange={e => setScheduledPickupTime(e.target.value)}
-                style={{ width: '100%', padding: '14px 16px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', cursor: 'pointer' }}>
-                <option value="">— Select time —</option>
-                {pickupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <Clock3 size={14} color="#555" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <select value={scheduledPickupTime}
+                  onChange={e => setScheduledPickupTime(e.target.value)}
+                  style={{
+                    width: '100%', padding: '14px 16px 14px 40px',
+                    background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
+                    color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+                    outline: 'none', cursor: 'pointer', appearance: 'none', boxSizing: 'border-box'
+                  }}>
+                  <option value="">— {language === 'mr' ? 'वेळ निवडा' : 'Select time'} —</option>
+                  {pickupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <ChevronRight size={14} color="#444" style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%) rotate(90deg)', pointerEvents: 'none' }} />
+              </div>
             </div>
           )}
 
-          {/* Waitlist info pill */}
+          {/* Queue info pill — dine-in */}
           {isDineIn && avgWaitData && (
-            <div style={{ background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '10px', padding: '12px 16px', fontSize: '0.78rem', color: '#8a704d', display: 'flex', justifyContent: 'space-between' }}>
-              <span>{avgWaitData.queueLength || 0} group{avgWaitData.queueLength !== 1 ? 's' : ''} ahead</span>
-              <span>~{(avgWaitData.queueLength || 0) * (avgWaitData.avgWait || 20)} min wait</span>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px'
+            }}>
+              {[
+                { icon: <UserCheck size={12} color="#555" />, label: language === 'mr' ? 'पुढे रांग' : 'Ahead', val: `${avgWaitData.queueLength || 0} group${(avgWaitData.queueLength || 0) !== 1 ? 's' : ''}` },
+                { icon: <Hourglass size={12} color="#555" />, label: language === 'mr' ? 'अंदाजे वेळ' : 'Est. Wait', val: `~${(avgWaitData.queueLength || 0) * (avgWaitData.avgWait || 20)} min` },
+              ].map(s => (
+                <div key={s.label} style={{ background: '#0a0a0a', border: '1px solid #161616', borderRadius: '10px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {s.icon}
+                  <div>
+                    <div style={{ fontSize: '0.54rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#888', marginTop: '2px' }}>{s.val}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          <button onClick={() => setRegistrationStep('menu')} style={{
-            width: '100%', padding: '16px',
-            background: customerInfo.name.trim() ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#222',
-            color: customerInfo.name.trim() ? '#000' : '#444',
-            border: 'none', borderRadius: '14px', fontWeight: '900',
-            fontSize: '0.95rem', cursor: customerInfo.name.trim() ? 'pointer' : 'not-allowed',
-            marginTop: '8px', letterSpacing: '0.5px'
-          }}
-            disabled={!customerInfo.name.trim()}>
-            {language === 'mr' ? 'मेनू पहा →' : 'BROWSE MENU →'}
-          </button>
-
-          <button onClick={() => setRegistrationStep('mode')} style={{ background: 'transparent', border: 'none', color: '#444', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>
-            ← {language === 'mr' ? 'मागे जा' : 'Back'}
+          {/* CTA */}
+          <button
+            onClick={() => setRegistrationStep('menu')}
+            disabled={!customerInfo.name.trim()}
+            style={{
+              width: '100%', padding: '16px',
+              background: customerInfo.name.trim() ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
+              color: customerInfo.name.trim() ? '#000' : '#2a2a2a',
+              border: customerInfo.name.trim() ? 'none' : '1px solid #161616',
+              borderRadius: '14px', fontWeight: '900', fontSize: '0.9rem',
+              cursor: customerInfo.name.trim() ? 'pointer' : 'not-allowed',
+              letterSpacing: '0.5px', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px'
+            }}>
+            <UtensilsCrossed size={16} />
+            {language === 'mr' ? 'मेनू पहा' : 'BROWSE MENU'}
+            <ChevronRight size={16} />
           </button>
         </div>
-      </div>
+      </Shell>
     );
   }
 
-  // MODE SELECTION SCREEN (default)
+  // ═══════════════════════════════════════════════
+  // SCREEN 0 — MODE SELECTION
+  // ═══════════════════════════════════════════════
   const occupiedCount = avgWaitData?.tablesOccupied || 0;
-  const totalCount    = avgWaitData?.totalTables || 12;
-  const queueLen      = avgWaitData?.queueLength || 0;
-  const estWait       = avgWaitData?.estimatedWait || 0;
-  const isFull        = occupiedCount >= totalCount;
+  const totalCount    = avgWaitData?.totalTables    || 12;
+  const queueLen      = avgWaitData?.queueLength    || 0;
+  const estWait       = avgWaitData?.estimatedWait  || 0;
+  const freeTables    = totalCount - occupiedCount;
+  const isFull        = freeTables <= 0;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#1a1a1a', color: '#fff', fontFamily: 'Poppins, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-      {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '4px' }}>
-          {restaurantData?.name || 'PRATYEKSHA'}
-        </h1>
-        {isFull ? (
-          <div style={{ marginTop: '10px' }}>
-            <div style={{ fontSize: '0.82rem', color: '#c0392b', fontWeight: '700', marginBottom: '4px' }}>
-              {language === 'mr' ? `सर्व ${totalCount} टेबल भरलेले आहेत` : `All ${totalCount} tables are currently occupied`}
-            </div>
-            {queueLen > 0 && (
-              <div style={{ fontSize: '0.75rem', color: '#666' }}>
-                {queueLen} group{queueLen !== 1 ? 's' : ''} waiting · ~{estWait} min estimated wait
+    <Shell>
+      <RestaurantBadge />
+
+      {/* Table availability strip */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        padding: '12px 20px', marginBottom: '28px',
+        background: isFull ? 'rgba(192,57,43,0.05)' : 'rgba(74,222,128,0.05)',
+        border: `1px solid ${isFull ? 'rgba(192,57,43,0.15)' : 'rgba(74,222,128,0.15)'}`,
+        borderRadius: '14px', width: '100%', maxWidth: '400px'
+      }}>
+        <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: isFull ? 'rgba(192,57,43,0.08)' : 'rgba(74,222,128,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <CircleDot size={14} color={isFull ? '#c0392b' : '#4ade80'} />
+        </div>
+        <div style={{ flex: 1 }}>
+          {isFull ? (
+            <>
+              <div style={{ fontSize: '0.76rem', color: '#c0392b', fontWeight: '800' }}>
+                {language === 'mr' ? `सर्व ${totalCount} टेबल भरलेले` : `All ${totalCount} tables occupied`}
               </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ fontSize: '0.82rem', color: '#4ade80', fontWeight: '700', marginTop: '10px' }}>
-            {language === 'mr' ? `${totalCount - occupiedCount} टेबल उपलब्ध` : `${totalCount - occupiedCount} of ${totalCount} tables available`}
-          </div>
-        )}
+              {queueLen > 0 && (
+                <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '2px' }}>
+                  {queueLen} group{queueLen !== 1 ? 's' : ''} waiting · ~{estWait} min
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: '0.76rem', color: '#4ade80', fontWeight: '800' }}>
+              {language === 'mr' ? `${freeTables} टेबल उपलब्ध` : `${freeTables} of ${totalCount} tables available`}
+            </div>
+          )}
+        </div>
+        {/* Occupancy bar */}
+        <div style={{ width: '60px', height: '4px', background: '#1a1a1a', borderRadius: '2px', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ height: '100%', width: `${(occupiedCount / totalCount) * 100}%`, background: isFull ? '#c0392b' : '#4ade80', borderRadius: '2px', transition: 'width 0.6s ease' }} />
+        </div>
       </div>
 
       {/* Mode cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '400px' }}>
-        {/* Dine-in waitlist */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', maxWidth: '400px' }}>
+
+        {/* ── DINE-IN WAITLIST card ── */}
         <button onClick={() => { setCounterMode('dine-in'); setRegistrationStep('register'); }} style={{
-          background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.2)',
-          borderRadius: '20px', padding: '28px 24px', textAlign: 'left', cursor: 'pointer',
-          color: '#fff', transition: 'all 0.2s', width: '100%'
+          background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.18)',
+          borderRadius: '20px', padding: '22px 20px', textAlign: 'left', cursor: 'pointer',
+          color: '#fff', transition: 'all 0.18s', width: '100%',
         }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.1)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}>
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.09)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.05)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.18)'; }}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-<div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-  <Armchair size={26} color="#d3bfa2" />
-</div>            <div>
-              <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px' }}>
+            <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Armchair size={24} color="#d3bfa2" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px', letterSpacing: '-0.2px' }}>
                 {language === 'mr' ? 'टेबलसाठी रांगेत बसा' : 'JOIN WAITLIST'}
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#666', lineHeight: 1.5 }}>
+              <div style={{ fontSize: '0.72rem', color: '#555', lineHeight: 1.55 }}>
                 {language === 'mr'
                   ? `प्रतीक्षा करताना आधीच ऑर्डर द्या${queueLen > 0 ? ` · ~${estWait} मिनिट` : ''}`
-                  : `Pre-order while you wait${queueLen > 0 ? ` · ~${estWait} min` : ''}`}
+                  : `Pre-order while you wait${queueLen > 0 ? ` · ~${estWait} min` : ' · No wait currently'}`}
               </div>
+              {queueLen > 0 && (
+                <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Users size={11} color="#555" />
+                  <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800' }}>
+                    {queueLen} group{queueLen !== 1 ? 's' : ''} ahead
+                  </span>
+                </div>
+              )}
             </div>
+            <ChevronRight size={18} color="#333" style={{ marginTop: '2px', flexShrink: 0 }} />
           </div>
         </button>
 
-        {/* Pickup */}
+        {/* ── PICKUP card ── */}
         <button onClick={() => { setCounterMode('pickup'); setRegistrationStep('register'); }} style={{
-          background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.15)',
-          borderRadius: '20px', padding: '28px 24px', textAlign: 'left', cursor: 'pointer',
-          color: '#fff', transition: 'all 0.2s', width: '100%'
+          background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.12)',
+          borderRadius: '20px', padding: '22px 20px', textAlign: 'left', cursor: 'pointer',
+          color: '#fff', transition: 'all 0.18s', width: '100%',
         }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.08)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(211,191,162,0.04)'}>
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.22)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.03)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-<div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-  <ShoppingBag size={26} color="#d3bfa2" />
-</div>            <div>
-              <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '6px' }}>
+            <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <ShoppingBag size={24} color="#d3bfa2" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px', letterSpacing: '-0.2px' }}>
                 {language === 'mr' ? 'टेकअवे / पिकअप' : 'TAKEAWAY / PICKUP'}
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#666', lineHeight: 1.5 }}>
-                {language === 'mr' ? 'ऑर्डर द्या, ठरलेल्या वेळी घ्या · प्रतीक्षा नाही' : 'Order now, choose your time · No wait needed'}
+              <div style={{ fontSize: '0.72rem', color: '#555', lineHeight: 1.55 }}>
+                {language === 'mr' ? 'ऑर्डर द्या, ठरलेल्या वेळी घ्या · प्रतीक्षा नाही' : 'Order now, choose pickup time · Skip the queue'}
               </div>
             </div>
+            <ChevronRight size={18} color="#333" style={{ marginTop: '2px', flexShrink: 0 }} />
           </div>
         </button>
       </div>
 
       {/* Language toggle */}
       <button onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')} style={{
-        marginTop: '32px', background: 'transparent', border: '1px solid rgba(211,191,162,0.15)',
-        color: '#555', padding: '8px 20px', borderRadius: '20px', fontSize: '0.7rem',
-        fontWeight: '800', cursor: 'pointer'
-      }}>
+        marginTop: '32px', background: 'transparent', border: '1px solid #1a1a1a',
+        color: '#333', padding: '9px 24px', borderRadius: '20px',
+        fontSize: '0.68rem', fontWeight: '800', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.15s'
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#555'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+      >
+        <Globe2 size={13} />
         {language === 'en' ? 'मराठी' : 'English'}
       </button>
-    </div>
+    </Shell>
   );
-}
+})()}
 
 
 
@@ -958,21 +1171,103 @@ if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATY
       </AnimatePresence>
 {/* Counter mode context banner */}
 {isCounterScan && registrationStep === 'menu' && (
-  <div style={{ background: 'rgba(211,191,162,0.06)', borderBottom: '1px solid rgba(211,191,162,0.12)', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <span style={{ fontSize: '1.2rem' }}>{counterMode === 'dine-in' ? '🪑' : '🛍️'}</span>
-      <div>
-        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>
+  <div style={{
+    position: 'sticky', top: 0, zIndex: 1000,
+    background: '#111',
+    borderBottom: '1px solid rgba(211,191,162,0.1)',
+  }}>
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '12px 18px',
+      background: 'rgba(211,191,162,0.04)',
+    }}>
+      {/* LEFT: mode icon + info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+          background: counterMode === 'dine-in' ? 'rgba(211,191,162,0.08)' : 'rgba(211,191,162,0.06)',
+          border: '1px solid rgba(211,191,162,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
           {counterMode === 'dine-in'
-            ? (avgWaitData?.queueLength ? `#${(avgWaitData.queueLength) + 1} in queue · ~${avgWaitData.estimatedWait || 20} min` : 'Waitlist')
-            : (scheduledPickupTime ? `Pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}` : 'Pickup Order')}
+            ? <Armchair size={17} color="#d3bfa2" />
+            : <ShoppingBag size={17} color="#d3bfa2" />
+          }
         </div>
-        <div style={{ fontSize: '0.62rem', color: '#555' }}>{customerInfo.name}</div>
+
+        <div>
+          {/* Status line */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {counterMode === 'dine-in' ? (
+              avgWaitData?.queueLength
+                ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Hash size={10} color="#8a704d" />
+                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2' }}>
+                        {(avgWaitData.queueLength) + 1} in queue
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.6rem', color: '#333' }}>·</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Hourglass size={10} color="#555" />
+                      <span style={{ fontSize: '0.64rem', color: '#666', fontWeight: '700' }}>
+                        ~{avgWaitData.estimatedWait || 20} min
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <UserCheck size={11} color="#8a704d" />
+                    <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2' }}>Waitlist</span>
+                  </div>
+                )
+            ) : scheduledPickupTime ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Clock3 size={11} color="#8a704d" />
+                <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2' }}>
+                  Pickup {new Date(scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Package size={11} color="#8a704d" />
+                <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2' }}>Pickup Order</span>
+              </div>
+            )}
+          </div>
+
+          {/* Customer name */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+            <Users size={10} color="#333" />
+            <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '700' }}>
+              {customerInfo.name}
+              {counterMode === 'dine-in' && partySize > 1 && ` · ${partySize} pax`}
+            </span>
+          </div>
+        </div>
       </div>
+
+      {/* RIGHT: back button */}
+      <button onClick={() => setRegistrationStep('register')} style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '7px 13px', background: 'transparent',
+        border: '1px solid #1a1a1a', color: '#444',
+        borderRadius: '9px', fontSize: '0.6rem', fontWeight: '900',
+        cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0,
+        transition: 'all 0.15s'
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#888'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+      >
+        <ArrowLeft size={12} />
+        BACK
+      </button>
     </div>
-    <button onClick={() => setRegistrationStep('register')} style={{ background: 'transparent', border: 'none', color: '#555', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}>← Back</button>
   </div>
 )}
+
+
       <header style={styles.header}>
         <div style={styles.langToggleBox}>
           <button style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
