@@ -58,7 +58,9 @@ const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 // ── COUNTER / WAITLIST MODE ──
 const [counterMode, setCounterMode] = useState(null); // null | 'dine-in' | 'pickup'
 const [isCounterScan, setIsCounterScan] = useState(false);
-const [sessionId] = useState(() => {
+// REPLACE the existing sessionId useState:
+const [sessionId, setSessionId] = useState(() => {
+  // Always generate fresh — session validity checked against backend
   const stored = sessionStorage.getItem('pratyeksha_session');
   if (stored) return stored;
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -218,40 +220,65 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
     };
   }, [isCounterScan, sessionId, waitlistSocket]);
 
-  useEffect(() => {
-    const activeTenant = urlTenantId || 'jay_ambe_fusion';
-    setTenantId(activeTenant);
-    const params = new URLSearchParams(window.location.search);
-    const tableParam = params.get('table');
-    
-    if (tableParam) {
-      setTableNumber(tableParam);
-      setIsCounterScan(false);
-    } else {
-      setTableNumber('Counter');
-      setIsCounterScan(true);
-      
-      axios.get(`${BASE_URL}/waitlist/avg-wait/${activeTenant}`)
-        .then(r => setAvgWaitData(r.data))
-        .catch(() => {});
-        
-      axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
-        .then(r => {
-          if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
-            setWaitlistEntry(r.data);
-            setCounterMode(r.data.mode);
-            setRegistrationStep('confirm');
-          }
-        })
-        .catch((err) => {
-          console.warn("No active session found or backend unreachable. Resetting registration track.", err.message);
+// REPLACE the existing useEffect that has:
+// "axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)"
+
+useEffect(() => {
+  const activeTenant = urlTenantId || 'jay_ambe_fusion';
+  setTenantId(activeTenant);
+  const params = new URLSearchParams(window.location.search);
+  const tableParam = params.get('table');
+
+  if (tableParam) {
+    setTableNumber(tableParam);
+    setIsCounterScan(false);
+  } else {
+    setTableNumber('Counter');
+    setIsCounterScan(true);
+
+    // Fetch avg wait data
+    axios.get(`${BASE_URL}/waitlist/avg-wait/${activeTenant}`)
+      .then(r => setAvgWaitData(r.data))
+      .catch(() => {});
+
+    // Try to resume existing session
+    axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
+      .then(r => {
+        if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
+          // Valid active session — resume
+          setWaitlistEntry(r.data);
+          setCounterMode(r.data.mode);
+          setRegistrationStep('confirm');
+        } else {
+          // Session exists in DB but in a terminal state (settled/cancelled/no-show)
+          // → Fresh start: clear sessionStorage and generate new sessionId
+          sessionStorage.removeItem('pratyeksha_session');
+          const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          sessionStorage.setItem('pratyeksha_session', newId);
+          // Reset all counter state
+          setWaitlistEntry(null);
+          setCounterMode(null);
           setRegistrationStep('mode');
-        });
-    }
-  }, [urlTenantId, sessionId]);
-
-
-
+          setCustomerInfo({ name: '', phone: '' });
+          setPartySize(1);
+          setScheduledPickupTime('');
+        }
+      })
+      .catch(() => {
+        // 404 or network error → no active session found → fresh start
+        // Clear any stale sessionStorage
+        sessionStorage.removeItem('pratyeksha_session');
+        const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionStorage.setItem('pratyeksha_session', newId);
+        setWaitlistEntry(null);
+        setCounterMode(null);
+        setRegistrationStep('mode');
+        setCustomerInfo({ name: '', phone: '' });
+        setPartySize(1);
+        setScheduledPickupTime('');
+      });
+  }
+}, [urlTenantId]); 
 
   // =========================================================================
   // ── CONDITIONAL RENDER LAYOUTS (MUST ALWAYS GO AFTER ALL HOOK DECLARATIONS) ──
@@ -658,9 +685,19 @@ const sendBatchToKitchen = async () => {
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
   }, [allMenuItems, isOnlyVegTenant]);
 
-{isCounterScan && registrationStep !== 'menu' && (() => {
+// FIND this block (just before the isLoading check):
+// {isCounterScan && registrationStep !== 'menu' && (() => {
+//   ...entire IIFE...
+// })()}
+//
+// if (isLoading) return ...
 
-  // ── SHARED LAYOUT WRAPPER ─────────────────────────────────────
+// REPLACE with:
+
+// ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
+if (isCounterScan && registrationStep !== 'menu') {
+
+  // shared shell
   const Shell = ({ children, centered = true }) => (
     <div style={{
       minHeight: '100vh', background: '#111', color: '#fff',
@@ -674,7 +711,6 @@ const sendBatchToKitchen = async () => {
     </div>
   );
 
-  // ── RESTAURANT HEADER BADGE ───────────────────────────────────
   const RestaurantBadge = () => (
     <div style={{ textAlign: 'center', marginBottom: '36px' }}>
       <div style={{
@@ -694,17 +730,14 @@ const sendBatchToKitchen = async () => {
     </div>
   );
 
-  // ═══════════════════════════════════════════════
-  // SCREEN 1 — CONFIRMATION / WAITING SCREEN
-  // ═══════════════════════════════════════════════
+  // ── SCREEN: CONFIRM (resume existing session) ──
   if (registrationStep === 'confirm' && waitlistEntry) {
-    const isDineIn  = waitlistEntry.mode === 'dine-in';
-    const hasItems  = waitlistEntry.items?.length > 0;
-    const estWait   = waitlistEntry.waitlistPosition * 20;
+    const isDineIn = waitlistEntry.mode === 'dine-in';
+    const hasItems = waitlistEntry.items?.length > 0;
+    const estWait  = waitlistEntry.waitlistPosition * 20;
 
     return (
       <Shell>
-        {/* Success icon */}
         <div style={{
           width: '72px', height: '72px', borderRadius: '22px',
           background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)',
@@ -745,7 +778,7 @@ const sendBatchToKitchen = async () => {
                 </span>
               </div>
             </>
-          ) : waitlistEntry.scheduledPickupTime && (
+          ) : waitlistEntry.scheduledPickupTime ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}>
                 <CalendarClock size={12} color="#555" />
@@ -757,7 +790,7 @@ const sendBatchToKitchen = async () => {
                 {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
               </div>
             </>
-          )}
+          ) : null}
         </div>
 
         {/* PRE-ORDER SUMMARY */}
@@ -798,8 +831,8 @@ const sendBatchToKitchen = async () => {
           </div>
           <p style={{ margin: 0, fontSize: '0.74rem', color: '#666', lineHeight: 1.6 }}>
             {language === 'mr'
-              ? 'जेव्हा तुमचे टेबल / ऑर्डर तयार होईल तेव्हा तुम्हाला सूचना मिळेल — हे पेज बंद केले तरी.'
-              : "You'll be notified when your table or order is ready — even if you close this page."}
+              ? 'जेव्हा तुमचे टेबल / ऑर्डर तयार होईल तेव्हा तुम्हाला सूचना मिळेल.'
+              : "You'll be notified when your table or order is ready."}
           </p>
         </div>
 
@@ -819,10 +852,20 @@ const sendBatchToKitchen = async () => {
           </button>
         )}
 
-        {/* Cancel */}
+        {/* Cancel — clears session completely */}
         <button onClick={() => {
           axios.delete(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}`).catch(() => {});
-          setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
+          sessionStorage.removeItem('pratyeksha_session');
+          const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          sessionStorage.setItem('pratyeksha_session', newId);
+          setWaitlistEntry(null);
+          setRegistrationStep('mode');
+          setCounterMode(null);
+          setCustomerInfo({ name: '', phone: '' });
+          setPartySize(1);
+          setScheduledPickupTime('');
+          setCart({});
+          setSuggestions({});
         }} style={{
           background: 'transparent', border: '1px solid #1a1a1a', color: '#333',
           fontSize: '0.72rem', cursor: 'pointer', padding: '10px 24px',
@@ -839,26 +882,23 @@ const sendBatchToKitchen = async () => {
     );
   }
 
-  // ═══════════════════════════════════════════════
-  // SCREEN 2 — REGISTRATION FORM
-  // ═══════════════════════════════════════════════
+  // ── SCREEN: REGISTER ──
   if (registrationStep === 'register') {
     const isDineIn = counterMode === 'dine-in';
-
     const pickupOptions = [];
     const base = new Date();
     base.setMinutes(Math.ceil(base.getMinutes() / 15) * 15, 0, 0);
     for (let i = 0; i < 12; i++) {
-      const t = new Date(base.getTime() + i * 15 * 60000);
+      const slot = new Date(base.getTime() + i * 15 * 60000);
       pickupOptions.push({
-        value: t.toISOString(),
-        label: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        value: slot.toISOString(),
+        label: slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
       });
     }
 
     return (
       <Shell centered={false}>
-        {/* Sticky top bar */}
+        {/* top bar */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
           background: '#111', borderBottom: '1px solid #161616',
@@ -875,17 +915,14 @@ const sendBatchToKitchen = async () => {
           </button>
           <div>
             <div style={{ fontSize: '0.68rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>
-              {isDineIn
-                ? (language === 'mr' ? 'रांगेत नोंदणी' : 'Join Waitlist')
-                : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')}
+              {isDineIn ? (language === 'mr' ? 'रांगेत नोंदणी' : 'Join Waitlist') : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')}
             </div>
             <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '2px' }}>{restaurantData?.name}</div>
           </div>
         </div>
 
         <div style={{ padding: '32px 24px 60px', maxWidth: '440px', margin: '0 auto', width: '100%' }}>
-
-          {/* Mode indicator */}
+          {/* mode badge */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '12px',
             padding: '14px 18px', marginBottom: '28px',
@@ -907,7 +944,7 @@ const sendBatchToKitchen = async () => {
             </div>
           </div>
 
-          {/* Name field */}
+          {/* Name */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
               {language === 'mr' ? 'तुमचे नाव *' : 'Your Name *'}
@@ -916,19 +953,13 @@ const sendBatchToKitchen = async () => {
               placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
               value={customerInfo.name}
               onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-              style={{
-                width: '100%', padding: '14px 16px',
-                background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
-                color: '#fff', borderRadius: '12px', fontSize: '1rem',
-                outline: 'none', boxSizing: 'border-box',
-                transition: 'border-color 0.15s'
-              }}
+              style={{ width: '100%', padding: '14px 16px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', color: '#fff', borderRadius: '12px', fontSize: '1rem', outline: 'none', boxSizing: 'border-box' }}
               onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
               onBlur={e => e.target.style.borderColor = 'rgba(211,191,162,0.15)'}
             />
           </div>
 
-          {/* Party size — dine-in only */}
+          {/* Party size */}
           {isDineIn && (
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
@@ -942,8 +973,7 @@ const sendBatchToKitchen = async () => {
                     background: partySize === n ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
                     color: partySize === n ? '#000' : '#444',
                     outline: partySize === n ? 'none' : '1px solid #1a1a1a',
-                    transition: 'all 0.15s',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    transition: 'all 0.15s'
                   }}>
                     {n}{n === 6 ? '+' : ''}
                   </button>
@@ -952,7 +982,7 @@ const sendBatchToKitchen = async () => {
             </div>
           )}
 
-          {/* Pickup time — pickup only */}
+          {/* Pickup time */}
           {!isDineIn && (
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', display: 'block', marginBottom: '9px', textTransform: 'uppercase' }}>
@@ -960,27 +990,18 @@ const sendBatchToKitchen = async () => {
               </label>
               <div style={{ position: 'relative' }}>
                 <Clock3 size={14} color="#555" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                <select value={scheduledPickupTime}
-                  onChange={e => setScheduledPickupTime(e.target.value)}
-                  style={{
-                    width: '100%', padding: '14px 16px 14px 40px',
-                    background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
-                    color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
-                    outline: 'none', cursor: 'pointer', appearance: 'none', boxSizing: 'border-box'
-                  }}>
+                <select value={scheduledPickupTime} onChange={e => setScheduledPickupTime(e.target.value)}
+                  style={{ width: '100%', padding: '14px 16px 14px 40px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', color: '#fff', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', appearance: 'none', boxSizing: 'border-box' }}>
                   <option value="">— {language === 'mr' ? 'वेळ निवडा' : 'Select time'} —</option>
                   {pickupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                <ChevronRight size={14} color="#444" style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%) rotate(90deg)', pointerEvents: 'none' }} />
               </div>
             </div>
           )}
 
-          {/* Queue info pill — dine-in */}
+          {/* Queue info */}
           {isDineIn && avgWaitData && (
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px'
-            }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
               {[
                 { icon: <UserCheck size={12} color="#555" />, label: language === 'mr' ? 'पुढे रांग' : 'Ahead', val: `${avgWaitData.queueLength || 0} group${(avgWaitData.queueLength || 0) !== 1 ? 's' : ''}` },
                 { icon: <Hourglass size={12} color="#555" />, label: language === 'mr' ? 'अंदाजे वेळ' : 'Est. Wait', val: `~${(avgWaitData.queueLength || 0) * (avgWaitData.avgWait || 20)} min` },
@@ -1019,9 +1040,7 @@ const sendBatchToKitchen = async () => {
     );
   }
 
-  // ═══════════════════════════════════════════════
-  // SCREEN 0 — MODE SELECTION
-  // ═══════════════════════════════════════════════
+  // ── SCREEN: MODE SELECTION (default) ──
   const occupiedCount = avgWaitData?.tablesOccupied || 0;
   const totalCount    = avgWaitData?.totalTables    || 12;
   const queueLen      = avgWaitData?.queueLength    || 0;
@@ -1033,7 +1052,7 @@ const sendBatchToKitchen = async () => {
     <Shell>
       <RestaurantBadge />
 
-      {/* Table availability strip */}
+      {/* occupancy strip */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         padding: '12px 20px', marginBottom: '28px',
@@ -1062,16 +1081,14 @@ const sendBatchToKitchen = async () => {
             </div>
           )}
         </div>
-        {/* Occupancy bar */}
         <div style={{ width: '60px', height: '4px', background: '#1a1a1a', borderRadius: '2px', overflow: 'hidden', flexShrink: 0 }}>
           <div style={{ height: '100%', width: `${(occupiedCount / totalCount) * 100}%`, background: isFull ? '#c0392b' : '#4ade80', borderRadius: '2px', transition: 'width 0.6s ease' }} />
         </div>
       </div>
 
-      {/* Mode cards */}
+      {/* mode cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', maxWidth: '400px' }}>
-
-        {/* ── DINE-IN WAITLIST card ── */}
+        {/* WAITLIST */}
         <button onClick={() => { setCounterMode('dine-in'); setRegistrationStep('register'); }} style={{
           background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.18)',
           borderRadius: '20px', padding: '22px 20px', textAlign: 'left', cursor: 'pointer',
@@ -1085,7 +1102,7 @@ const sendBatchToKitchen = async () => {
               <Armchair size={24} color="#d3bfa2" />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px', letterSpacing: '-0.2px' }}>
+              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px' }}>
                 {language === 'mr' ? 'टेबलसाठी रांगेत बसा' : 'JOIN WAITLIST'}
               </div>
               <div style={{ fontSize: '0.72rem', color: '#555', lineHeight: 1.55 }}>
@@ -1096,9 +1113,7 @@ const sendBatchToKitchen = async () => {
               {queueLen > 0 && (
                 <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Users size={11} color="#555" />
-                  <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800' }}>
-                    {queueLen} group{queueLen !== 1 ? 's' : ''} ahead
-                  </span>
+                  <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '800' }}>{queueLen} group{queueLen !== 1 ? 's' : ''} ahead</span>
                 </div>
               )}
             </div>
@@ -1106,7 +1121,7 @@ const sendBatchToKitchen = async () => {
           </div>
         </button>
 
-        {/* ── PICKUP card ── */}
+        {/* PICKUP */}
         <button onClick={() => { setCounterMode('pickup'); setRegistrationStep('register'); }} style={{
           background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.12)',
           borderRadius: '20px', padding: '22px 20px', textAlign: 'left', cursor: 'pointer',
@@ -1120,7 +1135,7 @@ const sendBatchToKitchen = async () => {
               <ShoppingBag size={24} color="#d3bfa2" />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px', letterSpacing: '-0.2px' }}>
+              <div style={{ fontSize: '0.94rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '5px' }}>
                 {language === 'mr' ? 'टेकअवे / पिकअप' : 'TAKEAWAY / PICKUP'}
               </div>
               <div style={{ fontSize: '0.72rem', color: '#555', lineHeight: 1.55 }}>
@@ -1132,7 +1147,7 @@ const sendBatchToKitchen = async () => {
         </button>
       </div>
 
-      {/* Language toggle */}
+      {/* language toggle */}
       <button onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')} style={{
         marginTop: '32px', background: 'transparent', border: '1px solid #1a1a1a',
         color: '#333', padding: '9px 24px', borderRadius: '20px',
@@ -1147,12 +1162,10 @@ const sendBatchToKitchen = async () => {
       </button>
     </Shell>
   );
-})()}
+} // ← end of if (isCounterScan && registrationStep !== 'menu')
 
-
-
-if (isLoading) return <div style={{...styles.loader, color: primaryColor}}>PRATYEKSHA...</div>;
-
+// ── LOADER ──
+if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRATYEKSHA...</div>;
 
   return (
     <div style={{...styles.body, backgroundColor: secondaryColor}}>

@@ -399,6 +399,7 @@ socket.on('new_waitlist_entry', () => fetchCounterQueue());
 socket.on('waitlist_cancelled',  () => fetchCounterQueue());
 socket.on('waitlist_assigned',   () => { fetchCounterQueue(); fetchInitialData(); });
 socket.on('waitlist_updated',    () => fetchCounterQueue());
+socket.on('pickup_ready',        () => fetchCounterQueue());
 
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
@@ -414,8 +415,7 @@ socket.on('waitlist_updated',    () => fetchCounterQueue());
       });
     }
     return () => { socket.off(); };
-  }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData]);
-
+}, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData, fetchCounterQueue]);
   // ── Attendance: fetch monthly logs when management tab opens or viewDate changes
   const fetchAttendanceForDate = useCallback(async (targetDate) => {
     try {
@@ -6137,16 +6137,31 @@ style={{
                   key={n}
                   disabled={isOcc}
                   onClick={async () => {
-                    try {
-                      await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, { tableNumber: id });
-                      setAssignTableModal(null);
-                      fetchCounterQueue();
-                      fetchInitialData();
-                      showNotif(`T${n} assigned to ${assignTableModal.customerName} — order sent to KDS`, 'success');
-                    } catch {
-                      showNotif('Failed to assign table', 'error');
-                    }
-                  }}
+  try {
+    const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
+      tableNumber: id
+    });
+    if (res.data?.success) {
+      setAssignTableModal(null);
+      fetchCounterQueue();
+      fetchInitialData();
+      showNotif(
+        res.data.order
+          ? `T${n} assigned to ${assignTableModal.customerName} — order in KDS`
+          : `T${n} assigned to ${assignTableModal.customerName}`,
+        'success'
+      );
+    } else {
+      showNotif(res.data?.error || 'Assignment failed', 'error');
+    }
+  } catch (err) {
+    console.error('Assign error:', err.response?.data || err.message);
+    showNotif(
+      err.response?.data?.error || 'Failed to assign table — check console',
+      'error'
+    );
+  }
+}}
                   style={{
                     padding: '16px 8px', borderRadius: '12px', cursor: isOcc ? 'not-allowed' : 'pointer',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
