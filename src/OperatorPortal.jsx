@@ -6136,7 +6136,8 @@ style={{
                 <button
                   key={n}
                   disabled={isOcc}
-                  onClick={async () => {
+                  // The onClick inside your assign table grid button — REPLACE with:
+onClick={async () => {
   try {
     const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
       tableNumber: id
@@ -6144,10 +6145,10 @@ style={{
     if (res.data?.success) {
       setAssignTableModal(null);
       fetchCounterQueue();
-      fetchInitialData();
+      fetchInitialData();          // ← this re-fetches orders so pending tab updates
       showNotif(
         res.data.order
-          ? `T${n} assigned to ${assignTableModal.customerName} — order in KDS`
+          ? `T${n} assigned to ${assignTableModal.customerName} — order firing to KDS`
           : `T${n} assigned to ${assignTableModal.customerName}`,
         'success'
       );
@@ -6157,7 +6158,7 @@ style={{
   } catch (err) {
     console.error('Assign error:', err.response?.data || err.message);
     showNotif(
-      err.response?.data?.error || 'Failed to assign table — check console',
+      err.response?.data?.error || err.message || 'Failed to assign table',
       'error'
     );
   }
