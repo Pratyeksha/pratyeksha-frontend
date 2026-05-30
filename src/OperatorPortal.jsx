@@ -176,6 +176,8 @@ const [newDish, setNewDish] = useState({
 const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 
+const [waitlistAnalytics, setWaitlistAnalytics] = useState(null);
+
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
     name: '', role: 'Waiter', age: '', contact: '', address: '',
@@ -259,7 +261,8 @@ const fetchAnalytics = useCallback(async () => {
       axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: null })),
       axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: [] })),
       axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: { efficiency: [] } }))
+      axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: { efficiency: [] } })),
+      axios.get(`${BASE_URL}/admin/analytics/waitlist/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: null })),
     ]);
     setAnalytics(analyticsRes.data.salesData || []);
     setTopPerformers(analyticsRes.data.topItems || []);
@@ -271,6 +274,7 @@ const fetchAnalytics = useCallback(async () => {
     setProfitabilityData(profitRes.data || []);
     setProcurementData(procureRes.data || []);
     setStaffEfficiency(staffEffRes.data?.efficiency || []);
+    setWaitlistAnalytics(waitlistRes.data);
   } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, viewDate]);
 
@@ -3527,6 +3531,153 @@ const renderMonthHeatmap = () => {
   </div>
 )}
 
+{/* ── WAITLIST & COUNTER INTELLIGENCE ── */}
+{waitlistAnalytics && (
+  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+    <h4 style={styles.biTitle}>
+      <Users size={16} /> WAITLIST & COUNTER INTELLIGENCE
+      <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
+        {waitlistAnalytics.month?.monthLabel}
+      </span>
+    </h4>
+
+    {/* TODAY STRIP */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px', marginBottom: '24px' }}>
+      {[
+        { l: 'GROUPS TODAY',   v: waitlistAnalytics.today.total,   c: '#d3bfa2' },
+        { l: 'SEATED TODAY',   v: waitlistAnalytics.today.seated,  c: '#4ade80' },
+        { l: 'PICKUP TODAY',   v: waitlistAnalytics.today.pickup,  c: '#60a5fa' },
+        { l: 'STILL WAITING',  v: waitlistAnalytics.today.waiting, c: '#BA7517' },
+        { l: 'WALKED / NO-SHOW', v: waitlistAnalytics.today.walked, c: '#E24B4A' },
+      ].map(s => (
+        <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '14px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>{s.l}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* MONTHLY KPIs */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
+      {[
+        { l: 'CONVERSION RATE',       v: `${waitlistAnalytics.month.conversionPct}%`,    c: waitlistAnalytics.month.conversionPct > 70 ? '#4ade80' : waitlistAnalytics.month.conversionPct > 50 ? '#d3bfa2' : '#BA7517' },
+        { l: 'AVG WAIT TIME',         v: `${waitlistAnalytics.month.avgWaitMin} min`,    c: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' },
+        { l: 'PRE-ORDER REVENUE',     v: `₹${waitlistAnalytics.month.preOrderRevenue.toLocaleString()}`, c: '#d3bfa2' },
+        { l: 'NOTIF DELIVERED',       v: `${waitlistAnalytics.month.notifDeliveredPct}%`, c: '#60a5fa' },
+      ].map(s => (
+        <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* MODE SPLIT + PARTY SIZE */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+      {/* Mode split bar */}
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>MODE SPLIT — {waitlistAnalytics.month.total} TOTAL</div>
+        {waitlistAnalytics.month.total > 0 && (
+          <>
+            <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', gap: '2px' }}>
+              <div style={{ width: `${Math.round((waitlistAnalytics.month.dineIn / waitlistAnalytics.month.total) * 100)}%`, background: '#d3bfa2', borderRadius: '4px 0 0 4px', transition: 'width 0.8s ease' }} />
+              <div style={{ flex: 1, background: '#60a5fa', borderRadius: '0 4px 4px 0' }} />
+            </div>
+            {[
+              { l: 'Dine-in Waitlist', v: waitlistAnalytics.month.dineIn,  seated: waitlistAnalytics.month.seated,  c: '#d3bfa2' },
+              { l: 'Pickup / Takeaway', v: waitlistAnalytics.month.pickup, seated: waitlistAnalytics.month.pickupSettled, c: '#60a5fa' },
+            ].map(s => (
+              <div key={s.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #0d0d0d' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.c }} />
+                  <span style={{ fontSize: '0.68rem', color: '#666' }}>{s.l}</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{s.v}</span>
+                  <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>{s.seated} completed</span>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Party size distribution */}
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>PARTY SIZE DISTRIBUTION</div>
+        {Object.entries(waitlistAnalytics.month.partySizes || {}).map(([size, count]) => {
+          const maxCount = Math.max(...Object.values(waitlistAnalytics.month.partySizes || {}), 1);
+          return (
+            <div key={size} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', minWidth: '24px', textAlign: 'right' }}>{size}</span>
+              <div style={{ flex: 1, height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.round((count / maxCount) * 100)}%`, background: 'rgba(211,191,162,0.6)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+              </div>
+              <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', minWidth: '24px' }}>{count}</span>
+            </div>
+          );
+        })}
+        {waitlistAnalytics.month.peakHour && (
+          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #111', fontSize: '0.62rem', color: '#555' }}>
+            Peak arrival: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
+              {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
+                : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
+                : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
+                : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
+            </span>
+            <span style={{ color: '#333', marginLeft: '8px' }}>({waitlistAnalytics.month.peakHour.count} groups)</span>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* DAILY TREND SPARKLINE */}
+    {waitlistAnalytics.dailyTrend?.length > 0 && (
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px' }}>DAILY FOOTFALL TREND</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
+          {(() => {
+            const maxVal = Math.max(...waitlistAnalytics.dailyTrend.map(d => d.total), 1);
+            return waitlistAnalytics.dailyTrend.map((d, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
+                title={`${d.date}: ${d.total} groups · ${d.seated} seated · ${d.pickup} pickup · ${d.walked} walked`}>
+                <div style={{
+                  width: '100%', minWidth: 0,
+                  height: `${Math.max(4, Math.round((d.total / maxVal) * 100))}%`,
+                  background: d.walked > d.seated ? 'rgba(226,75,74,0.4)' : d.total > 0 ? 'rgba(211,191,162,0.5)' : '#111',
+                  borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
+                }} />
+              </div>
+            ));
+          })()}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>
+            {waitlistAnalytics.dailyTrend[0]?.date?.slice(5)}
+          </span>
+          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>
+            {waitlistAnalytics.dailyTrend[waitlistAnalytics.dailyTrend.length - 1]?.date?.slice(5)}
+          </span>
+        </div>
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: '16px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #0d0d0d' }}>
+          {[
+            { c: 'rgba(211,191,162,0.5)', l: 'Normal / Good conversion' },
+            { c: 'rgba(226,75,74,0.4)',   l: 'High walk-aways' },
+          ].map(s => (
+            <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '10px', height: '6px', borderRadius: '2px', background: s.c }} />
+              <span style={{ fontSize: '0.55rem', color: '#333', fontWeight: '700' }}>{s.l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+
 {/* ── INSIGHT: TOP TABLE REVENUE HOURS ── */}
 {hourlyAnalytics.hourly.length > 0 && (() => {
   const topHours = [...hourlyAnalytics.hourly].sort((a,b)=>b.revenue-a.revenue).slice(0,3);
@@ -3548,6 +3699,8 @@ const renderMonthHeatmap = () => {
     </div>
   );
 })()}
+
+
 
 {/* ── INSIGHT: PAYMENT MODE TRENDS ── */}
 {analytics.length > 0 && (() => {
