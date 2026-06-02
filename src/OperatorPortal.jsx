@@ -132,6 +132,8 @@ const istTodayStr = useMemo(() => {
   const [pendingDeleteStaff, setPendingDeleteStaff] = useState(null);
   const [tenantConfig, setTenantConfig] = useState(null);
 
+  const [queueSearch, setQueueSearch] = useState('');
+
   // ── These are re-fetched whenever viewDate changes (month selector)
   const [trendsData, setTrendsData] = useState(null);
   const [hourlyAnalytics, setHourlyAnalytics] = useState({ hourly: [], dayOfWeek: [] });
@@ -245,36 +247,47 @@ const fetchExtraAnalytics = useCallback(async () => {
     } catch (err) { console.error("Data Sync Error:", err); }
   }, [tenantId,fetchCounterQueue ]);
 
-  // ── fetchAnalytics now takes an optional targetMonth (YYYY-MM) so it re-runs when viewDate changes
+// REPLACE fetchAnalytics entirely:
 const fetchAnalytics = useCallback(async () => {
   try {
     const istNow = new Date(new Date().getTime() + 330*60*1000);
     const todayStr = istNow.toISOString().split('T')[0];
-
-    // Selected month string for month-filtered endpoints
     const selectedMonthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth()+1).padStart(2,'0');
 
-    const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes] = await Promise.all([
+    const results = await Promise.allSettled([
       axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${todayStr}&month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}?month=${selectedMonthStr}`),
-      axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: null })),
-      axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: { efficiency: [] } })),
-      axios.get(`${BASE_URL}/admin/analytics/waitlist/${tenantId}?month=${selectedMonthStr}`).catch(() => ({ data: null })),
+      axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}?month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`),
+      axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/waitlist/${tenantId}?month=${selectedMonthStr}`),
     ]);
-    setAnalytics(analyticsRes.data.salesData || []);
-    setTopPerformers(analyticsRes.data.topItems || []);
-    setBottomPerformers(analyticsRes.data.bottomItems || []);
-    setCategoryRankings(analyticsRes.data.categoryRankings || {});
-    setHourlyAnalytics({ hourly: hourlyRes.data.hourly || [], dayOfWeek: hourlyRes.data.dayOfWeek || [] });
-    setTrendsData(trendsRes.data);
-    setPrepTimeData(prepRes.data);
-    setProfitabilityData(profitRes.data || []);
-    setProcurementData(procureRes.data || []);
-    setStaffEfficiency(staffEffRes.data?.efficiency || []);
-    setWaitlistAnalytics(waitlistRes.data);
+
+    const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes, waitlistRes] = results;
+
+    const val = (r, fallback) => r.status === 'fulfilled' ? r.value.data : fallback;
+
+    setAnalytics(val(analyticsRes, { salesData: [] }).salesData || []);
+    setTopPerformers(val(analyticsRes, { topItems: [] }).topItems || []);
+    setBottomPerformers(val(analyticsRes, { bottomItems: [] }).bottomItems || []);
+    setCategoryRankings(val(analyticsRes, { categoryRankings: {} }).categoryRankings || {});
+    setHourlyAnalytics({
+      hourly:    val(hourlyRes, { hourly: [] }).hourly    || [],
+      dayOfWeek: val(hourlyRes, { dayOfWeek: [] }).dayOfWeek || []
+    });
+    setTrendsData(val(trendsRes, null));
+    setPrepTimeData(val(prepRes, null));
+    setProfitabilityData(val(profitRes, []));
+    setProcurementData(val(procureRes, []));
+    setStaffEfficiency(val(staffEffRes, { efficiency: [] }).efficiency || []);
+
+    // ← THIS was the bug: waitlistRes was missing from destructure, so it was always undefined
+    const waitlistData = val(waitlistRes, null);
+    setWaitlistAnalytics(waitlistData);
+    console.log('[Analytics] Waitlist data loaded:', waitlistData?.today);
+
   } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, viewDate]);
 
@@ -479,9 +492,11 @@ const hudLiveCounterBreakdown = useMemo(() => {
     ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
   ], [orders]);
 
-  const filteredOrders = useMemo(() => {
+const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       if (order.status === 'served' || order.status === 'settled') return false;
+      // Counter-pickup orders settle via pickup queue, not kitchen tickets
+      if (order.source === 'counter-pickup') return false;
       const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
       if (orderZone === 'delayed') return minutes >= 15;
       if (orderZone === 'fresh')   return minutes < 15;
@@ -1666,14 +1681,14 @@ const renderMonthHeatmap = () => {
               ))}
             </div>
           )}
-   {activeTab === 'menu' && (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-    {/* VEG / NON-VEG FILTER */}
+{activeTab === 'menu' && (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+    {/* VEG / NON-VEG FILTER — unchanged */}
     <div style={{ display: 'flex', background: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '4px', gap: '4px' }}>
       {[
         { val: 'all',    label: 'ALL' },
-        { val: 'veg',    label: '🌿 VEG' },
-        { val: 'nonveg', label: '🍖 NON-VEG' },
+        { val: 'veg',    label: 'VEG' },
+        { val: 'nonveg', label: 'NON-VEG' },
       ].map(f => (
         <button key={f.val} onClick={() => setMenuVegFilter(f.val)} style={{
           padding: '7px 14px', border: 'none', borderRadius: '7px', cursor: 'pointer',
@@ -1682,26 +1697,63 @@ const renderMonthHeatmap = () => {
           color: menuVegFilter === f.val ? '#000' : '#444',
           transition: 'all 0.15s'
         }}>
-          {f.label}
+          {f.val === 'veg' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: menuVegFilter === 'veg' ? '#4a7c3f' : '#555', display: 'inline-block' }}/>
+              VEG
+            </span>
+          )}
+          {f.val === 'nonveg' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `7px solid ${menuVegFilter === 'nonveg' ? '#8a3030' : '#555'}`, display: 'inline-block' }}/>
+              NON-VEG
+            </span>
+          )}
+          {f.val === 'all' && 'ALL'}
         </button>
       ))}
     </div>
 
-    {/* existing auto-hide toggle — keep as-is */}
+    {/* AUTO-HIDE TOGGLE — premium design */}
     {tenantConfig && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900' }}>AUTO-HIDE ON LOW STOCK</span>
-        <button onClick={async () => {
-          const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
-          await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
-          setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
-          showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
-        }} style={{
-          padding: '6px 14px', borderRadius: '8px', border: 'none', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer',
-          background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a',
-          color: tenantConfig.config?.autoHideDishesOnLowStock ? '#000' : '#444'
-        }}>
-          {tenantConfig.config?.autoHideDishesOnLowStock ? 'ON' : 'OFF'}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        padding: '8px 14px', background: '#000',
+        border: `1px solid ${tenantConfig.config?.autoHideDishesOnLowStock ? 'rgba(211,191,162,0.25)' : '#1a1a1a'}`,
+        borderRadius: '10px', transition: 'all 0.2s'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Low stock icon — lucide Layers */}
+          <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444'} />
+          <span style={{
+            fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.5px',
+            color: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444'
+          }}>
+            AUTO-HIDE LOW STOCK
+          </span>
+        </div>
+        {/* Toggle pill */}
+        <button
+          type="button"
+          onClick={async () => {
+            const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
+            await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
+            setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
+            showNotif(`Auto-hide ${nv ? 'enabled — dishes hide when stock hits zero' : 'disabled'}`);
+          }}
+          style={{
+            width: '38px', height: '20px', borderRadius: '10px', border: 'none',
+            cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+            background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a'
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: '3px',
+            left: tenantConfig.config?.autoHideDishesOnLowStock ? '20px' : '3px',
+            width: '14px', height: '14px', borderRadius: '50%',
+            background: tenantConfig.config?.autoHideDishesOnLowStock ? '#0c0c0c' : '#444',
+            transition: 'left 0.2s'
+          }} />
         </button>
       </div>
     )}
@@ -1807,323 +1859,459 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
  
-    {/* ══════════════════════════════════════════════
-        ROW 2: COUNTER QUEUE PANEL
-        Shows only when there is queue data
-        (always visible with live counter stats)
-    ══════════════════════════════════════════════ */}
-    <div style={{ background: '#080808', borderRadius: '20px', border: '1px solid #141414', overflow: 'hidden' }}>
- 
-      {/* Panel header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #111', background: '#0a0a0a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Users size={16} color="#d3bfa2" />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
-            <div style={{ fontSize: '0.56rem', color: '#444', fontWeight: '700', marginTop: '2px' }}>
-              Waitlist · Pickup · Pre-orders
-            </div>
-          </div>
-          {/* Live counts pill */}
-          <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.07)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #161616', borderRadius: '20px' }}>
-              <UserCheck size={10} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#333'} />
-              <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#333' }}>{waitlistEntries.length} waiting</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: pickupEntries.length > 0 ? 'rgba(74,222,128,0.05)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(74,222,128,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
-              <PackageCheck size={10} color={pickupEntries.length > 0 ? '#4ade80' : '#333'} />
-              <span style={{ fontSize: '0.6rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#4ade80' : '#333' }}>{pickupEntries.length} pickup</span>
-            </div>
-          </div>
-        </div>
- 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {avgWaitData && (
-            <div style={{ display: 'flex', align: 'center', gap: '16px' }}>
-              {[
-                { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={10} color="#555" /> },
-                { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={10} color="#555" /> },
-              ].map(s => (
-                <div key={s.label} style={{ textAlign: 'right' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginBottom: '2px' }}>
-                    {s.icon}
-                    <span style={{ fontSize: '0.5rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#888' }}>{s.val}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          <button onClick={fetchCounterQueue}
-            style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
-          >
-            <RefreshCw size={13} />
-          </button>
-        </div>
+{/* ══════════════════════════════════════════════
+    ROW 2: COUNTER QUEUE PANEL
+══════════════════════════════════════════════ */}
+<div style={{ background: '#080808', borderRadius: '20px', border: '1px solid #141414', overflow: 'hidden' }}>
+
+  {/* Panel header */}
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #111', background: '#0a0a0a' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Users size={16} color="#d3bfa2" />
       </div>
- 
-      {/* Tab switcher */}
-      <div style={{ display: 'flex', padding: '0 24px', background: '#080808', borderBottom: '1px solid #0d0d0d' }}>
-        {[
-          { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />, count: waitlistEntries.length },
-          { id: 'pickup',   label: 'PICKUP QUEUE',      icon: <PackageCheck size={12} />, count: pickupEntries.length },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setQueueTab(tab.id)} style={{
-            display: 'flex', alignItems: 'center', gap: '7px',
-            padding: '12px 16px', background: 'transparent', border: 'none',
-            cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.8px',
-            color: queueTab === tab.id ? '#d3bfa2' : '#333',
-            borderBottom: `2px solid ${queueTab === tab.id ? '#d3bfa2' : 'transparent'}`,
-            transition: 'all 0.15s', marginBottom: '-1px'
-          }}>
-            <span style={{ color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a' }}>{tab.icon}</span>
-            {tab.label}
-            <span style={{
-              fontSize: '0.52rem', padding: '1px 7px', borderRadius: '10px', fontWeight: '900',
-              background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.15)' : 'rgba(211,191,162,0.05)') : '#0d0d0d',
-              color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#555') : '#222',
-              border: tab.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #161616'
-            }}>{tab.count}</span>
-          </button>
-        ))}
+      <div>
+        <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
+        <div style={{ fontSize: '0.56rem', color: '#444', fontWeight: '700', marginTop: '2px' }}>Waitlist · Pickup · Pre-orders</div>
       </div>
- 
-      {/* Queue content */}
-      <div style={{ padding: '20px 24px 24px' }}>
- 
-        {/* ── DINE-IN WAITLIST ── */}
-        {queueTab === 'waitlist' && (
-          waitlistEntries.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                <UserCheck size={20} color="#1e1e1e" />
-              </div>
-              <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>No one in the waitlist</div>
-              <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>Customers joining from the counter page appear here</div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
-              {waitlistEntries.map((entry, i) => {
-                const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
-                const urgency  = waitMins > 30 ? 'critical' : waitMins > 20 ? 'high' : waitMins > 10 ? 'medium' : 'low';
-                const urgencyColor = { critical: '#c0392b', high: '#BA7517', medium: '#d3bfa2', low: '#555' }[urgency];
-                const accentColor  = { critical: 'rgba(192,57,43,0.35)', high: 'rgba(186,117,23,0.35)', medium: 'rgba(211,191,162,0.2)', low: 'rgba(211,191,162,0.08)' }[urgency];
-                return (
-                  <div key={entry._id} style={{
-                    background: '#0a0a0a', borderRadius: '16px',
-                    border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.2)' : '#161616'}`,
-                    borderTop: `3px solid ${accentColor}`,
-                    overflow: 'hidden', position: 'relative'
-                  }}>
-                    {/* Card header */}
-                    <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {/* Position badge */}
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: urgency === 'critical' ? 'rgba(192,57,43,0.1)' : 'rgba(211,191,162,0.06)', border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.25)' : 'rgba(211,191,162,0.12)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff' }}>{entry.customerName}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Users size={10} color="#555" />
-                              <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '700' }}>{entry.partySize} pax</span>
-                            </div>
-                            {entry.customerPhone && (
-                              <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '600' }}>{entry.customerPhone}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Wait timer */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: urgency === 'critical' ? 'rgba(192,57,43,0.08)' : urgency === 'high' ? 'rgba(186,117,23,0.08)' : '#0d0d0d', borderRadius: '8px', border: `1px solid ${urgency !== 'low' ? urgencyColor + '33' : '#161616'}` }}>
-                        <Hourglass size={11} color={urgencyColor} />
-                        <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
-                      </div>
-                    </div>
- 
-                    {/* Pre-ordered items */}
-                    {entry.items?.length > 0 && (
-                      <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-                          <UtensilsCrossed size={10} color="#444" />
-                          <span style={{ fontSize: '0.52rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
-                        </div>
-                        <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.6 }}>
-                          {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
-                          {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3} more</span>}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '5px' }}>
-                          <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>
-                            Est. ₹{entry.totalAmount.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
- 
-                    {/* Actions */}
-                    <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
-                      <button onClick={() => setAssignTableModal(entry)} style={{
-                        flex: 1, padding: '11px', borderRadius: '10px', border: 'none',
-                        background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                        color: '#000', fontWeight: '900', fontSize: '0.66rem',
-                        cursor: 'pointer', letterSpacing: '0.5px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
-                      }}>
-                        <TableProperties size={13} />
-                        ASSIGN TABLE
-                        <ChevronRight size={13} />
-                      </button>
-                      <button onClick={() => setConfirmModal({
-                        show: true, title: 'Mark as No-Show?',
-                        subtitle: `${entry.customerName} will be removed from the waitlist.`,
-                        onConfirm: async () => {
-                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
-                          fetchCounterQueue();
-                          showNotif(`${entry.customerName} — marked no-show`);
-                        }
-                      })} style={{
-                        padding: '11px 13px', background: 'transparent',
-                        border: '1px solid #1a1a1a', color: '#333',
-                        borderRadius: '10px', fontSize: '0.6rem', fontWeight: '900',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px',
-                        flexShrink: 0
-                      }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-                      >
-                        <AlertOctagon size={12} />
-                        NO SHOW
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
- 
-        {/* ── PICKUP QUEUE ── */}
-        {queueTab === 'pickup' && (
-          pickupEntries.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                <PackageCheck size={20} color="#1e1e1e" />
-              </div>
-              <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>No pickup orders</div>
-              <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>Takeaway / scheduled pickups appear here</div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
-              {pickupEntries.map(entry => {
-                const isReady        = entry.status === 'pickup-ready';
-                const pickupMinsLeft = entry.scheduledPickupTime
-                  ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
-                const pickupDue      = pickupMinsLeft !== null && pickupMinsLeft <= 0;
-                const pickupSoon     = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 10;
-                return (
-                  <div key={entry._id} style={{
-                    background: '#0a0a0a', borderRadius: '16px',
-                    border: `1px solid ${isReady ? 'rgba(74,222,128,0.18)' : '#161616'}`,
-                    borderTop: `3px solid ${isReady ? 'rgba(74,222,128,0.5)' : pickupDue ? 'rgba(186,117,23,0.5)' : '#1a1a1a'}`,
-                    overflow: 'hidden'
-                  }}>
-                    {/* header */}
-                    <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff', marginBottom: '4px' }}>{entry.customerName}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {entry.scheduledPickupTime && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Clock3 size={10} color="#555" />
-                              <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '700' }}>
-                                {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                              </span>
-                            </div>
-                          )}
-                          {pickupMinsLeft !== null && (
-                            <span style={{
-                              fontSize: '0.56rem', padding: '2px 7px', borderRadius: '5px', fontWeight: '900',
-                              background: pickupDue ? 'rgba(186,117,23,0.1)' : pickupSoon ? 'rgba(186,117,23,0.06)' : '#0d0d0d',
-                              color: pickupDue ? '#BA7517' : pickupSoon ? '#8a704d' : '#333',
-                              border: (pickupDue || pickupSoon) ? '1px solid rgba(186,117,23,0.2)' : '1px solid #161616'
-                            }}>
-                              {pickupDue ? 'DUE NOW' : `${pickupMinsLeft} min left`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {isReady && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px' }}>
-                          <PackageCheck size={12} color="#4ade80" />
-                          <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#4ade80' }}>READY</span>
-                        </div>
-                      )}
-                    </div>
- 
-                    {/* items */}
-                    {entry.items?.length > 0 && (
-                      <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-                        <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.7 }}>
-                          {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
-                          {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3}</span>}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                          <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    )}
- 
-                    {/* actions */}
-                    <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
-                      {!isReady && (
-                        <button onClick={async () => {
-                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
-                          fetchCounterQueue();
-                          showNotif(`${entry.customerName} — notified, pickup ready`);
-                        }} style={{
-                          flex: 1, padding: '11px', background: 'rgba(74,222,128,0.08)',
-                          border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80',
-                          borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900',
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
-                        }}>
-                          <PackageCheck size={13} />
-                          MARK READY
-                        </button>
-                      )}
-                      <button onClick={() => setConfirmModal({
-                        show: true,
-                        title: `Settle ${entry.customerName}?`,
-                        subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} and mark order as collected.`,
-                        onConfirm: async () => {
-                          await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount });
-                          fetchCounterQueue(); fetchAnalytics();
-                          showNotif(`${entry.customerName} — pickup settled`);
-                        }
-                      })} style={{
-                        flex: 1, padding: '11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                        border: 'none', color: '#000', borderRadius: '10px',
-                        fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
-                      }}>
-                        <Store size={13} />
-                        SETTLE  ₹{entry.totalAmount.toLocaleString()}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
- 
+      {/* Live counts */}
+      <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.07)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #161616', borderRadius: '20px' }}>
+          <UserCheck size={10} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#333'} />
+          <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#333' }}>{waitlistEntries.length} waiting</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: pickupEntries.length > 0 ? 'rgba(74,222,128,0.05)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(74,222,128,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
+          <ShoppingBag size={10} color={pickupEntries.length > 0 ? '#4ade80' : '#333'} />
+          <span style={{ fontSize: '0.6rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#4ade80' : '#333' }}>{pickupEntries.length} pickup</span>
+        </div>
       </div>
     </div>
- 
+
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {avgWaitData && (
+        <div style={{ display: 'flex', gap: '16px' }}>
+          {[
+            { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={10} color="#555" /> },
+            { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={10} color="#555" /> },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign: 'right' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                {s.icon}
+                <span style={{ fontSize: '0.5rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#888' }}>{s.val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <button onClick={fetchCounterQueue}
+        style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+      >
+        <RefreshCw size={13} />
+      </button>
+    </div>
+  </div>
+
+  {/* Tab switcher + Search bar */}
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', background: '#080808', borderBottom: '1px solid #0d0d0d' }}>
+    <div style={{ display: 'flex' }}>
+      {[
+        { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />, count: waitlistEntries.length },
+        { id: 'pickup',   label: 'PICKUP QUEUE',      icon: <ShoppingBag size={12} />, count: pickupEntries.length },
+      ].map(tab => (
+        <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
+          display: 'flex', alignItems: 'center', gap: '7px',
+          padding: '12px 16px', background: 'transparent', border: 'none',
+          cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.8px',
+          color: queueTab === tab.id ? '#d3bfa2' : '#333',
+          borderBottom: `2px solid ${queueTab === tab.id ? '#d3bfa2' : 'transparent'}`,
+          transition: 'all 0.15s', marginBottom: '-1px'
+        }}>
+          <span style={{ color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a' }}>{tab.icon}</span>
+          {tab.label}
+          <span style={{
+            fontSize: '0.52rem', padding: '1px 7px', borderRadius: '10px', fontWeight: '900',
+            background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.15)' : 'rgba(211,191,162,0.05)') : '#0d0d0d',
+            color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#555') : '#222',
+            border: tab.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #161616'
+          }}>{tab.count}</span>
+        </button>
+      ))}
+    </div>
+
+    {/* Search bar */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #1a1a1a', borderRadius: '8px', padding: '7px 12px', margin: '8px 0' }}>
+      <Search size={12} color="#444" />
+      <input
+        type="text"
+        placeholder={`Search ${queueTab === 'waitlist' ? 'waitlist' : 'pickup'} by name...`}
+        value={queueSearch}
+        onChange={e => setQueueSearch(e.target.value)}
+        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.72rem', width: '180px' }}
+      />
+      {queueSearch && (
+        <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: '0', display: 'flex' }}>
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  </div>
+
+  {/* Queue content */}
+  <div style={{ padding: '20px 24px 24px' }}>
+
+    {/* ── DINE-IN WAITLIST ── */}
+    {queueTab === 'waitlist' && (() => {
+      const filtered = waitlistEntries.filter(e =>
+        !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase())
+      );
+      return filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            <UserCheck size={20} color="#1e1e1e" />
+          </div>
+          <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>
+            {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>
+            {!queueSearch && 'Customers joining from the counter page appear here'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+          {filtered.map((entry) => {
+            const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
+            const urgency  = waitMins > 30 ? 'critical' : waitMins > 20 ? 'high' : waitMins > 10 ? 'medium' : 'low';
+            const urgencyColor = { critical: '#c0392b', high: '#BA7517', medium: '#d3bfa2', low: '#555' }[urgency];
+            const accentColor  = { critical: 'rgba(192,57,43,0.35)', high: 'rgba(186,117,23,0.35)', medium: 'rgba(211,191,162,0.2)', low: 'rgba(211,191,162,0.08)' }[urgency];
+            return (
+              <div key={entry._id} style={{
+                background: '#0a0a0a', borderRadius: '16px',
+                border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.2)' : '#161616'}`,
+                borderTop: `3px solid ${accentColor}`,
+                overflow: 'hidden', position: 'relative'
+              }}>
+                {/* Card header */}
+                <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: urgency === 'critical' ? 'rgba(192,57,43,0.1)' : 'rgba(211,191,162,0.06)', border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.25)' : 'rgba(211,191,162,0.12)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff' }}>{entry.customerName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Users size={10} color="#555" />
+                          <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '700' }}>{entry.partySize} pax</span>
+                        </div>
+                        {entry.customerPhone && (
+                          <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '600' }}>{entry.customerPhone}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: urgency === 'critical' ? 'rgba(192,57,43,0.08)' : urgency === 'high' ? 'rgba(186,117,23,0.08)' : '#0d0d0d', borderRadius: '8px', border: `1px solid ${urgency !== 'low' ? urgencyColor + '33' : '#161616'}` }}>
+                    <Hourglass size={11} color={urgencyColor} />
+                    <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
+                  </div>
+                </div>
+
+                {entry.items?.length > 0 && (
+                  <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
+                      <UtensilsCrossed size={10} color="#444" />
+                      <span style={{ fontSize: '0.52rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
+                    </div>
+                    <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.6 }}>
+                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
+                      {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3} more</span>}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '5px' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>Est. ₹{entry.totalAmount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
+                  <button onClick={() => setAssignTableModal(entry)} style={{
+                    flex: 1, padding: '11px', borderRadius: '10px', border: 'none',
+                    background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                    color: '#000', fontWeight: '900', fontSize: '0.66rem',
+                    cursor: 'pointer', letterSpacing: '0.5px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
+                  }}>
+                    <TableProperties size={13} />
+                    ASSIGN TABLE
+                    <ChevronRight size={13} />
+                  </button>
+                  <button onClick={() => setConfirmModal({
+                    show: true, title: 'Mark as No-Show?',
+                    subtitle: `${entry.customerName} will be removed from the waitlist.`,
+                    onConfirm: async () => {
+                      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+                      fetchCounterQueue();
+                      showNotif(`${entry.customerName} — marked no-show`);
+                    }
+                  })} style={{
+                    padding: '11px 13px', background: 'transparent',
+                    border: '1px solid #1a1a1a', color: '#333',
+                    borderRadius: '10px', fontSize: '0.6rem', fontWeight: '900',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                  >
+                    <AlertOctagon size={12} />
+                    NO SHOW
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    })()}
+
+    {/* ── PICKUP QUEUE ── */}
+    {queueTab === 'pickup' && (() => {
+      const filtered = pickupEntries.filter(e =>
+        !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase())
+      );
+      return filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            <ShoppingBag size={20} color="#1e1e1e" />
+          </div>
+          <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>
+            {queueSearch ? `No results for "${queueSearch}"` : 'No pickup orders'}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>
+            {!queueSearch && 'Takeaway / scheduled pickups appear here'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+          {filtered.map(entry => {
+            const isKitchenFired = entry.kitchenFired;
+            const isReady        = entry.status === 'pickup-ready';
+            const pickupMinsLeft = entry.scheduledPickupTime
+              ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
+            const pickupDue  = pickupMinsLeft !== null && pickupMinsLeft <= 0;
+            const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 10;
+
+            // Step indicator: 1=Send to Kitchen, 2=Mark Ready, 3=Settle
+            const step = isReady ? 3 : isKitchenFired ? 2 : 1;
+
+            return (
+              <div key={entry._id} style={{
+                background: '#0a0a0a', borderRadius: '16px',
+                border: `1px solid ${isReady ? 'rgba(74,222,128,0.18)' : isKitchenFired ? 'rgba(211,191,162,0.12)' : '#161616'}`,
+                borderTop: `3px solid ${isReady ? 'rgba(74,222,128,0.5)' : isKitchenFired ? 'rgba(211,191,162,0.4)' : pickupDue ? 'rgba(186,117,23,0.5)' : '#1a1a1a'}`,
+                overflow: 'hidden'
+              }}>
+
+                {/* Header */}
+                <div style={{ padding: '16px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff', marginBottom: '4px' }}>{entry.customerName}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {entry.scheduledPickupTime && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock3 size={10} color="#555" />
+                          <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '700' }}>
+                            {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                          </span>
+                        </div>
+                      )}
+                      {pickupMinsLeft !== null && (
+                        <span style={{
+                          fontSize: '0.56rem', padding: '2px 7px', borderRadius: '5px', fontWeight: '900',
+                          background: pickupDue ? 'rgba(186,117,23,0.1)' : pickupSoon ? 'rgba(186,117,23,0.06)' : '#0d0d0d',
+                          color: pickupDue ? '#BA7517' : pickupSoon ? '#8a704d' : '#333',
+                          border: (pickupDue || pickupSoon) ? '1px solid rgba(186,117,23,0.2)' : '1px solid #161616'
+                        }}>
+                          {pickupDue ? 'DUE NOW' : `${pickupMinsLeft} min left`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Status badge */}
+                  {isReady ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px' }}>
+                      <PackageCheck size={12} color="#4ade80" />
+                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#4ade80' }}>READY</span>
+                    </div>
+                  ) : isKitchenFired ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '8px' }}>
+                      <ChefHat size={12} color="#d3bfa2" />
+                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#d3bfa2' }}>IN KITCHEN</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '8px' }}>
+                      <Timer size={12} color="#444" />
+                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#444' }}>PENDING</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step progress strip */}
+                <div style={{ margin: '0 18px 12px', display: 'flex', gap: '4px' }}>
+                  {[
+                    { n: 1, label: 'Kitchen', icon: <ChefHat size={9} /> },
+                    { n: 2, label: 'Ready',   icon: <PackageCheck size={9} /> },
+                    { n: 3, label: 'Settled',  icon: <Store size={9} /> },
+                  ].map(s => (
+                    <div key={s.n} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 8px', borderRadius: '6px', background: step >= s.n ? (step === s.n ? 'rgba(211,191,162,0.1)' : 'rgba(74,222,128,0.06)') : '#050505', border: `1px solid ${step >= s.n ? (step === s.n ? 'rgba(211,191,162,0.25)' : 'rgba(74,222,128,0.15)') : '#0d0d0d'}` }}>
+                      <span style={{ color: step >= s.n ? (step === s.n ? '#d3bfa2' : '#4ade80') : '#2a2a2a' }}>{s.icon}</span>
+                      <span style={{ fontSize: '0.48rem', fontWeight: '900', color: step >= s.n ? (step === s.n ? '#d3bfa2' : '#4ade80') : '#222', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Items */}
+                {entry.items?.length > 0 && (
+                  <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+                    <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.7 }}>
+                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
+                      {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3}</span>}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.58rem', color: '#444' }}>
+                        <Truck size={10} color="#444" style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                        Takeaway
+                      </span>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions — progressive 3-step flow */}
+                <div style={{ padding: '0 18px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                  {/* STEP 1: SEND TO KITCHEN */}
+                  {!isKitchenFired && !isReady && (
+                    <button onClick={async () => {
+                      try {
+                        const orderItems = (entry.items || []).map(i => ({
+                          menuItemId:   i.menuItemId || null,
+                          name:         i.name,
+                          quantity:     Number(i.quantity) || 1,
+                          portion:      i.portion || 'Single',
+                          pricePerUnit: Number(i.price || i.pricePerUnit) || 0,
+                          subtotal:     Number(i.subtotal) || 0,
+                          suggestion:   ''
+                        }));
+                        const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
+                        // Post as 'pending' order → appears in KDS
+                        await axios.post(`${BASE_URL}/orders`, {
+                          tenantId,
+                          tableNumber: 'Counter',
+                          items: orderItems,
+                          source: 'counter-pickup',
+                          sessionId: entry.sessionId,
+                          waitlistId: entry._id,
+                          status: 'pending',
+                          billDetails: { itemsTotal, grandTotal: itemsTotal }
+                        });
+                        // Mark kitchenFired on waitlist entry
+                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
+                        fetchCounterQueue();
+                        fetchInitialData();
+                        showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
+                      } catch (err) {
+                        showNotif(err.response?.data?.error || 'Failed to send to kitchen', 'error');
+                      }
+                    }} style={{
+                      width: '100%', padding: '12px', borderRadius: '10px', border: 'none',
+                      background: 'linear-gradient(135deg, rgba(211,191,162,0.15), rgba(211,191,162,0.08))',
+                      border: '1px solid rgba(211,191,162,0.3)',
+                      color: '#d3bfa2', fontWeight: '900', fontSize: '0.68rem',
+                      cursor: 'pointer', letterSpacing: '0.5px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      transition: 'all 0.15s'
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.18)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(211,191,162,0.15), rgba(211,191,162,0.08))'; }}
+                    >
+                      <ChefHat size={14} />
+                      SEND TO KITCHEN
+                      <ChevronRight size={13} />
+                    </button>
+                  )}
+
+                  {/* STEP 2: MARK READY (only after kitchen fired) */}
+                  {isKitchenFired && !isReady && (
+                    <button onClick={async () => {
+                      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
+                      fetchCounterQueue();
+                      showNotif(`${entry.customerName} — customer notified, pickup ready`);
+                    }} style={{
+                      width: '100%', padding: '12px',
+                      background: 'rgba(74,222,128,0.08)',
+                      border: '1px solid rgba(74,222,128,0.25)',
+                      color: '#4ade80', borderRadius: '10px',
+                      fontSize: '0.68rem', fontWeight: '900',
+                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      transition: 'all 0.15s'
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(74,222,128,0.14)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(74,222,128,0.08)'; }}
+                    >
+                      <PackageCheck size={14} />
+                      MARK READY — NOTIFY CUSTOMER
+                      <ChevronRight size={13} />
+                    </button>
+                  )}
+
+                  {/* STEP 3: SETTLE BILL (always visible, as takeaway) */}
+                  <button onClick={() => setConfirmModal({
+                    show: true,
+                    title: `Settle Pickup — ${entry.customerName}?`,
+                    subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`,
+                    onConfirm: async () => {
+                      try {
+                        // Settle via waitlist settle route (handled as counter-pickup in billing)
+                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, {
+                          paymentMethod: 'cash',
+                          finalAmount: entry.totalAmount
+                        });
+                        fetchCounterQueue();
+                        fetchAnalytics();
+                        showNotif(`${entry.customerName} — pickup settled as takeaway`);
+                      } catch (err) {
+                        showNotif(err.response?.data?.error || 'Settlement failed', 'error');
+                      }
+                    }
+                  })} style={{
+                    width: '100%', padding: '12px',
+                    background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#111',
+                    border: isReady ? 'none' : '1px solid #1a1a1a',
+                    color: isReady ? '#000' : '#444',
+                    borderRadius: '10px', fontSize: '0.68rem', fontWeight: '900',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    transition: 'all 0.15s'
+                  }}>
+                    <Store size={14} />
+                    SETTLE ₹{entry.totalAmount.toLocaleString()}
+                    {isReady && <span style={{ fontSize: '0.56rem', opacity: 0.7 }}>· TAKEAWAY</span>}
+                  </button>
+
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    })()}
+
+  </div>
+</div>
+
+
   </motion.div>
 )}
  
