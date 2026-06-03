@@ -920,8 +920,19 @@ const Shell = ({ children, centered = true }) => (
             border: '1px solid rgba(211,191,162,0.1)',
             color: 'rgba(211,191,162,0.4)'
           }}>
-            {isDineIn ? '🪑  WAITLIST' : '🛍️  PICKUP'}
-          </span>
+<span style={{
+  fontSize: '0.52rem', fontWeight: '900', letterSpacing: '1.5px',
+  padding: '5px 12px', borderRadius: '20px',
+  background: 'rgba(211,191,162,0.05)',
+  border: '1px solid rgba(211,191,162,0.1)',
+  color: 'rgba(211,191,162,0.4)',
+  display: 'inline-flex', alignItems: 'center', gap: '6px'
+}}>
+  {isDineIn
+    ? <><Armchair    size={11} color="rgba(211,191,162,0.4)" /> WAITLIST</>
+    : <><ShoppingBag size={11} color="rgba(211,191,162,0.4)" /> PICKUP</>
+  }
+</span>          </span>
         </div>
 
         <div style={{ padding: '36px 24px 80px', maxWidth: '400px', margin: '0 auto', width: '100%' }}>

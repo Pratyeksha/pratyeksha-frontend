@@ -10,7 +10,8 @@ import {
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
-Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot
+Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
+  Droplet, Wind, Milk, Candy, Box,
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -105,6 +106,32 @@ const [newExtraItem, setNewExtraItem] = useState({
   name: '', category: 'Cold Drinks', price: '', costPrice: '', // ← ADD costPrice
   unit: 'piece', currentStock: '', description: '', isAvailable: true, image: ''
 });
+
+
+const categoryIcons = {
+  'Cold Drinks':     <Droplets   size={13} color="#d3bfa2" />,
+  'Ice Cream':       <IceCream   size={13} color="#d3bfa2" />,
+  'Packaged Snacks': <Package2   size={13} color="#d3bfa2" />,
+  'Juices':          <Citrus     size={13} color="#d3bfa2" />,
+  'Mineral Water':   <Droplet    size={13} color="#d3bfa2" />,
+  'Tobacco':         <Wind       size={13} color="#d3bfa2" />,
+  'Dairy':           <Milk       size={13} color="#d3bfa2" />,
+  'Sweets':          <Candy      size={13} color="#d3bfa2" />,
+  'Other':           <Box        size={13} color="#d3bfa2" />,
+};
+
+const categoryIconsLg = {
+  'Cold Drinks':     <Droplets   size={16} color="#d3bfa2" />,
+  'Ice Cream':       <IceCream   size={16} color="#d3bfa2" />,
+  'Packaged Snacks': <Package2   size={16} color="#d3bfa2" />,
+  'Juices':          <Citrus     size={16} color="#d3bfa2" />,
+  'Mineral Water':   <Droplet    size={16} color="#d3bfa2" />,
+  'Tobacco':         <Wind       size={16} color="#d3bfa2" />,
+  'Dairy':           <Milk       size={16} color="#d3bfa2" />,
+  'Sweets':          <Candy      size={16} color="#d3bfa2" />,
+  'Other':           <Box        size={16} color="#d3bfa2" />,
+};
+
 
 const [extraItemsInBill, setExtraItemsInBill] = useState([]);
 const [showExtraItemPicker, setShowExtraItemPicker] = useState(false);
@@ -5517,8 +5544,15 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
             <div key={cat}>
               {/* Category header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #151515' }}>
-                <span style={{ fontSize: '1.2rem' }}>{categoryEmojis[cat] || '📦'}</span>
-                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
+<span style={{
+  width: '28px', height: '28px', borderRadius: '8px',
+  background: 'rgba(211,191,162,0.05)',
+  border: '1px solid rgba(211,191,162,0.1)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  flexShrink: 0
+}}>
+  {categoryIconsLg[cat] || <Box size={16} color="#d3bfa2" />}
+</span>                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
                 <span style={{ fontSize: '0.62rem', padding: '2px 8px', background: 'rgba(211,191,162,0.06)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900' }}>
                   {items.length} item{items.length !== 1 ? 's' : ''}
                 </span>
@@ -5552,8 +5586,16 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
                       {/* Category badge */}
                       <div style={{ marginBottom: '12px' }}>
                         <span style={{ fontSize: '0.52rem', padding: '3px 8px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {categoryEmojis[item.category] || '📦'} {item.category}
-                        </span>
+<span style={{
+  display: 'inline-flex', alignItems: 'center', gap: '5px',
+  fontSize: '0.52rem', padding: '3px 8px',
+  background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a',
+  borderRadius: '4px', color: '#555', fontWeight: '900',
+  textTransform: 'uppercase', letterSpacing: '0.5px'
+}}>
+  {categoryIcons[item.category] || <Box size={13} color="#555" />}
+  {item.category}
+</span>                        </span>
                       </div>
 
                       {/* Name + Price */}
@@ -5753,6 +5795,8 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
                 onChange={e => setExtraItemEditData({ ...extraItemEditData, price: e.target.value })}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
+
+            
             {/* Add after Price field in edit modal */}
 <div>
   <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
@@ -5765,6 +5809,7 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
     </div>
   )}
 </div>
+
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
               <input type="number" value={extraItemEditData.currentStock ?? ''}
