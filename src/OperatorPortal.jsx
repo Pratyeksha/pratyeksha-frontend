@@ -1816,196 +1816,302 @@ const renderMonthHeatmap = () => {
   <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
  
-    {/* ══════════════════════════════════════════════
-        ROW 1: Kitchen Tickets + Service Calls
-    ══════════════════════════════════════════════ */}
-    <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-start', width: '100%' }}>
- 
-      {/* KITCHEN TICKETS */}
-      <div style={{ flex: 1.3 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ChefHat size={14} color="#d3bfa2" />
-          </div>
-          <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#444', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-            Kitchen Tickets
-          </span>
-          <span style={{ fontSize: '0.54rem', padding: '2px 8px', background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#0d0d0d', color: filteredOrders.length > 0 ? '#d3bfa2' : '#333', borderRadius: '20px', fontWeight: '900', border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #1a1a1a' }}>
-            {filteredOrders.length}
-          </span>
-        </div>
-        {filteredOrders.length > 0 ? filteredOrders.map(order => (
+{/* ══════════════════════════════════════════════
+    ROW 1: Kitchen Tickets + Service Calls
+══════════════════════════════════════════════ */}
+<div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1px 1fr', gap: '0', width: '100%', background: '#080808', borderRadius: '20px', border: '1px solid rgba(211,191,162,0.08)', overflow: 'hidden' }} className="p-kds-row">
+
+  {/* ── KITCHEN TICKETS ── */}
+  <div style={{ display: 'flex', flexDirection: 'column', padding: '20px' }}>
+
+    {/* Header */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexShrink: 0 }}>
+      <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ChefHat size={14} color="#d3bfa2" />
+      </div>
+      <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#888', letterSpacing: '2px', textTransform: 'uppercase' }}>Kitchen Tickets</span>
+      <span style={{
+        fontSize: '0.52rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '900',
+        background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#0d0d0d',
+        color: filteredOrders.length > 0 ? '#d3bfa2' : '#2a2a2a',
+        border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #1a1a1a'
+      }}>
+        {filteredOrders.length}
+      </span>
+      {filteredOrders.length > 4 && (
+        <span style={{ marginLeft: 'auto', fontSize: '0.48rem', color: '#5a4a30', fontWeight: '900', letterSpacing: '1px' }}>SCROLL ↓</span>
+      )}
+    </div>
+
+    {/* Scrollable list — 4 tickets max visible */}
+    <div style={{
+      overflowY: 'auto', maxHeight: '320px',
+      display: 'flex', flexDirection: 'column', gap: '7px',
+      paddingRight: '4px',
+    }} className="custom-scroll kds-scroll">
+
+      {filteredOrders.length > 0 ? filteredOrders.map(order => {
+        const mins = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
+        const tier = mins >= 20 ? 'over' : mins >= 10 ? 'warn' : 'ok';
+        const leftBar = tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : 'rgba(211,191,162,0.2)';
+        const cardBg  = tier === 'over' ? 'rgba(211,191,162,0.03)' : '#0a0a0a';
+        const cardBorder = tier === 'over' ? 'rgba(211,191,162,0.18)' : '#141414';
+
+        return (
           <div key={order._id} style={{
-            display: 'flex', alignItems: 'center', gap: '16px',
-            background: '#0a0a0a', padding: '16px 18px', borderRadius: '14px',
-            border: '1px solid #161616', marginBottom: '10px',
-            borderLeft: '3px solid rgba(211,191,162,0.2)'
+            display: 'flex', alignItems: 'center', gap: '12px',
+            background: cardBg, padding: '12px 14px', borderRadius: '11px',
+            border: `1px solid ${cardBorder}`,
+            borderLeft: `3px solid ${leftBar}`,
+            flexShrink: 0, transition: 'all 0.2s'
           }}>
+            {/* Table badge */}
             <div style={{
-              width: '40px', height: '40px', borderRadius: '10px',
-              background: '#111', border: '1px solid rgba(211,191,162,0.18)',
+              width: '36px', height: '36px', borderRadius: '9px',
+              background: tier === 'over' ? 'rgba(211,191,162,0.1)' : '#111',
+              border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.25)' : '#1e1e1e'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: '900', fontSize: '0.9rem', color: '#d3bfa2',
+              fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2',
               flexShrink: 0, fontFamily: 'monospace'
             }}>
               {order.tableNumber}
             </div>
+
+            {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: '900', fontSize: '0.82rem', color: '#fff', marginBottom: '4px' }}>
-                Table {order.tableNumber}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                <span style={{ fontWeight: '900', fontSize: '0.78rem', color: '#fff' }}>T{order.tableNumber}</span>
+                <span style={{ fontSize: '0.52rem', color: '#333' }}>·</span>
+                <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>{(order.items || []).length} item{(order.items || []).length !== 1 ? 's' : ''}</span>
               </div>
-              <div style={{ color: '#555', fontSize: '0.7rem', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {(order.items || []).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
+              <div style={{ fontSize: '0.62rem', color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                {(order.items || []).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
               </div>
             </div>
-            <OperatorLiveTimer createdAt={order.createdAt} />
+
+            {/* Timer */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
+              <OperatorLiveTimer createdAt={order.createdAt} />
+              {tier !== 'ok' && (
+                <span style={{
+                  fontSize: '0.44rem', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase',
+                  color: tier === 'over' ? '#d3bfa2' : '#5a4a30'
+                }}>
+                  {tier === 'over' ? '⚠ OVERDUE' : 'DELAYED'}
+                </span>
+              )}
+            </div>
           </div>
-        )) : (
-          <div style={{ textAlign: 'center', padding: '40px 20px', background: '#080808', borderRadius: '14px', border: '1px dashed #161616' }}>
-            <ChefHat size={24} color="#1a1a1a" style={{ marginBottom: '10px' }} />
-            <div style={{ fontSize: '0.72rem', color: '#2a2a2a', fontWeight: '700' }}>No active kitchen tickets</div>
-          </div>
-        )}
-      </div>
- 
-      {/* SERVICE CALLS */}
-      <div style={{ flex: 1, borderLeft: '1px solid #111', paddingLeft: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: waiterRequests.length > 0 ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.02)', border: waiterRequests.length > 0 ? '1px solid rgba(212,175,55,0.2)' : '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BellRing size={14} color={waiterRequests.length > 0 ? '#d4af37' : '#333'} />
-          </div>
-          <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#444', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Service Calls</span>
-          {waiterRequests.length > 0 && (
-            <span style={{ fontSize: '0.54rem', padding: '2px 8px', background: 'rgba(212,175,55,0.1)', color: '#d4af37', borderRadius: '20px', fontWeight: '900', border: '1px solid rgba(212,175,55,0.2)' }}>
-              {waiterRequests.length}
-            </span>
-          )}
+        );
+      }) : (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#050505', borderRadius: '12px', border: '1px dashed #141414' }}>
+          <ChefHat size={20} color="#1a1a1a" style={{ marginBottom: '10px' }} />
+          <div style={{ fontSize: '0.65rem', color: '#222', fontWeight: '700' }}>Kitchen is clear</div>
         </div>
-        {waiterRequests.length > 0 ? waiterRequests.map(req => (
-          <motion.div initial={{ x: 16, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#0a0a0a', padding: '14px 16px', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.12)', marginBottom: '10px', borderLeft: '3px solid rgba(212,175,55,0.3)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <BellRing size={14} color="#d4af37" />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: '900', color: '#d4af37', fontSize: '0.76rem', marginBottom: '2px' }}>Table {req.tableNumber}</div>
-              <div style={{ fontSize: '0.68rem', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
-            </div>
-            <button onClick={() => completeWaiterRequest(req._id)} style={{ padding: '6px 12px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)', color: '#d3bfa2', borderRadius: '7px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0 }}>
-              DONE
-            </button>
-          </motion.div>
-        )) : (
-          <div style={{ textAlign: 'center', padding: '40px 20px', background: '#080808', borderRadius: '14px', border: '1px dashed #161616' }}>
-            <BellRing size={20} color="#1a1a1a" style={{ marginBottom: '8px' }} />
-            <div style={{ fontSize: '0.68rem', color: '#222', fontWeight: '700' }}>No pending requests</div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
- 
+  </div>
+
+  {/* ── VERTICAL DIVIDER ── */}
+  <div style={{ background: 'linear-gradient(180deg, transparent 0%, rgba(211,191,162,0.08) 15%, rgba(211,191,162,0.08) 85%, transparent 100%)', width: '1px', alignSelf: 'stretch' }} className="p-service-divider" />
+
+  {/* ── SERVICE CALLS ── */}
+  <div style={{ display: 'flex', flexDirection: 'column', padding: '20px' }} className="p-service-col">
+
+    {/* Header */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexShrink: 0 }}>
+      <div style={{
+        width: '30px', height: '30px', borderRadius: '8px',
+        background: waiterRequests.length > 0 ? 'rgba(211,191,162,0.07)' : 'rgba(255,255,255,0.02)',
+        border: waiterRequests.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #1a1a1a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
+        <BellRing size={14} color={waiterRequests.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
+      </div>
+      <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waiterRequests.length > 0 ? '#888' : '#2a2a2a', letterSpacing: '2px', textTransform: 'uppercase' }}>
+        Service Calls
+      </span>
+      {waiterRequests.length > 0 && (
+        <span style={{
+          fontSize: '0.52rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '900',
+          background: 'rgba(211,191,162,0.1)', color: '#d3bfa2',
+          border: '1px solid rgba(211,191,162,0.2)'
+        }}>
+          {waiterRequests.length}
+        </span>
+      )}
+      {waiterRequests.length > 4 && (
+        <span style={{ marginLeft: 'auto', fontSize: '0.48rem', color: '#5a4a30', fontWeight: '900', letterSpacing: '1px' }}>SCROLL ↓</span>
+      )}
+    </div>
+
+    {/* Scrollable list — 4 max visible */}
+    <div style={{
+      overflowY: 'auto', maxHeight: '320px',
+      display: 'flex', flexDirection: 'column', gap: '7px',
+      paddingRight: '4px',
+    }} className="custom-scroll kds-scroll">
+
+      {waiterRequests.length > 0 ? waiterRequests.map(req => (
+        <motion.div
+          initial={{ x: 12, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+          key={req._id}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '11px',
+            background: '#0a0a0a', padding: '12px 13px', borderRadius: '11px',
+            border: '1px solid rgba(211,191,162,0.1)',
+            borderLeft: '3px solid rgba(211,191,162,0.3)',
+            flexShrink: 0
+          }}>
+          <div style={{
+            width: '30px', height: '30px', borderRadius: '8px',
+            background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <BellRing size={12} color="#8a704d" />
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: '900', color: '#d3bfa2', fontSize: '0.74rem', marginBottom: '2px' }}>
+              Table {req.tableNumber}
+            </div>
+            <div style={{ fontSize: '0.62rem', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {req.serviceRequest}
+            </div>
+          </div>
+
+          <button
+            onClick={() => completeWaiterRequest(req._id)}
+            style={{
+              padding: '5px 11px', background: 'transparent',
+              border: '1px solid rgba(211,191,162,0.18)', color: '#8a704d',
+              borderRadius: '7px', fontSize: '0.55rem', fontWeight: '900',
+              cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0,
+              transition: 'all 0.15s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(211,191,162,0.1)';
+              e.currentTarget.style.color = '#d3bfa2';
+              e.currentTarget.style.borderColor = 'rgba(211,191,162,0.35)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#8a704d';
+              e.currentTarget.style.borderColor = 'rgba(211,191,162,0.18)';
+            }}
+          >
+            DONE
+          </button>
+        </motion.div>
+      )) : (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#050505', borderRadius: '12px', border: '1px dashed #141414' }}>
+          <BellRing size={18} color="#1a1a1a" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '0.62rem', color: '#1e1e1e', fontWeight: '700' }}>No pending calls</div>
+        </div>
+      )}
+    </div>
+  </div>
+</div>
+
 {/* ══════════════════════════════════════════════
     ROW 2: COUNTER QUEUE PANEL
 ══════════════════════════════════════════════ */}
-<div style={{ background: '#080808', borderRadius: '20px', border: '1px solid #141414', overflow: 'hidden' }}>
+<div style={{ background: '#080808', borderRadius: '20px', border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden' }}>
 
   {/* Panel header */}
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #111', background: '#0a0a0a' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-      <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Users size={16} color="#d3bfa2" />
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #0d0d0d', background: '#0a0a0a' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Users size={15} color="#d3bfa2" />
       </div>
       <div>
-        <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
-        <div style={{ fontSize: '0.56rem', color: '#444', fontWeight: '700', marginTop: '2px' }}>Waitlist · Pickup · Pre-orders</div>
+        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
+        <div style={{ fontSize: '0.54rem', color: '#333', fontWeight: '700', marginTop: '2px' }}>Waitlist · Pickup · Pre-orders</div>
       </div>
-      {/* Live counts */}
-      <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.07)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #161616', borderRadius: '20px' }}>
-          <UserCheck size={10} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#333'} />
-          <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#333' }}>{waitlistEntries.length} waiting</span>
+      <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
+          <UserCheck size={9} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
+          <span style={{ fontSize: '0.56rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#2a2a2a' }}>{waitlistEntries.length} waiting</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: pickupEntries.length > 0 ? 'rgba(74,222,128,0.05)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(74,222,128,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
-          <ShoppingBag size={10} color={pickupEntries.length > 0 ? '#4ade80' : '#333'} />
-          <span style={{ fontSize: '0.6rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#4ade80' : '#333' }}>{pickupEntries.length} pickup</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', background: pickupEntries.length > 0 ? 'rgba(138,112,77,0.08)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(138,112,77,0.2)' : '1px solid #161616', borderRadius: '20px' }}>
+          <ShoppingBag size={9} color={pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a'} />
+          <span style={{ fontSize: '0.56rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a' }}>{pickupEntries.length} pickup</span>
         </div>
       </div>
     </div>
 
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
       {avgWaitData && (
-        <div style={{ display: 'flex', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '18px' }}>
           {[
-            { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={10} color="#555" /> },
-            { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={10} color="#555" /> },
+            { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={9} color="#333" /> },
+            { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={9} color="#333" /> },
           ].map(s => (
             <div key={s.label} style={{ textAlign: 'right' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', marginBottom: '1px' }}>
                 {s.icon}
-                <span style={{ fontSize: '0.5rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
+                <span style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
               </div>
-              <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#888' }}>{s.val}</div>
+              <div style={{ fontSize: '0.74rem', fontWeight: '900', color: '#666' }}>{s.val}</div>
             </div>
           ))}
         </div>
       )}
       <button onClick={fetchCounterQueue}
-        style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
       >
-        <RefreshCw size={13} />
+        <RefreshCw size={12} />
       </button>
     </div>
   </div>
 
-  {/* Tab switcher + Search bar */}
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', background: '#080808', borderBottom: '1px solid #0d0d0d' }}>
+  {/* Tab switcher + Search */}
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 22px', background: '#080808', borderBottom: '1px solid #0a0a0a' }}>
     <div style={{ display: 'flex' }}>
       {[
-        { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />, count: waitlistEntries.length },
-        { id: 'pickup',   label: 'PICKUP QUEUE',      icon: <ShoppingBag size={12} />, count: pickupEntries.length },
+        { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={11} />, count: waitlistEntries.length },
+        { id: 'pickup',   label: 'PICKUP QUEUE',     icon: <ShoppingBag size={11} />, count: pickupEntries.length },
       ].map(tab => (
         <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
-          display: 'flex', alignItems: 'center', gap: '7px',
-          padding: '12px 16px', background: 'transparent', border: 'none',
-          cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.8px',
-          color: queueTab === tab.id ? '#d3bfa2' : '#333',
-          borderBottom: `2px solid ${queueTab === tab.id ? '#d3bfa2' : 'transparent'}`,
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '11px 14px', background: 'transparent', border: 'none',
+          cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.8px',
+          color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a',
+          borderBottom: `2px solid ${queueTab === tab.id ? 'rgba(211,191,162,0.6)' : 'transparent'}`,
           transition: 'all 0.15s', marginBottom: '-1px'
         }}>
-          <span style={{ color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a' }}>{tab.icon}</span>
+          <span style={{ color: queueTab === tab.id ? '#8a704d' : '#1e1e1e' }}>{tab.icon}</span>
           {tab.label}
           <span style={{
-            fontSize: '0.52rem', padding: '1px 7px', borderRadius: '10px', fontWeight: '900',
-            background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.15)' : 'rgba(211,191,162,0.05)') : '#0d0d0d',
-            color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#555') : '#222',
-            border: tab.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #161616'
+            fontSize: '0.5rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '900',
+            background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.04)') : '#0d0d0d',
+            color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#444') : '#1e1e1e',
+            border: tab.count > 0 ? '1px solid rgba(211,191,162,0.1)' : '1px solid #141414'
           }}>{tab.count}</span>
         </button>
       ))}
     </div>
-
-    {/* Search bar */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #1a1a1a', borderRadius: '8px', padding: '7px 12px', margin: '8px 0' }}>
-      <Search size={12} color="#444" />
+    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#000', border: '1px solid #1a1a1a', borderRadius: '7px', padding: '6px 11px', margin: '7px 0' }}>
+      <Search size={11} color="#333" />
       <input
         type="text"
-        placeholder={`Search ${queueTab === 'waitlist' ? 'waitlist' : 'pickup'} by name...`}
+        placeholder={`Search by name...`}
         value={queueSearch}
         onChange={e => setQueueSearch(e.target.value)}
-        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.72rem', width: '180px' }}
+        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.68rem', width: '150px' }}
       />
       {queueSearch && (
-        <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: '0', display: 'flex' }}>
-          <X size={12} />
+        <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', padding: '0', display: 'flex' }}>
+          <X size={11} />
         </button>
       )}
     </div>
   </div>
 
   {/* Queue content */}
-  <div style={{ padding: '20px 24px 24px' }}>
+  <div style={{ padding: '18px 22px 22px' }}>
 
     {/* ── DINE-IN WAITLIST ── */}
     {queueTab === 'waitlist' && (() => {
@@ -2014,82 +2120,110 @@ const renderMonthHeatmap = () => {
       );
       return filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-            <UserCheck size={20} color="#1e1e1e" />
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#0a0a0a', border: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <UserCheck size={18} color="#1a1a1a" />
           </div>
-          <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>
+          <div style={{ fontSize: '0.72rem', color: '#1e1e1e', fontWeight: '700' }}>
             {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>
+          <div style={{ fontSize: '0.58rem', color: '#161616', marginTop: '5px' }}>
             {!queueSearch && 'Customers joining from the counter page appear here'}
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '12px' }} className="p-queue-grid">
           {filtered.map((entry) => {
             const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
             const urgency  = waitMins > 30 ? 'critical' : waitMins > 20 ? 'high' : waitMins > 10 ? 'medium' : 'low';
-            const urgencyColor = { critical: '#c0392b', high: '#BA7517', medium: '#d3bfa2', low: '#555' }[urgency];
-            const accentColor  = { critical: 'rgba(192,57,43,0.35)', high: 'rgba(186,117,23,0.35)', medium: 'rgba(211,191,162,0.2)', low: 'rgba(211,191,162,0.08)' }[urgency];
+            const urgencyColor = {
+              critical: '#d3bfa2',
+              high:     '#8a704d',
+              medium:   '#6a5a3a',
+              low:      '#3a3228'
+            }[urgency];
+            const borderTopColor = {
+              critical: 'rgba(211,191,162,0.6)',
+              high:     'rgba(138,112,77,0.5)',
+              medium:   'rgba(106,90,58,0.35)',
+              low:      'rgba(211,191,162,0.08)'
+            }[urgency];
+            const cardBorder = urgency === 'critical' ? 'rgba(211,191,162,0.15)' : '#141414';
+
             return (
               <div key={entry._id} style={{
-                background: '#0a0a0a', borderRadius: '16px',
-                border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.2)' : '#161616'}`,
-                borderTop: `3px solid ${accentColor}`,
-                overflow: 'hidden', position: 'relative'
+                background: '#0a0a0a', borderRadius: '14px',
+                border: `1px solid ${cardBorder}`,
+                borderTop: `2px solid ${borderTopColor}`,
+                overflow: 'hidden'
               }}>
                 {/* Card header */}
-                <div style={{ padding: '16px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ padding: '14px 16px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: urgency === 'critical' ? 'rgba(192,57,43,0.1)' : 'rgba(211,191,162,0.06)', border: `1px solid ${urgency === 'critical' ? 'rgba(192,57,43,0.25)' : 'rgba(211,191,162,0.12)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
+                    <div style={{
+                      width: '30px', height: '30px', borderRadius: '7px',
+                      background: 'rgba(211,191,162,0.05)',
+                      border: `1px solid ${borderTopColor}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
                     </div>
                     <div>
-                      <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff' }}>{entry.customerName}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Users size={10} color="#555" />
-                          <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '700' }}>{entry.partySize} pax</span>
-                        </div>
+                      <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#fff' }}>{entry.customerName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                        <Users size={9} color="#444" />
+                        <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>{entry.partySize} pax</span>
                         {entry.customerPhone && (
-                          <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '600' }}>{entry.customerPhone}</span>
+                          <span style={{ fontSize: '0.58rem', color: '#2a2a2a', fontWeight: '600' }}>{entry.customerPhone}</span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: urgency === 'critical' ? 'rgba(192,57,43,0.08)' : urgency === 'high' ? 'rgba(186,117,23,0.08)' : '#0d0d0d', borderRadius: '8px', border: `1px solid ${urgency !== 'low' ? urgencyColor + '33' : '#161616'}` }}>
-                    <Hourglass size={11} color={urgencyColor} />
-                    <span style={{ fontSize: '0.72rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
+
+                  {/* Wait timer */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '4px 9px', borderRadius: '7px',
+                    background: urgency === 'critical' ? 'rgba(211,191,162,0.07)' : '#0d0d0d',
+                    border: `1px solid ${urgency !== 'low' ? borderTopColor : '#141414'}`
+                  }}>
+                    <Hourglass size={10} color={urgencyColor} />
+                    <span style={{ fontSize: '0.7rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
                   </div>
                 </div>
 
+                {/* Pre-order items */}
                 {entry.items?.length > 0 && (
-                  <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-                      <UtensilsCrossed size={10} color="#444" />
-                      <span style={{ fontSize: '0.52rem', color: '#333', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
+                  <div style={{ margin: '0 16px 10px', padding: '9px 11px', background: '#050505', borderRadius: '9px', border: '1px solid #0d0d0d' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
+                      <UtensilsCrossed size={9} color="#333" />
+                      <span style={{ fontSize: '0.5rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
                     </div>
-                    <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.6 }}>
-                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
-                      {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3} more</span>}
+                    <div style={{ fontSize: '0.63rem', color: '#555', lineHeight: 1.6 }}>
+                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
+                      {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3} more</span>}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '5px' }}>
-                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>Est. ₹{entry.totalAmount.toLocaleString()}</span>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
                     </div>
                   </div>
                 )}
 
-                <div style={{ padding: '0 18px 16px', display: 'flex', gap: '8px' }}>
+                {/* Actions */}
+                <div style={{ padding: '0 16px 14px', display: 'flex', gap: '7px' }}>
                   <button onClick={() => setAssignTableModal(entry)} style={{
-                    flex: 1, padding: '11px', borderRadius: '10px', border: 'none',
-                    background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                    color: '#000', fontWeight: '900', fontSize: '0.66rem',
+                    flex: 1, padding: '10px', borderRadius: '9px', border: 'none',
+                    background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+                    color: '#000', fontWeight: '900', fontSize: '0.62rem',
                     cursor: 'pointer', letterSpacing: '0.5px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px'
-                  }}>
-                    <TableProperties size={13} />
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    transition: 'opacity 0.15s'
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                  >
+                    <TableProperties size={12} />
                     ASSIGN TABLE
-                    <ChevronRight size={13} />
+                    <ChevronRight size={12} />
                   </button>
                   <button onClick={() => setConfirmModal({
                     show: true, title: 'Mark as No-Show?',
@@ -2100,15 +2234,16 @@ const renderMonthHeatmap = () => {
                       showNotif(`${entry.customerName} — marked no-show`);
                     }
                   })} style={{
-                    padding: '11px 13px', background: 'transparent',
-                    border: '1px solid #1a1a1a', color: '#333',
-                    borderRadius: '10px', fontSize: '0.6rem', fontWeight: '900',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0
+                    padding: '10px 12px', background: 'transparent',
+                    border: '1px solid #1a1a1a', color: '#2a2a2a',
+                    borderRadius: '9px', fontSize: '0.58rem', fontWeight: '900',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
+                    transition: 'all 0.15s'
                   }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
                   >
-                    <AlertOctagon size={12} />
+                    <AlertOctagon size={11} />
                     NO SHOW
                   </button>
                 </div>
@@ -2126,18 +2261,18 @@ const renderMonthHeatmap = () => {
       );
       return filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#0d0d0d', border: '1px solid #161616', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-            <ShoppingBag size={20} color="#1e1e1e" />
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#0a0a0a', border: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <ShoppingBag size={18} color="#1a1a1a" />
           </div>
-          <div style={{ fontSize: '0.76rem', color: '#222', fontWeight: '700' }}>
+          <div style={{ fontSize: '0.72rem', color: '#1e1e1e', fontWeight: '700' }}>
             {queueSearch ? `No results for "${queueSearch}"` : 'No pickup orders'}
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#1a1a1a', marginTop: '5px' }}>
+          <div style={{ fontSize: '0.58rem', color: '#161616', marginTop: '5px' }}>
             {!queueSearch && 'Takeaway / scheduled pickups appear here'}
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '12px' }} className="p-queue-grid">
           {filtered.map(entry => {
             const isKitchenFired = entry.kitchenFired;
             const isReady        = entry.status === 'pickup-ready';
@@ -2145,206 +2280,208 @@ const renderMonthHeatmap = () => {
               ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
             const pickupDue  = pickupMinsLeft !== null && pickupMinsLeft <= 0;
             const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 10;
-
-            // Step indicator: 1=Send to Kitchen, 2=Mark Ready, 3=Settle
             const step = isReady ? 3 : isKitchenFired ? 2 : 1;
+
+            const topBorder = isReady
+              ? 'rgba(211,191,162,0.6)'
+              : isKitchenFired
+              ? 'rgba(138,112,77,0.4)'
+              : pickupDue
+              ? 'rgba(138,112,77,0.5)'
+              : 'rgba(211,191,162,0.08)';
 
             return (
               <div key={entry._id} style={{
-                background: '#0a0a0a', borderRadius: '16px',
-                border: `1px solid ${isReady ? 'rgba(74,222,128,0.18)' : isKitchenFired ? 'rgba(211,191,162,0.12)' : '#161616'}`,
-                borderTop: `3px solid ${isReady ? 'rgba(74,222,128,0.5)' : isKitchenFired ? 'rgba(211,191,162,0.4)' : pickupDue ? 'rgba(186,117,23,0.5)' : '#1a1a1a'}`,
+                background: '#0a0a0a', borderRadius: '14px',
+                border: `1px solid ${isReady ? 'rgba(211,191,162,0.14)' : '#141414'}`,
+                borderTop: `2px solid ${topBorder}`,
                 overflow: 'hidden'
               }}>
-
                 {/* Header */}
-                <div style={{ padding: '16px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ padding: '14px 16px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff', marginBottom: '4px' }}>{entry.customerName}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff', marginBottom: '3px' }}>{entry.customerName}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                       {entry.scheduledPickupTime && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock3 size={10} color="#555" />
-                          <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '700' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock3 size={9} color="#444" />
+                          <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '700' }}>
                             {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                           </span>
                         </div>
                       )}
                       {pickupMinsLeft !== null && (
                         <span style={{
-                          fontSize: '0.56rem', padding: '2px 7px', borderRadius: '5px', fontWeight: '900',
-                          background: pickupDue ? 'rgba(186,117,23,0.1)' : pickupSoon ? 'rgba(186,117,23,0.06)' : '#0d0d0d',
-                          color: pickupDue ? '#BA7517' : pickupSoon ? '#8a704d' : '#333',
-                          border: (pickupDue || pickupSoon) ? '1px solid rgba(186,117,23,0.2)' : '1px solid #161616'
+                          fontSize: '0.54rem', padding: '2px 6px', borderRadius: '5px', fontWeight: '900',
+                          background: pickupDue ? 'rgba(138,112,77,0.12)' : pickupSoon ? 'rgba(138,112,77,0.06)' : '#0d0d0d',
+                          color: pickupDue ? '#8a704d' : pickupSoon ? '#6a5a3a' : '#2a2a2a',
+                          border: (pickupDue || pickupSoon) ? '1px solid rgba(138,112,77,0.25)' : '1px solid #141414'
                         }}>
-                          {pickupDue ? 'DUE NOW' : `${pickupMinsLeft} min left`}
+                          {pickupDue ? 'DUE NOW' : `${pickupMinsLeft}m left`}
                         </span>
                       )}
                     </div>
                   </div>
+
                   {/* Status badge */}
                   {isReady ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px' }}>
-                      <PackageCheck size={12} color="#4ade80" />
-                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#4ade80' }}>READY</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '7px' }}>
+                      <PackageCheck size={11} color="#d3bfa2" />
+                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#d3bfa2' }}>READY</span>
                     </div>
                   ) : isKitchenFired ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '8px' }}>
-                      <ChefHat size={12} color="#d3bfa2" />
-                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#d3bfa2' }}>IN KITCHEN</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: 'rgba(138,112,77,0.07)', border: '1px solid rgba(138,112,77,0.2)', borderRadius: '7px' }}>
+                      <ChefHat size={11} color="#8a704d" />
+                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#8a704d' }}>IN KITCHEN</span>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '8px' }}>
-                      <Timer size={12} color="#444" />
-                      <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#444' }}>PENDING</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '7px' }}>
+                      <Timer size={11} color="#333" />
+                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#333' }}>PENDING</span>
                     </div>
                   )}
                 </div>
 
-                {/* Step progress strip */}
-                <div style={{ margin: '0 18px 12px', display: 'flex', gap: '4px' }}>
+                {/* Step progress strip — all gold shades */}
+                <div style={{ margin: '0 16px 10px', display: 'flex', gap: '3px' }}>
                   {[
                     { n: 1, label: 'Kitchen', icon: <ChefHat size={9} /> },
                     { n: 2, label: 'Ready',   icon: <PackageCheck size={9} /> },
-                    { n: 3, label: 'Settled',  icon: <Store size={9} /> },
-                  ].map(s => (
-                    <div key={s.n} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 8px', borderRadius: '6px', background: step >= s.n ? (step === s.n ? 'rgba(211,191,162,0.1)' : 'rgba(74,222,128,0.06)') : '#050505', border: `1px solid ${step >= s.n ? (step === s.n ? 'rgba(211,191,162,0.25)' : 'rgba(74,222,128,0.15)') : '#0d0d0d'}` }}>
-                      <span style={{ color: step >= s.n ? (step === s.n ? '#d3bfa2' : '#4ade80') : '#2a2a2a' }}>{s.icon}</span>
-                      <span style={{ fontSize: '0.48rem', fontWeight: '900', color: step >= s.n ? (step === s.n ? '#d3bfa2' : '#4ade80') : '#222', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</span>
-                    </div>
-                  ))}
+                    { n: 3, label: 'Settled', icon: <Store size={9} /> },
+                  ].map(s => {
+                    const done    = step > s.n;
+                    const current = step === s.n;
+                    return (
+                      <div key={s.n} style={{
+                        flex: 1, display: 'flex', alignItems: 'center', gap: '3px',
+                        padding: '5px 7px', borderRadius: '6px',
+                        background: done ? 'rgba(211,191,162,0.07)' : current ? 'rgba(138,112,77,0.1)' : '#050505',
+                        border: `1px solid ${done ? 'rgba(211,191,162,0.15)' : current ? 'rgba(138,112,77,0.25)' : '#0d0d0d'}`
+                      }}>
+                        <span style={{ color: done ? '#d3bfa2' : current ? '#8a704d' : '#1e1e1e' }}>{s.icon}</span>
+                        <span style={{
+                          fontSize: '0.46rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.3px',
+                          color: done ? '#d3bfa2' : current ? '#8a704d' : '#1a1a1a'
+                        }}>{s.label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Items */}
                 {entry.items?.length > 0 && (
-                  <div style={{ margin: '0 18px 12px', padding: '10px 12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-                    <div style={{ fontSize: '0.66rem', color: '#666', lineHeight: 1.7 }}>
-                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join('  ·  ')}
-                      {entry.items.length > 3 && <span style={{ color: '#3a3a3a' }}> +{entry.items.length - 3}</span>}
+                  <div style={{ margin: '0 16px 10px', padding: '9px 11px', background: '#050505', borderRadius: '9px', border: '1px solid #0d0d0d' }}>
+                    <div style={{ fontSize: '0.63rem', color: '#555', lineHeight: 1.7 }}>
+                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
+                      {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3}</span>}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.58rem', color: '#444' }}>
-                        <Truck size={10} color="#444" style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                        Takeaway
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.56rem', color: '#2a2a2a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Truck size={9} color="#2a2a2a" /> Takeaway
                       </span>
-                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Actions — progressive 3-step flow */}
-                <div style={{ padding: '0 18px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Actions */}
+                <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
 
-                  {/* STEP 1: SEND TO KITCHEN */}
+                  {/* STEP 1 */}
                   {!isKitchenFired && !isReady && (
                     <button onClick={async () => {
                       try {
                         const orderItems = (entry.items || []).map(i => ({
-                          menuItemId:   i.menuItemId || null,
-                          name:         i.name,
-                          quantity:     Number(i.quantity) || 1,
-                          portion:      i.portion || 'Single',
+                          menuItemId: i.menuItemId || null, name: i.name,
+                          quantity: Number(i.quantity) || 1, portion: i.portion || 'Single',
                           pricePerUnit: Number(i.price || i.pricePerUnit) || 0,
-                          subtotal:     Number(i.subtotal) || 0,
-                          suggestion:   ''
+                          subtotal: Number(i.subtotal) || 0, suggestion: ''
                         }));
                         const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
-                        // Post as 'pending' order → appears in KDS
                         await axios.post(`${BASE_URL}/orders`, {
-                          tenantId,
-                          tableNumber: 'Counter',
-                          items: orderItems,
-                          source: 'counter-pickup',
-                          sessionId: entry.sessionId,
-                          waitlistId: entry._id,
-                          status: 'pending',
+                          tenantId, tableNumber: 'Counter', items: orderItems,
+                          source: 'counter-pickup', sessionId: entry.sessionId,
+                          waitlistId: entry._id, status: 'pending',
                           billDetails: { itemsTotal, grandTotal: itemsTotal }
                         });
-                        // Mark kitchenFired on waitlist entry
                         await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
-                        fetchCounterQueue();
-                        fetchInitialData();
+                        fetchCounterQueue(); fetchInitialData();
                         showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
                       } catch (err) {
                         showNotif(err.response?.data?.error || 'Failed to send to kitchen', 'error');
                       }
                     }} style={{
-                      width: '100%', padding: '12px', borderRadius: '10px', border: 'none',
-                      background: 'linear-gradient(135deg, rgba(211,191,162,0.15), rgba(211,191,162,0.08))',
-                      border: '1px solid rgba(211,191,162,0.3)',
-                      color: '#d3bfa2', fontWeight: '900', fontSize: '0.68rem',
+                      width: '100%', padding: '10px', borderRadius: '9px',
+                      background: 'rgba(138,112,77,0.08)',
+                      border: '1px solid rgba(138,112,77,0.25)',
+                      color: '#8a704d', fontWeight: '900', fontSize: '0.64rem',
                       cursor: 'pointer', letterSpacing: '0.5px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
                       transition: 'all 0.15s'
                     }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.18)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(211,191,162,0.15), rgba(211,191,162,0.08))'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.15)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.08)'; e.currentTarget.style.color = '#8a704d'; }}
                     >
-                      <ChefHat size={14} />
-                      SEND TO KITCHEN
-                      <ChevronRight size={13} />
+                      <ChefHat size={13} /> SEND TO KITCHEN <ChevronRight size={12} />
                     </button>
                   )}
 
-                  {/* STEP 2: MARK READY (only after kitchen fired) */}
+                  {/* STEP 2 */}
                   {isKitchenFired && !isReady && (
                     <button onClick={async () => {
                       await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
                       fetchCounterQueue();
                       showNotif(`${entry.customerName} — customer notified, pickup ready`);
                     }} style={{
-                      width: '100%', padding: '12px',
-                      background: 'rgba(74,222,128,0.08)',
-                      border: '1px solid rgba(74,222,128,0.25)',
-                      color: '#4ade80', borderRadius: '10px',
-                      fontSize: '0.68rem', fontWeight: '900',
+                      width: '100%', padding: '10px',
+                      background: 'rgba(211,191,162,0.07)',
+                      border: '1px solid rgba(211,191,162,0.2)',
+                      color: '#d3bfa2', borderRadius: '9px',
+                      fontSize: '0.64rem', fontWeight: '900',
                       cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
                       transition: 'all 0.15s'
                     }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(74,222,128,0.14)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(74,222,128,0.08)'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.13)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
                     >
-                      <PackageCheck size={14} />
-                      MARK READY — NOTIFY CUSTOMER
-                      <ChevronRight size={13} />
+                      <PackageCheck size={13} /> MARK READY — NOTIFY CUSTOMER <ChevronRight size={12} />
                     </button>
                   )}
 
-                  {/* STEP 3: SETTLE BILL (always visible, as takeaway) */}
+                  {/* STEP 3 */}
                   <button onClick={() => setConfirmModal({
                     show: true,
                     title: `Settle Pickup — ${entry.customerName}?`,
                     subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`,
                     onConfirm: async () => {
                       try {
-                        // Settle via waitlist settle route (handled as counter-pickup in billing)
                         await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, {
-                          paymentMethod: 'cash',
-                          finalAmount: entry.totalAmount
+                          paymentMethod: 'cash', finalAmount: entry.totalAmount
                         });
-                        fetchCounterQueue();
-                        fetchAnalytics();
+                        fetchCounterQueue(); fetchAnalytics();
                         showNotif(`${entry.customerName} — pickup settled as takeaway`);
                       } catch (err) {
                         showNotif(err.response?.data?.error || 'Settlement failed', 'error');
                       }
                     }
                   })} style={{
-                    width: '100%', padding: '12px',
-                    background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#111',
+                    width: '100%', padding: '10px',
+                    background: isReady ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : '#0d0d0d',
                     border: isReady ? 'none' : '1px solid #1a1a1a',
-                    color: isReady ? '#000' : '#444',
-                    borderRadius: '10px', fontSize: '0.68rem', fontWeight: '900',
+                    color: isReady ? '#000' : '#333',
+                    borderRadius: '9px', fontSize: '0.64rem', fontWeight: '900',
                     cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
                     transition: 'all 0.15s'
-                  }}>
-                    <Store size={14} />
+                  }}
+                    onMouseEnter={e => { if (!isReady) { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}}
+                    onMouseLeave={e => { if (!isReady) { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}}
+                  >
+                    <Store size={13} />
                     SETTLE ₹{entry.totalAmount.toLocaleString()}
-                    {isReady && <span style={{ fontSize: '0.56rem', opacity: 0.7 }}>· TAKEAWAY</span>}
+                    {isReady && <span style={{ fontSize: '0.52rem', opacity: 0.6 }}>· TAKEAWAY</span>}
                   </button>
-
                 </div>
               </div>
             );
@@ -2352,7 +2489,6 @@ const renderMonthHeatmap = () => {
         </div>
       );
     })()}
-
   </div>
 </div>
 
@@ -6608,11 +6744,18 @@ tr:hover td { background: rgba(255,255,255,0.01); }
 button[style*="transparent"]:hover { opacity: 0.8; }
 .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
 
+/* KDS scroll columns */
+.kds-scroll::-webkit-scrollbar { width: 3px; }
+.kds-scroll::-webkit-scrollbar-thumb { background: #2a1f0e; border-radius: 10px; }
+.kds-scroll::-webkit-scrollbar-track { background: transparent; }
+
 /* ═══════════════════════════════════════════════
    TABLET — 681px to 1024px
    Sidebar narrows, grids compress, header wraps
 ═══════════════════════════════════════════════ */
 @media (min-width: 681px) and (max-width: 1024px) {
+
+  .p-kds-row { grid-template-columns: 1.2fr 1px 1fr !important; }
 
   /* Sidebar narrows */
   .p-sidebar {
@@ -6731,6 +6874,10 @@ button[style*="transparent"]:hover { opacity: 0.8; }
    Sidebar becomes bottom nav bar
 ═══════════════════════════════════════════════ */
 @media (max-width: 680px) {
+
+  .p-kds-row { grid-template-columns: 1fr !important; }
+  .p-service-divider { display: none !important; }
+  .p-service-col { border-top: 1px solid #141414 !important; }
 
   /* ── SIDEBAR → BOTTOM NAV ── */
   .p-sidebar {
