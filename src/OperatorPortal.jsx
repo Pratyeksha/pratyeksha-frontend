@@ -243,11 +243,30 @@ const fetchCounterQueue = useCallback(async () => {
       axios.get(`${BASE_URL}/waitlist/${tenantId}`),
       axios.get(`${BASE_URL}/waitlist/avg-wait/${tenantId}`)
     ]);
-    setWaitlistEntries(qRes.data.waitlist    || []);
-    setPickupEntries  (qRes.data.pickupQueue || []);
-    setAvgWaitData    (aRes.data);
+    // ── Only show entries that are truly waiting, not assigned/seated/settled
+    const allWaitlist = qRes.data.waitlist || [];
+    const allPickup   = qRes.data.pickupQueue || [];
+    
+    setWaitlistEntries(
+      allWaitlist.filter(e => 
+        !['assigned', 'seated', 'settled', 'no-show', 'completed'].includes(e.status)
+      )
+    );
+    setPickupEntries(
+      allPickup.filter(e => 
+        !['settled', 'completed', 'cancelled'].includes(e.status)
+      )
+    );
+    setAvgWaitData(aRes.data);
   } catch { }
 }, [tenantId]);
+
+// Add this right after your existing waitlistEntries state
+useEffect(() => {
+  setWaitlistEntries(prev => 
+    prev.filter(e => e.status === 'waiting' || e.status === 'pending')
+  );
+}, [waitlistEntries.length]);
 
 
 const fetchExtraAnalytics = useCallback(async () => {
@@ -1627,11 +1646,10 @@ const renderMonthHeatmap = () => {
       </AnimatePresence>
 
       {/* SIDEBAR */}
-      <aside style={styles.sidebar}>
-        <div style={styles.sidebarTop} className="sidebar-nav">
-          <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo}/></div>
-          <nav style={styles.navStack}>
-            {[
+<aside style={styles.sidebar} className="p-sidebar">
+<div style={styles.sidebarTop} className="sidebar-nav p-sidebar-top" >
+            <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo} className="p-sidebar-logo-wrap"/></div>
+<nav style={styles.navStack} className="p-nav-stack">            {[
               {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
               {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
               {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
@@ -6372,13 +6390,18 @@ style={{
                   // The onClick inside your assign table grid button — REPLACE with:
 onClick={async () => {
   try {
+    // ── Optimistic removal BEFORE API call ──
+    setWaitlistEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
+    setAssignTableModal(null);
+
     const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
       tableNumber: id
     });
+
     if (res.data?.success) {
-      setAssignTableModal(null);
-      fetchCounterQueue();
-      fetchInitialData();          // ← this re-fetches orders so pending tab updates
+      // Refetch to sync — filtered function won't bring it back
+      await fetchCounterQueue();
+      fetchInitialData();
       showNotif(
         res.data.order
           ? `T${n} assigned to ${assignTableModal.customerName} — order firing to KDS`
@@ -6386,9 +6409,13 @@ onClick={async () => {
         'success'
       );
     } else {
+      // If failed, restore the entry
+      await fetchCounterQueue();
       showNotif(res.data?.error || 'Assignment failed', 'error');
     }
   } catch (err) {
+    // If failed, restore the entry
+    await fetchCounterQueue();
     console.error('Assign error:', err.response?.data || err.message);
     showNotif(
       err.response?.data?.error || err.message || 'Failed to assign table',
@@ -6396,7 +6423,7 @@ onClick={async () => {
     );
   }
 }}
-                  style={{
+        style={{
                     padding: '16px 8px', borderRadius: '12px', cursor: isOcc ? 'not-allowed' : 'pointer',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
                     transition: 'all 0.15s',
@@ -6569,29 +6596,332 @@ onClick={async () => {
   50% { opacity: 0.4; transform: scale(1.03); }
 }
 
-  /* Scrollbars */
-  .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-  .custom-scroll::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
-  .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-  
-  /* Sidebar nav */
-  .sidebar-nav::-webkit-scrollbar { width: 2px; }
-  .sidebar-nav::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
-  .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
-  
-  /* Spinner */
-  .spinner { border: 3px solid #111; border-top: 3px solid #d3bfa2; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; }
-  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-  
-  /* Table rows */
-  tr:hover td { background: rgba(255,255,255,0.01); }
-  
-  /* Nav button hover */
-  button[style*="transparent"]:hover { opacity: 0.8; }
-  
-  /* Mono font for numbers */
-  .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
-`}</style>
+.custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar { width: 2px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.spinner { border: 3px solid #111; border-top: 3px solid #d3bfa2; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+tr:hover td { background: rgba(255,255,255,0.01); }
+button[style*="transparent"]:hover { opacity: 0.8; }
+.mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+
+/* ═══════════════════════════════════════════════
+   TABLET — 681px to 1024px
+   Sidebar narrows, grids compress, header wraps
+═══════════════════════════════════════════════ */
+@media (min-width: 681px) and (max-width: 1024px) {
+
+  /* Sidebar narrows */
+  .p-sidebar {
+    width: 200px !important;
+    min-width: 200px !important;
+  }
+  .p-sidebar-logo { width: 110px !important; }
+  .p-nav-btn, .p-nav-active {
+    padding: 11px 14px !important;
+    font-size: 0.68rem !important;
+  }
+
+  /* Header */
+  .p-header {
+    padding: 0 28px !important;
+    min-height: 80px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Scroll area */
+  .p-scroll { padding: 28px 28px !important; }
+
+  /* Billing: stack floor + receipt vertically */
+  .p-billing-flex {
+    flex-direction: column !important;
+    gap: 32px !important;
+  }
+  .p-receipt {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Table grid: more columns fit */
+  .p-table-grid {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)) !important;
+  }
+
+  /* KDS row: stack vertically */
+  .p-kds-row {
+    flex-direction: column !important;
+    gap: 24px !important;
+  }
+  .p-service-col {
+    border-left: none !important;
+    padding-left: 0 !important;
+    border-top: 1px solid #111 !important;
+    padding-top: 24px !important;
+  }
+
+  /* Insights 2-col grids → single col */
+  .p-2col { grid-template-columns: 1fr !important; }
+
+  /* Management 2-col → single col */
+  .p-mgmt-2col { grid-template-columns: 1fr !important; }
+
+  /* Extras add form: compress columns */
+  .p-extras-form {
+    grid-template-columns: 1fr 1fr 1fr !important;
+  }
+
+  /* Inventory add form */
+  .p-inv-form {
+    grid-template-columns: 1fr 1fr auto !important;
+  }
+
+  /* Menu grid */
+  .p-menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  }
+
+  /* Queue grid single col */
+  .p-queue-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stats row wraps */
+  .p-stats-row { flex-wrap: wrap !important; }
+  .p-stats-row > div { flex: 1 1 140px !important; }
+
+  /* HUD counters wrap */
+  .p-hud { flex-wrap: wrap !important; }
+
+  /* Category rankings */
+  .p-cat-grid { grid-template-columns: 1fr !important; }
+
+  /* Marketing offer grid */
+  .p-offer-grid { grid-template-columns: 1fr !important; }
+
+  /* Staff add form */
+  .p-staff-form {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+  }
+
+  /* Attendance grid */
+  .p-attendance-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+  }
+
+  /* Heatmap squares */
+  .p-heat-sq { height: 52px !important; }
+  .p-heat-sq-empty { height: 52px !important; }
+
+  /* Profitability KPI strip */
+  .p-kpi-3col { grid-template-columns: 1fr 1fr !important; }
+
+  /* Modal wider on tablet */
+  .p-modal-box { max-width: 90vw !important; }
+
+  /* Purchase history drawer narrower */
+  .p-purchase-drawer { width: 380px !important; }
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE — up to 680px
+   Sidebar becomes bottom nav bar
+═══════════════════════════════════════════════ */
+@media (max-width: 680px) {
+
+  /* ── SIDEBAR → BOTTOM NAV ── */
+  .p-sidebar {
+    position: fixed !important;
+    bottom: 0 !important; left: 0 !important; right: 0 !important;
+    width: 100vw !important;
+    height: auto !important;
+    flex-direction: row !important;
+    border-right: none !important;
+    border-top: 1px solid #1a1a1a !important;
+    z-index: 8000 !important;
+    background: #080808 !important;
+  }
+  .p-sidebar-top {
+    flex-direction: row !important;
+    padding: 6px 8px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex: 1 !important;
+    scrollbar-width: none !important;
+  }
+  .p-sidebar-top::-webkit-scrollbar { display: none !important; }
+  .p-sidebar-bottom { display: none !important; }
+  .p-sidebar-logo-wrap { display: none !important; }
+  .p-nav-stack {
+    flex-direction: row !important;
+    gap: 2px !important;
+    align-items: center !important;
+    width: max-content !important;
+  }
+  .p-nav-btn, .p-nav-active {
+    flex-direction: column !important;
+    font-size: 0.4rem !important;
+    padding: 7px 8px !important;
+    min-width: 56px !important;
+    gap: 3px !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+  }
+  /* Hide text label on very small screens, show only icon */
+  .p-nav-btn .p-nav-label,
+  .p-nav-active .p-nav-label { display: none !important; }
+
+  /* ── MAIN CONTENT ── */
+  .p-main { padding-bottom: 72px !important; }
+  .p-scroll { padding: 14px 14px !important; }
+  .p-header {
+    padding: 0 14px !important;
+    min-height: 58px !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .p-page-title { font-size: 0.85rem !important; letter-spacing: 0.5px !important; }
+
+  /* ── BILLING ── */
+  .p-billing-flex {
+    flex-direction: column !important;
+    gap: 20px !important;
+  }
+  .p-receipt {
+    position: fixed !important;
+    top: 0 !important; left: 0 !important;
+    width: 100vw !important;
+    height: calc(100vh - 72px) !important;
+    max-height: calc(100vh - 72px) !important;
+    border-radius: 0 !important;
+    z-index: 7000 !important;
+    margin: 0 !important;
+    padding: 24px 20px !important;
+    overflow-y: auto !important;
+  }
+  .p-table-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px !important;
+  }
+  .p-table-btn {
+    padding: 16px 6px !important;
+    border-radius: 10px !important;
+  }
+  .p-special-row { flex-direction: column !important; }
+  .p-special-row > button { flex: none !important; width: 100% !important; }
+
+  /* ── KDS ROW ── */
+  .p-kds-row {
+    flex-direction: column !important;
+    gap: 20px !important;
+  }
+  .p-service-col {
+    border-left: none !important;
+    padding-left: 0 !important;
+    border-top: 1px solid #111 !important;
+    padding-top: 20px !important;
+  }
+
+  /* ── COUNTER QUEUE ── */
+  .p-queue-grid { grid-template-columns: 1fr !important; }
+  .p-queue-tabs { overflow-x: auto !important; }
+
+  /* ── HUD COUNTERS ── */
+  .p-hud {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+  .p-hud::-webkit-scrollbar { display: none !important; }
+  .p-hud-box { min-width: 88px !important; padding: 4px 12px !important; }
+  .p-hud-val { font-size: 1.1rem !important; }
+
+  /* ── INSIGHTS ── */
+  .p-stats-row {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  .p-stats-row > div { flex: 1 1 120px !important; padding: 16px !important; }
+  .p-stats-val { font-size: 1.4rem !important; }
+  .p-2col { grid-template-columns: 1fr !important; }
+  .p-cat-grid { grid-template-columns: 1fr !important; }
+  .p-offer-grid { grid-template-columns: 1fr !important; }
+  .p-kpi-3col { grid-template-columns: 1fr 1fr !important; }
+  .p-heat-sq { height: 34px !important; border-radius: 5px !important; font-size: 0.6rem !important; }
+  .p-heat-sq-empty { height: 34px !important; }
+  .p-heatmap-card { padding: 16px !important; }
+
+  /* ── MENU ── */
+  .p-menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  /* ── MANAGEMENT / STAFF ── */
+  .p-mgmt-2col { grid-template-columns: 1fr !important; }
+  .p-staff-form {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .p-staff-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  .p-attendance-grid { grid-template-columns: 1fr !important; }
+  .p-floor-2col { grid-template-columns: 1fr !important; }
+
+  /* ── INVENTORY ── */
+  .p-inv-form { grid-template-columns: 1fr 1fr !important; }
+  .p-inv-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+
+  /* ── EXTRAS ── */
+  .p-extras-form { grid-template-columns: 1fr 1fr !important; }
+  .p-extras-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── MODALS → slide up from bottom ── */
+  .p-modal-backdrop {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .p-modal-box {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    padding: 28px 20px !important;
+  }
+
+  /* Purchase history drawer */
+  .p-purchase-drawer {
+    width: 100vw !important;
+    border-radius: 20px 20px 0 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    height: 90vh !important;
+  }
+
+  /* Edit modal */
+  .p-edit-modal {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Marketing grid */
+  .p-marketing-grid { grid-template-columns: 1fr !important; }
+
+  /* Salary slip modal */
+  .p-salary-modal { max-width: 100% !important; }
+
+  /* Roster ledger */
+  .p-roster-header { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+  .p-roster-controls { flex-wrap: wrap !important; gap: 8px !important; }
+
+  /* Assign table modal */
+  .p-assign-grid { grid-template-columns: repeat(4, 1fr) !important; }
+}`}</style>
     </div>
   );
 };
