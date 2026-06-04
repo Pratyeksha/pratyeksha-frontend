@@ -1,281 +1,345 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Building2, RefreshCcw, Search, TrendingUp, Users, Trophy,
   ShieldCheck, Zap, AlertCircle, Utensils, Coffee,
   CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2,
-  Clock, Layers, X, Menu
+  Clock, Layers, X, Menu, Plus, Power, RotateCcw, UserPlus,
+  IndianRupee, AlertTriangle, Calendar, Store, ChefHat,
+  BarChart3, Eye, EyeOff, Copy, Check, Wallet
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
-/* ─────────────────────────────────────────────
-   RESPONSIVE CSS — injected once at module level
-───────────────────────────────────────────── */
+/* ── Global Styles ── */
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body, html {
     overflow: hidden !important;
-    margin: 0; padding: 0;
     width: 100vw; height: 100vh;
-    background: #000;
-    font-family: 'Outfit', sans-serif;
+    background: #0a0800;
+    font-family: 'DM Sans', sans-serif;
+    color: #e8dcc8;
+    -webkit-font-smoothing: antialiased;
   }
-  a { text-decoration: none; }
-
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2416; border-radius: 99px; }
   .no-sb::-webkit-scrollbar { display: none; }
   .no-sb { -ms-overflow-style: none; scrollbar-width: none; }
+  input, select, textarea { font-family: 'DM Sans', sans-serif; }
+  a { text-decoration: none; color: inherit; }
 
-  /* ── Sidebar slide-in ── */
-  .pma-sidebar {
-    width: 280px;
-    height: 100vh;
-    background: #080808;
-    border-right: 1px solid #151515;
-    padding: 36px 24px;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    z-index: 149;
-    overflow-y: auto;
-    transition: transform 0.26s cubic-bezier(.4,0,.2,1);
+  /* ── Sidebar ── */
+  .p-sidebar {
+    width: 260px; min-width: 260px; height: 100vh;
+    background: #070600;
+    border-right: 1px solid #1c1810;
+    display: flex; flex-direction: column;
+    flex-shrink: 0; overflow: hidden;
+    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    position: relative; z-index: 149;
+  }
+  .p-sidebar-inner {
+    display: flex; flex-direction: column;
+    height: 100%; overflow-y: auto; padding: 28px 18px;
   }
 
-  /* Mobile topbar */
-  .pma-topbar {
-    display: none;
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 54px;
-    background: #080808;
-    border-bottom: 1px solid #151515;
-    z-index: 160;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
+  /* ── Mobile topbar ── */
+  .p-topbar {
+    display: none; position: fixed; top: 0; left: 0; right: 0;
+    height: 52px; background: #070600;
+    border-bottom: 1px solid #1c1810;
+    z-index: 160; align-items: center;
+    justify-content: space-between; padding: 0 16px;
   }
 
-  /* Mobile stat strip (under header in clients view) */
-  .pma-mob-stats {
-    display: none;
-    padding: 10px 14px;
-    gap: 8px;
-    background: #080808;
-    border-bottom: 1px solid #0d0d0d;
-    flex-shrink: 0;
+  /* ── Backdrop ── */
+  .p-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 148;
+    backdrop-filter: blur(3px);
   }
 
-  /* Detail drawer — desktop: side panel */
-  .pma-drawer {
-    width: 340px;
-    background: #080808;
-    border-left: 1px solid #151515;
-    height: 100%;
-    flex-shrink: 0;
-    overflow: hidden;
+  /* ── Input focus ── */
+  .p-inp { transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
+  .p-inp:focus { border-color: rgba(193,155,90,0.5) !important; box-shadow: 0 0 0 3px rgba(193,155,90,0.06) !important; }
+
+  /* ── Form grid ── */
+  .p-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .p-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+  .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* ── Filter bar ── */
+  .p-filterbar { display: flex; border-bottom: 1px solid #111008; flex-shrink: 0; background: #070600; overflow-x: auto; }
+  .p-filterbar::-webkit-scrollbar { display: none; }
+
+  /* ── Main scroll areas ── */
+  .p-scroll { flex: 1; overflow-y: auto; }
+  .p-pad { padding: 24px 36px 48px; }
+  .p-pad-sm { padding: 16px 18px 40px; }
+
+  /* ── Hover row ── */
+  .p-row { transition: background 0.12s; }
+  .p-row:hover { background: #0f0d06 !important; }
+
+  /* ── Card hover ── */
+  .p-card { transition: border-color 0.18s, box-shadow 0.18s; }
+  .p-card:hover { border-color: rgba(193,155,90,0.22) !important; box-shadow: 0 0 0 1px rgba(193,155,90,0.06) !important; }
+
+  /* ── Button hover ── */
+  .p-btn-ghost:hover { background: rgba(193,155,90,0.08) !important; color: #c19b5a !important; }
+
+  /* ── Demo card ── */
+  .p-demo-card { transition: background 0.12s, border-color 0.12s; cursor: pointer; }
+  .p-demo-card:hover { background: #0f0d06 !important; border-color: rgba(193,155,90,0.15) !important; }
+
+  /* ── Animations ── */
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse-gold {
+    0%,100% { box-shadow: 0 0 0 0 rgba(193,155,90,0); }
+    50% { box-shadow: 0 0 0 6px rgba(193,155,90,0.08); }
   }
 
-  /* hide on mobile */
-  .hide-mob  { }
-  .hide-sm   { }
-
-  /* ── Filter tab row scrollable ── */
-  .pma-filter-row {
-    display: flex;
-    gap: 0;
-    padding: 0 40px;
-    border-bottom: 1px solid #111;
-    flex-shrink: 0;
-    background: #050505;
-    overflow-x: auto;
+  /* ── Responsive ── */
+  @media (max-width: 1100px) {
+    .p-stat-grid { grid-template-columns: repeat(2,1fr); }
+    .p-chart-grid { grid-template-columns: 1fr; }
+    .p-pad { padding: 20px 24px 40px; }
+    .p-sidebar { width: 230px; min-width: 230px; }
   }
-  .pma-filter-row::-webkit-scrollbar { display: none; }
-
-  /* ── Demo list scroll area ── */
-  .pma-demo-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px 40px 40px;
-  }
-
-  /* ── Table wrapper ── */
-  .pma-table-wrap {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: auto;
-    padding: 16px 40px 40px;
-  }
-
-  /* ── TABLET (≤ 1024px) ── */
-  @media (max-width: 1024px) {
-    .pma-sidebar { width: 240px; padding: 28px 18px; }
-    .pma-table-wrap { padding: 12px 24px 32px; }
-    .pma-filter-row { padding: 0 24px; }
-    .pma-demo-scroll { padding: 10px 24px 32px; }
-    .pma-drawer { width: 300px; }
-  }
-
-  /* ── MOBILE (≤ 768px) ── */
   @media (max-width: 768px) {
-    /* Show topbar */
-    .pma-topbar { display: flex; }
-
-    /* Sidebar: fixed overlay, off-screen by default */
-    .pma-sidebar {
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      width: 76vw;
-      max-width: 300px;
-      padding-top: 20px;
+    .p-topbar { display: flex; }
+    .p-sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 80vw; max-width: 280px;
       transform: translateX(-100%);
+      z-index: 160;
     }
-    .pma-sidebar.open { transform: translateX(0); }
-
-    /* Main feed: push down for topbar */
-    .pma-main { padding-top: 54px !important; }
-
-    /* Header inside sections */
-    .pma-section-header {
-      padding: 16px 16px 12px !important;
-      flex-wrap: wrap !important;
-      gap: 10px !important;
-    }
-    .pma-section-header h1 { font-size: 1.25rem !important; }
-
-    /* Search input */
-    .pma-search-input { width: 160px !important; }
-
-    /* Mobile stat strip */
-    .pma-mob-stats { display: flex; }
-
-    /* Table padding */
-    .pma-table-wrap { padding: 10px 14px 28px; }
-    .pma-filter-row { padding: 0 14px; }
-    .pma-demo-scroll { padding: 10px 14px 28px; }
-
-    /* Drawer: full screen */
-    .pma-drawer {
-      position: fixed !important;
-      inset: 54px 0 0 0 !important;
-      width: 100vw !important;
-      max-width: 100vw !important;
-      z-index: 170 !important;
-      border-left: none !important;
-    }
-
-    /* Hide less important table cols */
+    .p-sidebar.open { transform: translateX(0); }
+    .p-backdrop.open { display: block; }
+    .p-main { padding-top: 52px !important; }
+    .p-stat-grid { grid-template-columns: 1fr 1fr; }
+    .p-form-grid { grid-template-columns: 1fr; }
+    .p-pad { padding: 16px 16px 40px; }
+    .p-chart-grid { grid-template-columns: 1fr; }
     .hide-mob { display: none !important; }
+    .p-header { padding: 16px 16px 12px !important; }
+    .p-drawer {
+      position: fixed !important; inset: 52px 0 0 0 !important;
+      width: 100vw !important; max-width: 100vw !important;
+      z-index: 170 !important; border-left: none !important;
+    }
+    .p-demo-list { flex: 1 !important; }
+    .p-demo-list.has-detail { display: none !important; }
   }
-
-  /* ── SMALL MOBILE (≤ 480px) ── */
   @media (max-width: 480px) {
+    .p-stat-grid { grid-template-columns: 1fr; }
     .hide-sm { display: none !important; }
-    .pma-search-input { width: 130px !important; }
-    .pma-sidebar { width: 85vw; }
+    .p-pad { padding: 12px 12px 40px; }
   }
 `;
 
-/* ─────────────────────────────────────────────
-   INJECT GLOBAL CSS once
-───────────────────────────────────────────── */
-if (typeof document !== 'undefined' && !document.getElementById('pma-styles')) {
+if (typeof document !== 'undefined' && !document.getElementById('p-admin-styles')) {
   const s = document.createElement('style');
-  s.id = 'pma-styles';
+  s.id = 'p-admin-styles';
   s.textContent = GLOBAL_CSS;
   document.head.appendChild(s);
 }
 
-/* ─────────────────────────────────────────────
-   SMALL REUSABLE COMPONENTS
-───────────────────────────────────────────── */
-const Divider = () => <div style={{ height: 1, background: '#151515', margin: '16px 0' }} />;
+/* ─────────────────────────────────────────
+   DESIGN TOKENS
+───────────────────────────────────────── */
+const C = {
+  bg:        '#0a0800',
+  bgDark:    '#070600',
+  bgCard:    '#0d0b05',
+  bgCard2:   '#100e07',
+  border:    '#1c1810',
+  borderMid: '#252010',
+  gold:      '#c19b5a',
+  goldLight: '#d4af7a',
+  goldDim:   '#8a6d3a',
+  goldFaint: 'rgba(193,155,90,0.08)',
+  amber:     '#b87333',
+  amberDim:  '#7a4d1e',
+  bronze:    '#8B5E3C',
+  text:      '#e8dcc8',
+  textMid:   '#a0906e',
+  textDim:   '#5a4e38',
+  textFaint: '#2e2818',
+  warning:   '#d4903a',
+  danger:    '#c07830',
+  success:   '#b89850',
+};
 
-const StatusBadge = ({ status }) => {
+/* ─────────────────────────────────────────
+   SMALL COMPONENTS
+───────────────────────────────────────── */
+
+const Pill = ({ children, color = C.gold, bg }) => (
+  <span style={{
+    fontSize: '0.5rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+    background: bg || `rgba(193,155,90,0.1)`,
+    color, border: `1px solid ${color}33`,
+    letterSpacing: '0.8px', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif'
+  }}>
+    {children}
+  </span>
+);
+
+const StatusChip = ({ status }) => {
   const map = {
-    Pending:      { bg: 'rgba(201,169,110,0.08)', color: '#d3bfa2', border: 'rgba(201,169,110,0.2)' },
-    Contacted:    { bg: 'rgba(255,255,255,0.04)', color: '#fff',    border: 'rgba(255,255,255,0.12)' },
-    'Demo Given': { bg: 'rgba(255,255,255,0.02)', color: '#555',    border: '#1a1a1a' },
+    'Pending':      { c: C.gold,    bg: 'rgba(193,155,90,0.1)',  label: 'PENDING' },
+    'Contacted':    { c: C.amber,   bg: 'rgba(184,115,51,0.1)', label: 'CONTACTED' },
+    'Demo Given':   { c: C.textMid, bg: 'rgba(160,144,110,0.08)', label: 'DONE' },
   };
-  const st = map[status] || map.Pending;
+  const s = map[status] || map['Pending'];
   return (
     <span style={{
-      fontSize: '0.54rem', fontWeight: 900, padding: '2px 8px', borderRadius: '20px',
-      background: st.bg, color: st.color, border: `1px solid ${st.border}`,
-      letterSpacing: '0.5px', whiteSpace: 'nowrap', flexShrink: 0,
+      fontSize: '0.48rem', fontWeight: 800, padding: '3px 9px', borderRadius: 99,
+      background: s.bg, color: s.c, border: `1px solid ${s.c}44`,
+      letterSpacing: '1px', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif'
     }}>
-      {status?.toUpperCase()}
+      {s.label}
     </span>
   );
 };
 
-const MetaChip = ({ icon: Icon, label, className = '' }) => (
-  <div className={className} style={{
-    display: 'flex', alignItems: 'center', gap: '5px',
-    fontSize: '0.68rem', color: '#555', fontWeight: 600,
-  }}>
-    <Icon size={10} color="#555" />
-    <span>{label}</span>
+const ClientStatusDot = ({ client, now }) => {
+  if (!client.isActive) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.danger, display: 'inline-block', flexShrink: 0 }} />;
+  const exp = client.config?.planExpiry;
+  if (!exp || new Date(exp) < now) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.warning, display: 'inline-block', flexShrink: 0 }} />;
+  const soon = new Date(now); soon.setDate(soon.getDate() + 30);
+  if (new Date(exp) <= soon) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.goldLight, display: 'inline-block', animation: 'pulse-gold 2s infinite', flexShrink: 0 }} />;
+  return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.gold, display: 'inline-block', flexShrink: 0 }} />;
+};
+
+const LabeledInput = ({ label, required, hint, children }) => (
+  <div>
+    <label style={{
+      display: 'block', marginBottom: 7,
+      fontSize: '0.54rem', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase',
+      color: required ? C.gold : C.textDim, fontFamily: 'Syne, sans-serif'
+    }}>
+      {label}{required && <span style={{ color: C.danger, marginLeft: 3 }}>*</span>}
+    </label>
+    {children}
+    {hint && <div style={{ fontSize: '0.55rem', color: C.textFaint, marginTop: 5 }}>{hint}</div>}
   </div>
 );
 
-/* ─────────────────────────────────────────────
-   MAIN COMPONENT
-───────────────────────────────────────────── */
+const inp = {
+  width: '100%', padding: '11px 14px',
+  background: '#0a0800', border: `1px solid ${C.borderMid}`,
+  color: C.text, borderRadius: 10, fontSize: '0.82rem',
+  outline: 'none', boxSizing: 'border-box',
+  fontFamily: 'DM Sans, sans-serif',
+};
+
+const SectionDivider = () => (
+  <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${C.borderMid}, transparent)`, margin: '18px 0' }} />
+);
+
+/* ─────────────────────────────────────────
+   MAIN EXPORT
+───────────────────────────────────────── */
 export default function PratyekshaMasterAdmin() {
-  const [activeSection, setActiveSection] = useState('clients');
+  // Default to demos tab on first load
+  const [activeSection, setActiveSection] = useState('demos');
   const [clients,       setClients]       = useState([]);
-  const [stats,         setStats]         = useState({ totalRevenue: 0, activeCount: 0, topClients: [] });
+  const [stats,         setStats]         = useState({ totalRevenue: 0, activeCount: 0, expiredCount: 0, disabledCount: 0, expiringSoon: 0, topClients: [], totalClients: 0 });
   const [loading,       setLoading]       = useState(true);
   const [searchTerm,    setSearchTerm]    = useState('');
   const [sidebarOpen,   setSidebarOpen]   = useState(false);
+  const [clientFilter,  setClientFilter]  = useState('all');
 
   const [demoRequests,  setDemoRequests]  = useState([]);
   const [demoLoading,   setDemoLoading]   = useState(false);
-  const [demoFilter,    setDemoFilter]    = useState('all');
+  const [demoFilter,    setDemoFilter]    = useState('Pending');
   const [demoSearch,    setDemoSearch]    = useState('');
   const [selectedDemo,  setSelectedDemo]  = useState(null);
 
-  /* ── fetchers ── */
-  const fetchData = async () => {
+  const [onboarding, setOnboarding] = useState({
+    name: '', businessType: 'Restaurant', ownerName: '', contact: '', gstin: '',
+    street: '', city: '', state: '', pincode: '',
+    tableCount: '12', taxPercentage: '5',
+    username: '', password: '', confirmPassword: '',
+    planMonths: '12', paidAmount: '', googleReview: '', instaId: ''
+  });
+  const [onboardLoading,  setOnboardLoading]  = useState(false);
+  const [onboardSuccess,  setOnboardSuccess]  = useState(null);
+  const [onboardError,    setOnboardError]    = useState('');
+  const [showPassword,    setShowPassword]    = useState(false);
+  const [copied,          setCopied]          = useState('');
+
+  const now = new Date();
+
+  /* ── Fetch ── */
+  const fetchData = useCallback(async () => {
     try {
       const [cRes, sRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/master/tenants`),
         axios.get(`${BASE_URL}/admin/master/analytics`),
       ]);
-      setClients(cRes.data);
-      setStats(sRes.data);
+      setClients(cRes.data || []);
+      setStats(sRes.data || {});
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  const fetchDemos = async () => {
+  const fetchDemos = useCallback(async () => {
     setDemoLoading(true);
     try {
       const r = await axios.get(`${BASE_URL}/admin/master/demo-requests`);
       setDemoRequests(r.data || []);
     } catch (e) { console.error(e); }
     finally { setDemoLoading(false); }
-  };
+  }, []);
 
   useEffect(() => { fetchData(); fetchDemos(); }, []);
 
-  /* ── helpers ── */
+  /* ── Helpers ── */
   const getClientStatus = (c) => {
+    if (!c.isActive) return { label: 'DISABLED', color: C.danger };
     const exp = c.config?.planExpiry;
-    if (!exp || new Date(exp) < new Date()) return { label: 'PENDING', color: '#ffcc00' };
-    return { label: 'ACTIVE', color: '#d3bfa2' };
+    if (!exp || new Date(exp) < now) return { label: 'EXPIRED', color: C.warning };
+    const soon = new Date(now); soon.setDate(soon.getDate() + 30);
+    if (new Date(exp) <= soon) return { label: 'EXPIRING', color: C.goldLight };
+    return { label: 'ACTIVE', color: C.gold };
   };
 
-  const handleActivate = async (id, name) => {
-    const amt = prompt(`Enter payment from ${name}:`, '1200');
+  const getDaysLeft = (c) => {
+    const exp = c.config?.planExpiry;
+    if (!exp) return null;
+    return Math.ceil((new Date(exp) - now) / (1000 * 60 * 60 * 24));
+  };
+
+  const handleRenew = async (client) => {
+    const months = prompt(`Renew "${client.name}" — plan months:`, '12');
+    if (!months) return;
+    const amt = prompt(`Amount received from ${client.name} (₹):`, '1200');
     if (!amt) return;
     try {
-      await axios.patch(`${BASE_URL}/admin/master/settle-subscription/${id}`, { paidAmount: Number(amt) });
+      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: Number(months), paidAmount: Number(amt) });
       fetchData();
-    } catch { alert('Activation failed.'); }
+    } catch { alert('Renewal failed.'); }
+  };
+
+  const handleToggle = async (client) => {
+    const action = client.isActive ? 'disable' : 're-enable';
+    if (!window.confirm(`${action.toUpperCase()} account for "${client.name}"?`)) return;
+    try {
+      await axios.patch(`${BASE_URL}/admin/master/toggle-tenant/${client._id}`);
+      fetchData();
+    } catch { alert('Toggle failed.'); }
   };
 
   const markDone = async (id) => {
@@ -297,11 +361,49 @@ export default function PratyekshaMasterAdmin() {
   const navTo = (sec) => { setActiveSection(sec); setSidebarOpen(false); setSelectedDemo(null); };
   const refresh = () => { fetchData(); fetchDemos(); };
 
-  /* ── derived ── */
-  const filteredClients = clients.filter(c =>
-    c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.tenantId?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const copyText = (text, key) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(key);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
+  /* ── Onboard ── */
+  const handleOnboard = async () => {
+    if (!onboarding.name || !onboarding.username || !onboarding.password) {
+      setOnboardError('Restaurant name, username and password are required.'); return;
+    }
+    if (onboarding.password !== onboarding.confirmPassword) {
+      setOnboardError('Passwords do not match.'); return;
+    }
+    if (onboarding.password.length < 6) {
+      setOnboardError('Password must be at least 6 characters.'); return;
+    }
+    setOnboardLoading(true); setOnboardError('');
+    try {
+      const res = await axios.post(`${BASE_URL}/admin/master/onboard`, {
+        ...onboarding,
+        tableCount: Number(onboarding.tableCount),
+        taxPercentage: Number(onboarding.taxPercentage),
+        planMonths: Number(onboarding.planMonths),
+        paidAmount: Number(onboarding.paidAmount),
+      });
+      setOnboardSuccess({ tenantId: res.data.tenantId, username: onboarding.username, password: onboarding.password, name: onboarding.name });
+      setOnboarding({ name: '', businessType: 'Restaurant', ownerName: '', contact: '', gstin: '', street: '', city: '', state: '', pincode: '', tableCount: '12', taxPercentage: '5', username: '', password: '', confirmPassword: '', planMonths: '12', paidAmount: '', googleReview: '', instaId: '' });
+      fetchData();
+    } catch (err) {
+      setOnboardError(err.response?.data?.error || 'Onboarding failed.');
+    } finally { setOnboardLoading(false); }
+  };
+
+  /* ── Derived ── */
+  const filteredClients = clients
+    .filter(c => {
+      if (clientFilter === 'active')   return c.isActive && c.config?.planExpiry && new Date(c.config.planExpiry) > now;
+      if (clientFilter === 'expired')  return c.isActive && (!c.config?.planExpiry || new Date(c.config.planExpiry) <= now);
+      if (clientFilter === 'disabled') return !c.isActive;
+      return true;
+    })
+    .filter(c => !searchTerm || c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.tenantId?.toLowerCase().includes(searchTerm.toLowerCase()) || c.address?.city?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const demoCounts = {
     all:          demoRequests.length,
@@ -312,439 +414,272 @@ export default function PratyekshaMasterAdmin() {
 
   const filteredDemos = demoRequests.filter(r => {
     const okFilter = demoFilter === 'all' || r.status === demoFilter;
-    const okSearch = !demoSearch ||
-      r.name?.toLowerCase().includes(demoSearch.toLowerCase()) ||
-      r.restaurant?.toLowerCase().includes(demoSearch.toLowerCase()) ||
-      r.phone?.includes(demoSearch) ||
-      r.city?.toLowerCase().includes(demoSearch.toLowerCase());
+    const okSearch = !demoSearch || r.name?.toLowerCase().includes(demoSearch.toLowerCase()) || r.restaurant?.toLowerCase().includes(demoSearch.toLowerCase()) || r.phone?.includes(demoSearch) || r.city?.toLowerCase().includes(demoSearch.toLowerCase());
     return okFilter && okSearch;
   });
 
-  /* ── loader ── */
+  /* ── Loader ── */
   if (loading) return (
-    <div style={{
-      height: '100vh', width: '100vw', background: '#000', color: '#d3bfa2',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      letterSpacing: '4px', fontWeight: 900, fontSize: '0.8rem',
-      fontFamily: "'Outfit', sans-serif",
-    }}>
-      ACCESSING PRATYEKSHA MAIN...
+    <div style={{ height: '100vh', background: C.bgDark, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20 }}>
+      <div style={{ width: 48, height: 48, borderRadius: '50%', border: `2px solid ${C.borderMid}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite' }} />
+      <div style={{ fontSize: '0.62rem', fontWeight: 800, letterSpacing: '4px', color: C.textDim, fontFamily: 'Syne, sans-serif' }}>PRATYEKSHA MAIN</div>
     </div>
   );
 
-  /* ═══════════════════════════════════════════
-     RENDER
-  ═══════════════════════════════════════════ */
-  return (
-    <div style={{
-      display: 'flex', width: '100vw', height: '100vh',
-      background: '#050505', color: '#fff',
-      fontFamily: "'Outfit', sans-serif",
-      overflow: 'hidden', position: 'fixed', top: 0, left: 0,
-    }}>
+  const NavItem = ({ id, label, icon: Icon, count, urgent }) => {
+    const isActive = activeSection === id;
+    return (
+      <button onClick={() => navTo(id)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 12px', borderRadius: 10, cursor: 'pointer', border: 'none',
+        background: isActive ? C.goldFaint : 'transparent',
+        color: isActive ? C.gold : C.textDim,
+        fontSize: '0.66rem', fontWeight: isActive ? 700 : 500, letterSpacing: '0.3px',
+        fontFamily: 'Syne, sans-serif', textAlign: 'left',
+        outline: isActive ? `1px solid rgba(193,155,90,0.15)` : '1px solid transparent',
+        transition: 'all 0.15s',
+      }}>
+        <Icon size={14} strokeWidth={isActive ? 2 : 1.5} />
+        <span style={{ flex: 1 }}>{label}</span>
+        {count !== undefined && count > 0 && (
+          <span style={{
+            fontSize: '0.5rem', fontWeight: 800, padding: '1px 6px', borderRadius: 99,
+            background: urgent ? `rgba(193,155,90,0.2)` : C.textFaint,
+            color: urgent ? C.gold : C.textDim, fontFamily: 'Syne, sans-serif'
+          }}>{count}</span>
+        )}
+      </button>
+    );
+  };
 
-      {/* ── MOBILE TOPBAR ── */}
-      <div className="pma-topbar">
-        <button onClick={() => setSidebarOpen(true)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}>
-          <Menu size={20} color="#d3bfa2" />
+  /* ════════════════════════════════════════
+     RENDER
+  ════════════════════════════════════════ */
+  return (
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: C.bg, color: C.text, overflow: 'hidden', position: 'fixed', top: 0, left: 0, fontFamily: 'DM Sans, sans-serif' }}>
+
+      {/* Mobile topbar */}
+      <div className="p-topbar">
+        <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', color: C.gold }}>
+          <Menu size={20} />
         </button>
-        <span style={{ fontSize: '0.82rem', fontWeight: 900, letterSpacing: '3px', color: '#d3bfa2' }}>
-          PRATYEKSHA
-        </span>
-        <button onClick={refresh}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}>
-          <RefreshCcw size={16} color="#d3bfa2" />
+        <span style={{ fontSize: '0.78rem', fontWeight: 800, letterSpacing: '3px', color: C.gold, fontFamily: 'Syne, sans-serif' }}>PRATYEKSHA</span>
+        <button onClick={refresh} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', color: C.textDim }}>
+          <RefreshCcw size={16} />
         </button>
       </div>
 
-      {/* ── BACKDROP ── */}
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)',
-          zIndex: 148, backdropFilter: 'blur(2px)',
-        }} />
-      )}
+      {/* Backdrop */}
+      <div className={`p-backdrop${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
-      {/* ════════════ SIDEBAR ════════════ */}
-      <aside className={`pma-sidebar no-sb${sidebarOpen ? ' open' : ''}`}>
+      {/* ════════ SIDEBAR ════════ */}
+      <aside className={`p-sidebar${sidebarOpen ? ' open' : ''}`}>
+        <div className="p-sidebar-inner no-sb">
 
-        {/* close btn visible on mobile */}
-        <button onClick={() => setSidebarOpen(false)} style={{
-          display: 'none', background: 'none', border: 'none', cursor: 'pointer',
-          alignSelf: 'flex-end', marginBottom: 12, padding: 4,
-          // shown via inline style trick
-          ...(typeof window !== 'undefined' && window.innerWidth <= 768
-            ? { display: 'flex' } : {}),
-        }}>
-          <X size={18} color="#555" />
-        </button>
-
-        {/* logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10, background: '#d3bfa2',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <Zap color="#000" size={17} fill="#000" />
+          {/* Brand */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 32, paddingBottom: 20, borderBottom: `1px solid ${C.borderMid}` }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 9,
+              background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <Zap size={15} color="#000" fill="#000" />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '2.5px', color: C.text, fontFamily: 'Syne, sans-serif', lineHeight: 1 }}>PRATYEKSHA</div>
+              <div style={{ fontSize: '0.5rem', color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginTop: 2 }}>CONTROL CENTRE</div>
+            </div>
           </div>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: 900, letterSpacing: '3px', color: '#fff', margin: 0 }}>
-            PRATYEKSHA
-          </h2>
-        </div>
 
-        {/* Revenue block */}
-        <p style={{ fontSize: '0.56rem', color: '#333', fontWeight: 900, letterSpacing: '2px', margin: '0 0 10px' }}>
-          BUSINESS REVENUE
-        </p>
-        <small style={{ color: '#444', fontSize: '0.63rem' }}>Total Earnings</small>
-        <h2 style={{ margin: '4px 0 14px', fontSize: '1.55rem', fontWeight: 900, color: '#d3bfa2' }}>
-          ₹{stats.totalRevenue?.toLocaleString() || 0}
-        </h2>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-          {[
-            { icon: <Users size={13} color="#d3bfa2" />, label: `${stats.activeCount} Active` },
-            { icon: <TrendingUp size={13} color="#d3bfa2" />, label: `${clients.length} Total` },
-          ].map(({ icon, label }) => (
-            <div key={label} style={{
-              flex: 1, padding: '8px', background: '#0d0d0d', borderRadius: 8,
-              display: 'flex', alignItems: 'center', gap: 6,
-              fontSize: '0.64rem', color: '#888', border: '1px solid #151515',
-            }}>
-              {icon}{label}
+          {/* Revenue metric */}
+          <div style={{ marginBottom: 24, padding: '16px', background: C.bgCard, border: `1px solid ${C.borderMid}`, borderRadius: 12, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, width: 60, height: 60, borderRadius: '0 12px 0 60px', background: `rgba(193,155,90,0.04)` }} />
+            <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', marginBottom: 8, fontFamily: 'Syne, sans-serif' }}>TOTAL REVENUE</div>
+            <div style={{ fontSize: '1.55rem', fontWeight: 800, color: C.gold, fontFamily: 'Syne, sans-serif', lineHeight: 1, marginBottom: 10 }}>
+              ₹{(stats.totalRevenue || 0).toLocaleString()}
             </div>
-          ))}
-        </div>
-
-        <Divider />
-
-        {/* Navigation */}
-        <p style={{ fontSize: '0.56rem', color: '#333', fontWeight: 900, letterSpacing: '2px', margin: '0 0 10px' }}>
-          NAVIGATION
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-          {[
-            { id: 'clients', label: 'CLIENT PARTNERS', icon: <Building2 size={13} />, count: clients.length },
-            { id: 'demos',   label: 'DEMO REQUESTS',   icon: <CalendarClock size={13} />, count: demoCounts.Pending, highlight: demoCounts.Pending > 0 },
-          ].map(({ id, label, icon, count, highlight }) => (
-            <button key={id} onClick={() => navTo(id)} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
-              fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.5px',
-              transition: 'all 0.15s', width: '100%', textAlign: 'left',
-              background: activeSection === id ? 'rgba(211,191,162,0.08)' : 'transparent',
-              color:      activeSection === id ? '#d3bfa2' : '#444',
-              border:     activeSection === id ? '1px solid rgba(211,191,162,0.18)' : '1px solid transparent',
-            }}>
-              {icon}
-              <span style={{ flex: 1 }}>{label}</span>
-              <span style={{
-                fontSize: '0.54rem', fontWeight: 900, padding: '1px 7px',
-                borderRadius: 10, flexShrink: 0,
-                background: highlight ? 'rgba(211,191,162,0.15)' : '#111',
-                color: highlight ? '#d3bfa2' : '#333',
-              }}>{count}</span>
-            </button>
-          ))}
-        </div>
-
-        <Divider />
-
-        {/* Top clients */}
-        <h4 style={{ color: '#d3bfa2', fontSize: '0.68rem', fontWeight: 900, marginBottom: 14, display: 'flex', alignItems: 'center' }}>
-          <Trophy size={13} style={{ marginRight: 7 }} /> HIGH BENEFICIARIES
-        </h4>
-        <div className="no-sb" style={{ flex: 1, overflowY: 'auto', marginBottom: 14 }}>
-          {stats.topClients?.map((c, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
-              background: 'linear-gradient(90deg,#0d0d0d,transparent)',
-              padding: '8px 10px', borderRadius: 8,
-            }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 900, color: '#222' }}>{i + 1}</span>
-              <div>
-                <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#fff' }}>{c.name?.split(' ')[0]}</div>
-                <div style={{ fontSize: '0.64rem', color: '#444' }}>₹{c.revenue}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={refresh} style={{
-          width: '100%', padding: '11px', background: '#000', border: '1px solid #1a1a1a',
-          color: '#d3bfa2', borderRadius: 8, fontSize: '0.6rem', fontWeight: 900,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 8, marginTop: 'auto', flexShrink: 0, fontFamily: "'Outfit', sans-serif",
-        }}>
-          <RefreshCcw size={13} /> REFRESH CORE
-        </button>
-      </aside>
-
-      {/* ════════════ MAIN AREA ════════════ */}
-      <main className="pma-main" style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        height: '100vh', overflow: 'hidden', minWidth: 0,
-      }}>
-
-        {/* ══ CLIENTS SECTION ══ */}
-        {activeSection === 'clients' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-            {/* Header */}
-            <header className="pma-section-header" style={{
-              padding: '26px 40px 18px', display: 'flex', justifyContent: 'space-between',
-              alignItems: 'center', background: '#050505', flexShrink: 0,
-              borderBottom: '1px solid #0d0d0d', flexWrap: 'wrap', gap: 10,
-            }}>
-              <div>
-                <h1 style={{ fontSize: '1.55rem', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-                  System Control
-                </h1>
-                <p style={{ color: '#333', margin: '4px 0 0', fontWeight: 600, fontSize: '0.74rem' }}>
-                  Full lifecycle management.
-                </p>
-              </div>
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <Search size={13} color="#555" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  className="pma-search-input"
-                  placeholder="Search partners..."
-                  style={{
-                    background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 10,
-                    padding: '10px 14px 10px 38px', color: '#fff', width: 210, outline: 'none',
-                    fontSize: '0.76rem', fontFamily: "'Outfit', sans-serif",
-                  }}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </header>
-
-            {/* Mobile stats strip */}
-            <div className="pma-mob-stats">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {[
-                { val: clients.length,                           lbl: 'Total Clients' },
-                { val: stats.activeCount,                        lbl: 'Active' },
-                { val: `₹${((stats.totalRevenue||0)/1000).toFixed(0)}k`, lbl: 'Revenue' },
-              ].map(({ val, lbl }) => (
-                <div key={lbl} style={{
-                  flex: 1, background: '#0d0d0d', border: '1px solid #151515',
-                  borderRadius: 10, padding: '10px 8px',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                }}>
-                  <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#d3bfa2' }}>{val}</span>
-                  <span style={{ fontSize: '0.54rem', color: '#555', fontWeight: 700, textTransform: 'uppercase' }}>{lbl}</span>
+                { val: stats.activeCount || 0, lbl: 'Active', c: C.gold },
+                { val: stats.expiredCount || 0, lbl: 'Expired', c: C.warning },
+                { val: stats.disabledCount || 0, lbl: 'Disabled', c: C.danger },
+                { val: stats.totalClients || 0, lbl: 'Total', c: C.textMid },
+              ].map(s => (
+                <div key={s.lbl} style={{ background: C.bgDark, padding: '7px 9px', borderRadius: 7, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: s.c, lineHeight: 1, fontFamily: 'Syne, sans-serif' }}>{s.val}</div>
+                  <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 600, marginTop: 3, letterSpacing: '0.5px' }}>{s.lbl.toUpperCase()}</div>
                 </div>
               ))}
             </div>
-
-            {/* Table */}
-            <div className="pma-table-wrap no-sb">
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', minWidth: 380 }}>
-                <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#050505' }}>
-                  <tr style={{ textAlign: 'left', color: '#333', fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
-                    <th style={{ paddingLeft: 20, paddingBottom: 8 }}>PARTNER</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8 }}>CATEGORY</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8 }}>EXPIRY</th>
-                    <th style={{ paddingBottom: 8 }}>STATUS</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8 }}>COLLECTED</th>
-                    <th style={{ textAlign: 'right', paddingRight: 20, paddingBottom: 8 }}>ACTION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClients.map((client) => {
-                    const st = getClientStatus(client);
-                    return (
-                      <motion.tr layout key={client._id} style={{ background: '#0a0a0a' }}>
-                        <td style={{ paddingLeft: 20, paddingTop: 13, paddingBottom: 13 }}>
-                          <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 170 }}>
-                            {client.name}
-                          </div>
-                          <div style={{ fontSize: '0.6rem', color: '#2a2a2a', fontFamily: 'monospace' }}>
-                            {client.tenantId}
-                          </div>
-                        </td>
-                        <td className="hide-mob">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {client.businessType === 'Cafe'
-                              ? <Coffee size={11} color="#888" />
-                              : <Utensils size={11} color="#888" />}
-                            <span style={{ color: '#555', fontSize: '0.58rem', fontWeight: 900 }}>
-                              {client.businessType?.toUpperCase() || 'RESTAURANT'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="hide-mob">
-                          <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#d3bfa2', whiteSpace: 'nowrap' }}>
-                            {client.config?.planExpiry
-                              ? new Date(client.config.planExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                              : 'NOT SET'}
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: st.color }}>
-                            {st.label === 'ACTIVE'
-                              ? <ShieldCheck size={11} />
-                              : <AlertCircle size={11} />}
-                            <span style={{ fontWeight: 900, fontSize: '0.6rem' }}>{st.label}</span>
-                          </div>
-                        </td>
-                        <td className="hide-mob" style={{ fontWeight: 900, color: '#fff', fontSize: '0.88rem' }}>
-                          ₹{client.totalPaidAmount || 0}
-                        </td>
-                        <td style={{ textAlign: 'right', paddingRight: 20 }}>
-                          <button
-                            onClick={() => handleActivate(client._id, client.name)}
-                            style={{
-                              padding: '7px 13px', borderRadius: 7,
-                              fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer',
-                              whiteSpace: 'nowrap', fontFamily: "'Outfit', sans-serif",
-                              ...(st.label === 'PENDING'
-                                ? { background: '#d3bfa2', border: 'none', color: '#000' }
-                                : { background: 'transparent', border: '1px solid #1a1a1a', color: '#444' }),
-                            }}
-                          >
-                            {st.label === 'PENDING' ? 'ACTIVATE' : 'RENEW'}
-                          </button>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
-        )}
 
-        {/* ══ DEMO REQUESTS SECTION ══ */}
+          {/* Nav */}
+          <div style={{ fontSize: '0.48rem', color: C.textFaint, fontWeight: 700, letterSpacing: '2.5px', marginBottom: 8, paddingLeft: 12, fontFamily: 'Syne, sans-serif' }}>NAVIGATION</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
+            <NavItem id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
+            <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
+            <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
+            <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
+          </div>
+
+          <SectionDivider />
+
+          {/* Top clients */}
+          <div style={{ fontSize: '0.48rem', color: C.textFaint, fontWeight: 700, letterSpacing: '2.5px', marginBottom: 12, paddingLeft: 4, fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Trophy size={10} color={C.textDim} /> HIGH BENEFICIARIES
+          </div>
+          <div className="no-sb" style={{ flex: 1, overflowY: 'auto' }}>
+            {(stats.topClients || []).map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '7px 10px', borderRadius: 8, background: C.bgCard }}>
+                <div style={{ fontSize: '0.6rem', fontWeight: 800, color: C.textFaint, fontFamily: 'Syne, sans-serif', width: 14 }}>{i + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize: '0.58rem', color: C.goldDim, fontWeight: 600 }}>₹{(c.revenue || 0).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <SectionDivider />
+          <button onClick={refresh} style={{
+            width: '100%', padding: '10px', background: C.bgCard, border: `1px solid ${C.borderMid}`,
+            color: C.textDim, borderRadius: 10, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px',
+          }}>
+            <RefreshCcw size={12} /> REFRESH
+          </button>
+        </div>
+      </aside>
+
+      {/* ════════ MAIN ════════ */}
+      <main className="p-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', minWidth: 0 }}>
+
+        {/* ══ DEMO REQUESTS ══ */}
         {activeSection === 'demos' && (
           <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
 
-            {/* List panel — hidden on mobile when drawer is open */}
-            <div style={{
-              flex: 1, display: selectedDemo ? 'none' : 'flex',
-              flexDirection: 'column', overflow: 'hidden',
-            }}
-              /* On desktop always show */
-              className="pma-demo-list-panel"
-            >
+            {/* List panel */}
+            <div className={`p-demo-list${selectedDemo ? ' has-detail' : ''}`}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
               {/* Header */}
-              <header className="pma-section-header" style={{
-                padding: '26px 40px 18px', display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', background: '#050505', flexShrink: 0,
-                borderBottom: '1px solid #0d0d0d', flexWrap: 'wrap', gap: 10,
-              }}>
-                <div>
-                  <h1 style={{ fontSize: '1.55rem', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
-                    Demo Requests
-                  </h1>
-                  <p style={{ color: '#333', margin: '4px 0 0', fontWeight: 600, fontSize: '0.74rem' }}>
-                    {demoCounts.Pending} pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} done
-                  </p>
+              <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>INBOUND PIPELINE</div>
+                    <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Demo Requests</h1>
+                    <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>
+                      <span style={{ color: C.gold, fontWeight: 700 }}>{demoCounts.Pending}</span> pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} completed
+                    </div>
+                  </div>
+                  {/* Search */}
+                  <div style={{ position: 'relative' }}>
+                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input className="p-inp" placeholder="Search requests…" value={demoSearch}
+                      onChange={e => setDemoSearch(e.target.value)}
+                      style={{ ...inp, paddingLeft: 38, width: 200, borderRadius: 10, fontSize: '0.76rem' }} />
+                  </div>
                 </div>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <Search size={13} color="#555" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    className="pma-search-input"
-                    placeholder="Search..."
-                    value={demoSearch}
-                    onChange={e => setDemoSearch(e.target.value)}
-                    style={{
-                      background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 10,
-                      padding: '10px 14px 10px 38px', color: '#fff', width: 210, outline: 'none',
-                      fontSize: '0.76rem', fontFamily: "'Outfit', sans-serif",
-                    }}
-                  />
-                </div>
-              </header>
+              </div>
 
               {/* Filter tabs */}
-              <div className="pma-filter-row no-sb">
-                {['all', 'Pending', 'Contacted', 'Demo Given'].map(f => (
-                  <button key={f} onClick={() => setDemoFilter(f)} style={{
-                    padding: '11px 14px', background: 'transparent', border: 'none',
-                    cursor: 'pointer', fontSize: '0.62rem', fontWeight: 900, letterSpacing: '0.5px',
-                    display: 'flex', alignItems: 'center', transition: 'all 0.15s',
-                    whiteSpace: 'nowrap', flexShrink: 0,
-                    color:        demoFilter === f ? '#d3bfa2' : '#444',
-                    borderBottom: demoFilter === f ? '2px solid #d3bfa2' : '2px solid transparent',
-                    background:   demoFilter === f ? 'rgba(211,191,162,0.06)' : 'transparent',
-                    fontFamily: "'Outfit', sans-serif",
+              <div className="p-filterbar" style={{ padding: '0 36px' }}>
+                {[
+                  { id: 'all', label: 'ALL', count: demoCounts.all },
+                  { id: 'Pending', label: 'PENDING', count: demoCounts.Pending, urgent: true },
+                  { id: 'Contacted', label: 'CONTACTED', count: demoCounts.Contacted },
+                  { id: 'Demo Given', label: 'DONE', count: demoCounts['Demo Given'] },
+                ].map(f => (
+                  <button key={f.id} onClick={() => setDemoFilter(f.id)} style={{
+                    padding: '11px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: '0.58rem', fontWeight: 700, letterSpacing: '1px', whiteSpace: 'nowrap', flexShrink: 0,
+                    color: demoFilter === f.id ? C.gold : C.textDim,
+                    borderBottom: `2px solid ${demoFilter === f.id ? C.gold : 'transparent'}`,
+                    fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 7,
+                    transition: 'all 0.15s',
                   }}>
-                    {f === 'all' ? 'ALL' : f === 'Demo Given' ? 'DONE' : f.toUpperCase()}
-                    <span style={{
-                      marginLeft: 6, fontSize: '0.56rem', fontWeight: 900,
-                      padding: '1px 6px', borderRadius: 10,
-                      background: demoFilter === f ? 'rgba(211,191,162,0.15)' : '#111',
-                      color: demoFilter === f ? '#d3bfa2' : '#333',
-                    }}>
-                      {f === 'all' ? demoCounts.all : demoCounts[f] || 0}
-                    </span>
+                    {f.label}
+                    {f.count > 0 && (
+                      <span style={{
+                        fontSize: '0.5rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99,
+                        background: demoFilter === f.id ? 'rgba(193,155,90,0.15)' : C.bgCard,
+                        color: demoFilter === f.id ? C.gold : C.textDim,
+                        border: `1px solid ${demoFilter === f.id ? 'rgba(193,155,90,0.3)' : C.border}`,
+                        fontFamily: 'Syne, sans-serif'
+                      }}>{f.count}</span>
+                    )}
                   </button>
                 ))}
               </div>
 
-              {/* Demo cards */}
-              <div className="pma-demo-scroll no-sb">
+              {/* List */}
+              <div className="p-scroll no-sb" style={{ padding: '16px 36px 40px' }}>
                 {demoLoading ? (
-                  <div style={{ textAlign: 'center', padding: '60px 20px', color: '#333', fontSize: '0.78rem', fontWeight: 700 }}>
-                    LOADING REQUESTS...
+                  <div style={{ textAlign: 'center', padding: '60px 0', color: C.textFaint }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${C.borderMid}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite', margin: '0 auto 12px' }} />
+                    <div style={{ fontSize: '0.66rem', fontWeight: 600, letterSpacing: '2px', fontFamily: 'Syne, sans-serif' }}>LOADING</div>
                   </div>
                 ) : filteredDemos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '60px 20px', color: '#222', fontSize: '0.78rem', fontWeight: 700 }}>
-                    NO REQUESTS FOUND
+                  <div style={{ textAlign: 'center', padding: '80px 0', color: C.textFaint }}>
+                    <CalendarClock size={32} color={C.borderMid} style={{ marginBottom: 12 }} />
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>NO REQUESTS FOUND</div>
                   </div>
-                ) : filteredDemos.map((req) => {
+                ) : filteredDemos.map(req => {
                   const isSelected = selectedDemo?._id === req._id;
                   return (
-                    <motion.div
-                      key={req._id}
-                      layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
+                    <motion.div key={req._id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      className="p-demo-card"
                       onClick={() => setSelectedDemo(isSelected ? null : req)}
                       style={{
-                        padding: '15px 16px', borderRadius: 12, marginBottom: 8,
-                        border: '1px solid #111', transition: 'all 0.15s', cursor: 'pointer',
-                        background: isSelected ? 'rgba(211,191,162,0.05)' : '#0a0a0a',
-                        borderLeft: isSelected ? '3px solid #d3bfa2' : '3px solid transparent',
-                      }}
-                    >
-                      {/* Top row */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 9 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.92rem', fontWeight: 900, color: '#fff' }}>{req.name}</span>
-                            <StatusBadge status={req.status} />
+                        padding: '16px 18px', borderRadius: 14, marginBottom: 8,
+                        background: isSelected ? C.bgCard2 : C.bgCard,
+                        border: `1px solid ${isSelected ? 'rgba(193,155,90,0.25)' : C.border}`,
+                        borderLeft: `3px solid ${isSelected ? C.gold : 'transparent'}`,
+                      }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: C.text }}>{req.name}</span>
+                            <StatusChip status={req.status} />
                           </div>
-                          <div style={{ fontSize: '0.76rem', color: '#8a704d', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: '0.72rem', color: C.goldDim, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {req.restaurant}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8, flexShrink: 0 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                           {req.status !== 'Demo Given' && (
-                            <button
-                              onClick={e => { e.stopPropagation(); markDone(req._id); }}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 4,
-                                padding: '5px 9px', background: 'rgba(211,191,162,0.06)',
-                                border: '1px solid rgba(211,191,162,0.18)', color: '#d3bfa2',
-                                borderRadius: 6, fontSize: '0.54rem', fontWeight: 900,
-                                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Outfit', sans-serif",
-                              }}
-                            >
+                            <button onClick={e => { e.stopPropagation(); markDone(req._id); }} style={{
+                              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                              background: C.goldFaint, border: `1px solid rgba(193,155,90,0.2)`,
+                              color: C.gold, borderRadius: 7, fontSize: '0.52rem', fontWeight: 700,
+                              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif',
+                            }}>
                               <CheckCircle2 size={11} /> DONE
                             </button>
                           )}
-                          <ChevronRight size={14} color={isSelected ? '#d3bfa2' : '#333'} />
+                          <ChevronRight size={14} color={isSelected ? C.gold : C.textDim} />
                         </div>
                       </div>
-                      {/* Meta row */}
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        <MetaChip icon={Phone} label={req.phone} />
-                        {req.city  && <MetaChip icon={MapPin} label={req.city} />}
-                        {req.type  && <MetaChip icon={Utensils} label={req.type} className="hide-mob" />}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.66rem', color: '#333', fontWeight: 600, marginLeft: 'auto' }}>
-                          <Clock size={10} color="#333" />
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }}>
+                          <Phone size={10} color={C.textDim} strokeWidth={1.5} />
+                          {req.phone}
+                        </div>
+                        {req.city && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }} className="hide-mob">
+                            <MapPin size={10} color={C.textDim} strokeWidth={1.5} />
+                            {req.city}
+                          </div>
+                        )}
+                        {req.type && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }} className="hide-mob">
+                            <Utensils size={10} color={C.textDim} strokeWidth={1.5} />
+                            {req.type}
+                          </div>
+                        )}
+                        <div style={{ marginLeft: 'auto', fontSize: '0.6rem', color: C.textFaint, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Clock size={9} color={C.textFaint} strokeWidth={1.5} />
                           {new Date(req.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                         </div>
                       </div>
@@ -754,184 +689,647 @@ export default function PratyekshaMasterAdmin() {
               </div>
             </div>
 
-            {/* ── DETAIL DRAWER ── */}
+            {/* Detail Drawer */}
             <AnimatePresence>
               {selectedDemo && (
-                <motion.div
-                  className="pma-drawer"
+                <motion.div className="p-drawer"
                   initial={{ x: '100%', opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: '100%', opacity: 0 }}
                   transition={{ duration: 0.22, ease: 'easeInOut' }}
-                >
-                  <div className="no-sb" style={{ padding: '22px 20px', height: '100%', overflowY: 'auto' }}>
+                  style={{ width: 340, background: C.bgDark, borderLeft: `1px solid ${C.border}`, height: '100%', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
+                  <div className="no-sb" style={{ height: '100%', overflowY: 'auto', padding: '24px 22px' }}>
 
                     {/* Drawer header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.54rem', color: '#555', fontWeight: 900, letterSpacing: '2px', marginBottom: 5 }}>
-                          DEMO REQUEST DETAIL
-                        </div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#fff' }}>
-                          {selectedDemo.name}
-                        </h3>
-                        <div style={{ fontSize: '0.76rem', color: '#8a704d', fontWeight: 700, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {selectedDemo.restaurant}
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+                      <div>
+                        <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>DEMO DETAIL</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: C.text, fontFamily: 'Syne, sans-serif' }}>{selectedDemo.name}</div>
+                        <div style={{ fontSize: '0.72rem', color: C.goldDim, marginTop: 3 }}>{selectedDemo.restaurant}</div>
                       </div>
-                      <button onClick={() => setSelectedDemo(null)} style={{
-                        background: '#111', border: '1px solid #1a1a1a', color: '#555',
-                        padding: 7, borderRadius: 8, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', flexShrink: 0,
-                      }}>
-                        <X size={15} />
+                      <button onClick={() => setSelectedDemo(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                        <X size={14} />
                       </button>
                     </div>
 
-                    {/* Status picker */}
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: '0.54rem', color: '#444', fontWeight: 900, letterSpacing: '1.5px', marginBottom: 9 }}>
-                        CURRENT STATUS
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                    {/* Status updater */}
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 10 }}>UPDATE STATUS</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                         {['Pending', 'Contacted', 'Demo Given'].map(s => {
-                          const map = {
-                            Pending:      { bg: 'rgba(201,169,110,0.08)', color: '#d3bfa2', border: 'rgba(201,169,110,0.2)' },
-                            Contacted:    { bg: 'rgba(255,255,255,0.04)', color: '#fff',    border: 'rgba(255,255,255,0.12)' },
-                            'Demo Given': { bg: 'rgba(255,255,255,0.02)', color: '#555',    border: '#1a1a1a' },
-                          };
-                          const st = map[s];
                           const isActive = selectedDemo.status === s;
+                          const colors = { 'Pending': C.gold, 'Contacted': C.amber, 'Demo Given': C.textMid };
+                          const c = colors[s];
                           return (
                             <button key={s} onClick={() => updateStatus(selectedDemo._id, s)} style={{
-                              flex: 1, padding: '8px 4px', borderRadius: 8,
-                              border: `1px solid ${isActive ? st.border : '#1a1a1a'}`,
-                              background: isActive ? st.bg : 'transparent',
-                              color: isActive ? st.color : '#333',
-                              fontSize: '0.52rem', fontWeight: 900, cursor: 'pointer',
-                              transition: 'all 0.15s', fontFamily: "'Outfit', sans-serif",
+                              padding: '8px 4px', borderRadius: 9, border: `1px solid ${isActive ? c + '44' : C.border}`,
+                              background: isActive ? `${c}12` : 'transparent',
+                              color: isActive ? c : C.textDim,
+                              fontSize: '0.5rem', fontWeight: 700, cursor: 'pointer',
+                              fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px', transition: 'all 0.15s',
                             }}>
-                              {s.toUpperCase()}
+                              {s === 'Demo Given' ? 'DONE' : s.toUpperCase()}
                             </button>
                           );
                         })}
                       </div>
                     </div>
+                    <SectionDivider />
 
-                    <Divider />
-
-                    {/* Contact info */}
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: '0.54rem', color: '#444', fontWeight: 900, letterSpacing: '1.5px', marginBottom: 12 }}>
-                        CONTACT INFORMATION
-                      </div>
+                    {/* Contact section */}
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 14 }}>CONTACT</div>
                       {[
-                        { icon: <Phone size={13} color="#8a704d" />, label: 'MOBILE', val: selectedDemo.phone, href: `tel:${selectedDemo.phone}`, link: true },
-                        selectedDemo.email && { icon: <Mail size={13} color="#8a704d" />, label: 'EMAIL', val: selectedDemo.email, href: `mailto:${selectedDemo.email}`, link: true },
-                        selectedDemo.city && { icon: <MapPin size={13} color="#8a704d" />, label: 'CITY', val: selectedDemo.city },
+                        { icon: Phone, label: 'MOBILE', val: selectedDemo.phone, href: `tel:${selectedDemo.phone}` },
+                        selectedDemo.email && { icon: Mail, label: 'EMAIL', val: selectedDemo.email, href: `mailto:${selectedDemo.email}` },
+                        selectedDemo.city && { icon: MapPin, label: 'CITY', val: selectedDemo.city },
                       ].filter(Boolean).map(row => (
-                        <div key={row.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '4px 0' }}>
-                          {row.icon}
+                        <div key={row.label} style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: 8, background: C.bgCard, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <row.icon size={12} color={C.goldDim} strokeWidth={1.5} />
+                          </div>
                           <div>
-                            <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: 900, letterSpacing: '1px', marginBottom: 3 }}>{row.label}</div>
-                            {row.link
-                              ? <a href={row.href} style={{ fontSize: '0.78rem', fontWeight: 700, color: '#d3bfa2' }}>{row.val}</a>
-                              : <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fff' }}>{row.val}</div>}
+                            <div style={{ fontSize: '0.46rem', color: C.textDim, fontWeight: 700, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 4 }}>{row.label}</div>
+                            {row.href
+                              ? <a href={row.href} style={{ fontSize: '0.78rem', fontWeight: 600, color: C.gold }}>{row.val}</a>
+                              : <div style={{ fontSize: '0.78rem', fontWeight: 600, color: C.text }}>{row.val}</div>
+                            }
                           </div>
                         </div>
                       ))}
                     </div>
+                    <SectionDivider />
 
-                    <Divider />
-
-                    {/* Establishment profile */}
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: '0.54rem', color: '#444', fontWeight: 900, letterSpacing: '1.5px', marginBottom: 12 }}>
-                        ESTABLISHMENT PROFILE
-                      </div>
+                    {/* Establishment */}
+                    <div style={{ marginBottom: 22 }}>
+                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 14 }}>ESTABLISHMENT</div>
                       {[
-                        { label: 'NAME',    value: selectedDemo.restaurant },
-                        { label: 'TYPE',    value: selectedDemo.type || '—' },
-                        { label: 'TABLES',  value: selectedDemo.tables || '—' },
-                      ].map(row => (
-                        <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #0d0d0d' }}>
-                          <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: 900 }}>{row.label}</span>
-                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#fff', textAlign: 'right', maxWidth: '58%', wordBreak: 'break-word' }}>{row.value}</span>
+                        { l: 'NAME',   v: selectedDemo.restaurant },
+                        { l: 'TYPE',   v: selectedDemo.type   || '—' },
+                        { l: 'TABLES', v: selectedDemo.tables || '—' },
+                      ].map(r => (
+                        <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <span style={{ fontSize: '0.55rem', color: C.textDim, fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>{r.l}</span>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: C.text }}>{r.v}</span>
                         </div>
                       ))}
-                    </div>
-
-                    <Divider />
-
-                    {/* Timeline */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: '0.54rem', color: '#444', fontWeight: 900, letterSpacing: '1.5px', marginBottom: 10 }}>
-                        TIMELINE
-                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0' }}>
-                        <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: 900 }}>SUBMITTED</span>
-                        <span style={{ fontSize: '0.7rem', color: '#888', fontWeight: 700 }}>
-                          {new Date(selectedDemo.createdAt).toLocaleString('en-GB', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
+                        <span style={{ fontSize: '0.55rem', color: C.textDim, fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>SUBMITTED</span>
+                        <span style={{ fontSize: '0.68rem', color: C.textMid }}>
+                          {new Date(selectedDemo.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
                       </div>
                     </div>
+                    <SectionDivider />
 
-                    {/* CTA */}
-                    {selectedDemo.status !== 'Demo Given' ? (
-                      <button onClick={() => markDone(selectedDemo._id)} style={{
-                        width: '100%', padding: '13px', background: '#d3bfa2', color: '#000',
-                        border: 'none', borderRadius: 10, fontSize: '0.74rem', fontWeight: 900,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        gap: 7, marginBottom: 10, fontFamily: "'Outfit', sans-serif",
+                    {/* Actions */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <a href={`tel:${selectedDemo.phone}`} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '13px', background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                        borderRadius: 11, fontSize: '0.68rem', fontWeight: 800,
+                        color: '#000', fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px',
                       }}>
-                        <CheckCircle2 size={14} /> MARK DEMO COMPLETE
+                        <Phone size={13} /> CALL NOW
+                      </a>
+                      <button onClick={() => {
+                        setOnboarding(p => ({ ...p, name: selectedDemo.restaurant || '', contact: selectedDemo.phone || '', tableCount: selectedDemo.tables || '12' }));
+                        navTo('onboard');
+                      }} style={{
+                        padding: '12px', background: C.goldFaint,
+                        border: `1px solid rgba(193,155,90,0.2)`, color: C.gold,
+                        borderRadius: 11, fontSize: '0.66rem', fontWeight: 700,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 7, fontFamily: 'Syne, sans-serif',
+                      }}>
+                        <UserPlus size={13} /> ONBOARD THIS CLIENT
                       </button>
-                    ) : (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                        padding: 12, background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a',
-                        borderRadius: 10, fontSize: '0.66rem', fontWeight: 900, color: '#8a704d',
-                        marginBottom: 10, letterSpacing: '1px',
-                      }}>
-                        <CheckCircle2 size={13} color="#8a704d" /> DEMO COMPLETED
-                      </div>
-                    )}
-
-                    <a href={`tel:${selectedDemo.phone}`} style={{
-                      width: '100%', padding: '12px', background: 'transparent', color: '#d3bfa2',
-                      border: '1px solid rgba(211,191,162,0.2)', borderRadius: 10,
-                      fontSize: '0.7rem', fontWeight: 900,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    }}>
-                      <Phone size={13} /> CALL NOW
-                    </a>
-
+                      {selectedDemo.status !== 'Demo Given' && (
+                        <button onClick={() => markDone(selectedDemo._id)} style={{
+                          padding: '12px', background: C.bgCard,
+                          border: `1px solid ${C.border}`, color: C.textMid,
+                          borderRadius: 11, fontSize: '0.66rem', fontWeight: 700,
+                          cursor: 'pointer', display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', gap: 7, fontFamily: 'Syne, sans-serif',
+                        }}>
+                          <CheckCircle2 size={13} /> MARK DEMO DONE
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
-
           </div>
         )}
+
+        {/* ══ DASHBOARD ══ */}
+        {activeSection === 'dashboard' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>OVERVIEW</div>
+                  <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Dashboard</h1>
+                </div>
+                <button onClick={() => navTo('onboard')} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
+                  background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                  color: '#000', border: 'none', borderRadius: 11, fontSize: '0.66rem',
+                  fontWeight: 800, cursor: 'pointer', fontFamily: 'Syne, sans-serif', letterSpacing: '0.3px',
+                }}>
+                  <UserPlus size={13} /> ONBOARD CLIENT
+                </button>
+              </div>
+            </div>
+
+            <div className="p-scroll no-sb p-pad">
+
+              {/* KPI grid */}
+              <div className="p-stat-grid" style={{ marginBottom: 24 }}>
+                {[
+                  { icon: IndianRupee, label: 'TOTAL REVENUE', val: `₹${(stats.totalRevenue || 0).toLocaleString()}`, sub: 'All time', accent: C.gold },
+                  { icon: ShieldCheck, label: 'ACTIVE',        val: stats.activeCount || 0,   sub: 'Live subscriptions', accent: C.gold },
+                  { icon: AlertTriangle, label: 'EXPIRED',     val: stats.expiredCount || 0,  sub: 'Need renewal',      accent: C.warning },
+                  { icon: Calendar,    label: 'EXPIRING SOON', val: stats.expiringSoon || 0,  sub: 'Within 30 days',    accent: C.amber },
+                ].map(k => (
+                  <div key={k.label} className="p-card" style={{
+                    background: C.bgCard, border: `1px solid ${C.border}`,
+                    borderTop: `2px solid ${k.accent}30`,
+                    borderRadius: 16, padding: '20px 18px', position: 'relative', overflow: 'hidden',
+                  }}>
+                    <div style={{ position: 'absolute', top: 0, right: 0, width: 50, height: 50, borderRadius: '0 16px 0 50px', background: `${k.accent}06` }} />
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: `${k.accent}12`, border: `1px solid ${k.accent}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                      <k.icon size={17} color={k.accent} strokeWidth={1.5} />
+                    </div>
+                    <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>{k.label}</div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: k.accent, fontFamily: 'Syne, sans-serif', lineHeight: 1, marginBottom: 4 }}>{k.val}</div>
+                    <div style={{ fontSize: '0.58rem', color: C.textDim }}>{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Expiry warning */}
+              {(stats.expiringSoon || 0) > 0 && (
+                <div style={{
+                  background: 'rgba(184,115,51,0.06)', border: `1px solid rgba(184,115,51,0.2)`,
+                  borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center',
+                  gap: 14, marginBottom: 20
+                }}>
+                  <AlertCircle size={17} color={C.amber} strokeWidth={1.5} />
+                  <div>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: C.amber, fontFamily: 'Syne, sans-serif' }}>
+                      {stats.expiringSoon} subscription{stats.expiringSoon > 1 ? 's' : ''} expiring within 30 days
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: C.textDim, marginTop: 3 }}>Reach out proactively before expiry</div>
+                  </div>
+                  <button onClick={() => { setClientFilter('active'); navTo('clients'); }} style={{
+                    marginLeft: 'auto', padding: '7px 14px',
+                    background: 'rgba(184,115,51,0.1)', border: `1px solid rgba(184,115,51,0.25)`,
+                    color: C.amber, borderRadius: 8, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'Syne, sans-serif', flexShrink: 0,
+                  }}>
+                    VIEW →
+                  </button>
+                </div>
+              )}
+
+              {/* Charts */}
+              <div className="p-chart-grid">
+
+                {/* Top earners */}
+                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                    <Trophy size={14} color={C.goldDim} strokeWidth={1.5} />
+                    <span style={{ fontSize: '0.6rem', fontWeight: 700, color: C.textDim, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif' }}>TOP REVENUE CLIENTS</span>
+                  </div>
+                  {clients.sort((a, b) => (b.totalPaidAmount || 0) - (a.totalPaidAmount || 0)).slice(0, 6).map((c, i) => (
+                    <div key={c._id} style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '0.6rem', color: C.textFaint, fontFamily: 'Syne, sans-serif', minWidth: 14 }}>#{i + 1}</span>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text }}>{c.name}</span>
+                        </div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: C.gold }}>₹{(c.totalPaidAmount || 0).toLocaleString()}</span>
+                      </div>
+                      <div style={{ height: 3, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 99,
+                          width: `${Math.min(100, ((c.totalPaidAmount || 0) / Math.max(clients[0]?.totalPaidAmount || 1, 1)) * 100)}%`,
+                          background: `linear-gradient(90deg, ${C.amber}, ${C.gold})`,
+                          transition: 'width 0.8s ease'
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Status breakdown + quick actions */}
+                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                    <BarChart3 size={14} color={C.goldDim} strokeWidth={1.5} />
+                    <span style={{ fontSize: '0.6rem', fontWeight: 700, color: C.textDim, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif' }}>SUBSCRIPTION HEALTH</span>
+                  </div>
+                  {[
+                    { label: 'ACTIVE',   val: stats.activeCount   || 0, c: C.gold,    pct: ((stats.activeCount   || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                    { label: 'EXPIRED',  val: stats.expiredCount  || 0, c: C.warning, pct: ((stats.expiredCount  || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                    { label: 'DISABLED', val: stats.disabledCount || 0, c: C.danger,  pct: ((stats.disabledCount || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                  ].map(s => (
+                    <div key={s.label} style={{ marginBottom: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7, alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.58rem', color: s.c, fontWeight: 700, fontFamily: 'Syne, sans-serif', letterSpacing: '1px' }}>{s.label}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: C.text }}>{s.val} <span style={{ color: C.textDim, fontSize: '0.58rem' }}>({Math.round(s.pct)}%)</span></span>
+                      </div>
+                      <div style={{ height: 5, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${s.pct}%`, background: s.c, borderRadius: 99, transition: 'width 0.8s ease', opacity: 0.8 }} />
+                      </div>
+                    </div>
+                  ))}
+                  <SectionDivider />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                    <button onClick={() => navTo('onboard')} style={{
+                      flex: 1, padding: '11px', background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                      border: 'none', color: '#000', borderRadius: 10, fontSize: '0.62rem',
+                      fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6, fontFamily: 'Syne, sans-serif',
+                    }}>
+                      <UserPlus size={12} /> ONBOARD
+                    </button>
+                    <button onClick={() => navTo('clients')} style={{
+                      flex: 1, padding: '11px', background: 'transparent',
+                      border: `1px solid rgba(193,155,90,0.2)`, color: C.gold,
+                      borderRadius: 10, fontSize: '0.62rem', fontWeight: 700,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6, fontFamily: 'Syne, sans-serif',
+                    }}>
+                      <Building2 size={12} /> CLIENTS
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ CLIENTS ══ */}
+        {activeSection === 'clients' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>ACCOUNTS</div>
+                  <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Client Partners</h1>
+                  <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>{filteredClients.length} of {clients.length} shown</div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input className="p-inp" placeholder="Search…" value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      style={{ ...inp, paddingLeft: 38, width: 190, borderRadius: 10, fontSize: '0.76rem' }} />
+                  </div>
+                  <button onClick={() => navTo('onboard')} style={{
+                    display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px',
+                    background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                    border: 'none', color: '#000', borderRadius: 10, fontSize: '0.62rem',
+                    fontWeight: 800, cursor: 'pointer', fontFamily: 'Syne, sans-serif', whiteSpace: 'nowrap',
+                  }}>
+                    <Plus size={12} /> NEW CLIENT
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="p-filterbar" style={{ padding: '0 36px' }}>
+              {[
+                { id: 'all', label: 'ALL', count: clients.length },
+                { id: 'active', label: 'ACTIVE', count: stats.activeCount || 0 },
+                { id: 'expired', label: 'EXPIRED', count: stats.expiredCount || 0 },
+                { id: 'disabled', label: 'DISABLED', count: stats.disabledCount || 0 },
+              ].map(f => (
+                <button key={f.id} onClick={() => setClientFilter(f.id)} style={{
+                  padding: '11px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: '0.58rem', fontWeight: 700, letterSpacing: '1px', whiteSpace: 'nowrap', flexShrink: 0,
+                  color: clientFilter === f.id ? C.gold : C.textDim,
+                  borderBottom: `2px solid ${clientFilter === f.id ? C.gold : 'transparent'}`,
+                  fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 7,
+                  transition: 'all 0.15s',
+                }}>
+                  {f.label}
+                  <span style={{
+                    fontSize: '0.5rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99,
+                    background: clientFilter === f.id ? 'rgba(193,155,90,0.15)' : C.bgCard,
+                    color: clientFilter === f.id ? C.gold : C.textDim,
+                    border: `1px solid ${clientFilter === f.id ? 'rgba(193,155,90,0.3)' : C.border}`,
+                    fontFamily: 'Syne, sans-serif',
+                  }}>{f.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Table */}
+            <div className="p-scroll no-sb" style={{ padding: '16px 36px 40px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 5px', minWidth: 480 }}>
+                <thead>
+                  <tr style={{ fontSize: '0.5rem', color: C.textDim, textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'Syne, sans-serif' }}>
+                    <th style={{ paddingLeft: 16, paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>PARTNER</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>TYPE</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>EXPIRY</th>
+                    <th style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>STATUS</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>REVENUE</th>
+                    <th style={{ paddingBottom: 8, textAlign: 'right', paddingRight: 12, fontWeight: 700 }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredClients.map(client => {
+                    const st = getClientStatus(client);
+                    const dl = getDaysLeft(client);
+                    return (
+                      <motion.tr layout key={client._id} className="p-row" style={{ background: C.bgCard }}>
+                        <td style={{ paddingLeft: 16, paddingTop: 13, paddingBottom: 13, borderRadius: '12px 0 0 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <ClientStatusDot client={client} now={now} />
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.84rem', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }}>{client.name}</div>
+                              <div style={{ fontSize: '0.56rem', color: C.textFaint, fontFamily: 'DM Sans, sans-serif', marginTop: 2 }}>{client.tenantId}</div>
+                              {client.address?.city && (
+                                <div style={{ fontSize: '0.56rem', color: C.textDim, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <MapPin size={8} color={C.textDim} strokeWidth={1.5} />{client.address.city}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="hide-mob">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {client.businessType === 'Cafe' ? <Coffee size={11} color={C.textDim} strokeWidth={1.5} /> : <Utensils size={11} color={C.textDim} strokeWidth={1.5} />}
+                            <span style={{ color: C.textDim, fontSize: '0.6rem', fontWeight: 600 }}>{(client.businessType || 'Restaurant').toUpperCase()}</span>
+                          </div>
+                        </td>
+                        <td className="hide-mob">
+                          <div style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text }}>
+                            {client.config?.planExpiry ? new Date(client.config.planExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </div>
+                          {dl !== null && (
+                            <div style={{ fontSize: '0.58rem', fontWeight: 600, marginTop: 2, color: dl <= 0 ? C.danger : dl <= 30 ? C.warning : C.textDim }}>
+                              {dl <= 0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{
+                            fontSize: '0.52rem', fontWeight: 800, padding: '3px 9px', borderRadius: 99,
+                            background: `${st.color}12`, color: st.color, border: `1px solid ${st.color}33`,
+                            fontFamily: 'Syne, sans-serif', letterSpacing: '0.8px'
+                          }}>{st.label}</span>
+                        </td>
+                        <td className="hide-mob">
+                          <span style={{ fontWeight: 700, color: C.gold, fontSize: '0.84rem' }}>₹{(client.totalPaidAmount || 0).toLocaleString()}</span>
+                        </td>
+                        <td style={{ textAlign: 'right', paddingRight: 12, borderRadius: '0 12px 12px 0' }}>
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button onClick={() => handleToggle(client)} style={{
+                              padding: '6px 10px', borderRadius: 8, fontSize: '0.56rem', fontWeight: 700,
+                              cursor: 'pointer', background: 'transparent',
+                              border: `1px solid ${client.isActive ? `${C.danger}44` : `${C.gold}44`}`,
+                              color: client.isActive ? C.danger : C.gold,
+                              fontFamily: 'Syne, sans-serif',
+                              display: 'flex', alignItems: 'center', gap: 5,
+                            }}>
+                              <Power size={10} />
+                              <span className="hide-sm">{client.isActive ? 'DISABLE' : 'ENABLE'}</span>
+                            </button>
+                            <button onClick={() => handleRenew(client)} style={{
+                              padding: '6px 12px', borderRadius: 8, fontSize: '0.58rem', fontWeight: 700,
+                              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif',
+                              background: st.label === 'EXPIRED' || st.label === 'DISABLED' ? `linear-gradient(135deg, ${C.amber}, ${C.gold})` : 'transparent',
+                              border: st.label === 'EXPIRED' || st.label === 'DISABLED' ? 'none' : `1px solid ${C.border}`,
+                              color: st.label === 'EXPIRED' || st.label === 'DISABLED' ? '#000' : C.textDim,
+                            }}>
+                              {st.label === 'ACTIVE' || st.label === 'EXPIRING' ? 'RENEW' : 'ACTIVATE'}
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredClients.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '80px 0', color: C.textFaint }}>
+                  <Building2 size={32} color={C.border} style={{ marginBottom: 14 }} />
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>NO CLIENTS FOUND</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ONBOARD ══ */}
+        {activeSection === 'onboard' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>NEW CLIENT</div>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Client Onboarding</h1>
+              <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>Register a restaurant or café on Pratyeksha</div>
+            </div>
+
+            <div className="p-scroll no-sb p-pad">
+
+              {/* Success */}
+              <AnimatePresence>
+                {onboardSuccess && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    style={{
+                      background: `rgba(193,155,90,0.06)`, border: `1px solid rgba(193,155,90,0.25)`,
+                      borderRadius: 16, padding: '20px 22px', marginBottom: 28
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontSize: '0.52rem', color: C.gold, fontWeight: 800, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>CLIENT ONBOARDED ✓</div>
+                        <div style={{ fontSize: '0.96rem', fontWeight: 700, color: C.text }}>{onboardSuccess.name}</div>
+                      </div>
+                      <button onClick={() => setOnboardSuccess(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
+                      {[
+                        { lbl: 'TENANT ID', val: onboardSuccess.tenantId, key: 'tid' },
+                        { lbl: 'USERNAME',  val: onboardSuccess.username,  key: 'usr' },
+                        { lbl: 'PASSWORD',  val: onboardSuccess.password,  key: 'pwd' },
+                      ].map(r => (
+                        <div key={r.key} style={{ background: C.bgDark, border: `1px solid rgba(193,155,90,0.15)`, borderRadius: 10, padding: '12px 14px' }}>
+                          <div style={{ fontSize: '0.48rem', color: C.gold, fontWeight: 800, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>{r.lbl}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <code style={{ fontSize: '0.78rem', color: C.text, fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.val}</code>
+                            <button onClick={() => copyText(r.val, r.key)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, color: copied === r.key ? C.gold : C.textDim }}>
+                              {copied === r.key ? <Check size={13} /> : <Copy size={13} />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: C.textDim, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertCircle size={11} color={C.textDim} /> Save credentials — password cannot be recovered after closing.
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {onboardError && (
+                <div style={{ background: `rgba(192,120,48,0.08)`, border: `1px solid rgba(192,120,48,0.25)`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: '0.72rem', color: C.danger, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={14} color={C.danger} /> {onboardError}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gap: 20, maxWidth: 880 }}>
+
+                {/* Business Info */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderTop: `2px solid ${C.gold}30`, borderRadius: 16, padding: '22px 22px' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.gold, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Store size={13} color={C.gold} /> BUSINESS INFORMATION
+                  </div>
+                  <div className="p-form-grid">
+                    <LabeledInput label="Restaurant / Café Name" required>
+                      <input className="p-inp" style={inp} placeholder="Jay Ambe Fusion" value={onboarding.name} onChange={e => setOnboarding(p => ({ ...p, name: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Business Type" required>
+                      <select className="p-inp" style={{ ...inp, cursor: 'pointer' }} value={onboarding.businessType} onChange={e => setOnboarding(p => ({ ...p, businessType: e.target.value }))}>
+                        <option>Restaurant</option>
+                        <option>Cafe</option>
+                        <option>Hotel</option>
+                      </select>
+                    </LabeledInput>
+                    <LabeledInput label="Owner Name">
+                      <input className="p-inp" style={inp} placeholder="Full name" value={onboarding.ownerName} onChange={e => setOnboarding(p => ({ ...p, ownerName: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Contact Number">
+                      <input className="p-inp" style={inp} placeholder="10-digit mobile" value={onboarding.contact} onChange={e => setOnboarding(p => ({ ...p, contact: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="GSTIN">
+                      <input className="p-inp" style={inp} placeholder="27AABCU1234F1Z5" value={onboarding.gstin} onChange={e => setOnboarding(p => ({ ...p, gstin: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Number of Tables">
+                      <input className="p-inp" style={inp} type="number" placeholder="12" value={onboarding.tableCount} onChange={e => setOnboarding(p => ({ ...p, tableCount: e.target.value }))} />
+                    </LabeledInput>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 22px' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <MapPin size={13} /> ADDRESS
+                  </div>
+                  <div className="p-form-grid">
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <LabeledInput label="Street Address">
+                        <input className="p-inp" style={inp} placeholder="Shop no., Street name" value={onboarding.street} onChange={e => setOnboarding(p => ({ ...p, street: e.target.value }))} />
+                      </LabeledInput>
+                    </div>
+                    <LabeledInput label="City">
+                      <input className="p-inp" style={inp} placeholder="Kolhapur" value={onboarding.city} onChange={e => setOnboarding(p => ({ ...p, city: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="State">
+                      <input className="p-inp" style={inp} placeholder="Maharashtra" value={onboarding.state} onChange={e => setOnboarding(p => ({ ...p, state: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Pincode">
+                      <input className="p-inp" style={inp} placeholder="416001" value={onboarding.pincode} onChange={e => setOnboarding(p => ({ ...p, pincode: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Tax Percentage (%)">
+                      <input className="p-inp" style={inp} type="number" placeholder="5" value={onboarding.taxPercentage} onChange={e => setOnboarding(p => ({ ...p, taxPercentage: e.target.value }))} />
+                    </LabeledInput>
+                  </div>
+                </div>
+
+                {/* Credentials */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 22px' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={13} /> ADMIN CREDENTIALS
+                  </div>
+                  <div className="p-form-grid">
+                    <LabeledInput label="Username" required hint="Used to login to operator portal">
+                      <input className="p-inp" style={inp} placeholder="jay_ambe_admin" value={onboarding.username} onChange={e => setOnboarding(p => ({ ...p, username: e.target.value.toLowerCase().replace(/\s/g, '_') }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Password" required>
+                      <div style={{ position: 'relative' }}>
+                        <input className="p-inp" style={{ ...inp, paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min 6 characters" value={onboarding.password} onChange={e => setOnboarding(p => ({ ...p, password: e.target.value }))} />
+                        <button type="button" onClick={() => setShowPassword(p => !p)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: C.textDim }}>
+                          {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                    </LabeledInput>
+                    <LabeledInput label="Confirm Password" required>
+                      <input className="p-inp" style={{ ...inp, borderColor: onboarding.confirmPassword && onboarding.password !== onboarding.confirmPassword ? `${C.danger}55` : C.borderMid }} type="password" placeholder="Re-enter password" value={onboarding.confirmPassword} onChange={e => setOnboarding(p => ({ ...p, confirmPassword: e.target.value }))} />
+                    </LabeledInput>
+                  </div>
+                </div>
+
+                {/* Subscription & Payment */}
+                <div style={{ background: C.bgCard, border: `1px solid rgba(193,155,90,0.15)`, borderTop: `2px solid ${C.amber}33`, borderRadius: 16, padding: '22px 22px' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.gold, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Wallet size={13} color={C.gold} /> SUBSCRIPTION & PAYMENT
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: C.textDim, marginBottom: 18 }}>Collect via GPay manually and record below.</div>
+                  <div className="p-form-grid">
+                    <LabeledInput label="Plan Duration" required>
+                      <select className="p-inp" style={{ ...inp, cursor: 'pointer' }} value={onboarding.planMonths} onChange={e => setOnboarding(p => ({ ...p, planMonths: e.target.value }))}>
+                        <option value="1">1 Month</option>
+                        <option value="3">3 Months</option>
+                        <option value="6">6 Months</option>
+                        <option value="12">1 Year (12 Months)</option>
+                      </select>
+                    </LabeledInput>
+                    <LabeledInput label="Amount Received (₹)" hint="Enter 0 if not yet collected">
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.textDim, fontSize: '0.82rem', fontWeight: 700 }}>₹</span>
+                        <input className="p-inp" style={{ ...inp, paddingLeft: 26 }} type="number" placeholder="1200" value={onboarding.paidAmount} onChange={e => setOnboarding(p => ({ ...p, paidAmount: e.target.value }))} />
+                      </div>
+                    </LabeledInput>
+                    <LabeledInput label="Google Review Link">
+                      <input className="p-inp" style={inp} placeholder="https://g.page/..." value={onboarding.googleReview} onChange={e => setOnboarding(p => ({ ...p, googleReview: e.target.value }))} />
+                    </LabeledInput>
+                    <LabeledInput label="Instagram Handle">
+                      <input className="p-inp" style={inp} placeholder="@jayambefusion" value={onboarding.instaId} onChange={e => setOnboarding(p => ({ ...p, instaId: e.target.value }))} />
+                    </LabeledInput>
+                  </div>
+                </div>
+
+                {/* Submit */}
+                <div style={{ display: 'flex', gap: 12, paddingBottom: 20 }}>
+                  <button onClick={handleOnboard} disabled={onboardLoading} style={{
+                    flex: 2, padding: '15px', borderRadius: 12, border: 'none', fontFamily: 'Syne, sans-serif',
+                    background: onboardLoading ? C.bgCard : `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                    color: onboardLoading ? C.textDim : '#000',
+                    cursor: onboardLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.76rem', fontWeight: 800, letterSpacing: '0.5px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  }}>
+                    {onboardLoading
+                      ? <><RefreshCcw size={14} style={{ animation: 'spin 0.9s linear infinite' }} /> ONBOARDING…</>
+                      : <><UserPlus size={14} /> ONBOARD CLIENT &amp; GENERATE ACCESS</>
+                    }
+                  </button>
+                  <button onClick={() => setOnboarding({ name: '', businessType: 'Restaurant', ownerName: '', contact: '', gstin: '', street: '', city: '', state: '', pincode: '', tableCount: '12', taxPercentage: '5', username: '', password: '', confirmPassword: '', planMonths: '12', paidAmount: '', googleReview: '', instaId: '' })}
+                    style={{ flex: 1, padding: '15px', background: 'transparent', border: `1px solid ${C.borderMid}`, color: C.textDim, borderRadius: 12, fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Syne, sans-serif' }}>
+                    CLEAR
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
 
-      {/* ── Extra responsive CSS ── */}
       <style>{`
-        /* Desktop: demo list always visible, drawer as side panel */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @media (min-width: 769px) {
-          .pma-demo-list-panel { display: flex !important; }
-          .pma-drawer { position: relative !important; }
-        }
-        /* Mobile: topbar always shows */
-        @media (max-width: 768px) {
-          .pma-topbar { display: flex !important; }
-          .pma-sidebar-close { display: flex !important; }
+          .p-demo-list { display: flex !important; }
+          .p-drawer { position: relative !important; flex-shrink: 0 !important; }
         }
       `}</style>
-
     </div>
   );
 }
