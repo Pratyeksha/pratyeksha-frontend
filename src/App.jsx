@@ -9,7 +9,7 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle
+  Package, UserCheck, MinusCircle, PlusCircle 
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -30,8 +30,12 @@ const PratyekshaPremiumMenu = () => {
   const [tableNumber, setTableNumber] = useState('');
 
   const [activeModel, setActiveModel] = useState(null);
-  const [cart, setCart] = useState({}); 
-  const [suggestions, setSuggestions] = useState({}); 
+const [cart, setCart] = useState(() => {
+  try {
+    const saved = localStorage.getItem(`pratyeksha_cart_${urlTenantId}`);
+    return saved ? JSON.parse(saved) : {};
+  } catch { return {}; }
+});  const [suggestions, setSuggestions] = useState({}); 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
@@ -41,6 +45,8 @@ const PratyekshaPremiumMenu = () => {
   const [billRequested, setBillRequested] = useState(false);
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
+  const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
+// { orderId: 'pending' | 'ready' | 'served' }
 
   const [alert, setAlert] = useState({ show: false, msg: '', type: 'success' });
 
@@ -54,6 +60,10 @@ const [extraItemCart, setExtraItemCart] = useState({}); // { itemId: qty }
 const [activeExtraCategory, setActiveExtraCategory] = useState('All');
 const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 
+const [reservationDate, setReservationDate] = useState('');
+const [reservationTime, setReservationTime] = useState('');
+const [specialRequests, setSpecialRequests] = useState('');
+const [tablePreference, setTablePreference] = useState('');
 
 // ── COUNTER / WAITLIST MODE ──
 const [counterMode, setCounterMode] = useState(null); // null | 'dine-in' | 'pickup'
@@ -212,6 +222,11 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       triggerAlert(data.restaurantName ? `Your pickup will be ready in ~10 min at ${data.restaurantName}!` : 'Order ready soon!', 'success');
     });
 
+    waitlistSocket.on('reservation_confirmed', (data) => {
+  setWaitlistEntry(prev => prev ? { ...prev, status: 'confirmed' } : prev);
+  setNotificationBanner({ type: 'reservation_confirmed', restaurantName: data.restaurantName, time: data.reservationTime });
+});
+
     return () => {
       waitlistSocket.off('table_assigned');
       waitlistSocket.off('pickup_ready');
@@ -286,8 +301,8 @@ useEffect(() => {
 
   // 1. Fullscreen Notification Banner Overlay
 if (notificationBanner) {
-  const isTable  = notificationBanner.type === 'table';
-
+const isTable       = notificationBanner.type === 'table';
+const isReservation = notificationBanner.type === 'reservation_confirmed';
   // Request notification permission and show browser notification
   const sendBrowserNotification = () => {
     if (!('Notification' in window)) return;
@@ -468,18 +483,19 @@ if (notificationBanner) {
 
   const isOnlyVegTenant = restaurantData?.config?.onlyVeg === true;
 
-  // Reset to veg when switching categories, if non-veg has no items there
 useEffect(() => {
   if (isOnlyVegTenant) {
     setFilterVegOnly(true);
     return;
   }
-  const hasNonVegInCategory = allMenuItems.some(i => {
-    const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
-    return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
-  });
-  if (!hasNonVegInCategory) {
-    setFilterVegOnly(true);
+  if (!filterVegOnly) {
+    const hasNonVegInCategory = allMenuItems.some(i => {
+      const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
+      return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
+    });
+    if (!hasNonVegInCategory) {
+      setFilterVegOnly(true);
+    }
   }
 }, [selectedCategoryId, allMenuItems, isOnlyVegTenant]);
 
@@ -523,7 +539,19 @@ const fetchMenuContent = async () => {
           )
         );
       }
+  
     });
+
+    // ── Live order status updates for customer ──
+socket.on("order_status_updated", (data) => {
+  if (data.tableNumber?.toString() === tableNumber?.toString()) {
+    setLiveOrderStatuses(prev => ({ ...prev, [data.orderId]: data.status }));
+    if (data.status === 'ready') {
+      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+      triggerAlert('🍽️ Your order is ready! Please collect.', 'success');
+    }
+  }
+});
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
     return () => {
@@ -637,6 +665,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
     }, 0);
   };
 
+  
 const sendBatchToKitchen = async () => {
     try {
       // 🚀 AGGREGATE CART ITEMS: Group by ID and Portion
@@ -679,8 +708,11 @@ const sendBatchToKitchen = async () => {
         createdAt: new Date().toISOString() 
       };
 
-      await axios.post(`${BASE_URL}/orders`, payload);
-      
+const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
+// ── Track this order for live status ──
+if (orderRes.data?._id) {
+  setLiveOrderStatuses(prev => ({ ...prev, [orderRes.data._id]: 'pending' }));
+}      
       // Update placedOrders with the aggregated view for the receipt
       setPlacedOrders(prev => [...prev, ...orderItems]); 
       triggerAlert("orderSuccess");
@@ -750,6 +782,57 @@ const sendBatchToKitchen = async () => {
         }
       } catch (e) { console.warn('Push subscription failed:', e); }
     }
+  } catch (err) {
+    console.error(err);
+    triggerAlert('orderError', 'error');
+  }
+};
+
+const placeReservation = async () => {
+  if (!customerInfo.name.trim() || !reservationDate || !reservationTime) return;
+
+  const summary = {};
+  Object.entries(cart).forEach(([key, qty]) => {
+    const isMulti = key.includes('-');
+    const id = isMulti ? key.split('-')[0] : key;
+    const portion = isMulti ? key.split('-')[1] : 'Single';
+    const item = allMenuItems.find(i => i._id === id);
+    const summaryKey = `${id}-${portion}`;
+    if (!summary[summaryKey]) {
+      const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+      summary[summaryKey] = { menuItemId: item._id, name: item.name, quantity: 0, portion, pricePerUnit: unitPrice, subtotal: 0, price: unitPrice };
+    }
+    summary[summaryKey].quantity += qty;
+    summary[summaryKey].subtotal = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
+  });
+
+  const orderItems = Object.values(summary);
+  const total = orderItems.reduce((a, i) => a + i.subtotal, 0);
+
+  // Build ISO datetime from date + time
+  const [hours, minutes] = reservationTime.split(':').map(Number);
+  const resDateTime = new Date(reservationDate);
+  resDateTime.setHours(hours, minutes, 0, 0);
+
+  try {
+    const res = await axios.post(`${BASE_URL}/reservations/${tenantId}`, {
+      sessionId,
+      customerName: customerInfo.name,
+      customerPhone: customerInfo.phone || '',
+      partySize,
+      reservationTime: resDateTime.toISOString(),
+      tablePreference,
+      specialRequests,
+      items: orderItems,
+      totalAmount: total,
+      status: 'pending'
+    });
+
+    setWaitlistEntry(res.data.reservation);
+    setCart({}); setSuggestions({});
+    setRegistrationStep('confirm');
+    setIsDrawerOpen(false);
+    triggerAlert('orderSuccess');
   } catch (err) {
     console.error(err);
     triggerAlert('orderError', 'error');
@@ -832,12 +915,17 @@ useEffect(() => {
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
   }, [allMenuItems, isOnlyVegTenant]);
 
-// FIND this block (just before the isLoading check):
-// {isCounterScan && registrationStep !== 'menu' && (() => {
-//   ...entire IIFE...
-// })()}
-//
-// if (isLoading) return ...
+  // ── Persist cart to localStorage so it survives browser close ──
+useEffect(() => {
+  if (Object.keys(cart).length > 0) {
+    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
+  } else {
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+  }
+}, [cart, tenantId]);
+
+const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
+const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
@@ -928,10 +1016,15 @@ const Shell = ({ children, centered = true }) => (
   color: 'rgba(211,191,162,0.4)',
   display: 'inline-flex', alignItems: 'center', gap: '6px'
 }}>
-  {isDineIn
+  {/* {isDineIn
     ? <><Armchair    size={11} color="rgba(211,191,162,0.4)" /> WAITLIST</>
     : <><ShoppingBag size={11} color="rgba(211,191,162,0.4)" /> PICKUP</>
-  }
+  } */}
+  {isDineIn
+  ? <Armchair size={19} color="#d3bfa2" strokeWidth={1.5} />
+  : counterMode === 'reservation'
+  ? <CalendarClock size={19} color="#d3bfa2" strokeWidth={1.5} />
+  : <ShoppingBag size={19} color="#d3bfa2" strokeWidth={1.5} />}
 </span>          </span>
         </div>
 
@@ -1006,7 +1099,61 @@ const Shell = ({ children, centered = true }) => (
                   </span>
                 </div>
               </>
-            ) : waitlistEntry.scheduledPickupTime ? (
+            ) : waitlistEntry.mode === 'reservation' ? (
+  <>
+    <p style={{
+      fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px',
+      color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '16px'
+    }}>
+      {language === 'mr' ? 'बुकिंग वेळ' : 'Reservation'}
+    </p>
+    <div style={{
+      fontSize: '3rem', fontWeight: '900', color: '#d3bfa2',
+      fontFamily: 'monospace', letterSpacing: '-2px', marginBottom: '8px', lineHeight: 1
+    }}>
+      {new Date(waitlistEntry.reservationTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}
+    </div>
+    <div style={{
+      fontSize: '0.78rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700', marginBottom: '10px'
+    }}>
+      {new Date(waitlistEntry.reservationTime).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}
+    </div>
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: '8px',
+      padding: '7px 16px', borderRadius: '20px',
+      background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)'
+    }}>
+      <Users size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+        {waitlistEntry.partySize} {language === 'mr' ? 'जण' : 'guests'}
+      </span>
+    </div>
+    {waitlistEntry.specialRequests && (
+      <div style={{
+        marginTop: '14px', padding: '10px 14px',
+        background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)',
+        borderRadius: '10px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)',
+        fontStyle: 'italic'
+      }}>
+        "{waitlistEntry.specialRequests}"
+      </div>
+    )}
+    <div style={{
+      marginTop: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px',
+      padding: '5px 14px', borderRadius: '20px',
+      background: waitlistEntry.status === 'confirmed' ? 'rgba(211,191,162,0.08)' : 'rgba(138,112,77,0.08)',
+      border: `1px solid ${waitlistEntry.status === 'confirmed' ? 'rgba(211,191,162,0.2)' : 'rgba(138,112,77,0.2)'}`
+    }}>
+      <span style={{
+        fontSize: '0.62rem', fontWeight: '900',
+        color: waitlistEntry.status === 'confirmed' ? '#d3bfa2' : '#8a704d',
+        letterSpacing: '1px', textTransform: 'uppercase'
+      }}>
+        {waitlistEntry.status === 'confirmed' ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}
+      </span>
+    </div>
+  </>
+) :  waitlistEntry.scheduledPickupTime ? (
               <>
                 <p style={{
                   fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px',
@@ -1349,6 +1496,144 @@ const Shell = ({ children, centered = true }) => (
             </div>
           )}
 
+          {/* ── RESERVATION DATE + TIME ── */}
+{counterMode === 'reservation' && (
+  <>
+    {/* Date picker */}
+    <div style={{ marginBottom: '22px' }}>
+      <label style={{
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontWeight: '900', letterSpacing: '2px',
+        display: 'block', marginBottom: '10px', textTransform: 'uppercase'
+      }}>
+        {language === 'mr' ? 'तारीख *' : 'Reservation Date *'}
+      </label>
+      <input
+        type="date"
+        value={reservationDate}
+        min={new Date().toISOString().split('T')[0]}
+        onChange={e => setReservationDate(e.target.value)}
+        style={{
+          width: '100%', padding: '15px 16px',
+          background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
+          color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+          outline: 'none', boxSizing: 'border-box', colorScheme: 'dark',
+          fontFamily: 'Poppins, sans-serif', cursor: 'pointer'
+        }}
+      />
+    </div>
+
+    {/* Time slots */}
+    <div style={{ marginBottom: '22px' }}>
+      <label style={{
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontWeight: '900', letterSpacing: '2px',
+        display: 'block', marginBottom: '10px', textTransform: 'uppercase'
+      }}>
+        {language === 'mr' ? 'वेळ *' : 'Time Slot *'}
+      </label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+        {['11:00', '12:00', '13:00', '14:00', '18:00', '19:00', '20:00', '20:30', '21:00'].map(slot => {
+          const [h, m] = slot.split(':').map(Number);
+          const label = h < 12 ? `${h}:${m.toString().padStart(2,'0')} AM` : h === 12 ? `12:${m.toString().padStart(2,'0')} PM` : `${h-12}:${m.toString().padStart(2,'0')} PM`;
+          const isSelected = reservationTime === slot;
+          return (
+            <button key={slot} type="button" onClick={() => setReservationTime(slot)} style={{
+              padding: '11px 8px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+              fontWeight: '900', fontSize: '0.72rem',
+              background: isSelected ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
+              color: isSelected ? '#0c0c0c' : 'rgba(255,255,255,0.2)',
+              outline: isSelected ? 'none' : '1px solid rgba(211,191,162,0.08)',
+              transition: 'all 0.15s',
+              transform: isSelected ? 'scale(1.04)' : 'scale(1)'
+            }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    {/* Party size for reservation */}
+    <div style={{ marginBottom: '22px' }}>
+      <label style={{
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontWeight: '900', letterSpacing: '2px',
+        display: 'block', marginBottom: '10px', textTransform: 'uppercase'
+      }}>
+        {language === 'mr' ? 'किती जण?' : 'Party Size'}
+      </label>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        {[1, 2, 3, 4, 5, 6].map(n => (
+          <button key={n} type="button" onClick={() => setPartySize(n)} style={{
+            width: '54px', height: '54px', borderRadius: '13px',
+            border: 'none', cursor: 'pointer',
+            fontWeight: '900', fontSize: '1rem', transition: 'all 0.15s',
+            background: partySize === n ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
+            color: partySize === n ? '#0c0c0c' : 'rgba(255,255,255,0.25)',
+            outline: partySize === n ? 'none' : '1px solid rgba(211,191,162,0.08)',
+            transform: partySize === n ? 'scale(1.05)' : 'scale(1)'
+          }}>
+            {n}{n === 6 ? '+' : ''}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* Table preference */}
+    <div style={{ marginBottom: '22px' }}>
+      <label style={{
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontWeight: '900', letterSpacing: '2px',
+        display: 'block', marginBottom: '10px', textTransform: 'uppercase'
+      }}>
+        {language === 'mr' ? 'टेबल प्राधान्य (ऐच्छिक)' : 'Table Preference (optional)'}
+      </label>
+      <input
+        type="text"
+        placeholder={language === 'mr' ? 'उदा. खिडकीजवळ, शांत कोपरा' : 'e.g. window seat, quiet corner, table 4'}
+        value={tablePreference}
+        onChange={e => setTablePreference(e.target.value)}
+        style={{
+          width: '100%', padding: '15px 16px',
+          background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
+          color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+          outline: 'none', boxSizing: 'border-box',
+          fontFamily: 'Poppins, sans-serif', transition: 'border-color 0.2s'
+        }}
+        onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
+        onBlur={e  => e.target.style.borderColor = 'rgba(211,191,162,0.12)'}
+      />
+    </div>
+
+    {/* Special requests */}
+    <div style={{ marginBottom: '22px' }}>
+      <label style={{
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontWeight: '900', letterSpacing: '2px',
+        display: 'block', marginBottom: '10px', textTransform: 'uppercase'
+      }}>
+        {language === 'mr' ? 'विशेष विनंती (ऐच्छिक)' : 'Special Requests (optional)'}
+      </label>
+      <input
+        type="text"
+        placeholder={language === 'mr' ? 'उदा. वाढदिवस, ऍलर्जी...' : 'e.g. birthday celebration, nut allergy, high chair...'}
+        value={specialRequests}
+        onChange={e => setSpecialRequests(e.target.value)}
+        style={{
+          width: '100%', padding: '15px 16px',
+          background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
+          color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+          outline: 'none', boxSizing: 'border-box',
+          fontFamily: 'Poppins, sans-serif', transition: 'border-color 0.2s'
+        }}
+        onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
+        onBlur={e  => e.target.style.borderColor = 'rgba(211,191,162,0.12)'}
+      />
+    </div>
+  </>
+)}
+
           {/* Queue info pills — dine-in only */}
           {isDineIn && avgWaitData && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
@@ -1390,8 +1675,13 @@ const Shell = ({ children, centered = true }) => (
           {/* CTA */}
           <button
             onClick={() => setRegistrationStep('menu')}
-            disabled={!customerInfo.name.trim()}
-            style={{
+disabled={!ctaEnabled}
+style={{
+  background: ctaEnabled ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : '#121212',
+  color: ctaEnabled ? '#0c0c0c' : 'rgba(255,255,255,0.15)',
+  border: ctaEnabled ? 'none' : '1px solid rgba(211,191,162,0.07)',
+  cursor: ctaEnabled ? 'pointer' : 'not-allowed',
+  
               width: '100%', padding: '17px',
               background: customerInfo.name.trim()
                 ? 'linear-gradient(135deg, #d3bfa2, #bda88a)'
@@ -1577,6 +1867,43 @@ const Shell = ({ children, centered = true }) => (
             <ChevronRight size={16} color="rgba(211,191,162,0.15)" style={{ marginTop: '4px', flexShrink: 0 }} />
           </div>
         </button>
+
+        {/* RESERVATION card */}
+<button
+  onClick={() => { setCounterMode('reservation'); setRegistrationStep('register'); }}
+  style={{
+    background: '#0f0f0f',
+    border: '1px solid rgba(211,191,162,0.07)',
+    borderRadius: '22px', padding: '22px 20px',
+    textAlign: 'left', cursor: 'pointer',
+    color: '#fff', transition: 'all 0.18s', width: '100%',
+  }}
+  onMouseEnter={e => { e.currentTarget.style.background = '#141414'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.14)'; }}
+  onMouseLeave={e => { e.currentTarget.style.background = '#0f0f0f'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; }}
+>
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+    <div style={{
+      width: '52px', height: '52px', borderRadius: '15px', flexShrink: 0,
+      background: 'rgba(211,191,162,0.04)',
+      border: '1px solid rgba(211,191,162,0.08)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      <CalendarClock size={22} color="rgba(211,191,162,0.55)" strokeWidth={1.5} />
+    </div>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: '0.9rem', fontWeight: '900', color: 'rgba(211,191,162,0.65)', marginBottom: '6px' }}>
+        {language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table'}
+      </div>
+      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.6 }}>
+        {language === 'mr'
+          ? 'आगाऊ बुकिंग करा · तारीख व वेळ निवडा · आधीच ऑर्डर द्या'
+          : 'Book in advance · Choose date & time · Pre-order your meal'}
+      </div>
+    </div>
+    <ChevronRight size={16} color="rgba(211,191,162,0.12)" style={{ marginTop: '4px', flexShrink: 0 }} />
+  </div>
+</button>
+
       </div>
 
       {/* Language toggle */}
@@ -1977,6 +2304,60 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         </AnimatePresence>
       </motion.div>
 
+{/* ── ORDER STATUS BANNER ── */}
+{hasPlacedInitialOrder && !isCounterScan && Object.keys(liveOrderStatuses).length > 0 && (
+  <div style={{
+    margin: '0 20px 12px',
+    background: '#0c0c0c',
+    border: '1px solid rgba(211,191,162,0.1)',
+    borderRadius: '16px',
+    overflow: 'hidden'
+  }}>
+    <div style={{
+      padding: '10px 16px',
+      background: 'rgba(211,191,162,0.04)',
+      borderBottom: '1px solid rgba(211,191,162,0.08)',
+      fontSize: '0.52rem', fontWeight: '900',
+      color: 'rgba(211,191,162,0.35)',
+      letterSpacing: '2px', textTransform: 'uppercase'
+    }}>
+      ORDER STATUS — TABLE {tableNumber}
+    </div>
+    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {Object.entries(liveOrderStatuses).map(([orderId, status]) => {
+        const steps = ['pending', 'ready', 'served'];
+        const stepIdx = steps.indexOf(status);
+        const labels = { pending: 'In Kitchen 🍳', ready: 'Ready! 🍽️', served: 'Served ✓' };
+        const colors = { pending: '#8a704d', ready: '#d3bfa2', served: '#555' };
+        return (
+          <div key={orderId} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              fontSize: '0.7rem', fontWeight: '900',
+              color: colors[status] || '#555',
+              padding: '4px 10px',
+              background: `rgba(211,191,162,${stepIdx === 1 ? '0.1' : '0.04'})`,
+              border: `1px solid rgba(211,191,162,${stepIdx === 1 ? '0.25' : '0.08'})`,
+              borderRadius: '20px'
+            }}>
+              {labels[status] || status}
+            </div>
+            {/* Progress dots */}
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {steps.map((s, i) => (
+                <div key={s} style={{
+                  width: i <= stepIdx ? '18px' : '6px',
+                  height: '6px', borderRadius: '3px',
+                  background: i <= stepIdx ? 'rgba(211,191,162,0.6)' : 'rgba(211,191,162,0.1)',
+                  transition: 'all 0.4s ease'
+                }} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
       {/* FABs RIGHT SIDE */}
 {/* FABs RIGHT SIDE */}
 <div style={styles.rightFabContainer}>
@@ -2529,12 +2910,16 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 <div style={styles.drawerFooter}>
   {totalItemsInCart > 0 && (
     <button style={{...styles.kitchenBtn, background: primaryColor}}
-      onClick={isCounterScan ? placeWaitlistOrder : sendBatchToKitchen}>
-      {isCounterScan
-        ? (counterMode === 'dine-in'
-            ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
-            : (language === 'mr' ? 'पिकअप ऑर्डर द्या ✓' : 'PLACE PICKUP ORDER ✓'))
-        : t[language].orderNow}
+onClick={isCounterScan
+  ? counterMode === 'reservation' ? placeReservation : placeWaitlistOrder
+  : sendBatchToKitchen}>
+  {isCounterScan
+    ? counterMode === 'dine-in'
+      ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
+      : counterMode === 'reservation'
+      ? (language === 'mr' ? 'बुकिंग कन्फर्म करा ✓' : 'CONFIRM RESERVATION ✓')
+      : (language === 'mr' ? 'पिकअप ऑर्डर द्या ✓' : 'PLACE PICKUP ORDER ✓')
+    : t[language].orderNow}
     </button>
   )}
   {!isCounterScan && (

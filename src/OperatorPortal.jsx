@@ -11,7 +11,7 @@ import {
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
 Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
-  Droplet, Wind, Milk, Candy, Box,
+  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -234,32 +234,39 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
 const [assignTableModal, setAssignTableModal] = useState(null);
 const [waitlistEntries,  setWaitlistEntries]  = useState([]);
 const [pickupEntries,    setPickupEntries]     = useState([]);
+const [reservationEntries, setReservationEntries] = useState([]);
 const [avgWaitData,      setAvgWaitData]       = useState(null);
 const [queueTab,         setQueueTab]          = useState('waitlist');
+const [reservationViewDate, setReservationViewDate] = useState(() => {
+  const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  return d.toISOString().split('T')[0];
+});
+const [reservationEditModal, setReservationEditModal] = useState(null);
 
 const fetchCounterQueue = useCallback(async () => {
   try {
-    const [qRes, aRes] = await Promise.all([
+    const [qRes, aRes, rRes] = await Promise.all([
       axios.get(`${BASE_URL}/waitlist/${tenantId}`),
-      axios.get(`${BASE_URL}/waitlist/avg-wait/${tenantId}`)
+      axios.get(`${BASE_URL}/waitlist/avg-wait/${tenantId}`),
+      axios.get(`${BASE_URL}/reservations/${tenantId}?date=${reservationViewDate}`)
+        .catch(() => ({ data: [] }))
     ]);
-    // ── Only show entries that are truly waiting, not assigned/seated/settled
     const allWaitlist = qRes.data.waitlist || [];
     const allPickup   = qRes.data.pickupQueue || [];
-    
     setWaitlistEntries(
-      allWaitlist.filter(e => 
-        !['assigned', 'seated', 'settled', 'no-show', 'completed'].includes(e.status)
+      allWaitlist.filter(e =>
+        !['assigned','seated','settled','no-show','completed'].includes(e.status)
       )
     );
     setPickupEntries(
-      allPickup.filter(e => 
-        !['settled', 'completed', 'cancelled'].includes(e.status)
+      allPickup.filter(e =>
+        !['settled','completed','cancelled'].includes(e.status)
       )
     );
+    setReservationEntries(rRes.data || []);
     setAvgWaitData(aRes.data);
   } catch { }
-}, [tenantId]);
+}, [tenantId, reservationViewDate]);
 
 // Add this right after your existing waitlistEntries state
 useEffect(() => {
@@ -386,6 +393,18 @@ const fetchExtraItems = useCallback(async () => {
   finally { setExtraItemsLoading(false); }
 }, [tenantId]);
 
+
+const deductExtraItemStock = useCallback(async (itemId, qty) => {
+  try {
+    await axios.patch(`${BASE_URL}/extra-items/item/${itemId}/restock`, { 
+      addQty: -Math.abs(qty)  // negative qty = deduction
+    });
+  } catch (err) {
+    console.error('Extra item stock deduction failed:', err);
+  }
+}, []);
+
+
 useEffect(() => {
   if (isAuthenticated) {
     fetchAnalytics();
@@ -455,6 +474,8 @@ socket.on("menu_updated", (updatedItem) => {
 });
 
 socket.on('new_waitlist_entry', () => fetchCounterQueue());
+socket.on('new_reservation',    () => { fetchCounterQueue(); showNotif('New reservation received', 'info'); });
+socket.on('reservation_updated',() => fetchCounterQueue());
 socket.on('waitlist_cancelled',  () => fetchCounterQueue());
 socket.on('waitlist_assigned',   () => { fetchCounterQueue(); fetchInitialData(); });
 socket.on('waitlist_updated',    () => fetchCounterQueue());
@@ -753,8 +774,8 @@ const settleBill = () => {
 
 
 useEffect(() => {
-  if (activeTab === 'billing') fetchCounterQueue();
-  if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+ if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
+   if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
   if (activeTab === 'extras') fetchExtraItems();
     if (activeTab === 'insights') {    // ← ADD THIS
     fetchExtraAnalytics();
@@ -784,6 +805,16 @@ const handleFinalSettle = async () => {
             discount, finalAmount: finalAmt, paymentMethods: paymentMethodDetails, customerPhone: ""
         });
         
+        // ── Deduct extra items from stock on settlement ──
+if (extraItemsInBill.length > 0) {
+  await Promise.allSettled(
+    extraItemsInBill.map(ei => 
+      deductExtraItemStock(ei._id, ei.quantity)
+    )
+  );
+  setExtraItemsInBill([]);
+}
+
         if (res.data?.duplicate) {
             showNotif(`Already settled — Invoice #${res.data.billNo}`, "info");
             setTableBill(null);
@@ -804,6 +835,7 @@ const handleFinalSettle = async () => {
             
             // Delay cleanup to show success briefly
             setTimeout(async () => {
+
                 setTableBill(null);
                 setSelectedTable(null);
                 setPaymentModes({ cash: 0, upi: 0, card: 0 });
@@ -1654,6 +1686,7 @@ const renderMonthHeatmap = () => {
               {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
               {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
               {id:'extras', label:'EXTRA ITEMS', icon:<ShoppingBag size={18}/>},
+              {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
               {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
               {id:'management',label:'MANAGEMENT',   icon:<ShieldCheck size={18}/>},
               {id:'inventory',label:'INVENTORY',     icon:<Layers size={18}/>},
@@ -1681,12 +1714,14 @@ const renderMonthHeatmap = () => {
           {/* ── Billing HUD ── */}
           {activeTab==='billing' && (
             <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} style={styles.hudCountersRow}>
-              {[
-                {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
-                {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
-                {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
-                {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
-              ].map((s,i)=>(
+{[
+  {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
+  {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
+  {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
+  {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
+  {label:"CGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+  {label:"SGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+].map((s,i)=>(
                 <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
                   <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
                   <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
@@ -2037,6 +2072,16 @@ const renderMonthHeatmap = () => {
           <ShoppingBag size={9} color={pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a'} />
           <span style={{ fontSize: '0.56rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a' }}>{pickupEntries.length} pickup</span>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px',
+  background: reservationEntries.length > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d',
+  border: reservationEntries.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616',
+  borderRadius: '20px' }}>
+  <CalendarClock size={9} color={reservationEntries.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
+  <span style={{ fontSize: '0.56rem', fontWeight: '900',
+    color: reservationEntries.length > 0 ? '#d3bfa2' : '#2a2a2a' }}>
+    {reservationEntries.length} reserved
+  </span>
+</div>
       </div>
     </div>
 
@@ -2070,10 +2115,11 @@ const renderMonthHeatmap = () => {
   {/* Tab switcher + Search */}
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 22px', background: '#080808', borderBottom: '1px solid #0a0a0a' }}>
     <div style={{ display: 'flex' }}>
-      {[
-        { id: 'waitlist', label: 'DINE-IN WAITLIST', icon: <UserCheck size={11} />, count: waitlistEntries.length },
-        { id: 'pickup',   label: 'PICKUP QUEUE',     icon: <ShoppingBag size={11} />, count: pickupEntries.length },
-      ].map(tab => (
+{[
+  { id: 'waitlist',     label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />,    count: waitlistEntries.length },
+  { id: 'pickup',       label: 'PICKUP QUEUE',      icon: <ShoppingBag size={12} />,  count: pickupEntries.length },
+  { id: 'reservations', label: 'RESERVATIONS',       icon: <CalendarClock size={12} />, count: reservationEntries.filter(r=>r.status==='confirmed'||r.status==='pending').length },
+].map(tab => (
         <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           padding: '11px 14px', background: 'transparent', border: 'none',
@@ -2489,6 +2535,215 @@ const renderMonthHeatmap = () => {
         </div>
       );
     })()}
+
+    {/* ── RESERVATIONS TAB ── */}
+{queueTab === 'reservations' && (() => {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+      {/* Date navigator */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={() => {
+            const d = new Date(reservationViewDate);
+            d.setDate(d.getDate() - 1);
+            setReservationViewDate(d.toISOString().split('T')[0]);
+          }} style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
+            <ChevronLeft size={14} />
+          </button>
+          <div style={{ padding:'7px 16px', background:'#000', border:'1px solid #1a1a1a', borderRadius:'8px', fontSize:'0.72rem', fontWeight:'900', color:'#d3bfa2', minWidth:'140px', textAlign:'center' }}>
+            {new Date(reservationViewDate).toLocaleDateString('en-IN',{ weekday:'short', day:'numeric', month:'short' })}
+          </div>
+          <button onClick={() => {
+            const d = new Date(reservationViewDate);
+            d.setDate(d.getDate() + 1);
+            setReservationViewDate(d.toISOString().split('T')[0]);
+          }} style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
+            <ChevronRight size={14} />
+          </button>
+          <button onClick={() => {
+            const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+            setReservationViewDate(d.toISOString().split('T')[0]);
+          }} style={{ padding:'7px 12px', background:'transparent', border:'1px solid rgba(211,191,162,0.15)', color:'#8a704d', borderRadius:'7px', fontSize:'0.6rem', fontWeight:'900', cursor:'pointer' }}>
+            TODAY
+          </button>
+          <button onClick={() => fetchCounterQueue()}
+            style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
+            <RefreshCw size={12} />
+          </button>
+        </div>
+
+        {/* Summary chips */}
+        <div style={{ display:'flex', gap:'8px' }}>
+          {[
+            { label:'TOTAL', val: reservationEntries.length, color:'#d3bfa2' },
+            { label:'CONFIRMED', val: reservationEntries.filter(r=>r.status==='confirmed').length, color:'#8a704d' },
+            { label:'PENDING', val: reservationEntries.filter(r=>r.status==='pending').length, color:'#555' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'center', padding:'8px 12px', background:'#0d0d0d', border:'1px solid #1a1a1a', borderRadius:'10px' }}>
+              <div style={{ fontSize:'1.1rem', fontWeight:'900', color:s.color }}>{s.val}</div>
+              <div style={{ fontSize:'0.48rem', color:'#333', fontWeight:'900', marginTop:'2px', letterSpacing:'0.5px' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Timeline view */}
+      {reservationEntries.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'48px 20px' }}>
+          <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#0a0a0a', border:'1px solid #141414', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}>
+            <CalendarClock size={18} color="#1a1a1a" />
+          </div>
+          <div style={{ fontSize:'0.72rem', color:'#1e1e1e', fontWeight:'700' }}>No reservations for this date</div>
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+          {/* Sort by time */}
+          {[...reservationEntries]
+            .sort((a, b) => new Date(a.reservationTime) - new Date(b.reservationTime))
+            .map(entry => {
+              const resTime = new Date(entry.reservationTime);
+              const now     = new Date();
+              const minsUntil = Math.round((resTime - now) / 60000);
+              const isUpcoming = minsUntil > 0 && minsUntil <= 60;
+              const isOverdue  = minsUntil < -15 && entry.status !== 'seated' && entry.status !== 'cancelled';
+              const isPast     = minsUntil < 0;
+              const statusColors = {
+                pending:   { bg:'rgba(211,191,162,0.04)', border:'rgba(211,191,162,0.1)', text:'#8a704d', label:'PENDING' },
+                confirmed: { bg:'rgba(211,191,162,0.07)', border:'rgba(211,191,162,0.2)', text:'#d3bfa2', label:'CONFIRMED' },
+                seated:    { bg:'rgba(211,191,162,0.03)', border:'#1a1a1a',               text:'#444',    label:'SEATED' },
+                cancelled: { bg:'#080808',                border:'#1a1a1a',               text:'#2a2a2a', label:'CANCELLED' },
+                'no-show': { bg:'#080808',                border:'#1a1a1a',               text:'#2a2a2a', label:'NO-SHOW' },
+              };
+              const sc = statusColors[entry.status] || statusColors.pending;
+
+              return (
+                <div key={entry._id} style={{
+                  background: isOverdue ? 'rgba(211,191,162,0.04)' : sc.bg,
+                  border: `1px solid ${isOverdue ? 'rgba(211,191,162,0.2)' : sc.border}`,
+                  borderLeft: `3px solid ${isUpcoming ? '#d3bfa2' : isOverdue ? '#8a704d' : entry.status==='confirmed' ? 'rgba(211,191,162,0.4)' : '#1a1a1a'}`,
+                  borderRadius:'14px', overflow:'hidden',
+                  opacity: ['cancelled','no-show','seated'].includes(entry.status) ? 0.5 : 1
+                }}>
+                  <div style={{ padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    {/* Left info */}
+                    <div style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
+                      {/* Time block */}
+                      <div style={{ textAlign:'center', padding:'8px 12px', background:'rgba(211,191,162,0.05)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:'10px', flexShrink:0 }}>
+                        <div style={{ fontSize:'1.1rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace', lineHeight:1 }}>
+                          {resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}
+                        </div>
+                        {isUpcoming && (
+                          <div style={{ fontSize:'0.48rem', color:'#8a704d', fontWeight:'900', marginTop:'3px', letterSpacing:'0.5px' }}>
+                            in {minsUntil}m
+                          </div>
+                        )}
+                        {isOverdue && (
+                          <div style={{ fontSize:'0.48rem', color:'#8a704d', fontWeight:'900', marginTop:'3px', letterSpacing:'0.5px' }}>
+                            ⚠ {Math.abs(minsUntil)}m ago
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Guest info */}
+                      <div>
+                        <div style={{ fontWeight:'900', fontSize:'0.88rem', color:'#fff', marginBottom:'3px' }}>
+                          {entry.customerName}
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                            <Users size={9} color="#444" />
+                            <span style={{ fontSize:'0.6rem', color:'#444', fontWeight:'700' }}>{entry.partySize} pax</span>
+                          </div>
+                          {entry.customerPhone && (
+                            <span style={{ fontSize:'0.6rem', color:'#333', fontWeight:'600' }}>{entry.customerPhone}</span>
+                          )}
+                          {entry.tablePreference && (
+                            <span style={{ fontSize:'0.58rem', padding:'1px 7px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'4px', color:'#8a704d', fontWeight:'800' }}>
+                              Pref: T{entry.tablePreference}
+                            </span>
+                          )}
+                        </div>
+                        {entry.specialRequests && (
+                          <div style={{ marginTop:'5px', fontSize:'0.62rem', color:'#555', display:'flex', alignItems:'center', gap:'5px' }}>
+                            <StickyNote size={9} color="#555" />
+                            {entry.specialRequests}
+                          </div>
+                        )}
+                        {entry.items?.length > 0 && (
+                          <div style={{ marginTop:'5px', fontSize:'0.62rem', color:'#555' }}>
+                            Pre-order: {entry.items.slice(0,2).map(i=>`${i.quantity}× ${i.name}`).join(' · ')}
+                            {entry.items.length > 2 && ` +${entry.items.length-2} more`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status + actions */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-end', flexShrink:0 }}>
+                      <span style={{ fontSize:'0.52rem', padding:'3px 9px', borderRadius:'20px', fontWeight:'900',
+                        background:`${sc.bg}`, border:`1px solid ${sc.border}`, color:sc.text, letterSpacing:'0.5px' }}>
+                        {sc.label}
+                      </span>
+                      <div style={{ display:'flex', gap:'5px' }}>
+                        {/* Confirm button */}
+                        {entry.status === 'pending' && (
+                          <button onClick={async () => {
+                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'confirmed' });
+                            fetchCounterQueue();
+                            showNotif(`${entry.customerName} reservation confirmed`);
+                          }} style={{ padding:'5px 10px', background:'linear-gradient(135deg,#d3bfa2,#bda88a)', border:'none', color:'#000', borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+                            CONFIRM
+                          </button>
+                        )}
+                        {/* Assign table */}
+                        {['pending','confirmed'].includes(entry.status) && (
+                          <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+                            style={{ padding:'5px 10px', background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2', borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+                            SEAT
+                          </button>
+                        )}
+                        {/* Edit */}
+                        <button onClick={() => setReservationEditModal(entry)}
+                          style={{ width:'28px', height:'28px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+                          onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
+                          onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
+                          ✎
+                        </button>
+                        {/* No show */}
+                        {['pending','confirmed'].includes(entry.status) && (
+                          <button onClick={() => setConfirmModal({
+                            show:true, title:`No-Show — ${entry.customerName}?`,
+                            subtitle:'Mark this reservation as no-show and free the slot.',
+                            onConfirm: async () => {
+                              await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'no-show' });
+                              fetchCounterQueue();
+                              showNotif(`${entry.customerName} — marked no-show`);
+                            }
+                          })} style={{ width:'28px', height:'28px', background:'transparent', border:'1px solid #1a1a1a', color:'#333', borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+                            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#8a704d'; }}
+                            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#333'; }}>
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
+  );
+})()}
+
   </div>
 </div>
 
@@ -2751,17 +3006,65 @@ const renderMonthHeatmap = () => {
 })}
                 </div>
                 <div style={{...styles.biCard,marginTop:'25px',borderTop:'2px solid #d3bfa2',background:'#090909',padding:'20px'}}>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'15px',textAlign:'center'}}>
-                    {[['DAILY CASH PORTFOLIO',dailySettlementBreakdown.cash],['DAILY UPI INSTANT NET',dailySettlementBreakdown.upi],['DAILY CARD CAPTURES',dailySettlementBreakdown.card]].map(([label,val])=>(
-                      <div key={label}><small style={{...styles.statLabel,color:'#666',letterSpacing:'0.5px'}}>{label}</small>
-                      <div style={{fontSize:'1.15rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>₹{val.toLocaleString()}</div></div>
-                    ))}
-                    <div style={{borderLeft:'1px solid #151515',paddingLeft:'15px'}}>
-                      <small style={{...styles.statLabel,color:'#d3bfa2',fontWeight:'900'}}>DAILY GROSS SETTLED</small>
-                      <div style={{fontSize:'1.35rem',fontWeight:'900',color:'#d3bfa2',marginTop:'2px'}}>₹{dailySettlementBreakdown.gross.toLocaleString()}</div>
-                    </div>
-                  </div>
-                </div>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px',textAlign:'center'}}>
+    {[
+      ['CASH',     dailySettlementBreakdown.cash],
+      ['UPI',      dailySettlementBreakdown.upi],
+      ['CARD',     dailySettlementBreakdown.card],
+    ].map(([label,val])=>(
+      <div key={label} style={{borderRight:'1px solid #1c1f26',paddingRight:'12px'}}>
+        <small style={{...styles.statLabel,color:'#555',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
+          DAILY {label}
+        </small>
+        <div style={{fontSize:'1rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>
+          ₹{Number(val).toLocaleString()}
+        </div>
+      </div>
+    ))}
+
+    {/* GST SPLIT */}
+    {(() => {
+      const taxPct = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
+      const halfTax = taxPct / 2;
+      const gross = dailySettlementBreakdown.gross;
+      const taxableBase = gross / (1 + taxPct);
+      const cgst = Math.round(gross * halfTax / (1 + taxPct));
+      const sgst = cgst;
+      const netRevenue = Math.round(taxableBase);
+      return (
+        <>
+          <div style={{borderRight:'1px solid #1c1f26',paddingRight:'12px'}}>
+            <small style={{...styles.statLabel,color:'#8a704d',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
+              CGST {(halfTax*100).toFixed(1)}%
+            </small>
+            <div style={{fontSize:'1rem',fontWeight:'900',color:'#8a704d',marginTop:'4px'}}>
+              ₹{cgst.toLocaleString()}
+            </div>
+          </div>
+          <div style={{borderRight:'1px solid #1c1f26',paddingRight:'12px'}}>
+            <small style={{...styles.statLabel,color:'#8a704d',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
+              SGST {(halfTax*100).toFixed(1)}%
+            </small>
+            <div style={{fontSize:'1rem',fontWeight:'900',color:'#8a704d',marginTop:'4px'}}>
+              ₹{sgst.toLocaleString()}
+            </div>
+          </div>
+          <div style={{borderLeft:'2px solid #d3bfa2',paddingLeft:'12px'}}>
+            <small style={{...styles.statLabel,color:'#d3bfa2',fontWeight:'900',fontSize:'0.52rem'}}>
+              GROSS SETTLED
+            </small>
+            <div style={{fontSize:'1.2rem',fontWeight:'900',color:'#d3bfa2',marginTop:'2px'}}>
+              ₹{gross.toLocaleString()}
+            </div>
+            <div style={{fontSize:'0.52rem',color:'#555',marginTop:'2px'}}>
+              NET ₹{netRevenue.toLocaleString()} + GST ₹{(cgst+sgst).toLocaleString()}
+            </div>
+          </div>
+        </>
+      );
+    })()}
+  </div>
+</div>
               </div>
               {tableBill && (
                 <motion.div initial={{x:20,opacity:0}} animate={{x:0,opacity:1}} style={styles.receipt}>
@@ -4408,11 +4711,34 @@ setNewStaff({
   )}
 </td>
                                   <td><span style={{display:'inline-flex',alignItems:'center',gap:'5px',fontSize:'0.7rem',fontWeight:'800',color:m.shiftType==='Night Shift'?'#8a704d':'#d3bfa2'}}><Clock size={11}/>{m.shiftType?.toUpperCase()}</span></td>
-                                  <td style={{textAlign:'center'}}>
-                                    <span style={{padding:'4px 10px',borderRadius:'12px',background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.08)',fontSize:'0.75rem',fontWeight:'800',color:'#fff'}}>
-                                      {days} <span style={{color:'#444',fontSize:'0.6rem'}}>DAYS</span>
-                                    </span>
-                                  </td>
+<td style={{textAlign:'center'}}>
+  <span style={{
+    padding:'4px 10px',borderRadius:'12px',
+    background:'rgba(211,191,162,0.03)',
+    border:'1px solid rgba(211,191,162,0.08)',
+    fontSize:'0.75rem',fontWeight:'800',color:'#fff'
+  }}>
+    {days} <span style={{color:'#444',fontSize:'0.6rem'}}>DAYS</span>
+  </span>
+  {(() => {
+    // Calculate total hours for this staff in selected month
+    const prefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+    const staffLogs = attendanceLogs.filter(l =>
+      (l.staffId===m._id||l.staffId?.toString()===m._id?.toString()) &&
+      l.date?.startsWith(prefix) && l.clockIn && l.clockOut
+    );
+    const totalHrs = staffLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
+    const overtimeHrs = Math.max(0, totalHrs - (days * 8));
+    return overtimeHrs > 0 ? (
+      <div style={{
+        fontSize:'0.52rem',fontWeight:'900',color:'#BA7517',
+        marginTop:'3px',letterSpacing:'0.5px'
+      }}>
+        +{overtimeHrs.toFixed(1)}h OT
+      </div>
+    ) : null;
+  })()}
+</td>
                                   <td style={{fontSize:'0.75rem',color:'#888'}}>{calculateTenure(m.joiningDate)}</td>
                                   <td style={{fontWeight:'800',color:'#fff'}}>₹{Number(m.baseSalary).toLocaleString()}<small style={{color:'#444',fontSize:'0.6rem'}}>/mo</small></td>
                                   {/* Replace the payroll <td> */}
@@ -4660,49 +4986,67 @@ setNewStaff({
                     </button>
                   </div>
 
-                  {/* Session history for today */}
-                  {dayLogs.length > 0 && (
-                    <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                      {dayLogs.map((log, idx) => {
-                        const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
-                        const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : null;
-                        const hrs = log.totalWorkingHours;
-                        return (
-                          <div key={log._id} style={{
-                            display:'flex',alignItems:'center',gap:'8px',
-                            padding:'6px 8px',background:'#0a0a0a',
-                            borderRadius:'6px',border:'1px solid #111'
-                          }}>
-                            <span style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',minWidth:'20px'}}>#{idx+1}</span>
-                            <div style={{display:'flex',alignItems:'center',gap:'6px',flex:1}}>
-                              <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{inTime}</span>
-                              <span style={{fontSize:'0.55rem',color:'#333'}}>→</span>
-                              {outTime ? (
-                                <>
-                                  <span style={{fontSize:'0.65rem',color:'#4ade80',fontWeight:'700'}}>{outTime}</span>
-                                  <span style={{marginLeft:'auto',fontSize:'0.6rem',color:'#4ade80',fontWeight:'900',
-                                    background:'rgba(74,222,128,0.06)',padding:'2px 6px',borderRadius:'4px',border:'1px solid rgba(74,222,128,0.12)'}}>
-                                    {hrs ? `${hrs.toFixed(1)}h` : '—'}
-                                  </span>
-                                </>
-                              ) : (
-                                <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontStyle:'italic',marginLeft:'auto'}}>IN PROGRESS...</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+{/* Session history for today */}
+{dayLogs.length > 0 && (
+  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+    {dayLogs.map((log, idx) => {
+      const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
+      const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : null;
+      const hrs = log.totalWorkingHours;
+      return (
+        <div key={log._id} style={{
+          display:'flex',alignItems:'center',gap:'8px',
+          padding:'6px 8px',background:'#0a0a0a',
+          borderRadius:'6px',border:'1px solid #111'
+        }}>
+          <span style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',minWidth:'20px'}}>#{idx+1}</span>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',flex:1}}>
+            <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{inTime}</span>
+            <span style={{fontSize:'0.55rem',color:'#333'}}>→</span>
+            {outTime ? (
+              <>
+                <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{outTime}</span>
+                <span style={{
+                  marginLeft:'auto',fontSize:'0.6rem',fontWeight:'900',
+                  // ── OVERTIME FLAG: >9h in a single session ──
+                  color: hrs >= 9 ? '#BA7517' : '#d3bfa2',
+                  background: hrs >= 9 ? 'rgba(186,117,23,0.08)' : 'rgba(211,191,162,0.06)',
+                  padding:'2px 6px',borderRadius:'4px',
+                  border: hrs >= 9 ? '1px solid rgba(186,117,23,0.25)' : '1px solid rgba(211,191,162,0.12)'
+                }}>
+                  {hrs ? `${hrs.toFixed(1)}h` : '—'}
+                  {hrs >= 9 && <span style={{marginLeft:'4px',fontSize:'0.48rem',letterSpacing:'0.5px'}}>⚠ OT</span>}
+                </span>
+              </>
+            ) : (
+              <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontStyle:'italic',marginLeft:'auto'}}>IN PROGRESS...</span>
+            )}
+          </div>
+        </div>
+      );
+    })}
 
-                      {/* Total for day if multiple sessions */}
-                      {completedLogs.length > 1 && (
-                        <div style={{display:'flex',justifyContent:'flex-end',paddingTop:'4px'}}>
-                          <span style={{fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
-                            TOTAL: {totalHoursToday.toFixed(2)}h
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+    {/* Total for day + overtime summary */}
+    {completedLogs.length > 0 && (
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
+        <span style={{fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
+          TOTAL: {totalHoursToday.toFixed(2)}h
+        </span>
+        {totalHoursToday >= 9 && (
+          <span style={{
+            fontSize:'0.58rem',fontWeight:'900',
+            padding:'2px 8px',borderRadius:'4px',
+            background:'rgba(186,117,23,0.1)',
+            color:'#BA7517',
+            border:'1px solid rgba(186,117,23,0.25)'
+          }}>
+            ⚠ OVERTIME — {(totalHoursToday - 8).toFixed(1)}h extra
+          </span>
+        )}
+      </div>
+    )}
+  </div>
+)}
 
                   {/* Absent indicator */}
                   {!hasAnyPunch && (
@@ -5464,7 +5808,175 @@ setNewStaff({
             </motion.div>
           )}
 
+{/* ── RESERVATIONS TAB (FULL PAGE) ── */}
+{activeTab === 'reservations' && (
+  <motion.div key="reservations" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
+    style={{display:'flex',flexDirection:'column',gap:'24px',paddingBottom:'100px',width:'100%'}}>
 
+    {/* Header */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
+      <div>
+        <div style={{fontSize:'0.58rem',color:'#555',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>BOOKING MANAGEMENT</div>
+        <h2 style={{margin:0,fontSize:'1.2rem',fontWeight:'900',color:'#fff'}}>RESERVATION CALENDAR</h2>
+        <p style={{margin:'5px 0 0',fontSize:'0.7rem',color:'#444',lineHeight:'1.5'}}>
+          Manage advance bookings, table assignments and guest pre-orders.
+        </p>
+      </div>
+      <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+        {/* Date navigator */}
+        <button onClick={() => {
+          const d = new Date(reservationViewDate);
+          d.setDate(d.getDate()-1);
+          setReservationViewDate(d.toISOString().split('T')[0]);
+        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
+          <ChevronLeft size={14}/>
+        </button>
+        <input type="date" value={reservationViewDate}
+          onChange={e => setReservationViewDate(e.target.value)}
+          style={{padding:'8px 12px',background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.75rem',fontWeight:'900',outline:'none',colorScheme:'dark',cursor:'pointer'}}/>
+        <button onClick={() => {
+          const d = new Date(reservationViewDate);
+          d.setDate(d.getDate()+1);
+          setReservationViewDate(d.toISOString().split('T')[0]);
+        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
+          <ChevronRight size={14}/>
+        </button>
+        <button onClick={fetchCounterQueue}
+          style={{padding:'8px 14px',background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer'}}>
+          ↻ REFRESH
+        </button>
+      </div>
+    </div>
+
+    {/* KPI strip */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
+      {[
+        { l:'TOTAL BOOKINGS',  v: reservationEntries.length,                                           c:'#d3bfa2' },
+        { l:'CONFIRMED',       v: reservationEntries.filter(r=>r.status==='confirmed').length,          c:'#d3bfa2' },
+        { l:'PENDING',         v: reservationEntries.filter(r=>r.status==='pending').length,            c:'#8a704d' },
+        { l:'TOTAL COVERS',    v: reservationEntries.filter(r=>!['cancelled','no-show'].includes(r.status)).reduce((a,r)=>a+(r.partySize||0),0), c:'#fff' },
+      ].map(s=>(
+        <div key={s.l} style={{background:'#0d0d0d',border:'1px solid #1a1a1a',borderRadius:'14px',padding:'16px'}}>
+          <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginBottom:'6px'}}>{s.l}</div>
+          <div style={{fontSize:'1.6rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* Timeline — hourly slots */}
+    <div style={{background:'#080808',border:'1px solid rgba(211,191,162,0.07)',borderRadius:'20px',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid #0d0d0d',background:'#0a0a0a',display:'flex',alignItems:'center',gap:'10px'}}>
+        <CalendarClock size={16} color="#d3bfa2"/>
+        <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>
+          {new Date(reservationViewDate).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+        </span>
+      </div>
+      <div style={{padding:'20px'}}>
+        {/* Generate hour slots 11am–11pm */}
+        {Array.from({length:13},(_,i)=>i+11).map(hour => {
+          const slotEntries = reservationEntries.filter(r => {
+            const h = new Date(r.reservationTime).getHours();
+            return h === hour;
+          });
+          const fmt = h => h === 12 ? '12:00 PM' : h < 12 ? `${h}:00 AM` : `${h-12}:00 PM`;
+          const isCurrentHour = new Date().getHours() === hour;
+
+          return (
+            <div key={hour} style={{
+              display:'flex',gap:'14px',
+              paddingBottom:'14px',marginBottom:'14px',
+              borderBottom:'1px solid #0d0d0d',
+              background: isCurrentHour ? 'rgba(211,191,162,0.02)' : 'transparent',
+              borderRadius: isCurrentHour ? '8px' : '0',
+              padding: isCurrentHour ? '8px' : '0 0 14px 0'
+            }}>
+              {/* Hour label */}
+              <div style={{
+                minWidth:'70px',textAlign:'right',
+                fontSize:'0.65rem',fontWeight:'900',
+                color: isCurrentHour ? '#d3bfa2' : '#2a2a2a',
+                paddingTop:'2px',flexShrink:0
+              }}>
+                {fmt(hour)}
+                {isCurrentHour && (
+                  <div style={{fontSize:'0.48rem',color:'rgba(211,191,162,0.4)',letterSpacing:'0.5px',marginTop:'2px'}}>NOW</div>
+                )}
+              </div>
+
+              {/* Slot content */}
+              <div style={{flex:1,display:'flex',flexDirection:'column',gap:'6px'}}>
+                {slotEntries.length === 0 ? (
+                  <div style={{height:'32px',border:'1px dashed #141414',borderRadius:'8px',display:'flex',alignItems:'center',paddingLeft:'12px'}}>
+                    <span style={{fontSize:'0.58rem',color:'#1e1e1e',fontWeight:'700'}}>Available</span>
+                  </div>
+                ) : slotEntries.map(entry => {
+                  const sc = {
+                    pending:   {bg:'rgba(211,191,162,0.05)',border:'rgba(211,191,162,0.12)',text:'#8a704d'},
+                    confirmed: {bg:'rgba(211,191,162,0.1)', border:'rgba(211,191,162,0.3)', text:'#d3bfa2'},
+                    seated:    {bg:'rgba(211,191,162,0.03)',border:'#1a1a1a',               text:'#444'},
+                    cancelled: {bg:'#080808',               border:'#1a1a1a',               text:'#2a2a2a'},
+                  }[entry.status] || {bg:'rgba(211,191,162,0.05)',border:'rgba(211,191,162,0.12)',text:'#8a704d'};
+                  return (
+                    <div key={entry._id} style={{
+                      display:'flex',justifyContent:'space-between',alignItems:'center',
+                      padding:'10px 14px',
+                      background:sc.bg, border:`1px solid ${sc.border}`,
+                      borderLeft:`3px solid ${sc.text}`,
+                      borderRadius:'10px'
+                    }}>
+                      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                        <div style={{fontWeight:'900',fontSize:'0.82rem',color:'#fff'}}>{entry.customerName}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                          <Users size={10} color="#444"/>
+                          <span style={{fontSize:'0.6rem',color:'#444',fontWeight:'700'}}>{entry.partySize}p</span>
+                        </div>
+                        {entry.tablePreference && (
+                          <span style={{fontSize:'0.58rem',padding:'2px 7px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'4px',color:'#8a704d',fontWeight:'800'}}>
+                            T{entry.tablePreference}
+                          </span>
+                        )}
+                        <span style={{fontSize:'0.52rem',color:sc.text,fontWeight:'900',letterSpacing:'0.5px'}}>
+                          {entry.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{display:'flex',gap:'5px'}}>
+                        {entry.status==='pending' && (
+                          <button onClick={async()=>{
+                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed'});
+                            fetchCounterQueue();
+                            showNotif(`${entry.customerName} confirmed`);
+                          }} style={{padding:'4px 10px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
+                            CONFIRM
+                          </button>
+                        )}
+                        {['pending','confirmed'].includes(entry.status) && (
+                          <button onClick={()=>setAssignTableModal({...entry,_fromReservation:true})}
+                            style={{padding:'4px 10px',background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
+                            SEAT
+                          </button>
+                        )}
+                        <button onClick={()=>setReservationEditModal(entry)}
+                          style={{width:'26px',height:'26px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'6px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
+                          ✎
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </motion.div>
+)}
           {/* ════════════════════════════════════════════
     EXTRA ITEMS — Cold drinks, Ice creams, etc.
     ════════════════════════════════════════════ */}
@@ -5884,7 +6396,90 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
           MODALS — rendered at root level, always correct position
           ════════════════════════════════════════════ */}
 
-      {/* CONFIRM MODAL */}
+{/* ── RESERVATION EDIT MODAL ── */}
+<AnimatePresence>
+  {reservationEditModal && (
+    <div style={styles.modalBackdrop} className="p-modal-backdrop">
+      <motion.div
+        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        style={{...styles.confirmBox, width:'480px', textAlign:'left', padding:'36px 28px', maxHeight:'85vh', overflowY:'auto'}}
+        className="p-modal-box custom-scroll">
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'24px'}}>
+          <div>
+            <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>RESERVATION</div>
+            <h3 style={{color:'#fff',margin:0,fontSize:'1rem',fontWeight:'900'}}>{reservationEditModal.customerName}</h3>
+          </div>
+          <button onClick={() => setReservationEditModal(null)}
+            style={{background:'#111',border:'1px solid #1a1a1a',color:'#555',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+          {/* Status */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Status</label>
+            <select
+              defaultValue={reservationEditModal.status}
+              onChange={e => setReservationEditModal(prev => ({...prev, status: e.target.value}))}
+              style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+              {['pending','confirmed','seated','cancelled','no-show'].map(s => (
+                <option key={s} value={s}>{s.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Table preference */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Table Assignment</label>
+            <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
+              {Array.from({length:tableCount},(_,i)=>(i+1).toString()).map(t => {
+                const isOcc = occupiedTables.includes(t);
+                const isSel = reservationEditModal.tablePreference?.toString() === t;
+                return (
+                  <button key={t} type="button" onClick={() => !isOcc && setReservationEditModal(prev => ({...prev, tablePreference:t}))}
+                    style={{
+                      padding:'8px 14px',borderRadius:'8px',
+                      border:'none',fontSize:'0.7rem',fontWeight:'800',cursor:isOcc?'not-allowed':'pointer',
+                      background: isSel ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isOcc ? '#0d0d0d' : '#111',
+                      color: isSel ? '#000' : isOcc ? '#222' : '#555',
+                      opacity: isOcc ? 0.4 : 1
+                    }}>
+                    T{t}{isOcc ? ' •' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Special requests */}
+          <div>
+            <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Special Requests</label>
+            <input type="text"
+              defaultValue={reservationEditModal.specialRequests || ''}
+              onChange={e => setReservationEditModal(prev => ({...prev, specialRequests: e.target.value}))}
+              style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}} />
+          </div>
+
+          <div style={{display:'flex',gap:'12px',paddingTop:'16px',borderTop:'1px solid #111'}}>
+            <button onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
+            <button onClick={async () => {
+              await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
+                status: reservationEditModal.status,
+                tablePreference: reservationEditModal.tablePreference,
+                specialRequests: reservationEditModal.specialRequests
+              });
+              fetchCounterQueue();
+              showNotif(`Reservation updated for ${reservationEditModal.customerName}`);
+              setReservationEditModal(null);
+            }} style={{...styles.confirmBtn, flex:2}}>SAVE CHANGES</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
 
       {/* EXTRA ITEM EDIT MODAL */}
 <AnimatePresence>

@@ -160,19 +160,63 @@ const KitchenView = () => {
     if (!SR) return;
     const rec = new SR();
     rec.continuous = true; rec.interimResults = false; rec.lang = 'en-IN';
-    rec.onresult = (e) => {
-      const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-      if (txt.includes('complete table') || txt.includes('ready table')) {
-        const match = txt.match(/(?:table|ready|complete)\s*(\w+)/);
-        if (match?.[1]) {
-          const t = match[1].toUpperCase();
-          const o = orders.find(x => x.tableNumber?.toUpperCase() === t);
-          if (o) markAsReady(o._id);
-        }
-      } else if (txt.includes('recall last') || txt.includes('pratyeksha recall')) {
-        handleRecall();
-      }
+rec.onresult = (e) => {
+  const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
+
+  // ── TABLE COMPLETE — English + Marathi ──
+  const isCompleteCmd =
+    txt.includes('complete table') ||
+    txt.includes('ready table') ||
+    txt.includes('टेबल तयार') ||      // Marathi: "table ready"
+    txt.includes('तयार टेबल') ||
+    txt.includes('पूर्ण टेबल') ||     // Marathi: "complete table"
+    txt.includes('आर्डर तयार');       // Marathi: "order ready"
+
+  if (isCompleteCmd) {
+    // Extract table number — handle English digits and Marathi words
+    const marathiNums = {
+      'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,
+      'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10,
+      'अकरा':11,'बारा':12,'तेरा':13,'चौदा':14,'पंधरा':15
     };
+    let tableNum = null;
+    // Check Marathi number words
+    Object.entries(marathiNums).forEach(([word, num]) => {
+      if (txt.includes(word)) tableNum = num.toString();
+    });
+    // Fallback to English digits
+    if (!tableNum) {
+      const match = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/);
+      if (match?.[1]) tableNum = match[1].toUpperCase();
+    }
+    if (tableNum) {
+      const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tableNum.toString().toUpperCase());
+      if (o) markAsReady(o._id);
+    }
+  }
+
+  // ── RECALL — English + Marathi ──
+  if (
+    txt.includes('recall last') ||
+    txt.includes('pratyeksha recall') ||
+    txt.includes('परत आण') ||         // Marathi: "bring back"
+    txt.includes('रिकॉल')             // Marathi transliteration
+  ) {
+    handleRecall();
+  }
+
+  // ── AGGREGATE VIEW TOGGLE ──
+  if (
+    txt.includes('show summary') ||
+    txt.includes('aggregate view') ||
+    txt.includes('सारांश दाखवा')      // Marathi: "show summary"
+  ) {
+    setIsAggregateView(v => !v);
+  }
+};
+
+// ── Set recognition language to support both EN and MR ──
+rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
     rec.onerror = rec.onend = () => setIsListening(false);
     recognitionRef.current = rec;
   }, [orders, recallQueue]);
@@ -584,11 +628,11 @@ const KitchenView = () => {
             onClick={toggleVoiceListener}
             style={{ ...rs.utilBtn, borderColor: isListening ? '#d3bfa2' : '#252932', background: isListening ? 'rgba(211,191,162,0.12)' : '#191b22' }}>
             <Mic size={15} color={isListening ? '#d3bfa2' : '#9fa4b0'} />
-            {!isMobile && (
-              <span style={{ color: isListening ? '#d3bfa2' : '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
-                {isListening ? "LIVE" : "VOICE"}
-              </span>
-            )}
+{!isMobile && (
+  <span style={{ color: isListening ? '#d3bfa2' : '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
+    {isListening ? "LIVE — EN/MR" : "VOICE"}
+  </span>
+)}
           </button>
 
           {/* Aggregate toggle */}
@@ -601,13 +645,30 @@ const KitchenView = () => {
             )}
           </button>
 
-          {/* Recall */}
-          {recallQueue.length > 0 && (
-            <button onClick={handleRecall} style={rs.utilBtn}>
-              <History size={16} color="#d3bfa2" />
-              {!isMobile && <span style={{ fontSize: '0.72rem', fontWeight: 700 }}>RECALL</span>}
-            </button>
-          )}
+{recallQueue.length > 0 && (
+  <button onClick={handleRecall} style={{
+    ...rs.utilBtn,
+    border: '1px solid rgba(211,191,162,0.3)',
+    background: 'rgba(211,191,162,0.06)',
+    position: 'relative'
+  }}>
+    <History size={16} color="#d3bfa2" />
+    {!isMobile && (
+      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>RECALL</span>
+    )}
+    {/* Count badge */}
+    <div style={{
+      position: 'absolute', top: '-6px', right: '-6px',
+      width: '18px', height: '18px', borderRadius: '50%',
+      background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+      color: '#0f1013', fontSize: '0.55rem', fontWeight: '900',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'monospace', lineHeight: 1
+    }}>
+      {recallQueue.length}
+    </div>
+  </button>
+)}
 
           {/* Ticket count badge */}
           <div style={rs.ticketBadge}>
@@ -637,6 +698,41 @@ const KitchenView = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ── RECALL QUEUE PREVIEW ── */}
+<AnimatePresence>
+  {recallQueue.length > 0 && (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'rgba(211,191,162,0.04)',
+        border: '1px solid rgba(211,191,162,0.1)',
+        borderRadius: 9, padding: '6px 12px', flexShrink: 0, overflow: 'hidden'
+      }}>
+      <History size={11} color="rgba(211,191,162,0.4)" />
+      <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.35)', fontWeight: 900, letterSpacing: '1px', flexShrink: 0 }}>
+        RECALL ({recallQueue.length}/10):
+      </span>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }} className="no-scrollbar">
+        {recallQueue.map((o, i) => (
+          <span key={i} style={{
+            fontSize: '0.58rem', fontWeight: 900,
+            padding: '2px 8px', borderRadius: 5,
+            background: i === 0 ? 'rgba(211,191,162,0.12)' : '#0d0e11',
+            border: `1px solid ${i === 0 ? 'rgba(211,191,162,0.25)' : '#1f222a'}`,
+            color: i === 0 ? '#d3bfa2' : '#4a4f5c',
+            whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'monospace'
+          }}>
+            T-{o.tableNumber} · {o.items?.length} items
+          </span>
+        ))}
+      </div>
+      <span style={{ fontSize: '0.52rem', color: 'rgba(211,191,162,0.2)', flexShrink: 0 }}>
+        ← NEXT
+      </span>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* ── MODIFICATION ALERTS ── */}
       <AnimatePresence>
@@ -966,6 +1062,23 @@ const KDSOrderCard = ({
   socketInstance, isNonVegMode, tenantOnlyVeg, isMobile, isTablet = false
 }) => {
   const [seconds, setSeconds] = useState(0);
+  
+const [itemStartTimes, setItemStartTimes] = useState({}); 
+// { idx: timestamp } — when chef tapped the item (started cooking)
+const [itemElapsed, setItemElapsed] = useState({});
+
+useEffect(() => {
+  const t = setInterval(() => {
+    setItemElapsed(prev => {
+      const updated = {};
+      Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
+        updated[idx] = Math.floor((Date.now() - startMs) / 1000);
+      });
+      return updated;
+    });
+  }, 1000);
+  return () => clearInterval(t);
+}, [itemStartTimes]);
 
   useEffect(() => {
     const update = () => setSeconds(Math.floor((new Date() - new Date(order.createdAt)) / 1000));
@@ -1092,8 +1205,13 @@ const KDSOrderCard = ({
           return (
             <div
               key={idx}
-              onClick={() => toggleItemCrossed(idx)}
-              style={{
+onClick={() => {
+  toggleItemCrossed(idx);
+  // ── Start item timer on first tap (begin cooking) ──
+  if (!checkedItemsGlobal[`${order._id}-${idx}`] && !itemStartTimes[idx]) {
+    setItemStartTimes(prev => ({ ...prev, [idx]: Date.now() }));
+  }
+}}              style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 0', borderBottom: '1px solid #1c1f26',
                 cursor: 'pointer', opacity: crossed ? 0.2 : 1,
@@ -1152,6 +1270,42 @@ const KDSOrderCard = ({
                 }}>
                   {item.portion?.toUpperCase() || 'STANDARD'}
                 </span>
+
+                {/* ── ITEM-LEVEL COOK TIMER ── */}
+{itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`] && (
+  <div style={{
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    marginTop: 4,
+    fontSize: '0.55rem', fontWeight: 900,
+    color: (itemElapsed[idx]||0) >= 300 ? '#d3bfa2' : 'rgba(211,191,162,0.4)',
+    background: (itemElapsed[idx]||0) >= 300 ? 'rgba(211,191,162,0.08)' : 'transparent',
+    padding: (itemElapsed[idx]||0) >= 300 ? '2px 6px' : '0',
+    borderRadius: 4,
+    border: (itemElapsed[idx]||0) >= 300 ? '1px solid rgba(211,191,162,0.2)' : 'none',
+    fontFamily: 'monospace'
+  }}>
+    <Timer size={9} />
+    {(() => {
+      const s = itemElapsed[idx] || 0;
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return `${m}:${sec.toString().padStart(2,'0')}`;
+    })()}
+    {(itemElapsed[idx]||0) >= 300 && (
+      <span style={{ fontSize: '0.48rem', letterSpacing: '0.5px' }}>⚠ SLOW</span>
+    )}
+  </div>
+)}
+{checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (
+  <div style={{
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    marginTop: 4, fontSize: '0.55rem', fontWeight: 900,
+    color: '#555', fontFamily: 'monospace'
+  }}>
+    <Timer size={9} />
+    Done in {Math.floor((itemElapsed[idx]||0)/60)}m {((itemElapsed[idx]||0)%60)}s
+  </div>
+)}
                 {item.suggestion && (
                   <div style={{
                     color: '#bda88a', fontSize: '0.62rem', marginTop: 4,
@@ -1163,6 +1317,8 @@ const KDSOrderCard = ({
                     <span style={{ textTransform: 'uppercase' }}>{item.suggestion}</span>
                   </div>
                 )}
+
+                
               </div>
               {crossed && <CheckSquare size={16} color="#d3bfa2" style={{ flexShrink: 0 }} />}
             </div>
