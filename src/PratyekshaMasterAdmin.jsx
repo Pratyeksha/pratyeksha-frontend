@@ -12,128 +12,181 @@ import {
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
-/* ── Global Styles ── */
+/* ─────────────────────────────────────────
+   DESIGN TOKENS
+   Reference: Image 2 — dark bg #0f0f0f, 
+   gold ONLY on accents/numbers/borders,
+   white/light-gray for all body text
+───────────────────────────────────────── */
+const C = {
+  /* backgrounds */
+  bg:       '#0a0a0a',
+  bgDark:   '#060606',
+  bgCard:   '#111111',
+  bgCard2:  '#151515',
+  bgInput:  '#0d0d0d',
+
+  /* borders */
+  border:    '#1e1e1e',
+  borderMid: '#252525',
+  borderGold:'rgba(184,151,90,0.18)',
+
+  /* gold palette — from Image 2 */
+  gold:      '#c8a84b',   /* primary accent — timers, badges */
+  goldLight: '#d4b86a',   /* lighter hover state */
+  goldDim:   '#8a6d2a',   /* muted gold for secondary labels */
+  goldFaint: 'rgba(200,168,75,0.07)',
+  goldBorder:'rgba(200,168,75,0.15)',
+
+  /* text — IMAGE 2 uses near-white for readability */
+  text:      '#e8e8e8',   /* primary body text — near white */
+  textMid:   '#a8a8a8',   /* secondary text */
+  textDim:   '#606060',   /* placeholders, labels */
+  textFaint: '#2a2a2a',   /* very dim */
+
+  /* status */
+  warning:  '#d4903a',
+  danger:   '#c06040',
+  success:  '#5a9e6a',
+  green:    '#4ade80',
+
+  /* amber */
+  amber:    '#b87c33',
+  amberDim: '#7a4d1e',
+};
+
+/* ── Global CSS ── */
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
   body, html {
     overflow: hidden !important;
     width: 100vw; height: 100vh;
-    background: #0a0800;
-    font-family: 'DM Sans', sans-serif;
-    color: #e8dcc8;
+    background: #0a0a0a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #e8e8e8;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    line-height: 1.5;
   }
+
   ::-webkit-scrollbar { width: 3px; height: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2416; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 99px; }
   .no-sb::-webkit-scrollbar { display: none; }
   .no-sb { -ms-overflow-style: none; scrollbar-width: none; }
-  input, select, textarea { font-family: 'DM Sans', sans-serif; }
+  
+  input, select, textarea, button {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+  }
   a { text-decoration: none; color: inherit; }
 
   /* ── Sidebar ── */
   .p-sidebar {
-    width: 260px; min-width: 260px; height: 100vh;
-    background: #070600;
-    border-right: 1px solid #1c1810;
+    width: 248px; min-width: 248px; height: 100vh;
+    background: #060606;
+    border-right: 1px solid #1a1a1a;
     display: flex; flex-direction: column;
     flex-shrink: 0; overflow: hidden;
-    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    transition: transform 0.26s cubic-bezier(.4,0,.2,1);
     position: relative; z-index: 149;
   }
   .p-sidebar-inner {
     display: flex; flex-direction: column;
-    height: 100%; overflow-y: auto; padding: 28px 18px;
+    height: 100%; overflow-y: auto; padding: 22px 14px;
   }
 
   /* ── Mobile topbar ── */
   .p-topbar {
     display: none; position: fixed; top: 0; left: 0; right: 0;
-    height: 52px; background: #070600;
-    border-bottom: 1px solid #1c1810;
+    height: 50px; background: #060606;
+    border-bottom: 1px solid #1a1a1a;
     z-index: 160; align-items: center;
-    justify-content: space-between; padding: 0 16px;
+    justify-content: space-between; padding: 0 14px;
   }
 
   /* ── Backdrop ── */
   .p-backdrop {
     display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.75); z-index: 148;
-    backdrop-filter: blur(3px);
+    background: rgba(0,0,0,0.8); z-index: 148;
   }
 
   /* ── Input focus ── */
   .p-inp { transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
-  .p-inp:focus { border-color: rgba(193,155,90,0.5) !important; box-shadow: 0 0 0 3px rgba(193,155,90,0.06) !important; }
+  .p-inp:focus { 
+    border-color: rgba(200,168,75,0.4) !important; 
+    box-shadow: 0 0 0 3px rgba(200,168,75,0.05) !important; 
+  }
 
-  /* ── Form grid ── */
-  .p-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .p-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
-  .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* ── Grids ── */
+  .p-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .p-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+  .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
   /* ── Filter bar ── */
-  .p-filterbar { display: flex; border-bottom: 1px solid #111008; flex-shrink: 0; background: #070600; overflow-x: auto; }
+  .p-filterbar { 
+    display: flex; border-bottom: 1px solid #1a1a1a; 
+    flex-shrink: 0; background: #060606; overflow-x: auto; 
+  }
   .p-filterbar::-webkit-scrollbar { display: none; }
 
-  /* ── Main scroll areas ── */
+  /* ── Scroll areas ── */
   .p-scroll { flex: 1; overflow-y: auto; }
-  .p-pad { padding: 24px 36px 48px; }
-  .p-pad-sm { padding: 16px 18px 40px; }
+  .p-pad { padding: 24px 32px 48px; }
 
-  /* ── Hover row ── */
-  .p-row { transition: background 0.12s; }
-  .p-row:hover { background: #0f0d06 !important; }
+  /* ── Row hover ── */
+  .p-row { transition: background 0.1s; }
+  .p-row:hover { background: #141414 !important; }
 
   /* ── Card hover ── */
-  .p-card { transition: border-color 0.18s, box-shadow 0.18s; }
-  .p-card:hover { border-color: rgba(193,155,90,0.22) !important; box-shadow: 0 0 0 1px rgba(193,155,90,0.06) !important; }
-
-  /* ── Button hover ── */
-  .p-btn-ghost:hover { background: rgba(193,155,90,0.08) !important; color: #c19b5a !important; }
+  .p-card { transition: border-color 0.18s; }
+  .p-card:hover { border-color: rgba(200,168,75,0.2) !important; }
 
   /* ── Demo card ── */
-  .p-demo-card { transition: background 0.12s, border-color 0.12s; cursor: pointer; }
-  .p-demo-card:hover { background: #0f0d06 !important; border-color: rgba(193,155,90,0.15) !important; }
+  .p-demo-card { transition: background 0.1s, border-color 0.1s; cursor: pointer; }
+  .p-demo-card:hover { background: #141414 !important; }
+
+  /* ── Nav item hover ── */
+  .p-nav-item:hover { background: #111111 !important; color: #c8c8c8 !important; }
 
   /* ── Animations ── */
-  @keyframes shimmer {
-    0% { background-position: -200% center; }
-    100% { background-position: 200% center; }
-  }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
   @keyframes pulse-gold {
-    0%,100% { box-shadow: 0 0 0 0 rgba(193,155,90,0); }
-    50% { box-shadow: 0 0 0 6px rgba(193,155,90,0.08); }
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   /* ── Responsive ── */
   @media (max-width: 1100px) {
     .p-stat-grid { grid-template-columns: repeat(2,1fr); }
     .p-chart-grid { grid-template-columns: 1fr; }
-    .p-pad { padding: 20px 24px 40px; }
-    .p-sidebar { width: 230px; min-width: 230px; }
+    .p-pad { padding: 20px 20px 40px; }
+    .p-sidebar { width: 220px; min-width: 220px; }
   }
   @media (max-width: 768px) {
     .p-topbar { display: flex; }
     .p-sidebar {
       position: fixed; top: 0; left: 0; bottom: 0;
-      width: 80vw; max-width: 280px;
+      width: 80vw; max-width: 260px;
       transform: translateX(-100%);
       z-index: 160;
     }
     .p-sidebar.open { transform: translateX(0); }
     .p-backdrop.open { display: block; }
-    .p-main { padding-top: 52px !important; }
+    .p-main { padding-top: 50px !important; }
     .p-stat-grid { grid-template-columns: 1fr 1fr; }
     .p-form-grid { grid-template-columns: 1fr; }
-    .p-pad { padding: 16px 16px 40px; }
+    .p-pad { padding: 14px 14px 40px; }
     .p-chart-grid { grid-template-columns: 1fr; }
     .hide-mob { display: none !important; }
-    .p-header { padding: 16px 16px 12px !important; }
+    .p-header { padding: 14px 14px 12px !important; }
     .p-drawer {
-      position: fixed !important; inset: 52px 0 0 0 !important;
+      position: fixed !important; inset: 50px 0 0 0 !important;
       width: 100vw !important; max-width: 100vw !important;
       z-index: 170 !important; border-left: none !important;
     }
@@ -143,7 +196,11 @@ const GLOBAL_CSS = `
   @media (max-width: 480px) {
     .p-stat-grid { grid-template-columns: 1fr; }
     .hide-sm { display: none !important; }
-    .p-pad { padding: 12px 12px 40px; }
+  }
+
+  @media (min-width: 769px) {
+    .p-demo-list { display: flex !important; }
+    .p-drawer { position: relative !important; flex-shrink: 0 !important; }
   }
 `;
 
@@ -155,104 +212,83 @@ if (typeof document !== 'undefined' && !document.getElementById('p-admin-styles'
 }
 
 /* ─────────────────────────────────────────
-   DESIGN TOKENS
-───────────────────────────────────────── */
-const C = {
-  bg:        '#0a0800',
-  bgDark:    '#070600',
-  bgCard:    '#0d0b05',
-  bgCard2:   '#100e07',
-  border:    '#1c1810',
-  borderMid: '#252010',
-  gold:      '#c19b5a',
-  goldLight: '#d4af7a',
-  goldDim:   '#8a6d3a',
-  goldFaint: 'rgba(193,155,90,0.08)',
-  amber:     '#b87333',
-  amberDim:  '#7a4d1e',
-  bronze:    '#8B5E3C',
-  text:      '#e8dcc8',
-  textMid:   '#a0906e',
-  textDim:   '#5a4e38',
-  textFaint: '#2e2818',
-  warning:   '#d4903a',
-  danger:    '#c07830',
-  success:   '#b89850',
-};
-
-/* ─────────────────────────────────────────
-   SMALL COMPONENTS
+   SHARED SMALL COMPONENTS
 ───────────────────────────────────────── */
 
-const Pill = ({ children, color = C.gold, bg }) => (
-  <span style={{
-    fontSize: '0.5rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-    background: bg || `rgba(193,155,90,0.1)`,
-    color, border: `1px solid ${color}33`,
-    letterSpacing: '0.8px', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif'
-  }}>
-    {children}
-  </span>
-);
-
+/* Status pill — minimal, gold accent only */
 const StatusChip = ({ status }) => {
   const map = {
-    'Pending':      { c: C.gold,    bg: 'rgba(193,155,90,0.1)',  label: 'PENDING' },
-    'Contacted':    { c: C.amber,   bg: 'rgba(184,115,51,0.1)', label: 'CONTACTED' },
-    'Demo Given':   { c: C.textMid, bg: 'rgba(160,144,110,0.08)', label: 'DONE' },
+    'Pending':    { color: C.gold,    bg: 'rgba(200,168,75,0.08)',  border: 'rgba(200,168,75,0.2)',  label: 'Pending' },
+    'Contacted':  { color: C.warning, bg: 'rgba(212,144,58,0.08)', border: 'rgba(212,144,58,0.2)', label: 'Contacted' },
+    'Demo Given': { color: C.textDim, bg: 'rgba(96,96,96,0.08)',   border: 'rgba(96,96,96,0.18)',  label: 'Done' },
   };
   const s = map[status] || map['Pending'];
   return (
     <span style={{
-      fontSize: '0.48rem', fontWeight: 800, padding: '3px 9px', borderRadius: 99,
-      background: s.bg, color: s.c, border: `1px solid ${s.c}44`,
-      letterSpacing: '1px', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif'
+      fontSize: 11, fontWeight: 500, padding: '2px 9px', borderRadius: 6,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      letterSpacing: '0.2px', whiteSpace: 'nowrap',
     }}>
       {s.label}
     </span>
   );
 };
 
+/* Client status dot */
 const ClientStatusDot = ({ client, now }) => {
-  if (!client.isActive) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.danger, display: 'inline-block', flexShrink: 0 }} />;
+  const base = { width: 7, height: 7, borderRadius: '50%', display: 'inline-block', flexShrink: 0 };
+  if (!client.isActive) return <span style={{ ...base, background: C.danger }} />;
   const exp = client.config?.planExpiry;
-  if (!exp || new Date(exp) < now) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.warning, display: 'inline-block', flexShrink: 0 }} />;
+  if (!exp || new Date(exp) < now) return <span style={{ ...base, background: C.warning }} />;
   const soon = new Date(now); soon.setDate(soon.getDate() + 30);
-  if (new Date(exp) <= soon) return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.goldLight, display: 'inline-block', animation: 'pulse-gold 2s infinite', flexShrink: 0 }} />;
-  return <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.gold, display: 'inline-block', flexShrink: 0 }} />;
+  if (new Date(exp) <= soon) return <span style={{ ...base, background: C.gold, animation: 'pulse-gold 2s infinite' }} />;
+  return <span style={{ ...base, background: '#4ade80' }} />;
 };
 
-const LabeledInput = ({ label, required, hint, children }) => (
-  <div>
-    <label style={{
-      display: 'block', marginBottom: 7,
-      fontSize: '0.54rem', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase',
-      color: required ? C.gold : C.textDim, fontFamily: 'Syne, sans-serif'
-    }}>
-      {label}{required && <span style={{ color: C.danger, marginLeft: 3 }}>*</span>}
-    </label>
+/* Section label */
+const SectionLabel = ({ children, icon: Icon }) => (
+  <div style={{
+    fontSize: 11, fontWeight: 600, color: C.textDim,
+    letterSpacing: '0.8px', textTransform: 'uppercase',
+    marginBottom: 12, display: 'flex', alignItems: 'center', gap: 7
+  }}>
+    {Icon && <Icon size={12} color={C.textDim} strokeWidth={1.5} />}
     {children}
-    {hint && <div style={{ fontSize: '0.55rem', color: C.textFaint, marginTop: 5 }}>{hint}</div>}
   </div>
 );
 
-const inp = {
-  width: '100%', padding: '11px 14px',
-  background: '#0a0800', border: `1px solid ${C.borderMid}`,
-  color: C.text, borderRadius: 10, fontSize: '0.82rem',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'DM Sans, sans-serif',
-};
-
-const SectionDivider = () => (
-  <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${C.borderMid}, transparent)`, margin: '18px 0' }} />
+/* Divider */
+const Div = () => (
+  <div style={{ height: 1, background: C.border, margin: '16px 0' }} />
 );
+
+/* Labeled form input */
+const LabeledInput = ({ label, required, hint, children }) => (
+  <div>
+    <label style={{
+      display: 'block', marginBottom: 6,
+      fontSize: 11, fontWeight: 600, letterSpacing: '0.3px',
+      color: required ? C.textMid : C.textDim,
+    }}>
+      {label}{required && <span style={{ color: C.gold, marginLeft: 3 }}>*</span>}
+    </label>
+    {children}
+    {hint && <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>{hint}</div>}
+  </div>
+);
+
+/* Shared input style */
+const inp = {
+  width: '100%', padding: '10px 12px',
+  background: C.bgInput, border: `1px solid ${C.borderMid}`,
+  color: C.text, borderRadius: 8, fontSize: 13,
+  outline: 'none', boxSizing: 'border-box',
+};
 
 /* ─────────────────────────────────────────
    MAIN EXPORT
 ───────────────────────────────────────── */
 export default function PratyekshaMasterAdmin() {
-  // Default to demos tab on first load
   const [activeSection, setActiveSection] = useState('demos');
   const [clients,       setClients]       = useState([]);
   const [stats,         setStats]         = useState({ totalRevenue: 0, activeCount: 0, expiredCount: 0, disabledCount: 0, expiringSoon: 0, topClients: [], totalClients: 0 });
@@ -274,11 +310,11 @@ export default function PratyekshaMasterAdmin() {
     username: '', password: '', confirmPassword: '',
     planMonths: '12', paidAmount: '', googleReview: '', instaId: ''
   });
-  const [onboardLoading,  setOnboardLoading]  = useState(false);
-  const [onboardSuccess,  setOnboardSuccess]  = useState(null);
-  const [onboardError,    setOnboardError]    = useState('');
-  const [showPassword,    setShowPassword]    = useState(false);
-  const [copied,          setCopied]          = useState('');
+  const [onboardLoading, setOnboardLoading] = useState(false);
+  const [onboardSuccess, setOnboardSuccess] = useState(null);
+  const [onboardError,   setOnboardError]   = useState('');
+  const [showPassword,   setShowPassword]   = useState(false);
+  const [copied,         setCopied]         = useState('');
 
   const now = new Date();
 
@@ -308,12 +344,12 @@ export default function PratyekshaMasterAdmin() {
 
   /* ── Helpers ── */
   const getClientStatus = (c) => {
-    if (!c.isActive) return { label: 'DISABLED', color: C.danger };
+    if (!c.isActive) return { label: 'Disabled', color: C.danger };
     const exp = c.config?.planExpiry;
-    if (!exp || new Date(exp) < now) return { label: 'EXPIRED', color: C.warning };
+    if (!exp || new Date(exp) < now) return { label: 'Expired', color: C.warning };
     const soon = new Date(now); soon.setDate(soon.getDate() + 30);
-    if (new Date(exp) <= soon) return { label: 'EXPIRING', color: C.goldLight };
-    return { label: 'ACTIVE', color: C.gold };
+    if (new Date(exp) <= soon) return { label: 'Expiring', color: C.gold };
+    return { label: 'Active', color: '#4ade80' };
   };
 
   const getDaysLeft = (c) => {
@@ -325,7 +361,7 @@ export default function PratyekshaMasterAdmin() {
   const handleRenew = async (client) => {
     const months = prompt(`Renew "${client.name}" — plan months:`, '12');
     if (!months) return;
-    const amt = prompt(`Amount received from ${client.name} (₹):`, '1200');
+    const amt = prompt(`Amount received (₹):`, '1200');
     if (!amt) return;
     try {
       await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: Number(months), paidAmount: Number(amt) });
@@ -420,52 +456,64 @@ export default function PratyekshaMasterAdmin() {
 
   /* ── Loader ── */
   if (loading) return (
-    <div style={{ height: '100vh', background: C.bgDark, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20 }}>
-      <div style={{ width: 48, height: 48, borderRadius: '50%', border: `2px solid ${C.borderMid}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite' }} />
-      <div style={{ fontSize: '0.62rem', fontWeight: 800, letterSpacing: '4px', color: C.textDim, fontFamily: 'Syne, sans-serif' }}>PRATYEKSHA MAIN</div>
+    <div style={{ height: '100vh', background: C.bgDark, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', border: `1.5px solid ${C.border}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite' }} />
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '2px', color: C.textDim, textTransform: 'uppercase' }}>Pratyeksha</div>
     </div>
   );
 
+  /* ── Nav item ── */
   const NavItem = ({ id, label, icon: Icon, count, urgent }) => {
     const isActive = activeSection === id;
     return (
-      <button onClick={() => navTo(id)} style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 12px', borderRadius: 10, cursor: 'pointer', border: 'none',
-        background: isActive ? C.goldFaint : 'transparent',
+      <button onClick={() => navTo(id)} className="p-nav-item" style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+        padding: '9px 10px', borderRadius: 8, cursor: 'pointer', border: 'none',
+        background: isActive ? 'rgba(200,168,75,0.07)' : 'transparent',
         color: isActive ? C.gold : C.textDim,
-        fontSize: '0.66rem', fontWeight: isActive ? 700 : 500, letterSpacing: '0.3px',
-        fontFamily: 'Syne, sans-serif', textAlign: 'left',
-        outline: isActive ? `1px solid rgba(193,155,90,0.15)` : '1px solid transparent',
-        transition: 'all 0.15s',
+        fontSize: 13, fontWeight: isActive ? 600 : 400,
+        textAlign: 'left', outline: 'none',
+        borderLeft: isActive ? `2px solid ${C.gold}` : '2px solid transparent',
+        transition: 'all 0.12s',
       }}>
-        <Icon size={14} strokeWidth={isActive ? 2 : 1.5} />
+        <Icon size={15} strokeWidth={isActive ? 2 : 1.5} style={{ flexShrink: 0 }} />
         <span style={{ flex: 1 }}>{label}</span>
         {count !== undefined && count > 0 && (
           <span style={{
-            fontSize: '0.5rem', fontWeight: 800, padding: '1px 6px', borderRadius: 99,
-            background: urgent ? `rgba(193,155,90,0.2)` : C.textFaint,
-            color: urgent ? C.gold : C.textDim, fontFamily: 'Syne, sans-serif'
+            fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+            background: urgent ? 'rgba(200,168,75,0.12)' : C.bgCard2,
+            color: urgent ? C.gold : C.textDim,
+            border: `1px solid ${urgent ? 'rgba(200,168,75,0.25)' : C.border}`,
           }}>{count}</span>
         )}
       </button>
     );
   };
 
+  /* Filter tab style */
+  const filterTab = (isActive) => ({
+    padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
+    fontSize: 12, fontWeight: isActive ? 600 : 400,
+    color: isActive ? C.text : C.textDim,
+    borderBottom: `2px solid ${isActive ? C.gold : 'transparent'}`,
+    display: 'flex', alignItems: 'center', gap: 7,
+    transition: 'all 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
+  });
+
   /* ════════════════════════════════════════
      RENDER
   ════════════════════════════════════════ */
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: C.bg, color: C.text, overflow: 'hidden', position: 'fixed', top: 0, left: 0, fontFamily: 'DM Sans, sans-serif' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: C.bg, color: C.text, overflow: 'hidden', position: 'fixed', top: 0, left: 0 }}>
 
       {/* Mobile topbar */}
       <div className="p-topbar">
-        <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', color: C.gold }}>
-          <Menu size={20} />
+        <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', color: C.textMid }}>
+          <Menu size={18} />
         </button>
-        <span style={{ fontSize: '0.78rem', fontWeight: 800, letterSpacing: '3px', color: C.gold, fontFamily: 'Syne, sans-serif' }}>PRATYEKSHA</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.gold, letterSpacing: '0.5px' }}>Pratyeksha</span>
         <button onClick={refresh} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', color: C.textDim }}>
-          <RefreshCcw size={16} />
+          <RefreshCcw size={15} />
         </button>
       </div>
 
@@ -477,77 +525,79 @@ export default function PratyekshaMasterAdmin() {
         <div className="p-sidebar-inner no-sb">
 
           {/* Brand */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 32, paddingBottom: 20, borderBottom: `1px solid ${C.borderMid}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, paddingBottom: 18, borderBottom: `1px solid ${C.border}` }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 9,
-              background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+              width: 30, height: 30, borderRadius: 8,
+              background: C.gold,
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
             }}>
               <Zap size={15} color="#000" fill="#000" />
             </div>
             <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '2.5px', color: C.text, fontFamily: 'Syne, sans-serif', lineHeight: 1 }}>PRATYEKSHA</div>
-              <div style={{ fontSize: '0.5rem', color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginTop: 2 }}>CONTROL CENTRE</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: '0.3px', lineHeight: 1.2 }}>Pratyeksha</div>
+              <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>Control Centre</div>
             </div>
           </div>
 
-          {/* Revenue metric */}
-          <div style={{ marginBottom: 24, padding: '16px', background: C.bgCard, border: `1px solid ${C.borderMid}`, borderRadius: 12, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, right: 0, width: 60, height: 60, borderRadius: '0 12px 0 60px', background: `rgba(193,155,90,0.04)` }} />
-            <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', marginBottom: 8, fontFamily: 'Syne, sans-serif' }}>TOTAL REVENUE</div>
-            <div style={{ fontSize: '1.55rem', fontWeight: 800, color: C.gold, fontFamily: 'Syne, sans-serif', lineHeight: 1, marginBottom: 10 }}>
+          {/* Revenue metric card */}
+          <div style={{
+            marginBottom: 20, padding: '14px',
+            background: C.bgCard, border: `1px solid ${C.border}`,
+            borderRadius: 10,
+          }}>
+            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 6 }}>Total Revenue</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.gold, lineHeight: 1, marginBottom: 12, fontFamily: 'JetBrains Mono, monospace' }}>
               ₹{(stats.totalRevenue || 0).toLocaleString()}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {[
-                { val: stats.activeCount || 0, lbl: 'Active', c: C.gold },
-                { val: stats.expiredCount || 0, lbl: 'Expired', c: C.warning },
+                { val: stats.activeCount   || 0, lbl: 'Active',   c: '#4ade80' },
+                { val: stats.expiredCount  || 0, lbl: 'Expired',  c: C.warning },
                 { val: stats.disabledCount || 0, lbl: 'Disabled', c: C.danger },
-                { val: stats.totalClients || 0, lbl: 'Total', c: C.textMid },
+                { val: stats.totalClients  || 0, lbl: 'Total',    c: C.textMid },
               ].map(s => (
-                <div key={s.lbl} style={{ background: C.bgDark, padding: '7px 9px', borderRadius: 7, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: s.c, lineHeight: 1, fontFamily: 'Syne, sans-serif' }}>{s.val}</div>
-                  <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 600, marginTop: 3, letterSpacing: '0.5px' }}>{s.lbl.toUpperCase()}</div>
+                <div key={s.lbl} style={{ background: C.bgDark, padding: '7px 8px', borderRadius: 7, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: s.c, lineHeight: 1, fontFamily: 'JetBrains Mono, monospace' }}>{s.val}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{s.lbl}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Nav */}
-          <div style={{ fontSize: '0.48rem', color: C.textFaint, fontWeight: 700, letterSpacing: '2.5px', marginBottom: 8, paddingLeft: 12, fontFamily: 'Syne, sans-serif' }}>NAVIGATION</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
+          <div style={{ fontSize: 10, color: C.textFaint, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6, paddingLeft: 10 }}>Navigation</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
             <NavItem id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
             <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
           </div>
 
-          <SectionDivider />
+          <Div />
 
           {/* Top clients */}
-          <div style={{ fontSize: '0.48rem', color: C.textFaint, fontWeight: 700, letterSpacing: '2.5px', marginBottom: 12, paddingLeft: 4, fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Trophy size={10} color={C.textDim} /> HIGH BENEFICIARIES
+          <div style={{ fontSize: 10, color: C.textFaint, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Trophy size={10} color={C.textFaint} /> Top Clients
           </div>
           <div className="no-sb" style={{ flex: 1, overflowY: 'auto' }}>
             {(stats.topClients || []).map((c, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '7px 10px', borderRadius: 8, background: C.bgCard }}>
-                <div style={{ fontSize: '0.6rem', fontWeight: 800, color: C.textFaint, fontFamily: 'Syne, sans-serif', width: 14 }}>{i + 1}</div>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '7px 8px', borderRadius: 7, background: C.bgCard }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.textFaint, width: 14 }}>{i + 1}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                  <div style={{ fontSize: '0.58rem', color: C.goldDim, fontWeight: 600 }}>₹{(c.revenue || 0).toLocaleString()}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: C.goldDim, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}>₹{(c.revenue || 0).toLocaleString()}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          <SectionDivider />
+          <Div />
           <button onClick={refresh} style={{
-            width: '100%', padding: '10px', background: C.bgCard, border: `1px solid ${C.borderMid}`,
-            color: C.textDim, borderRadius: 10, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px',
+            width: '100%', padding: '9px', background: C.bgCard, border: `1px solid ${C.border}`,
+            color: C.textDim, borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            <RefreshCcw size={12} /> REFRESH
+            <RefreshCcw size={12} /> Refresh
           </button>
         </div>
       </aside>
@@ -557,56 +607,47 @@ export default function PratyekshaMasterAdmin() {
 
         {/* ══ DEMO REQUESTS ══ */}
         {activeSection === 'demos' && (
-          <div style={{ display: 'flex', height: '100%', overflow: 'hidden', position: 'relative' }}>
+          <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
-            {/* List panel */}
+            {/* List */}
             <div className={`p-demo-list${selectedDemo ? ' has-detail' : ''}`}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
               {/* Header */}
-              <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div className="p-header" style={{ padding: '20px 32px 14px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>INBOUND PIPELINE</div>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Demo Requests</h1>
-                    <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>
-                      <span style={{ color: C.gold, fontWeight: 700 }}>{demoCounts.Pending}</span> pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} completed
+                    <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Inbound Pipeline</div>
+                    <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: '-0.3px', lineHeight: 1 }}>Demo Requests</h1>
+                    <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>
+                      <span style={{ color: C.gold, fontWeight: 600 }}>{demoCounts.Pending}</span> pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} completed
                     </div>
                   </div>
-                  {/* Search */}
                   <div style={{ position: 'relative' }}>
-                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                     <input className="p-inp" placeholder="Search requests…" value={demoSearch}
                       onChange={e => setDemoSearch(e.target.value)}
-                      style={{ ...inp, paddingLeft: 38, width: 200, borderRadius: 10, fontSize: '0.76rem' }} />
+                      style={{ ...inp, paddingLeft: 34, width: 200, fontSize: 13 }} />
                   </div>
                 </div>
               </div>
 
               {/* Filter tabs */}
-              <div className="p-filterbar" style={{ padding: '0 36px' }}>
+              <div className="p-filterbar" style={{ padding: '0 32px' }}>
                 {[
-                  { id: 'all', label: 'ALL', count: demoCounts.all },
-                  { id: 'Pending', label: 'PENDING', count: demoCounts.Pending, urgent: true },
-                  { id: 'Contacted', label: 'CONTACTED', count: demoCounts.Contacted },
-                  { id: 'Demo Given', label: 'DONE', count: demoCounts['Demo Given'] },
+                  { id: 'all',        label: 'All',       count: demoCounts.all },
+                  { id: 'Pending',    label: 'Pending',   count: demoCounts.Pending, urgent: true },
+                  { id: 'Contacted',  label: 'Contacted', count: demoCounts.Contacted },
+                  { id: 'Demo Given', label: 'Done',      count: demoCounts['Demo Given'] },
                 ].map(f => (
-                  <button key={f.id} onClick={() => setDemoFilter(f.id)} style={{
-                    padding: '11px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
-                    fontSize: '0.58rem', fontWeight: 700, letterSpacing: '1px', whiteSpace: 'nowrap', flexShrink: 0,
-                    color: demoFilter === f.id ? C.gold : C.textDim,
-                    borderBottom: `2px solid ${demoFilter === f.id ? C.gold : 'transparent'}`,
-                    fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 7,
-                    transition: 'all 0.15s',
-                  }}>
+                  <button key={f.id} onClick={() => setDemoFilter(f.id)} style={filterTab(demoFilter === f.id)}>
                     {f.label}
                     {f.count > 0 && (
                       <span style={{
-                        fontSize: '0.5rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99,
-                        background: demoFilter === f.id ? 'rgba(193,155,90,0.15)' : C.bgCard,
+                        fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 99,
+                        background: demoFilter === f.id ? 'rgba(200,168,75,0.1)' : C.bgCard,
                         color: demoFilter === f.id ? C.gold : C.textDim,
-                        border: `1px solid ${demoFilter === f.id ? 'rgba(193,155,90,0.3)' : C.border}`,
-                        fontFamily: 'Syne, sans-serif'
+                        border: `1px solid ${demoFilter === f.id ? 'rgba(200,168,75,0.25)' : C.border}`,
                       }}>{f.count}</span>
                     )}
                   </button>
@@ -614,36 +655,36 @@ export default function PratyekshaMasterAdmin() {
               </div>
 
               {/* List */}
-              <div className="p-scroll no-sb" style={{ padding: '16px 36px 40px' }}>
+              <div className="p-scroll no-sb" style={{ padding: '14px 32px 40px' }}>
                 {demoLoading ? (
-                  <div style={{ textAlign: 'center', padding: '60px 0', color: C.textFaint }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${C.borderMid}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite', margin: '0 auto 12px' }} />
-                    <div style={{ fontSize: '0.66rem', fontWeight: 600, letterSpacing: '2px', fontFamily: 'Syne, sans-serif' }}>LOADING</div>
+                  <div style={{ textAlign: 'center', padding: '60px 0', color: C.textDim }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${C.border}`, borderTopColor: C.gold, animation: 'spin 0.9s linear infinite', margin: '0 auto 10px' }} />
+                    <div style={{ fontSize: 12 }}>Loading…</div>
                   </div>
                 ) : filteredDemos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '80px 0', color: C.textFaint }}>
-                    <CalendarClock size={32} color={C.borderMid} style={{ marginBottom: 12 }} />
-                    <div style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>NO REQUESTS FOUND</div>
+                  <div style={{ textAlign: 'center', padding: '80px 0', color: C.textDim }}>
+                    <CalendarClock size={28} color={C.border} style={{ marginBottom: 10 }} />
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>No requests found</div>
                   </div>
                 ) : filteredDemos.map(req => {
                   const isSelected = selectedDemo?._id === req._id;
                   return (
-                    <motion.div key={req._id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                    <motion.div key={req._id} layout initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
                       className="p-demo-card"
                       onClick={() => setSelectedDemo(isSelected ? null : req)}
                       style={{
-                        padding: '16px 18px', borderRadius: 14, marginBottom: 8,
+                        padding: '14px 16px', borderRadius: 10, marginBottom: 6,
                         background: isSelected ? C.bgCard2 : C.bgCard,
-                        border: `1px solid ${isSelected ? 'rgba(193,155,90,0.25)' : C.border}`,
-                        borderLeft: `3px solid ${isSelected ? C.gold : 'transparent'}`,
+                        border: `1px solid ${isSelected ? 'rgba(200,168,75,0.2)' : C.border}`,
+                        borderLeft: `2px solid ${isSelected ? C.gold : 'transparent'}`,
                       }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                         <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: C.text }}>{req.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{req.name}</span>
                             <StatusChip status={req.status} />
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: C.goldDim, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: 12, color: C.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {req.restaurant}
                           </div>
                         </div>
@@ -651,37 +692,34 @@ export default function PratyekshaMasterAdmin() {
                           {req.status !== 'Demo Given' && (
                             <button onClick={e => { e.stopPropagation(); markDone(req._id); }} style={{
                               display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-                              background: C.goldFaint, border: `1px solid rgba(193,155,90,0.2)`,
-                              color: C.gold, borderRadius: 7, fontSize: '0.52rem', fontWeight: 700,
-                              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif',
+                              background: 'rgba(200,168,75,0.06)', border: `1px solid rgba(200,168,75,0.18)`,
+                              color: C.gold, borderRadius: 7, fontSize: 11, fontWeight: 600,
+                              cursor: 'pointer', whiteSpace: 'nowrap',
                             }}>
-                              <CheckCircle2 size={11} /> DONE
+                              <CheckCircle2 size={11} /> Done
                             </button>
                           )}
                           <ChevronRight size={14} color={isSelected ? C.gold : C.textDim} />
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }}>
-                          <Phone size={10} color={C.textDim} strokeWidth={1.5} />
-                          {req.phone}
-                        </div>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.textDim }}>
+                          <Phone size={10} strokeWidth={1.5} /> {req.phone}
+                        </span>
                         {req.city && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }} className="hide-mob">
-                            <MapPin size={10} color={C.textDim} strokeWidth={1.5} />
-                            {req.city}
-                          </div>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.textDim }} className="hide-mob">
+                            <MapPin size={10} strokeWidth={1.5} /> {req.city}
+                          </span>
                         )}
                         {req.type && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', color: C.textDim }} className="hide-mob">
-                            <Utensils size={10} color={C.textDim} strokeWidth={1.5} />
-                            {req.type}
-                          </div>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.textDim }} className="hide-mob">
+                            <Utensils size={10} strokeWidth={1.5} /> {req.type}
+                          </span>
                         )}
-                        <div style={{ marginLeft: 'auto', fontSize: '0.6rem', color: C.textFaint, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <Clock size={9} color={C.textFaint} strokeWidth={1.5} />
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: C.textFaint, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock size={9} strokeWidth={1.5} />
                           {new Date(req.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                        </div>
+                        </span>
                       </div>
                     </motion.div>
                   );
@@ -696,123 +734,122 @@ export default function PratyekshaMasterAdmin() {
                   initial={{ x: '100%', opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: '100%', opacity: 0 }}
-                  transition={{ duration: 0.22, ease: 'easeInOut' }}
-                  style={{ width: 340, background: C.bgDark, borderLeft: `1px solid ${C.border}`, height: '100%', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
-                  <div className="no-sb" style={{ height: '100%', overflowY: 'auto', padding: '24px 22px' }}>
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  style={{ width: 320, background: C.bgDark, borderLeft: `1px solid ${C.border}`, height: '100%', overflow: 'hidden', flexShrink: 0 }}>
+                  <div className="no-sb" style={{ height: '100%', overflowY: 'auto', padding: '20px 20px' }}>
 
-                    {/* Drawer header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                       <div>
-                        <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>DEMO DETAIL</div>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: C.text, fontFamily: 'Syne, sans-serif' }}>{selectedDemo.name}</div>
-                        <div style={{ fontSize: '0.72rem', color: C.goldDim, marginTop: 3 }}>{selectedDemo.restaurant}</div>
+                        <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 5 }}>Demo Detail</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{selectedDemo.name}</div>
+                        <div style={{ fontSize: 12, color: C.textDim, marginTop: 3 }}>{selectedDemo.restaurant}</div>
                       </div>
-                      <button onClick={() => setSelectedDemo(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
-                        <X size={14} />
+                      <button onClick={() => setSelectedDemo(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 7, cursor: 'pointer', display: 'flex' }}>
+                        <X size={13} />
                       </button>
                     </div>
 
                     {/* Status updater */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 10 }}>UPDATE STATUS</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 8 }}>Update Status</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
                         {['Pending', 'Contacted', 'Demo Given'].map(s => {
                           const isActive = selectedDemo.status === s;
-                          const colors = { 'Pending': C.gold, 'Contacted': C.amber, 'Demo Given': C.textMid };
+                          const colors = { 'Pending': C.gold, 'Contacted': C.warning, 'Demo Given': C.textMid };
                           const c = colors[s];
                           return (
                             <button key={s} onClick={() => updateStatus(selectedDemo._id, s)} style={{
-                              padding: '8px 4px', borderRadius: 9, border: `1px solid ${isActive ? c + '44' : C.border}`,
-                              background: isActive ? `${c}12` : 'transparent',
+                              padding: '8px 4px', borderRadius: 7, border: `1px solid ${isActive ? c + '44' : C.border}`,
+                              background: isActive ? `${c}10` : 'transparent',
                               color: isActive ? c : C.textDim,
-                              fontSize: '0.5rem', fontWeight: 700, cursor: 'pointer',
-                              fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px', transition: 'all 0.15s',
+                              fontSize: 11, fontWeight: isActive ? 600 : 400, cursor: 'pointer',
+                              transition: 'all 0.12s',
                             }}>
-                              {s === 'Demo Given' ? 'DONE' : s.toUpperCase()}
+                              {s === 'Demo Given' ? 'Done' : s}
                             </button>
                           );
                         })}
                       </div>
                     </div>
-                    <SectionDivider />
+                    <Div />
 
-                    {/* Contact section */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 14 }}>CONTACT</div>
+                    {/* Contact */}
+                    <div style={{ marginBottom: 18 }}>
+                      <SectionLabel>Contact</SectionLabel>
                       {[
-                        { icon: Phone, label: 'MOBILE', val: selectedDemo.phone, href: `tel:${selectedDemo.phone}` },
-                        selectedDemo.email && { icon: Mail, label: 'EMAIL', val: selectedDemo.email, href: `mailto:${selectedDemo.email}` },
-                        selectedDemo.city && { icon: MapPin, label: 'CITY', val: selectedDemo.city },
+                        { icon: Phone, label: 'Mobile', val: selectedDemo.phone, href: `tel:${selectedDemo.phone}` },
+                        selectedDemo.email && { icon: Mail, label: 'Email', val: selectedDemo.email, href: `mailto:${selectedDemo.email}` },
+                        selectedDemo.city && { icon: MapPin, label: 'City', val: selectedDemo.city },
                       ].filter(Boolean).map(row => (
-                        <div key={row.label} style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                          <div style={{ width: 28, height: 28, borderRadius: 8, background: C.bgCard, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <row.icon size={12} color={C.goldDim} strokeWidth={1.5} />
+                        <div key={row.label} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: C.bgCard, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <row.icon size={11} color={C.textDim} strokeWidth={1.5} />
                           </div>
                           <div>
-                            <div style={{ fontSize: '0.46rem', color: C.textDim, fontWeight: 700, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 4 }}>{row.label}</div>
+                            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>{row.label}</div>
                             {row.href
-                              ? <a href={row.href} style={{ fontSize: '0.78rem', fontWeight: 600, color: C.gold }}>{row.val}</a>
-                              : <div style={{ fontSize: '0.78rem', fontWeight: 600, color: C.text }}>{row.val}</div>
+                              ? <a href={row.href} style={{ fontSize: 13, fontWeight: 500, color: C.gold }}>{row.val}</a>
+                              : <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{row.val}</div>
                             }
                           </div>
                         </div>
                       ))}
                     </div>
-                    <SectionDivider />
+                    <Div />
 
                     {/* Establishment */}
-                    <div style={{ marginBottom: 22 }}>
-                      <div style={{ fontSize: '0.48rem', color: C.textDim, fontWeight: 700, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 14 }}>ESTABLISHMENT</div>
+                    <div style={{ marginBottom: 18 }}>
+                      <SectionLabel>Establishment</SectionLabel>
                       {[
-                        { l: 'NAME',   v: selectedDemo.restaurant },
-                        { l: 'TYPE',   v: selectedDemo.type   || '—' },
-                        { l: 'TABLES', v: selectedDemo.tables || '—' },
+                        { l: 'Name',   v: selectedDemo.restaurant },
+                        { l: 'Type',   v: selectedDemo.type   || '—' },
+                        { l: 'Tables', v: selectedDemo.tables || '—' },
                       ].map(r => (
-                        <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
-                          <span style={{ fontSize: '0.55rem', color: C.textDim, fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>{r.l}</span>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: C.text }}>{r.v}</span>
+                        <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <span style={{ fontSize: 12, color: C.textDim }}>{r.l}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{r.v}</span>
                         </div>
                       ))}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0' }}>
-                        <span style={{ fontSize: '0.55rem', color: C.textDim, fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>SUBMITTED</span>
-                        <span style={{ fontSize: '0.68rem', color: C.textMid }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                        <span style={{ fontSize: 12, color: C.textDim }}>Submitted</span>
+                        <span style={{ fontSize: 12, color: C.textDim }}>
                           {new Date(selectedDemo.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
                       </div>
                     </div>
-                    <SectionDivider />
+                    <Div />
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                       <a href={`tel:${selectedDemo.phone}`} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        padding: '13px', background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
-                        borderRadius: 11, fontSize: '0.68rem', fontWeight: 800,
-                        color: '#000', fontFamily: 'Syne, sans-serif', letterSpacing: '0.5px',
+                        padding: '12px', background: C.gold,
+                        borderRadius: 9, fontSize: 13, fontWeight: 600,
+                        color: '#000',
                       }}>
-                        <Phone size={13} /> CALL NOW
+                        <Phone size={13} /> Call Now
                       </a>
                       <button onClick={() => {
                         setOnboarding(p => ({ ...p, name: selectedDemo.restaurant || '', contact: selectedDemo.phone || '', tableCount: selectedDemo.tables || '12' }));
                         navTo('onboard');
                       }} style={{
-                        padding: '12px', background: C.goldFaint,
-                        border: `1px solid rgba(193,155,90,0.2)`, color: C.gold,
-                        borderRadius: 11, fontSize: '0.66rem', fontWeight: 700,
+                        padding: '11px', background: 'rgba(200,168,75,0.06)',
+                        border: `1px solid rgba(200,168,75,0.18)`, color: C.gold,
+                        borderRadius: 9, fontSize: 13, fontWeight: 500,
                         cursor: 'pointer', display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', gap: 7, fontFamily: 'Syne, sans-serif',
+                        justifyContent: 'center', gap: 7,
                       }}>
-                        <UserPlus size={13} /> ONBOARD THIS CLIENT
+                        <UserPlus size={13} /> Onboard This Client
                       </button>
                       {selectedDemo.status !== 'Demo Given' && (
                         <button onClick={() => markDone(selectedDemo._id)} style={{
-                          padding: '12px', background: C.bgCard,
+                          padding: '11px', background: C.bgCard,
                           border: `1px solid ${C.border}`, color: C.textMid,
-                          borderRadius: 11, fontSize: '0.66rem', fontWeight: 700,
+                          borderRadius: 9, fontSize: 13, fontWeight: 400,
                           cursor: 'pointer', display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', gap: 7, fontFamily: 'Syne, sans-serif',
+                          justifyContent: 'center', gap: 7,
                         }}>
-                          <CheckCircle2 size={13} /> MARK DEMO DONE
+                          <CheckCircle2 size={13} /> Mark Demo Done
                         </button>
                       )}
                     </div>
@@ -826,45 +863,41 @@ export default function PratyekshaMasterAdmin() {
         {/* ══ DASHBOARD ══ */}
         {activeSection === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div className="p-header" style={{ padding: '20px 32px 14px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>OVERVIEW</div>
-                  <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Dashboard</h1>
+                  <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Overview</div>
+                  <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: '-0.3px', lineHeight: 1 }}>Dashboard</h1>
                 </div>
                 <button onClick={() => navTo('onboard')} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
-                  background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
-                  color: '#000', border: 'none', borderRadius: 11, fontSize: '0.66rem',
-                  fontWeight: 800, cursor: 'pointer', fontFamily: 'Syne, sans-serif', letterSpacing: '0.3px',
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                  background: C.gold, color: '#000', border: 'none', borderRadius: 9,
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 }}>
-                  <UserPlus size={13} /> ONBOARD CLIENT
+                  <UserPlus size={13} /> Onboard Client
                 </button>
               </div>
             </div>
 
             <div className="p-scroll no-sb p-pad">
-
               {/* KPI grid */}
-              <div className="p-stat-grid" style={{ marginBottom: 24 }}>
+              <div className="p-stat-grid" style={{ marginBottom: 20 }}>
                 {[
-                  { icon: IndianRupee, label: 'TOTAL REVENUE', val: `₹${(stats.totalRevenue || 0).toLocaleString()}`, sub: 'All time', accent: C.gold },
-                  { icon: ShieldCheck, label: 'ACTIVE',        val: stats.activeCount || 0,   sub: 'Live subscriptions', accent: C.gold },
-                  { icon: AlertTriangle, label: 'EXPIRED',     val: stats.expiredCount || 0,  sub: 'Need renewal',      accent: C.warning },
-                  { icon: Calendar,    label: 'EXPIRING SOON', val: stats.expiringSoon || 0,  sub: 'Within 30 days',    accent: C.amber },
+                  { icon: IndianRupee, label: 'Total Revenue', val: `₹${(stats.totalRevenue || 0).toLocaleString()}`, sub: 'All time', accent: C.gold },
+                  { icon: ShieldCheck, label: 'Active',        val: stats.activeCount   || 0, sub: 'Live subscriptions', accent: '#4ade80' },
+                  { icon: AlertTriangle, label: 'Expired',     val: stats.expiredCount  || 0, sub: 'Need renewal',      accent: C.warning },
+                  { icon: Calendar,    label: 'Expiring Soon', val: stats.expiringSoon  || 0, sub: 'Within 30 days',    accent: C.amber },
                 ].map(k => (
                   <div key={k.label} className="p-card" style={{
                     background: C.bgCard, border: `1px solid ${C.border}`,
-                    borderTop: `2px solid ${k.accent}30`,
-                    borderRadius: 16, padding: '20px 18px', position: 'relative', overflow: 'hidden',
+                    borderRadius: 12, padding: '18px 16px', position: 'relative', overflow: 'hidden',
                   }}>
-                    <div style={{ position: 'absolute', top: 0, right: 0, width: 50, height: 50, borderRadius: '0 16px 0 50px', background: `${k.accent}06` }} />
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: `${k.accent}12`, border: `1px solid ${k.accent}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                      <k.icon size={17} color={k.accent} strokeWidth={1.5} />
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: `${k.accent}12`, border: `1px solid ${k.accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                      <k.icon size={15} color={k.accent} strokeWidth={1.5} />
                     </div>
-                    <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>{k.label}</div>
-                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: k.accent, fontFamily: 'Syne, sans-serif', lineHeight: 1, marginBottom: 4 }}>{k.val}</div>
-                    <div style={{ fontSize: '0.58rem', color: C.textDim }}>{k.sub}</div>
+                    <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, marginBottom: 4 }}>{k.label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: k.accent, lineHeight: 1, marginBottom: 3, fontFamily: 'JetBrains Mono, monospace' }}>{k.val}</div>
+                    <div style={{ fontSize: 11, color: C.textDim }}>{k.sub}</div>
                   </div>
                 ))}
               </div>
@@ -872,97 +905,92 @@ export default function PratyekshaMasterAdmin() {
               {/* Expiry warning */}
               {(stats.expiringSoon || 0) > 0 && (
                 <div style={{
-                  background: 'rgba(184,115,51,0.06)', border: `1px solid rgba(184,115,51,0.2)`,
-                  borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center',
-                  gap: 14, marginBottom: 20
+                  background: 'rgba(184,124,51,0.05)', border: `1px solid rgba(184,124,51,0.2)`,
+                  borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center',
+                  gap: 12, marginBottom: 18
                 }}>
-                  <AlertCircle size={17} color={C.amber} strokeWidth={1.5} />
-                  <div>
-                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: C.amber, fontFamily: 'Syne, sans-serif' }}>
+                  <AlertCircle size={16} color={C.amber} strokeWidth={1.5} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
                       {stats.expiringSoon} subscription{stats.expiringSoon > 1 ? 's' : ''} expiring within 30 days
                     </div>
-                    <div style={{ fontSize: '0.62rem', color: C.textDim, marginTop: 3 }}>Reach out proactively before expiry</div>
+                    <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Reach out proactively before expiry</div>
                   </div>
                   <button onClick={() => { setClientFilter('active'); navTo('clients'); }} style={{
-                    marginLeft: 'auto', padding: '7px 14px',
-                    background: 'rgba(184,115,51,0.1)', border: `1px solid rgba(184,115,51,0.25)`,
-                    color: C.amber, borderRadius: 8, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer',
-                    fontFamily: 'Syne, sans-serif', flexShrink: 0,
-                  }}>
-                    VIEW →
-                  </button>
+                    padding: '6px 12px',
+                    background: 'rgba(184,124,51,0.08)', border: `1px solid rgba(184,124,51,0.22)`,
+                    color: C.amber, borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  }}>View</button>
                 </div>
               )}
 
               {/* Charts */}
               <div className="p-chart-grid">
-
                 {/* Top earners */}
-                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                    <Trophy size={14} color={C.goldDim} strokeWidth={1.5} />
-                    <span style={{ fontSize: '0.6rem', fontWeight: 700, color: C.textDim, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif' }}>TOP REVENUE CLIENTS</span>
+                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <Trophy size={13} color={C.textDim} strokeWidth={1.5} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.textMid }}>Top Revenue Clients</span>
                   </div>
                   {clients.sort((a, b) => (b.totalPaidAmount || 0) - (a.totalPaidAmount || 0)).slice(0, 6).map((c, i) => (
-                    <div key={c._id} style={{ marginBottom: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: '0.6rem', color: C.textFaint, fontFamily: 'Syne, sans-serif', minWidth: 14 }}>#{i + 1}</span>
-                          <span style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text }}>{c.name}</span>
+                    <div key={c._id} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ fontSize: 11, color: C.textFaint, minWidth: 14 }}>#{i + 1}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{c.name}</span>
                         </div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: C.gold }}>₹{(c.totalPaidAmount || 0).toLocaleString()}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.gold, fontFamily: 'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount || 0).toLocaleString()}</span>
                       </div>
                       <div style={{ height: 3, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
                         <div style={{
                           height: '100%', borderRadius: 99,
                           width: `${Math.min(100, ((c.totalPaidAmount || 0) / Math.max(clients[0]?.totalPaidAmount || 1, 1)) * 100)}%`,
-                          background: `linear-gradient(90deg, ${C.amber}, ${C.gold})`,
-                          transition: 'width 0.8s ease'
+                          background: C.gold, opacity: 0.6,
                         }} />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Status breakdown + quick actions */}
-                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                    <BarChart3 size={14} color={C.goldDim} strokeWidth={1.5} />
-                    <span style={{ fontSize: '0.6rem', fontWeight: 700, color: C.textDim, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif' }}>SUBSCRIPTION HEALTH</span>
+                {/* Subscription health */}
+                <div className="p-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 18px', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <BarChart3 size={13} color={C.textDim} strokeWidth={1.5} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.textMid }}>Subscription Health</span>
                   </div>
                   {[
-                    { label: 'ACTIVE',   val: stats.activeCount   || 0, c: C.gold,    pct: ((stats.activeCount   || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
-                    { label: 'EXPIRED',  val: stats.expiredCount  || 0, c: C.warning, pct: ((stats.expiredCount  || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
-                    { label: 'DISABLED', val: stats.disabledCount || 0, c: C.danger,  pct: ((stats.disabledCount || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                    { label: 'Active',   val: stats.activeCount   || 0, c: '#4ade80', pct: ((stats.activeCount   || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                    { label: 'Expired',  val: stats.expiredCount  || 0, c: C.warning, pct: ((stats.expiredCount  || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
+                    { label: 'Disabled', val: stats.disabledCount || 0, c: C.danger,  pct: ((stats.disabledCount || 0) / Math.max(stats.totalClients || 1, 1)) * 100 },
                   ].map(s => (
-                    <div key={s.label} style={{ marginBottom: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7, alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.58rem', color: s.c, fontWeight: 700, fontFamily: 'Syne, sans-serif', letterSpacing: '1px' }}>{s.label}</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: C.text }}>{s.val} <span style={{ color: C.textDim, fontSize: '0.58rem' }}>({Math.round(s.pct)}%)</span></span>
+                    <div key={s.label} style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: C.textMid }}>{s.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, fontFamily: 'JetBrains Mono, monospace' }}>{s.val} <span style={{ color: C.textDim, fontSize: 11, fontFamily: 'Inter, sans-serif' }}>({Math.round(s.pct)}%)</span></span>
                       </div>
-                      <div style={{ height: 5, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${s.pct}%`, background: s.c, borderRadius: 99, transition: 'width 0.8s ease', opacity: 0.8 }} />
+                      <div style={{ height: 4, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${s.pct}%`, background: s.c, borderRadius: 99, opacity: 0.75 }} />
                       </div>
                     </div>
                   ))}
-                  <SectionDivider />
+                  <Div />
                   <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
                     <button onClick={() => navTo('onboard')} style={{
-                      flex: 1, padding: '11px', background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
-                      border: 'none', color: '#000', borderRadius: 10, fontSize: '0.62rem',
-                      fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', gap: 6, fontFamily: 'Syne, sans-serif',
+                      flex: 1, padding: '10px', background: C.gold,
+                      border: 'none', color: '#000', borderRadius: 8, fontSize: 13,
+                      fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6,
                     }}>
-                      <UserPlus size={12} /> ONBOARD
+                      <UserPlus size={12} /> Onboard
                     </button>
                     <button onClick={() => navTo('clients')} style={{
-                      flex: 1, padding: '11px', background: 'transparent',
-                      border: `1px solid rgba(193,155,90,0.2)`, color: C.gold,
-                      borderRadius: 10, fontSize: '0.62rem', fontWeight: 700,
+                      flex: 1, padding: '10px', background: 'transparent',
+                      border: `1px solid rgba(200,168,75,0.2)`, color: C.gold,
+                      borderRadius: 8, fontSize: 13, fontWeight: 500,
                       cursor: 'pointer', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', gap: 6, fontFamily: 'Syne, sans-serif',
+                      justifyContent: 'center', gap: 6,
                     }}>
-                      <Building2 size={12} /> CLIENTS
+                      <Building2 size={12} /> Clients
                     </button>
                   </div>
                 </div>
@@ -974,71 +1002,62 @@ export default function PratyekshaMasterAdmin() {
         {/* ══ CLIENTS ══ */}
         {activeSection === 'clients' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div className="p-header" style={{ padding: '20px 32px 14px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>ACCOUNTS</div>
-                  <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Client Partners</h1>
-                  <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>{filteredClients.length} of {clients.length} shown</div>
+                  <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Accounts</div>
+                  <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: '-0.3px', lineHeight: 1 }}>Client Partners</h1>
+                  <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{filteredClients.length} of {clients.length} shown</div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ position: 'relative' }}>
-                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <Search size={13} color={C.textDim} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                     <input className="p-inp" placeholder="Search…" value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
-                      style={{ ...inp, paddingLeft: 38, width: 190, borderRadius: 10, fontSize: '0.76rem' }} />
+                      style={{ ...inp, paddingLeft: 34, width: 180, fontSize: 13 }} />
                   </div>
                   <button onClick={() => navTo('onboard')} style={{
-                    display: 'flex', alignItems: 'center', gap: 7, padding: '10px 14px',
-                    background: `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
-                    border: 'none', color: '#000', borderRadius: 10, fontSize: '0.62rem',
-                    fontWeight: 800, cursor: 'pointer', fontFamily: 'Syne, sans-serif', whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px',
+                    background: C.gold, border: 'none', color: '#000', borderRadius: 8,
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                   }}>
-                    <Plus size={12} /> NEW CLIENT
+                    <Plus size={13} /> New Client
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Filter tabs */}
-            <div className="p-filterbar" style={{ padding: '0 36px' }}>
+            <div className="p-filterbar" style={{ padding: '0 32px' }}>
               {[
-                { id: 'all', label: 'ALL', count: clients.length },
-                { id: 'active', label: 'ACTIVE', count: stats.activeCount || 0 },
-                { id: 'expired', label: 'EXPIRED', count: stats.expiredCount || 0 },
-                { id: 'disabled', label: 'DISABLED', count: stats.disabledCount || 0 },
+                { id: 'all',      label: 'All',      count: clients.length },
+                { id: 'active',   label: 'Active',   count: stats.activeCount   || 0 },
+                { id: 'expired',  label: 'Expired',  count: stats.expiredCount  || 0 },
+                { id: 'disabled', label: 'Disabled', count: stats.disabledCount || 0 },
               ].map(f => (
-                <button key={f.id} onClick={() => setClientFilter(f.id)} style={{
-                  padding: '11px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
-                  fontSize: '0.58rem', fontWeight: 700, letterSpacing: '1px', whiteSpace: 'nowrap', flexShrink: 0,
-                  color: clientFilter === f.id ? C.gold : C.textDim,
-                  borderBottom: `2px solid ${clientFilter === f.id ? C.gold : 'transparent'}`,
-                  fontFamily: 'Syne, sans-serif', display: 'flex', alignItems: 'center', gap: 7,
-                  transition: 'all 0.15s',
-                }}>
+                <button key={f.id} onClick={() => setClientFilter(f.id)} style={filterTab(clientFilter === f.id)}>
                   {f.label}
                   <span style={{
-                    fontSize: '0.5rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99,
-                    background: clientFilter === f.id ? 'rgba(193,155,90,0.15)' : C.bgCard,
+                    fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 99,
+                    background: clientFilter === f.id ? 'rgba(200,168,75,0.1)' : C.bgCard,
                     color: clientFilter === f.id ? C.gold : C.textDim,
-                    border: `1px solid ${clientFilter === f.id ? 'rgba(193,155,90,0.3)' : C.border}`,
-                    fontFamily: 'Syne, sans-serif',
+                    border: `1px solid ${clientFilter === f.id ? 'rgba(200,168,75,0.25)' : C.border}`,
                   }}>{f.count}</span>
                 </button>
               ))}
             </div>
 
             {/* Table */}
-            <div className="p-scroll no-sb" style={{ padding: '16px 36px 40px', overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 5px', minWidth: 480 }}>
+            <div className="p-scroll no-sb" style={{ padding: '14px 32px 40px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', minWidth: 480 }}>
                 <thead>
-                  <tr style={{ fontSize: '0.5rem', color: C.textDim, textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'Syne, sans-serif' }}>
-                    <th style={{ paddingLeft: 16, paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>PARTNER</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>TYPE</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>EXPIRY</th>
-                    <th style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>STATUS</th>
-                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 700 }}>REVENUE</th>
-                    <th style={{ paddingBottom: 8, textAlign: 'right', paddingRight: 12, fontWeight: 700 }}>ACTIONS</th>
+                  <tr style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                    <th style={{ paddingLeft: 14, paddingBottom: 8, textAlign: 'left', fontWeight: 600 }}>Partner</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 600 }}>Type</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 600 }}>Expiry</th>
+                    <th style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 600 }}>Status</th>
+                    <th className="hide-mob" style={{ paddingBottom: 8, textAlign: 'left', fontWeight: 600 }}>Revenue</th>
+                    <th style={{ paddingBottom: 8, textAlign: 'right', paddingRight: 10, fontWeight: 600 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1047,67 +1066,65 @@ export default function PratyekshaMasterAdmin() {
                     const dl = getDaysLeft(client);
                     return (
                       <motion.tr layout key={client._id} className="p-row" style={{ background: C.bgCard }}>
-                        <td style={{ paddingLeft: 16, paddingTop: 13, paddingBottom: 13, borderRadius: '12px 0 0 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <td style={{ paddingLeft: 14, paddingTop: 12, paddingBottom: 12, borderRadius: '10px 0 0 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                             <ClientStatusDot client={client} now={now} />
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.84rem', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }}>{client.name}</div>
-                              <div style={{ fontSize: '0.56rem', color: C.textFaint, fontFamily: 'DM Sans, sans-serif', marginTop: 2 }}>{client.tenantId}</div>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{client.name}</div>
+                              <div style={{ fontSize: 11, color: C.textDim, marginTop: 1, fontFamily: 'JetBrains Mono, monospace' }}>{client.tenantId}</div>
                               {client.address?.city && (
-                                <div style={{ fontSize: '0.56rem', color: C.textDim, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                                  <MapPin size={8} color={C.textDim} strokeWidth={1.5} />{client.address.city}
+                                <div style={{ fontSize: 11, color: C.textDim, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <MapPin size={8} strokeWidth={1.5} />{client.address.city}
                                 </div>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="hide-mob">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                             {client.businessType === 'Cafe' ? <Coffee size={11} color={C.textDim} strokeWidth={1.5} /> : <Utensils size={11} color={C.textDim} strokeWidth={1.5} />}
-                            <span style={{ color: C.textDim, fontSize: '0.6rem', fontWeight: 600 }}>{(client.businessType || 'Restaurant').toUpperCase()}</span>
+                            <span style={{ color: C.textDim, fontSize: 12 }}>{client.businessType || 'Restaurant'}</span>
                           </div>
                         </td>
                         <td className="hide-mob">
-                          <div style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>
                             {client.config?.planExpiry ? new Date(client.config.planExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                           </div>
                           {dl !== null && (
-                            <div style={{ fontSize: '0.58rem', fontWeight: 600, marginTop: 2, color: dl <= 0 ? C.danger : dl <= 30 ? C.warning : C.textDim }}>
+                            <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, color: dl <= 0 ? C.danger : dl <= 30 ? C.warning : C.textDim }}>
                               {dl <= 0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`}
                             </div>
                           )}
                         </td>
                         <td>
                           <span style={{
-                            fontSize: '0.52rem', fontWeight: 800, padding: '3px 9px', borderRadius: 99,
-                            background: `${st.color}12`, color: st.color, border: `1px solid ${st.color}33`,
-                            fontFamily: 'Syne, sans-serif', letterSpacing: '0.8px'
+                            fontSize: 11, fontWeight: 500, padding: '3px 9px', borderRadius: 6,
+                            background: `${st.color}10`, color: st.color, border: `1px solid ${st.color}30`,
                           }}>{st.label}</span>
                         </td>
                         <td className="hide-mob">
-                          <span style={{ fontWeight: 700, color: C.gold, fontSize: '0.84rem' }}>₹{(client.totalPaidAmount || 0).toLocaleString()}</span>
+                          <span style={{ fontWeight: 700, color: C.gold, fontSize: 13, fontFamily: 'JetBrains Mono, monospace' }}>₹{(client.totalPaidAmount || 0).toLocaleString()}</span>
                         </td>
-                        <td style={{ textAlign: 'right', paddingRight: 12, borderRadius: '0 12px 12px 0' }}>
+                        <td style={{ textAlign: 'right', paddingRight: 10, borderRadius: '0 10px 10px 0' }}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button onClick={() => handleToggle(client)} style={{
-                              padding: '6px 10px', borderRadius: 8, fontSize: '0.56rem', fontWeight: 700,
+                              padding: '5px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500,
                               cursor: 'pointer', background: 'transparent',
-                              border: `1px solid ${client.isActive ? `${C.danger}44` : `${C.gold}44`}`,
+                              border: `1px solid ${client.isActive ? `${C.danger}35` : `${C.gold}30`}`,
                               color: client.isActive ? C.danger : C.gold,
-                              fontFamily: 'Syne, sans-serif',
-                              display: 'flex', alignItems: 'center', gap: 5,
+                              display: 'flex', alignItems: 'center', gap: 4,
                             }}>
                               <Power size={10} />
-                              <span className="hide-sm">{client.isActive ? 'DISABLE' : 'ENABLE'}</span>
+                              <span className="hide-sm">{client.isActive ? 'Disable' : 'Enable'}</span>
                             </button>
                             <button onClick={() => handleRenew(client)} style={{
-                              padding: '6px 12px', borderRadius: 8, fontSize: '0.58rem', fontWeight: 700,
-                              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Syne, sans-serif',
-                              background: st.label === 'EXPIRED' || st.label === 'DISABLED' ? `linear-gradient(135deg, ${C.amber}, ${C.gold})` : 'transparent',
-                              border: st.label === 'EXPIRED' || st.label === 'DISABLED' ? 'none' : `1px solid ${C.border}`,
-                              color: st.label === 'EXPIRED' || st.label === 'DISABLED' ? '#000' : C.textDim,
+                              padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                              background: st.label === 'Expired' || st.label === 'Disabled' ? C.gold : 'transparent',
+                              border: st.label === 'Expired' || st.label === 'Disabled' ? 'none' : `1px solid ${C.border}`,
+                              color: st.label === 'Expired' || st.label === 'Disabled' ? '#000' : C.textDim,
                             }}>
-                              {st.label === 'ACTIVE' || st.label === 'EXPIRING' ? 'RENEW' : 'ACTIVATE'}
+                              {st.label === 'Active' || st.label === 'Expiring' ? 'Renew' : 'Activate'}
                             </button>
                           </div>
                         </td>
@@ -1117,9 +1134,9 @@ export default function PratyekshaMasterAdmin() {
                 </tbody>
               </table>
               {filteredClients.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '80px 0', color: C.textFaint }}>
-                  <Building2 size={32} color={C.border} style={{ marginBottom: 14 }} />
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Syne, sans-serif' }}>NO CLIENTS FOUND</div>
+                <div style={{ textAlign: 'center', padding: '80px 0', color: C.textDim }}>
+                  <Building2 size={28} color={C.border} style={{ marginBottom: 12 }} />
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>No clients found</div>
                 </div>
               )}
             </div>
@@ -1129,10 +1146,10 @@ export default function PratyekshaMasterAdmin() {
         {/* ══ ONBOARD ══ */}
         {activeSection === 'onboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <div className="p-header" style={{ padding: '22px 36px 16px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-              <div style={{ fontSize: '0.5rem', color: C.textDim, fontWeight: 700, letterSpacing: '3px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>NEW CLIENT</div>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'Syne, sans-serif', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>Client Onboarding</h1>
-              <div style={{ fontSize: '0.66rem', color: C.textDim, marginTop: 5 }}>Register a restaurant or café on Pratyeksha</div>
+            <div className="p-header" style={{ padding: '20px 32px 14px', background: C.bgDark, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>New Client</div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: '-0.3px', lineHeight: 1 }}>Client Onboarding</h1>
+              <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>Register a restaurant or café on Pratyeksha</div>
             </div>
 
             <div className="p-scroll no-sb p-pad">
@@ -1140,30 +1157,30 @@ export default function PratyekshaMasterAdmin() {
               {/* Success */}
               <AnimatePresence>
                 {onboardSuccess && (
-                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                     style={{
-                      background: `rgba(193,155,90,0.06)`, border: `1px solid rgba(193,155,90,0.25)`,
-                      borderRadius: 16, padding: '20px 22px', marginBottom: 28
+                      background: 'rgba(200,168,75,0.05)', border: `1px solid rgba(200,168,75,0.2)`,
+                      borderRadius: 12, padding: '18px 20px', marginBottom: 24
                     }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                       <div>
-                        <div style={{ fontSize: '0.52rem', color: C.gold, fontWeight: 800, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 5 }}>CLIENT ONBOARDED ✓</div>
-                        <div style={{ fontSize: '0.96rem', fontWeight: 700, color: C.text }}>{onboardSuccess.name}</div>
+                        <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, letterSpacing: '0.5px', marginBottom: 4 }}>Client Onboarded ✓</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{onboardSuccess.name}</div>
                       </div>
-                      <button onClick={() => setOnboardSuccess(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                      <button onClick={() => setOnboardSuccess(null)} style={{ background: C.bgCard, border: `1px solid ${C.border}`, color: C.textDim, padding: 7, borderRadius: 7, cursor: 'pointer', display: 'flex' }}>
                         <X size={13} />
                       </button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8, marginBottom: 12 }}>
                       {[
-                        { lbl: 'TENANT ID', val: onboardSuccess.tenantId, key: 'tid' },
-                        { lbl: 'USERNAME',  val: onboardSuccess.username,  key: 'usr' },
-                        { lbl: 'PASSWORD',  val: onboardSuccess.password,  key: 'pwd' },
+                        { lbl: 'Tenant ID', val: onboardSuccess.tenantId, key: 'tid' },
+                        { lbl: 'Username',  val: onboardSuccess.username,  key: 'usr' },
+                        { lbl: 'Password',  val: onboardSuccess.password,  key: 'pwd' },
                       ].map(r => (
-                        <div key={r.key} style={{ background: C.bgDark, border: `1px solid rgba(193,155,90,0.15)`, borderRadius: 10, padding: '12px 14px' }}>
-                          <div style={{ fontSize: '0.48rem', color: C.gold, fontWeight: 800, letterSpacing: '1.5px', fontFamily: 'Syne, sans-serif', marginBottom: 6 }}>{r.lbl}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                            <code style={{ fontSize: '0.78rem', color: C.text, fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.val}</code>
+                        <div key={r.key} style={{ background: C.bgDark, border: `1px solid rgba(200,168,75,0.12)`, borderRadius: 9, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10, color: C.gold, fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{r.lbl}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                            <code style={{ fontSize: 12, color: C.text, fontFamily: 'JetBrains Mono, monospace', wordBreak: 'break-all' }}>{r.val}</code>
                             <button onClick={() => copyText(r.val, r.key)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0, color: copied === r.key ? C.gold : C.textDim }}>
                               {copied === r.key ? <Check size={13} /> : <Copy size={13} />}
                             </button>
@@ -1171,26 +1188,24 @@ export default function PratyekshaMasterAdmin() {
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize: '0.6rem', color: C.textDim, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AlertCircle size={11} color={C.textDim} /> Save credentials — password cannot be recovered after closing.
+                    <div style={{ fontSize: 11, color: C.textDim, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertCircle size={11} /> Save credentials — password cannot be recovered after closing.
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
               {onboardError && (
-                <div style={{ background: `rgba(192,120,48,0.08)`, border: `1px solid rgba(192,120,48,0.25)`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: '0.72rem', color: C.danger, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AlertTriangle size={14} color={C.danger} /> {onboardError}
+                <div style={{ background: 'rgba(192,96,64,0.06)', border: `1px solid rgba(192,96,64,0.2)`, borderRadius: 9, padding: '11px 14px', marginBottom: 18, fontSize: 13, color: C.danger, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={14} /> {onboardError}
                 </div>
               )}
 
-              <div style={{ display: 'grid', gap: 20, maxWidth: 880 }}>
+              <div style={{ display: 'grid', gap: 16, maxWidth: 820 }}>
 
                 {/* Business Info */}
-                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderTop: `2px solid ${C.gold}30`, borderRadius: 16, padding: '22px 22px' }}>
-                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.gold, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Store size={13} color={C.gold} /> BUSINESS INFORMATION
-                  </div>
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 20px' }}>
+                  <SectionLabel icon={Store}>Business Information</SectionLabel>
                   <div className="p-form-grid">
                     <LabeledInput label="Restaurant / Café Name" required>
                       <input className="p-inp" style={inp} placeholder="Jay Ambe Fusion" value={onboarding.name} onChange={e => setOnboarding(p => ({ ...p, name: e.target.value }))} />
@@ -1218,10 +1233,8 @@ export default function PratyekshaMasterAdmin() {
                 </div>
 
                 {/* Address */}
-                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 22px' }}>
-                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MapPin size={13} /> ADDRESS
-                  </div>
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 20px' }}>
+                  <SectionLabel icon={MapPin}>Address</SectionLabel>
                   <div className="p-form-grid">
                     <div style={{ gridColumn: 'span 2' }}>
                       <LabeledInput label="Street Address">
@@ -1244,18 +1257,16 @@ export default function PratyekshaMasterAdmin() {
                 </div>
 
                 {/* Credentials */}
-                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 22px' }}>
-                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.textDim, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ShieldCheck size={13} /> ADMIN CREDENTIALS
-                  </div>
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 20px' }}>
+                  <SectionLabel icon={ShieldCheck}>Admin Credentials</SectionLabel>
                   <div className="p-form-grid">
                     <LabeledInput label="Username" required hint="Used to login to operator portal">
                       <input className="p-inp" style={inp} placeholder="jay_ambe_admin" value={onboarding.username} onChange={e => setOnboarding(p => ({ ...p, username: e.target.value.toLowerCase().replace(/\s/g, '_') }))} />
                     </LabeledInput>
                     <LabeledInput label="Password" required>
                       <div style={{ position: 'relative' }}>
-                        <input className="p-inp" style={{ ...inp, paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min 6 characters" value={onboarding.password} onChange={e => setOnboarding(p => ({ ...p, password: e.target.value }))} />
-                        <button type="button" onClick={() => setShowPassword(p => !p)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: C.textDim }}>
+                        <input className="p-inp" style={{ ...inp, paddingRight: 42 }} type={showPassword ? 'text' : 'password'} placeholder="Min 6 characters" value={onboarding.password} onChange={e => setOnboarding(p => ({ ...p, password: e.target.value }))} />
+                        <button type="button" onClick={() => setShowPassword(p => !p)} style={{ position: 'absolute', right: 11, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: C.textDim, display: 'flex' }}>
                           {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
@@ -1266,12 +1277,10 @@ export default function PratyekshaMasterAdmin() {
                   </div>
                 </div>
 
-                {/* Subscription & Payment */}
-                <div style={{ background: C.bgCard, border: `1px solid rgba(193,155,90,0.15)`, borderTop: `2px solid ${C.amber}33`, borderRadius: 16, padding: '22px 22px' }}>
-                  <div style={{ fontSize: '0.58rem', fontWeight: 800, color: C.gold, letterSpacing: '2px', fontFamily: 'Syne, sans-serif', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Wallet size={13} color={C.gold} /> SUBSCRIPTION & PAYMENT
-                  </div>
-                  <div style={{ fontSize: '0.62rem', color: C.textDim, marginBottom: 18 }}>Collect via GPay manually and record below.</div>
+                {/* Subscription */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 20px' }}>
+                  <SectionLabel icon={Wallet}>Subscription & Payment</SectionLabel>
+                  <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14, marginTop: -6 }}>Collect via GPay manually and record below.</div>
                   <div className="p-form-grid">
                     <LabeledInput label="Plan Duration" required>
                       <select className="p-inp" style={{ ...inp, cursor: 'pointer' }} value={onboarding.planMonths} onChange={e => setOnboarding(p => ({ ...p, planMonths: e.target.value }))}>
@@ -1283,8 +1292,8 @@ export default function PratyekshaMasterAdmin() {
                     </LabeledInput>
                     <LabeledInput label="Amount Received (₹)" hint="Enter 0 if not yet collected">
                       <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.textDim, fontSize: '0.82rem', fontWeight: 700 }}>₹</span>
-                        <input className="p-inp" style={{ ...inp, paddingLeft: 26 }} type="number" placeholder="1200" value={onboarding.paidAmount} onChange={e => setOnboarding(p => ({ ...p, paidAmount: e.target.value }))} />
+                        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.textDim, fontSize: 13 }}>₹</span>
+                        <input className="p-inp" style={{ ...inp, paddingLeft: 24 }} type="number" placeholder="1200" value={onboarding.paidAmount} onChange={e => setOnboarding(p => ({ ...p, paidAmount: e.target.value }))} />
                       </div>
                     </LabeledInput>
                     <LabeledInput label="Google Review Link">
@@ -1297,23 +1306,23 @@ export default function PratyekshaMasterAdmin() {
                 </div>
 
                 {/* Submit */}
-                <div style={{ display: 'flex', gap: 12, paddingBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 10, paddingBottom: 20 }}>
                   <button onClick={handleOnboard} disabled={onboardLoading} style={{
-                    flex: 2, padding: '15px', borderRadius: 12, border: 'none', fontFamily: 'Syne, sans-serif',
-                    background: onboardLoading ? C.bgCard : `linear-gradient(135deg, ${C.amber}, ${C.gold})`,
+                    flex: 2, padding: '13px', borderRadius: 10, border: 'none',
+                    background: onboardLoading ? C.bgCard2 : C.gold,
                     color: onboardLoading ? C.textDim : '#000',
                     cursor: onboardLoading ? 'not-allowed' : 'pointer',
-                    fontSize: '0.76rem', fontWeight: 800, letterSpacing: '0.5px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                    fontSize: 14, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                   }}>
                     {onboardLoading
-                      ? <><RefreshCcw size={14} style={{ animation: 'spin 0.9s linear infinite' }} /> ONBOARDING…</>
-                      : <><UserPlus size={14} /> ONBOARD CLIENT &amp; GENERATE ACCESS</>
+                      ? <><RefreshCcw size={14} style={{ animation: 'spin 0.9s linear infinite' }} /> Onboarding…</>
+                      : <><UserPlus size={14} /> Onboard Client & Generate Access</>
                     }
                   </button>
                   <button onClick={() => setOnboarding({ name: '', businessType: 'Restaurant', ownerName: '', contact: '', gstin: '', street: '', city: '', state: '', pincode: '', tableCount: '12', taxPercentage: '5', username: '', password: '', confirmPassword: '', planMonths: '12', paidAmount: '', googleReview: '', instaId: '' })}
-                    style={{ flex: 1, padding: '15px', background: 'transparent', border: `1px solid ${C.borderMid}`, color: C.textDim, borderRadius: 12, fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Syne, sans-serif' }}>
-                    CLEAR
+                    style={{ flex: 1, padding: '13px', background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, borderRadius: 10, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+                    Clear
                   </button>
                 </div>
               </div>
@@ -1322,14 +1331,6 @@ export default function PratyekshaMasterAdmin() {
         )}
 
       </main>
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @media (min-width: 769px) {
-          .p-demo-list { display: flex !important; }
-          .p-drawer { position: relative !important; flex-shrink: 0 !important; }
-        }
-      `}</style>
     </div>
   );
 }
