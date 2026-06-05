@@ -1003,6 +1003,43 @@ const requestFinalBill = async () => {
 const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
+
+// ── Persist cart to localStorage so it survives browser close ──
+useEffect(() => {
+  if (Object.keys(cart).length > 0) {
+    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
+  } else {
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+  }
+}, [cart, tenantId]);
+
+// ── Persist placedOrders to localStorage (bill survives refresh) ──
+useEffect(() => {
+  if (!tenantId || !tableNumber) return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
+  if (placedOrders.length > 0) {
+    localStorage.setItem(key, JSON.stringify(placedOrders));
+  } else {
+    localStorage.removeItem(key);
+  }
+}, [placedOrders, tenantId, tableNumber]);
+
+// ── Restore placedOrders on mount (after refresh) ──
+useEffect(() => {
+  if (!tenantId || !tableNumber || tableNumber === 'Counter') return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setPlacedOrders(parsed);
+        setHasPlacedInitialOrder(true);
+      }
+    }
+  } catch { /* ignore */ }
+}, [tenantId, tableNumber]);
+
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -2143,41 +2180,7 @@ style={{
   );
 } // ← end of if (isCounterScan && registrationStep !== 'menu')
 
-// ── Persist cart to localStorage so it survives browser close ──
-useEffect(() => {
-  if (Object.keys(cart).length > 0) {
-    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
-  } else {
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
-  }
-}, [cart, tenantId]);
 
-// ── Persist placedOrders to localStorage (bill survives refresh) ──
-useEffect(() => {
-  if (!tenantId || !tableNumber) return;
-  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
-  if (placedOrders.length > 0) {
-    localStorage.setItem(key, JSON.stringify(placedOrders));
-  } else {
-    localStorage.removeItem(key);
-  }
-}, [placedOrders, tenantId, tableNumber]);
-
-// ── Restore placedOrders on mount (after refresh) ──
-useEffect(() => {
-  if (!tenantId || !tableNumber || tableNumber === 'Counter') return;
-  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setPlacedOrders(parsed);
-        setHasPlacedInitialOrder(true);
-      }
-    }
-  } catch { /* ignore */ }
-}, [tenantId, tableNumber]);
 
 // ── LOADER ──
 if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRATYEKSHA...</div>;
