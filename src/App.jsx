@@ -64,6 +64,8 @@ const [reservationDate, setReservationDate] = useState('');
 const [reservationTime, setReservationTime] = useState('');
 const [specialRequests, setSpecialRequests] = useState('');
 const [tablePreference, setTablePreference] = useState('');
+const [reservationAskOrder, setReservationAskOrder] = useState(false);
+// true = show the "want to pre-order?" prompt after reservation fields filled
 
 // ── COUNTER / WAITLIST MODE ──
 const [counterMode, setCounterMode] = useState(null); // null | 'dine-in' | 'pickup'
@@ -258,40 +260,38 @@ useEffect(() => {
 
     // Try to resume existing session
     axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
-      .then(r => {
-        if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
-          // Valid active session — resume
-          setWaitlistEntry(r.data);
-          setCounterMode(r.data.mode);
+.then(r => {
+  if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
+    setWaitlistEntry(r.data);
+    setCounterMode(r.data.mode);
+    setRegistrationStep('confirm');
+  } else {
+    // Also check for active reservation
+    axios.get(`${BASE_URL}/reservations/session/${activeTenant}/${sessionId}`)
+      .then(rr => {
+        if (rr.data && ['pending','confirmed'].includes(rr.data.status)) {
+          setWaitlistEntry(rr.data);
+          setCounterMode('reservation');
           setRegistrationStep('confirm');
         } else {
-          // Session exists in DB but in a terminal state (settled/cancelled/no-show)
-          // → Fresh start: clear sessionStorage and generate new sessionId
           sessionStorage.removeItem('pratyeksha_session');
           const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           sessionStorage.setItem('pratyeksha_session', newId);
-          // Reset all counter state
-          setWaitlistEntry(null);
-          setCounterMode(null);
-          setRegistrationStep('mode');
-          setCustomerInfo({ name: '', phone: '' });
-          setPartySize(1);
+          setWaitlistEntry(null); setCounterMode(null); setRegistrationStep('mode');
+          setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
           setScheduledPickupTime('');
         }
       })
       .catch(() => {
-        // 404 or network error → no active session found → fresh start
-        // Clear any stale sessionStorage
         sessionStorage.removeItem('pratyeksha_session');
         const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         sessionStorage.setItem('pratyeksha_session', newId);
-        setWaitlistEntry(null);
-        setCounterMode(null);
-        setRegistrationStep('mode');
-        setCustomerInfo({ name: '', phone: '' });
-        setPartySize(1);
+        setWaitlistEntry(null); setCounterMode(null); setRegistrationStep('mode');
+        setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
         setScheduledPickupTime('');
       });
+  }
+})
   }
 }, [urlTenantId]); 
 
@@ -567,7 +567,7 @@ socket.on("order_status_updated", (data) => {
     else if (direction === 'right' && currentIndex > 0) setSelectedCategoryId(categories[currentIndex - 1]);
   };
 
-  const sendExtraItemsRequest = async () => {
+const sendExtraItemsRequest = async () => {
   const activeItems = Object.entries(extraItemCart).filter(([, qty]) => qty > 0);
   if (activeItems.length === 0) return;
 
@@ -576,12 +576,32 @@ socket.on("order_status_updated", (data) => {
     return `${item?.name} x${qty}`;
   }).join(', ');
 
+  // Build line items for bill tracking
+  const extraLineItems = activeItems.map(([id, qty]) => {
+    const item = extraItems.find(i => i._id === id);
+    return {
+      menuItemId:   null,
+      extraItemId:  id,
+      name:         item?.name || '',
+      quantity:     qty,
+      portion:      'Single',
+      pricePerUnit: item?.price || 0,
+      subtotal:     (item?.price || 0) * qty,
+      isExtraItem:  true,
+      category:     item?.category || 'Extra'
+    };
+  });
+
   try {
     await axios.post(`${BASE_URL}/waiter-requests`, {
       tenantId,
       tableNumber,
       serviceRequest: `EXTRA ITEMS: ${requestText}`
     });
+
+    // ── ADD TO placedOrders so it appears in bill ──
+    setPlacedOrders(prev => [...prev, ...extraLineItems]);
+
     triggerAlert('waiterSuccess');
     setExtraItemCart({});
     setIsExtraItemsOpen(false);
@@ -764,6 +784,42 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
 
+    // ── Request push notification permission after order placed ──
+const askNotificationPermission = async () => {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      new Notification(
+        counterMode === 'dine-in'
+          ? '✓ You\'re in the queue!'
+          : '✓ Pickup order placed!',
+        {
+          body: counterMode === 'dine-in'
+            ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
+            : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
+          icon: '/logo.png',
+          badge: '/logo.png',
+        }
+      );
+    }
+  } else if (Notification.permission === 'granted') {
+    new Notification(
+      counterMode === 'dine-in' ? '✓ Queue confirmed!' : '✓ Pickup confirmed!',
+      {
+        body: counterMode === 'dine-in'
+          ? `Hi ${customerInfo.name}! You're in the queue.`
+          : `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}.`,
+        icon: '/logo.png',
+      }
+    );
+  }
+};
+askNotificationPermission();
+
+
+
+
     // Subscribe to push after order placed
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
@@ -836,6 +892,20 @@ const res = await axios.post(`${BASE_URL}/reservations/${tenantId}`, {
     setWaitlistEntry(res.data.reservation);
     setCart({}); setSuggestions({});
     setRegistrationStep('confirm');
+    // ── Notification for reservation ──
+const askResNotification = async () => {
+  if (!('Notification' in window)) return;
+  const perm = Notification.permission === 'default'
+    ? await Notification.requestPermission()
+    : Notification.permission;
+  if (perm === 'granted') {
+    new Notification('📅 Reservation Requested!', {
+      body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${new Date(resDateTime).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})} at ${new Date(resDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})} is pending confirmation.`,
+      icon: '/logo.png',
+    });
+  }
+};
+askResNotification();
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
   } catch (err) {
@@ -905,29 +975,30 @@ useEffect(() => {
   }
 }, [isCounterScan]);
 
-  const requestFinalBill = async () => {
-    if(!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
-    try {
-        const socket = io("https://pratyeksha-backend.onrender.com");
-        socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
-        await axios.post(`${BASE_URL}/customers`, { tenantId, name: customerInfo.name, phone: customerInfo.phone, lastVisit: new Date().toISOString() });
-        setBillRequested(true);
-    } catch (error) { setBillRequested(true); }
-  };
+const requestFinalBill = async () => {
+  if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
+  try {
+    const socket = io("https://pratyeksha-backend.onrender.com");
+    socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
+    await axios.post(`${BASE_URL}/customers`, {
+      tenantId, name: customerInfo.name, phone: customerInfo.phone,
+      lastVisit: new Date().toISOString()
+    });
+    // ── Clear stored bill on checkout ──
+    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+    setBillRequested(true);
+  } catch (error) {
+    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+    setBillRequested(true);
+  }
+};
 
   const hasNonVegInView = useMemo(() => {
     if (isOnlyVegTenant) return false;
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
   }, [allMenuItems, isOnlyVegTenant]);
 
-  // ── Persist cart to localStorage so it survives browser close ──
-useEffect(() => {
-  if (Object.keys(cart).length > 0) {
-    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
-  } else {
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
-  }
-}, [cart, tenantId]);
+
 
 const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
@@ -980,463 +1051,461 @@ const Shell = ({ children, centered = true }) => (
     </div>
   );
 
-  // ══════════════════════════════════════════
+// ══════════════════════════════════════════
   // SCREEN: CONFIRM
-if (registrationStep === 'register') {
-  const isDineIn    = counterMode === 'dine-in';
-  const isPickup    = counterMode === 'pickup';
-  const isReserve   = counterMode === 'reservation';
+  // ══════════════════════════════════════════
+  if (registrationStep === 'confirm' && waitlistEntry) {
+    const isDineIn = waitlistEntry.mode === 'dine-in';
+    const hasItems = waitlistEntry.items?.length > 0;
+    const estWait  = waitlistEntry.waitlistPosition * 20;
 
-  // Pickup: 15-min slots for next 3 hours
-  const pickupOptions = [];
-  const base = new Date();
-  base.setMinutes(Math.ceil(base.getMinutes() / 15) * 15, 0, 0);
-  for (let i = 0; i < 12; i++) {
-    const slot = new Date(base.getTime() + i * 15 * 60000);
-    pickupOptions.push({
-      value: slot.toISOString(),
-      label: slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-    });
-  }
-
-  // Header title per mode
-  const modeTitle = isDineIn
-    ? (language === 'mr' ? 'रांगेत नोंदणी' : 'Join Waitlist')
-    : isPickup
-    ? (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')
-    : (language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table');
-
-  const modeIcon = isDineIn
-    ? <Armchair size={19} color="#d3bfa2" strokeWidth={1.5} />
-    : isPickup
-    ? <ShoppingBag size={19} color="#d3bfa2" strokeWidth={1.5} />
-    : <CalendarClock size={19} color="#d3bfa2" strokeWidth={1.5} />;
-
-  const modeSubtitle = isDineIn
-    ? (avgWaitData?.queueLength
-        ? `${avgWaitData.queueLength} ahead · ~${avgWaitData.estimatedWait || 20} min`
-        : 'Live queue tracking')
-    : isPickup
-    ? 'Choose your pickup time'
-    : 'Book your table in advance';
-
-  return (
-    <Shell centered={false}>
-      {/* Sticky top bar */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 10,
-        background: 'rgba(14,14,14,0.96)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(211,191,162,0.07)',
-        padding: '14px 20px',
-        display: 'flex', alignItems: 'center', gap: '14px'
-      }}>
-        <button onClick={() => setRegistrationStep('mode')} style={{
-          width: '36px', height: '36px', borderRadius: '10px',
-          background: 'rgba(211,191,162,0.05)',
-          border: '1px solid rgba(211,191,162,0.1)',
-          color: 'rgba(211,191,162,0.5)', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, transition: 'all 0.15s'
-        }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(211,191,162,0.1)'}
-        >
-          <ArrowLeft size={16} strokeWidth={1.5} />
-        </button>
-        <div>
-          <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2' }}>{modeTitle}</div>
-          <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.25)', marginTop: '2px' }}>{restaurantData?.name}</div>
-        </div>
-      </div>
-
-      <div style={{ padding: '28px 22px 100px', maxWidth: '440px', margin: '0 auto', width: '100%' }}>
-
-        {/* Mode badge */}
+    return (
+      <Shell centered={false}>
+        {/* Top bar */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '14px',
-          padding: '16px 18px', marginBottom: '28px',
-          background: '#121212', border: '1px solid rgba(211,191,162,0.09)',
-          borderRadius: '16px'
+          position: 'sticky', top: 0, zIndex: 10,
+          background: 'rgba(14,14,14,0.95)',
+          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(211,191,162,0.07)',
+          padding: '14px 24px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
+          <span style={{
+            fontSize: '0.52rem', fontWeight: '900',
+            letterSpacing: '2.5px', textTransform: 'uppercase',
+            color: 'rgba(211,191,162,0.3)'
+          }}>
+            {restaurantData?.name}
+          </span>
+          {/* CODE 1 — mode badge */}
+          <span style={{
+            fontSize: '0.52rem', fontWeight: '900', letterSpacing: '1.5px',
+            padding: '5px 12px', borderRadius: '20px',
+            background: 'rgba(211,191,162,0.05)',
+            border: '1px solid rgba(211,191,162,0.1)',
+            color: 'rgba(211,191,162,0.4)',
+            display: 'inline-flex', alignItems: 'center', gap: '6px'
+          }}>
+            {waitlistEntry?.mode === 'dine-in'
+              ? <><Armchair size={11} color="rgba(211,191,162,0.4)" /> {language === 'mr' ? 'वेटलिस्ट' : 'WAITLIST'}</>
+              : waitlistEntry?.mode === 'reservation'
+              ? <><CalendarClock size={11} color="rgba(211,191,162,0.4)" /> {language === 'mr' ? 'बुकिंग' : 'RESERVATION'}</>
+              : <><ShoppingBag size={11} color="rgba(211,191,162,0.4)" /> {language === 'mr' ? 'पिकअप' : 'PICKUP'}</>
+            }
+          </span>
+        </div>
+
+        <div style={{ padding: '36px 24px 80px', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
+
+          {/* Icon + heading */}
           <div style={{
-            width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
-            background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            width: '56px', height: '56px', borderRadius: '16px',
+            background: 'rgba(211,191,162,0.06)',
+            border: '1px solid rgba(211,191,162,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: '22px'
           }}>
-            {modeIcon}
+            <CheckCircle2 size={24} color="rgba(211,191,162,0.7)" strokeWidth={1.5} />
           </div>
-          <div>
-            <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '3px' }}>
-              {modeTitle}
-            </div>
-            <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', fontWeight: '500' }}>
-              {modeSubtitle}
-            </div>
-          </div>
-        </div>
 
-        {/* ── NAME (all modes) ── */}
-        <div style={{ marginBottom: '18px' }}>
-          <label style={{
-            fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-            fontWeight: '900', letterSpacing: '2px',
-            display: 'block', marginBottom: '8px', textTransform: 'uppercase'
+          <h1 style={{
+            fontSize: '1.7rem', fontWeight: '900', color: '#fff',
+            marginBottom: '8px', letterSpacing: '-0.6px', lineHeight: 1.15
           }}>
-            {language === 'mr' ? 'तुमचे नाव *' : 'Your Name *'}
-          </label>
-          <input
-            type="text"
-            placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
-            defaultValue={customerInfo.name}
-            onBlur={e => {
-              e.target.style.borderColor = 'rgba(211,191,162,0.12)';
-              setCustomerInfo(prev => ({ ...prev, name: e.target.value }));
-            }}
-            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-            onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-            style={{
-              width: '100%', padding: '15px 16px',
-              background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-              color: '#fff', borderRadius: '12px', fontSize: '1rem',
-              outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
-              fontFamily: 'Poppins, sans-serif'
-            }}
-          />
-        </div>
+            {language === 'mr' ? "तुम्ही\nरांगेत आहात!" : "You're\nAll Set!"}
+          </h1>
+          <p style={{
+            color: 'rgba(255,255,255,0.22)', fontSize: '0.78rem',
+            marginBottom: '32px', fontWeight: '500', lineHeight: 1.7
+          }}>
+            {language === 'mr'
+              ? 'तुमची माहिती यशस्वीरित्या नोंदवली गेली आहे.'
+              : 'Your details are confirmed. Relax — we\'ll handle the rest.'}
+          </p>
 
-        {/* ── CONTACT (all modes) ── */}
-        <div style={{ marginBottom: '18px' }}>
-          <label style={{
-            fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-            fontWeight: '900', letterSpacing: '2px',
-            display: 'block', marginBottom: '8px', textTransform: 'uppercase'
+          {/* STATUS CARD */}
+          <div style={{
+            background: '#121212',
+            border: '1px solid rgba(211,191,162,0.09)',
+            borderRadius: '22px', padding: '30px 24px',
+            marginBottom: '12px', textAlign: 'center',
+            position: 'relative', overflow: 'hidden'
           }}>
-            {language === 'mr' ? '१० अंकी मोबाईल नंबर *' : '10-Digit Mobile Number *'}
-          </label>
-          <div style={{ position: 'relative' }}>
-            <span style={{
-              position: 'absolute', left: '14px', top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: '0.85rem', color: 'rgba(211,191,162,0.4)',
-              fontWeight: '700', pointerEvents: 'none'
-            }}>+91</span>
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={10}
-              placeholder="9876543210"
-              defaultValue={customerInfo.phone}
-              onBlur={e => {
-                e.target.style.borderColor = 'rgba(211,191,162,0.12)';
-                const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                setCustomerInfo(prev => ({ ...prev, phone: val }));
-              }}
-              onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-              onInput={e => {
-                e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-              }}
-              style={{
-                width: '100%', padding: '15px 16px 15px 52px',
-                background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                color: '#fff', borderRadius: '12px', fontSize: '1rem',
-                outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
-                fontFamily: 'Poppins, sans-serif', letterSpacing: '1.5px'
-              }}
-            />
+            <div style={{
+              position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px',
+              background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.25), transparent)'
+            }} />
+
+            {isDineIn ? (
+              <>
+                <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                  {language === 'mr' ? 'रांगेतील स्थान' : 'Queue Position'}
+                </p>
+                <div style={{ fontSize: '5.5rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1, fontFamily: 'monospace', marginBottom: '18px', letterSpacing: '-6px' }}>
+                  #{waitlistEntry.waitlistPosition}
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 20px', borderRadius: '30px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
+                  <Hourglass size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+                  <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+                    {language === 'mr' ? `अंदाजे ~${estWait} मिनिटे` : `~${estWait} min estimated`}
+                  </span>
+                </div>
+              </>
+            ) : waitlistEntry.mode === 'reservation' ? (
+              <>
+                <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                  {language === 'mr' ? 'बुकिंग वेळ' : 'Reservation'}
+                </p>
+                <div style={{ fontSize: '3rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', letterSpacing: '-2px', marginBottom: '8px', lineHeight: 1 }}>
+                  {new Date(waitlistEntry.reservationTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700', marginBottom: '10px' }}>
+                  {new Date(waitlistEntry.reservationTime).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '7px 16px', borderRadius: '20px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
+                  <Users size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+                  <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+                    {waitlistEntry.partySize} {language === 'mr' ? 'जण' : 'guests'}
+                  </span>
+                </div>
+                {waitlistEntry.specialRequests && (
+                  <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '10px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>
+                    "{waitlistEntry.specialRequests}"
+                  </div>
+                )}
+                <div style={{ marginTop: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '20px', background: waitlistEntry.status === 'confirmed' ? 'rgba(211,191,162,0.08)' : 'rgba(138,112,77,0.08)', border: `1px solid ${waitlistEntry.status === 'confirmed' ? 'rgba(211,191,162,0.2)' : 'rgba(138,112,77,0.2)'}` }}>
+                  <span style={{ fontSize: '0.62rem', fontWeight: '900', color: waitlistEntry.status === 'confirmed' ? '#d3bfa2' : '#8a704d', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                    {waitlistEntry.status === 'confirmed' ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}
+                  </span>
+                </div>
+              </>
+            ) : waitlistEntry.scheduledPickupTime ? (
+              <>
+                <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                  {language === 'mr' ? 'पिकअप वेळ' : 'Pickup Time'}
+                </p>
+                <div style={{ fontSize: '3.8rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', letterSpacing: '-2px', marginBottom: '10px', lineHeight: 1 }}>
+                  {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </div>
+                <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.18)', fontWeight: '600' }}>
+                  {language === 'mr' ? 'ठरलेली वेळ' : 'Your scheduled slot'}
+                </p>
+              </>
+            ) : null}
           </div>
-          {customerInfo.phone && customerInfo.phone.length > 0 && customerInfo.phone.length !== 10 && (
-            <div style={{ fontSize: '0.6rem', color: '#BA7517', marginTop: '5px', fontWeight: '700' }}>
-              {language === 'mr' ? `${10 - customerInfo.phone.length} अंक आणखी हवेत` : `${10 - customerInfo.phone.length} more digits needed`}
+
+          {/* Confirmation receipt card */}
+          <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '18px', overflow: 'hidden', marginBottom: '12px' }}>
+            <div style={{ padding: '14px 18px', background: 'rgba(211,191,162,0.04)', borderBottom: '1px solid rgba(211,191,162,0.07)', display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <CheckCircle2 size={13} color="rgba(211,191,162,0.5)" strokeWidth={2} />
+              <span style={{ fontSize: '0.52rem', fontWeight: '900', color: 'rgba(211,191,162,0.4)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                {language === 'mr' ? 'पुष्टी तपशील' : 'Confirmation Details'}
+              </span>
+            </div>
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                { label: language === 'mr' ? 'नाव' : 'NAME', val: waitlistEntry.customerName, color: '#d3bfa2' },
+                waitlistEntry.customerPhone && { label: language === 'mr' ? 'मोबाईल' : 'MOBILE', val: `+91 ${waitlistEntry.customerPhone}`, color: 'rgba(255,255,255,0.4)', mono: true },
+                { label: language === 'mr' ? 'प्रकार' : 'TYPE', val: waitlistEntry.mode === 'dine-in' ? 'DINE-IN WAITLIST' : waitlistEntry.mode === 'reservation' ? 'RESERVATION' : 'PICKUP', badge: true },
+                waitlistEntry.partySize > 1 && { label: language === 'mr' ? 'जण' : 'GUESTS', val: waitlistEntry.partySize, color: 'rgba(255,255,255,0.4)' },
+              ].filter(Boolean).map((row, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>{row.label}</span>
+                  {row.badge
+                    ? <span style={{ fontSize: '0.6rem', fontWeight: '900', padding: '3px 10px', borderRadius: '20px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d' }}>{row.val}</span>
+                    : <span style={{ fontSize: '0.78rem', fontWeight: row.mono ? '700' : '800', color: row.color, fontFamily: row.mono ? 'monospace' : 'inherit' }}>{row.val}</span>
+                  }
+                </div>
+              ))}
+              {(waitlistEntry.specialRequests || waitlistEntry.tablePreference) && (
+                <div style={{ marginTop: '4px', padding: '10px 12px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '10px' }}>
+                  {waitlistEntry.tablePreference && <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', marginBottom: waitlistEntry.specialRequests ? '5px' : '0' }}><span style={{ color: 'rgba(211,191,162,0.3)', fontWeight: '700' }}>{language === 'mr' ? 'टेबल: ' : 'Pref: '}</span>{waitlistEntry.tablePreference}</div>}
+                  {waitlistEntry.specialRequests && <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>"{waitlistEntry.specialRequests}"</div>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Notification pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', marginBottom: '12px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '14px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0, background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BellRing size={14} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
+            </div>
+            <p style={{ margin: 0, fontSize: '0.71rem', color: 'rgba(255,255,255,0.22)', lineHeight: 1.65, fontWeight: '500' }}>
+              {language === 'mr' ? 'टेबल / ऑर्डर तयार झाल्यावर सूचना मिळेल — पेज बंद केले तरीही.' : "You'll be notified when ready — even if you close this page."}
+            </p>
+          </div>
+
+          {/* Pre-order summary */}
+          {hasItems && (
+            <div style={{ background: '#0c0c0c', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '16px', padding: '20px', marginBottom: '12px' }}>
+              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2.5px', color: 'rgba(211,191,162,0.22)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                {language === 'mr' ? 'प्री-ऑर्डर' : 'Pre-Order'}
+              </p>
+              {waitlistEntry.items.map((item, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: i < waitlistEntry.items.length - 1 ? '12px' : '0', marginBottom: i < waitlistEntry.items.length - 1 ? '12px' : '0', borderBottom: i < waitlistEntry.items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.6rem', fontWeight: '900', fontFamily: 'monospace', color: 'rgba(211,191,162,0.25)', minWidth: '18px' }}>×{item.quantity}</span>
+                    <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}>{item.name}</span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#d3bfa2', fontWeight: '800', fontFamily: 'monospace' }}>₹{item.subtotal}</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', marginTop: '8px', borderTop: '1px solid rgba(211,191,162,0.07)' }}>
+                <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Total</span>
+                <span style={{ fontSize: '1rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>₹{waitlistEntry.totalAmount}</span>
+              </div>
             </div>
           )}
+
+          {/* ── ORDER CONFIRMATION RECEIPT ── */}
+<div style={{
+  background: '#0a0a0a',
+  border: '1px solid rgba(211,191,162,0.1)',
+  borderRadius: '18px',
+  overflow: 'hidden',
+  marginBottom: '12px'
+}}>
+  {/* Receipt header */}
+  <div style={{
+    padding: '14px 18px',
+    background: 'rgba(211,191,162,0.04)',
+    borderBottom: '1px solid rgba(211,191,162,0.07)',
+    display: 'flex', alignItems: 'center', gap: '9px'
+  }}>
+    <CheckCircle2 size={13} color="rgba(211,191,162,0.5)" strokeWidth={2} />
+    <span style={{
+      fontSize: '0.52rem', fontWeight: '900', color: 'rgba(211,191,162,0.4)',
+      letterSpacing: '2px', textTransform: 'uppercase'
+    }}>
+      {language === 'mr' ? 'पुष्टी तपशील' : 'Confirmation Details'}
+    </span>
+  </div>
+
+  {/* Receipt body */}
+  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+    {/* Name */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+        {language === 'mr' ? 'नाव' : 'NAME'}
+      </span>
+      <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#d3bfa2' }}>
+        {waitlistEntry.customerName}
+      </span>
+    </div>
+
+    {/* Phone */}
+    {waitlistEntry.customerPhone && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+          {language === 'mr' ? 'मोबाईल' : 'MOBILE'}
+        </span>
+        <span style={{ fontSize: '0.78rem', fontWeight: '700', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+          +91 {waitlistEntry.customerPhone}
+        </span>
+      </div>
+    )}
+
+    {/* Mode */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+        {language === 'mr' ? 'प्रकार' : 'TYPE'}
+      </span>
+      <span style={{
+        fontSize: '0.6rem', fontWeight: '900', padding: '3px 10px',
+        borderRadius: '20px', letterSpacing: '0.5px',
+        background: 'rgba(211,191,162,0.06)',
+        border: '1px solid rgba(211,191,162,0.12)',
+        color: '#8a704d'
+      }}>
+        {waitlistEntry.mode === 'dine-in' ? 'DINE-IN WAITLIST'
+          : waitlistEntry.mode === 'reservation' ? 'RESERVATION'
+          : 'PICKUP'}
+      </span>
+    </div>
+
+    {/* Party size */}
+    {waitlistEntry.partySize > 1 && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+          {language === 'mr' ? 'जण' : 'GUESTS'}
+        </span>
+        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'rgba(255,255,255,0.4)' }}>
+          {waitlistEntry.partySize}
+        </span>
+      </div>
+    )}
+
+    {/* Pickup time (pickup only) */}
+    {waitlistEntry.mode === 'pickup' && waitlistEntry.scheduledPickupTime && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+          {language === 'mr' ? 'पिकअप वेळ' : 'PICKUP TIME'}
+        </span>
+        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#d3bfa2', fontFamily: 'monospace' }}>
+          {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+        </span>
+      </div>
+    )}
+
+    {/* Reservation time */}
+    {waitlistEntry.mode === 'reservation' && waitlistEntry.reservationTime && (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+            {language === 'mr' ? 'तारीख' : 'DATE'}
+          </span>
+          <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#d3bfa2' }}>
+            {new Date(waitlistEntry.reservationTime).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </span>
         </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+            {language === 'mr' ? 'वेळ' : 'TIME'}
+          </span>
+          <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#d3bfa2', fontFamily: 'monospace' }}>
+            {new Date(waitlistEntry.reservationTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+          </span>
+        </div>
+      </>
+    )}
 
-        {/* ── PARTY SIZE (dine-in + reservation) ── */}
-        {(isDineIn || isReserve) && (
-          <div style={{ marginBottom: '18px' }}>
-            <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-              fontWeight: '900', letterSpacing: '2px',
-              display: 'block', marginBottom: '8px', textTransform: 'uppercase'
+    {/* Special requests */}
+    {(waitlistEntry.specialRequests || waitlistEntry.tablePreference) && (
+      <div style={{
+        marginTop: '4px', padding: '10px 12px',
+        background: 'rgba(211,191,162,0.03)',
+        border: '1px solid rgba(211,191,162,0.07)',
+        borderRadius: '10px'
+      }}>
+        {waitlistEntry.tablePreference && (
+          <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', marginBottom: waitlistEntry.specialRequests ? '5px' : '0' }}>
+            <span style={{ color: 'rgba(211,191,162,0.3)', fontWeight: '700' }}>
+              {language === 'mr' ? 'टेबल: ' : 'Pref: '}
+            </span>
+            {waitlistEntry.tablePreference}
+          </div>
+        )}
+        {waitlistEntry.specialRequests && (
+          <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>
+            "{waitlistEntry.specialRequests}"
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* Status badge */}
+    <div style={{
+      marginTop: '4px',
+      display: 'flex', justifyContent: 'center',
+      padding: '10px',
+      background: waitlistEntry.status === 'confirmed'
+        ? 'rgba(211,191,162,0.06)'
+        : 'rgba(138,112,77,0.05)',
+      border: `1px solid ${waitlistEntry.status === 'confirmed'
+        ? 'rgba(211,191,162,0.15)'
+        : 'rgba(138,112,77,0.1)'}`,
+      borderRadius: '10px'
+    }}>
+      <span style={{
+        fontSize: '0.6rem', fontWeight: '900', letterSpacing: '1px',
+        color: waitlistEntry.status === 'confirmed' ? '#d3bfa2' : '#8a704d',
+        textTransform: 'uppercase'
+      }}>
+        {waitlistEntry.status === 'confirmed'
+          ? (language === 'mr' ? '✓ कन्फर्म झाले' : '✓ CONFIRMED')
+          : (language === 'mr' ? '⏳ प्रतीक्षा — रेस्टॉरंट लवकरच कन्फर्म करेल' : '⏳ PENDING — Restaurant will confirm shortly')}
+      </span>
+    </div>
+  </div>
+</div>
+
+          {/* Add pre-order CTA — CODE 4 onClick */}
+          {!hasItems && (
+            <button onClick={() => {
+              if (counterMode === 'reservation') {
+                setReservationAskOrder(true);
+              } else {
+                setRegistrationStep('menu');
+              }
+            }} style={{
+              width: '100%', padding: '17px',
+              background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+              color: '#0c0c0c', border: 'none', borderRadius: '14px',
+              fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
+              marginBottom: '10px', letterSpacing: '1px', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px'
             }}>
-              {language === 'mr' ? 'किती जण? *' : 'Party Size *'}
-            </label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {[1, 2, 3, 4, 5, 6].map(n => (
-                <button key={n} type="button" onClick={() => setPartySize(n)} style={{
-                  width: '54px', height: '54px', borderRadius: '13px',
-                  border: 'none', cursor: 'pointer',
-                  fontWeight: '900', fontSize: '1rem', transition: 'all 0.15s',
-                  background: partySize === n ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
-                  color: partySize === n ? '#0c0c0c' : 'rgba(255,255,255,0.25)',
-                  outline: partySize === n ? 'none' : '1px solid rgba(211,191,162,0.08)',
-                  transform: partySize === n ? 'scale(1.05)' : 'scale(1)'
-                }}>
-                  {n}{n === 6 ? '+' : ''}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── PICKUP TIME (pickup only) ── */}
-        {isPickup && (
-          <div style={{ marginBottom: '18px' }}>
-            <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-              fontWeight: '900', letterSpacing: '2px',
-              display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-            }}>
-              {language === 'mr' ? 'पिकअप वेळ *' : 'Pickup Time *'}
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Clock3 size={14} color="rgba(211,191,162,0.3)" strokeWidth={1.5} style={{
-                position: 'absolute', left: '15px', top: '50%',
-                transform: 'translateY(-50%)', pointerEvents: 'none'
-              }} />
-              <select
-                value={scheduledPickupTime}
-                onChange={e => setScheduledPickupTime(e.target.value)}
-                style={{
-                  width: '100%', padding: '15px 16px 15px 42px',
-                  background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                  color: scheduledPickupTime ? '#fff' : 'rgba(255,255,255,0.25)',
-                  borderRadius: '12px', fontSize: '0.9rem',
-                  outline: 'none', cursor: 'pointer', appearance: 'none',
-                  boxSizing: 'border-box', fontFamily: 'Poppins, sans-serif'
-                }}
-              >
-                <option value="">{language === 'mr' ? '— वेळ निवडा —' : '— Choose a pickup slot —'}</option>
-                {pickupOptions.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <ChevronRight size={13} color="rgba(211,191,162,0.25)" style={{
-                position: 'absolute', right: '14px', top: '50%',
-                transform: 'translateY(-50%) rotate(90deg)', pointerEvents: 'none'
-              }} />
-            </div>
-          </div>
-        )}
-
-        {/* ── RESERVATION DATE (reservation only) ── */}
-        {isReserve && (
-          <>
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{
-                fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-                fontWeight: '900', letterSpacing: '2px',
-                display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-              }}>
-                {language === 'mr' ? 'तारीख *' : 'Reservation Date *'}
-              </label>
-              <input
-                type="date"
-                value={reservationDate}
-                min={new Date().toISOString().split('T')[0]}
-                onChange={e => setReservationDate(e.target.value)}
-                style={{
-                  width: '100%', padding: '15px 16px',
-                  background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                  color: reservationDate ? '#fff' : 'rgba(255,255,255,0.25)',
-                  borderRadius: '12px', fontSize: '0.9rem',
-                  outline: 'none', boxSizing: 'border-box',
-                  colorScheme: 'dark', fontFamily: 'Poppins, sans-serif', cursor: 'pointer'
-                }}
-              />
-            </div>
-
-            {/* Time grid */}
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{
-                fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-                fontWeight: '900', letterSpacing: '2px',
-                display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-              }}>
-                {language === 'mr' ? 'वेळ *' : 'Time Slot *'}
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                {[
-                  { slot: '11:00', label: '11:00 AM' },
-                  { slot: '12:00', label: '12:00 PM' },
-                  { slot: '13:00', label: '1:00 PM' },
-                  { slot: '14:00', label: '2:00 PM' },
-                  { slot: '18:00', label: '6:00 PM' },
-                  { slot: '19:00', label: '7:00 PM' },
-                  { slot: '19:30', label: '7:30 PM' },
-                  { slot: '20:00', label: '8:00 PM' },
-                  { slot: '20:30', label: '8:30 PM' },
-                  { slot: '21:00', label: '9:00 PM' },
-                  { slot: '21:30', label: '9:30 PM' },
-                  { slot: '22:00', label: '10:00 PM' },
-                ].map(({ slot, label }) => {
-                  const isSel = reservationTime === slot;
-                  return (
-                    <button key={slot} type="button" onClick={() => setReservationTime(slot)} style={{
-                      padding: '12px 6px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                      fontWeight: '900', fontSize: '0.72rem', transition: 'all 0.15s',
-                      background: isSel ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
-                      color: isSel ? '#0c0c0c' : 'rgba(255,255,255,0.2)',
-                      outline: isSel ? 'none' : '1px solid rgba(211,191,162,0.08)',
-                      transform: isSel ? 'scale(1.04)' : 'scale(1)'
-                    }}>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Table preference */}
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{
-                fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-                fontWeight: '900', letterSpacing: '2px',
-                display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-              }}>
-                {language === 'mr' ? 'टेबल प्राधान्य (ऐच्छिक)' : 'Table Preference (optional)'}
-              </label>
-              <input
-                type="text"
-                placeholder={language === 'mr' ? 'उदा. खिडकीजवळ, शांत कोपरा, टेबल ४' : 'e.g. window seat, quiet corner, table 4'}
-                value={tablePreference}
-                onChange={e => setTablePreference(e.target.value)}
-                style={{
-                  width: '100%', padding: '15px 16px',
-                  background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                  color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
-                  outline: 'none', boxSizing: 'border-box', fontFamily: 'Poppins, sans-serif',
-                  transition: 'border-color 0.2s'
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-                onBlur={e  => e.target.style.borderColor = 'rgba(211,191,162,0.12)'}
-              />
-            </div>
-
-            {/* Special requests */}
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{
-                fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-                fontWeight: '900', letterSpacing: '2px',
-                display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-              }}>
-                {language === 'mr' ? 'विशेष विनंती (ऐच्छिक)' : 'Special Requests (optional)'}
-              </label>
-              <input
-                type="text"
-                placeholder={language === 'mr' ? 'उदा. वाढदिवस, ऍलर्जी, हाय चेअर' : 'e.g. birthday, nut allergy, high chair...'}
-                value={specialRequests}
-                onChange={e => setSpecialRequests(e.target.value)}
-                style={{
-                  width: '100%', padding: '15px 16px',
-                  background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                  color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
-                  outline: 'none', boxSizing: 'border-box', fontFamily: 'Poppins, sans-serif',
-                  transition: 'border-color 0.2s'
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-                onBlur={e  => e.target.style.borderColor = 'rgba(211,191,162,0.12)'}
-              />
-            </div>
-          </>
-        )}
-
-        {/* ── SPECIAL REQUESTS for dine-in and pickup too ── */}
-        {(isDineIn || isPickup) && (
-          <div style={{ marginBottom: '18px' }}>
-            <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
-              fontWeight: '900', letterSpacing: '2px',
-              display: 'block', marginBottom: '8px', textTransform: 'uppercase'
-            }}>
-              {language === 'mr' ? 'विशेष विनंती (ऐच्छिक)' : 'Special Requests (optional)'}
-            </label>
-            <input
-              type="text"
-              placeholder={language === 'mr' ? 'उदा. व्हीलचेअर, लहान मूल, ऍलर्जी...' : 'e.g. wheelchair access, high chair, nut allergy...'}
-              value={specialRequests}
-              onChange={e => setSpecialRequests(e.target.value)}
-              style={{
-                width: '100%', padding: '15px 16px',
-                background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-                color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
-                outline: 'none', boxSizing: 'border-box', fontFamily: 'Poppins, sans-serif',
-                transition: 'border-color 0.2s'
-              }}
-              onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-              onBlur={e  => e.target.style.borderColor = 'rgba(211,191,162,0.12)'}
-            />
-          </div>
-        )}
-
-        {/* ── QUEUE INFO (dine-in only) ── */}
-        {isDineIn && avgWaitData && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px' }}>
-            {[
-              { icon: <UserCheck size={13} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />, label: language === 'mr' ? 'पुढे रांग' : 'Groups Ahead', val: `${avgWaitData.queueLength || 0}` },
-              { icon: <Hourglass size={13} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />, label: language === 'mr' ? 'अंदाजे वेळ' : 'Est. Wait', val: `~${(avgWaitData.queueLength || 0) * (avgWaitData.avgWait || 20)} min` },
-            ].map(s => (
-              <div key={s.label} style={{
-                background: '#0c0c0c', border: '1px solid rgba(211,191,162,0.07)',
-                borderRadius: '12px', padding: '14px 16px',
-                display: 'flex', alignItems: 'center', gap: '10px'
-              }}>
-                {s.icon}
-                <div>
-                  <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.2)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: '900', color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>{s.val}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── CTA ── */}
-        {(() => {
-          const phoneOk = customerInfo.phone?.replace(/\D/g, '').length === 10;
-          const nameOk  = customerInfo.name.trim().length > 0;
-          const pickupOk = !isPickup || scheduledPickupTime;
-          const resOk    = !isReserve || (reservationDate && reservationTime);
-          const allOk    = nameOk && phoneOk && pickupOk && resOk;
-
-          return (
-            <button
-              onClick={() => allOk && setRegistrationStep('menu')}
-              style={{
-                width: '100%', padding: '17px',
-                background: allOk ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
-                color: allOk ? '#0c0c0c' : 'rgba(255,255,255,0.15)',
-                border: allOk ? 'none' : '1px solid rgba(211,191,162,0.07)',
-                borderRadius: '14px', fontWeight: '900', fontSize: '0.86rem',
-                cursor: allOk ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px', textTransform: 'uppercase', transition: 'all 0.2s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-              }}>
               <UtensilsCrossed size={15} strokeWidth={2.5} />
-              {isReserve
-                ? (language === 'mr' ? 'मेनू पहा व बुकिंग करा' : 'Browse Menu & Reserve')
-                : (language === 'mr' ? 'मेनू पहा' : 'Browse Menu')}
+              {language === 'mr' ? 'आधीच ऑर्डर द्या' : 'Add Pre-Order'}
               <ChevronRight size={15} />
             </button>
-          );
-        })()}
+          )}
 
-        {/* Validation hint */}
-        {(() => {
-          const phoneOk = customerInfo.phone?.replace(/\D/g, '').length === 10;
-          const nameOk  = customerInfo.name.trim().length > 0;
-          if (!nameOk) return <div style={{ textAlign:'center', marginTop:'10px', fontSize:'0.6rem', color:'rgba(211,191,162,0.2)' }}>{language==='mr'?'नाव आवश्यक आहे':'Enter your name to continue'}</div>;
-          if (!phoneOk) return <div style={{ textAlign:'center', marginTop:'10px', fontSize:'0.6rem', color:'rgba(211,191,162,0.2)' }}>{language==='mr'?'१० अंकी नंबर आवश्यक':'10-digit number required'}</div>;
-          if (isPickup && !scheduledPickupTime) return <div style={{ textAlign:'center', marginTop:'10px', fontSize:'0.6rem', color:'rgba(211,191,162,0.2)' }}>{language==='mr'?'पिकअप वेळ निवडा':'Choose a pickup time'}</div>;
-          if (isReserve && !reservationDate) return <div style={{ textAlign:'center', marginTop:'10px', fontSize:'0.6rem', color:'rgba(211,191,162,0.2)' }}>{language==='mr'?'तारीख निवडा':'Choose a date'}</div>;
-          if (isReserve && !reservationTime) return <div style={{ textAlign:'center', marginTop:'10px', fontSize:'0.6rem', color:'rgba(211,191,162,0.2)' }}>{language==='mr'?'वेळ निवडा':'Choose a time slot'}</div>;
-          return null;
-        })()}
-      </div>
-    </Shell>
-  );
-}
+          {/* Cancel — CODE 3 onClick */}
+          <button onClick={() => {
+            if (counterMode === 'reservation' && waitlistEntry?._id) {
+              axios.delete(`${BASE_URL}/reservations/${waitlistEntry._id}`).catch(() => {});
+            } else {
+              axios.delete(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}`).catch(() => {});
+            }
+            sessionStorage.removeItem('pratyeksha_session');
+            const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('pratyeksha_session', newId);
+            setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
+            setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
+            setScheduledPickupTime(''); setReservationDate(''); setReservationTime('');
+            setSpecialRequests(''); setTablePreference('');
+            setCart({}); setSuggestions({});
+          }} style={{
+            width: '100%', background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.05)',
+            color: 'rgba(255,255,255,0.18)',
+            fontSize: '0.7rem', cursor: 'pointer',
+            padding: '13px', borderRadius: '12px',
+            fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.2s'
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.18)'; }}
+          >
+            {language === 'mr' ? 'रद्द करा' : 'Leave Queue'}
+          </button>
+        </div>
+
+        {/* Reservation pre-order prompt overlay */}
+        <AnimatePresence>
+          {reservationAskOrder && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 40px' }}>
+              <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+                style={{ width: '100%', maxWidth: '400px', background: '#111', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '24px 24px 20px 20px', padding: '32px 24px 28px', margin: '0 16px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '18px' }}>
+                  <UtensilsCrossed size={22} color="rgba(211,191,162,0.6)" strokeWidth={1.5} />
+                </div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '900', color: '#fff', marginBottom: '8px', letterSpacing: '-0.3px' }}>
+                  {language === 'mr' ? 'आधीच ऑर्डर देणार का?' : 'Pre-order your meal?'}
+                </h3>
+                <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)', lineHeight: 1.7, marginBottom: '26px', fontWeight: '500' }}>
+                  {language === 'mr' ? 'तुम्ही येण्यापूर्वीच ऑर्डर तयार असेल — प्रतीक्षा नाही!' : 'Your food will be ready when you arrive — no waiting!'}
+                </p>
+                <button onClick={() => { setReservationAskOrder(false); setRegistrationStep('menu'); }} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', borderRadius: '13px', color: '#0c0c0c', fontWeight: '900', fontSize: '0.88rem', cursor: 'pointer', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                  <UtensilsCrossed size={16} strokeWidth={2.5} />
+                  {language === 'mr' ? 'हो, मेनू पाहतो' : 'Yes, Browse Menu'}
+                  <ChevronRight size={16} />
+                </button>
+                <button onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '13px', color: 'rgba(255,255,255,0.2)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; }}>
+                  {language === 'mr' ? 'नाही, नंतर ठरवतो' : "No, I'll decide at the restaurant"}
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Shell>
+    );
+  }
 
   // ══════════════════════════════════════════
   // SCREEN: REGISTER
@@ -2073,6 +2142,42 @@ style={{
     </Shell>
   );
 } // ← end of if (isCounterScan && registrationStep !== 'menu')
+
+// ── Persist cart to localStorage so it survives browser close ──
+useEffect(() => {
+  if (Object.keys(cart).length > 0) {
+    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
+  } else {
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+  }
+}, [cart, tenantId]);
+
+// ── Persist placedOrders to localStorage (bill survives refresh) ──
+useEffect(() => {
+  if (!tenantId || !tableNumber) return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
+  if (placedOrders.length > 0) {
+    localStorage.setItem(key, JSON.stringify(placedOrders));
+  } else {
+    localStorage.removeItem(key);
+  }
+}, [placedOrders, tenantId, tableNumber]);
+
+// ── Restore placedOrders on mount (after refresh) ──
+useEffect(() => {
+  if (!tenantId || !tableNumber || tableNumber === 'Counter') return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setPlacedOrders(parsed);
+        setHasPlacedInitialOrder(true);
+      }
+    }
+  } catch { /* ignore */ }
+}, [tenantId, tableNumber]);
 
 // ── LOADER ──
 if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRATYEKSHA...</div>;
@@ -2864,19 +2969,32 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                       
                       {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
 <div style={styles.billTableBody}>
-   {finalBillItems.map((order, idx) => (
-     <div key={idx} style={styles.billTableRow}>
-        <div style={{flex: 2, display: 'flex', flexDirection: 'column'}}>
-           <span style={{fontSize: '0.85rem', fontWeight: '700', color: '#fff'}}>
-             {order.quantity}x {language === 'mr' ? order.name_mr : order.name}
-           </span>
-           <span style={{fontSize: '0.65rem', color: primaryColor}}>{order.portion !== 'Single' ? order.portion : ''}</span>
-        </div>
-        <span style={{flex: 1, textAlign: 'right', fontSize: '0.85rem'}}>₹{convertToMrNumber(order.subtotal)}</span>
-     </div>
-   ))}
+  {finalBillItems.map((order, idx) => (
+    <div key={idx} style={styles.billTableRow}>
+      <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
+        <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {order.quantity}x {language === 'mr' ? (order.name_mr || order.name) : order.name}
+          {order.isExtraItem && (
+            <span style={{
+              fontSize: '0.48rem', padding: '2px 5px',
+              background: 'rgba(211,191,162,0.08)',
+              border: '1px solid rgba(211,191,162,0.15)',
+              borderRadius: '4px', color: '#8a704d',
+              fontWeight: '900', letterSpacing: '0.5px'
+            }}>EXTRA</span>
+          )}
+        </span>
+        <span style={{ fontSize: '0.65rem', color: primaryColor }}>
+          {order.portion !== 'Single' ? order.portion : ''}
+          {order.isExtraItem ? ` · ₹${order.pricePerUnit} each` : ''}
+        </span>
+      </div>
+      <span style={{ flex: 1, textAlign: 'right', fontSize: '0.85rem' }}>
+        ₹{convertToMrNumber(order.subtotal)}
+      </span>
+    </div>
+  ))}
 </div>
-
                       <div style={styles.billTableFooter}>
                          <div style={styles.billLineTotal}>
                             <span>{t[language].grandTotal}</span>
@@ -2921,20 +3039,28 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
      <span>ITEM DESCRIPTION</span>
      <span>TOTAL</span>
   </div>
-  {finalBillItems.map((order, idx) => (
-    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
-       <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
-            {convertToMrNumber(order.quantity)}x {language === 'mr' ? order.name_mr : order.name}
-          </span>
-          {/* 🚀 PRICE PER UNIT DISPLAYED LIKE YOUR UPLOADED IMAGE */}
-          <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>
-            @ ₹{convertToMrNumber(order.pricePerUnit)} {order.portion !== 'Single' ? `(${order.portion})` : ''}
-          </span>
-       </div>
-       <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{convertToMrNumber(order.subtotal)}</b>
+{finalBillItems.map((order, idx) => (
+  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
+        {convertToMrNumber(order.quantity)}x {language === 'mr' ? (order.name_mr || order.name) : order.name}
+        {order.isExtraItem ? ' ⬦' : ''}
+      </span>
+      <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>
+        @ ₹{convertToMrNumber(order.pricePerUnit)}
+        {order.portion !== 'Single' ? ` (${order.portion})` : ''}
+        {order.isExtraItem ? ' · Extra Item' : ''}
+      </span>
     </div>
-  ))}
+    <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{convertToMrNumber(order.subtotal)}</b>
+  </div>
+))}
+{/* Extra items footnote in PDF */}
+{finalBillItems.some(i => i.isExtraItem) && (
+  <div style={{ fontSize: '0.62rem', color: '#999', marginTop: '8px', fontStyle: 'italic' }}>
+    ⬦ Extra items ordered separately at counter
+  </div>
+)}
 </div>
 
 {/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
