@@ -716,34 +716,37 @@ const notifyWaiter = async (serviceType = "Custom") => {
     }, 0);
   };
 useEffect(() => {
-  if (!tenantId || tableNumber === 'Counter') return; // only for table QR scans
+  // Only for table scans — not counter mode
+  if (!tenantId || tableNumber === 'Counter' || isCounterScan) return;
   if (welcomeDismissed) return;
 
-  const recognizeCustomer = async (phone) => {
-    if (!phone || phone.length !== 10) return;
-    setWelcomeLoading(true);
-    try {
-      const res = await axios.get(
-        `${BASE_URL}/customers/recognize/${tenantId}/${phone}`
-      );
-      if (res.data?.found) {
-        setWelcomeCard(res.data);
-        setWelcomePhone(phone);
-      }
-    } catch { /* not found — silently ignore */ }
-    finally { setWelcomeLoading(false); }
-  };
+  const savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`);
 
-  // Check localStorage for saved phone
-  const saved = localStorage.getItem(`pratyeksha_phone_${tenantId}`);
-  if (saved && saved.length === 10) {
-    recognizeCustomer(saved);
+  if (savedPhone && savedPhone.length === 10) {
+    // Auto-recognize silently — no prompt needed
+    setWelcomeLoading(true);
+    axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${savedPhone}`)
+      .then(r => {
+        if (r.data?.found) {
+          setWelcomeCard(r.data);
+          setWelcomePhone(savedPhone);
+        } else {
+          // Phone saved but customer not in DB — show input after delay
+          const timer = setTimeout(() => setShowPhonePrompt(true), 1800);
+          return () => clearTimeout(timer);
+        }
+      })
+      .catch(() => {
+        const timer = setTimeout(() => setShowPhonePrompt(true), 1800);
+        return () => clearTimeout(timer);
+      })
+      .finally(() => setWelcomeLoading(false));
   } else {
-    // Show phone prompt after 1.2s so menu loads first
-    const t = setTimeout(() => setShowPhonePrompt(true), 1200);
-    return () => clearTimeout(t);
+    // No saved phone — show prompt after brief delay so menu loads first
+    const timer = setTimeout(() => setShowPhonePrompt(true), 1500);
+    return () => clearTimeout(timer);
   }
-}, [tenantId, tableNumber, welcomeDismissed]);
+}, [tenantId, tableNumber, isCounterScan, welcomeDismissed]);
 
 
   
@@ -3847,177 +3850,277 @@ onClick={isCounterScan
       exit={{ opacity: 0 }}
       style={{
         position: 'fixed', inset: 0, zIndex: 8000,
-        background: 'rgba(0,0,0,0.88)',
+        background: 'rgba(0,0,0,0.9)',
         display: 'flex', alignItems: 'flex-end',
-        justifyContent: 'center', padding: '0 0 28px',
+        justifyContent: 'center', padding: '0 0 20px',
         fontFamily: 'Poppins, sans-serif'
       }}
     >
       <motion.div
-        initial={{ y: 100, opacity: 0 }}
+        initial={{ y: 120, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        exit={{ y: 120, opacity: 0 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 280 }}
         style={{
-          width: '100%', maxWidth: '420px',
-          background: '#0d0d0d',
+          width: '100%', maxWidth: '440px',
+          background: '#0c0c0c',
           border: '1px solid rgba(211,191,162,0.15)',
-          borderRadius: '26px 26px 20px 20px',
-          overflow: 'hidden', margin: '0 14px'
+          borderRadius: '28px 28px 20px 20px',
+          overflow: 'hidden', margin: '0 12px',
+          maxHeight: '88vh', overflowY: 'auto'
         }}
+        className="no-scrollbar"
       >
-        {/* Gold top line */}
-        <div style={{ height: '2px', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.6), transparent)' }} />
+        {/* Gold shimmer top line */}
+        <div style={{ height: '2px', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.7), transparent)', flexShrink: 0 }} />
 
-        {/* Header */}
+        {/* HERO HEADER */}
         <div style={{
-          padding: '22px 22px 16px',
-          background: 'linear-gradient(180deg, rgba(211,191,162,0.06) 0%, transparent 100%)',
-          borderBottom: '1px solid rgba(211,191,162,0.07)'
+          padding: '22px 22px 18px',
+          background: 'linear-gradient(180deg, rgba(211,191,162,0.07) 0%, transparent 100%)',
+          borderBottom: '1px solid rgba(211,191,162,0.07)',
+          position: 'relative'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {/* Avatar */}
+          {/* Dismiss button */}
+          <button onClick={() => setWelcomeDismissed(true)} style={{
+            position: 'absolute', top: '18px', right: '18px',
+            width: '28px', height: '28px', borderRadius: '8px',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+            color: '#555', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <X size={14} />
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginRight: '36px' }}>
+            {/* Avatar with loyalty tier */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
               <div style={{
-                width: '46px', height: '46px', borderRadius: '14px', flexShrink: 0,
+                width: '56px', height: '56px', borderRadius: '18px',
                 background: 'rgba(211,191,162,0.08)',
                 border: '1px solid rgba(211,191,162,0.2)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.4rem'
+                fontSize: '1.8rem'
               }}>
-                {welcomeCard.visitCount >= 5 ? '🏅' : welcomeCard.visitCount >= 2 ? '⭐' : '👋'}
+                {welcomeCard.isLoyal ? '🏅' : welcomeCard.visitCount >= 2 ? '⭐' : '👋'}
               </div>
-              <div>
-                <div style={{ fontSize: '0.52rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
-                  {welcomeCard.visitCount >= 5
-                    ? (language === 'mr' ? 'लॉयल गेस्ट' : 'LOYAL GUEST')
-                    : welcomeCard.visitCount >= 2
-                    ? (language === 'mr' ? 'परत आलात!' : 'WELCOME BACK!')
-                    : (language === 'mr' ? 'स्वागत' : 'WELCOME')}
+              {/* Visit count badge */}
+              {welcomeCard.visitCount > 1 && (
+                <div style={{
+                  position: 'absolute', bottom: '-6px', right: '-6px',
+                  background: 'rgba(211,191,162,0.9)',
+                  color: '#000', fontSize: '0.5rem', fontWeight: '900',
+                  padding: '2px 6px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.2)'
+                }}>
+                  {welcomeCard.visitCount}×
                 </div>
-                <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px' }}>
-                  {language === 'mr' ? 'नमस्कार' : 'Good'}{' '}
-                  {language === 'en' && (() => {
-                    const h = new Date().getHours();
-                    return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-                  })()}{', '}
-                  {welcomeCard.name?.split(' ')[0]}!
-                </div>
+              )}
+            </div>
+
+            {/* Greeting */}
+            <div>
+              <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                {welcomeCard.isLoyal ? 'LOYAL GUEST 🏅' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK!' : 'WELCOME'}
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
+                {language === 'en' ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ` : 'नमस्कार, '}
+                {welcomeCard.name?.split(' ')[0]}!
+              </div>
+              <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', marginTop: '3px', fontWeight: '500' }}>
+                {restaurantData?.name}
               </div>
             </div>
-            <button onClick={() => setWelcomeDismissed(true)} style={{
-              width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              color: '#555', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <X size={14} />
-            </button>
           </div>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '18px 22px 20px' }}>
+        {/* BODY */}
+        <div style={{ padding: '18px 20px 20px' }}>
 
-          {/* Last visit */}
-          {welcomeCard.lastVisit && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              padding: '10px 13px', marginBottom: '10px',
-              background: '#111', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '11px'
-            }}>
-              <Timer size={13} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
-              <div>
-                <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-                  {language === 'mr' ? 'शेवटची भेट' : 'Last Visit'}
+          {/* ── STATS ROW ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+            {[
+              {
+                icon: '🍽️',
+                label: language === 'mr' ? 'भेटी' : 'Visits',
+                val: welcomeCard.visitCount || 1,
+                mono: true
+              },
+              {
+                icon: '💰',
+                label: language === 'mr' ? 'एकूण खर्च' : 'Total Spent',
+                val: welcomeCard.totalSpend > 0 ? `₹${welcomeCard.totalSpend.toLocaleString()}` : '—',
+                gold: true
+              },
+              {
+                icon: '📅',
+                label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit',
+                val: welcomeCard.lastVisit
+                  ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                  : '—',
+                small: true
+              }
+            ].map((s, i) => (
+              <div key={i} style={{
+                background: '#111', border: '1px solid rgba(211,191,162,0.07)',
+                borderRadius: '12px', padding: '12px 10px', textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1rem', marginBottom: '6px' }}>{s.icon}</div>
+                <div style={{
+                  fontSize: s.small ? '0.76rem' : s.mono ? '1.1rem' : '0.88rem',
+                  fontWeight: '900', color: s.gold ? '#d3bfa2' : '#fff',
+                  fontFamily: s.mono ? 'monospace' : 'inherit',
+                  lineHeight: 1.1, marginBottom: '4px'
+                }}>
+                  {s.val}
                 </div>
-                <div style={{ fontSize: '0.76rem', fontWeight: '700', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                  {new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  {s.label}
                 </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
 
-          {/* Last order items */}
-          {welcomeCard.lastOrderItems?.length > 0 && (
+          {/* ── ALL-TIME FAVOURITE DISH ── */}
+          {welcomeCard.favDish && (
             <div style={{
-              padding: '10px 13px', marginBottom: '10px',
-              background: '#111', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '11px'
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '13px 15px', marginBottom: '10px',
+              background: 'rgba(211,191,162,0.05)',
+              border: '1px solid rgba(211,191,162,0.12)',
+              borderRadius: '14px', position: 'relative', overflow: 'hidden'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '8px' }}>
-                <UtensilsCrossed size={12} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
-                <span style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-                  {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {welcomeCard.lastOrderItems.slice(0, 4).map((item, i) => (
-                  <div key={i} style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', fontWeight: '500' }}>
-                    <span style={{ color: 'rgba(211,191,162,0.4)', fontFamily: 'monospace', fontSize: '0.68rem' }}>{item.quantity}×</span>
-                    {' '}{item.name}
-                  </div>
-                ))}
-                {welcomeCard.lastOrderItems.length > 4 && (
-                  <div style={{ fontSize: '0.62rem', color: 'rgba(211,191,162,0.2)' }}>
-                    +{welcomeCard.lastOrderItems.length - 4} more items
+              {/* Glow accent */}
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '60px', height: '60px', background: 'radial-gradient(circle, rgba(211,191,162,0.07) 0%, transparent 70%)', borderRadius: '0 14px 0 60px' }} />
+              <div style={{ fontSize: '1.4rem', flexShrink: 0 }}>🌟</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  {language === 'mr' ? 'आवडता पदार्थ' : 'All-Time Favourite'}
+                </div>
+                <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {welcomeCard.favDish.name}
+                </div>
+                {welcomeCard.favDish.count > 1 && (
+                  <div style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)', marginTop: '2px' }}>
+                    {language === 'mr' ? `${welcomeCard.favDish.count} वेळा ऑर्डर केले` : `Ordered ${welcomeCard.favDish.count} times`}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Fav dish + visit count */}
-          {(welcomeCard.favDish || welcomeCard.visitCount > 1) && (
-            <div style={{ display: 'grid', gridTemplateColumns: welcomeCard.favDish && welcomeCard.visitCount > 1 ? '1fr 1fr' : '1fr', gap: '9px', marginBottom: '16px' }}>
-              {welcomeCard.favDish && (
-                <div style={{ padding: '10px 13px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '11px' }}>
-                  <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    {language === 'mr' ? 'आवडता पदार्थ' : 'Favourite Dish'}
-                  </div>
-                  <div style={{ fontSize: '0.76rem', fontWeight: '800', color: '#d3bfa2', lineHeight: 1.3 }}>
-                    {welcomeCard.favDish.name}
-                  </div>
-                  {welcomeCard.favDish.count > 1 && (
-                    <div style={{ fontSize: '0.6rem', color: 'rgba(211,191,162,0.35)', marginTop: '3px' }}>
-                      {language === 'mr' ? `${welcomeCard.favDish.count} वेळा` : `ordered ${welcomeCard.favDish.count}×`}
+          {/* ── TOP DISHES (all-time) ── */}
+          {welcomeCard.allDishes?.length > 1 && (
+            <div style={{
+              padding: '13px 15px', marginBottom: '10px',
+              background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
+              borderRadius: '14px'
+            }}>
+              <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Flame size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+                {language === 'mr' ? 'तुमचे सर्वात जास्त ऑर्डर' : 'Your Most Ordered'}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                {welcomeCard.allDishes.slice(0, 4).map((dish, i) => {
+                  const maxCount = welcomeCard.allDishes[0]?.count || 1;
+                  const pct = Math.round((dish.count / maxCount) * 100);
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '16px', fontSize: '0.6rem', color: 'rgba(211,191,162,0.2)', fontFamily: 'monospace', fontWeight: '900', textAlign: 'right', flexShrink: 0 }}>
+                        #{i + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                          <span style={{ fontSize: '0.72rem', color: i === 0 ? '#d3bfa2' : 'rgba(255,255,255,0.4)', fontWeight: i === 0 ? '800' : '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                            {dish.name}
+                          </span>
+                          <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '6px' }}>
+                            {dish.count}×
+                          </span>
+                        </div>
+                        {/* Progress bar */}
+                        <div style={{ height: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '1px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: i === 0 ? 'rgba(211,191,162,0.6)' : 'rgba(211,191,162,0.2)', borderRadius: '1px', transition: 'width 0.8s ease' }} />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-              {welcomeCard.visitCount > 1 && (
-                <div style={{ padding: '10px 13px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '11px' }}>
-                  <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    {language === 'mr' ? 'भेटी' : 'Total Visits'}
-                  </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1, fontFamily: 'monospace' }}>
-                    {welcomeCard.visitCount}
-                  </div>
-                  <div style={{ fontSize: '0.6rem', color: 'rgba(211,191,162,0.35)', marginTop: '3px' }}>
-                    {welcomeCard.visitCount >= 5
-                      ? (language === 'mr' ? 'लॉयल गेस्ट 🏅' : 'Loyal Guest 🏅')
-                      : (language === 'mr' ? 'भेटी' : 'visits')}
-                  </div>
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* CTA */}
+          {/* ── LAST ORDER ── */}
+          {welcomeCard.lastOrderItems?.length > 0 && (
+            <div style={{
+              padding: '13px 15px', marginBottom: '14px',
+              background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
+              borderRadius: '14px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Timer size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+                  {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
+                </div>
+                {welcomeCard.lastOrderDate && (
+                  <div style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.15)', fontWeight: '600' }}>
+                    {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {welcomeCard.lastOrderItems.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: 'rgba(211,191,162,0.25)', fontFamily: 'monospace', minWidth: '20px' }}>
+                      ×{item.quantity}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.name}
+                    </span>
+                    {item.subtotal > 0 && (
+                      <span style={{ fontSize: '0.66rem', color: 'rgba(211,191,162,0.3)', fontFamily: 'monospace', flexShrink: 0 }}>
+                        ₹{item.subtotal}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── LOYALTY MESSAGE ── */}
+          {welcomeCard.isLoyal && (
+            <div style={{
+              padding: '12px 15px', marginBottom: '14px',
+              background: 'rgba(211,191,162,0.04)',
+              border: '1px solid rgba(211,191,162,0.12)',
+              borderRadius: '12px', textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '1.2rem', marginBottom: '5px' }}>🏅</div>
+              <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#d3bfa2', marginBottom: '3px' }}>
+                {language === 'mr' ? 'तुम्ही लॉयल गेस्ट आहात!' : "You're a Loyal Guest!"}
+              </div>
+              <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.5 }}>
+                {language === 'mr'
+                  ? `${welcomeCard.visitCount} भेटींसाठी धन्यवाद — तुम्ही आमच्यासाठी खास आहात.`
+                  : `Thank you for your ${welcomeCard.visitCount} visits — you're special to us.`}
+              </div>
+            </div>
+          )}
+
+          {/* ── CTA ── */}
           <button
             onClick={() => {
               localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone);
               setWelcomeDismissed(true);
             }}
             style={{
-              width: '100%', padding: '15px',
-              background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-              border: 'none', borderRadius: '13px',
-              color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
+              width: '100%', padding: '16px',
+              background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+              border: 'none', borderRadius: '14px',
+              color: '#0c0c0c', fontWeight: '900', fontSize: '0.88rem',
               cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
-              boxShadow: '0 6px 20px rgba(211,191,162,0.18)'
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              boxShadow: '0 8px 24px rgba(211,191,162,0.18)'
             }}
           >
             <Utensils size={15} strokeWidth={2.5} />
@@ -4028,6 +4131,7 @@ onClick={isCounterScan
     </motion.div>
   )}
 </AnimatePresence>
+
 
 {/* ── PHONE PROMPT (new customers / unrecognized) ── */}
 <AnimatePresence>
