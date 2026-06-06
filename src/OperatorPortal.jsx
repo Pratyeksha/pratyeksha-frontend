@@ -2670,6 +2670,15 @@ const renderMonthHeatmap = () => {
                             </span>
                           )}
                         </div>
+                        {/* Inline table chip — visible once assigned */}
+{entry.assignedTable && (
+  <div style={{ marginTop:'4px', display:'inline-flex', alignItems:'center', gap:'4px', padding:'2px 8px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.15)', borderRadius:'5px' }}>
+    <TableProperties size={9} color="#8a704d" />
+    <span style={{ fontSize:'0.58rem', color:'#8a704d', fontWeight:'900', letterSpacing:'0.5px' }}>
+      TABLE {entry.assignedTable}
+    </span>
+  </div>
+)}
                         {entry.specialRequests && (
                           <div style={{ marginTop:'5px', fontSize:'0.62rem', color:'#555', display:'flex', alignItems:'center', gap:'5px' }}>
                             <StickyNote size={9} color="#555" />
@@ -2685,55 +2694,127 @@ const renderMonthHeatmap = () => {
                       </div>
                     </div>
 
-                    {/* Status + actions */}
-                    <div style={{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-end', flexShrink:0 }}>
-                      <span style={{ fontSize:'0.52rem', padding:'3px 9px', borderRadius:'20px', fontWeight:'900',
-                        background:`${sc.bg}`, border:`1px solid ${sc.border}`, color:sc.text, letterSpacing:'0.5px' }}>
-                        {sc.label}
-                      </span>
-                      <div style={{ display:'flex', gap:'5px' }}>
-                        {/* Confirm button */}
-                        {entry.status === 'pending' && (
-                          <button onClick={async () => {
-                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'confirmed' });
-                            fetchCounterQueue();
-                            showNotif(`${entry.customerName} reservation confirmed`);
-                          }} style={{ padding:'5px 10px', background:'linear-gradient(135deg,#d3bfa2,#bda88a)', border:'none', color:'#000', borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
-                            CONFIRM
-                          </button>
-                        )}
-                        {/* Assign table */}
-                        {['pending','confirmed'].includes(entry.status) && (
-                          <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-                            style={{ padding:'5px 10px', background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2', borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
-                            SEAT
-                          </button>
-                        )}
-                        {/* Edit */}
-                        <button onClick={() => setReservationEditModal(entry)}
-                          style={{ width:'28px', height:'28px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-                          onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
-                          onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
-                          ✎
-                        </button>
-                        {/* No show */}
-                        {['pending','confirmed'].includes(entry.status) && (
-                          <button onClick={() => setConfirmModal({
-                            show:true, title:`No-Show — ${entry.customerName}?`,
-                            subtitle:'Mark this reservation as no-show and free the slot.',
-                            onConfirm: async () => {
-                              await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'no-show' });
-                              fetchCounterQueue();
-                              showNotif(`${entry.customerName} — marked no-show`);
-                            }
-                          })} style={{ width:'28px', height:'28px', background:'transparent', border:'1px solid #1a1a1a', color:'#333', borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-                            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#8a704d'; }}
-                            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#333'; }}>
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    </div>
+   {/* Status + actions */}
+<div style={{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-end', flexShrink:0 }}>
+
+  {/* ── Status badge — shows table pill when seated ── */}
+  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px' }}>
+    <span style={{
+      fontSize:'0.52rem', padding:'3px 9px', borderRadius:'20px', fontWeight:'900',
+      background: sc.bg, border:`1px solid ${sc.border}`, color: sc.text, letterSpacing:'0.5px'
+    }}>
+      {sc.label}
+    </span>
+
+    {/* Table assigned pill — visible for all statuses once assigned */}
+    {entry.assignedTable && (
+      <div style={{
+        display:'flex', alignItems:'center', gap:'5px',
+        padding:'5px 12px',
+        background:'rgba(211,191,162,0.08)',
+        border:'1px solid rgba(211,191,162,0.25)',
+        borderRadius:'8px'
+      }}>
+        <TableProperties size={11} color="#d3bfa2" />
+        <span style={{
+          fontSize:'0.72rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace', letterSpacing:'1px'
+        }}>
+          T{entry.assignedTable}
+        </span>
+      </div>
+    )}
+  </div>
+
+  {/* ── Action buttons ── */}
+  <div style={{ display:'flex', gap:'5px', marginTop:'2px' }}>
+    {/* Confirm */}
+    {entry.status === 'pending' && (
+      <button onClick={async () => {
+        await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'confirmed' });
+        fetchCounterQueue();
+        showNotif(`${entry.customerName} reservation confirmed`);
+      }} style={{
+        padding:'5px 10px',
+        background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
+        border:'none', color:'#000', borderRadius:'7px',
+        fontSize:'0.58rem', fontWeight:'900', cursor:'pointer'
+      }}>
+        CONFIRM
+      </button>
+    )}
+
+    {/* Seat / Assign table — show for pending + confirmed, hide once seated */}
+    {['pending','confirmed'].includes(entry.status) && (
+      <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+        style={{
+          padding:'5px 10px',
+          background: entry.status === 'confirmed'
+            ? 'linear-gradient(135deg,rgba(211,191,162,0.15),rgba(211,191,162,0.08))'
+            : 'rgba(211,191,162,0.06)',
+          border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2',
+          borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer',
+          display:'flex', alignItems:'center', gap:'4px'
+        }}>
+        <TableProperties size={10} />
+        SEAT
+      </button>
+    )}
+
+    {/* Re-assign table — show when already seated (change table) */}
+    {entry.status === 'seated' && (
+      <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+        style={{
+          padding:'5px 10px',
+          background:'transparent',
+          border:'1px solid #1a1a1a', color:'#444',
+          borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer',
+          display:'flex', alignItems:'center', gap:'4px'
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}
+        title="Change assigned table"
+      >
+        <TableProperties size={10} />
+        CHANGE T
+      </button>
+    )}
+
+    {/* Edit */}
+    <button onClick={() => setReservationEditModal(entry)}
+      style={{
+        width:'28px', height:'28px', background:'transparent',
+        border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px',
+        fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
+      ✎
+    </button>
+
+    {/* No-show — only for pending/confirmed */}
+    {['pending','confirmed'].includes(entry.status) && (
+      <button onClick={() => setConfirmModal({
+        show:true,
+        title:`No-Show — ${entry.customerName}?`,
+        subtitle:'Mark this reservation as no-show and free the slot.',
+        onConfirm: async () => {
+          await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'no-show' });
+          fetchCounterQueue();
+          showNotif(`${entry.customerName} — marked no-show`);
+        }
+      })} style={{
+        width:'28px', height:'28px', background:'transparent',
+        border:'1px solid #1a1a1a', color:'#333',
+        borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center'
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#8a704d'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#333'; }}>
+        ✕
+      </button>
+    )}
+  </div>
+</div>
                   </div>
                 </div>
               );
@@ -7118,54 +7199,52 @@ style={{
                 <button
                   key={n}
                   disabled={isOcc}
-                  // The onClick inside your assign table grid button — REPLACE with:
 onClick={async () => {
   try {
-    setAssignTableModal(null);
-
-    // ── RESERVATION path ──
     if (assignTableModal._fromReservation) {
-      setReservationEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
-
+      // ── RESERVATION PATH ──
       const res = await axios.patch(`${BASE_URL}/reservations/${assignTableModal._id}`, {
         status: 'seated',
-        assignedTable: id,
-        seatedAt: new Date().toISOString()
+        assignedTable: id
       });
 
-      await fetchCounterQueue();
-      fetchInitialData();
-      showNotif(
-        res.data?.reservation?.linkedOrderId
-          ? `T${n} — ${assignTableModal.customerName} seated · pre-order firing to KDS`
-          : `T${n} — ${assignTableModal.customerName} seated`,
-        'success'
-      );
-      return;
-    }
+      if (res.data?.success) {
+        setAssignTableModal(null);
+        fetchCounterQueue();
+        fetchInitialData(); // refresh orders — KDS gets the pre-order if any
 
-    // ── WAITLIST path (existing) ──
-    setWaitlistEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
-
-    const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
-      tableNumber: id
-    });
-
-    if (res.data?.success) {
-      await fetchCounterQueue();
-      fetchInitialData();
-      showNotif(
-        res.data.order
-          ? `T${n} assigned to ${assignTableModal.customerName} — order firing to KDS`
-          : `T${n} assigned to ${assignTableModal.customerName}`,
-        'success'
-      );
+        // If server created an order from pre-order items, notify
+        if (res.data?.order) {
+          showNotif(
+            `T${n} assigned to ${assignTableModal.customerName} — pre-order firing to KDS`,
+            'success'
+          );
+        } else {
+          showNotif(`T${n} assigned to ${assignTableModal.customerName}`, 'success');
+        }
+      } else {
+        showNotif(res.data?.error || 'Assignment failed', 'error');
+      }
     } else {
-      await fetchCounterQueue();
-      showNotif(res.data?.error || 'Assignment failed', 'error');
+      // ── WAITLIST PATH (unchanged) ──
+      const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
+        tableNumber: id
+      });
+      if (res.data?.success) {
+        setAssignTableModal(null);
+        fetchCounterQueue();
+        fetchInitialData();
+        showNotif(
+          res.data.order
+            ? `T${n} assigned to ${assignTableModal.customerName} — order firing to KDS`
+            : `T${n} assigned to ${assignTableModal.customerName}`,
+          'success'
+        );
+      } else {
+        showNotif(res.data?.error || 'Assignment failed', 'error');
+      }
     }
   } catch (err) {
-    await fetchCounterQueue();
     console.error('Assign error:', err.response?.data || err.message);
     showNotif(
       err.response?.data?.error || err.message || 'Failed to assign table',
