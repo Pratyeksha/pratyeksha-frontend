@@ -7121,16 +7121,37 @@ style={{
                   // The onClick inside your assign table grid button — REPLACE with:
 onClick={async () => {
   try {
-    // ── Optimistic removal BEFORE API call ──
-    setWaitlistEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
     setAssignTableModal(null);
+
+    // ── RESERVATION path ──
+    if (assignTableModal._fromReservation) {
+      setReservationEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
+
+      const res = await axios.patch(`${BASE_URL}/reservations/${assignTableModal._id}`, {
+        status: 'seated',
+        assignedTable: id,
+        seatedAt: new Date().toISOString()
+      });
+
+      await fetchCounterQueue();
+      fetchInitialData();
+      showNotif(
+        res.data?.reservation?.linkedOrderId
+          ? `T${n} — ${assignTableModal.customerName} seated · pre-order firing to KDS`
+          : `T${n} — ${assignTableModal.customerName} seated`,
+        'success'
+      );
+      return;
+    }
+
+    // ── WAITLIST path (existing) ──
+    setWaitlistEntries(prev => prev.filter(e => e._id !== assignTableModal._id));
 
     const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
       tableNumber: id
     });
 
     if (res.data?.success) {
-      // Refetch to sync — filtered function won't bring it back
       await fetchCounterQueue();
       fetchInitialData();
       showNotif(
@@ -7140,12 +7161,10 @@ onClick={async () => {
         'success'
       );
     } else {
-      // If failed, restore the entry
       await fetchCounterQueue();
       showNotif(res.data?.error || 'Assignment failed', 'error');
     }
   } catch (err) {
-    // If failed, restore the entry
     await fetchCounterQueue();
     console.error('Assign error:', err.response?.data || err.message);
     showNotif(
