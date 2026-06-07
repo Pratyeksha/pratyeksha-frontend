@@ -666,6 +666,432 @@ const sendExtraItemsRequest = async () => {
   }
 };
 
+// ══════════════════════════════════════════════════════════════════
+// PDF TOKEN SYSTEM — All 3 modes
+// Paste this entire block anywhere in PratyekshaPremiumMenu
+// BEFORE the component's return statement (alongside other functions)
+//
+// Uses from component scope:
+//   restaurantData, waitlistEntry, counterMode, language
+//
+// Each mode generates its own random token on call.
+// Call the right function from each confirm screen's PDF button.
+// ══════════════════════════════════════════════════════════════════
+
+// ── Random token generator (6 chars, alphanumeric uppercase) ──
+const genToken = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no confusable chars
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+};
+
+// ── Shared: open print dialog ──
+const openPDF = (html) => {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  if (win) {
+    win.onload = () => setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 600);
+  }
+};
+
+// ── Shared: inline SVG icons ──
+const IC = {
+  calendar:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  clock:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  users:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  user:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  phone:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.35 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+  mappin:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  utensils:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`,
+  chair:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 11v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v2H7v-2a2 2 0 0 0-4 0Z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>`,
+  bag:       `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  check:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  hourglass: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
+  note:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  hash:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
+};
+
+// ── Shared: tenant info block (used in all 3 PDFs) ──
+const tenantInfoHTML = (rd, accentColor = '#7a5a30', borderColor = '#e0d0bc', mutedColor = '#9a8060') => {
+  const address = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
+  return `
+  <div style="display:flex;flex-direction:column;gap:4px;padding:10px 14px;border:1px solid ${borderColor};border-radius:10px;margin-bottom:14px;background:rgba(0,0,0,0.02);">
+    ${rd?.contact ? `
+    <div style="display:flex;align-items:center;gap:6px;font-size:8.5px;color:${mutedColor};font-weight:600;">
+      <span style="color:${accentColor};">${IC.phone}</span> ${rd.contact}
+    </div>` : ''}
+    ${address ? `
+    <div style="display:flex;align-items:flex-start;gap:6px;font-size:8.5px;color:${mutedColor};font-weight:600;">
+      <span style="color:${accentColor};margin-top:1px;">${IC.mappin}</span> ${address}
+    </div>` : ''}
+    ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `
+    <div style="display:flex;align-items:center;gap:6px;font-size:8px;color:${mutedColor};font-weight:600;">
+      <span style="color:${accentColor};">${IC.hash}</span> GSTIN: ${rd.gstin}
+    </div>` : ''}
+  </div>`;
+};
+
+// ── Shared: order items table ──
+const orderTableHTML = (items, totalAmount, thBg, thColor, tdBorder, totalKeyColor, totalValColor) => {
+  if (!items?.length) return '';
+  return `
+  <table style="width:100%;border-collapse:collapse;margin-top:4px;">
+    <thead>
+      <tr>
+        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:left;background:${thBg};color:${thColor};border-radius:4px 0 0 0;">Item</th>
+        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:center;background:${thBg};color:${thColor};">Qty</th>
+        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:right;background:${thBg};color:${thColor};border-radius:0 4px 0 0;">₹</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items.map(i => `
+      <tr>
+        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};">${i.name}${i.portion && i.portion !== 'Single' ? ` <span style="font-size:7.5px;opacity:0.6;">(${i.portion})</span>` : ''}</td>
+        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};text-align:center;">${i.quantity}</td>
+        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};text-align:right;font-weight:700;">₹${i.subtotal}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 8px 4px;border-top:1.5px solid ${totalKeyColor}11;">
+    <span style="font-size:9px;font-weight:800;text-transform:uppercase;color:${totalKeyColor};">Total</span>
+    <span style="font-size:15px;font-weight:900;color:${totalValColor};">₹${(totalAmount || 0).toLocaleString()}</span>
+  </div>`;
+};
+
+// ── Shared: footer ──
+const footerHTML = (borderColor, brandColor, dateColor) => `
+  <div style="text-align:center;padding-top:12px;border-top:1px dashed ${borderColor};">
+    <div style="font-size:7px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:${brandColor};">PRATYEKSHA</div>
+    <div style="font-size:7px;color:${dateColor};margin-top:2px;">
+      ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}
+    </div>
+  </div>`;
+
+// ── Base CSS shared across all 3 PDFs ──
+const BASE_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.page{width:100%;max-width:380px;margin:0 auto;padding:28px 22px;}
+@media print{body{margin:0;}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}`;
+
+
+// ══════════════════════════════════════════════════════════════════
+// MODE 1 — DINE-IN WAITLIST TOKEN
+// Call: downloadWaitlistToken()
+// ══════════════════════════════════════════════════════════════════
+const downloadWaitlistToken = () => {
+  const token    = genToken();
+  const entry    = waitlistEntry || {};
+  const rd       = restaurantData;
+  const position = entry.waitlistPosition || 1;
+  const estWait  = position * 20;
+  const isConf   = ['confirmed','assigned','seated'].includes(entry.status);
+  const hasOrder = (entry.items || []).length > 0;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Waitlist Token</title>
+<style>
+${BASE_CSS}
+body{background:#fff;color:#111;}
+</style></head><body><div class="page">
+
+  <!-- HEADER: Mode label + restaurant name + tenant info -->
+  <div style="text-align:center;margin-bottom:16px;padding-bottom:14px;border-bottom:2px solid #111;">
+    <div style="display:inline-flex;align-items:center;gap:5px;background:#f5f0e8;color:#7a5a30;border:1px solid #e0d5c0;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
+      <span style="color:#7a5a30;">${IC.chair}</span> Dine-In Waitlist
+    </div>
+    <div style="font-size:22px;font-weight:900;color:#111;letter-spacing:-0.5px;">${rd?.name || 'PRATYEKSHA'}</div>
+    ${rd?.address?.city ? `<div style="font-size:8px;color:#888;margin-top:2px;">${rd.address.city}</div>` : ''}
+  </div>
+
+  <!-- TENANT INFO -->
+  ${tenantInfoHTML(rd, '#7a5a30', '#e0d5c0', '#9a8060')}
+
+  <!-- MERGED TOKEN + QUEUE HERO -->
+  <div style="background:#111;border-radius:16px;padding:22px 18px;margin-bottom:16px;display:flex;align-items:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#e8c96a 60%,transparent);"></div>
+
+    <!-- Queue number (left) -->
+    <div style="flex:1;text-align:center;padding-right:16px;border-right:1px solid rgba(201,168,76,0.2);">
+      <div style="font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(201,168,76,0.35);margin-bottom:6px;">Queue Position</div>
+      <div style="font-size:60px;font-weight:900;color:#c9a84c;line-height:1;font-family:'Courier New',monospace;letter-spacing:-4px;">#${position}</div>
+      <div style="font-size:8px;font-weight:600;color:rgba(255,255,255,0.2);margin-top:8px;">~${estWait} min wait</div>
+    </div>
+
+    <!-- Token (right) -->
+    <div style="flex:1;text-align:center;padding-left:16px;">
+      <div style="font-size:6px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);margin-bottom:6px;">Token</div>
+      <div style="font-size:22px;font-weight:900;color:#fff;font-family:'Courier New',monospace;letter-spacing:4px;">${token}</div>
+      <div style="display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:4px 10px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;${isConf ? 'background:rgba(45,106,79,0.25);border:1px solid rgba(45,106,79,0.5);color:#6dba96;' : 'background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:rgba(201,168,76,0.8);'}">
+        <span style="color:inherit;">${isConf ? IC.check : IC.hourglass}</span>
+        ${isConf ? 'Confirmed' : 'In Queue'}
+      </div>
+    </div>
+  </div>
+
+  <!-- GUEST DETAILS -->
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
+    <span style="color:#9a8060;">${IC.users}</span> Guest Details
+  </div>
+
+  <div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Name</div>
+      <div style="font-size:10.5px;font-weight:700;color:#111;">${entry.customerName || '—'}</div>
+    </div>
+    ${entry.customerPhone ? `
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Mobile</div>
+      <div style="font-size:10px;font-weight:700;color:#111;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
+    </div>` : ''}
+    <div style="flex:1;min-width:80px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Party Size</div>
+      <div style="font-size:10.5px;font-weight:700;color:#111;">${entry.partySize || 1} ${(entry.partySize || 1) === 1 ? 'person' : 'people'}</div>
+    </div>
+  </div>
+
+  ${entry.specialRequests ? `
+  <div style="padding:10px 12px;background:#f9f5ef;border:1px solid #e8ddd0;border-radius:8px;margin-bottom:10px;">
+    <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Special Request</div>
+    <div style="font-size:9.5px;color:#111;font-style:italic;">"${entry.specialRequests}"</div>
+  </div>` : ''}
+
+  ${hasOrder ? `
+  <hr style="border:none;border-top:1px dashed #e0d0bc;margin:12px 0;">
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
+    <span style="color:#9a8060;">${IC.utensils}</span> Pre-Order · fires when seated
+  </div>
+  ${orderTableHTML(entry.items, entry.totalAmount, '#f9f5ef', '#9a8060', '#f0e8da', '#111', '#7a5a30')}
+  ` : ''}
+
+  <!-- IMPORTANT -->
+  <div style="padding:10px 12px;background:#f9f5ef;border:1px solid #e8ddd0;border-radius:8px;margin:12px 0;">
+    <div style="font-size:7px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#9a8060;margin-bottom:5px;">Important</div>
+    <div style="font-size:8px;color:#7a5a30;line-height:1.6;">• Show this token at the counter when your name is called.<br/>• Your pre-order will fire to the kitchen the moment you're seated.</div>
+  </div>
+
+  ${footerHTML('#e0d0bc', '#ccc', '#ddd')}
+</div></body></html>`;
+  openPDF(html);
+};
+
+
+// ══════════════════════════════════════════════════════════════════
+// MODE 2 — PICKUP / TAKEAWAY TOKEN
+// Call: downloadPickupToken()
+// ══════════════════════════════════════════════════════════════════
+const downloadPickupToken = () => {
+  const token    = genToken();
+  const entry    = waitlistEntry || {};
+  const rd       = restaurantData;
+  const hasOrder = (entry.items || []).length > 0;
+  const pickupTime = entry.scheduledPickupTime
+    ? new Date(entry.scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
+    : null;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Pickup Token</title>
+<style>
+${BASE_CSS}
+body{background:#060e1c;color:#c8dff0;}
+</style></head><body><div class="page">
+
+  <!-- HEADER -->
+  <div style="text-align:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #1e3a5f;">
+    <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.25);color:#6ba3d6;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
+      <span style="color:#6ba3d6;">${IC.bag}</span> Pickup / Takeaway
+    </div>
+    <div style="font-size:22px;font-weight:900;color:#e8f4fd;letter-spacing:-0.3px;">${rd?.name || 'PRATYEKSHA'}</div>
+    ${rd?.address?.city ? `<div style="font-size:8px;color:#4a6a8a;margin-top:2px;">${rd.address.city}</div>` : ''}
+  </div>
+
+  <!-- TENANT INFO (dark theme) -->
+  ${tenantInfoHTML(rd, '#6ba3d6', '#1e3a5f', '#4a6a8a')}
+
+  <!-- TOKEN BLOCK -->
+  <div style="background:rgba(74,144,217,0.06);border:1px solid #1e3a5f;border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#4a90d9,transparent);"></div>
+    <div style="font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(107,163,214,0.35);margin-bottom:6px;">Pickup Token</div>
+    <div style="font-size:32px;font-weight:900;color:#6ba3d6;font-family:'Courier New',monospace;letter-spacing:8px;margin-bottom:8px;">${token}</div>
+    <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.25);color:#6ba3d6;">
+      <span style="color:#6ba3d6;">${IC.check}</span> Order Confirmed
+    </div>
+  </div>
+
+  <!-- PICKUP TIME PILL -->
+  <div style="display:flex;align-items:center;justify-content:space-between;background:#050d1a;border:1px solid #1e3a5f;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#6ba3d6;">${IC.bag}</div>
+      <div>
+        <div style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#4a6a8a;margin-bottom:2px;">Collection Point</div>
+        <div style="font-size:11px;font-weight:800;color:#c8dff0;">Counter</div>
+      </div>
+    </div>
+    ${pickupTime ? `
+    <div style="text-align:right;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#4a6a8a;margin-bottom:2px;">Pickup Slot</div>
+      <div style="font-size:22px;font-weight:900;color:#6ba3d6;font-family:'Courier New',monospace;letter-spacing:-1px;">${pickupTime}</div>
+    </div>` : `
+    <div style="text-align:right;">
+      <div style="font-size:8.5px;font-weight:700;color:#4a6a8a;">We'll notify you<br/>when ready</div>
+    </div>`}
+  </div>
+
+  <!-- CUSTOMER -->
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#4a6a8a;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:5px;">
+    <span>${IC.user}</span> Customer
+  </div>
+
+  <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#4a6a8a;margin-bottom:3px;">Name</div>
+      <div style="font-size:10.5px;font-weight:700;color:#c8dff0;">${entry.customerName || '—'}</div>
+    </div>
+    ${entry.customerPhone ? `
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#4a6a8a;margin-bottom:3px;">Mobile</div>
+      <div style="font-size:10px;font-weight:700;color:#c8dff0;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
+    </div>` : ''}
+  </div>
+
+  ${hasOrder ? `
+  <hr style="border:none;border-top:1px dashed #1e3a5f;margin:12px 0;">
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#4a6a8a;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:5px;">
+    <span>${IC.utensils}</span> Order
+  </div>
+  ${orderTableHTML(entry.items, entry.totalAmount, '#050d1a', '#4a6a8a', '#1e3a5f', '#c8dff0', '#6ba3d6')}
+  ` : ''}
+
+  ${footerHTML('#1e3a5f', '#1e3a5f', '#1a2a3f')}
+</div></body></html>`;
+  openPDF(html);
+};
+
+
+// ══════════════════════════════════════════════════════════════════
+// MODE 3 — RESERVATION TOKEN
+// Call: downloadReservationPDF()
+// ══════════════════════════════════════════════════════════════════
+const downloadReservationPDF = () => {
+  const token    = genToken();
+  const entry    = waitlistEntry || {};
+  const rd       = restaurantData;
+  const isConf   = ['confirmed','seated'].includes(entry.status);
+  const hasOrder = (entry.items || []).length > 0;
+  const resTime  = entry.reservationTime ? new Date(entry.reservationTime) : null;
+  const fmtDate  = resTime ? resTime.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '—';
+  const fmtTime  = resTime ? resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
+  const fmtShort = resTime ? resTime.toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Reservation Token</title>
+<style>
+${BASE_CSS}
+body{background:#fff;color:#111;}
+</style></head><body><div class="page">
+
+  <!-- HEADER -->
+  <div style="text-align:center;margin-bottom:16px;padding-bottom:14px;border-bottom:2px solid #111;">
+    <div style="display:inline-flex;align-items:center;gap:5px;background:#f5f0e8;color:#7a5a30;border:1px solid #e0d5c0;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
+      <span style="color:#7a5a30;">${IC.calendar}</span> Table Reservation
+    </div>
+    <div style="font-size:22px;font-weight:900;color:#111;letter-spacing:-0.5px;">${rd?.name || 'PRATYEKSHA'}</div>
+    ${rd?.address?.city ? `<div style="font-size:8px;color:#888;margin-top:2px;">${rd.address.city}</div>` : ''}
+  </div>
+
+  <!-- TENANT INFO -->
+  ${tenantInfoHTML(rd, '#7a5a30', '#e0d5c0', '#9a8060')}
+
+  <!-- TOKEN STRIP -->
+  <div style="display:flex;align-items:center;justify-content:space-between;background:#111;border-radius:12px;padding:14px 18px;margin-bottom:14px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#e8c96a 60%,transparent);"></div>
+    <div>
+      <div style="font-size:6px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(201,168,76,0.35);margin-bottom:4px;">Booking Token</div>
+      <div style="font-size:26px;font-weight:900;color:#c9a84c;font-family:'Courier New',monospace;letter-spacing:5px;">${token}</div>
+    </div>
+    <div style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;${isConf ? 'background:rgba(45,106,79,0.25);border:1px solid rgba(45,106,79,0.5);color:#6dba96;' : 'background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:rgba(201,168,76,0.8);'}">
+      <span style="color:inherit;">${isConf ? IC.check : IC.hourglass}</span>
+      ${isConf ? 'Confirmed' : 'Pending'}
+    </div>
+  </div>
+
+  <!-- DATE / TIME / GUESTS / TABLE PREF ROW -->
+  ${resTime ? `
+  <div style="display:flex;border:1px solid #e0d0bc;border-radius:12px;overflow:hidden;margin-bottom:14px;">
+    <div style="flex:1;padding:12px 8px;text-align:center;border-right:1px solid #e0d0bc;">
+      <div style="font-size:12px;font-weight:900;color:#111;margin-bottom:3px;font-family:'Courier New',monospace;">${fmtShort}</div>
+      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;">Date</div>
+    </div>
+    <div style="flex:1;padding:12px 8px;text-align:center;border-right:1px solid #e0d0bc;">
+      <div style="font-size:12px;font-weight:900;color:#111;margin-bottom:3px;font-family:'Courier New',monospace;">${fmtTime}</div>
+      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;">Time</div>
+    </div>
+    <div style="flex:1;padding:12px 8px;text-align:center;${entry.tablePreference ? 'border-right:1px solid #e0d0bc;' : ''}">
+      <div style="font-size:12px;font-weight:900;color:#111;margin-bottom:3px;font-family:'Courier New',monospace;">${entry.partySize || 1}</div>
+      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;">Guests</div>
+    </div>
+    ${entry.tablePreference ? `
+    <div style="flex:1;padding:12px 8px;text-align:center;">
+      <div style="font-size:10px;font-weight:900;color:#111;margin-bottom:3px;">${entry.tablePreference}</div>
+      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;">Pref</div>
+    </div>` : ''}
+  </div>` : ''}
+
+  <!-- GUEST -->
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
+    <span style="color:#9a8060;">${IC.user}</span> Guest
+  </div>
+
+  <div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Name</div>
+      <div style="font-size:10.5px;font-weight:700;color:#111;">${entry.customerName || '—'}</div>
+    </div>
+    ${entry.customerPhone ? `
+    <div style="flex:1;min-width:100px;">
+      <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Mobile</div>
+      <div style="font-size:10px;font-weight:700;color:#111;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
+    </div>` : ''}
+  </div>
+
+  ${entry.specialRequests ? `
+  <div style="padding:10px 12px;background:#f9f5ef;border:1px solid #e8ddd0;border-radius:8px;margin-bottom:10px;">
+    <div style="font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;">Special Request</div>
+    <div style="font-size:9.5px;color:#111;font-style:italic;">"${entry.specialRequests}"</div>
+  </div>` : ''}
+
+  ${hasOrder ? `
+  <hr style="border:none;border-top:1px dashed #e0d0bc;margin:12px 0;">
+  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
+    <span style="color:#9a8060;">${IC.utensils}</span> Pre-Order
+  </div>
+  ${orderTableHTML(entry.items, entry.totalAmount, '#f9f5ef', '#9a8060', '#f0e8da', '#111', '#7a5a30')}
+  <p style="font-size:7.5px;color:#9a8060;margin-top:6px;text-align:center;">Food will be ready shortly after you arrive</p>
+  ` : `
+  <div style="background:#f9f5ef;border:1px solid #e8ddd0;border-radius:10px;padding:14px;text-align:center;margin-bottom:10px;">
+    <div style="color:#b09070;margin-bottom:4px;">${IC.chair}</div>
+    <div style="font-size:9.5px;font-weight:800;color:#7a5a30;margin-bottom:3px;">Table-Only Reservation</div>
+    <div style="font-size:8px;color:#9a8060;">You will order from the menu when you arrive</div>
+  </div>
+  `}
+
+  <!-- FULL DATE -->
+  ${resTime ? `
+  <p style="font-size:8px;color:#b09070;text-align:center;margin:10px 0 12px;font-weight:600;">${fmtDate} at ${fmtTime}</p>` : ''}
+
+  <!-- IMPORTANT -->
+  <div style="padding:10px 12px;background:#f9f5ef;border:1px solid #e8ddd0;border-radius:8px;margin-bottom:12px;">
+    <div style="font-size:7px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#9a8060;margin-bottom:5px;">Important</div>
+    <div style="font-size:8px;color:#7a5a30;line-height:1.6;">
+      • Show this token at reception on arrival.<br/>
+      • Arrive 5–10 minutes before your reservation time.<br/>
+      • For changes, contact the restaurant directly.
+    </div>
+  </div>
+
+  ${footerHTML('#e0d0bc', '#ccc', '#ddd')}
+</div></body></html>`;
+  openPDF(html);
+};
+
 const notifyWaiter = async (serviceType = "Custom") => {
   try {
     let requestText = serviceType;
@@ -1573,598 +1999,7 @@ const downloadReservationPDF = () => {
   const hasItems = waitlistEntry.items?.length > 0;
   const estWait  = waitlistEntry.waitlistPosition * 20;
 
-// ══════════════════════════════════════════
-// PDF GENERATORS — all 3 modes
-// ══════════════════════════════════════════
 
-// ── SHARED: Premium SVG icons as inline strings ──
-const svgIcons = {
-  calendar: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-  clock: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-  users: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-  phone: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.35 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
-  utensils: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`,
-  chair: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 11v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v2H7v-2a2 2 0 0 0-4 0Z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>`,
-  shoppingbag: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-  mappin: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
-  check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2d6a4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
-  hourglass: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
-  note: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`,
-  receipt: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>`,
-};
-
-// ── SHARED: base CSS for all PDFs ──
-const pdfBaseCSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Inter',sans-serif;background:#fff;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .page{width:100%;max-width:400px;margin:0 auto;padding:40px 32px;}
-
-  /* HEADER */
-  .pdf-header{text-align:center;padding-bottom:24px;margin-bottom:28px;border-bottom:2px solid #111;position:relative;}
-  .mode-ribbon{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:99px;font-size:8px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
-  .restaurant-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#111;margin-bottom:3px;}
-  .restaurant-sub{font-size:9px;color:#888;font-weight:500;}
-
-  /* TOKEN BLOCK */
-  .token-block{border-radius:18px;padding:28px 24px;text-align:center;margin-bottom:22px;position:relative;overflow:hidden;}
-  .token-shimmer{position:absolute;top:0;left:15%;right:15%;height:2px;}
-  .token-label{font-size:7px;font-weight:900;letter-spacing:3.5px;text-transform:uppercase;margin-bottom:10px;}
-  .token-number{font-size:38px;font-weight:900;font-family:'Courier New',monospace;letter-spacing:10px;margin-bottom:14px;line-height:1;}
-  .status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:99px;font-size:8px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;}
-
-  /* INFO GRID */
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;}
-  .info-cell{border-radius:12px;padding:13px 14px;}
-  .info-cell-label{display:flex;align-items:center;gap:5px;margin-bottom:6px;}
-  .info-cell-key{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;}
-  .info-cell-val{font-size:11px;font-weight:800;line-height:1.3;}
-  .info-cell-full{grid-column:1/-1;}
-
-  /* TIME ROW */
-  .time-row{display:flex;justify-content:center;gap:0;border-radius:14px;overflow:hidden;margin-bottom:18px;}
-  .time-cell{flex:1;padding:16px 8px;text-align:center;}
-  .time-val{font-size:14px;font-weight:900;margin-bottom:4px;font-family:'Courier New',monospace;}
-  .time-key{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;}
-
-  /* SECTION */
-  .section-title{display:flex;align-items:center;gap:8px;font-size:7px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:#9a8060;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f0ebe4;}
-  .section-title svg{flex-shrink:0;}
-
-  /* ORDER TABLE */
-  .order-table{width:100%;border-collapse:collapse;margin-bottom:14px;}
-  .order-table th{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#9a8060;padding:8px 10px;background:#faf6f0;text-align:left;}
-  .order-table th:last-child{text-align:right;}
-  .order-table td{font-size:10px;padding:9px 10px;border-bottom:1px solid #f5f0eb;}
-  .order-table td:last-child{text-align:right;font-weight:700;}
-  .order-total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #e8ddd0;margin-top:4px;}
-  .order-total-key{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}
-  .order-total-val{font-size:16px;font-weight:900;color:#7a5a30;}
-
-  /* TABLE-ONLY BOX */
-  .table-only-box{border-radius:14px;padding:20px;text-align:center;margin-bottom:18px;}
-  .table-only-icon{margin-bottom:10px;}
-  .table-only-title{font-size:11px;font-weight:800;margin-bottom:5px;}
-  .table-only-sub{font-size:9px;font-weight:500;line-height:1.7;}
-
-  /* INSTRUCTIONS */
-  .instructions-box{border-radius:12px;padding:14px 16px;margin-bottom:20px;}
-  .instructions-title{font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
-  .instruction-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;}
-  .instruction-dot{width:4px;height:4px;border-radius:50%;margin-top:5px;flex-shrink:0;}
-  .instruction-text{font-size:9px;line-height:1.6;}
-
-  /* FOOTER */
-  .pdf-footer{text-align:center;padding-top:16px;border-top:1px solid #f0ebe4;}
-  .footer-barcode{display:flex;justify-content:center;gap:2px;margin-bottom:10px;}
-  .barcode-bar{height:28px;background:#ddd;border-radius:1px;}
-  .footer-brand{font-size:7px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#ccc;margin-bottom:3px;}
-  .footer-date{font-size:7px;color:#ddd;}
-
-  @media print{body{margin:0;}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}
-`;
-
-// ── SHARED: barcode visual ──
-const generateBarcodeSVG = (token) => {
-  const bars = token.split('').flatMap((c, i) => {
-    const code = c.charCodeAt(0);
-    return [
-      `<rect x="${i * 22}" y="0" width="${2 + (code % 4)}" height="28" fill="#333" rx="1"/>`,
-      `<rect x="${i * 22 + 6}" y="0" width="${1 + (code % 3)}" height="28" fill="#555" rx="1"/>`,
-      `<rect x="${i * 22 + 12}" y="0" width="${3}" height="28" fill="#444" rx="1"/>`,
-      `<rect x="${i * 22 + 17}" y="0" width="${1 + (code % 2)}" height="28" fill="#333" rx="1"/>`,
-    ];
-  });
-  return `<svg width="132" height="28" viewBox="0 0 132 28" xmlns="http://www.w3.org/2000/svg">${bars.join('')}</svg>`;
-};
-
-// ── SHARED: open PDF in new tab and print ──
-const openPDF = (html) => {
-  const blob = new Blob([html], { type: 'text/html' });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, '_blank');
-  if (win) {
-    win.onload = () => {
-      setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 700);
-    };
-  }
-};
-
-// ══════════════════════════════════════════
-// MODE 1: WAITLIST / DINE-IN TOKEN
-// ══════════════════════════════════════════
-const downloadWaitlistToken = () => {
-  const token = sessionToken;
-  const position = waitlistEntry?.waitlistPosition || 1;
-  const estWait  = position * 20;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>${pdfBaseCSS}
-  .mode-ribbon-dinein{background:#f0ebe4;color:#7a5a30;border:1px solid #e8ddd0;}
-  .token-block-dinein{background:linear-gradient(160deg,#faf6f0 0%,#f5ede0 100%);border:1px solid #e8ddd0;}
-  .token-shimmer-dinein{background:linear-gradient(90deg,transparent,#c9a84c,transparent);}
-  .token-label-dinein{color:#9a8060;}
-  .token-number-dinein{color:#111;}
-  .status-confirmed{background:#f0f9f4;border:1px solid #b7dfc8;color:#2d6a4f;}
-  .status-pending{background:#faf6f0;border:1px solid #e8ddd0;color:#7a5a30;}
-  .info-cell-dinein{background:#faf6f0;border:1px solid #f0ebe4;}
-  .info-cell-key-dinein{color:#b09070;}
-  .info-cell-val-dinein{color:#111;}
-  .time-cell-dinein{background:#faf6f0;border-right:1px solid #e8ddd0;}
-  .time-cell-dinein:last-child{border-right:none;}
-  .time-val-dinein{color:#111;}
-  .time-key-dinein{color:#b09070;}
-  .queue-hero{background:#111;border-radius:16px;padding:22px;text-align:center;margin-bottom:18px;}
-  .queue-position{font-size:72px;font-weight:900;font-family:'Courier New',monospace;color:#c9a84c;line-height:1;letter-spacing:-4px;margin-bottom:6px;}
-  .queue-label{font-size:8px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:rgba(201,168,76,0.5);}
-  .queue-wait{font-size:11px;font-weight:700;color:rgba(255,255,255,0.3);margin-top:10px;}
-  .instructions-box-dinein{background:#faf6f0;border:1px solid #ede8e0;}
-  .instructions-title-dinein{color:#9a8060;}
-  .instruction-dot-dinein{background:#c9a84c;}
-  .instruction-text-dinein{color:#6a5a40;}
-</style>
-</head><body><div class="page">
-
-  <!-- HEADER -->
-  <div class="pdf-header">
-    <div class="mode-ribbon mode-ribbon-dinein">
-      ${svgIcons.chair}
-      <span>Dine-In Waitlist</span>
-    </div>
-    <div class="restaurant-name">${restaurantData?.name || 'PRATYEKSHA'}</div>
-    <div class="restaurant-sub">${restaurantData?.address?.city || 'Queue Confirmation Token'}</div>
-  </div>
-
-  <!-- TOKEN BLOCK -->
-  <div class="token-block token-block-dinein">
-    <div class="token-shimmer token-shimmer-dinein"></div>
-    <div class="token-label token-label-dinein">Waitlist Token</div>
-    <div class="token-number token-number-dinein">${token}</div>
-    <div class="status-badge ${waitlistEntry?.status === 'confirmed' ? 'status-confirmed' : 'status-pending'}">
-      ${waitlistEntry?.status === 'confirmed'
-        ? `${svgIcons.check}<span>Confirmed</span>`
-        : `${svgIcons.hourglass}<span>In Queue</span>`}
-    </div>
-  </div>
-
-  <!-- QUEUE POSITION HERO -->
-  <div class="queue-hero">
-    <div class="queue-position">#${position}</div>
-    <div class="queue-label">Your Queue Position</div>
-    <div class="queue-wait">Estimated wait: ~${estWait} minutes</div>
-  </div>
-
-  <!-- GUEST DETAILS -->
-  <div style="margin-bottom:18px;">
-    <div class="section-title">${svgIcons.users} Guest Details</div>
-    <div class="info-grid">
-      <div class="info-cell info-cell-dinein info-cell-full">
-        <div class="info-cell-label">
-          ${svgIcons.users}
-          <span class="info-cell-key info-cell-key-dinein">Guest Name</span>
-        </div>
-        <div class="info-cell-val info-cell-val-dinein">${waitlistEntry?.customerName || '—'}</div>
-      </div>
-      ${waitlistEntry?.customerPhone ? `
-      <div class="info-cell info-cell-dinein">
-        <div class="info-cell-label">
-          ${svgIcons.phone}
-          <span class="info-cell-key info-cell-key-dinein">Mobile</span>
-        </div>
-        <div class="info-cell-val info-cell-val-dinein" style="font-family:'Courier New',monospace;font-size:10px;">+91 ${waitlistEntry.customerPhone}</div>
-      </div>` : ''}
-      <div class="info-cell info-cell-dinein">
-        <div class="info-cell-label">
-          ${svgIcons.users}
-          <span class="info-cell-key info-cell-key-dinein">Party Size</span>
-        </div>
-        <div class="info-cell-val info-cell-val-dinein">${waitlistEntry?.partySize || 1} ${waitlistEntry?.partySize === 1 ? 'person' : 'people'}</div>
-      </div>
-      ${waitlistEntry?.specialRequests ? `
-      <div class="info-cell info-cell-dinein info-cell-full">
-        <div class="info-cell-label">
-          ${svgIcons.note}
-          <span class="info-cell-key info-cell-key-dinein">Special Request</span>
-        </div>
-        <div class="info-cell-val info-cell-val-dinein" style="font-style:italic;font-weight:600;">"${waitlistEntry.specialRequests}"</div>
-      </div>` : ''}
-    </div>
-  </div>
-
-  ${waitlistEntry?.items?.length > 0 ? `
-  <!-- PRE-ORDER -->
-  <div style="margin-bottom:18px;">
-    <div class="section-title">${svgIcons.utensils} Pre-Order</div>
-    <table class="order-table">
-      <thead><tr>
-        <th>Item</th>
-        <th>Qty</th>
-        <th>Amount</th>
-      </tr></thead>
-      <tbody>
-        ${waitlistEntry.items.map(i => `
-        <tr>
-          <td>${i.name}${i.portion && i.portion !== 'Single' ? ` <span style="font-size:8px;color:#9a8060;">(${i.portion})</span>` : ''}</td>
-          <td>${i.quantity}</td>
-          <td>&#8377;${i.subtotal}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="order-total-row">
-      <span class="order-total-key">Pre-Order Total</span>
-      <span class="order-total-val">&#8377;${waitlistEntry?.totalAmount?.toLocaleString() || 0}</span>
-    </div>
-    <p style="font-size:8px;color:#aaa;text-align:center;margin-top:8px;">Food will be ready when you're seated</p>
-  </div>` : ''}
-
-  <!-- INSTRUCTIONS -->
-  <div class="instructions-box instructions-box-dinein">
-    <div class="instructions-title instructions-title-dinein">What to do next</div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-dinein"></div><div class="instruction-text instruction-text-dinein">Keep this token handy — you'll be called by name.</div></div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-dinein"></div><div class="instruction-text instruction-text-dinein">You'll receive a notification when your table is assigned.</div></div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-dinein"></div><div class="instruction-text instruction-text-dinein">Please stay nearby — missing your call may move you to the end.</div></div>
-    ${waitlistEntry?.items?.length > 0 ? `<div class="instruction-row"><div class="instruction-dot instruction-dot-dinein"></div><div class="instruction-text instruction-text-dinein">Your pre-order will reach the table as soon as you're seated.</div></div>` : ''}
-  </div>
-
-  <!-- FOOTER -->
-  <div class="pdf-footer">
-    <div class="footer-barcode">${generateBarcodeSVG(token)}</div>
-    <div style="font-family:'Courier New',monospace;font-size:9px;color:#ccc;letter-spacing:3px;margin-bottom:8px;">${token}</div>
-    <div class="footer-brand">Powered by Pratyeksha</div>
-    <div class="footer-date">Generated: ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-  </div>
-
-</div></body></html>`;
-  openPDF(html);
-};
-
-// ══════════════════════════════════════════
-// MODE 2: PICKUP TOKEN
-// ══════════════════════════════════════════
-const downloadPickupToken = () => {
-  const token = sessionToken;
-  const pickupTime = waitlistEntry?.scheduledPickupTime
-    ? new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
-    : null;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>${pdfBaseCSS}
-  .mode-ribbon-pickup{background:#0f1a2e;color:#6ba3d6;border:1px solid #1e3a5f;}
-  .token-block-pickup{background:linear-gradient(160deg,#0a1628 0%,#0f1e38 100%);border:1px solid #1e3a5f;}
-  .token-shimmer-pickup{background:linear-gradient(90deg,transparent,#4a90d9,transparent);}
-  .token-label-pickup{color:#6ba3d6;}
-  .token-number-pickup{color:#e8f4fd;}
-  .status-pickup{background:rgba(74,144,217,0.12);border:1px solid rgba(74,144,217,0.3);color:#6ba3d6;}
-  .pickup-time-hero{background:#050d1a;border:1px solid #1e3a5f;border-radius:18px;padding:26px 24px;text-align:center;margin-bottom:18px;position:relative;overflow:hidden;}
-  .pickup-time-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#4a90d9,transparent);}
-  .pickup-time-label{font-size:7px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:rgba(107,163,214,0.5);margin-bottom:12px;}
-  .pickup-time-val{font-size:52px;font-weight:900;font-family:'Courier New',monospace;color:#6ba3d6;line-height:1;letter-spacing:-3px;margin-bottom:6px;}
-  .pickup-time-sub{font-size:9px;color:rgba(107,163,214,0.4);font-weight:600;}
-  .info-cell-pickup{background:#050d1a;border:1px solid #1e3a5f;}
-  .info-cell-key-pickup{color:#4a6a8a;}
-  .info-cell-val-pickup{color:#c8dff0;}
-  .instructions-box-pickup{background:#050d1a;border:1px solid #1e3a5f;}
-  .instructions-title-pickup{color:#4a6a8a;}
-  .instruction-dot-pickup{background:#4a90d9;}
-  .instruction-text-pickup{color:#4a6a8a;}
-  .section-title-pickup{color:#4a6a8a;}
-</style>
-</head><body style="background:#060e1c;"><div class="page">
-
-  <!-- HEADER -->
-  <div class="pdf-header" style="border-bottom-color:#1e3a5f;">
-    <div class="mode-ribbon mode-ribbon-pickup">
-      ${svgIcons.shoppingbag.replace('stroke="#9a8060"','stroke="#6ba3d6"')}
-      <span>Takeaway / Pickup</span>
-    </div>
-    <div class="restaurant-name" style="color:#e8f4fd;">${restaurantData?.name || 'PRATYEKSHA'}</div>
-    <div class="restaurant-sub">Pickup Order Confirmation</div>
-  </div>
-
-  <!-- TOKEN BLOCK -->
-  <div class="token-block token-block-pickup">
-    <div class="token-shimmer token-shimmer-pickup"></div>
-    <div class="token-label token-label-pickup">Pickup Token</div>
-    <div class="token-number token-number-pickup">${token}</div>
-    <div class="status-badge status-pickup">
-      ${svgIcons.check.replace('stroke="#2d6a4f"','stroke="#6ba3d6"')}
-      <span>Order Confirmed</span>
-    </div>
-  </div>
-
-  <!-- PICKUP TIME HERO -->
-  ${pickupTime ? `
-  <div class="pickup-time-hero">
-    <div class="pickup-time-label">Pickup Slot</div>
-    <div class="pickup-time-val">${pickupTime}</div>
-    <div class="pickup-time-sub">Please arrive at the counter by this time</div>
-  </div>` : `
-  <div class="pickup-time-hero">
-    <div class="pickup-time-label">Collection Point</div>
-    <div style="font-size:32px;font-weight:900;color:#6ba3d6;margin:8px 0 6px;">Counter</div>
-    <div class="pickup-time-sub">We'll notify you when your order is ready</div>
-  </div>`}
-
-  <!-- CUSTOMER DETAILS -->
-  <div style="margin-bottom:18px;">
-    <div class="section-title section-title-pickup" style="border-bottom-color:#1e3a5f;">
-      ${svgIcons.users.replace('stroke="#9a8060"','stroke="#4a6a8a"')} Customer Details
-    </div>
-    <div class="info-grid">
-      <div class="info-cell info-cell-pickup info-cell-full">
-        <div class="info-cell-label">
-          ${svgIcons.users.replace('stroke="#9a8060"','stroke="#4a6a8a"')}
-          <span class="info-cell-key info-cell-key-pickup">Name</span>
-        </div>
-        <div class="info-cell-val info-cell-val-pickup">${waitlistEntry?.customerName || '—'}</div>
-      </div>
-      ${waitlistEntry?.customerPhone ? `
-      <div class="info-cell info-cell-pickup">
-        <div class="info-cell-label">
-          ${svgIcons.phone.replace('stroke="#9a8060"','stroke="#4a6a8a"')}
-          <span class="info-cell-key info-cell-key-pickup">Mobile</span>
-        </div>
-        <div class="info-cell-val info-cell-val-pickup" style="font-family:'Courier New',monospace;font-size:10px;">+91 ${waitlistEntry.customerPhone}</div>
-      </div>` : ''}
-      ${pickupTime ? `
-      <div class="info-cell info-cell-pickup">
-        <div class="info-cell-label">
-          ${svgIcons.clock.replace('stroke="#9a8060"','stroke="#4a6a8a"')}
-          <span class="info-cell-key info-cell-key-pickup">Slot</span>
-        </div>
-        <div class="info-cell-val info-cell-val-pickup">${pickupTime}</div>
-      </div>` : ''}
-    </div>
-  </div>
-
-  <!-- ORDER ITEMS -->
-  ${waitlistEntry?.items?.length > 0 ? `
-  <div style="margin-bottom:18px;">
-    <div class="section-title section-title-pickup" style="border-bottom-color:#1e3a5f;">
-      ${svgIcons.receipt.replace('stroke="#9a8060"','stroke="#4a6a8a"')} Order Details
-    </div>
-    <table class="order-table">
-      <thead><tr style="background:#050d1a;">
-        <th style="color:#4a6a8a;background:#050d1a;">Item</th>
-        <th style="color:#4a6a8a;background:#050d1a;">Qty</th>
-        <th style="color:#4a6a8a;background:#050d1a;">Amount</th>
-      </tr></thead>
-      <tbody>
-        ${waitlistEntry.items.map(i => `
-        <tr style="border-bottom-color:#1e3a5f;">
-          <td style="color:#c8dff0;">${i.name}${i.portion && i.portion !== 'Single' ? ` <span style="font-size:8px;color:#4a6a8a;">(${i.portion})</span>` : ''}</td>
-          <td style="color:#6ba3d6;font-weight:700;">${i.quantity}</td>
-          <td style="color:#c8dff0;">&#8377;${i.subtotal}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="order-total-row" style="border-top-color:#1e3a5f;">
-      <span class="order-total-key" style="color:#c8dff0;">Total Amount</span>
-      <span class="order-total-val" style="color:#6ba3d6;">&#8377;${waitlistEntry?.totalAmount?.toLocaleString() || 0}</span>
-    </div>
-  </div>` : ''}
-
-  <!-- INSTRUCTIONS -->
-  <div class="instructions-box instructions-box-pickup">
-    <div class="instructions-title instructions-title-pickup">Collection Instructions</div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-pickup"></div><div class="instruction-text instruction-text-pickup">Show this token at the counter to collect your order.</div></div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-pickup"></div><div class="instruction-text instruction-text-pickup">You'll receive a notification when your order is ready.</div></div>
-    ${pickupTime ? `<div class="instruction-row"><div class="instruction-dot instruction-dot-pickup"></div><div class="instruction-text instruction-text-pickup">Please arrive by ${pickupTime} to collect your order.</div></div>` : ''}
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-pickup"></div><div class="instruction-text instruction-text-pickup">Orders not collected within 30 minutes may be cancelled.</div></div>
-  </div>
-
-  <!-- FOOTER -->
-  <div class="pdf-footer" style="border-top-color:#1e3a5f;">
-    <div class="footer-barcode">${generateBarcodeSVG(token)}</div>
-    <div style="font-family:'Courier New',monospace;font-size:9px;color:#1e3a5f;letter-spacing:3px;margin-bottom:8px;">${token}</div>
-    <div class="footer-brand">Powered by Pratyeksha</div>
-    <div class="footer-date">${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-  </div>
-
-</div></body></html>`;
-  openPDF(html);
-};
-
-// ══════════════════════════════════════════
-// MODE 3: RESERVATION TOKEN (replaces old downloadReservationPDF)
-// ══════════════════════════════════════════
-const downloadReservationPDF = () => {
-  const token = sessionToken;
-  const hasPreOrder = hasItems && waitlistEntry.items?.length > 0;
-  const resTime = waitlistEntry.reservationTime ? new Date(waitlistEntry.reservationTime) : null;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>${pdfBaseCSS}
-  body{background:#fff;}
-  .mode-ribbon-res{background:#f9f5ee;color:#7a5a30;border:1px solid #e8ddd0;}
-  .token-block-res{background:linear-gradient(160deg,#fdfaf5 0%,#f9f1e4 100%);border:1px solid #e8ddd0;}
-  .token-shimmer-res{background:linear-gradient(90deg,transparent,#c9a84c,transparent);}
-  .token-label-res{color:#9a8060;}
-  .token-number-res{color:#111;}
-  .status-confirmed-res{background:#f0f9f4;border:1px solid #b7dfc8;color:#2d6a4f;}
-  .status-pending-res{background:#faf6f0;border:1px solid #e8ddd0;color:#7a5a30;}
-  .time-row-res{background:#faf6f0;border:1px solid #e8ddd0;border-radius:16px;overflow:hidden;margin-bottom:18px;}
-  .time-cell-res{border-right:1px solid #e8ddd0;padding:18px 8px;}
-  .time-cell-res:last-child{border-right:none;}
-  .time-val-res{color:#111;font-size:13px;font-weight:900;font-family:'Courier New',monospace;margin-bottom:4px;}
-  .time-key-res{font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;}
-  .info-cell-res{background:#faf6f0;border:1px solid #f0ebe4;}
-  .info-cell-key-res{color:#b09070;}
-  .info-cell-val-res{color:#111;}
-  .preorder-box-res{background:#faf6f0;border:1px solid #e8ddd0;border-radius:14px;padding:16px;margin-bottom:18px;}
-  .table-only-res{background:#faf6f0;border:1px solid #e8ddd0;border-radius:14px;padding:20px;text-align:center;margin-bottom:18px;}
-  .table-only-icon-res{margin-bottom:10px;}
-  .instructions-box-res{background:#faf6f0;border:1px solid #ede8e0;}
-  .instruction-dot-res{background:#c9a84c;}
-  .instruction-text-res{color:#6a5a40;}
-</style>
-</head><body><div class="page">
-
-  <!-- HEADER -->
-  <div class="pdf-header">
-    <div class="mode-ribbon mode-ribbon-res">
-      ${svgIcons.calendar}
-      <span>${hasPreOrder ? 'Reservation + Pre-Order' : 'Table Reservation'}</span>
-    </div>
-    <div class="restaurant-name">${restaurantData?.name || 'PRATYEKSHA'}</div>
-    <div class="restaurant-sub">${restaurantData?.address?.city || 'Booking Confirmation'}</div>
-  </div>
-
-  <!-- TOKEN BLOCK -->
-  <div class="token-block token-block-res">
-    <div class="token-shimmer token-shimmer-res"></div>
-    <div class="token-label token-label-res">Booking Token</div>
-    <div class="token-number token-number-res">${token}</div>
-    <div class="status-badge ${isConf ? 'status-confirmed-res' : 'status-pending-res'}">
-      ${isConf
-        ? `${svgIcons.check}<span>Confirmed</span>`
-        : `${svgIcons.hourglass}<span>Pending Confirmation</span>`}
-    </div>
-  </div>
-
-  <!-- DATE / TIME / GUESTS ROW -->
-  ${resTime ? `
-  <div class="time-row time-row-res">
-    <div class="time-cell time-cell-res">
-      <div class="time-val time-val-res">${resTime.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</div>
-      <div class="time-key time-key-res">Date</div>
-    </div>
-    <div class="time-cell time-cell-res">
-      <div class="time-val time-val-res">${resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-      <div class="time-key time-key-res">Time</div>
-    </div>
-    <div class="time-cell time-cell-res">
-      <div class="time-val time-val-res">${waitlistEntry.partySize}</div>
-      <div class="time-key time-key-res">Guests</div>
-    </div>
-  </div>` : ''}
-
-  <!-- GUEST DETAILS GRID -->
-  <div style="margin-bottom:18px;">
-    <div class="section-title">${svgIcons.users} Reservation Details</div>
-    <div class="info-grid">
-      <div class="info-cell info-cell-res info-cell-full">
-        <div class="info-cell-label">
-          ${svgIcons.users}
-          <span class="info-cell-key info-cell-key-res">Guest Name</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res">${waitlistEntry.customerName}</div>
-      </div>
-      ${waitlistEntry.customerPhone ? `
-      <div class="info-cell info-cell-res">
-        <div class="info-cell-label">
-          ${svgIcons.phone}
-          <span class="info-cell-key info-cell-key-res">Mobile</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res" style="font-family:'Courier New',monospace;font-size:10px;">+91 ${waitlistEntry.customerPhone}</div>
-      </div>` : ''}
-      <div class="info-cell info-cell-res">
-        <div class="info-cell-label">
-          ${svgIcons.users}
-          <span class="info-cell-key info-cell-key-res">Party Size</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res">${waitlistEntry.partySize} ${waitlistEntry.partySize === 1 ? 'person' : 'people'}</div>
-      </div>
-      ${resTime ? `
-      <div class="info-cell info-cell-res">
-        <div class="info-cell-label">
-          ${svgIcons.calendar}
-          <span class="info-cell-key info-cell-key-res">Date</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res">${resTime.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
-      </div>
-      <div class="info-cell info-cell-res">
-        <div class="info-cell-label">
-          ${svgIcons.clock}
-          <span class="info-cell-key info-cell-key-res">Time</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res" style="font-family:'Courier New',monospace;">${resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-      </div>` : ''}
-      ${waitlistEntry.specialRequests ? `
-      <div class="info-cell info-cell-res info-cell-full">
-        <div class="info-cell-label">
-          ${svgIcons.note}
-          <span class="info-cell-key info-cell-key-res">Special Request</span>
-        </div>
-        <div class="info-cell-val info-cell-val-res" style="font-style:italic;font-weight:600;">"${waitlistEntry.specialRequests}"</div>
-      </div>` : ''}
-    </div>
-  </div>
-
-  <!-- PRE-ORDER OR TABLE-ONLY -->
-  ${hasPreOrder ? `
-  <div class="preorder-box-res">
-    <div class="section-title" style="margin-bottom:12px;">${svgIcons.utensils} Pre-Order</div>
-    <table class="order-table">
-      <thead><tr>
-        <th>Item</th><th>Qty</th><th>Amount</th>
-      </tr></thead>
-      <tbody>
-        ${waitlistEntry.items.map(i => `
-        <tr>
-          <td>${i.name}${i.portion && i.portion !== 'Single' ? ` <span style="font-size:8px;color:#9a8060;">(${i.portion})</span>` : ''}</td>
-          <td>${i.quantity}</td>
-          <td>&#8377;${i.subtotal}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="order-total-row">
-      <span class="order-total-key">Pre-Order Total</span>
-      <span class="order-total-val">&#8377;${waitlistEntry.totalAmount?.toLocaleString() || 0}</span>
-    </div>
-    <p style="font-size:8px;color:#9a8060;text-align:center;margin-top:8px;line-height:1.6;">Your food will be ready shortly after you arrive</p>
-  </div>
-  ` : `
-  <div class="table-only-res">
-    <div class="table-only-icon-res">
-      ${svgIcons.chair.replace('stroke="#9a8060"','stroke="#b09070"')}
-    </div>
-    <div style="font-size:11px;font-weight:800;color:#7a5a30;margin-bottom:5px;">Table Reservation Only</div>
-    <div style="font-size:9px;color:#9a8060;line-height:1.7;">No pre-order — you'll order from the menu when you arrive.</div>
-  </div>
-  `}
-
-  <!-- INSTRUCTIONS -->
-  <div class="instructions-box instructions-box-res">
-    <div class="instructions-title" style="color:#9a8060;">Important</div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-res"></div><div class="instruction-text instruction-text-res">Show this token at reception on arrival.</div></div>
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-res"></div><div class="instruction-text instruction-text-res">Arrive 5–10 minutes before your reservation time.</div></div>
-    ${hasPreOrder ? `<div class="instruction-row"><div class="instruction-dot instruction-dot-res"></div><div class="instruction-text instruction-text-res">Pre-ordered food will be ready shortly after you're seated.</div></div>` : `<div class="instruction-row"><div class="instruction-dot instruction-dot-res"></div><div class="instruction-text instruction-text-res">Our team will take your order once you are seated.</div></div>`}
-    <div class="instruction-row"><div class="instruction-dot instruction-dot-res"></div><div class="instruction-text instruction-text-res">Contact the restaurant to modify or cancel.</div></div>
-  </div>
-
-  <!-- FOOTER -->
-  <div class="pdf-footer">
-    <div class="footer-barcode">${generateBarcodeSVG(token)}</div>
-    <div style="font-family:'Courier New',monospace;font-size:9px;color:#ccc;letter-spacing:3px;margin-bottom:8px;">${token}</div>
-    <div class="footer-brand">Powered by Pratyeksha</div>
-    <div class="footer-date">Generated: ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-  </div>
-
-</div></body></html>`;
-  openPDF(html);
-};
-  
   return (
     <Shell centered={false}>
       {/* Top bar */}
