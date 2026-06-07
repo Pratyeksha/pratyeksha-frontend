@@ -74,12 +74,24 @@ const KitchenView = () => {
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+
   // Drawer state — used on both mobile and tablet
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileCardIndex, setMobileCardIndex] = useState(0);
 
   const [completedTicketsCount, setCompletedTicketsCount] = useState(0);
   const [totalProcessingTime, setTotalProcessingTime] = useState(0);
+
+  const [showWastagePanel, setShowWastagePanel] = useState(false);
+const [wastageLog, setWastageLog] = useState(() => {
+  try { return JSON.parse(localStorage.getItem(`kds_wastage_${tenantId || 'default'}`) || '[]'); }
+  catch { return []; }
+});
+const [wastageForm, setWastageForm] = useState({
+  itemName: '', quantity: '', unit: 'kg', reason: 'spoiled', loggedBy: ''
+});
+const [wastageTab, setWastageTab] = useState('log'); // 'log' | 'report'
+
 
   const audioPlayer   = useRef(null);
   const alertPlayer   = useRef(null);
@@ -307,6 +319,31 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
       setOrders(prev => prev.filter(o => o._id !== orderId));
     } catch (err) { console.error(err); }
   };
+
+  const saveWastageEntry = () => {
+  const { itemName, quantity, unit, reason, loggedBy } = wastageForm;
+  if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
+  const entry = {
+    id: Date.now(),
+    itemName: itemName.trim(),
+    quantity: Number(quantity),
+    unit,
+    reason,
+    loggedBy: loggedBy.trim(),
+    timestamp: new Date().toISOString(),
+    estimatedCost: 0 // operator can enrich later
+  };
+  const updated = [entry, ...wastageLog];
+  setWastageLog(updated);
+  localStorage.setItem(`kds_wastage_${tenantId}`, JSON.stringify(updated.slice(0, 200)));
+  setWastageForm({ itemName: '', quantity: '', unit: 'kg', reason: 'spoiled', loggedBy: wastageForm.loggedBy });
+};
+
+const deleteWastageEntry = (id) => {
+  const updated = wastageLog.filter(e => e.id !== id);
+  setWastageLog(updated);
+  localStorage.setItem(`kds_wastage_${tenantId}`, JSON.stringify(updated));
+};
 
   const handleRecall = () => {
     if (!recallQueue.length) return;
@@ -670,6 +707,33 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
   </button>
 )}
 
+{/* Wastage button */}
+<button
+  onClick={() => setShowWastagePanel(true)}
+  style={{
+    ...rs.utilBtn,
+    borderColor: showWastagePanel ? 'rgba(211,191,162,0.4)' : '#252932',
+    background: showWastagePanel ? 'rgba(211,191,162,0.08)' : '#191b22',
+    position: 'relative'
+  }}>
+  <i className="ti ti-trash-x" style={{ fontSize: 15, color: '#d3bfa2' }} />
+  {!isMobile && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>WASTAGE</span>}
+  {wastageLog.filter(e => {
+    const d = new Date(e.timestamp);
+    const now = new Date();
+    return d.toDateString() === now.toDateString();
+  }).length > 0 && (
+    <div style={{
+      position: 'absolute', top: -6, right: -6,
+      width: 16, height: 16, borderRadius: '50%',
+      background: '#ff4d4d', color: '#fff',
+      fontSize: '0.48rem', fontWeight: 900,
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      {wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length}
+    </div>
+  )}
+</button>
           {/* Ticket count badge */}
           <div style={rs.ticketBadge}>
             <span style={rs.ticketNum}>{filteredOrders.length}</span>
@@ -698,6 +762,7 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* ── RECALL QUEUE PREVIEW ── */}
 <AnimatePresence>
   {recallQueue.length > 0 && (
@@ -979,6 +1044,351 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
           </button>
         </nav>
       )}
+
+{/* ── WASTAGE & SPOILAGE PANEL ── */}
+<AnimatePresence>
+  {showWastagePanel && (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 0.7 }} exit={{ opacity: 0 }}
+        onClick={() => setShowWastagePanel(false)}
+        style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000 }} />
+      <motion.div
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+        style={{
+          position: 'fixed', right: 0, top: 0, bottom: 0,
+          width: isMobile ? '100vw' : isTablet ? 400 : 480,
+          background: '#13151a', border: '1px solid #1f222a',
+          borderRadius: isMobile ? 0 : '16px 0 0 16px',
+          zIndex: 3001, display: 'flex', flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+        {/* Panel header */}
+        <div style={{
+          padding: '16px 20px', borderBottom: '1px solid #1f222a',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#0d0e11', flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 9,
+              background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <i className="ti ti-trash-x" style={{ fontSize: 18, color: '#ff8080' }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: 0.5 }}>
+                WASTAGE LOG
+              </div>
+              <div style={{ fontSize: '0.56rem', color: '#5c616e', fontWeight: 800, letterSpacing: 1 }}>
+                SPOILAGE · OVERCOOKED · DROPPED
+              </div>
+            </div>
+          </div>
+          <button onClick={() => setShowWastagePanel(false)}
+            style={{ background: '#191b22', border: '1px solid #252932', color: '#888', padding: 8, borderRadius: 8, cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', background: '#0d0e11',
+          borderBottom: '1px solid #1f222a', flexShrink: 0
+        }}>
+          {[['log', 'LOG ENTRY'], ['report', 'MONTHLY REPORT']].map(([tab, label]) => (
+            <button key={tab} onClick={() => setWastageTab(tab)} style={{
+              flex: 1, padding: '12px', border: 'none', cursor: 'pointer',
+              background: 'transparent',
+              borderBottom: wastageTab === tab ? '2px solid #d3bfa2' : '2px solid transparent',
+              color: wastageTab === tab ? '#d3bfa2' : '#5c616e',
+              fontSize: '0.62rem', fontWeight: 900, letterSpacing: 1
+            }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }} className="custom-scroll">
+
+          {wastageTab === 'log' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Entry form */}
+              <div style={{
+                background: '#0d0e11', border: '1px solid #1f222a',
+                borderRadius: 12, padding: 16
+              }}>
+                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
+                  NEW WASTAGE ENTRY
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input
+                    type="text"
+                    placeholder="Item name (e.g. Paneer, Dal)"
+                    value={wastageForm.itemName}
+                    onChange={e => setWastageForm(p => ({ ...p, itemName: e.target.value }))}
+                    style={{
+                      background: '#191b22', border: '1px solid #252932',
+                      color: '#fff', padding: '10px 12px', borderRadius: 8,
+                      fontSize: '0.82rem', outline: 'none', width: '100%', boxSizing: 'border-box',
+                      fontFamily: 'Outfit, sans-serif'
+                    }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <input
+                      type="number"
+                      placeholder="Quantity"
+                      value={wastageForm.quantity}
+                      onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))}
+                      style={{
+                        background: '#191b22', border: '1px solid #252932',
+                        color: '#fff', padding: '10px 12px', borderRadius: 8,
+                        fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box',
+                        fontFamily: 'Outfit, sans-serif'
+                      }} />
+                    <select
+                      value={wastageForm.unit}
+                      onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}
+                      style={{
+                        background: '#191b22', border: '1px solid #252932',
+                        color: '#fff', padding: '10px 12px', borderRadius: 8,
+                        fontSize: '0.82rem', outline: 'none', appearance: 'none',
+                        fontFamily: 'Outfit, sans-serif'
+                      }}>
+                      {['kg', 'gm', 'litre', 'ml', 'pieces', 'portions'].map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <select
+                    value={wastageForm.reason}
+                    onChange={e => setWastageForm(p => ({ ...p, reason: e.target.value }))}
+                    style={{
+                      background: '#191b22', border: '1px solid #252932',
+                      color: '#fff', padding: '10px 12px', borderRadius: 8,
+                      fontSize: '0.82rem', outline: 'none', appearance: 'none',
+                      fontFamily: 'Outfit, sans-serif'
+                    }}>
+                    {[
+                      ['spoiled', '🧫 Spoiled / Expired'],
+                      ['overcooked', '🔥 Overcooked / Burnt'],
+                      ['dropped', '💥 Dropped / Contaminated'],
+                      ['portioning', '⚖️ Over-portioned'],
+                      ['prep_waste', '🔪 Prep / Cutting Loss'],
+                      ['other', '📝 Other']
+                    ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Logged by (Chef name)"
+                    value={wastageForm.loggedBy}
+                    onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))}
+                    style={{
+                      background: '#191b22', border: '1px solid #252932',
+                      color: '#fff', padding: '10px 12px', borderRadius: 8,
+                      fontSize: '0.82rem', outline: 'none', width: '100%', boxSizing: 'border-box',
+                      fontFamily: 'Outfit, sans-serif'
+                    }} />
+                  <button
+                    onClick={saveWastageEntry}
+                    style={{
+                      width: '100%', padding: '12px',
+                      background: wastageForm.itemName && wastageForm.quantity && wastageForm.loggedBy
+                        ? 'linear-gradient(135deg,#bda88a,#d3bfa2)'
+                        : '#1a1c23',
+                      border: '1px solid #252932', borderRadius: 8,
+                      color: wastageForm.itemName && wastageForm.quantity && wastageForm.loggedBy ? '#0f1013' : '#444',
+                      fontWeight: 900, fontSize: '0.78rem', cursor: 'pointer',
+                      letterSpacing: 0.5
+                    }}>
+                    LOG WASTAGE ENTRY
+                  </button>
+                </div>
+              </div>
+
+              {/* Today's entries */}
+              <div>
+                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 10 }}>
+                  TODAY'S ENTRIES ({wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length})
+                </div>
+                {wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#3a3e4a', fontSize: '0.78rem', fontWeight: 700 }}>
+                    No wastage logged today
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {wastageLog
+                      .filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString())
+                      .map(entry => (
+                        <div key={entry.id} style={{
+                          background: '#0d0e11', border: '1px solid #1f222a',
+                          borderLeft: '3px solid rgba(255,77,77,0.4)',
+                          borderRadius: 10, padding: '12px 14px',
+                          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 900, fontSize: '0.85rem', color: '#fff', marginBottom: 4 }}>
+                              {entry.itemName}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{
+                                background: '#1a1c23', border: '1px solid #252932',
+                                padding: '2px 8px', borderRadius: 5,
+                                fontSize: '0.58rem', fontWeight: 900, color: '#d3bfa2'
+                              }}>
+                                {entry.quantity} {entry.unit}
+                              </span>
+                              <span style={{
+                                background: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.15)',
+                                padding: '2px 8px', borderRadius: 5,
+                                fontSize: '0.58rem', fontWeight: 900, color: '#ff8080'
+                              }}>
+                                {entry.reason.replace('_', ' ').toUpperCase()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.58rem', color: '#5c616e', marginTop: 5, fontWeight: 700 }}>
+                              by {entry.loggedBy} · {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                          <button onClick={() => deleteWastageEntry(entry.id)}
+                            style={{ background: 'none', border: 'none', color: '#3a3e4a', cursor: 'pointer', padding: 4 }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+          ) : (
+            /* Monthly report */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Summary cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'THIS MONTH', value: wastageLog.filter(e => {
+                    const d = new Date(e.timestamp);
+                    const now = new Date();
+                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                  }).length, unit: 'entries', color: '#d3bfa2' },
+                  { label: 'TOTAL ALL TIME', value: wastageLog.length, unit: 'entries', color: '#8a8f9f' },
+                ].map(s => (
+                  <div key={s.label} style={{
+                    background: '#0d0e11', border: '1px solid #1f222a',
+                    borderRadius: 10, padding: '14px'
+                  }}>
+                    <div style={{ fontSize: '0.5rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 6 }}>{s.label}</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 900, color: s.color, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1 }}>{s.value}</div>
+                    <div style={{ fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 700, marginTop: 4 }}>{s.unit}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top wasted items */}
+              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
+                  TOP WASTED ITEMS (ALL TIME)
+                </div>
+                {(() => {
+                  const counts = {};
+                  wastageLog.forEach(e => {
+                    counts[e.itemName] = (counts[e.itemName] || 0) + 1;
+                  });
+                  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                  if (!sorted.length) return <div style={{ color: '#3a3e4a', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center', padding: '20px 0' }}>No data yet</div>;
+                  return sorted.map(([name, count], i) => (
+                    <div key={name} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 0', borderBottom: i < sorted.length - 1 ? '1px solid #1a1c23' : 'none'
+                    }}>
+                      <div style={{
+                        width: 26, height: 26, borderRadius: 6, background: '#1a1c23',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.65rem', fontWeight: 900, color: i === 0 ? '#d3bfa2' : '#5c616e',
+                        fontFamily: 'monospace', flexShrink: 0
+                      }}>{i + 1}</div>
+                      <div style={{ flex: 1, fontWeight: 800, fontSize: '0.82rem', color: '#c8ccd6' }}>{name}</div>
+                      <div style={{
+                        background: i === 0 ? 'rgba(255,77,77,0.12)' : '#1a1c23',
+                        border: `1px solid ${i === 0 ? 'rgba(255,77,77,0.25)' : '#252932'}`,
+                        padding: '3px 9px', borderRadius: 5,
+                        fontSize: '0.62rem', fontWeight: 900,
+                        color: i === 0 ? '#ff8080' : '#5c616e', fontFamily: 'monospace'
+                      }}>{count}×</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* By reason breakdown */}
+              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
+                  BY REASON
+                </div>
+                {(() => {
+                  const counts = {};
+                  wastageLog.forEach(e => { counts[e.reason] = (counts[e.reason] || 0) + 1; });
+                  const total = wastageLog.length || 1;
+                  return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
+                    <div key={reason} style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8a8f9f', textTransform: 'capitalize' }}>
+                          {reason.replace('_',' ')}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#d3bfa2', fontFamily: 'monospace' }}>
+                          {count} ({Math.round(count/total*100)}%)
+                        </span>
+                      </div>
+                      <div style={{ height: 4, background: '#1a1c23', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 2,
+                          width: `${Math.round(count/total*100)}%`,
+                          background: 'rgba(211,191,162,0.5)'
+                        }} />
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Staff log */}
+              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
+                  BY STAFF (WHO LOGGED)
+                </div>
+                {(() => {
+                  const counts = {};
+                  wastageLog.forEach(e => { counts[e.loggedBy] = (counts[e.loggedBy] || 0) + 1; });
+                  return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([name, count]) => (
+                    <div key={name} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 0', borderBottom: '1px solid #1a1c23'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%',
+                          background: '#1a1c23', border: '1px solid #252932',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.6rem', fontWeight: 900, color: '#d3bfa2'
+                        }}>
+                          {name.slice(0,2).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#c8ccd6' }}>{name}</span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#8a8f9f', fontFamily: 'monospace' }}>{count} entries</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </>
+  )}
+</AnimatePresence>
 
       {/* ── WAITER CALLS ── */}
       <div style={{

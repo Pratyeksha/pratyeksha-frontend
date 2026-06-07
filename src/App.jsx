@@ -1467,21 +1467,99 @@ const Shell = ({ children, centered = true }) => (
  
   // ── booking token (short ID from _id last 6 chars) ──
   const tokenId  = waitlistEntry._id?.slice(-6)?.toUpperCase() || 'XXXXXX';
- 
-  // ── PDF generator ──
-  const downloadReservationPDF = () => {
-    import('html2pdf.js').then(html2pdf => {
-      const el = document.getElementById('reservation-pdf-frame');
-      if (!el) return;
-      html2pdf.default().set({
-        margin: [0,0,0,0],
-        filename: `Reservation_${tokenId}_${restaurantData?.name?.replace(/\s+/g,'_') || 'Pratyeksha'}.pdf`,
-        image: { type: 'jpeg', quality: 1.0 },
-        html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' }
-      }).from(el).save();
-    });
-  };
+// ── PDF BOOKING GENERATOR ──
+const downloadBookingPDF = (entry, restaurantName) => {
+  const resTime = new Date(entry.reservationTime);
+  const timeStr = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateStr = resTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Poppins', sans-serif; background: #fff; color: #111; padding: 40px; }
+        .header { text-align: center; border-bottom: 2px solid #d3bfa2; padding-bottom: 24px; margin-bottom: 28px; }
+        .logo { font-size: 9px; font-weight: 900; letter-spacing: 4px; color: #8a704d; margin-bottom: 8px; }
+        .restaurant { font-size: 22px; font-weight: 900; color: #111; margin-bottom: 4px; }
+        .subtitle { font-size: 10px; color: #888; font-weight: 600; letter-spacing: 1px; }
+        .ticket { border: 1.5px solid #d3bfa2; border-radius: 16px; padding: 28px; margin-bottom: 20px; position: relative; }
+        .ticket::before { content: 'RESERVATION CONFIRMED'; position: absolute; top: -8px; left: 20px; background: #fff; padding: 0 10px; font-size: 8px; font-weight: 900; letter-spacing: 2px; color: #8a704d; }
+        .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0ebe4; }
+        .row:last-child { border-bottom: none; }
+        .row-label { font-size: 8px; font-weight: 900; letter-spacing: 1.5px; color: #aaa; text-transform: uppercase; }
+        .row-val { font-size: 13px; font-weight: 800; color: #111; }
+        .time-block { background: #faf6f0; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; border: 1px solid #e8ddd0; }
+        .time-big { font-size: 32px; font-weight: 900; color: #8a704d; font-family: monospace; }
+        .date-str { font-size: 11px; color: #888; margin-top: 4px; font-weight: 600; }
+        .footer { text-align: center; margin-top: 28px; padding-top: 20px; border-top: 1px solid #f0ebe4; }
+        .footer p { font-size: 9px; color: #bbb; line-height: 1.8; font-weight: 500; }
+        .id-box { text-align: center; margin-top: 16px; padding: 10px; background: #faf6f0; border-radius: 8px; }
+        .id-text { font-size: 8px; font-weight: 900; letter-spacing: 2px; color: #bbb; }
+        .id-val { font-size: 11px; font-family: monospace; color: #8a704d; margin-top: 3px; font-weight: 700; }
+        ${entry.items?.length > 0 ? `.preorder { margin-top: 16px; } .preorder-title { font-size: 8px; font-weight: 900; letter-spacing: 1.5px; color: #aaa; text-transform: uppercase; margin-bottom: 10px; } .preorder-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f5f0ea; font-size: 11px; } .preorder-total { display: flex; justify-content: space-between; padding-top: 10px; font-size: 13px; font-weight: 900; color: #8a704d; }` : ''}
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="logo">POWERED BY PRATYEKSHA</div>
+        <div class="restaurant">${restaurantName}</div>
+        <div class="subtitle">TABLE RESERVATION CONFIRMATION</div>
+      </div>
+
+      <div class="time-block">
+        <div class="time-big">${timeStr}</div>
+        <div class="date-str">${dateStr}</div>
+      </div>
+
+      <div class="ticket">
+        <div class="row"><span class="row-label">Guest Name</span><span class="row-val">${entry.customerName}</span></div>
+        <div class="row"><span class="row-label">Mobile</span><span class="row-val">+91 ${entry.customerPhone}</span></div>
+        <div class="row"><span class="row-label">Party Size</span><span class="row-val">${entry.partySize} ${entry.partySize === 1 ? 'person' : 'people'}</span></div>
+        ${entry.tablePreference ? `<div class="row"><span class="row-label">Table Pref.</span><span class="row-val">${entry.tablePreference}</span></div>` : ''}
+        ${entry.specialRequests ? `<div class="row"><span class="row-label">Special Req.</span><span class="row-val">${entry.specialRequests}</span></div>` : ''}
+        <div class="row"><span class="row-label">Status</span><span class="row-val" style="color:#8a704d">⏳ PENDING CONFIRMATION</span></div>
+      </div>
+
+      ${entry.items?.length > 0 ? `
+      <div class="ticket">
+        <div class="preorder">
+          <div class="preorder-title">Pre-Order</div>
+          ${entry.items.map(i => `<div class="preorder-item"><span>${i.quantity}× ${i.name}</span><span>₹${i.subtotal}</span></div>`).join('')}
+          <div class="preorder-total"><span>Total</span><span>₹${entry.totalAmount}</span></div>
+        </div>
+      </div>` : ''}
+
+      <div class="id-box">
+        <div class="id-text">BOOKING REFERENCE</div>
+        <div class="id-val">${entry._id?.toString().slice(-8).toUpperCase() || 'PENDING'}</div>
+      </div>
+
+      <div class="footer">
+        <p>Please arrive 5–10 minutes before your reservation time.<br/>
+        Show this confirmation at the restaurant entrance.<br/>
+        For changes, contact the restaurant directly.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  // Trigger print dialog which allows PDF save
+  if (win) {
+    win.onload = () => {
+      setTimeout(() => {
+        win.print();
+        URL.revokeObjectURL(url);
+      }, 500);
+    };
+  }
+};
  
   return (
     <div style={{ padding: '28px 22px 100px', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
@@ -1606,7 +1684,6 @@ const Shell = ({ children, centered = true }) => (
         </p>
       </div>
  
-      {/* ── DOWNLOAD PDF BUTTON ── */}
       {/* ── DOWNLOAD PDF BUTTON — always shown for reservations ── */}
 <button
   onClick={downloadReservationPDF}
