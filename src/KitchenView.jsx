@@ -7,8 +7,12 @@ import {
   ChefHat, Timer, Hourglass, BellRing, StickyNote,
   X, Zap, History, LayoutGrid, BarChart3,
   Package, UtensilsCrossed, Clock, CheckSquare,
-  Activity, ChevronDown, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff,
-  Menu, ChevronLeft, ChevronRight, AlignJustify
+  Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff,
+  Menu, ChevronLeft, ChevronRight, AlignJustify,  Trash2, FlameKindling, AlertTriangle, Droplets,
+  Scale, RotateCcw, FileText, ChevronDown,
+  TrendingDown, BadgeAlert, RefreshCw, IndianRupee,
+  Search
+ 
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -82,15 +86,19 @@ const KitchenView = () => {
   const [completedTicketsCount, setCompletedTicketsCount] = useState(0);
   const [totalProcessingTime, setTotalProcessingTime] = useState(0);
 
-  const [showWastagePanel, setShowWastagePanel] = useState(false);
-const [wastageLog, setWastageLog] = useState(() => {
-  try { return JSON.parse(localStorage.getItem(`kds_wastage_${tenantId || 'default'}`) || '[]'); }
-  catch { return []; }
+const [showWastagePanel, setShowWastagePanel]   = useState(false);
+const [wastageTab,       setWastageTab]         = useState('log');   // 'log' | 'report'
+const [wastageForm,      setWastageForm]        = useState({
+  itemName: '', inventoryId: null, quantity: '', unit: 'kg',
+  reason: 'Spoiled / Expired', loggedBy: '', notes: ''
 });
-const [wastageForm, setWastageForm] = useState({
-  itemName: '', quantity: '', unit: 'kg', reason: 'spoiled', loggedBy: ''
-});
-const [wastageTab, setWastageTab] = useState('log'); // 'log' | 'report'
+const [wastageSuggestions,  setWastageSuggestions]  = useState([]);
+const [showWastageSuggest,  setShowWastageSuggest]  = useState(false);
+const [wastageInventory,    setWastageInventory]     = useState([]);   // full inventory list
+const [wastageLog,          setWastageLog]           = useState([]);   // today's DB entries
+const [wastageAnalytics,    setWastageAnalytics]     = useState(null); // monthly analytics
+const [wastageSaving,       setWastageSaving]        = useState(false);
+const [wastageLoading,      setWastageLoading]       = useState(false);
 
 
   const audioPlayer   = useRef(null);
@@ -320,30 +328,7 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
     } catch (err) { console.error(err); }
   };
 
-  const saveWastageEntry = () => {
-  const { itemName, quantity, unit, reason, loggedBy } = wastageForm;
-  if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
-  const entry = {
-    id: Date.now(),
-    itemName: itemName.trim(),
-    quantity: Number(quantity),
-    unit,
-    reason,
-    loggedBy: loggedBy.trim(),
-    timestamp: new Date().toISOString(),
-    estimatedCost: 0 // operator can enrich later
-  };
-  const updated = [entry, ...wastageLog];
-  setWastageLog(updated);
-  localStorage.setItem(`kds_wastage_${tenantId}`, JSON.stringify(updated.slice(0, 200)));
-  setWastageForm({ itemName: '', quantity: '', unit: 'kg', reason: 'spoiled', loggedBy: wastageForm.loggedBy });
-};
 
-const deleteWastageEntry = (id) => {
-  const updated = wastageLog.filter(e => e.id !== id);
-  setWastageLog(updated);
-  localStorage.setItem(`kds_wastage_${tenantId}`, JSON.stringify(updated));
-};
 
   const handleRecall = () => {
     if (!recallQueue.length) return;
@@ -420,6 +405,86 @@ const deleteWastageEntry = (id) => {
       return true;
     });
   }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
+
+
+  // Fetch today's wastage from DB
+const fetchWastageLog = useCallback(async () => {
+  if (!tenantId) return;
+  setWastageLoading(true);
+  try {
+    const res = await axios.get(`${BASE_URL}/wastage/${tenantId}`);
+    setWastageLog(res.data || []);
+  } catch { setWastageLog([]); }
+  finally { setWastageLoading(false); }
+}, [tenantId]);
+ 
+// Fetch monthly analytics
+const fetchWastageAnalytics = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`);
+    setWastageAnalytics(res.data || null);
+  } catch { setWastageAnalytics(null); }
+}, [tenantId]);
+ 
+// Fetch inventory for autocomplete (once)
+const fetchWastageInventory = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/inventory/${tenantId}`);
+    setWastageInventory(res.data || []);
+  } catch { setWastageInventory([]); }
+}, [tenantId]);
+ 
+// Save wastage entry to DB
+const saveWastageEntry = async () => {
+  const { itemName, quantity, unit, reason, loggedBy } = wastageForm;
+  if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
+  setWastageSaving(true);
+  try {
+    await axios.post(`${BASE_URL}/wastage/${tenantId}`, {
+      itemName:    wastageForm.itemName.trim(),
+      inventoryId: wastageForm.inventoryId || undefined,
+      quantity:    Number(wastageForm.quantity),
+      unit:        wastageForm.unit,
+      reason:      wastageForm.reason,
+      loggedBy:    wastageForm.loggedBy.trim(),
+      notes:       wastageForm.notes || '',
+    });
+    setWastageForm(p => ({
+      itemName: '', inventoryId: null, quantity: '', unit: 'kg',
+      reason: 'Spoiled / Expired', loggedBy: p.loggedBy, notes: ''
+    }));
+    setWastageSuggestions([]);
+    fetchWastageLog();
+    // refresh inventory too (stock was deducted)
+    fetchWastageInventory();
+  } catch (err) {
+    console.error('Wastage save error:', err.message);
+  } finally { setWastageSaving(false); }
+};
+ 
+// Delete entry (re-credits inventory on backend)
+const deleteWastageEntry = async (entryId) => {
+  try {
+    await axios.delete(`${BASE_URL}/wastage/${tenantId}/${entryId}`);
+    setWastageLog(prev => prev.filter(e => e._id !== entryId));
+  } catch { }
+};
+
+ 
+// ── 4. ADD THIS useEffect inside KitchenView to load when panel opens ──
+
+useEffect(() => {
+  if (showWastagePanel) {
+    fetchWastageInventory();
+    fetchWastageLog();
+    if (wastageTab === 'report') fetchWastageAnalytics();
+  }
+}, [showWastagePanel]);
+ 
+useEffect(() => {
+  if (showWastagePanel && wastageTab === 'report') fetchWastageAnalytics();
+}, [wastageTab]);
+
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
@@ -1044,351 +1109,642 @@ const deleteWastageEntry = (id) => {
           </button>
         </nav>
       )}
-
 {/* ── WASTAGE & SPOILAGE PANEL ── */}
 <AnimatePresence>
   {showWastagePanel && (
     <>
+      {/* Backdrop */}
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 0.7 }} exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 0.75 }} exit={{ opacity: 0 }}
         onClick={() => setShowWastagePanel(false)}
-        style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000 }} />
+        style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000 }}
+      />
+ 
+      {/* Drawer */}
       <motion.div
         initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 32 }}
         style={{
           position: 'fixed', right: 0, top: 0, bottom: 0,
-          width: isMobile ? '100vw' : isTablet ? 400 : 480,
-          background: '#13151a', border: '1px solid #1f222a',
-          borderRadius: isMobile ? 0 : '16px 0 0 16px',
-          zIndex: 3001, display: 'flex', flexDirection: 'column',
-          overflow: 'hidden'
-        }}>
-        {/* Panel header */}
+          width: isMobile ? '100vw' : isTablet ? 420 : 500,
+          background: '#0d0e11',
+          borderLeft: '1px solid #1f222a',
+          borderRadius: isMobile ? 0 : '20px 0 0 20px',
+          zIndex: 3001, display: 'flex', flexDirection: 'column', overflow: 'hidden'
+        }}
+      >
+        {/* ── PANEL HEADER ── */}
         <div style={{
-          padding: '16px 20px', borderBottom: '1px solid #1f222a',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: '#0d0e11', flexShrink: 0
+          padding: '18px 20px', borderBottom: '1px solid #1a1c23',
+          background: '#0a0b0e', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 36, height: 36, borderRadius: 9,
-              background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              width: 38, height: 38, borderRadius: 10,
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
             }}>
-              <i className="ti ti-trash-x" style={{ fontSize: 18, color: '#ff8080' }} />
+              <Trash2 size={17} color="#f87171" />
             </div>
             <div>
-              <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: 0.5 }}>
+              <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: 0.3 }}>
                 WASTAGE LOG
               </div>
-              <div style={{ fontSize: '0.56rem', color: '#5c616e', fontWeight: 800, letterSpacing: 1 }}>
-                SPOILAGE · OVERCOOKED · DROPPED
+              <div style={{ fontSize: '0.56rem', color: '#3a3e4a', fontWeight: 800, letterSpacing: 1.5, marginTop: 1 }}>
+                SPOILAGE · OVERCOOKED · DROPPED · EXCESS PREP
               </div>
             </div>
           </div>
-          <button onClick={() => setShowWastagePanel(false)}
-            style={{ background: '#191b22', border: '1px solid #252932', color: '#888', padding: 8, borderRadius: 8, cursor: 'pointer' }}>
-            <X size={18} />
+          <button
+            onClick={() => setShowWastagePanel(false)}
+            style={{
+              background: '#13151a', border: '1px solid #252932',
+              color: '#5c616e', padding: 8, borderRadius: 9,
+              cursor: 'pointer', display: 'flex', alignItems: 'center'
+            }}>
+            <X size={17} />
           </button>
         </div>
-
-        {/* Tabs */}
+ 
+        {/* ── TAB SWITCHER ── */}
         <div style={{
-          display: 'flex', background: '#0d0e11',
-          borderBottom: '1px solid #1f222a', flexShrink: 0
+          display: 'flex', background: '#0a0b0e',
+          borderBottom: '1px solid #1a1c23', flexShrink: 0
         }}>
-          {[['log', 'LOG ENTRY'], ['report', 'MONTHLY REPORT']].map(([tab, label]) => (
-            <button key={tab} onClick={() => setWastageTab(tab)} style={{
-              flex: 1, padding: '12px', border: 'none', cursor: 'pointer',
-              background: 'transparent',
-              borderBottom: wastageTab === tab ? '2px solid #d3bfa2' : '2px solid transparent',
-              color: wastageTab === tab ? '#d3bfa2' : '#5c616e',
-              fontSize: '0.62rem', fontWeight: 900, letterSpacing: 1
-            }}>
-              {label}
+          {[
+            { id: 'log',    label: 'LOG ENTRY',      icon: <FileText size={13} /> },
+            { id: 'report', label: 'MONTHLY REPORT', icon: <TrendingDown size={13} /> },
+          ].map(tab => (
+            <button key={tab.id}
+              onClick={() => setWastageTab(tab.id)}
+              style={{
+                flex: 1, padding: '11px 8px', border: 'none', cursor: 'pointer',
+                background: 'transparent',
+                borderBottom: wastageTab === tab.id ? '2px solid #d3bfa2' : '2px solid transparent',
+                color: wastageTab === tab.id ? '#d3bfa2' : '#3a3e4a',
+                fontSize: '0.6rem', fontWeight: 900, letterSpacing: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'all 0.15s'
+              }}>
+              {tab.icon} {tab.label}
             </button>
           ))}
         </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }} className="custom-scroll">
-
-          {wastageTab === 'log' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Entry form */}
+ 
+        {/* ── SCROLLABLE BODY ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 24px' }} className="custom-scroll">
+ 
+          {/* ══════════════ LOG ENTRY TAB ══════════════ */}
+          {wastageTab === 'log' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+ 
+              {/* ENTRY FORM */}
               <div style={{
-                background: '#0d0e11', border: '1px solid #1f222a',
-                borderRadius: 12, padding: 16
+                background: '#0a0b0e', border: '1px solid #1f222a',
+                borderRadius: 14, padding: '16px 16px 18px'
               }}>
-                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
-                  NEW WASTAGE ENTRY
+                <div style={{
+                  fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 900,
+                  letterSpacing: 1.5, marginBottom: 14,
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}>
+                  <BadgeAlert size={12} color="#d3bfa2" />
+                  NEW ENTRY
                 </div>
+ 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <input
-                    type="text"
-                    placeholder="Item name (e.g. Paneer, Dal)"
-                    value={wastageForm.itemName}
-                    onChange={e => setWastageForm(p => ({ ...p, itemName: e.target.value }))}
-                    style={{
-                      background: '#191b22', border: '1px solid #252932',
-                      color: '#fff', padding: '10px 12px', borderRadius: 8,
-                      fontSize: '0.82rem', outline: 'none', width: '100%', boxSizing: 'border-box',
-                      fontFamily: 'Outfit, sans-serif'
-                    }} />
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <input
-                      type="number"
-                      placeholder="Quantity"
-                      value={wastageForm.quantity}
-                      onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))}
-                      style={{
-                        background: '#191b22', border: '1px solid #252932',
-                        color: '#fff', padding: '10px 12px', borderRadius: 8,
-                        fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box',
-                        fontFamily: 'Outfit, sans-serif'
+ 
+                  {/* ── ITEM NAME with inventory autocomplete ── */}
+                  <div style={{ position: 'relative' }}>
+                    <label style={wFormLabel}>
+                      <Package size={11} style={{ display: 'inline', marginRight: 4 }} />
+                      INGREDIENT NAME
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={13} color="#3a3e4a" style={{
+                        position: 'absolute', left: 10, top: '50%',
+                        transform: 'translateY(-50%)', pointerEvents: 'none'
                       }} />
-                    <select
-                      value={wastageForm.unit}
-                      onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}
-                      style={{
-                        background: '#191b22', border: '1px solid #252932',
-                        color: '#fff', padding: '10px 12px', borderRadius: 8,
-                        fontSize: '0.82rem', outline: 'none', appearance: 'none',
-                        fontFamily: 'Outfit, sans-serif'
+                      <input
+                        type="text"
+                        placeholder="e.g. Paneer, Tomato, Dal..."
+                        value={wastageForm.itemName}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setWastageForm(p => ({ ...p, itemName: val, inventoryId: null }));
+                          if (val.trim().length >= 1) {
+                            const matches = wastageInventory.filter(i =>
+                              i.itemName.toLowerCase().includes(val.toLowerCase())
+                            );
+                            setWastageSuggestions(matches.slice(0, 6));
+                            setShowWastageSuggest(matches.length > 0);
+                          } else {
+                            setShowWastageSuggest(false);
+                            setWastageSuggestions([]);
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setShowWastageSuggest(false), 200)}
+                        onFocus={() => {
+                          if (wastageForm.itemName.trim().length >= 1 && wastageSuggestions.length > 0)
+                            setShowWastageSuggest(true);
+                        }}
+                        style={{ ...wInput, paddingLeft: 32 }}
+                      />
+                    </div>
+ 
+                    {/* Inventory suggestions dropdown */}
+                    {showWastageSuggest && wastageSuggestions.length > 0 && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0,
+                        zIndex: 999, background: '#13151a',
+                        border: '1px solid rgba(211,191,162,0.2)',
+                        borderRadius: 10, marginTop: 4,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.6)', overflow: 'hidden'
                       }}>
-                      {['kg', 'gm', 'litre', 'ml', 'pieces', 'portions'].map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
+                        <div style={{
+                          padding: '6px 10px', fontSize: '0.52rem',
+                          color: '#3a3e4a', fontWeight: 900, letterSpacing: 1,
+                          borderBottom: '1px solid #1f222a'
+                        }}>
+                          FROM INVENTORY — CLICK TO LINK
+                        </div>
+                        {wastageSuggestions.map(item => {
+                          const wac = item.weightedAvgCost || item.costPrice || 0;
+                          const isLow = item.currentStock <= item.minThreshold;
+                          return (
+                            <div key={item._id}
+                              onMouseDown={() => {
+                                setWastageForm(p => ({
+                                  ...p,
+                                  itemName: item.itemName,
+                                  inventoryId: item._id,
+                                  unit: item.unit
+                                }));
+                                setShowWastageSuggest(false);
+                                setWastageSuggestions([]);
+                              }}
+                              style={{
+                                padding: '10px 12px', cursor: 'pointer',
+                                borderBottom: '1px solid #111',
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                transition: 'background 0.1s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.05)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fff' }}>
+                                  {item.itemName}
+                                </div>
+                                <div style={{ fontSize: '0.6rem', color: '#3a3e4a', marginTop: 2 }}>
+                                  {item.currentStock} {item.unit} in stock
+                                  {wac > 0 && (
+                                    <span style={{ color: '#5c616e', marginLeft: 6 }}>
+                                      · WAC ₹{wac.toFixed(2)}/{item.unit}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <span style={{
+                                fontSize: '0.52rem', fontWeight: 900, padding: '2px 7px',
+                                borderRadius: 5,
+                                background: isLow ? 'rgba(239,68,68,0.1)' : 'rgba(211,191,162,0.06)',
+                                border: `1px solid ${isLow ? 'rgba(239,68,68,0.25)' : '#1f222a'}`,
+                                color: isLow ? '#f87171' : '#3a3e4a'
+                              }}>
+                                {isLow ? 'LOW' : 'OK'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <select
-                    value={wastageForm.reason}
-                    onChange={e => setWastageForm(p => ({ ...p, reason: e.target.value }))}
-                    style={{
-                      background: '#191b22', border: '1px solid #252932',
-                      color: '#fff', padding: '10px 12px', borderRadius: 8,
-                      fontSize: '0.82rem', outline: 'none', appearance: 'none',
-                      fontFamily: 'Outfit, sans-serif'
-                    }}>
-                    {[
-                      ['spoiled', '🧫 Spoiled / Expired'],
-                      ['overcooked', '🔥 Overcooked / Burnt'],
-                      ['dropped', '💥 Dropped / Contaminated'],
-                      ['portioning', '⚖️ Over-portioned'],
-                      ['prep_waste', '🔪 Prep / Cutting Loss'],
-                      ['other', '📝 Other']
-                    ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Logged by (Chef name)"
-                    value={wastageForm.loggedBy}
-                    onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))}
-                    style={{
-                      background: '#191b22', border: '1px solid #252932',
-                      color: '#fff', padding: '10px 12px', borderRadius: 8,
-                      fontSize: '0.82rem', outline: 'none', width: '100%', boxSizing: 'border-box',
-                      fontFamily: 'Outfit, sans-serif'
-                    }} />
+ 
+                  {/* ── QUANTITY + UNIT ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={wFormLabel}>
+                        <Scale size={11} style={{ display: 'inline', marginRight: 4 }} />
+                        QUANTITY
+                      </label>
+                      <input
+                        type="number" min="0" step="0.1"
+                        placeholder="e.g. 2.5"
+                        value={wastageForm.quantity}
+                        onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))}
+                        style={wInput}
+                      />
+                    </div>
+                    <div>
+                      <label style={wFormLabel}>UNIT</label>
+                      <select
+                        value={wastageForm.unit}
+                        onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}
+                        style={{ ...wInput, appearance: 'none', cursor: 'pointer' }}>
+                        {['kg','gm','litre','ml','pieces','portions','dozen'].map(u => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+ 
+                  {/* ── REASON PILLS ── */}
+                  <div>
+                    <label style={wFormLabel}>
+                      <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />
+                      REASON
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                      {[
+                        { val: 'Spoiled / Expired',  icon: <Droplets size={13} />,      color: '#f87171' },
+                        { val: 'Overcooked',          icon: <FlameKindling size={13} />, color: '#fb923c' },
+                        { val: 'Dropped / Spilled',   icon: <AlertTriangle size={13} />, color: '#fbbf24' },
+                        { val: 'Excess Prep',         icon: <Scale size={13} />,         color: '#a78bfa' },
+                        { val: 'Customer Return',     icon: <RotateCcw size={13} />,     color: '#60a5fa' },
+                        { val: 'Other',               icon: <FileText size={13} />,      color: '#9ca3af' },
+                      ].map(r => {
+                        const sel = wastageForm.reason === r.val;
+                        return (
+                          <button key={r.val} type="button"
+                            onClick={() => setWastageForm(p => ({ ...p, reason: r.val }))}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 7,
+                              padding: '9px 10px', borderRadius: 9, cursor: 'pointer',
+                              border: `1px solid ${sel ? r.color + '55' : '#1f222a'}`,
+                              background: sel ? r.color + '14' : '#13151a',
+                              color: sel ? r.color : '#3a3e4a',
+                              fontSize: '0.62rem', fontWeight: sel ? 900 : 700,
+                              transition: 'all 0.12s', textAlign: 'left'
+                            }}>
+                            <span style={{ color: sel ? r.color : '#2a2e38', flexShrink: 0 }}>{r.icon}</span>
+                            <span style={{ lineHeight: 1.3 }}>{r.val}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+ 
+                  {/* ── LOGGED BY ── */}
+                  <div>
+                    <label style={wFormLabel}>LOGGED BY</label>
+                    <input
+                      type="text"
+                      placeholder="Chef name"
+                      value={wastageForm.loggedBy}
+                      onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))}
+                      style={wInput}
+                    />
+                  </div>
+ 
+                  {/* ── NOTES ── */}
+                  <div>
+                    <label style={wFormLabel}>
+                      NOTES <span style={{ color: '#2a2e38', fontWeight: 600 }}>(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Found mold on delivery batch"
+                      value={wastageForm.notes}
+                      onChange={e => setWastageForm(p => ({ ...p, notes: e.target.value }))}
+                      style={wInput}
+                    />
+                  </div>
+ 
+                  {/* WAC COST PREVIEW — only when linked to inventory */}
+                  {wastageForm.inventoryId && wastageForm.quantity && (() => {
+                    const inv = wastageInventory.find(i => i._id === wastageForm.inventoryId);
+                    if (!inv) return null;
+                    const wac  = inv.weightedAvgCost || inv.costPrice || 0;
+                    const cost = Math.round(Number(wastageForm.quantity) * wac * 100) / 100;
+                    if (cost <= 0) return null;
+                    return (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        background: 'rgba(239,68,68,0.05)',
+                        border: '1px solid rgba(239,68,68,0.15)',
+                        borderRadius: 8, padding: '8px 12px'
+                      }}>
+                        <IndianRupee size={13} color="#f87171" />
+                        <div>
+                          <span style={{ fontSize: '0.6rem', color: '#3a3e4a', fontWeight: 800 }}>
+                            ESTIMATED COST LOSS:&nbsp;
+                          </span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#f87171' }}>
+                            ₹{cost.toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: '0.58rem', color: '#2a2e38', marginLeft: 6 }}>
+                            ({wastageForm.quantity} {wastageForm.unit} × ₹{wac.toFixed(2)} WAC)
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+ 
+                  {/* ── SUBMIT ── */}
                   <button
                     onClick={saveWastageEntry}
+                    disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
                     style={{
-                      width: '100%', padding: '12px',
-                      background: wastageForm.itemName && wastageForm.quantity && wastageForm.loggedBy
-                        ? 'linear-gradient(135deg,#bda88a,#d3bfa2)'
-                        : '#1a1c23',
-                      border: '1px solid #252932', borderRadius: 8,
-                      color: wastageForm.itemName && wastageForm.quantity && wastageForm.loggedBy ? '#0f1013' : '#444',
-                      fontWeight: 900, fontSize: '0.78rem', cursor: 'pointer',
-                      letterSpacing: 0.5
+                      width: '100%', padding: '13px',
+                      borderRadius: 10, border: 'none', cursor: 'pointer',
+                      fontWeight: 900, fontSize: '0.78rem', letterSpacing: 0.5,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      transition: 'all 0.15s',
+                      background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim())
+                        ? '#13151a'
+                        : 'linear-gradient(135deg,#c94f4f,#e05e5e)',
+                      color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim())
+                        ? '#2a2e38'
+                        : '#fff',
                     }}>
-                    LOG WASTAGE ENTRY
+                    {wastageSaving
+                      ? <><RefreshCw size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> SAVING...</>
+                      : <><Trash2 size={14} /> LOG WASTAGE ENTRY</>
+                    }
                   </button>
                 </div>
               </div>
-
-              {/* Today's entries */}
+ 
+              {/* ── TODAY'S ENTRIES (from DB) ── */}
               <div>
-                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 10 }}>
-                  TODAY'S ENTRIES ({wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length})
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: 10
+                }}>
+                  <div style={{
+                    fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 900,
+                    letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 6
+                  }}>
+                    <FileText size={12} color="#d3bfa2" />
+                    TODAY'S ENTRIES ({wastageLog.length})
+                  </div>
+                  <button onClick={fetchWastageLog} style={{
+                    background: 'transparent', border: '1px solid #1f222a',
+                    color: '#3a3e4a', padding: '4px 8px', borderRadius: 7,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: '0.58rem', fontWeight: 800
+                  }}>
+                    <RefreshCw size={11} /> REFRESH
+                  </button>
                 </div>
-                {wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#3a3e4a', fontSize: '0.78rem', fontWeight: 700 }}>
+ 
+                {wastageLoading ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#2a2e38', fontSize: '0.75rem' }}>
+                    Loading...
+                  </div>
+                ) : wastageLog.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center', padding: '36px 0',
+                    color: '#2a2e38', fontSize: '0.75rem', fontWeight: 700,
+                    background: '#0a0b0e', borderRadius: 12, border: '1px dashed #1a1c23'
+                  }}>
+                    <Trash2 size={22} color="#1a1c23" style={{ display: 'block', margin: '0 auto 10px' }} />
                     No wastage logged today
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {wastageLog
-                      .filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString())
-                      .map(entry => (
-                        <div key={entry.id} style={{
-                          background: '#0d0e11', border: '1px solid #1f222a',
-                          borderLeft: '3px solid rgba(255,77,77,0.4)',
-                          borderRadius: 10, padding: '12px 14px',
-                          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10
-                        }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 900, fontSize: '0.85rem', color: '#fff', marginBottom: 4 }}>
-                              {entry.itemName}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {wastageLog.map(entry => {
+                      const reasonColors = {
+                        'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
+                        'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
+                        'Customer Return': '#60a5fa',   'Other': '#9ca3af',
+                      };
+                      const rc = reasonColors[entry.reason] || '#9ca3af';
+                      return (
+                        <motion.div key={entry._id}
+                          initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                          style={{
+                            background: '#0a0b0e', border: '1px solid #1a1c23',
+                            borderLeft: `3px solid ${rc}66`,
+                            borderRadius: 11, padding: '12px 13px',
+                            display: 'flex', alignItems: 'flex-start',
+                            justifyContent: 'space-between', gap: 10
+                          }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#fff' }}>
+                                {entry.itemName}
+                              </span>
                               <span style={{
-                                background: '#1a1c23', border: '1px solid #252932',
+                                background: '#13151a', border: '1px solid #252932',
                                 padding: '2px 8px', borderRadius: 5,
-                                fontSize: '0.58rem', fontWeight: 900, color: '#d3bfa2'
+                                fontSize: '0.6rem', fontWeight: 900, color: '#d3bfa2', fontFamily: 'monospace'
                               }}>
                                 {entry.quantity} {entry.unit}
                               </span>
                               <span style={{
-                                background: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.15)',
+                                background: rc + '14', border: `1px solid ${rc}33`,
                                 padding: '2px 8px', borderRadius: 5,
-                                fontSize: '0.58rem', fontWeight: 900, color: '#ff8080'
+                                fontSize: '0.58rem', fontWeight: 900,
+                                color: rc, textTransform: 'uppercase', letterSpacing: 0.5
                               }}>
-                                {entry.reason.replace('_', ' ').toUpperCase()}
+                                {entry.reason}
                               </span>
                             </div>
-                            <div style={{ fontSize: '0.58rem', color: '#5c616e', marginTop: 5, fontWeight: 700 }}>
-                              by {entry.loggedBy} · {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                              {entry.totalCost > 0 && (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', color: '#f87171', fontWeight: 800 }}>
+                                  <IndianRupee size={10} /> {entry.totalCost.toFixed(2)} lost
+                                </span>
+                              )}
+                              <span style={{ fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 700 }}>
+                                by {entry.loggedBy}
+                              </span>
+                              <span style={{ fontSize: '0.56rem', color: '#2a2e38' }}>
+                                {new Date(entry.loggedAt || entry.createdAt).toLocaleTimeString('en-IN', {
+                                  hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
+                                })}
+                              </span>
                             </div>
+                            {entry.notes && (
+                              <div style={{ fontSize: '0.6rem', color: '#2a2e38', marginTop: 5, fontStyle: 'italic' }}>
+                                "{entry.notes}"
+                              </div>
+                            )}
                           </div>
-                          <button onClick={() => deleteWastageEntry(entry.id)}
-                            style={{ background: 'none', border: 'none', color: '#3a3e4a', cursor: 'pointer', padding: 4 }}>
+                          <button onClick={() => deleteWastageEntry(entry._id)}
+                            style={{ background: 'none', border: 'none', color: '#252932', cursor: 'pointer', padding: 4, borderRadius: 6, transition: 'color 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#252932'}
+                            title="Delete & restore stock">
                             <X size={14} />
                           </button>
-                        </div>
-                      ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
             </div>
-
-          ) : (
-            /* Monthly report */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Summary cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[
-                  { label: 'THIS MONTH', value: wastageLog.filter(e => {
-                    const d = new Date(e.timestamp);
-                    const now = new Date();
-                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                  }).length, unit: 'entries', color: '#d3bfa2' },
-                  { label: 'TOTAL ALL TIME', value: wastageLog.length, unit: 'entries', color: '#8a8f9f' },
-                ].map(s => (
-                  <div key={s.label} style={{
-                    background: '#0d0e11', border: '1px solid #1f222a',
-                    borderRadius: 10, padding: '14px'
-                  }}>
-                    <div style={{ fontSize: '0.5rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 6 }}>{s.label}</div>
-                    <div style={{ fontSize: '2rem', fontWeight: 900, color: s.color, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 700, marginTop: 4 }}>{s.unit}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Top wasted items */}
-              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
-                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
-                  TOP WASTED ITEMS (ALL TIME)
+          )}
+ 
+          {/* ══════════════ MONTHLY REPORT TAB ══════════════ */}
+          {wastageTab === 'report' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {!wastageAnalytics ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#2a2e38', fontSize: '0.75rem' }}>
+                  <RefreshCw size={20} color="#1a1c23" style={{ display: 'block', margin: '0 auto 10px' }} />
+                  Loading report...
                 </div>
-                {(() => {
-                  const counts = {};
-                  wastageLog.forEach(e => {
-                    counts[e.itemName] = (counts[e.itemName] || 0) + 1;
-                  });
-                  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
-                  if (!sorted.length) return <div style={{ color: '#3a3e4a', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center', padding: '20px 0' }}>No data yet</div>;
-                  return sorted.map(([name, count], i) => (
-                    <div key={name} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 0', borderBottom: i < sorted.length - 1 ? '1px solid #1a1c23' : 'none'
-                    }}>
-                      <div style={{
-                        width: 26, height: 26, borderRadius: 6, background: '#1a1c23',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.65rem', fontWeight: 900, color: i === 0 ? '#d3bfa2' : '#5c616e',
-                        fontFamily: 'monospace', flexShrink: 0
-                      }}>{i + 1}</div>
-                      <div style={{ flex: 1, fontWeight: 800, fontSize: '0.82rem', color: '#c8ccd6' }}>{name}</div>
-                      <div style={{
-                        background: i === 0 ? 'rgba(255,77,77,0.12)' : '#1a1c23',
-                        border: `1px solid ${i === 0 ? 'rgba(255,77,77,0.25)' : '#252932'}`,
-                        padding: '3px 9px', borderRadius: 5,
-                        fontSize: '0.62rem', fontWeight: 900,
-                        color: i === 0 ? '#ff8080' : '#5c616e', fontFamily: 'monospace'
-                      }}>{count}×</div>
-                    </div>
-                  ));
-                })()}
-              </div>
-
-              {/* By reason breakdown */}
-              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
-                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
-                  BY REASON
-                </div>
-                {(() => {
-                  const counts = {};
-                  wastageLog.forEach(e => { counts[e.reason] = (counts[e.reason] || 0) + 1; });
-                  const total = wastageLog.length || 1;
-                  return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
-                    <div key={reason} style={{ marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8a8f9f', textTransform: 'capitalize' }}>
-                          {reason.replace('_',' ')}
-                        </span>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#d3bfa2', fontFamily: 'monospace' }}>
-                          {count} ({Math.round(count/total*100)}%)
-                        </span>
-                      </div>
-                      <div style={{ height: 4, background: '#1a1c23', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%', borderRadius: 2,
-                          width: `${Math.round(count/total*100)}%`,
-                          background: 'rgba(211,191,162,0.5)'
-                        }} />
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
-
-              {/* Staff log */}
-              <div style={{ background: '#0d0e11', border: '1px solid #1f222a', borderRadius: 12, padding: 14 }}>
-                <div style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 900, letterSpacing: 1, marginBottom: 12 }}>
-                  BY STAFF (WHO LOGGED)
-                </div>
-                {(() => {
-                  const counts = {};
-                  wastageLog.forEach(e => { counts[e.loggedBy] = (counts[e.loggedBy] || 0) + 1; });
-                  return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([name, count]) => (
-                    <div key={name} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '8px 0', borderBottom: '1px solid #1a1c23'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: '50%',
-                          background: '#1a1c23', border: '1px solid #252932',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.6rem', fontWeight: 900, color: '#d3bfa2'
-                        }}>
-                          {name.slice(0,2).toUpperCase()}
+              ) : (
+                <>
+                  {/* KPI STRIP */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[
+                      { label: 'TOTAL COST LOST', value: `₹${(wastageAnalytics.totalCost || 0).toLocaleString()}`, color: '#f87171', icon: <IndianRupee size={16} /> },
+                      { label: 'ENTRIES THIS MONTH', value: wastageAnalytics.totalEntries || 0, color: '#d3bfa2', icon: <FileText size={16} /> },
+                    ].map(s => (
+                      <div key={s.label} style={{
+                        background: '#0a0b0e', border: '1px solid #1f222a',
+                        borderTop: `2px solid ${s.color}44`, borderRadius: 12, padding: '14px 13px'
+                      }}>
+                        <div style={{ color: s.color, opacity: 0.5, marginBottom: 8 }}>{s.icon}</div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 900, color: s.color, fontFamily: 'monospace', lineHeight: 1, marginBottom: 4 }}>
+                          {s.value}
                         </div>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#c8ccd6' }}>{name}</span>
+                        <div style={{ fontSize: '0.5rem', color: '#2a2e38', fontWeight: 900, letterSpacing: 1 }}>
+                          {s.label}
+                        </div>
                       </div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#8a8f9f', fontFamily: 'monospace' }}>{count} entries</span>
+                    ))}
+                  </div>
+ 
+                  {/* TOP WASTED ITEMS */}
+                  {(wastageAnalytics.topWasted || []).length > 0 && (
+                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
+                        <TrendingDown size={13} color="#f87171" /> TOP WASTED INGREDIENTS
+                      </div>
+                      {wastageAnalytics.topWasted.map((item, i) => (
+                        <div key={item.name} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '9px 0',
+                          borderBottom: i < wastageAnalytics.topWasted.length - 1 ? '1px solid #13151a' : 'none'
+                        }}>
+                          <div style={{
+                            width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                            background: i === 0 ? 'rgba(248,113,113,0.12)' : '#13151a',
+                            border: `1px solid ${i === 0 ? 'rgba(248,113,113,0.25)' : '#1f222a'}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.65rem', fontWeight: 900,
+                            color: i === 0 ? '#f87171' : '#3a3e4a', fontFamily: 'monospace'
+                          }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#c8ccd6' }}>{item.name}</div>
+                            <div style={{ fontSize: '0.58rem', color: '#2a2e38', marginTop: 1 }}>
+                              {item.count} {item.count === 1 ? 'entry' : 'entries'}
+                              {item.qty > 0 && ` · ${item.qty} units`}
+                            </div>
+                          </div>
+                          <div style={{
+                            background: i === 0 ? 'rgba(248,113,113,0.1)' : '#13151a',
+                            border: `1px solid ${i === 0 ? 'rgba(248,113,113,0.2)' : '#1f222a'}`,
+                            padding: '3px 9px', borderRadius: 6,
+                            fontSize: '0.65rem', fontWeight: 900,
+                            color: i === 0 ? '#f87171' : '#3a3e4a', fontFamily: 'monospace'
+                          }}>
+                            {item.cost > 0 ? `₹${item.cost.toFixed(0)}` : `×${item.count}`}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ));
-                })()}
-              </div>
+                  )}
+ 
+                  {/* BY REASON */}
+                  {Object.keys(wastageAnalytics.byReason || {}).length > 0 && (
+                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
+                        <AlertTriangle size={13} color="#fbbf24" /> BY REASON
+                      </div>
+                      {Object.entries(wastageAnalytics.byReason)
+                        .sort((a, b) => b[1].cost - a[1].cost)
+                        .map(([reason, data]) => {
+                          const total = wastageAnalytics.totalEntries || 1;
+                          const pct   = Math.round((data.count / total) * 100);
+                          const reasonColors = {
+                            'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
+                            'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
+                            'Customer Return': '#60a5fa', 'Other': '#9ca3af',
+                          };
+                          const rc = reasonColors[reason] || '#9ca3af';
+                          return (
+                            <div key={reason} style={{ marginBottom: 11 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8a8f9f', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: rc, flexShrink: 0, display: 'inline-block' }} />
+                                  {reason}
+                                </span>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 900, color: rc, fontFamily: 'monospace' }}>
+                                  {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
+                                  <span style={{ color: '#2a2e38', fontWeight: 600, marginLeft: 5 }}>{pct}%</span>
+                                </span>
+                              </div>
+                              <div style={{ height: 4, background: '#13151a', borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: rc + '80', borderRadius: 2, transition: 'width 0.6s ease' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+ 
+                  {/* DAILY SPARKLINE */}
+                  {(wastageAnalytics.dailyTrend || []).length > 0 && (
+                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
+                        <TrendingDown size={13} color="#f87171" /> DAILY COST TREND
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 48 }}>
+                        {(() => {
+                          const maxCost = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
+                          return wastageAnalytics.dailyTrend.map((d) => (
+                            <div key={d.date}
+                              title={`${d.date}: ₹${d.cost.toFixed(0)} · ${d.count} entries`}
+                              style={{
+                                flex: 1, minWidth: 0,
+                                height: `${Math.max(8, Math.round((d.cost / maxCost) * 100))}%`,
+                                background: d.cost > 0 ? `rgba(248,113,113,${0.3 + (d.cost / maxCost) * 0.5})` : '#13151a',
+                                borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
+                              }}
+                            />
+                          ));
+                        })()}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+                        <span style={{ fontSize: '0.5rem', color: '#1f222a' }}>
+                          {wastageAnalytics.dailyTrend[0]?.date?.slice(8)}
+                        </span>
+                        <span style={{ fontSize: '0.5rem', color: '#1f222a' }}>
+                          {wastageAnalytics.dailyTrend[wastageAnalytics.dailyTrend.length - 1]?.date?.slice(8)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+ 
+                  <button onClick={fetchWastageAnalytics} style={{
+                    width: '100%', padding: '11px', background: 'transparent',
+                    border: '1px solid rgba(211,191,162,0.15)', color: '#d3bfa2',
+                    borderRadius: 9, fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                  }}>
+                    <RefreshCw size={13} /> REFRESH REPORT
+                  </button>
+                </>
+              )}
             </div>
           )}
+ 
         </div>
       </motion.div>
     </>
   )}
 </AnimatePresence>
+ 
 
       {/* ── WAITER CALLS ── */}
       <div style={{
@@ -1944,6 +2300,19 @@ const rs = {
     padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.72rem', fontWeight: 800, minHeight: 44
   },
+};
+
+const wInput = {
+  width: '100%', padding: '10px 11px',
+  background: '#13151a', border: '1px solid #252932',
+  color: '#fff', borderRadius: 9, fontSize: '0.82rem',
+  outline: 'none', boxSizing: 'border-box',
+  fontFamily: "'Outfit', sans-serif"
+};
+ 
+const wFormLabel = {
+  display: 'block', fontSize: '0.55rem', color: '#3a3e4a',
+  fontWeight: 900, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase'
 };
 
 export default KitchenView;
