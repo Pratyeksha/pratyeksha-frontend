@@ -11,7 +11,7 @@ import {
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
 Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
-  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote
+  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award, ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -786,6 +786,23 @@ useEffect(() => {
   if (activeTab === 'pending') fetchCounterQueue();
 }, [activeTab, fetchCounterQueue]);
 
+const SectionHeader = ({ icon, title, subtitle }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: '12px',
+    margin: '36px 0 16px', paddingBottom: '12px',
+    borderBottom: '1px solid rgba(211,191,162,0.12)'
+  }}>
+    <div style={{
+      width: '34px', height: '34px', borderRadius: '10px',
+      background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.15)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#d3bfa2'
+    }}>{icon}</div>
+    <div>
+      <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px', textTransform: 'uppercase' }}>{title}</h3>
+      {subtitle && <p style={{ margin: '2px 0 0', fontSize: '0.62rem', color: '#444', fontWeight: '600' }}>{subtitle}</p>}
+    </div>
+  </div>
+);
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
@@ -2072,16 +2089,21 @@ const renderMonthHeatmap = () => {
           <ShoppingBag size={9} color={pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a'} />
           <span style={{ fontSize: '0.56rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a' }}>{pickupEntries.length} pickup</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px',
-  background: reservationEntries.length > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d',
-  border: reservationEntries.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616',
-  borderRadius: '20px' }}>
-  <CalendarClock size={9} color={reservationEntries.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
-  <span style={{ fontSize: '0.56rem', fontWeight: '900',
-    color: reservationEntries.length > 0 ? '#d3bfa2' : '#2a2a2a' }}>
-    {reservationEntries.length} reserved
-  </span>
-</div>
+{(() => {
+  const pendingReservationCount = reservationEntries.filter(r => r.status === 'pending').length;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px',
+      background: pendingReservationCount > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d',
+      border: pendingReservationCount > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616',
+      borderRadius: '20px' }}>
+      <CalendarClock size={9} color={pendingReservationCount > 0 ? '#d3bfa2' : '#2a2a2a'} />
+      <span style={{ fontSize: '0.56rem', fontWeight: '900',
+        color: pendingReservationCount > 0 ? '#d3bfa2' : '#2a2a2a' }}>
+        {pendingReservationCount} pending
+      </span>
+    </div>
+  );
+})()}
       </div>
     </div>
 
@@ -2118,8 +2140,7 @@ const renderMonthHeatmap = () => {
 {[
   { id: 'waitlist',     label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />,    count: waitlistEntries.length },
   { id: 'pickup',       label: 'PICKUP QUEUE',      icon: <ShoppingBag size={12} />,  count: pickupEntries.length },
-  { id: 'reservations', label: 'RESERVATIONS',       icon: <CalendarClock size={12} />, count: reservationEntries.filter(r=>r.status==='confirmed'||r.status==='pending').length },
-].map(tab => (
+{ id: 'reservations', label: 'RESERVATIONS', icon: <CalendarClock size={12} />, count: reservationEntries.filter(r => r.status === 'pending').length },].map(tab => (
         <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           padding: '11px 14px', background: 'transparent', border: 'none',
@@ -2431,104 +2452,138 @@ const renderMonthHeatmap = () => {
                 )}
 
                 {/* Actions */}
-                <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+{/* Actions */}
+<div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
 
-                  {/* STEP 1 */}
-                  {!isKitchenFired && !isReady && (
-                    <button onClick={async () => {
-                      try {
-                        const orderItems = (entry.items || []).map(i => ({
-                          menuItemId: i.menuItemId || null, name: i.name,
-                          quantity: Number(i.quantity) || 1, portion: i.portion || 'Single',
-                          pricePerUnit: Number(i.price || i.pricePerUnit) || 0,
-                          subtotal: Number(i.subtotal) || 0, suggestion: ''
-                        }));
-                        const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
-                        await axios.post(`${BASE_URL}/orders`, {
-                          tenantId, tableNumber: 'Counter', items: orderItems,
-                          source: 'counter-pickup', sessionId: entry.sessionId,
-                          waitlistId: entry._id, status: 'pending',
-                          billDetails: { itemsTotal, grandTotal: itemsTotal }
-                        });
-                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
-                        fetchCounterQueue(); fetchInitialData();
-                        showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
-                      } catch (err) {
-                        showNotif(err.response?.data?.error || 'Failed to send to kitchen', 'error');
-                      }
-                    }} style={{
-                      width: '100%', padding: '10px', borderRadius: '9px',
-                      background: 'rgba(138,112,77,0.08)',
-                      border: '1px solid rgba(138,112,77,0.25)',
-                      color: '#8a704d', fontWeight: '900', fontSize: '0.64rem',
-                      cursor: 'pointer', letterSpacing: '0.5px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                      transition: 'all 0.15s'
-                    }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.15)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.08)'; e.currentTarget.style.color = '#8a704d'; }}
-                    >
-                      <ChefHat size={13} /> SEND TO KITCHEN <ChevronRight size={12} />
-                    </button>
-                  )}
+  {/* STEP 1 — Send to kitchen */}
+  {!isKitchenFired && !isReady && (
+    <button onClick={async () => {
+      try {
+        const orderItems = (entry.items || []).map(i => ({
+          menuItemId: i.menuItemId || null, name: i.name,
+          quantity: Number(i.quantity) || 1, portion: i.portion || 'Single',
+          pricePerUnit: Number(i.price || i.pricePerUnit) || 0,
+          subtotal: Number(i.subtotal) || 0, suggestion: ''
+        }));
+        const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
+        await axios.post(`${BASE_URL}/orders`, {
+          tenantId, tableNumber: 'Counter', items: orderItems,
+          source: 'counter-pickup', sessionId: entry.sessionId,
+          waitlistId: entry._id, status: 'pending',
+          billDetails: { itemsTotal, grandTotal: itemsTotal }
+        });
+        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
+        fetchCounterQueue(); fetchInitialData();
+        showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
+      } catch (err) {
+        showNotif(err.response?.data?.error || 'Failed to send to kitchen', 'error');
+      }
+    }} style={{
+      width: '100%', padding: '10px', borderRadius: '9px',
+      background: 'rgba(138,112,77,0.08)',
+      border: '1px solid rgba(138,112,77,0.25)',
+      color: '#8a704d', fontWeight: '900', fontSize: '0.64rem',
+      cursor: 'pointer', letterSpacing: '0.5px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+      transition: 'all 0.15s'
+    }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.15)'; e.currentTarget.style.color = '#d3bfa2'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.08)'; e.currentTarget.style.color = '#8a704d'; }}
+    >
+      <ChefHat size={13} /> SEND TO KITCHEN <ChevronRight size={12} />
+    </button>
+  )}
 
-                  {/* STEP 2 */}
-                  {isKitchenFired && !isReady && (
-                    <button onClick={async () => {
-                      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
-                      fetchCounterQueue();
-                      showNotif(`${entry.customerName} — customer notified, pickup ready`);
-                    }} style={{
-                      width: '100%', padding: '10px',
-                      background: 'rgba(211,191,162,0.07)',
-                      border: '1px solid rgba(211,191,162,0.2)',
-                      color: '#d3bfa2', borderRadius: '9px',
-                      fontSize: '0.64rem', fontWeight: '900',
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                      transition: 'all 0.15s'
-                    }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.13)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
-                    >
-                      <PackageCheck size={13} /> MARK READY — NOTIFY CUSTOMER <ChevronRight size={12} />
-                    </button>
-                  )}
+  {/* STEP 2 — Mark ready */}
+  {isKitchenFired && !isReady && (
+    <button onClick={async () => {
+      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
+      fetchCounterQueue();
+      showNotif(`${entry.customerName} — customer notified, pickup ready`);
+    }} style={{
+      width: '100%', padding: '10px',
+      background: 'rgba(211,191,162,0.07)',
+      border: '1px solid rgba(211,191,162,0.2)',
+      color: '#d3bfa2', borderRadius: '9px',
+      fontSize: '0.64rem', fontWeight: '900',
+      cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+      transition: 'all 0.15s'
+    }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.13)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
+    >
+      <PackageCheck size={13} /> MARK READY — NOTIFY CUSTOMER <ChevronRight size={12} />
+    </button>
+  )}
 
-                  {/* STEP 3 */}
-                  <button onClick={() => setConfirmModal({
-                    show: true,
-                    title: `Settle Pickup — ${entry.customerName}?`,
-                    subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`,
-                    onConfirm: async () => {
-                      try {
-                        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, {
-                          paymentMethod: 'cash', finalAmount: entry.totalAmount
-                        });
-                        fetchCounterQueue(); fetchAnalytics();
-                        showNotif(`${entry.customerName} — pickup settled as takeaway`);
-                      } catch (err) {
-                        showNotif(err.response?.data?.error || 'Settlement failed', 'error');
-                      }
-                    }
-                  })} style={{
-                    width: '100%', padding: '10px',
-                    background: isReady ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : '#0d0d0d',
-                    border: isReady ? 'none' : '1px solid #1a1a1a',
-                    color: isReady ? '#000' : '#333',
-                    borderRadius: '9px', fontSize: '0.64rem', fontWeight: '900',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                    transition: 'all 0.15s'
-                  }}
-                    onMouseEnter={e => { if (!isReady) { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}}
-                    onMouseLeave={e => { if (!isReady) { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}}
-                  >
-                    <Store size={13} />
-                    SETTLE ₹{entry.totalAmount.toLocaleString()}
-                    {isReady && <span style={{ fontSize: '0.52rem', opacity: 0.6 }}>· TAKEAWAY</span>}
-                  </button>
-                </div>
+  {/* STEP 3 — Settle */}
+  <button onClick={() => setConfirmModal({
+    show: true,
+    title: `Settle Pickup — ${entry.customerName}?`,
+    subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`,
+    onConfirm: async () => {
+      try {
+        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, {
+          paymentMethod: 'cash', finalAmount: entry.totalAmount
+        });
+        fetchCounterQueue(); fetchAnalytics();
+        showNotif(`${entry.customerName} — pickup settled as takeaway`);
+      } catch (err) {
+        showNotif(err.response?.data?.error || 'Settlement failed', 'error');
+      }
+    }
+  })} style={{
+    width: '100%', padding: '10px',
+    background: isReady ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : '#0d0d0d',
+    border: isReady ? 'none' : '1px solid #1a1a1a',
+    color: isReady ? '#000' : '#333',
+    borderRadius: '9px', fontSize: '0.64rem', fontWeight: '900',
+    cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+    transition: 'all 0.15s'
+  }}
+    onMouseEnter={e => { if (!isReady) { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}}
+    onMouseLeave={e => { if (!isReady) { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}}
+  >
+    <Store size={13} />
+    SETTLE ₹{entry.totalAmount.toLocaleString()}
+    {isReady && <span style={{ fontSize: '0.52rem', opacity: 0.6 }}>· TAKEAWAY</span>}
+  </button>
+
+  {/* ── CANCEL PICKUP — always shown unless already settled ── */}
+  {!['served', 'settled', 'cancelled'].includes(entry.status) && (
+    <button onClick={() => setConfirmModal({
+      show: true,
+      title: `Cancel Pickup — ${entry.customerName}?`,
+      subtitle: `This will remove the pickup order${entry.totalAmount > 0 ? ` (₹${entry.totalAmount.toLocaleString()})` : ''} and notify the customer.`,
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${BASE_URL}/waitlist/${entry._id}`);
+          fetchCounterQueue();
+          showNotif(`${entry.customerName} — pickup cancelled`);
+        } catch (err) {
+          showNotif(err.response?.data?.error || 'Cancel failed', 'error');
+        }
+      }
+    })} style={{
+      width: '100%', padding: '9px',
+      background: 'transparent',
+      border: '1px solid #1a1a1a',
+      color: '#2a2a2a', borderRadius: '9px',
+      fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
+      letterSpacing: '0.5px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+      transition: 'all 0.15s'
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
+    >
+      <X size={11} /> CANCEL PICKUP
+    </button>
+  )}
+
+</div>
               </div>
             );
           })}
@@ -2791,7 +2846,7 @@ const renderMonthHeatmap = () => {
       ✎
     </button>
 
-    {/* No-show — only for pending/confirmed */}
+{/* No-show — only for pending/confirmed */}
     {['pending','confirmed'].includes(entry.status) && (
       <button onClick={() => setConfirmModal({
         show:true,
@@ -2814,6 +2869,38 @@ const renderMonthHeatmap = () => {
       </button>
     )}
   </div>
+
+  {/* ── CANCEL RESERVATION — full width, shown for pending + confirmed ── */}
+  {['pending', 'confirmed'].includes(entry.status) && (
+    <button onClick={() => setConfirmModal({
+      show: true,
+      title: `Cancel Reservation — ${entry.customerName}?`,
+      subtitle: `${entry.partySize} pax · ${new Date(entry.reservationTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})} · This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled' });
+          fetchCounterQueue();
+          showNotif(`${entry.customerName} — reservation cancelled`);
+        } catch (err) {
+          showNotif(err.response?.data?.error || 'Cancel failed', 'error');
+        }
+      }
+    })} style={{
+      width: '100%', marginTop: '10px', padding: '9px',
+      background: 'transparent',
+      border: '1px solid #1a1a1a',
+      color: '#2a2a2a', borderRadius: '9px',
+      fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
+      letterSpacing: '0.5px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+      transition: 'all 0.15s'
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
+    >
+      <X size={11} /> CANCEL RESERVATION
+    </button>
+  )}
 </div>
                   </div>
                 </div>
@@ -3445,754 +3532,609 @@ const renderMonthHeatmap = () => {
   </motion.div>
 )}
           {/* ── INSIGHTS ── */}
-          {activeTab==='insights' && (
-            <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
-              {/* KPIs */}
-              <div style={styles.statsRow}>
-                <div style={styles.glassStat}>
-                  <small style={styles.statLabel}>MONTHLY REVENUE</small>
-                  <h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2>
-                  <div style={{color:'#4ade80',fontSize:'0.7rem'}}>
-                    {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}
-                  </div>
-                </div>
-                <div style={styles.glassStat}>
-                  <small style={styles.statLabel}>LOYALTY SCORE</small>
-                  <h2 style={styles.statVal}>{stats.loyaltyRate}%</h2>
-                  <div style={{color:'#d3bfa2',fontSize:'0.7rem'}}>
-                    {trendsData?.customers?.repeat||0} repeat / {trendsData?.customers?.total||0} total
-                  </div>
-                </div>
-                <div style={styles.glassStat}>
-<div style={{color:'#888',fontSize:'0.7rem'}}>Per Order</div> {/* ← was "Per Table" */}
-                  <h2 style={styles.statVal}>₹{stats.avg}</h2>
-                  <div style={{color:'#888',fontSize:'0.7rem'}}>Per Table</div>
-                </div>
-              </div>
+         {activeTab==='insights' && (
+  <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
 
-              {/* DIGEST */}
-              <div style={{...styles.biCard,marginBottom:'20px',borderLeft:'4px solid #d3bfa2'}}>
-                <h4 style={styles.biTitle}><Sparkles size={16}/> SMART DIGEST</h4>
-                <p style={{fontSize:'0.9rem',color:'#fff',fontWeight:'500'}}>{insightsData.digest}</p>
-              </div>
-
-              {/* HOURLY + DOW */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-                <div style={styles.biCard}>
-  <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
-  {hourlyAnalytics.hourly.length > 0 ? (() => {
-    const maxO = Math.max(...hourlyAnalytics.hourly.map(d => d.orderCount), 1);
-    const maxR = Math.max(...hourlyAnalytics.hourly.map(d => d.revenue), 1);
-    const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
-    const total = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
-    const totalRev = hourlyAnalytics.hourly.reduce((a, b) => a + b.revenue, 0);
-    const fmt = h => h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
-    const col = c => { const r = c / maxO; return r === 0 ? '#111' : r < 0.25 ? '#2a1f0a' : r < 0.5 ? '#633806' : r < 0.75 ? '#BA7517' : '#d3bfa2'; };
-    
-    // Dead hours = hours with 0 orders during operating window (8am-11pm)
-    const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
-    const deadHours = operatingHours.filter(h => h.orderCount === 0);
-    const slowHours = operatingHours.filter(h => h.orderCount > 0 && h.orderCount < (maxO * 0.25));
-    const avgRevenuePerHour = total > 0 ? Math.round(totalRev / operatingHours.filter(h => h.orderCount > 0).length) : 0;
-    const peakRevenue = hourlyAnalytics.hourly.find(h => h.hour === peak?.hour)?.revenue || 0;
-
-    return (
-      <>
-        {/* KPI strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
-          {[
-            { l: 'TOTAL TODAY', v: total + ' orders' },
-            { l: 'PEAK HOUR', v: fmt(peak?.hour || 0) },
-            { l: 'PEAK ORDERS', v: peak?.orderCount || 0 }
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2', marginTop: '3px' }}>{s.v}</div>
-            </div>
-          ))}
+    {/* ═══════════════════════════════════════════════
+        KPI STRIP — top-line numbers, fixed duplicate label
+    ═══════════════════════════════════════════════ */}
+    <div style={styles.statsRow}>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>MONTHLY REVENUE</small>
+        <h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2>
+        <div style={{color:'#4ade80',fontSize:'0.7rem'}}>
+          {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}
         </div>
-
-        {/* Revenue KPI strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
-          {[
-            { l: 'PEAK HR REVENUE', v: `₹${peakRevenue.toLocaleString()}` },
-            { l: 'AVG REV/ACTIVE HR', v: `₹${avgRevenuePerHour.toLocaleString()}` },
-            { l: 'DEAD HOURS (8a-11p)', v: deadHours.length + ' hrs', c: deadHours.length > 4 ? '#BA7517' : '#4ade80' }
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
-            </div>
-          ))}
+      </div>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>LOYALTY SCORE</small>
+        <h2 style={styles.statVal}>{stats.loyaltyRate}%</h2>
+        <div style={{color:'#d3bfa2',fontSize:'0.7rem'}}>
+          {trendsData?.customers?.repeat||0} repeat / {trendsData?.customers?.total||0} total
         </div>
+      </div>
+      <div style={styles.glassStat}>
+        <small style={styles.statLabel}>AVG ORDER VALUE</small>
+        <h2 style={styles.statVal}>₹{stats.avg}</h2>
+        <div style={{color:'#888',fontSize:'0.7rem'}}>per order</div>
+      </div>
+    </div>
 
-        {/* Bar chart — dual layer: orders + revenue */}
-        <div style={{ position: 'relative', height: '80px', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
-            {hourlyAnalytics.hourly.map(d => (
-              <div key={d.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                <div title={`${fmt(d.hour)}: ${d.orderCount} orders · ₹${d.revenue}`}
-                  style={{ width: '100%', height: `${Math.max(3, Math.round((d.orderCount / maxO) * 100))}%`, background: col(d.orderCount), borderRadius: '3px 3px 0 0', position: 'relative', minWidth: 0 }}>
-                  {d.hour === peak?.hour && (
-                    <div style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', whiteSpace: 'nowrap' }}>PEAK</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+    {/* SMART DIGEST */}
+    <div style={{...styles.biCard,marginBottom:'20px',borderLeft:'4px solid #d3bfa2'}}>
+      <h4 style={styles.biTitle}><Sparkles size={16}/> SMART DIGEST</h4>
+      <p style={{fontSize:'0.9rem',color:'#fff',fontWeight:'500'}}>{insightsData.digest}</p>
+    </div>
 
-        {/* Hour labels — only show every 3 hours */}
-        <div style={{ display: 'flex', gap: '3px', marginBottom: '12px' }}>
-          {hourlyAnalytics.hourly.map(d => (
-            <div key={d.hour} style={{ flex: 1, textAlign: 'center', fontSize: '0.45rem', color: d.hour % 3 === 0 ? '#333' : 'transparent', minWidth: 0 }}>
-              {fmt(d.hour)}
-            </div>
-          ))}
-        </div>
+    {/* ═══════════════════════════════════════════════
+        SECTION 1 — TODAY'S PULSE (most actionable, real-time)
+    ═══════════════════════════════════════════════ */}
+    <SectionHeader icon={<Activity size={16}/>} title="Today's Pulse" subtitle="Live operational signals — act on these now" />
 
-        {/* Insight callouts */}
-        {slowHours.length > 0 && (
-          <div style={{ background: 'rgba(186,117,23,0.05)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '8px', padding: '10px 12px', marginTop: '4px' }}>
-            <div style={{ fontSize: '0.6rem', color: '#BA7517', fontWeight: '900', marginBottom: '4px' }}>⚡ SLOW HOUR OPPORTUNITIES</div>
-            <div style={{ fontSize: '0.65rem', color: '#666' }}>
-              {slowHours.slice(0, 3).map(h => fmt(h.hour)).join(', ')} — consider happy hour promos or staff reallocation
-            </div>
-          </div>
-        )}
-      </>
-    );
-  })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS TODAY</div>}
-</div>
-                <div style={styles.biCard}>
-  <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
-  {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
-    const maxR = Math.max(...hourlyAnalytics.dayOfWeek.map(d => d.revenue), 1);
-    const peak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
-    const weak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue < a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
-    const totalWeekRev = hourlyAnalytics.dayOfWeek.reduce((a, b) => a + b.revenue, 0);
-    const activeDays = hourlyAnalytics.dayOfWeek.filter(d => d.orders > 0).length;
-    const avgPerActiveDay = activeDays > 0 ? Math.round(totalWeekRev / activeDays) : 0;
-    const weekendDays = hourlyAnalytics.dayOfWeek.filter(d => ['Sat', 'Sun'].includes(d.day));
-    const weekdayDays = hourlyAnalytics.dayOfWeek.filter(d => !['Sat', 'Sun'].includes(d.day));
-    const weekendRev = weekendDays.reduce((a, b) => a + b.revenue, 0);
-    const weekdayRev = weekdayDays.reduce((a, b) => a + b.revenue, 0);
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'4px'}}>
 
-    return (
-      <>
-        {/* Summary strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
-          {[
-            { l: 'BEST DAY', v: peak.day, sub: `₹${peak.revenue.toLocaleString()}`, c: '#d3bfa2' },
-            { l: 'AVG/ACTIVE DAY', v: `₹${avgPerActiveDay.toLocaleString()}`, sub: `${activeDays} active days` },
-            { l: 'SLOWEST DAY', v: weak.day, sub: `₹${weak.revenue.toLocaleString()}`, c: '#633806' }
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-              <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
-              <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '2px' }}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
+      {/* PEAK HOUR INTENSITY — now includes Golden Hours to fill space */}
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
+        {hourlyAnalytics.hourly.length > 0 ? (() => {
+          const maxO = Math.max(...hourlyAnalytics.hourly.map(d => d.orderCount), 1);
+          const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
+          const total = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
+          const totalRev = hourlyAnalytics.hourly.reduce((a, b) => a + b.revenue, 0);
+          const fmt = h => h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
+          const col = c => { const r = c / maxO; return r === 0 ? '#111' : r < 0.25 ? '#2a1f0a' : r < 0.5 ? '#633806' : r < 0.75 ? '#BA7517' : '#d3bfa2'; };
 
-        {/* Day bars */}
-        {hourlyAnalytics.dayOfWeek.map(d => {
-          const isPk = d.day === peak.day, isWk = d.day === weak.day && d.revenue < peak.revenue;
-          const avgOrder = d.orders > 0 ? Math.round(d.revenue / d.orders) : 0;
+          const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
+          const deadHours = operatingHours.filter(h => h.orderCount === 0);
+          const slowHours = operatingHours.filter(h => h.orderCount > 0 && h.orderCount < (maxO * 0.25));
+          const avgRevenuePerHour = total > 0 ? Math.round(totalRev / Math.max(1, operatingHours.filter(h => h.orderCount > 0).length)) : 0;
+          const peakRevenue = hourlyAnalytics.hourly.find(h => h.hour === peak?.hour)?.revenue || 0;
+          const topHours = [...hourlyAnalytics.hourly].sort((a,b)=>b.revenue-a.revenue).slice(0,3);
+
           return (
-            <div key={d.day} style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                <span style={{ width: '32px', fontSize: '0.7rem', color: isPk ? '#d3bfa2' : isWk ? '#633806' : '#555', fontWeight: '800' }}>{d.day}</span>
-                <div style={{ flex: 1, height: '8px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.round((d.revenue / maxR) * 100)}%`, background: isPk ? '#d3bfa2' : isWk ? '#633806' : '#8a704d', borderRadius: '4px', transition: 'width 0.6s ease' }} />
-                </div>
-                <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', minWidth: '70px', textAlign: 'right' }}>₹{d.revenue.toLocaleString()}</span>
-              </div>
-              {/* Sub-row: orders + avg */}
-              <div style={{ display: 'flex', paddingLeft: '42px', gap: '16px' }}>
-                <span style={{ fontSize: '0.58rem', color: '#333' }}>{d.orders || 0} orders</span>
-                {avgOrder > 0 && <span style={{ fontSize: '0.58rem', color: '#333' }}>avg ₹{avgOrder}</span>}
-                {isPk && <span style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900' }}>▲ BEST</span>}
-                {isWk && d.revenue > 0 && <span style={{ fontSize: '0.58rem', color: '#633806', fontWeight: '900' }}>▼ LOWEST</span>}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Weekend vs Weekday split */}
-        <div style={{ borderTop: '1px solid #111', paddingTop: '12px', marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          {[
-            { l: 'WEEKDAY TOTAL', v: `₹${weekdayRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekdayRev / totalWeekRev) * 100) : 0 },
-            { l: 'WEEKEND TOTAL', v: `₹${weekendRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekendRev / totalWeekRev) * 100) : 0 }
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '8px 10px', borderRadius: '8px', border: '1px solid #111' }}>
-              <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-              <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>{s.v}</div>
-              <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '1px' }}>{s.pct}% of week</div>
-            </div>
-          ))}
-        </div>
-      </>
-    );
-  })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO DATA YET</div>}
-</div>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
+                {[
+                  { l: 'TOTAL TODAY', v: total + ' orders' },
+                  { l: 'PEAK HOUR', v: fmt(peak?.hour || 0) },
+                  { l: 'PEAK ORDERS', v: peak?.orderCount || 0 }
+                ].map(s => (
+                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2', marginTop: '3px' }}>{s.v}</div>
+                  </div>
+                ))}
               </div>
 
-              {/* TABLE PERF + DWELL */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Layers size={16}/> TABLE PERFORMANCE</h4>
-                  {trendsData?.tables?.performance?.length>0 ? trendsData.tables.performance.slice(0,5).map(t=>{
-                    const mx=trendsData.tables.performance[0]?.revenue||1;
-                    return (
-                      <div key={t.table} style={{padding:'10px 0',borderBottom:'1px solid #111'}}>
-                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'5px'}}>
-                          <span style={{color:'#fff',fontWeight:'900',fontSize:'0.8rem'}}>Table {t.table}</span>
-                          <span style={{color:'#d3bfa2',fontWeight:'900',fontSize:'0.8rem'}}>₹{t.revenue.toLocaleString()}</span>
-                        </div>
-                        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                          <div style={{flex:1,height:'4px',background:'#111',borderRadius:'2px',overflow:'hidden'}}>
-                            <div style={{height:'100%',width:`${Math.round((t.revenue/mx)*100)}%`,background:'#8a704d'}}/>
-                          </div>
-                          <span style={{fontSize:'0.65rem',color:'#555'}}>{t.turns} turns</span>
-                        </div>
-                      </div>
-                    );
-                  }) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
-                </div>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Timer size={16}/> AVG DWELL TIME</h4>
-                  {trendsData?.tables ? (
-                    [{label:'AVG DWELL',val:trendsData.tables.overallAvgDwell>0?`${trendsData.tables.overallAvgDwell} min`:'—'},
-                     {label:'FASTEST',val:trendsData.tables.fastest?`T${trendsData.tables.fastest.table} · ${trendsData.tables.fastest.avgDwell}m`:'—'},
-                     {label:'SLOWEST',val:trendsData.tables.slowest?`T${trendsData.tables.slowest.table} · ${trendsData.tables.slowest.avgDwell}m`:'—'}
-                    ].map(s=>(
-                      <div key={s.label} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-                        <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.label}</small>
-                        <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#fff'}}>{s.val}</span>
-                      </div>
-                    ))
-                  ) : <div style={{opacity:0.3,fontSize:'0.75rem',paddingTop:'30px',textAlign:'center'}}>NO DATA</div>}
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+                {[
+                  { l: 'PEAK HR REVENUE', v: `₹${peakRevenue.toLocaleString()}` },
+                  { l: 'AVG REV/ACTIVE HR', v: `₹${avgRevenuePerHour.toLocaleString()}` },
+                  { l: 'DEAD HOURS (8a-11p)', v: deadHours.length + ' hrs', c: deadHours.length > 4 ? '#BA7517' : '#4ade80' }
+                ].map(s => (
+                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
+                  </div>
+                ))}
               </div>
 
-              {/* PROFITABILITY + REVENUE TREND */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-                <div style={styles.biCard}>
-  <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY — RECIPE COSTING</h4>
-  {profitabilityData.length > 0 ? (
-    <>
-      {/* Summary bar */}
-      {(() => {
-        const withRecipe = profitabilityData.filter(d => d.hasRecipe);
-        const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
-        const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
-        const totalCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
-        const overallMargin = totalRevenue > 0 ? Math.round((totalGrossProfit / totalRevenue) * 100) : 0;
-        return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px', padding: '12px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-            {[
-              { l: 'TOTAL REVENUE', v: `₹${totalRevenue.toLocaleString()}` },
-              { l: 'INGREDIENT COST', v: `₹${totalCost.toLocaleString()}`, c: '#BA7517' },
-              { l: 'GROSS PROFIT', v: `₹${totalGrossProfit.toLocaleString()}`, c: overallMargin > 50 ? '#4ade80' : '#d3bfa2' }
-            ].map(s => (
-              <div key={s.l} style={{ textAlign: 'center' }}>
-                <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                <div style={{ fontSize: '0.85rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* Per-dish breakdown */}
-      {profitabilityData.slice(0, 8).map((d, idx) => (
-        <div key={d._id} style={{ padding: '10px 0', borderBottom: '1px solid #111' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '900', minWidth: '16px' }}>#{idx + 1}</span>
-              <span style={{ color: '#fff', fontSize: '0.78rem', fontWeight: '700' }}>{d.name}</span>
-              {!d.hasRecipe && <span style={{ fontSize: '0.5rem', padding: '1px 5px', background: 'rgba(138,112,77,0.1)', color: '#555', borderRadius: '3px', border: '1px solid #1a1a1a' }}>NO RECIPE</span>}
-            </div>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.65rem', color: '#555' }}>{d.totalQtySold || 0} sold</span>
-              <span style={{ fontWeight: '900', fontSize: '0.78rem', color: d.grossProfit > 0 ? '#d3bfa2' : '#BA7517' }}>
-                {d.realizedMarginPct ?? d.marginPct}%
-              </span>
-            </div>
-          </div>
-
-          {/* Progress bar — margin */}
-          <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
-            <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, d.marginPct))}%`, background: d.grossProfit < 0 ? '#633806' : d.marginPct > 60 ? '#4ade80' : '#8a704d' }} />
-          </div>
-
-          {/* Cost breakdown row */}
-          {d.hasRecipe && (
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.6rem', color: '#444' }}>Sell ₹{d.sellingPrice}</span>
-              <span style={{ fontSize: '0.6rem', color: '#BA7517' }}>Cost ₹{d.ingredientCostPerServing}</span>
-              <span style={{ fontSize: '0.6rem', color: '#555' }}>→ ₹{d.profit}/serving</span>
-              {d.totalQtySold > 0 && (
-                <span style={{ fontSize: '0.6rem', color: d.grossProfit > 0 ? '#4ade80' : '#BA7517', fontWeight: '900' }}>
-                  Total P&L: ₹{d.grossProfit?.toLocaleString()}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Ingredient pills — top 3 */}
-          {d.ingredientBreakdown?.length > 0 && (
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '5px' }}>
-              {d.ingredientBreakdown.slice(0, 3).map((ing, i) => (
-                <span key={i} style={{ fontSize: '0.5rem', padding: '2px 6px', background: '#080808', border: '1px solid #151515', borderRadius: '4px', color: '#444' }}>
-                  {ing.name} {ing.qty}{ing.unit} = ₹{ing.lineCost}
-                </span>
-              ))}
-              {d.ingredientBreakdown.length > 3 && (
-                <span style={{ fontSize: '0.5rem', color: '#333' }}>+{d.ingredientBreakdown.length - 3} more</span>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </>
-  ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>LINK RECIPES TO COMPUTE MARGINS</div>}
-</div>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><TrendingUp size={16}/> REVENUE TREND</h4>
-                  {trendsData?.revenue ? (()=>{
-                    const {current,previous,growthPct}=trendsData.revenue;
-                    const isPos=growthPct!==null&&Number(growthPct)>=0;
-                    return (<>
-                      <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-                        <span style={{fontSize:'0.75rem',color:'#888'}}>This month</span><span style={{fontWeight:'900',color:'#fff'}}>₹{current.toLocaleString()}</span>
+              <div style={{ position: 'relative', height: '70px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '70px' }}>
+                  {hourlyAnalytics.hourly.map(d => (
+                    <div key={d.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                      <div title={`${fmt(d.hour)}: ${d.orderCount} orders · ₹${d.revenue}`}
+                        style={{ width: '100%', height: `${Math.max(3, Math.round((d.orderCount / maxO) * 100))}%`, background: col(d.orderCount), borderRadius: '3px 3px 0 0', position: 'relative', minWidth: 0 }}>
+                        {d.hour === peak?.hour && (
+                          <div style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', whiteSpace: 'nowrap' }}>PEAK</div>
+                        )}
                       </div>
-                      <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-                        <span style={{fontSize:'0.75rem',color:'#888'}}>Last month</span><span style={{fontWeight:'900',color:'#555'}}>₹{previous.toLocaleString()}</span>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0'}}>
-                        <span style={{fontSize:'0.75rem',color:'#888'}}>Growth</span>
-                        {growthPct!==null ? (
-                          <span style={{fontSize:'0.85rem',fontWeight:'900',padding:'4px 10px',borderRadius:'6px',
-                            background:isPos?'rgba(29,158,117,0.1)':'rgba(226,75,74,0.1)',color:isPos?'#1D9E75':'#E24B4A'}}>
-                            {isPos?'+':''}{growthPct}% {isPos?'↑':'↓'}
-                          </span>
-                        ) : <span style={{fontSize:'0.75rem',color:'#555'}}>No previous data</span>}
-                      </div>
-                    </>);
-                  })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
-                </div>
-              </div>
-
-              {/* CUSTOMER + REVENUE SOURCES */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><User size={16}/> REPEAT VS NEW CUSTOMERS</h4>
-                  {trendsData?.customers?.total>0 ? (<>
-                    <div style={{display:'flex',height:'8px',borderRadius:'4px',overflow:'hidden',marginBottom:'16px'}}>
-                      <div style={{width:`${trendsData.customers.repeatPct}%`,background:'#d3bfa2',transition:'width 0.8s ease'}}/>
-                      <div style={{flex:1,background:'#1a1a1a'}}/>
-                    </div>
-                    {[
-                      {l:'TOTAL CUSTOMERS',v:trendsData.customers.total,c:'#fff'},
-                      {l:'REPEAT VISITORS',v:`${trendsData.customers.repeat} (${trendsData.customers.repeatPct}%)`,c:'#d3bfa2'},
-                      {l:'NEW CUSTOMERS',v:trendsData.customers.new,c:'#888'},
-                      {l:'AVG VISITS',v:trendsData.customers.avgVisits+'x',c:'#fff'},
-                    ].map(s=>(
-                      <div key={s.l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #111'}}>
-                        <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.l}</small>
-                        <span style={{fontSize:'0.8rem',fontWeight:'900',color:s.c}}>{s.v}</span>
-                      </div>
-                    ))}
-                  </>) : <div style={{textAlign:'center',padding:'20px',fontSize:'0.75rem',color:'#444'}}>Start capturing customer phone numbers at billing to unlock retention metrics.</div>}
-                </div>
-                <div style={styles.biCard}>
-                  <h4 style={styles.biTitle}><Globe size={16}/> REVENUE SOURCES</h4>
-                  {Object.entries(advancedStats.sources).map(([src,val])=>(
-                    <div key={src} style={styles.sourceRow}>
-                      <span style={{textTransform:'capitalize',width:'80px'}}>{src}</span>
-                      <div style={styles.progressBg}><div style={{...styles.progressFill,width:`${(val/(stats.revenue||1))*100}%`}}/></div>
-                      <span style={{minWidth:'60px',textAlign:'right'}}>₹{val.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* CATEGORY RANKINGS */}
-{/* CATEGORY RANKINGS — with top AND bottom dishes */}
-{Object.keys(categoryRankings).length > 0 && (
-  <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-    <h4 style={styles.biTitle}><Layers size={16} /> CATEGORY PERFORMANCE SEGMENTATION</h4>
-    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
-      Sales velocity by category — top performers and underperforming items for the selected period.
-    </p>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-      {Object.entries(categoryRankings).map(([cat, m]) => (
-        <div key={cat} style={{
-          background: '#050505', border: '1px solid #111',
-          padding: '18px', borderRadius: '14px'
-        }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
-            <span style={{ fontWeight: '900', fontSize: '0.82rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {cat.replace('cat_', '').replace('CAT_', '')}
-            </span>
-            <span style={{ fontSize: '0.62rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.06)', color: '#888', fontWeight: '800', border: '1px solid #1a1a1a' }}>
-              {m.totalSoldInCategory} units
-            </span>
-          </div>
+              <div style={{ display: 'flex', gap: '3px', marginBottom: '14px' }}>
+                {hourlyAnalytics.hourly.map(d => (
+                  <div key={d.hour} style={{ flex: 1, textAlign: 'center', fontSize: '0.45rem', color: d.hour % 3 === 0 ? '#333' : 'transparent', minWidth: 0 }}>
+                    {fmt(d.hour)}
+                  </div>
+                ))}
+              </div>
 
-          {/* TOP 3 */}
-          <div style={{ marginBottom: '12px' }}>
-            <small style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-              ▲ Top Performers
-            </small>
-            {(m.topDishes || []).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', padding: '4px 0', borderBottom: '1px solid #0d0d0d' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.6rem', color: '#8a704d', fontWeight: '900', minWidth: '14px' }}>#{i + 1}</span>
-                  <span style={{ color: '#fff', fontWeight: '700' }}>{d.name}</span>
+              {/* GOLDEN HOURS — merged in to fill space */}
+              <div style={{ borderTop: '1px solid #111', paddingTop: '12px' }}>
+                <div style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Award size={12} color="#d3bfa2"/> TOP REVENUE HOURS
                 </div>
-                <span style={{ color: '#d3bfa2', fontWeight: '900', fontSize: '0.72rem' }}>{d.sold} sold</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginBottom: '10px' }}>
+                  {topHours.map((h,i)=>(
+                    <div key={h.hour} style={{background:'#050505',padding:'10px',borderRadius:'10px',border:`1px solid ${i===0?'rgba(211,191,162,0.3)':'#111'}`,borderTop:`2px solid ${i===0?'#d3bfa2':i===1?'#8a704d':'#333'}`}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'0.55rem',color:'#444',fontWeight:'900',marginBottom:'4px'}}>
+                        <Award size={11} color={i===0?'#d3bfa2':i===1?'#8a704d':'#555'}/> {i===0?'1ST':i===1?'2ND':'3RD'}
+                      </div>
+                      <div style={{fontSize:'1.1rem',fontWeight:'900',color:i===0?'#d3bfa2':'#fff'}}>{fmt(h.hour)}</div>
+                      <div style={{fontSize:'0.68rem',color:'#4ade80',fontWeight:'800',marginTop:'2px'}}>₹{h.revenue.toLocaleString()}</div>
+                      <div style={{fontSize:'0.55rem',color:'#444'}}>{h.orderCount} orders</div>
+                    </div>
+                  ))}
+                </div>
+
+                {slowHours.length > 0 && (
+                  <div style={{ background: 'rgba(186,117,23,0.05)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '0.6rem', color: '#BA7517', fontWeight: '900', marginBottom: '4px', display:'flex', alignItems:'center', gap:'6px' }}>
+                      <Zap size={11}/> SLOW HOUR OPPORTUNITIES
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#666' }}>
+                      {slowHours.slice(0, 3).map(h => fmt(h.hour)).join(', ')} — consider happy hour promos or staff reallocation
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            </>
+          );
+        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS TODAY</div>}
+      </div>
 
-          {/* BOTTOM 3 */}
-          <div>
-            <small style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-              ▼ Needs Attention
-            </small>
-            {(m.bottomDishes || []).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', padding: '4px 0', borderBottom: '1px solid #0a0a0a' }}>
-                <span style={{ color: '#444', fontWeight: '600' }}>• {d.name}</span>
-                <span style={{ color: '#333', fontWeight: '700', fontSize: '0.68rem' }}>{d.sold} sold</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}              {/* HEATMAP */}
-              <div style={styles.heatmapCard}>
-                <h4 style={styles.biTitle}><Calendar size={16}/> DAILY REVENUE HEATMAP — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
-                <div style={styles.calendarGridHeader}>{['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={styles.dayHeader}>{d}</div>)}</div>
-                <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
-<div style={styles.heatmapLegend}>
-  <span>Less</span>
-  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#111'}}/>
-  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
-  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
-  <span>More · </span>
-  <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(138,112,77,0.2)',border:'1px solid rgba(138,112,77,0.4)'}}/>
-  <span style={{fontSize:'0.55rem',color:'#555'}}>≈ Break-even</span>
-</div>
-              </div>
-
-
-              {/* ── MENU ENGINEERING MATRIX ── */}
-{profitabilityData.length > 0 && (() => {
-  const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
-  const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
-  const classify = (d) => {
-    const highSales = (d.totalQtySold || 0) >= avgSold;
-    const highMargin = (d.marginPct || 0) >= avgMargin;
-    if (highSales && highMargin) return { label: '⭐ STAR', color: '#4ade80', bg: 'rgba(74,222,128,0.06)', desc: 'High volume + High margin — protect & promote' };
-    if (highSales && !highMargin) return { label: '🐄 PLOWHORSE', color: '#2980B9', bg: 'rgba(41,128,185,0.06)', desc: 'High volume, low margin — consider price increase' };
-    if (!highSales && highMargin) return { label: '❓ PUZZLE', color: '#BA7517', bg: 'rgba(186,117,23,0.06)', desc: 'High margin, low volume — needs promotion push' };
-    return { label: '🐕 DOG', color: '#c0392b', bg: 'rgba(192,57,43,0.06)', desc: 'Low volume + Low margin — review or remove' };
-  };
-
-  const quadrants = { STAR: [], PLOWHORSE: [], PUZZLE: [], DOG: [] };
-  profitabilityData.forEach(d => {
-    const cls = classify(d);
-    const key = cls.label.split(' ')[1];
-    quadrants[key]?.push({ ...d, cls });
-  });
-
-  return (
-    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-      <h4 style={styles.biTitle}><Sparkles size={16} /> MENU ENGINEERING MATRIX</h4>
-      <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
-        Boston Matrix for your menu — classify dishes by profitability and popularity to make data-driven decisions.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-        {[
-          { key: 'STAR', label: '⭐ STARS', color: '#4ade80', desc: 'High popularity + High margin → Protect & Promote' },
-          { key: 'PLOWHORSE', label: '🐄 PLOWHORSES', color: '#2980B9', desc: 'High popularity + Low margin → Price increase opportunity' },
-          { key: 'PUZZLE', label: '❓ PUZZLES', color: '#BA7517', desc: 'Low popularity + High margin → Needs marketing push' },
-          { key: 'DOG', label: '🐕 DOGS', color: '#c0392b', desc: 'Low popularity + Low margin → Review or replace' },
-        ].map(({ key, label, color, desc }) => (
-          <div key={key} style={{ background: '#050505', border: `1px solid ${color}22`, borderTop: `2px solid ${color}`, borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: '900', color }}>{label}</span>
-              <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '4px', background: `${color}15`, color, fontWeight: '900', border: `1px solid ${color}33` }}>
-                {quadrants[key]?.length || 0} dishes
-              </span>
+      {/* WAITLIST TODAY — compact, today-only summary */}
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Users size={16}/> COUNTER & WAITLIST — TODAY</h4>
+        {waitlistAnalytics ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px', marginBottom: '14px' }}>
+              {[
+                { l: 'GROUPS TODAY',     v: waitlistAnalytics.today.total,   c: '#d3bfa2', icon: <Users size={14}/> },
+                { l: 'SEATED TODAY',     v: waitlistAnalytics.today.seated,  c: '#4ade80', icon: <ClipboardCheck size={14}/> },
+                { l: 'PICKUP TODAY',     v: waitlistAnalytics.today.pickup,  c: '#60a5fa', icon: <ShoppingBag size={14}/> },
+                { l: 'STILL WAITING',    v: waitlistAnalytics.today.waiting, c: '#BA7517', icon: <Timer size={14}/> },
+              ].map(s => (
+                <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '14px' }}>
+                  <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'8px'}}>
+                    <span style={{color:s.c}}>{s.icon}</span>
+                    <span style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>{s.l}</span>
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+                </div>
+              ))}
             </div>
-            <p style={{ fontSize: '0.6rem', color: '#444', marginBottom: '10px', lineHeight: '1.4' }}>{desc}</p>
-            {(quadrants[key] || []).slice(0, 4).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #0d0d0d', fontSize: '0.72rem' }}>
-                <span style={{ color: '#ccc' }}>{d.name}</span>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <span style={{ color: '#555', fontSize: '0.65rem' }}>{d.totalQtySold || 0} sold</span>
-                  <span style={{ color, fontWeight: '800', fontSize: '0.65rem' }}>{d.marginPct || 0}%</span>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>WALK-AWAYS / NO-SHOW</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '900', color: waitlistAnalytics.today.walked > 0 ? '#E24B4A' : '#4ade80' }}>{waitlistAnalytics.today.walked}</div>
+              </div>
+              <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>AVG WAIT (MONTH)</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '900', color: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' }}>{waitlistAnalytics.month.avgWaitMin} min</div>
+              </div>
+            </div>
+
+            {waitlistAnalytics.month.peakHour && (
+              <div style={{ padding: '10px 12px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', fontSize: '0.65rem', color: '#888' }}>
+                Peak arrival hour this month: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
+                  {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
+                    : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
+                    : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
+                    : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
+                </span> ({waitlistAnalytics.month.peakHour.count} groups)
+              </div>
+            )}
+          </>
+        ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO WAITLIST DATA</div>}
+      </div>
+    </div>
+
+    {/* ═══════════════════════════════════════════════
+        SECTION 2 — REVENUE & GROWTH
+    ═══════════════════════════════════════════════ */}
+    <SectionHeader icon={<TrendingUp size={16}/>} title="Revenue & Growth" subtitle="How money is moving — month over month" />
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+
+      {/* REVENUE TREND — expanded with payment-mode mini breakdown to fill space */}
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><TrendingUp size={16}/> REVENUE TREND</h4>
+        {trendsData?.revenue ? (()=>{
+          const {current,previous,growthPct}=trendsData.revenue;
+          const isPos=growthPct!==null&&Number(growthPct)>=0;
+          const totalRevToday = hourlyAnalytics.hourly.reduce((a,b)=>a+(b.revenue||0),0);
+          return (<>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
+              <span style={{fontSize:'0.75rem',color:'#888'}}>This month</span><span style={{fontWeight:'900',color:'#fff'}}>₹{current.toLocaleString()}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
+              <span style={{fontSize:'0.75rem',color:'#888'}}>Last month</span><span style={{fontWeight:'900',color:'#555'}}>₹{previous.toLocaleString()}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #111'}}>
+              <span style={{fontSize:'0.75rem',color:'#888'}}>Today so far</span><span style={{fontWeight:'900',color:'#d3bfa2'}}>₹{totalRevToday.toLocaleString()}</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',marginBottom:'14px'}}>
+              <span style={{fontSize:'0.75rem',color:'#888'}}>Growth (MoM)</span>
+              {growthPct!==null ? (
+                <span style={{fontSize:'0.85rem',fontWeight:'900',padding:'4px 10px',borderRadius:'6px',
+                  background:isPos?'rgba(29,158,117,0.1)':'rgba(226,75,74,0.1)',color:isPos?'#1D9E75':'#E24B4A',
+                  display:'inline-flex', alignItems:'center', gap:'5px'}}>
+                  {isPos ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} {isPos?'+':''}{growthPct}%
+                </span>
+              ) : <span style={{fontSize:'0.75rem',color:'#555'}}>No previous data</span>}
+            </div>
+
+            {/* Payment mode mini-breakdown */}
+            {analytics.length > 0 && (() => {
+              const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+              const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+              const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+              const grand  = totalC + totalU + totalK;
+              if (grand === 0) return null;
+              const modes = [
+                { label:'Cash', icon:<Banknote size={13}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
+                { label:'UPI',  icon:<Smartphone size={13}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
+                { label:'Card', icon:<CreditCard size={13}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
+              ];
+              return (
+                <div style={{borderTop:'1px solid #111',paddingTop:'14px'}}>
+                  <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginBottom:'10px'}}>PAYMENT MODE SPLIT</div>
+                  <div style={{display:'flex',height:'8px',borderRadius:'4px',overflow:'hidden',marginBottom:'10px'}}>
+                    {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
+                  </div>
+                  {modes.map(m=>(
+                    <div key={m.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0'}}>
+                      <span style={{display:'flex',alignItems:'center',gap:'7px',fontSize:'0.7rem',color:'#888'}}>{m.icon} {m.label}</span>
+                      <span style={{fontSize:'0.75rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()} <small style={{color:'#444',fontWeight:'700'}}>({m.pct}%)</small></span>
+                    </div>
+                  ))}
                 </div>
+              );
+            })()}
+          </>);
+        })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
+      </div>
+
+      {/* WEEKLY PERFORMANCE */}
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
+        {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
+          const maxR = Math.max(...hourlyAnalytics.dayOfWeek.map(d => d.revenue), 1);
+          const peak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+          const weak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue < a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
+          const totalWeekRev = hourlyAnalytics.dayOfWeek.reduce((a, b) => a + b.revenue, 0);
+          const activeDays = hourlyAnalytics.dayOfWeek.filter(d => d.orders > 0).length;
+          const avgPerActiveDay = activeDays > 0 ? Math.round(totalWeekRev / activeDays) : 0;
+          const weekendDays = hourlyAnalytics.dayOfWeek.filter(d => ['Sat', 'Sun'].includes(d.day));
+          const weekdayDays = hourlyAnalytics.dayOfWeek.filter(d => !['Sat', 'Sun'].includes(d.day));
+          const weekendRev = weekendDays.reduce((a, b) => a + b.revenue, 0);
+          const weekdayRev = weekdayDays.reduce((a, b) => a + b.revenue, 0);
+
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                {[
+                  { l: 'BEST DAY', v: peak.day, sub: `₹${peak.revenue.toLocaleString()}`, c: '#d3bfa2' },
+                  { l: 'AVG/ACTIVE DAY', v: `₹${avgPerActiveDay.toLocaleString()}`, sub: `${activeDays} active days` },
+                  { l: 'SLOWEST DAY', v: weak.day, sub: `₹${weak.revenue.toLocaleString()}`, c: '#633806' }
+                ].map(s => (
+                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
+                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '2px' }}>{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {hourlyAnalytics.dayOfWeek.map(d => {
+                const isPk = d.day === peak.day, isWk = d.day === weak.day && d.revenue < peak.revenue;
+                const avgOrder = d.orders > 0 ? Math.round(d.revenue / d.orders) : 0;
+                return (
+                  <div key={d.day} style={{ marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                      <span style={{ width: '32px', fontSize: '0.7rem', color: isPk ? '#d3bfa2' : isWk ? '#633806' : '#555', fontWeight: '800' }}>{d.day}</span>
+                      <div style={{ flex: 1, height: '8px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.round((d.revenue / maxR) * 100)}%`, background: isPk ? '#d3bfa2' : isWk ? '#633806' : '#8a704d', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                      </div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', minWidth: '70px', textAlign: 'right' }}>₹{d.revenue.toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: 'flex', paddingLeft: '42px', gap: '16px', alignItems:'center' }}>
+                      <span style={{ fontSize: '0.58rem', color: '#333' }}>{d.orders || 0} orders</span>
+                      {avgOrder > 0 && <span style={{ fontSize: '0.58rem', color: '#333' }}>avg ₹{avgOrder}</span>}
+                      {isPk && <span style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900', display:'flex', alignItems:'center', gap:'3px' }}><ArrowUp size={9}/> BEST</span>}
+                      {isWk && d.revenue > 0 && <span style={{ fontSize: '0.58rem', color: '#633806', fontWeight: '900', display:'flex', alignItems:'center', gap:'3px' }}><ArrowDown size={9}/> LOWEST</span>}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div style={{ borderTop: '1px solid #111', paddingTop: '12px', marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {[
+                  { l: 'WEEKDAY TOTAL', v: `₹${weekdayRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekdayRev / totalWeekRev) * 100) : 0 },
+                  { l: 'WEEKEND TOTAL', v: `₹${weekendRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekendRev / totalWeekRev) * 100) : 0 }
+                ].map(s => (
+                  <div key={s.l} style={{ background: '#050505', padding: '8px 10px', borderRadius: '8px', border: '1px solid #111' }}>
+                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                    <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>{s.v}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '1px' }}>{s.pct}% of week</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO DATA YET</div>}
+      </div>
+    </div>
+
+    {/* REVENUE FORECAST — full width */}
+    {currentMonthAnalytics.length > 0 && (() => {
+      const today = new Date(new Date().getTime() + 330 * 60 * 1000);
+      const dayOfMonth = today.getDate();
+      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+      const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+      if (!isCurrentMonth) return null;
+
+      const dailyRevenues = currentMonthAnalytics.map(d => d.revenue || 0).filter(v => v > 0);
+      if (dailyRevenues.length === 0) return null;
+      const avgDaily = dailyRevenues.reduce((a, b) => a + b, 0) / dailyRevenues.length;
+      const projectedMonthEnd = stats.revenue + (avgDaily * (daysInMonth - dayOfMonth));
+      const bestDay = Math.max(...dailyRevenues);
+      const bestCase = stats.revenue + (bestDay * (daysInMonth - dayOfMonth));
+      const daysLeft = daysInMonth - dayOfMonth;
+
+      return (
+        <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderLeft: '4px solid #2980B9' }}>
+          <h4 style={styles.biTitle}><TrendingUp size={16} /> MONTH-END REVENUE FORECAST</h4>
+          <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
+            Based on {dailyRevenues.length} active days this month · {daysLeft} days remaining
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
+            {[
+              { l: 'CURRENT REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#d3bfa2', sub: `${dayOfMonth}/${daysInMonth} days` },
+              { l: 'PROJECTED (BASE)', v: `₹${Math.round(projectedMonthEnd).toLocaleString()}`, c: '#4ade80', sub: `avg ₹${Math.round(avgDaily).toLocaleString()}/day` },
+              { l: 'BEST CASE', v: `₹${Math.round(bestCase).toLocaleString()}`, c: '#2980B9', sub: `if best day repeats` },
+            ].map(s => (
+              <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
               </div>
             ))}
-            {(quadrants[key]?.length || 0) > 4 && (
-              <div style={{ fontSize: '0.6rem', color: '#333', marginTop: '6px' }}>+{quadrants[key].length - 4} more</div>
-            )}
           </div>
-        ))}
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.6rem', color: '#555' }}>Month progress</span>
+              <span style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900' }}>{Math.round((dayOfMonth / daysInMonth) * 100)}% complete</span>
+            </div>
+            <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(dayOfMonth / daysInMonth) * 100}%`, background: 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '3px' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#333', marginTop: '4px' }}>
+            <span>Day 1</span><span>Day {dayOfMonth} (today)</span><span>Day {daysInMonth}</span>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* DAILY HEATMAP — full width */}
+    <div style={styles.heatmapCard}>
+      <h4 style={styles.biTitle}><Calendar size={16}/> DAILY REVENUE HEATMAP — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
+      <div style={styles.calendarGridHeader}>{['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={styles.dayHeader}>{d}</div>)}</div>
+      <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
+      <div style={styles.heatmapLegend}>
+        <span>Less</span>
+        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#111'}}/>
+        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
+        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
+        <span>More · </span>
+        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(138,112,77,0.2)',border:'1px solid rgba(138,112,77,0.4)'}}/>
+        <span style={{fontSize:'0.55rem',color:'#555'}}>≈ Break-even</span>
       </div>
     </div>
-  );
-})()}
 
-{/* ── REVENUE FORECAST ── */}
-{currentMonthAnalytics.length > 0 && (() => {
-  const today = new Date(new Date().getTime() + 330 * 60 * 1000);
-  const dayOfMonth = today.getDate();
-  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-  const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
-  if (!isCurrentMonth) return null;
+    {/* ═══════════════════════════════════════════════
+        SECTION 3 — MENU INTELLIGENCE
+    ═══════════════════════════════════════════════ */}
+    <SectionHeader icon={<Percent size={16}/>} title="Menu Intelligence" subtitle="Profitability, popularity, and pricing decisions" />
 
-  const dailyRevenues = currentMonthAnalytics.map(d => d.revenue || 0).filter(v => v > 0);
-  if (dailyRevenues.length === 0) return null;
-  const avgDaily = dailyRevenues.reduce((a, b) => a + b, 0) / dailyRevenues.length;
-  const projectedMonthEnd = stats.revenue + (avgDaily * (daysInMonth - dayOfMonth));
-  const bestDay = Math.max(...dailyRevenues);
-  const bestCase = stats.revenue + (bestDay * (daysInMonth - dayOfMonth));
-  const daysLeft = daysInMonth - dayOfMonth;
+    {/* DISH PROFITABILITY — full width now (was cramped in 2-col) */}
+    <div style={{...styles.biCard, marginBottom:'20px'}}>
+      <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY — RECIPE COSTING</h4>
+      {profitabilityData.length > 0 ? (
+        <>
+          {(() => {
+            const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
+            const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+            const totalCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
+            const overallMargin = totalRevenue > 0 ? Math.round((totalGrossProfit / totalRevenue) * 100) : 0;
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '18px', padding: '14px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
+                {[
+                  { l: 'TOTAL REVENUE', v: `₹${totalRevenue.toLocaleString()}` },
+                  { l: 'INGREDIENT COST', v: `₹${totalCost.toLocaleString()}`, c: '#BA7517' },
+                  { l: 'GROSS PROFIT', v: `₹${totalGrossProfit.toLocaleString()}`, c: overallMargin > 50 ? '#4ade80' : '#d3bfa2' }
+                ].map(s => (
+                  <div key={s.l} style={{ textAlign: 'center' }}>
+                    <small style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
+                    <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c || '#fff', marginTop: '4px' }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
-  return (
-    <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderLeft: '4px solid #2980B9' }}>
-      <h4 style={styles.biTitle}><TrendingUp size={16} /> MONTH-END REVENUE FORECAST</h4>
-      <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
-        Based on {dailyRevenues.length} active days this month · {daysLeft} days remaining
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
-        {[
-          { l: 'CURRENT REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#d3bfa2', sub: `${dayOfMonth}/${daysInMonth} days` },
-          { l: 'PROJECTED (BASE)', v: `₹${Math.round(projectedMonthEnd).toLocaleString()}`, c: '#4ade80', sub: `avg ₹${Math.round(avgDaily).toLocaleString()}/day` },
-          { l: 'BEST CASE', v: `₹${Math.round(bestCase).toLocaleString()}`, c: '#2980B9', sub: `if best day repeats` },
-        ].map(s => (
-          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-            <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
-      {/* Progress bar showing month completion */}
-      <div style={{ marginBottom: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-          <span style={{ fontSize: '0.6rem', color: '#555' }}>Month progress</span>
-          <span style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900' }}>{Math.round((dayOfMonth / daysInMonth) * 100)}% complete</span>
-        </div>
-        <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${(dayOfMonth / daysInMonth) * 100}%`, background: 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '3px' }} />
-        </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#333', marginTop: '4px' }}>
-        <span>Day 1</span><span>Day {dayOfMonth} (today)</span><span>Day {daysInMonth}</span>
-      </div>
-    </div>
-  );
-})()}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(380px,1fr))', gap: '0 32px' }}>
+            {profitabilityData.slice(0, 8).map((d, idx) => (
+              <div key={d._id} style={{ padding: '10px 0', borderBottom: '1px solid #111' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '900', minWidth: '16px' }}>#{idx + 1}</span>
+                    <span style={{ color: '#fff', fontSize: '0.78rem', fontWeight: '700' }}>{d.name}</span>
+                    {!d.hasRecipe && <span style={{ fontSize: '0.5rem', padding: '1px 5px', background: 'rgba(138,112,77,0.1)', color: '#555', borderRadius: '3px', border: '1px solid #1a1a1a' }}>NO RECIPE</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#555' }}>{d.totalQtySold || 0} sold</span>
+                    <span style={{ fontWeight: '900', fontSize: '0.78rem', color: d.grossProfit > 0 ? '#d3bfa2' : '#BA7517' }}>
+                      {d.realizedMarginPct ?? d.marginPct}%
+                    </span>
+                  </div>
+                </div>
 
-{/* ── WASTE COST ESTIMATOR ── */}
-{profitabilityData.length > 0 && inventory.length > 0 && (() => {
-  const lowStockItems = inventory.filter(i => i.currentStock < 0);
-  const negativeStockValue = lowStockItems.reduce((a, i) => a + Math.abs(i.currentStock * (i.weightedAvgCost || i.costPrice || 0)), 0);
-  const totalCostAllDishes = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
-  const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
-  const wasteEstPct = totalRevAllDishes > 0 ? 100 - Math.round((totalCostAllDishes / totalRevAllDishes) * 100) : 0;
+                <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
+                  <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, d.marginPct))}%`, background: d.grossProfit < 0 ? '#633806' : d.marginPct > 60 ? '#4ade80' : '#8a704d' }} />
+                </div>
 
-  return (
-    <div style={{ ...styles.biCard, marginBottom: '20px' }}>
-      <h4 style={styles.biTitle}><AlertTriangle size={16} /> INGREDIENT COST INTELLIGENCE</h4>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
-        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>RECIPE-BASED FOOD COST</div>
-          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: totalCostAllDishes / Math.max(totalRevAllDishes, 1) > 0.4 ? '#BA7517' : '#4ade80' }}>
-            {totalRevAllDishes > 0 ? `${Math.round((totalCostAllDishes / totalRevAllDishes) * 100)}%` : '—'}
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>of revenue · ideal: {'<'}35%</div>
-        </div>
-        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>OVER-DEPLETED STOCK</div>
-          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: lowStockItems.length > 0 ? '#c0392b' : '#4ade80' }}>
-            {lowStockItems.length} items
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>stock below zero — check recipes</div>
-        </div>
-        <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>EST. DEPLETION COST</div>
-          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: negativeStockValue > 0 ? '#BA7517' : '#4ade80' }}>
-            ₹{Math.round(negativeStockValue).toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>untracked ingredient usage</div>
-        </div>
-      </div>
-      {lowStockItems.length > 0 && (
-        <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(192,57,43,0.05)', border: '1px solid rgba(192,57,43,0.2)', borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.6rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px' }}>⚠ OVER-DEPLETED INGREDIENTS (stock negative)</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {lowStockItems.map((i, idx) => (
-              <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: '4px', color: '#c0392b', fontWeight: '800' }}>
-                {i.itemName}: {i.currentStock.toFixed(1)} {i.unit}
-              </span>
+                {d.hasRecipe && (
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#444' }}>Sell ₹{d.sellingPrice}</span>
+                    <span style={{ fontSize: '0.6rem', color: '#BA7517' }}>Cost ₹{d.ingredientCostPerServing}</span>
+                    <span style={{ fontSize: '0.6rem', color: '#555' }}>→ ₹{d.profit}/serving</span>
+                    {d.totalQtySold > 0 && (
+                      <span style={{ fontSize: '0.6rem', color: d.grossProfit > 0 ? '#4ade80' : '#BA7517', fontWeight: '900' }}>
+                        Total P&L: ₹{d.grossProfit?.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {d.ingredientBreakdown?.length > 0 && (
+                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '5px' }}>
+                    {d.ingredientBreakdown.slice(0, 3).map((ing, i) => (
+                      <span key={i} style={{ fontSize: '0.5rem', padding: '2px 6px', background: '#080808', border: '1px solid #151515', borderRadius: '4px', color: '#444' }}>
+                        {ing.name} {ing.qty}{ing.unit} = ₹{ing.lineCost}
+                      </span>
+                    ))}
+                    {d.ingredientBreakdown.length > 3 && (
+                      <span style={{ fontSize: '0.5rem', color: '#333' }}>+{d.ingredientBreakdown.length - 3} more</span>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-})()}
-
-{/* ── EXTRA ITEMS INSIGHTS ── */}
-{extraAnalytics && extraAnalytics.totalSold > 0 && (
-  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-    <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
-
-    {/* KPI strip */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-      {[
-        { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
-        { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
-        { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b' },
-        { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
-      ].map(s => (
-        <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
-          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-          <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-        </div>
-      ))}
+        </>
+      ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>LINK RECIPES TO COMPUTE MARGINS</div>}
     </div>
 
-    {/* Per-item breakdown */}
-    <div style={{ overflowX: 'auto' }} className="custom-scroll">
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-            {['Item', 'Category', 'Sell ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
-              <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {(extraAnalytics.items || [])
-            .filter(i => i.totalSold > 0)
-            .sort((a, b) => b.profit - a.profit)
-            .map(item => (
-              <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
-                <td style={{ padding: '10px 12px 10px 0', fontWeight: '900', color: '#fff' }}>{item.name}</td>
-                <td style={{ color: '#555', paddingRight: '12px' }}>{item.category}</td>
-                <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{item.price}</td>
-                <td style={{ paddingRight: '12px' }}>
-                  <span style={{
-                    fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
-                    background: item.margin > 40 ? 'rgba(74,222,128,0.08)' : 'rgba(186,117,23,0.08)',
-                    color: item.margin > 40 ? '#4ade80' : '#BA7517',
-                    border: `1px solid ${item.margin > 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`
-                  }}>
-                    {item.margin}%
+    {/* MENU ENGINEERING MATRIX */}
+    {profitabilityData.length > 0 && (() => {
+      const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
+      const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
+      const classify = (d) => {
+        const highSales = (d.totalQtySold || 0) >= avgSold;
+        const highMargin = (d.marginPct || 0) >= avgMargin;
+        if (highSales && highMargin) return { label: 'STAR', icon:<Star size={14}/>, color: '#4ade80', desc: 'High volume + High margin — protect & promote' };
+        if (highSales && !highMargin) return { label: 'PLOWHORSE', icon:<Repeat size={14}/>, color: '#2980B9', desc: 'High volume, low margin — consider price increase' };
+        if (!highSales && highMargin) return { label: 'PUZZLE', icon:<Puzzle size={14}/>, color: '#BA7517', desc: 'High margin, low volume — needs promotion push' };
+        return { label: 'DOG', icon:<XCircle size={14}/>, color: '#c0392b', desc: 'Low volume + Low margin — review or remove' };
+      };
+
+      const quadrants = { STAR: [], PLOWHORSE: [], PUZZLE: [], DOG: [] };
+      profitabilityData.forEach(d => {
+        const cls = classify(d);
+        quadrants[cls.label]?.push({ ...d, cls });
+      });
+
+      const quadDefs = [
+        { key: 'STAR', label: 'STARS', icon:<Star size={15}/>, color: '#4ade80', desc: 'High popularity + High margin → Protect & Promote' },
+        { key: 'PLOWHORSE', label: 'PLOWHORSES', icon:<Repeat size={15}/>, color: '#2980B9', desc: 'High popularity + Low margin → Price increase opportunity' },
+        { key: 'PUZZLE', label: 'PUZZLES', icon:<Puzzle size={15}/>, color: '#BA7517', desc: 'Low popularity + High margin → Needs marketing push' },
+        { key: 'DOG', label: 'DOGS', icon:<XCircle size={15}/>, color: '#c0392b', desc: 'Low popularity + Low margin → Review or replace' },
+      ];
+
+      return (
+        <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+          <h4 style={styles.biTitle}><Sparkles size={16} /> MENU ENGINEERING MATRIX</h4>
+          <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+            Boston Matrix for your menu — classify dishes by profitability and popularity to make data-driven decisions.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            {quadDefs.map(({ key, label, icon, color, desc }) => (
+              <div key={key} style={{ background: '#050505', border: `1px solid ${color}22`, borderTop: `2px solid ${color}`, borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems:'center' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: '900', color, display:'flex', alignItems:'center', gap:'7px' }}>{icon} {label}</span>
+                  <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '4px', background: `${color}15`, color, fontWeight: '900', border: `1px solid ${color}33` }}>
+                    {quadrants[key]?.length || 0} dishes
                   </span>
-                </td>
-                <td style={{ color: '#888', paddingRight: '12px' }}>{item.totalSold}</td>
-                <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{(item.revenue || 0).toLocaleString()}</td>
-                <td style={{ fontWeight: '900', color: item.profit > 0 ? '#4ade80' : '#c0392b' }}>
-                  ₹{(item.profit || 0).toLocaleString()}
-                </td>
-              </tr>
+                </div>
+                <p style={{ fontSize: '0.6rem', color: '#444', marginBottom: '10px', lineHeight: '1.4' }}>{desc}</p>
+                {(quadrants[key] || []).slice(0, 4).map((d, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #0d0d0d', fontSize: '0.72rem' }}>
+                    <span style={{ color: '#ccc' }}>{d.name}</span>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <span style={{ color: '#555', fontSize: '0.65rem' }}>{d.totalQtySold || 0} sold</span>
+                      <span style={{ color, fontWeight: '800', fontSize: '0.65rem' }}>{d.marginPct || 0}%</span>
+                    </div>
+                  </div>
+                ))}
+                {(quadrants[key]?.length || 0) > 4 && (
+                  <div style={{ fontSize: '0.6rem', color: '#333', marginTop: '6px' }}>+{quadrants[key].length - 4} more</div>
+                )}
+              </div>
             ))}
-        </tbody>
-        <tfoot>
-          <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
-            <td colSpan="4" style={{ padding: '12px 0', fontSize: '0.6rem', color: '#8a704d', fontWeight: '900' }}>TOTALS</td>
-            <td style={{ padding: '12px 0', color: '#888', fontWeight: '800' }}>
-              {(extraAnalytics.items || []).filter(i => i.totalSold > 0).reduce((a, i) => a + i.totalSold, 0)}
-            </td>
-            <td style={{ padding: '12px 0', color: '#d3bfa2', fontWeight: '900' }}>
-              ₹{(extraAnalytics.totalRevenue || 0).toLocaleString()}
-            </td>
-            <td style={{ padding: '12px 0', color: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b', fontWeight: '900' }}>
-              ₹{(extraAnalytics.totalProfit || 0).toLocaleString()}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    {/* By category summary */}
-    {Object.keys(extraAnalytics.byCategory || {}).length > 1 && (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
-        {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
-          <div key={cat} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-            <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat}</div>
-            <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
-            <div style={{ fontSize: '0.62rem', color: '#4ade80', marginTop: '3px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
-            <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units</div>
           </div>
-        ))}
+        </div>
+      );
+    })()}
+
+    {/* CATEGORY RANKINGS */}
+    {Object.keys(categoryRankings).length > 0 && (
+      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+        <h4 style={styles.biTitle}><Layers size={16} /> CATEGORY PERFORMANCE SEGMENTATION</h4>
+        <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
+          Sales velocity by category — top performers and underperforming items for the selected period.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+          {Object.entries(categoryRankings).map(([cat, m]) => (
+            <div key={cat} style={{ background: '#050505', border: '1px solid #111', padding: '18px', borderRadius: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
+                <span style={{ fontWeight: '900', fontSize: '0.82rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {cat.replace('cat_', '').replace('CAT_', '')}
+                </span>
+                <span style={{ fontSize: '0.62rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.06)', color: '#888', fontWeight: '800', border: '1px solid #1a1a1a' }}>
+                  {m.totalSoldInCategory} units
+                </span>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <small style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1px', display: 'flex', alignItems:'center', gap:'4px', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  <ArrowUp size={10}/> Top Performers
+                </small>
+                {(m.topDishes || []).map((d, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', padding: '4px 0', borderBottom: '1px solid #0d0d0d' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.6rem', color: '#8a704d', fontWeight: '900', minWidth: '14px' }}>#{i + 1}</span>
+                      <span style={{ color: '#fff', fontWeight: '700' }}>{d.name}</span>
+                    </div>
+                    <span style={{ color: '#d3bfa2', fontWeight: '900', fontSize: '0.72rem' }}>{d.sold} sold</span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <small style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1px', display: 'flex', alignItems:'center', gap:'4px', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  <ArrowDown size={10}/> Needs Attention
+                </small>
+                {(m.bottomDishes || []).map((d, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', padding: '4px 0', borderBottom: '1px solid #0a0a0a' }}>
+                    <span style={{ color: '#444', fontWeight: '600' }}>• {d.name}</span>
+                    <span style={{ color: '#333', fontWeight: '700', fontSize: '0.68rem' }}>{d.sold} sold</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )}
 
-    {/* Stock value footer */}
-    <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
-      <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
-    </div>
-  </div>
-)}
+    {/* EXTRA ITEMS REVENUE */}
+    {extraAnalytics && extraAnalytics.totalSold > 0 && (
+      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+        <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
 
-{staffEfficiency.length > 0 && (
-  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-      <h4 style={{ ...styles.biTitle, margin: 0 }}>
-        <Zap size={16} /> STAFF EFFICIENCY — {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-      </h4>
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900' }}>
-          SHOWING: {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
-        </div>
-        <button
-          onClick={() => {
-            const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-            fetchMonthlySalary(monthStr);
-            fetchAnalytics();
-            showNotif('Staff data refreshed');
-          }}
-          style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '6px 12px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}
-        >
-          ↻ REFRESH
-        </button>
-      </div>
-    </div>
-
-    {/* KPI STRIP */}
-    {(() => {
-      const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-      const totalHrs = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
-      const paidCount = staffEfficiency.filter(s => {
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-        return (rec?.status || s.salaryStatus) === 'Paid';
-      }).length;
-      const pendingPay = filteredStaff.reduce((acc, m) => {
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
-        return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
-      }, 0);
-      return (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
           {[
-            { l: 'TOTAL STAFF', v: staffEfficiency.length, c: '#d3bfa2' },
-            { l: 'HOURS LOGGED', v: `${totalHrs.toFixed(1)}h`, c: '#4ade80' },
-            { l: 'SALARIES PAID', v: `${paidCount}/${staffEfficiency.length}`, c: paidCount === staffEfficiency.length ? '#4ade80' : '#BA7517' },
-            { l: 'PENDING PAYROLL', v: `₹${pendingPay.toLocaleString()}`, c: pendingPay > 0 ? '#BA7517' : '#4ade80' }
+            { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
+            { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
+            { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b' },
+            { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
           ].map(s => (
             <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
               <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
@@ -4200,353 +4142,546 @@ const renderMonthHeatmap = () => {
             </div>
           ))}
         </div>
-      );
-    })()}
 
-    <div style={{ overflowX: 'auto' }} className="custom-scroll">
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-            {['Name', 'Role', 'Days Present', 'Hours', 'Rev/Hour', 'Base Salary', 'Payroll Status'].map(h => (
-              <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {staffEfficiency.map(s => {
-            const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-            const monthRec = monthlySalaryRecords.find(r =>
-              r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
-            );
-            const salaryStatus = monthRec?.status || s.salaryStatus || 'Unpaid';
-            const isPaid = salaryStatus === 'Paid';
-            const recordedSalary = monthRec?.baseSalary || s.baseSalary;
-            const attendancePct = Math.round((s.daysPresent / 26) * 100);
-
-            return (
-              <tr key={s._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
-                <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{s.name}</td>
-                <td style={{ color: '#555', fontWeight: '800' }}>{s.role}</td>
-                <td style={{ paddingRight: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{s.daysPresent}d</span>
-                    <div style={{ flex: 1, height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden', minWidth: '40px' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, attendancePct)}%`, background: attendancePct >= 80 ? '#4ade80' : attendancePct >= 50 ? '#d3bfa2' : '#BA7517', borderRadius: '2px', transition: 'width 0.6s ease' }} />
-                    </div>
-                    <span style={{ fontSize: '0.58rem', color: '#444' }}>{attendancePct}%</span>
-                  </div>
+        <div style={{ overflowX: 'auto' }} className="custom-scroll">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                {['Item', 'Category', 'Sell ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
+                  <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(extraAnalytics.items || [])
+                .filter(i => i.totalSold > 0)
+                .sort((a, b) => b.profit - a.profit)
+                .map(item => (
+                  <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+                    <td style={{ padding: '10px 12px 10px 0', fontWeight: '900', color: '#fff' }}>{item.name}</td>
+                    <td style={{ color: '#555', paddingRight: '12px' }}>{item.category}</td>
+                    <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{item.price}</td>
+                    <td style={{ paddingRight: '12px' }}>
+                      <span style={{
+                        fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
+                        background: item.margin > 40 ? 'rgba(74,222,128,0.08)' : 'rgba(186,117,23,0.08)',
+                        color: item.margin > 40 ? '#4ade80' : '#BA7517',
+                        border: `1px solid ${item.margin > 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`
+                      }}>
+                        {item.margin}%
+                      </span>
+                    </td>
+                    <td style={{ color: '#888', paddingRight: '12px' }}>{item.totalSold}</td>
+                    <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{(item.revenue || 0).toLocaleString()}</td>
+                    <td style={{ fontWeight: '900', color: item.profit > 0 ? '#4ade80' : '#c0392b' }}>
+                      ₹{(item.profit || 0).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
+                <td colSpan="4" style={{ padding: '12px 0', fontSize: '0.6rem', color: '#8a704d', fontWeight: '900' }}>TOTALS</td>
+                <td style={{ padding: '12px 0', color: '#888', fontWeight: '800' }}>
+                  {(extraAnalytics.items || []).filter(i => i.totalSold > 0).reduce((a, i) => a + i.totalSold, 0)}
                 </td>
-                <td style={{ color: '#888' }}>{s.totalHours}h</td>
-                <td style={{ fontWeight: '900', color: s.revenuePerHour > 0 ? '#d3bfa2' : '#333' }}>
-                  {s.revenuePerHour > 0 ? `₹${s.revenuePerHour.toLocaleString()}` : '—'}
+                <td style={{ padding: '12px 0', color: '#d3bfa2', fontWeight: '900' }}>
+                  ₹{(extraAnalytics.totalRevenue || 0).toLocaleString()}
                 </td>
-                <td style={{ color: '#fff' }}>₹{Number(recordedSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small></td>
-                <td>
-                  {/* LIVE PAYROLL STATUS — reads from monthlySalaryRecords */}
-                  <select
-                    value={salaryStatus}
-                    onChange={async e => {
-                      const newStatus = e.target.value;
-                      await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`, { status: newStatus });
-                      fetchMonthlySalary(monthStr);
-                      showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
-                    }}
-                    style={{
-                      background: '#000',
-                      color: isPaid ? '#d3bfa2' : '#444',
-                      border: isPaid ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
-                      padding: '6px 10px', borderRadius: '6px',
-                      fontSize: '0.65rem', fontWeight: '900',
-                      outline: 'none', cursor: 'pointer'
-                    }}
-                  >
-                    <option value="Unpaid">UNPAID</option>
-                    <option value="Paid">PAID</option>
-                  </select>
+                <td style={{ padding: '12px 0', color: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b', fontWeight: '900' }}>
+                  ₹{(extraAnalytics.totalProfit || 0).toLocaleString()}
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
-            <td colSpan="4" style={{ padding: '14px 0' }} />
-            <td colSpan="2" style={{ padding: '14px 12px', fontSize: '0.65rem', fontWeight: '900', color: '#8a704d', textTransform: 'uppercase' }}>
-              PENDING PAYROLL:
-            </td>
-            <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
-              ₹{totalPayrollValue.toLocaleString()}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-)}
-
-{/* ── WAITLIST & COUNTER INTELLIGENCE ── */}
-{waitlistAnalytics && (
-  <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-    <h4 style={styles.biTitle}>
-      <Users size={16} /> WAITLIST & COUNTER INTELLIGENCE
-      <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
-        {waitlistAnalytics.month?.monthLabel}
-      </span>
-    </h4>
-
-    {/* TODAY STRIP */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px', marginBottom: '24px' }}>
-      {[
-        { l: 'GROUPS TODAY',   v: waitlistAnalytics.today.total,   c: '#d3bfa2' },
-        { l: 'SEATED TODAY',   v: waitlistAnalytics.today.seated,  c: '#4ade80' },
-        { l: 'PICKUP TODAY',   v: waitlistAnalytics.today.pickup,  c: '#60a5fa' },
-        { l: 'STILL WAITING',  v: waitlistAnalytics.today.waiting, c: '#BA7517' },
-        { l: 'WALKED / NO-SHOW', v: waitlistAnalytics.today.walked, c: '#E24B4A' },
-      ].map(s => (
-        <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '14px 12px', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>{s.l}</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+            </tfoot>
+          </table>
         </div>
-      ))}
-    </div>
 
-    {/* MONTHLY KPIs */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
-      {[
-        { l: 'CONVERSION RATE',       v: `${waitlistAnalytics.month.conversionPct}%`,    c: waitlistAnalytics.month.conversionPct > 70 ? '#4ade80' : waitlistAnalytics.month.conversionPct > 50 ? '#d3bfa2' : '#BA7517' },
-        { l: 'AVG WAIT TIME',         v: `${waitlistAnalytics.month.avgWaitMin} min`,    c: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' },
-        { l: 'PRE-ORDER REVENUE',     v: `₹${waitlistAnalytics.month.preOrderRevenue.toLocaleString()}`, c: '#d3bfa2' },
-        { l: 'NOTIF DELIVERED',       v: `${waitlistAnalytics.month.notifDeliveredPct}%`, c: '#60a5fa' },
-      ].map(s => (
-        <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-          <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
-        </div>
-      ))}
-    </div>
-
-    {/* MODE SPLIT + PARTY SIZE */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-
-      {/* Mode split bar */}
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>MODE SPLIT — {waitlistAnalytics.month.total} TOTAL</div>
-        {waitlistAnalytics.month.total > 0 && (
-          <>
-            <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', gap: '2px' }}>
-              <div style={{ width: `${Math.round((waitlistAnalytics.month.dineIn / waitlistAnalytics.month.total) * 100)}%`, background: '#d3bfa2', borderRadius: '4px 0 0 4px', transition: 'width 0.8s ease' }} />
-              <div style={{ flex: 1, background: '#60a5fa', borderRadius: '0 4px 4px 0' }} />
-            </div>
-            {[
-              { l: 'Dine-in Waitlist', v: waitlistAnalytics.month.dineIn,  seated: waitlistAnalytics.month.seated,  c: '#d3bfa2' },
-              { l: 'Pickup / Takeaway', v: waitlistAnalytics.month.pickup, seated: waitlistAnalytics.month.pickupSettled, c: '#60a5fa' },
-            ].map(s => (
-              <div key={s.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #0d0d0d' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.c }} />
-                  <span style={{ fontSize: '0.68rem', color: '#666' }}>{s.l}</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{s.v}</span>
-                  <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>{s.seated} completed</span>
-                </div>
+        {Object.keys(extraAnalytics.byCategory || {}).length > 1 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
+            {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
+              <div key={cat} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+                <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat}</div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
+                <div style={{ fontSize: '0.62rem', color: '#4ade80', marginTop: '3px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
+                <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units</div>
               </div>
             ))}
-          </>
-        )}
-      </div>
-
-      {/* Party size distribution */}
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>PARTY SIZE DISTRIBUTION</div>
-        {Object.entries(waitlistAnalytics.month.partySizes || {}).map(([size, count]) => {
-          const maxCount = Math.max(...Object.values(waitlistAnalytics.month.partySizes || {}), 1);
-          return (
-            <div key={size} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', minWidth: '24px', textAlign: 'right' }}>{size}</span>
-              <div style={{ flex: 1, height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.round((count / maxCount) * 100)}%`, background: 'rgba(211,191,162,0.6)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
-              </div>
-              <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', minWidth: '24px' }}>{count}</span>
-            </div>
-          );
-        })}
-        {waitlistAnalytics.month.peakHour && (
-          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #111', fontSize: '0.62rem', color: '#555' }}>
-            Peak arrival: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
-              {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
-                : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
-                : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
-                : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
-            </span>
-            <span style={{ color: '#333', marginLeft: '8px' }}>({waitlistAnalytics.month.peakHour.count} groups)</span>
           </div>
         )}
-      </div>
-    </div>
 
-    {/* DAILY TREND SPARKLINE */}
-    {waitlistAnalytics.dailyTrend?.length > 0 && (
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px' }}>DAILY FOOTFALL TREND</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
-          {(() => {
-            const maxVal = Math.max(...waitlistAnalytics.dailyTrend.map(d => d.total), 1);
-            return waitlistAnalytics.dailyTrend.map((d, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
-                title={`${d.date}: ${d.total} groups · ${d.seated} seated · ${d.pickup} pickup · ${d.walked} walked`}>
-                <div style={{
-                  width: '100%', minWidth: 0,
-                  height: `${Math.max(4, Math.round((d.total / maxVal) * 100))}%`,
-                  background: d.walked > d.seated ? 'rgba(226,75,74,0.4)' : d.total > 0 ? 'rgba(211,191,162,0.5)' : '#111',
-                  borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
-                }} />
-              </div>
-            ));
-          })()}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>
-            {waitlistAnalytics.dailyTrend[0]?.date?.slice(5)}
-          </span>
-          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>
-            {waitlistAnalytics.dailyTrend[waitlistAnalytics.dailyTrend.length - 1]?.date?.slice(5)}
-          </span>
-        </div>
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: '16px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #0d0d0d' }}>
-          {[
-            { c: 'rgba(211,191,162,0.5)', l: 'Normal / Good conversion' },
-            { c: 'rgba(226,75,74,0.4)',   l: 'High walk-aways' },
-          ].map(s => (
-            <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '10px', height: '6px', borderRadius: '2px', background: s.c }} />
-              <span style={{ fontSize: '0.55rem', color: '#333', fontWeight: '700' }}>{s.l}</span>
-            </div>
-          ))}
+        <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
+          <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
         </div>
       </div>
     )}
-  </div>
-)}
 
+    {/* ═══════════════════════════════════════════════
+        SECTION 4 — OPERATIONS & RESOURCES
+    ═══════════════════════════════════════════════ */}
+    <SectionHeader icon={<Layers size={16}/>} title="Operations & Resources" subtitle="Tables, staff, and inventory health" />
 
-{/* ── INSIGHT: TOP TABLE REVENUE HOURS ── */}
-{hourlyAnalytics.hourly.length > 0 && (() => {
-  const topHours = [...hourlyAnalytics.hourly].sort((a,b)=>b.revenue-a.revenue).slice(0,3);
-  const fmt = h => h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
-  return (
-    <div style={{...styles.biCard, marginBottom:'20px'}}>
-      <h4 style={styles.biTitle}><Zap size={16}/> REVENUE GOLDEN HOURS — TODAY</h4>
-      <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>Your 3 highest earning hours today. Schedule extra staff and stock accordingly.</p>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px'}}>
-        {topHours.map((h,i)=>(
-          <div key={h.hour} style={{background:'#050505',padding:'16px',borderRadius:'12px',border:`1px solid ${i===0?'rgba(211,191,162,0.3)':'#111'}`,borderTop:`2px solid ${i===0?'#d3bfa2':i===1?'#8a704d':'#333'}`}}>
-            <div style={{fontSize:'0.6rem',color:'#444',fontWeight:'900',marginBottom:'6px'}}>{i===0?'🥇 PEAK':i===1?'🥈 2ND':'🥉 3RD'}</div>
-            <div style={{fontSize:'1.5rem',fontWeight:'900',color:i===0?'#d3bfa2':'#fff'}}>{fmt(h.hour)}</div>
-            <div style={{fontSize:'0.75rem',color:'#4ade80',fontWeight:'800',marginTop:'4px'}}>₹{h.revenue.toLocaleString()}</div>
-            <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{h.orderCount} orders</div>
-          </div>
-        ))}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Layers size={16}/> TABLE PERFORMANCE</h4>
+        {trendsData?.tables?.performance?.length>0 ? trendsData.tables.performance.slice(0,5).map(t=>{
+          const mx=trendsData.tables.performance[0]?.revenue||1;
+          return (
+            <div key={t.table} style={{padding:'10px 0',borderBottom:'1px solid #111'}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:'5px'}}>
+                <span style={{color:'#fff',fontWeight:'900',fontSize:'0.8rem'}}>Table {t.table}</span>
+                <span style={{color:'#d3bfa2',fontWeight:'900',fontSize:'0.8rem'}}>₹{t.revenue.toLocaleString()}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                <div style={{flex:1,height:'4px',background:'#111',borderRadius:'2px',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${Math.round((t.revenue/mx)*100)}%`,background:'#8a704d'}}/>
+                </div>
+                <span style={{fontSize:'0.65rem',color:'#555'}}>{t.turns} turns</span>
+              </div>
+            </div>
+          );
+        }) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
       </div>
-    </div>
-  );
-})()}
-
-
-
-{/* ── INSIGHT: PAYMENT MODE TRENDS ── */}
-{analytics.length > 0 && (() => {
-  const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
-  const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
-  const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
-  const grand  = totalC + totalU + totalK;
-  if (grand === 0) return null;
-  const modes = [
-    { label:'💵 Cash', val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
-    { label:'📱 UPI',  val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
-    { label:'💳 Card', val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
-  ];
-  return (
-    <div style={{...styles.biCard, marginBottom:'20px'}}>
-      <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
-      <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
-        Understanding how customers pay helps optimise cash flow and settlement timing.
-      </p>
-      <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
-        {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'16px'}}>
-        {modes.map(m=>(
-          <div key={m.label} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
-            <div style={{fontSize:'0.72rem',color:'#888',marginBottom:'4px'}}>{m.label}</div>
-            <div style={{fontSize:'1rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
-            <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
-          </div>
-        ))}
-      </div>
-      <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5'}}>
-        💡 <b style={{color:'#d3bfa2'}}>Insight:</b> {
-          totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
-          : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
-          : 'Balanced payment mix — good for cash flow predictability.'
-        }
-      </div>
-    </div>
-  );
-})()}
-
-{/* ── INSIGHT: INVENTORY HEALTH SCORECARD ── */}
-{inventory.length > 0 && (() => {
-  const totalItems   = inventory.length;
-  const lowItems     = inventory.filter(i=>i.currentStock<=i.minThreshold).length;
-  const depletedItems = inventory.filter(i=>i.currentStock<=0).length;
-  const healthyItems = totalItems - lowItems;
-  const healthScore  = Math.round((healthyItems/totalItems)*100);
-  const totalValue   = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
-  const criticals    = inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
-  return (
-    <div style={{...styles.biCard, marginBottom:'20px', borderLeft:`4px solid ${healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}`}}>
-      <h4 style={styles.biTitle}><Layers size={16}/> INVENTORY HEALTH SCORECARD</h4>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 3fr',gap:'20px',marginBottom:'16px',alignItems:'center'}}>
-        <div style={{textAlign:'center',background:'#050505',padding:'20px',borderRadius:'14px',border:'1px solid #111'}}>
-          <div style={{fontSize:'2.5rem',fontWeight:'900',color:healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}}>{healthScore}%</div>
-          <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',marginTop:'4px'}}>STOCK HEALTH</div>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px'}}>
-          {[
-            {l:'TOTAL ITEMS', v:totalItems, c:'#fff'},
-            {l:'HEALTHY', v:healthyItems, c:'#4ade80'},
-            {l:'LOW STOCK', v:lowItems, c:'#BA7517'},
-            {l:'DEPLETED', v:depletedItems, c:'#c0392b'},
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Timer size={16}/> AVG DWELL TIME</h4>
+        {trendsData?.tables ? (
+          [{label:'AVG DWELL',val:trendsData.tables.overallAvgDwell>0?`${trendsData.tables.overallAvgDwell} min`:'—'},
+           {label:'FASTEST',val:trendsData.tables.fastest?`T${trendsData.tables.fastest.table} · ${trendsData.tables.fastest.avgDwell}m`:'—'},
+           {label:'SLOWEST',val:trendsData.tables.slowest?`T${trendsData.tables.slowest.table} · ${trendsData.tables.slowest.avgDwell}m`:'—'}
           ].map(s=>(
-            <div key={s.l} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
-              <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'3px'}}>{s.l}</div>
-              <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+            <div key={s.label} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
+              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.label}</small>
+              <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#fff'}}>{s.val}</span>
+            </div>
+          ))
+        ) : <div style={{opacity:0.3,fontSize:'0.75rem',paddingTop:'30px',textAlign:'center'}}>NO DATA</div>}
+      </div>
+    </div>
+
+    {/* STAFF EFFICIENCY */}
+    {staffEfficiency.length > 0 && (
+      <div style={{ ...styles.biCard, marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h4 style={{ ...styles.biTitle, margin: 0 }}>
+            <Zap size={16} /> STAFF EFFICIENCY — {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          </h4>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900' }}>
+              SHOWING: {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
+            </div>
+            <button
+              onClick={() => {
+                const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+                fetchMonthlySalary(monthStr);
+                fetchAnalytics();
+                showNotif('Staff data refreshed');
+              }}
+              style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '6px 12px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}
+            >
+              ↻ REFRESH
+            </button>
+          </div>
+        </div>
+
+        {(() => {
+          const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+          const totalHrs = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
+          const paidCount = staffEfficiency.filter(s => {
+            const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+            return (rec?.status || s.salaryStatus) === 'Paid';
+          }).length;
+          const pendingPay = filteredStaff.reduce((acc, m) => {
+            const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
+            return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
+          }, 0);
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+              {[
+                { l: 'TOTAL STAFF', v: staffEfficiency.length, c: '#d3bfa2' },
+                { l: 'HOURS LOGGED', v: `${totalHrs.toFixed(1)}h`, c: '#4ade80' },
+                { l: 'SALARIES PAID', v: `${paidCount}/${staffEfficiency.length}`, c: paidCount === staffEfficiency.length ? '#4ade80' : '#BA7517' },
+                { l: 'PENDING PAYROLL', v: `₹${pendingPay.toLocaleString()}`, c: pendingPay > 0 ? '#BA7517' : '#4ade80' }
+              ].map(s => (
+                <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
+                  <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        <div style={{ overflowX: 'auto' }} className="custom-scroll">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                {['Name', 'Role', 'Days Present', 'Hours', 'Rev/Hour', 'Base Salary', 'Payroll Status'].map(h => (
+                  <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {staffEfficiency.map(s => {
+                const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+                const monthRec = monthlySalaryRecords.find(r =>
+                  r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
+                );
+                const salaryStatus = monthRec?.status || s.salaryStatus || 'Unpaid';
+                const isPaid = salaryStatus === 'Paid';
+                const recordedSalary = monthRec?.baseSalary || s.baseSalary;
+                const attendancePct = Math.round((s.daysPresent / 26) * 100);
+
+                return (
+                  <tr key={s._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
+                    <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{s.name}</td>
+                    <td style={{ color: '#555', fontWeight: '800' }}>{s.role}</td>
+                    <td style={{ paddingRight: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{s.daysPresent}d</span>
+                        <div style={{ flex: 1, height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden', minWidth: '40px' }}>
+                          <div style={{ height: '100%', width: `${Math.min(100, attendancePct)}%`, background: attendancePct >= 80 ? '#4ade80' : attendancePct >= 50 ? '#d3bfa2' : '#BA7517', borderRadius: '2px', transition: 'width 0.6s ease' }} />
+                        </div>
+                        <span style={{ fontSize: '0.58rem', color: '#444' }}>{attendancePct}%</span>
+                      </div>
+                    </td>
+                    <td style={{ color: '#888' }}>{s.totalHours}h</td>
+                    <td style={{ fontWeight: '900', color: s.revenuePerHour > 0 ? '#d3bfa2' : '#333' }}>
+                      {s.revenuePerHour > 0 ? `₹${s.revenuePerHour.toLocaleString()}` : '—'}
+                    </td>
+                    <td style={{ color: '#fff' }}>₹{Number(recordedSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small></td>
+                    <td>
+                      <select
+                        value={salaryStatus}
+                        onChange={async e => {
+                          const newStatus = e.target.value;
+                          await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`, { status: newStatus });
+                          fetchMonthlySalary(monthStr);
+                          showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
+                        }}
+                        style={{
+                          background: '#000',
+                          color: isPaid ? '#d3bfa2' : '#444',
+                          border: isPaid ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
+                          padding: '6px 10px', borderRadius: '6px',
+                          fontSize: '0.65rem', fontWeight: '900',
+                          outline: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        <option value="Unpaid">UNPAID</option>
+                        <option value="Paid">PAID</option>
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
+                <td colSpan="4" style={{ padding: '14px 0' }} />
+                <td colSpan="2" style={{ padding: '14px 12px', fontSize: '0.65rem', fontWeight: '900', color: '#8a704d', textTransform: 'uppercase' }}>
+                  PENDING PAYROLL:
+                </td>
+                <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
+                  ₹{totalPayrollValue.toLocaleString()}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    )}
+
+    {/* INVENTORY HEALTH SCORECARD */}
+    {inventory.length > 0 && (() => {
+      const totalItems   = inventory.length;
+      const lowItems     = inventory.filter(i=>i.currentStock<=i.minThreshold).length;
+      const depletedItems = inventory.filter(i=>i.currentStock<=0).length;
+      const healthyItems = totalItems - lowItems;
+      const healthScore  = Math.round((healthyItems/totalItems)*100);
+      const criticals    = inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
+      return (
+        <div style={{...styles.biCard, marginBottom:'20px', borderLeft:`4px solid ${healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}`}}>
+          <h4 style={styles.biTitle}><Layers size={16}/> INVENTORY HEALTH SCORECARD</h4>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 3fr',gap:'20px',marginBottom:'16px',alignItems:'center'}}>
+            <div style={{textAlign:'center',background:'#050505',padding:'20px',borderRadius:'14px',border:'1px solid #111'}}>
+              <div style={{fontSize:'2.5rem',fontWeight:'900',color:healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}}>{healthScore}%</div>
+              <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',marginTop:'4px'}}>STOCK HEALTH</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px'}}>
+              {[
+                {l:'TOTAL ITEMS', v:totalItems, c:'#fff'},
+                {l:'HEALTHY', v:healthyItems, c:'#4ade80'},
+                {l:'LOW STOCK', v:lowItems, c:'#BA7517'},
+                {l:'DEPLETED', v:depletedItems, c:'#c0392b'},
+              ].map(s=>(
+                <div key={s.l} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
+                  <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'3px'}}>{s.l}</div>
+                  <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {criticals.length > 0 && (
+            <div style={{background:'rgba(192,57,43,0.04)',border:'1px solid rgba(192,57,43,0.15)',borderRadius:'10px',padding:'14px'}}>
+              <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                <AlertTriangle size={12}/> NEEDS IMMEDIATE RESTOCK
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
+                {criticals.map(item=>(
+                  <div key={item._id} style={{background:'#050505',padding:'10px',borderRadius:'8px',border:'1px solid #1a1a1a'}}>
+                    <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{item.itemName}</div>
+                    <div style={{fontSize:'0.62rem',color:'#c0392b',marginTop:'2px'}}>{item.currentStock<=0?'OUT OF STOCK':`Only ${item.currentStock} ${item.unit} left`}</div>
+                    <div style={{fontSize:'0.58rem',color:'#444',marginTop:'1px'}}>Min: {item.minThreshold} {item.unit}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* INGREDIENT COST INTELLIGENCE */}
+    {profitabilityData.length > 0 && inventory.length > 0 && (() => {
+      const lowStockItems = inventory.filter(i => i.currentStock < 0);
+      const negativeStockValue = lowStockItems.reduce((a, i) => a + Math.abs(i.currentStock * (i.weightedAvgCost || i.costPrice || 0)), 0);
+      const totalCostAllDishes = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
+      const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+
+      return (
+        <div style={{ ...styles.biCard, marginBottom: '20px' }}>
+          <h4 style={styles.biTitle}><AlertTriangle size={16} /> INGREDIENT COST INTELLIGENCE</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>RECIPE-BASED FOOD COST</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: totalCostAllDishes / Math.max(totalRevAllDishes, 1) > 0.4 ? '#BA7517' : '#4ade80' }}>
+                {totalRevAllDishes > 0 ? `${Math.round((totalCostAllDishes / totalRevAllDishes) * 100)}%` : '—'}
+              </div>
+              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>of revenue · ideal: {'<'}35%</div>
+            </div>
+            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>OVER-DEPLETED STOCK</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: lowStockItems.length > 0 ? '#c0392b' : '#4ade80' }}>
+                {lowStockItems.length} items
+              </div>
+              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>stock below zero — check recipes</div>
+            </div>
+            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>EST. DEPLETION COST</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: negativeStockValue > 0 ? '#BA7517' : '#4ade80' }}>
+                ₹{Math.round(negativeStockValue).toLocaleString()}
+              </div>
+              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>untracked ingredient usage</div>
+            </div>
+          </div>
+          {lowStockItems.length > 0 && (
+            <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(192,57,43,0.05)', border: '1px solid rgba(192,57,43,0.2)', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.6rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px', display:'flex', alignItems:'center', gap:'6px' }}>
+                <AlertTriangle size={12}/> OVER-DEPLETED INGREDIENTS (stock negative)
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {lowStockItems.map((i, idx) => (
+                  <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: '4px', color: '#c0392b', fontWeight: '800' }}>
+                    {i.itemName}: {i.currentStock.toFixed(1)} {i.unit}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* ═══════════════════════════════════════════════
+        SECTION 5 — CUSTOMERS & CHANNELS
+    ═══════════════════════════════════════════════ */}
+    <SectionHeader icon={<Users size={16}/>} title="Customers & Channels" subtitle="Retention, acquisition, and where revenue comes from" />
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><User size={16}/> REPEAT VS NEW CUSTOMERS</h4>
+        {trendsData?.customers?.total>0 ? (<>
+          <div style={{display:'flex',height:'8px',borderRadius:'4px',overflow:'hidden',marginBottom:'16px'}}>
+            <div style={{width:`${trendsData.customers.repeatPct}%`,background:'#d3bfa2',transition:'width 0.8s ease'}}/>
+            <div style={{flex:1,background:'#1a1a1a'}}/>
+          </div>
+          {[
+            {l:'TOTAL CUSTOMERS',v:trendsData.customers.total,c:'#fff'},
+            {l:'REPEAT VISITORS',v:`${trendsData.customers.repeat} (${trendsData.customers.repeatPct}%)`,c:'#d3bfa2'},
+            {l:'NEW CUSTOMERS',v:trendsData.customers.new,c:'#888'},
+            {l:'AVG VISITS',v:trendsData.customers.avgVisits+'x',c:'#fff'},
+          ].map(s=>(
+            <div key={s.l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #111'}}>
+              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.l}</small>
+              <span style={{fontSize:'0.8rem',fontWeight:'900',color:s.c}}>{s.v}</span>
+            </div>
+          ))}
+        </>) : <div style={{textAlign:'center',padding:'20px',fontSize:'0.75rem',color:'#444'}}>Start capturing customer phone numbers at billing to unlock retention metrics.</div>}
+      </div>
+      <div style={styles.biCard}>
+        <h4 style={styles.biTitle}><Globe size={16}/> REVENUE SOURCES</h4>
+        {Object.entries(advancedStats.sources).map(([src,val])=>(
+          <div key={src} style={styles.sourceRow}>
+            <span style={{textTransform:'capitalize',width:'80px'}}>{src}</span>
+            <div style={styles.progressBg}><div style={{...styles.progressFill,width:`${(val/(stats.revenue||1))*100}%`}}/></div>
+            <span style={{minWidth:'60px',textAlign:'right'}}>₹{val.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* WAITLIST & COUNTER — MONTHLY (mode split, party size, daily trend) */}
+    {waitlistAnalytics && (
+      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+        <h4 style={styles.biTitle}>
+          <Users size={16} /> WAITLIST & COUNTER — MONTHLY BREAKDOWN
+          <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
+            {waitlistAnalytics.month?.monthLabel}
+          </span>
+        </h4>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
+          {[
+            { l: 'CONVERSION RATE',       v: `${waitlistAnalytics.month.conversionPct}%`,    c: waitlistAnalytics.month.conversionPct > 70 ? '#4ade80' : waitlistAnalytics.month.conversionPct > 50 ? '#d3bfa2' : '#BA7517' },
+            { l: 'AVG WAIT TIME',         v: `${waitlistAnalytics.month.avgWaitMin} min`,    c: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' },
+            { l: 'PRE-ORDER REVENUE',     v: `₹${waitlistAnalytics.month.preOrderRevenue.toLocaleString()}`, c: '#d3bfa2' },
+            { l: 'NOTIF DELIVERED',       v: `${waitlistAnalytics.month.notifDeliveredPct}%`, c: '#60a5fa' },
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
             </div>
           ))}
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>MODE SPLIT — {waitlistAnalytics.month.total} TOTAL</div>
+            {waitlistAnalytics.month.total > 0 && (
+              <>
+                <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', gap: '2px' }}>
+                  <div style={{ width: `${Math.round((waitlistAnalytics.month.dineIn / waitlistAnalytics.month.total) * 100)}%`, background: '#d3bfa2', borderRadius: '4px 0 0 4px', transition: 'width 0.8s ease' }} />
+                  <div style={{ flex: 1, background: '#60a5fa', borderRadius: '0 4px 4px 0' }} />
+                </div>
+                {[
+                  { l: 'Dine-in Waitlist', v: waitlistAnalytics.month.dineIn,  seated: waitlistAnalytics.month.seated,  c: '#d3bfa2' },
+                  { l: 'Pickup / Takeaway', v: waitlistAnalytics.month.pickup, seated: waitlistAnalytics.month.pickupSettled, c: '#60a5fa' },
+                ].map(s => (
+                  <div key={s.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #0d0d0d' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.c }} />
+                      <span style={{ fontSize: '0.68rem', color: '#666' }}>{s.l}</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{s.v}</span>
+                      <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>{s.seated} completed</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>PARTY SIZE DISTRIBUTION</div>
+            {Object.entries(waitlistAnalytics.month.partySizes || {}).map(([size, count]) => {
+              const maxCount = Math.max(...Object.values(waitlistAnalytics.month.partySizes || {}), 1);
+              return (
+                <div key={size} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', minWidth: '24px', textAlign: 'right' }}>{size}</span>
+                  <div style={{ flex: 1, height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.round((count / maxCount) * 100)}%`, background: 'rgba(211,191,162,0.6)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                  </div>
+                  <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', minWidth: '24px' }}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {waitlistAnalytics.dailyTrend?.length > 0 && (
+          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px' }}>DAILY FOOTFALL TREND</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
+              {(() => {
+                const maxVal = Math.max(...waitlistAnalytics.dailyTrend.map(d => d.total), 1);
+                return waitlistAnalytics.dailyTrend.map((d, i) => (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
+                    title={`${d.date}: ${d.total} groups · ${d.seated} seated · ${d.pickup} pickup · ${d.walked} walked`}>
+                    <div style={{
+                      width: '100%', minWidth: 0,
+                      height: `${Math.max(4, Math.round((d.total / maxVal) * 100))}%`,
+                      background: d.walked > d.seated ? 'rgba(226,75,74,0.4)' : d.total > 0 ? 'rgba(211,191,162,0.5)' : '#111',
+                      borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
+                    }} />
+                  </div>
+                ));
+              })()}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+              <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{waitlistAnalytics.dailyTrend[0]?.date?.slice(5)}</span>
+              <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{waitlistAnalytics.dailyTrend[waitlistAnalytics.dailyTrend.length - 1]?.date?.slice(5)}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #0d0d0d' }}>
+              {[
+                { c: 'rgba(211,191,162,0.5)', l: 'Normal / Good conversion' },
+                { c: 'rgba(226,75,74,0.4)',   l: 'High walk-aways' },
+              ].map(s => (
+                <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '6px', borderRadius: '2px', background: s.c }} />
+                  <span style={{ fontSize: '0.55rem', color: '#333', fontWeight: '700' }}>{s.l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-      {criticals.length > 0 && (
-        <div style={{background:'rgba(192,57,43,0.04)',border:'1px solid rgba(192,57,43,0.15)',borderRadius:'10px',padding:'14px'}}>
-          <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px'}}>⚠ NEEDS IMMEDIATE RESTOCK</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
-            {criticals.map(item=>(
-              <div key={item._id} style={{background:'#050505',padding:'10px',borderRadius:'8px',border:'1px solid #1a1a1a'}}>
-                <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{item.itemName}</div>
-                <div style={{fontSize:'0.62rem',color:'#c0392b',marginTop:'2px'}}>{item.currentStock<=0?'OUT OF STOCK':`Only ${item.currentStock} ${item.unit} left`}</div>
-                <div style={{fontSize:'0.58rem',color:'#444',marginTop:'1px'}}>Min: {item.minThreshold} {item.unit}</div>
+    )}
+
+    {/* PAYMENT MODE — full detail card */}
+    {analytics.length > 0 && (() => {
+      const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+      const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+      const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+      const grand  = totalC + totalU + totalK;
+      if (grand === 0) return null;
+      const modes = [
+        { label:'Cash', icon:<Banknote size={14}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
+        { label:'UPI',  icon:<Smartphone size={14}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
+        { label:'Card', icon:<CreditCard size={14}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
+      ];
+      return (
+        <div style={{...styles.biCard, marginBottom:'20px'}}>
+          <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
+          <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
+            Understanding how customers pay helps optimise cash flow and settlement timing.
+          </p>
+          <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
+            {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'16px'}}>
+            {modes.map(m=>(
+              <div key={m.label} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'7px',fontSize:'0.72rem',color:'#888',marginBottom:'4px'}}>{m.icon} {m.label}</div>
+                <div style={{fontSize:'1rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
+                <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
               </div>
             ))}
           </div>
+          <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5',display:'flex',alignItems:'flex-start',gap:'8px'}}>
+            <Lightbulb size={14} color="#d3bfa2" style={{flexShrink:0,marginTop:'1px'}}/>
+            <span><b style={{color:'#d3bfa2'}}>Insight:</b> {
+              totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
+              : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
+              : 'Balanced payment mix — good for cash flow predictability.'
+            }</span>
+          </div>
         </div>
-      )}
-    </div>
-  );
-})()}
-            </motion.div>
-          )}
+      );
+    })()}
 
+  </motion.div>
+)}
           {/* ── MANAGEMENT ── */}
           {activeTab==='management' && (
             <motion.div key="management" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{duration:0.4}}

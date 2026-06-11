@@ -63,6 +63,8 @@ const [cart, setCart] = useState(() => {
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
+  const [orderTrackingPanelOpen, setOrderTrackingPanelOpen] = useState(false);
+
 // { orderId: 'pending' | 'ready' | 'served' }
 
   const [alert, setAlert] = useState({ show: false, msg: '', type: 'success' });
@@ -3708,60 +3710,276 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         </AnimatePresence>
       </motion.div>
 
-{/* ── ORDER STATUS BANNER ── */}
-{hasPlacedInitialOrder && !isCounterScan && Object.keys(liveOrderStatuses).length > 0 && (
-  <div style={{
-    margin: '0 20px 12px',
-    background: '#0c0c0c',
-    border: '1px solid rgba(211,191,162,0.1)',
-    borderRadius: '16px',
-    overflow: 'hidden'
-  }}>
-    <div style={{
-      padding: '10px 16px',
-      background: 'rgba(211,191,162,0.04)',
-      borderBottom: '1px solid rgba(211,191,162,0.08)',
-      fontSize: '0.52rem', fontWeight: '900',
-      color: 'rgba(211,191,162,0.35)',
-      letterSpacing: '2px', textTransform: 'uppercase'
-    }}>
-      ORDER STATUS — TABLE {tableNumber}
-    </div>
-    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {Object.entries(liveOrderStatuses).map(([orderId, status]) => {
-        const steps = ['pending', 'ready', 'served'];
-        const stepIdx = steps.indexOf(status);
-        const labels = { pending: 'In Kitchen 🍳', ready: 'Ready! 🍽️', served: 'Served ✓' };
-        const colors = { pending: '#8a704d', ready: '#d3bfa2', served: '#555' };
-        return (
-          <div key={orderId} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+
+{/* ── ORDER STATUS BANNER — tap to expand tracking panel ── */}
+{hasPlacedInitialOrder && !isCounterScan && Object.keys(liveOrderStatuses).length > 0 && (() => {
+  const statuses = Object.values(liveOrderStatuses);
+  const hasReady  = statuses.some(s => s === 'ready');
+  const hasPending = statuses.some(s => s === 'pending');
+  const allServed  = statuses.every(s => s === 'served');
+  const activeStatus = hasReady ? 'ready' : hasPending ? 'pending' : 'served';
+
+  const statusMeta = {
+    pending: { label: language === 'mr' ? 'किचनमध्ये बनत आहे' : 'In the kitchen', sub: language === 'mr' ? 'थोडा वेळ लागेल' : 'Being prepared now', icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: true },
+    ready:   { label: language === 'mr' ? 'तयार आहे!' : 'Ready!', sub: language === 'mr' ? 'कृपया घ्या' : 'Please collect your order', icon: <CheckCircle2 size={14} color="#6dba96" strokeWidth={2} />, pulse: false },
+    served:  { label: language === 'mr' ? 'सर्व्ह केले' : 'All served', sub: language === 'mr' ? 'आनंद घ्या!' : 'Enjoy your meal!', icon: <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: false },
+  };
+  const meta = statusMeta[activeStatus];
+
+  return (
+    <>
+      {/* STICKY BANNER */}
+      <motion.div
+        onClick={() => setOrderTrackingPanelOpen(true)}
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{
+          margin: '0 16px 12px',
+          background: hasReady ? 'rgba(45,106,79,0.12)' : '#0c0c0c',
+          border: `1px solid ${hasReady ? 'rgba(109,186,150,0.3)' : 'rgba(211,191,162,0.1)'}`,
+          borderRadius: '16px', overflow: 'hidden', cursor: 'pointer'
+        }}
+      >
+        <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Pulse dot or icon */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
             <div style={{
-              fontSize: '0.7rem', fontWeight: '900',
-              color: colors[status] || '#555',
-              padding: '4px 10px',
-              background: `rgba(211,191,162,${stepIdx === 1 ? '0.1' : '0.04'})`,
-              border: `1px solid rgba(211,191,162,${stepIdx === 1 ? '0.25' : '0.08'})`,
-              borderRadius: '20px'
+              width: '36px', height: '36px', borderRadius: '10px',
+              background: hasReady ? 'rgba(109,186,150,0.1)' : 'rgba(211,191,162,0.06)',
+              border: `1px solid ${hasReady ? 'rgba(109,186,150,0.2)' : 'rgba(211,191,162,0.1)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              {labels[status] || status}
+              {meta.icon}
             </div>
-            {/* Progress dots */}
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              {steps.map((s, i) => (
-                <div key={s} style={{
-                  width: i <= stepIdx ? '18px' : '6px',
-                  height: '6px', borderRadius: '3px',
-                  background: i <= stepIdx ? 'rgba(211,191,162,0.6)' : 'rgba(211,191,162,0.1)',
-                  transition: 'all 0.4s ease'
-                }} />
-              ))}
+            {meta.pulse && (
+              <motion.div
+                animate={{ scale: [1, 1.6, 1], opacity: [0.6, 0, 0.6] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                style={{
+                  position: 'absolute', inset: 0, borderRadius: '10px',
+                  border: '1px solid rgba(211,191,162,0.35)', pointerEvents: 'none'
+                }}
+              />
+            )}
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: '900', color: hasReady ? '#6dba96' : '#d3bfa2', marginBottom: '2px' }}>
+              {meta.label}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.22)', fontWeight: '500' }}>
+              {meta.sub}
             </div>
           </div>
-        );
-      })}
-    </div>
-  </div>
-)}
+
+          {/* Progress mini bar */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '3px' }}>
+              {['pending','ready','served'].map((s, i) => {
+                const stepIdx = ['pending','ready','served'].indexOf(activeStatus);
+                return (
+                  <div key={s} style={{
+                    width: i <= stepIdx ? '14px' : '5px', height: '5px',
+                    borderRadius: '2.5px', transition: 'all 0.4s',
+                    background: i <= stepIdx
+                      ? (s === 'ready' || activeStatus === 'ready' ? 'rgba(109,186,150,0.7)' : 'rgba(211,191,162,0.5)')
+                      : 'rgba(255,255,255,0.07)'
+                  }} />
+                );
+              })}
+            </div>
+            <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.3px' }}>
+              {language === 'mr' ? 'तपशील पहा' : 'View details'}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── FULL TRACKING PANEL (slide up) ── */}
+      <AnimatePresence>
+        {orderTrackingPanelOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 7500,
+              background: 'rgba(0,0,0,0.88)',
+              display: 'flex', alignItems: 'flex-end',
+              justifyContent: 'center', padding: '0 0 20px',
+              fontFamily: 'Poppins, sans-serif'
+            }}
+            onClick={() => setOrderTrackingPanelOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              transition={{ type: 'spring', damping: 26 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: '440px',
+                background: '#0c0c0c',
+                border: '1px solid rgba(211,191,162,0.12)',
+                borderRadius: '24px 24px 18px 18px',
+                overflow: 'hidden', margin: '0 14px'
+              }}
+            >
+              <div style={{ height: '2px', background: 'linear-gradient(90deg,transparent,rgba(211,191,162,0.5),transparent)' }} />
+
+              {/* Panel header */}
+              <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(211,191,162,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                    {language === 'mr' ? 'ऑर्डर स्थिती' : 'Order Tracking'}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    <MapPin size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />
+                    {language === 'mr' ? `टेबल ${tableNumber}` : `Table ${tableNumber}`}
+                  </div>
+                </div>
+                <button onClick={() => setOrderTrackingPanelOpen(false)} style={{
+                  width: '30px', height: '30px', borderRadius: '9px',
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#555', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* PIPELINE VISUAL */}
+              <div style={{ padding: '20px 18px' }}>
+                {/* 3-step timeline */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', position: 'relative' }}>
+                  {/* Connecting line behind */}
+                  <div style={{ position: 'absolute', top: '18px', left: '10%', right: '10%', height: '1px', background: 'rgba(255,255,255,0.06)', zIndex: 0 }} />
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ width: activeStatus === 'pending' ? '15%' : activeStatus === 'ready' ? '55%' : '80%' }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                    style={{ position: 'absolute', top: '18px', left: '10%', height: '1px', background: 'linear-gradient(90deg,#c9a84c,rgba(211,191,162,0.4))', zIndex: 0 }}
+                  />
+
+                  {[
+                    { key: 'pending', label: language === 'mr' ? 'ऑर्डर\nमिळाली' : 'Order\nReceived',  icon: <ReceiptText size={16} strokeWidth={1.5} /> },
+                    { key: 'pending', label: language === 'mr' ? 'किचनमध्ये\nबनत आहे' : 'In the\nKitchen', icon: <Flame size={16} strokeWidth={1.5} /> },
+                    { key: 'ready',   label: language === 'mr' ? 'तयार /\nसर्व्ह' : 'Ready /\nServed',  icon: <CheckCircle2 size={16} strokeWidth={1.5} /> },
+                  ].map((step, i) => {
+                    const stepIdx = ['pending','ready','served'].indexOf(activeStatus);
+                    const reached = i <= stepIdx || (i === 1 && ['pending','ready','served'].includes(activeStatus));
+                    const isActive = (i === 0 && activeStatus === 'pending') || (i === 1 && activeStatus === 'pending') || (i === 2 && (activeStatus === 'ready' || activeStatus === 'served'));
+                    return (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', zIndex: 1 }}>
+                        <motion.div
+                          animate={isActive && activeStatus === 'pending' && i === 1 ? { scale: [1, 1.1, 1] } : {}}
+                          transition={{ repeat: Infinity, duration: 2 }}
+                          style={{
+                            width: '36px', height: '36px', borderRadius: '10px',
+                            background: reached
+                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(45,106,79,0.25)' : 'rgba(211,191,162,0.1)')
+                              : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${reached
+                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(109,186,150,0.35)' : 'rgba(211,191,162,0.25)')
+                              : 'rgba(255,255,255,0.07)'}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: reached
+                              ? (activeStatus === 'ready' && i === 2 ? '#6dba96' : '#d3bfa2')
+                              : 'rgba(255,255,255,0.15)',
+                            transition: 'all 0.4s'
+                          }}
+                        >
+                          {step.icon}
+                        </motion.div>
+                        <div style={{
+                          fontSize: '0.54rem', fontWeight: '700', textAlign: 'center', lineHeight: 1.4,
+                          color: reached ? (activeStatus === 'ready' && i === 2 ? '#6dba96' : 'rgba(255,255,255,0.5)') : 'rgba(255,255,255,0.15)',
+                          whiteSpace: 'pre-line', transition: 'all 0.4s'
+                        }}>
+                          {step.label}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* INDIVIDUAL ORDER ROWS */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                  {Object.entries(liveOrderStatuses).map(([orderId, status], idx) => {
+                    const stepIdx = ['pending','ready','served'].indexOf(status);
+                    const statusColor = { pending: '#8a704d', ready: '#6dba96', served: '#555' };
+                    const statusIcon  = {
+                      pending: <Flame size={11} color="#8a704d" strokeWidth={1.5} />,
+                      ready:   <CheckCircle2 size={11} color="#6dba96" strokeWidth={2} />,
+                      served:  <Sparkles size={11} color="#555" strokeWidth={1.5} />
+                    };
+                    const statusLabel = {
+                      pending: language === 'mr' ? 'बनत आहे' : 'Preparing',
+                      ready:   language === 'mr' ? 'तयार आहे!' : 'Ready!',
+                      served:  language === 'mr' ? 'सर्व्ह केले' : 'Served'
+                    };
+                    return (
+                      <div key={orderId} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '10px 13px',
+                        background: status === 'ready' ? 'rgba(45,106,79,0.08)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${status === 'ready' ? 'rgba(109,186,150,0.15)' : 'rgba(211,191,162,0.07)'}`,
+                        borderRadius: '11px', transition: 'all 0.3s'
+                      }}>
+                        <div style={{
+                          width: '26px', height: '26px', borderRadius: '7px', flexShrink: 0,
+                          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.56rem', fontWeight: '900', color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace'
+                        }}>
+                          #{idx + 1}
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {statusIcon[status]}
+                          <span style={{ fontSize: '0.72rem', fontWeight: '800', color: statusColor[status] || '#555' }}>
+                            {statusLabel[status]}
+                          </span>
+                        </div>
+                        {/* Mini progress */}
+                        <div style={{ display: 'flex', gap: '3px' }}>
+                          {['pending','ready','served'].map((s, i) => (
+                            <div key={s} style={{
+                              width: i <= stepIdx ? '12px' : '4px', height: '4px', borderRadius: '2px',
+                              background: i <= stepIdx
+                                ? (s === 'ready' ? 'rgba(109,186,150,0.6)' : 'rgba(211,191,162,0.45)')
+                                : 'rgba(255,255,255,0.07)',
+                              transition: 'all 0.4s'
+                            }} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* EST TIME note */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '9px',
+                  padding: '10px 13px',
+                  background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)',
+                  borderRadius: '11px'
+                }}>
+                  <Timer size={13} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+                  <p style={{ margin: 0, fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6, fontWeight: '500' }}>
+                    {activeStatus === 'ready'
+                      ? (language === 'mr' ? 'तुमची ऑर्डर टेबलवर येत आहे.' : 'Your order is on its way to your table.')
+                      : activeStatus === 'served'
+                      ? (language === 'mr' ? 'आनंद घ्या!' : 'Enjoy your meal!')
+                      : (language === 'mr' ? 'सामान्यत: १५–२५ मिनिटे लागतात.' : 'Typically ready in 15–25 minutes.')}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+})()}
       {/* FABs RIGHT SIDE */}
 {/* FABs RIGHT SIDE */}
 <div style={styles.rightFabContainer}>
@@ -4384,7 +4602,7 @@ onClick={isCounterScan
       exit={{ opacity: 0 }}
       style={{
         position: 'fixed', inset: 0, zIndex: 8000,
-        background: 'rgba(0,0,0,0.9)',
+        background: 'rgba(0,0,0,0.92)',
         display: 'flex', alignItems: 'flex-end',
         justifyContent: 'center', padding: '0 0 20px',
         fontFamily: 'Poppins, sans-serif'
@@ -4408,16 +4626,15 @@ onClick={isCounterScan
         {/* Gold shimmer top line */}
         <div style={{ height: '2px', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.7), transparent)', flexShrink: 0 }} />
 
-        {/* HERO HEADER */}
+        {/* HEADER */}
         <div style={{
-          padding: '22px 22px 18px',
-          background: 'linear-gradient(180deg, rgba(211,191,162,0.07) 0%, transparent 100%)',
+          padding: '20px 20px 16px',
+          background: 'linear-gradient(180deg, rgba(211,191,162,0.06) 0%, transparent 100%)',
           borderBottom: '1px solid rgba(211,191,162,0.07)',
           position: 'relative'
         }}>
-          {/* Dismiss button */}
           <button onClick={() => setWelcomeDismissed(true)} style={{
-            position: 'absolute', top: '18px', right: '18px',
+            position: 'absolute', top: '16px', right: '16px',
             width: '28px', height: '28px', borderRadius: '8px',
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
             color: '#555', cursor: 'pointer',
@@ -4427,40 +4644,44 @@ onClick={isCounterScan
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginRight: '36px' }}>
-            {/* Avatar with loyalty tier */}
+            {/* Avatar icon — Lucide, no emoji */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <div style={{
-                width: '56px', height: '56px', borderRadius: '18px',
-                background: 'rgba(211,191,162,0.08)',
-                border: '1px solid rgba(211,191,162,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.8rem'
+                width: '54px', height: '54px', borderRadius: '16px',
+                background: 'rgba(211,191,162,0.07)',
+                border: '1px solid rgba(211,191,162,0.18)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                {welcomeCard.isLoyal ? '🏅' : welcomeCard.visitCount >= 2 ? '⭐' : '👋'}
+                {welcomeCard.isLoyal
+                  ? <Sparkles size={24} color="#d3bfa2" strokeWidth={1.5} />
+                  : welcomeCard.visitCount >= 2
+                  ? <UserCheck size={24} color="#d3bfa2" strokeWidth={1.5} />
+                  : <Users size={24} color="#d3bfa2" strokeWidth={1.5} />}
               </div>
-              {/* Visit count badge */}
               {welcomeCard.visitCount > 1 && (
                 <div style={{
-                  position: 'absolute', bottom: '-6px', right: '-6px',
-                  background: 'rgba(211,191,162,0.9)',
-                  color: '#000', fontSize: '0.5rem', fontWeight: '900',
-                  padding: '2px 6px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.2)'
+                  position: 'absolute', bottom: '-5px', right: '-5px',
+                  background: '#d3bfa2', color: '#000',
+                  fontSize: '0.48rem', fontWeight: '900',
+                  padding: '2px 5px', borderRadius: '8px',
+                  border: '1.5px solid #0c0c0c', fontFamily: 'monospace'
                 }}>
                   {welcomeCard.visitCount}×
                 </div>
               )}
             </div>
 
-            {/* Greeting */}
             <div>
-              <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                {welcomeCard.isLoyal ? 'LOYAL GUEST 🏅' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK!' : 'WELCOME'}
+              <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                {welcomeCard.isLoyal ? 'LOYAL GUEST' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK' : 'WELCOME'}
               </div>
-              <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-                {language === 'en' ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ` : 'नमस्कार, '}
-                {welcomeCard.name?.split(' ')[0]}!
+              <div style={{ fontSize: '1.12rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
+                {language === 'en'
+                  ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${welcomeCard.name?.split(' ')[0]}!`
+                  : `नमस्कार, ${welcomeCard.name?.split(' ')[0]}!`}
               </div>
-              <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', marginTop: '3px', fontWeight: '500' }}>
+              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.18)', marginTop: '3px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <MapPin size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
                 {restaurantData?.name}
               </div>
             </div>
@@ -4468,73 +4689,62 @@ onClick={isCounterScan
         </div>
 
         {/* BODY */}
-        <div style={{ padding: '18px 20px 20px' }}>
+        <div style={{ padding: '16px 18px 18px' }}>
 
-          {/* ── STATS ROW ── */}
+          {/* ── STATS ROW — icons only, no emoji ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '14px' }}>
             {[
-              {
-                icon: '🍽️',
-                label: language === 'mr' ? 'भेटी' : 'Visits',
-                val: welcomeCard.visitCount || 1,
-                mono: true
-              },
-              {
-                icon: '💰',
-                label: language === 'mr' ? 'एकूण खर्च' : 'Total Spent',
-                val: welcomeCard.totalSpend > 0 ? `₹${welcomeCard.totalSpend.toLocaleString()}` : '—',
-                gold: true
-              },
-              {
-                icon: '📅',
-                label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit',
-                val: welcomeCard.lastVisit
-                  ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                  : '—',
-                small: true
-              }
+              { icon: <Utensils size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'भेटी' : 'Visits', val: welcomeCard.visitCount || 1, mono: true },
+              { icon: <ReceiptText size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'एकूण खर्च' : 'Total Spent', val: welcomeCard.totalSpend > 0 ? `₹${(welcomeCard.totalSpend).toLocaleString()}` : '—', gold: true },
+              { icon: <Timer size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit', val: welcomeCard.lastVisit ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—', small: true }
             ].map((s, i) => (
               <div key={i} style={{
                 background: '#111', border: '1px solid rgba(211,191,162,0.07)',
-                borderRadius: '12px', padding: '12px 10px', textAlign: 'center'
+                borderRadius: '12px', padding: '11px 9px', textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1rem', marginBottom: '6px' }}>{s.icon}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{s.icon}</div>
                 <div style={{
-                  fontSize: s.small ? '0.76rem' : s.mono ? '1.1rem' : '0.88rem',
+                  fontSize: s.small ? '0.74rem' : s.mono ? '1.05rem' : '0.84rem',
                   fontWeight: '900', color: s.gold ? '#d3bfa2' : '#fff',
                   fontFamily: s.mono ? 'monospace' : 'inherit',
                   lineHeight: 1.1, marginBottom: '4px'
                 }}>
                   {s.val}
                 </div>
-                <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                   {s.label}
                 </div>
               </div>
             ))}
           </div>
 
-          {/* ── ALL-TIME FAVOURITE DISH ── */}
+          {/* ── ALL-TIME FAVOURITE ── */}
           {welcomeCard.favDish && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '13px 15px', marginBottom: '10px',
-              background: 'rgba(211,191,162,0.05)',
-              border: '1px solid rgba(211,191,162,0.12)',
-              borderRadius: '14px', position: 'relative', overflow: 'hidden'
+              padding: '12px 14px', marginBottom: '10px',
+              background: 'rgba(211,191,162,0.04)',
+              border: '1px solid rgba(211,191,162,0.11)',
+              borderRadius: '13px', position: 'relative', overflow: 'hidden'
             }}>
-              {/* Glow accent */}
-              <div style={{ position: 'absolute', top: 0, right: 0, width: '60px', height: '60px', background: 'radial-gradient(circle, rgba(211,191,162,0.07) 0%, transparent 70%)', borderRadius: '0 14px 0 60px' }} />
-              <div style={{ fontSize: '1.4rem', flexShrink: 0 }}>🌟</div>
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '50px', height: '50px', background: 'radial-gradient(circle, rgba(211,191,162,0.06) 0%, transparent 70%)', borderRadius: '0 13px 0 50px' }} />
+              <div style={{
+                width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
+                background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Sparkles size={16} color="#d3bfa2" strokeWidth={1.5} />
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  {language === 'mr' ? 'आवडता पदार्थ' : 'All-Time Favourite'}
+                <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {language === 'mr' ? 'सर्वात आवडता पदार्थ' : 'All-Time Favourite'}
                 </div>
-                <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {welcomeCard.favDish.name}
                 </div>
                 {welcomeCard.favDish.count > 1 && (
-                  <div style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.28)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Hash size={9} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
                     {language === 'mr' ? `${welcomeCard.favDish.count} वेळा ऑर्डर केले` : `Ordered ${welcomeCard.favDish.count} times`}
                   </div>
                 )}
@@ -4542,38 +4752,59 @@ onClick={isCounterScan
             </div>
           )}
 
-          {/* ── TOP DISHES (all-time) ── */}
+          {/* ── TOP DISHES ranked list — icon-based, no emoji ── */}
           {welcomeCard.allDishes?.length > 1 && (
             <div style={{
-              padding: '13px 15px', marginBottom: '10px',
+              padding: '12px 14px', marginBottom: '10px',
               background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '14px'
+              borderRadius: '13px'
             }}>
-              <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Flame size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
                 {language === 'mr' ? 'तुमचे सर्वात जास्त ऑर्डर' : 'Your Most Ordered'}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {welcomeCard.allDishes.slice(0, 4).map((dish, i) => {
                   const maxCount = welcomeCard.allDishes[0]?.count || 1;
                   const pct = Math.round((dish.count / maxCount) * 100);
+                  const rankColors = ['#d3bfa2', '#a89070', '#8a7060', '#6a5040'];
                   return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '16px', fontSize: '0.6rem', color: 'rgba(211,191,162,0.2)', fontFamily: 'monospace', fontWeight: '900', textAlign: 'right', flexShrink: 0 }}>
-                        #{i + 1}
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                      {/* rank badge */}
+                      <div style={{
+                        width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                        background: i === 0 ? 'rgba(211,191,162,0.1)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${i === 0 ? 'rgba(211,191,162,0.25)' : 'rgba(255,255,255,0.05)'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.5rem', fontWeight: '900', fontFamily: 'monospace',
+                        color: rankColors[i] || '#555'
+                      }}>
+                        {i + 1}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '0.72rem', color: i === 0 ? '#d3bfa2' : 'rgba(255,255,255,0.4)', fontWeight: i === 0 ? '800' : '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                          <span style={{
+                            fontSize: '0.7rem', fontWeight: i === 0 ? '800' : '500',
+                            color: i === 0 ? '#d3bfa2' : 'rgba(255,255,255,0.35)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '155px'
+                          }}>
                             {dish.name}
                           </span>
-                          <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '6px' }}>
+                          <span style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '5px' }}>
                             {dish.count}×
                           </span>
                         </div>
-                        {/* Progress bar */}
-                        <div style={{ height: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '1px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: i === 0 ? 'rgba(211,191,162,0.6)' : 'rgba(211,191,162,0.2)', borderRadius: '1px', transition: 'width 0.8s ease' }} />
+                        <div style={{ height: '2px', background: 'rgba(255,255,255,0.04)', borderRadius: '1px', overflow: 'hidden' }}>
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ delay: i * 0.1 + 0.3, duration: 0.7, ease: 'easeOut' }}
+                            style={{
+                              height: '100%',
+                              background: i === 0 ? 'linear-gradient(90deg,#c9a84c,#d3bfa2)' : `rgba(211,191,162,${0.15 + (0.1 * (3 - i))})`,
+                              borderRadius: '1px'
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -4586,32 +4817,40 @@ onClick={isCounterScan
           {/* ── LAST ORDER ── */}
           {welcomeCard.lastOrderItems?.length > 0 && (
             <div style={{
-              padding: '13px 15px', marginBottom: '14px',
+              padding: '12px 14px', marginBottom: '14px',
               background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '14px'
+              borderRadius: '13px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '9px' }}>
+                <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Timer size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
                   {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
                 </div>
                 {welcomeCard.lastOrderDate && (
-                  <div style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.15)', fontWeight: '600' }}>
+                  <div style={{ fontSize: '0.54rem', color: 'rgba(255,255,255,0.14)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Timer size={9} color="rgba(255,255,255,0.14)" strokeWidth={1.5} />
                     {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {welcomeCard.lastOrderItems.map((item, i) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {welcomeCard.lastOrderItems.slice(0, 4).map((item, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: 'rgba(211,191,162,0.25)', fontFamily: 'monospace', minWidth: '20px' }}>
+                    <div style={{
+                      width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+                      background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Utensils size={8} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+                    </div>
+                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: 'rgba(211,191,162,0.22)', fontFamily: 'monospace', minWidth: '18px' }}>
                       ×{item.quantity}
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.32)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {item.name}
                     </span>
                     {item.subtotal > 0 && (
-                      <span style={{ fontSize: '0.66rem', color: 'rgba(211,191,162,0.3)', fontFamily: 'monospace', flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.64rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0 }}>
                         ₹{item.subtotal}
                       </span>
                     )}
@@ -4621,39 +4860,39 @@ onClick={isCounterScan
             </div>
           )}
 
-          {/* ── LOYALTY MESSAGE ── */}
+          {/* ── LOYALTY BADGE — icon only ── */}
           {welcomeCard.isLoyal && (
             <div style={{
-              padding: '12px 15px', marginBottom: '14px',
+              padding: '11px 14px', marginBottom: '14px',
               background: 'rgba(211,191,162,0.04)',
               border: '1px solid rgba(211,191,162,0.12)',
-              borderRadius: '12px', textAlign: 'center'
+              borderRadius: '12px', textAlign: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
             }}>
-              <div style={{ fontSize: '1.2rem', marginBottom: '5px' }}>🏅</div>
-              <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#d3bfa2', marginBottom: '3px' }}>
-                {language === 'mr' ? 'तुम्ही लॉयल गेस्ट आहात!' : "You're a Loyal Guest!"}
-              </div>
-              <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.5 }}>
-                {language === 'mr'
-                  ? `${welcomeCard.visitCount} भेटींसाठी धन्यवाद — तुम्ही आमच्यासाठी खास आहात.`
-                  : `Thank you for your ${welcomeCard.visitCount} visits — you're special to us.`}
+              <Sparkles size={16} color="#d3bfa2" strokeWidth={1.5} />
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#d3bfa2' }}>
+                  {language === 'mr' ? 'तुम्ही लॉयल गेस्ट आहात!' : "You're a Loyal Guest!"}
+                </div>
+                <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.18)', marginTop: '2px' }}>
+                  {language === 'mr'
+                    ? `${welcomeCard.visitCount} भेटींसाठी आभार`
+                    : `Thank you for ${welcomeCard.visitCount} visits`}
+                </div>
               </div>
             </div>
           )}
 
           {/* ── CTA ── */}
           <button
-            onClick={() => {
-              localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone);
-              setWelcomeDismissed(true);
-            }}
+            onClick={() => { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
             style={{
-              width: '100%', padding: '16px',
+              width: '100%', padding: '15px',
               background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
-              border: 'none', borderRadius: '14px',
-              color: '#0c0c0c', fontWeight: '900', fontSize: '0.88rem',
+              border: 'none', borderRadius: '13px',
+              color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
               cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
               boxShadow: '0 8px 24px rgba(211,191,162,0.18)'
             }}
           >
