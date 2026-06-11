@@ -310,9 +310,9 @@ useEffect(() => {
     axios.get(`${BASE_URL}/reservations/session/${activeTenant}/${sessionId}`)
       .then(rr => {
         if (rr.data && ['pending','confirmed'].includes(rr.data.status)) {
-          setWaitlistEntry(rr.data);
-          setCounterMode('reservation');
-          setRegistrationStep('confirm');
+setWaitlistEntry({ ...rr.data, mode: 'reservation' });
+setCounterMode('reservation');
+setRegistrationStep('confirm');
         } else {
           sessionStorage.removeItem('pratyeksha_session');
           const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -667,129 +667,366 @@ const sendExtraItemsRequest = async () => {
 };
 
 // ══════════════════════════════════════════════════════════════════
-// PDF TOKEN SYSTEM — All 3 modes
-// Paste this entire block anywhere in PratyekshaPremiumMenu
-// BEFORE the component's return statement (alongside other functions)
-//
-// Uses from component scope:
-//   restaurantData, waitlistEntry, counterMode, language
-//
-// Each mode generates its own random token on call.
-// Call the right function from each confirm screen's PDF button.
+// UNIFIED PREMIUM TOKEN SYSTEM — v2
+// Drop-in replacement for the 3 download functions + helpers
+// Paste BEFORE the component's return() statement
 // ══════════════════════════════════════════════════════════════════
 
-// ── Random token generator (6 chars, alphanumeric uppercase) ──
 const genToken = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no confusable chars
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 };
 
-// ── REPLACE openPDF with this ──
-const openPDF = (html, filename) => {
-  const win = window.open('', '_blank');
-  if (!win) {
-    // popup blocked — fallback to blob download
-    const blob = new Blob([html], { type: 'text/html' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = filename || 'token.html'; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-    return;
-  }
-  win.document.write(html);
-  win.document.close();
-  // Wait for fonts/styles to load, then print
-  win.onload = () => {
+const openTokenWindow = (html, filename) => {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  if (win) {
+    win.onload = () => setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 800);
     setTimeout(() => {
-      win.print();
-    }, 800);
-  };
-  // Fallback if onload already fired
-  setTimeout(() => {
-    if (win && !win.closed) win.print();
-  }, 1500);
+      if (win && !win.closed) { try { win.print(); } catch(e) {} URL.revokeObjectURL(url); }
+    }, 2000);
+  } else {
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
 };
 
-// ── Shared: inline SVG icons ──
 const IC = {
-  calendar:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-  clock:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-  users:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-  user:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-  phone:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.35 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
-  mappin:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
-  utensils:  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`,
-  chair:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 11v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v2H7v-2a2 2 0 0 0-4 0Z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>`,
-  bag:       `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-  check:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
-  hourglass: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
-  note:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
-  hash:      `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
+  chair:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 11v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v2H7v-2a2 2 0 0 0-4 0Z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>`,
+  bag:      `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  user:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  users:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  phone:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.35 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+  clock:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  hourglass:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
+  check:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  utensils: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`,
+  receipt:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>`,
+  note:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  hash:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
+  mappin:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  gstin:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
 };
 
-// ── Shared: tenant info block (used in all 3 PDFs) ──
-const tenantInfoHTML = (rd, accentColor = '#7a5a30', borderColor = '#e0d0bc', mutedColor = '#9a8060') => {
-  const address = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
+const ic = (key, color = '#c9a84c', size = 13) =>
+  (IC[key] || IC.hash)
+    .replace(/width="\d+"/, `width="${size}"`)
+    .replace(/height="\d+"/, `height="${size}"`)
+    .replace('stroke="currentColor"', `stroke="${color}"`);
+
+const nowStamp = () => new Date().toLocaleString('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  day: '2-digit', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: true
+});
+
+// ── Tenant contact row (phone + address + GSTIN) — used in header ──
+// Returns 1-2 clean lines, NO address duplication
+const tenantContactLine = (rd) => {
+  const parts = [];
+  if (rd?.contact)
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('phone','#bbb',10)} ${rd.contact}</span>`);
+  const addr = [rd?.address?.city, rd?.address?.state].filter(Boolean).join(', ');
+  if (addr)
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('mappin','#bbb',10)} ${addr}</span>`);
+  if (rd?.gstin && rd.gstin !== 'GSTIN PENDING')
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('gstin','#bbb',10)} GSTIN: ${rd.gstin}</span>`);
+  if (!parts.length) return '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:5px;font-size:9px;color:#aaa;font-family:'Courier New',monospace;">
+    ${parts.join('')}
+  </div>`;
+};
+
+const SHARED_CSS = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: #ffffff;
+    color: #111111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 13px;
+  }
+  .page {
+    width: 100%;
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 28px 36px 32px;
+    background: #ffffff;
+  }
+
+  .gold-bar {
+    height: 4px;
+    background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
+    border-radius: 3px;
+  }
+  .gold-bar-top    { margin-bottom: 22px; }
+  .gold-bar-bottom { margin-top: 22px; }
+
+  /* ── HEADER: 2-column, no city repetition ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid #111;
+    gap: 16px;
+  }
+  .mode-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #faf6ec;
+    border: 1px solid #e8d8a8;
+    border-radius: 99px;
+    padding: 4px 12px 4px 8px;
+    font-size: 8.5px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #7a5a20;
+    margin-bottom: 8px;
+  }
+  .rest-name {
+    font-size: 26px;
+    font-weight: 900;
+    color: #0c0c0c;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  /* right column — issued time + contact, stacked */
+  .header-right {
+    text-align: right;
+    flex-shrink: 0;
+    min-width: 140px;
+  }
+  .issued-label {
+    font-size: 8px; font-weight: bold; letter-spacing: 2px;
+    text-transform: uppercase; color: #ccc; margin-bottom: 2px;
+  }
+  .issued-val { font-size: 10px; color: #999; font-family: 'Courier New', monospace; }
+  .contact-right {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    font-size: 9px;
+    color: #aaa;
+    font-family: 'Courier New', monospace;
+  }
+  .contact-right span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* ── HERO ── */
+  .hero {
+    background: #0c0c0c;
+    border-radius: 14px;
+    padding: 24px 28px 18px;
+    text-align: center;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content:''; position:absolute; top:0; left:10%; right:10%;
+    height:2px; background:linear-gradient(90deg,transparent,#c9a84c,transparent);
+  }
+  .hero-eyebrow {
+    font-size: 8.5px; font-weight: bold; letter-spacing: 4px;
+    text-transform: uppercase; color: rgba(201,168,76,0.45); margin-bottom: 8px;
+  }
+  .hero-main {
+    font-size: 72px; font-weight: 900; color: #e8d9a8;
+    line-height: 1; letter-spacing: -4px; margin-bottom: 4px;
+    font-family: Georgia, serif;
+  }
+  .hero-main.time   { font-size: 54px; letter-spacing: -2px; font-family: 'Courier New', monospace; }
+  .hero-main.token-big { font-size: 38px; letter-spacing: 7px; font-family: 'Courier New', monospace; }
+  .hero-hash        { color: #7a6a30; }
+  .hero-sub         { font-size: 10px; color: rgba(232,217,168,0.4); font-weight: bold; margin-bottom: 14px; }
+  .hero-divider     { height: 1px; background: rgba(255,255,255,0.06); margin-bottom: 14px; }
+  .hero-row {
+    display: flex; align-items: stretch;
+    justify-content: center; gap: 9px;
+  }
+
+  .token-pill {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 9px; padding: 10px 18px; flex: 1;
+  }
+  .token-pill-label {
+    font-size: 7.5px; font-weight: bold; letter-spacing: 2.5px;
+    text-transform: uppercase; color: rgba(201,168,76,0.38); margin-bottom: 4px;
+  }
+  .token-pill-code {
+    font-family: 'Courier New', monospace; font-size: 22px;
+    font-weight: 900; color: #e8c96a; letter-spacing: 6px;
+  }
+  .status-pill {
+    border-radius: 9px; padding: 10px 16px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; min-width: 100px;
+  }
+  .status-pill.confirmed { background: linear-gradient(135deg,#c9a84c,#bda88a); }
+  .status-pill.pending   { background: rgba(201,168,76,0.05); border: 1px solid rgba(201,168,76,0.25); }
+  .status-text {
+    font-size: 8.5px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .status-pill.confirmed .status-text { color: #0c0c0c; }
+  .status-pill.pending   .status-text { color: #c9a84c; }
+  .status-icon { display:flex; align-items:center; justify-content:center; margin-bottom:1px; }
+
+  /* ── SECTION HDR ── */
+  .sec-hdr {
+    display: flex; align-items: center; gap: 7px; margin-bottom: 9px;
+  }
+  .sec-label {
+    font-size: 8.5px; font-weight: bold; letter-spacing: 2px;
+    text-transform: uppercase; color: #7a6a30;
+  }
+  .sec-rule  { flex:1; height:1px; background:#eddfc4; }
+  .sec-note  { font-size:9px; color:#bbb; font-style:italic; white-space:nowrap; }
+
+  /* ── DETAIL GRID ── */
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px; margin-bottom: 16px;
+  }
+  .d-cell {
+    background: #faf6ec; border: 1px solid #ede0c0;
+    border-radius: 9px; padding: 10px 12px;
+  }
+  .d-label {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 7.5px; font-weight: bold; letter-spacing: 2px;
+    text-transform: uppercase; color: #c0a050; margin-bottom: 4px;
+  }
+  .d-val { font-size: 13px; font-weight: bold; color: #111; line-height: 1.3; }
+  .d-val.mono { font-family: 'Courier New', monospace; font-size: 12px; }
+  .d-val small { font-size: 10px; color: #999; font-weight: normal; }
+
+  /* ── SPECIAL REQUEST ── */
+  .special {
+    background: #faf6ec; border-left: 3px solid #c9a84c;
+    border-radius: 0 9px 9px 0; padding: 10px 14px; margin-bottom: 16px;
+    font-size: 11px; color: #7a6030; font-style: italic; line-height: 1.6;
+    display: flex; align-items: flex-start; gap: 7px;
+  }
+
+  /* ── ORDER TABLE ── */
+  .order-section { margin-bottom: 16px; }
+  .order-table { width:100%; border-collapse:collapse; margin-top:9px; }
+  .order-table thead tr { border-bottom: 2px solid #111; }
+  .order-table th {
+    font-size: 8px; font-weight: bold; letter-spacing: 2px;
+    text-transform: uppercase; color: #999; padding: 6px 7px 8px; text-align: left;
+  }
+  .order-table th:nth-child(2) { text-align:center; }
+  .order-table th:last-child   { text-align:right; }
+  .order-table td {
+    font-size: 12px; padding: 8px 7px; border-bottom: 1px solid #f3ecdd; color: #222;
+  }
+  .order-table td:nth-child(2) { text-align:center; color:#999; }
+  .order-table td:last-child   { text-align:right; font-weight:bold; color:#111; }
+  .portion-tag { font-size:9px; color:#c9a84c; font-weight:bold; margin-left:4px; }
+  .order-total-row {
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 11px 7px 0; border-top: 2px solid #111; margin-top: 2px;
+  }
+  .order-total-key { font-size:9px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:#999; }
+  .order-total-val { font-size:24px; font-weight:900; color:#7a5a20; font-family:Georgia,serif; }
+
+  /* ── TABLE-ONLY ── */
+  .table-only {
+    background:#faf6ec; border:1px solid #ede0c0; border-radius:11px;
+    padding:18px; text-align:center; margin-bottom:16px;
+  }
+  .table-only-icon {
+    width:32px; height:32px; border-radius:50%;
+    background:#fff; border:1px solid #e8d8a8;
+    display:flex; align-items:center; justify-content:center;
+    margin:0 auto 8px;
+  }
+  .table-only-title { font-size:13px; font-weight:bold; color:#7a5a30; margin-bottom:4px; }
+  .table-only-text  { font-size:10.5px; color:#aa9a78; line-height:1.6; }
+
+  /* ── FOOTER ── */
+  .footer-rule { height:1px; background:#eeeeee; margin-bottom:11px; }
+  .footer {
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .footer-brand {
+    font-size:12px; font-weight:900; color:#c9a84c;
+    font-family:Georgia,serif; letter-spacing:1px; display:flex; align-items:center; gap:6px;
+  }
+  .footer-brand-sub { font-size:8px; color:#ccc; letter-spacing:2px; text-transform:uppercase; font-weight:bold; font-family:Georgia,serif; }
+  .footer-date { font-size:9px; color:#ccc; font-family:'Courier New',monospace; }
+
+  @media print {
+    html,body { height:auto !important; }
+    .page { padding:20px 28px 24px !important; }
+    @page { margin:0; size:A4 portrait; }
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  }
+`;
+
+// ── Shared footer HTML ──
+const footerHTML = () => `
+  <div class="footer-rule"></div>
+  <div class="footer">
+    <div>
+      <div class="footer-brand">Pratyeksha</div>
+      <div class="footer-brand-sub">Powered by Pratyeksha</div>
+    </div>
+    <div class="footer-date">${nowStamp()}</div>
+  </div>
+  <div class="gold-bar gold-bar-bottom"></div>
+`;
+
+// ── Shared right-column header (issued time + contact only — NO address/city) ──
+const headerRight = (rd) => {
+  const contact = rd?.contact
+    ? `<span>${ic('phone','#bbb',10)} ${rd.contact}</span>` : '';
+  const gstin = (rd?.gstin && rd.gstin !== 'GSTIN PENDING')
+    ? `<span>${ic('gstin','#bbb',10)} GSTIN: ${rd.gstin}</span>` : '';
   return `
-  <div style="display:flex;flex-direction:column;gap:4px;padding:10px 14px;border:1px solid ${borderColor};border-radius:10px;margin-bottom:14px;background:rgba(0,0,0,0.02);">
-    ${rd?.contact ? `
-    <div style="display:flex;align-items:center;gap:6px;font-size:8.5px;color:${mutedColor};font-weight:600;">
-      <span style="color:${accentColor};">${IC.phone}</span> ${rd.contact}
-    </div>` : ''}
-    ${address ? `
-    <div style="display:flex;align-items:flex-start;gap:6px;font-size:8.5px;color:${mutedColor};font-weight:600;">
-      <span style="color:${accentColor};margin-top:1px;">${IC.mappin}</span> ${address}
-    </div>` : ''}
-    ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `
-    <div style="display:flex;align-items:center;gap:6px;font-size:8px;color:${mutedColor};font-weight:600;">
-      <span style="color:${accentColor};">${IC.hash}</span> GSTIN: ${rd.gstin}
+  <div class="header-right">
+    <div class="issued-label">Issued</div>
+    <div class="issued-val">${nowStamp()}</div>
+    ${(contact || gstin) ? `
+    <div class="contact-right">
+      ${contact}
+      ${gstin}
     </div>` : ''}
   </div>`;
 };
 
-// ── Shared: order items table ──
-const orderTableHTML = (items, totalAmount, thBg, thColor, tdBorder, totalKeyColor, totalValColor) => {
-  if (!items?.length) return '';
-  return `
-  <table style="width:100%;border-collapse:collapse;margin-top:4px;">
+// ── Shared order table ──
+const orderTableHTML = (items, totalAmount) => `
+  <table class="order-table">
     <thead>
-      <tr>
-        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:left;background:${thBg};color:${thColor};border-radius:4px 0 0 0;">Item</th>
-        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:center;background:${thBg};color:${thColor};">Qty</th>
-        <th style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:6px 8px;text-align:right;background:${thBg};color:${thColor};border-radius:0 4px 0 0;">₹</th>
-      </tr>
+      <tr><th>Item</th><th>Qty</th><th>Amount</th></tr>
     </thead>
     <tbody>
       ${items.map(i => `
       <tr>
-        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};">${i.name}${i.portion && i.portion !== 'Single' ? ` <span style="font-size:7.5px;opacity:0.6;">(${i.portion})</span>` : ''}</td>
-        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};text-align:center;">${i.quantity}</td>
-        <td style="font-size:9.5px;padding:7px 8px;border-bottom:1px solid ${tdBorder};text-align:right;font-weight:700;">₹${i.subtotal}</td>
+        <td>${i.name}${i.portion && i.portion !== 'Single' ? `<span class="portion-tag">(${i.portion})</span>` : ''}</td>
+        <td>${i.quantity}</td>
+        <td>&#8377;${i.subtotal}</td>
       </tr>`).join('')}
     </tbody>
   </table>
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 8px 4px;border-top:1.5px solid ${totalKeyColor}11;">
-    <span style="font-size:9px;font-weight:800;text-transform:uppercase;color:${totalKeyColor};">Total</span>
-    <span style="font-size:15px;font-weight:900;color:${totalValColor};">₹${(totalAmount || 0).toLocaleString()}</span>
-  </div>`;
-};
-
-// ── Shared: footer ──
-const footerHTML = (borderColor, brandColor, dateColor) => `
-  <div style="text-align:center;padding-top:12px;border-top:1px dashed ${borderColor};">
-    <div style="font-size:7px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:${brandColor};">PRATYEKSHA</div>
-    <div style="font-size:7px;color:${dateColor};margin-top:2px;">
-      ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}
-    </div>
-  </div>`;
-
-// ── Base CSS shared across all 3 PDFs ──
-const BASE_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Inter',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-.page{width:100%;max-width:380px;margin:0 auto;padding:28px 22px;}
-@media print{body{margin:0;}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}`;
+  <div class="order-total-row">
+    <span class="order-total-key">Total Amount</span>
+    <span class="order-total-val">&#8377;${(totalAmount || 0).toLocaleString()}</span>
+  </div>
+`;
 
 
 // ══════════════════════════════════════════════════════════
@@ -799,106 +1036,96 @@ const downloadWaitlistToken = () => {
   const token    = genToken();
   const entry    = waitlistEntry || {};
   const rd       = restaurantData;
-  const position = entry.waitlistPosition || 1;
-  const estWait  = position * 20;
+  const pos      = entry.waitlistPosition || 1;
+  const estWait  = pos * 20;
   const isConf   = ['confirmed','assigned','seated'].includes(entry.status);
   const hasOrder = (entry.items || []).length > 0;
-  const now      = new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+  // Full address (street + city + state + pincode) — shown ONCE in header left
+  const fullAddr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>
-${BASE_CSS}
-body{background:#fff;color:#111;}
-</style></head><body><div class="page">
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<title>Waitlist Token — ${token}</title>
+<style>${SHARED_CSS}</style>
+</head>
+<body><div class="page">
 
-  <!-- HEADER -->
-  <div style="text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #111;">
-    <div style="display:inline-flex;align-items:center;gap:5px;background:#f5f0e8;color:#7a5a30;border:1px solid #e0d5c0;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
-      <span style="color:#7a5a30;">${IC.chair}</span>&nbsp;Dine-In Waitlist
+  <div class="gold-bar gold-bar-top"></div>
+
+  <!-- HEADER: left = restaurant identity + full address once, right = issued + phone/gstin -->
+  <div class="header">
+    <div>
+      <div class="mode-chip">${ic('chair','#7a5a20',13)}&nbsp; Dine-In Waitlist</div>
+      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
     </div>
-    <div style="font-size:22px;font-weight:900;color:#111;letter-spacing:-0.5px;margin-bottom:2px;">${rd?.name || 'PRATYEKSHA'}</div>
-    ${rd?.address?.city ? `<div style="font-size:8px;color:#888;">${rd.address.city}</div>` : ''}
+    ${headerRight(rd)}
   </div>
 
-  <!-- RESTAURANT CONTACT -->
-  ${tenantInfoHTML(rd, '#7a5a30', '#e0d5c0', '#9a8060')}
-
-  <!-- MAIN HERO: QUEUE POSITION + TOKEN (side by side in dark card) -->
-  <div style="background:#0f0f0f;border-radius:16px;overflow:hidden;margin-bottom:14px;position:relative;">
-    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#e8c96a 60%,transparent);"></div>
-    
-    <!-- Queue position — LARGE -->
-    <div style="padding:20px 18px 14px;text-align:center;border-bottom:1px solid rgba(201,168,76,0.15);">
-      <div style="font-size:7px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:rgba(201,168,76,0.4);margin-bottom:4px;">Queue Position</div>
-      <div style="font-size:80px;font-weight:900;color:#c9a84c;line-height:1;font-family:'Courier New',monospace;letter-spacing:-6px;">#${position}</div>
-      <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.25);margin-top:6px;">Estimated wait: ~${estWait} minutes</div>
-    </div>
-    
-    <!-- Token number row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;">
-      <div>
-        <div style="font-size:6px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.2);margin-bottom:4px;">Token ID</div>
-        <div style="font-size:22px;font-weight:900;color:#fff;font-family:'Courier New',monospace;letter-spacing:4px;">${token}</div>
+  <!-- HERO: queue number big, token + status below -->
+  <div class="hero">
+    <div class="hero-eyebrow">Queue Position</div>
+    <div class="hero-main"><span class="hero-hash">#</span>${pos}</div>
+    <div class="hero-sub">Estimated wait &nbsp;~${estWait} minutes</div>
+    <div class="hero-divider"></div>
+    <div class="hero-row">
+      <div class="token-pill">
+        <div class="token-pill-label">Token ID</div>
+        <div class="token-pill-code">${token}</div>
       </div>
-      <div style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;${isConf ? 'background:rgba(45,106,79,0.3);border:1px solid rgba(45,106,79,0.5);color:#6dba96;' : 'background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:rgba(201,168,76,0.8);'}">
-        <span style="color:inherit;">${isConf ? IC.check : IC.hourglass}</span>&nbsp;${isConf ? 'Confirmed' : 'In Queue'}
+      <div class="status-pill ${isConf ? 'confirmed' : 'pending'}">
+        <div class="status-icon">${isConf ? ic('check','#0c0c0c',18) : ic('hourglass','#c9a84c',18)}</div>
+        <div class="status-text">${isConf ? 'Confirmed' : 'In Queue'}</div>
       </div>
     </div>
   </div>
 
   <!-- GUEST DETAILS -->
-  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
-    <span style="color:#9a8060;">${IC.users}</span>&nbsp;Guest Details
+  <div class="sec-hdr">
+    ${ic('users','#c9a84c',12)}
+    <span class="sec-label">Guest Details</span>
+    <div class="sec-rule"></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.user}&nbsp;Name</div>
-      <div style="font-size:10px;font-weight:800;color:#111;line-height:1.3;">${entry.customerName || '—'}</div>
+  <div class="detail-grid">
+    <div class="d-cell">
+      <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Name</div>
+      <div class="d-val">${entry.customerName || '—'}</div>
     </div>
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.users}&nbsp;Party</div>
-      <div style="font-size:10px;font-weight:800;color:#111;">${entry.partySize || 1} ${(entry.partySize || 1) === 1 ? 'person' : 'people'}</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('users','#c0a050',11)}&nbsp;Party Size</div>
+      <div class="d-val">${entry.partySize || 1} <small>${(entry.partySize || 1) === 1 ? 'person' : 'people'}</small></div>
     </div>
     ${entry.customerPhone ? `
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.phone}&nbsp;Mobile</div>
-      <div style="font-size:9.5px;font-weight:700;color:#111;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
+      <div class="d-val mono">+91 ${entry.customerPhone}</div>
     </div>` : ''}
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.clock}&nbsp;Est. Wait</div>
-      <div style="font-size:10px;font-weight:800;color:#111;">~${estWait} min</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('clock','#c0a050',11)}&nbsp;Est. Wait</div>
+      <div class="d-val">~${estWait} <small>min</small></div>
     </div>
   </div>
 
   ${entry.specialRequests ? `
-  <div style="padding:9px 11px;background:#faf6f0;border:1px solid #e8ddd0;border-radius:8px;margin-bottom:10px;">
-    <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.note}&nbsp;Special Request</div>
-    <div style="font-size:9px;color:#111;font-style:italic;">"${entry.specialRequests}"</div>
+  <div class="special">
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
   </div>` : ''}
 
   ${hasOrder ? `
-  <div style="border-top:1px dashed #e0d0bc;padding-top:10px;margin-top:2px;">
-    <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
-      <span style="color:#9a8060;">${IC.utensils}</span>&nbsp;Pre-Order (fires to kitchen when seated)
+  <div class="order-section">
+    <div class="sec-hdr">
+      ${ic('utensils','#c9a84c',12)}
+      <span class="sec-label">Pre-Order</span>
+      <div class="sec-rule"></div>
+      <span class="sec-note">fires to kitchen when seated</span>
     </div>
-    ${orderTableHTML(entry.items, entry.totalAmount, '#f9f5ef', '#9a8060', '#f0e8da', '#111', '#7a5a30')}
+    ${orderTableHTML(entry.items, entry.totalAmount)}
   </div>` : ''}
 
-  <!-- INSTRUCTIONS -->
-  <div style="padding:9px 11px;background:#fffbf5;border:1px solid #e8ddd0;border-radius:8px;margin-top:10px;margin-bottom:12px;">
-    <div style="font-size:6.5px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#9a8060;margin-bottom:5px;">What's next</div>
-    <div style="font-size:8px;color:#7a5a30;line-height:1.65;">
-      • Keep this token — you'll be called when your table is ready.<br/>
-      • Stay nearby so you don't miss the call.<br/>
-      ${hasOrder ? '• Pre-ordered food fires to the kitchen the moment you\'re seated.<br/>' : ''}
-      • Missing your call may move you to the end of the queue.
-    </div>
-  </div>
-
-  ${footerHTML('#e0d0bc', '#ccc', '#aaa')}
+  ${footerHTML()}
 </div></body></html>`;
 
-  openPDF(html, `Waitlist_Token_${token}.pdf`);
+  openTokenWindow(html, `Waitlist_Token_${token}.pdf`);
 };
 
 
@@ -906,242 +1133,236 @@ body{background:#fff;color:#111;}
 // MODE 2 — PICKUP / TAKEAWAY TOKEN
 // ══════════════════════════════════════════════════════════
 const downloadPickupToken = () => {
-  const token    = genToken();
-  const entry    = waitlistEntry || {};
-  const rd       = restaurantData;
-  const hasOrder = (entry.items || []).length > 0;
-  const pickupTime = entry.scheduledPickupTime
-    ? new Date(entry.scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
-    : null;
-  const pickupDate = entry.scheduledPickupTime
-    ? new Date(entry.scheduledPickupTime).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})
-    : null;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>
-${BASE_CSS}
-body{background:#060e1c;color:#c8dff0;}
-</style></head><body><div class="page" style="background:#060e1c;">
-
-  <!-- HEADER -->
-  <div style="text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #1e3a5f;">
-    <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.25);color:#6ba3d6;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
-      <span style="color:#6ba3d6;">${IC.bag}</span>&nbsp;Pickup / Takeaway
-    </div>
-    <div style="font-size:22px;font-weight:900;color:#e8f4fd;letter-spacing:-0.3px;margin-bottom:2px;">${rd?.name || 'PRATYEKSHA'}</div>
-    ${rd?.address?.city ? `<div style="font-size:8px;color:#4a6a8a;">${rd.address.city}</div>` : ''}
-  </div>
-
-  <!-- RESTAURANT CONTACT (dark) -->
-  ${tenantInfoHTML(rd, '#6ba3d6', '#1e3a5f', '#4a6a8a')}
-
-  <!-- TOKEN HERO -->
-  <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:16px;padding:20px 18px;text-align:center;margin-bottom:14px;position:relative;overflow:hidden;">
-    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#4a90d9,transparent);"></div>
-    <div style="font-size:7px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:rgba(107,163,214,0.35);margin-bottom:6px;">Pickup Token</div>
-    <div style="font-size:36px;font-weight:900;color:#6ba3d6;font-family:'Courier New',monospace;letter-spacing:8px;margin-bottom:10px;">${token}</div>
-    <div style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.3);color:#6ba3d6;">
-      <span style="color:#6ba3d6;">${IC.check}</span>&nbsp;Order Confirmed
-    </div>
-  </div>
-
-  <!-- PICKUP SLOT DETAILS -->
-  <div style="display:grid;grid-template-columns:${pickupTime ? '1fr 1fr' : '1fr'};gap:10px;margin-bottom:14px;">
-    <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:10px;padding:12px 14px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#4a6a8a;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${IC.mappin}&nbsp;Collection</div>
-      <div style="font-size:14px;font-weight:900;color:#c8dff0;">Counter</div>
-      <div style="font-size:8px;color:#4a6a8a;margin-top:2px;font-weight:600;">${rd?.name || ''}</div>
-    </div>
-    ${pickupTime ? `
-    <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:10px;padding:12px 14px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#4a6a8a;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${IC.clock}&nbsp;Pickup Slot</div>
-      <div style="font-size:20px;font-weight:900;color:#6ba3d6;font-family:'Courier New',monospace;letter-spacing:-1px;">${pickupTime}</div>
-      ${pickupDate ? `<div style="font-size:8px;color:#4a6a8a;margin-top:2px;font-weight:600;">${pickupDate}</div>` : ''}
-    </div>` : `
-    <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:10px;padding:12px 14px;text-align:center;display:flex;align-items:center;justify-content:center;">
-      <div style="font-size:8.5px;font-weight:700;color:#4a6a8a;line-height:1.6;">We'll notify you<br/>when your order<br/>is ready</div>
-    </div>`}
-  </div>
-
-  <!-- CUSTOMER DETAILS -->
-  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#4a6a8a;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:5px;">
-    <span>${IC.user}</span>&nbsp;Customer Details
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-    <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#4a6a8a;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.user}&nbsp;Name</div>
-      <div style="font-size:10px;font-weight:800;color:#c8dff0;">${entry.customerName || '—'}</div>
-    </div>
-    ${entry.customerPhone ? `
-    <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#4a6a8a;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.phone}&nbsp;Mobile</div>
-      <div style="font-size:9.5px;font-weight:700;color:#c8dff0;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
-    </div>` : ''}
-  </div>
-
-  <!-- ORDER ITEMS -->
-  ${hasOrder ? `
-  <div style="border-top:1px dashed #1e3a5f;padding-top:10px;">
-    <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#4a6a8a;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
-      <span>${IC.utensils}</span>&nbsp;Order Summary
-    </div>
-    ${orderTableHTML(entry.items, entry.totalAmount, '#050d1a', '#4a6a8a', '#1e3a5f', '#c8dff0', '#6ba3d6')}
-  </div>` : `
-  <div style="background:#050d1a;border:1px solid #1e3a5f;border-radius:8px;padding:12px;text-align:center;margin-bottom:10px;">
-    <div style="font-size:8.5px;font-weight:700;color:#4a6a8a;line-height:1.6;">No pre-order placed — you may add items at the counter.</div>
-  </div>`}
-
-  <!-- INSTRUCTIONS -->
-  <div style="padding:9px 11px;background:#050d1a;border:1px solid #1e3a5f;border-radius:8px;margin-top:10px;margin-bottom:12px;">
-    <div style="font-size:6.5px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#4a6a8a;margin-bottom:5px;">Collection Instructions</div>
-    <div style="font-size:8px;color:#4a6a8a;line-height:1.65;">
-      • Show this token at the counter to collect your order.<br/>
-      ${pickupTime ? `• Please arrive by <strong style="color:#6ba3d6;">${pickupTime}</strong> to collect.<br/>` : ''}
-      • You will receive a notification when your order is ready.<br/>
-      • Orders not collected within 30 min may be cancelled.
-    </div>
-  </div>
-
-  <div style="text-align:center;padding-top:10px;border-top:1px dashed #1e3a5f;">
-    <div style="font-size:7px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:#1e3a5f;">PRATYEKSHA</div>
-    <div style="font-size:7px;color:#1a2a3f;margin-top:2px;">
-      ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}
-    </div>
-  </div>
-</div></body></html>`;
-
-  openPDF(html, `Pickup_Token_${token}.pdf`);
-};
-
-
-const downloadReservationPDF = () => {
   const token      = genToken();
   const entry      = waitlistEntry || {};
   const rd         = restaurantData;
-  const hasPreOrder = hasItems && entry.items?.length > 0;
-  const fmtDateLong  = resTime ? resTime.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '—';
-  const fmtDateShort = resTime ? resTime.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}) : '—';
-  const fmtTime      = resTime ? resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
-  const dayOfWeek    = resTime ? resTime.toLocaleDateString('en-IN',{weekday:'long'}) : '';
-  const address = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
+  const hasOrder   = (entry.items || []).length > 0;
+  const pickupTime = entry.scheduledPickupTime
+    ? new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    : null;
+  const pickupDate = entry.scheduledPickupTime
+    ? new Date(entry.scheduledPickupTime).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+    : null;
+  const fullAddr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<style>
-${BASE_CSS}
-body{background:#fff;color:#111;}
-</style></head><body><div class="page">
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<title>Pickup Token — ${token}</title>
+<style>${SHARED_CSS}</style>
+</head>
+<body><div class="page">
 
-  <!-- HEADER -->
-  <div style="text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #111;">
-    <div style="display:inline-flex;align-items:center;gap:5px;background:#f5f0e8;color:#7a5a30;border:1px solid #e0d5c0;border-radius:99px;padding:4px 12px;font-size:7px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">
-      <span style="color:#7a5a30;">${IC.calendar}</span>&nbsp;${hasPreOrder ? 'Reservation + Pre-Order' : 'Table Reservation'}
-    </div>
-    <div style="font-size:22px;font-weight:900;color:#111;letter-spacing:-0.5px;margin-bottom:2px;">${rd?.name || 'PRATYEKSHA'}</div>
-    ${rd?.address?.city ? `<div style="font-size:8px;color:#888;">${rd.address.city}</div>` : ''}
-  </div>
+  <div class="gold-bar gold-bar-top"></div>
 
-  <!-- RESTAURANT CONTACT -->
-  ${tenantInfoHTML(rd, '#7a5a30', '#e0d5c0', '#9a8060')}
-
-  <!-- TOKEN + STATUS STRIP -->
-  <div style="display:flex;align-items:center;justify-content:space-between;background:#111;border-radius:12px;padding:14px 16px;margin-bottom:14px;position:relative;overflow:hidden;">
-    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#e8c96a 60%,transparent);"></div>
+  <div class="header">
     <div>
-      <div style="font-size:6px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:rgba(201,168,76,0.35);margin-bottom:4px;">Booking Token</div>
-      <div style="font-size:26px;font-weight:900;color:#c9a84c;font-family:'Courier New',monospace;letter-spacing:5px;">${token}</div>
+      <div class="mode-chip">${ic('bag','#7a5a20',13)}&nbsp; Pickup &amp; Takeaway</div>
+      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
     </div>
-    <div style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:99px;font-size:7px;font-weight:800;letter-spacing:1px;text-transform:uppercase;flex-shrink:0;${isConf ? 'background:rgba(45,106,79,0.25);border:1px solid rgba(45,106,79,0.5);color:#6dba96;' : 'background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:rgba(201,168,76,0.8);'}">
-      <span style="color:inherit;">${isConf ? IC.check : IC.hourglass}</span>&nbsp;${isConf ? 'Confirmed' : 'Pending'}
+    ${headerRight(rd)}
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">${pickupTime ? 'Pickup Slot' : 'Pickup Token'}</div>
+    ${pickupTime
+      ? `<div class="hero-main time">${pickupTime}</div>
+         <div class="hero-sub">${pickupDate || 'Today'}&nbsp;&nbsp;·&nbsp;&nbsp;Counter Collection</div>`
+      : `<div class="hero-main token-big">${token}</div>
+         <div class="hero-sub">We'll notify you when your order is ready</div>`
+    }
+    <div class="hero-divider"></div>
+    <div class="hero-row">
+      ${pickupTime ? `
+      <div class="token-pill">
+        <div class="token-pill-label">Token ID</div>
+        <div class="token-pill-code">${token}</div>
+      </div>` : ''}
+      <div class="status-pill confirmed">
+        <div class="status-icon">${ic('check','#0c0c0c',18)}</div>
+        <div class="status-text" style="color:#0c0c0c;">Order Confirmed</div>
+      </div>
     </div>
   </div>
 
-  <!-- DATE / TIME / GUESTS — PROMINENT -->
-  ${resTime ? `
-  <div style="background:#faf6f0;border:1px solid #e0d0bc;border-radius:14px;overflow:hidden;margin-bottom:14px;">
-    <div style="background:#f0e8d8;padding:10px 14px;display:flex;align-items:center;gap:7px;border-bottom:1px solid #e0d0bc;">
-      <span style="color:#9a8060;">${IC.calendar}</span>
-      <div>
-        <div style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;">Reservation Date</div>
-        <div style="font-size:13px;font-weight:900;color:#111;margin-top:1px;">${fmtDateLong}</div>
-      </div>
-    </div>
-    <div style="display:flex;">
-      <div style="flex:1;padding:12px 14px;border-right:1px solid #e0d0bc;">
-        <div style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${IC.clock}&nbsp;Time</div>
-        <div style="font-size:20px;font-weight:900;color:#111;font-family:'Courier New',monospace;letter-spacing:-1px;">${fmtTime}</div>
-        <div style="font-size:8px;color:#b09070;font-weight:600;margin-top:2px;">${dayOfWeek}</div>
-      </div>
-      <div style="flex:1;padding:12px 14px;">
-        <div style="font-size:7px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#b09070;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${IC.users}&nbsp;Party Size</div>
-        <div style="font-size:20px;font-weight:900;color:#111;font-family:'Courier New',monospace;">${entry.partySize || 1}</div>
-        <div style="font-size:8px;color:#b09070;font-weight:600;margin-top:2px;">${(entry.partySize || 1) === 1 ? 'person' : 'people'}</div>
-      </div>
-    </div>
-  </div>` : ''}
-
-  <!-- GUEST DETAILS -->
-  <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #f0e8da;display:flex;align-items:center;gap:5px;">
-    <span style="color:#9a8060;">${IC.user}</span>&nbsp;Guest Details
+  <!-- CUSTOMER -->
+  <div class="sec-hdr">
+    ${ic('user','#c9a84c',12)}
+    <span class="sec-label">Customer Details</span>
+    <div class="sec-rule"></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.user}&nbsp;Name</div>
-      <div style="font-size:10px;font-weight:800;color:#111;line-height:1.3;">${entry.customerName || '—'}</div>
+  <div class="detail-grid">
+    <div class="d-cell">
+      <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Name</div>
+      <div class="d-val">${entry.customerName || '—'}</div>
     </div>
     ${entry.customerPhone ? `
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.phone}&nbsp;Mobile</div>
-      <div style="font-size:9.5px;font-weight:700;color:#111;font-family:'Courier New',monospace;">+91 ${entry.customerPhone}</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
+      <div class="d-val mono">+91 ${entry.customerPhone}</div>
     </div>` : ''}
+    <div class="d-cell">
+      <div class="d-label">${ic('mappin','#c0a050',11)}&nbsp;Collection</div>
+      <div class="d-val">Counter</div>
+    </div>
+    ${pickupTime ? `
+    <div class="d-cell">
+      <div class="d-label">${ic('clock','#c0a050',11)}&nbsp;Pickup Time</div>
+      <div class="d-val mono">${pickupTime}${pickupDate ? `&nbsp;<small>· ${pickupDate}</small>` : ''}</div>
+    </div>` : ''}
+  </div>
+
+  ${entry.specialRequests ? `
+  <div class="special">
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
+  </div>` : ''}
+
+  ${hasOrder ? `
+  <div class="order-section">
+    <div class="sec-hdr">
+      ${ic('receipt','#c9a84c',12)}
+      <span class="sec-label">Order Summary</span>
+      <div class="sec-rule"></div>
+    </div>
+    ${orderTableHTML(entry.items, entry.totalAmount)}
+  </div>` : `
+  <div class="table-only">
+    <div class="table-only-icon">${ic('bag','#c9a84c',18)}</div>
+    <div class="table-only-title">No Pre-Order Placed</div>
+    <div class="table-only-text">You may add items at the counter when you arrive.</div>
+  </div>`}
+
+  ${footerHTML()}
+</div></body></html>`;
+
+  openTokenWindow(html, `Pickup_Token_${token}.pdf`);
+};
+
+
+// ══════════════════════════════════════════════════════════
+// MODE 3 — TABLE RESERVATION TOKEN
+// Shows ONLY reservation info: date, time, guests, name,
+// phone, special requests, pre-order (if any).
+// No pickup / dine-in references whatsoever.
+// ══════════════════════════════════════════════════════════
+const downloadReservationPDF = () => {
+  const token       = genToken();
+  const entry       = waitlistEntry || {};
+  const rd          = restaurantData;
+  const hasPreOrder = (entry.items || []).length > 0;
+  const isConf      = ['confirmed','seated'].includes(entry.status);
+  const resTime     = entry.reservationTime ? new Date(entry.reservationTime) : null;
+  const fmtLong     = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  const fmtShort    = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
+  const fmtTime     = resTime ? resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
+  const fmtDay      = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'long' }) : '';
+  // Use last-6 of DB _id as stable token so it matches the on-screen token
+  const tokenId     = entry._id?.slice(-6)?.toUpperCase() || token;
+  const fullAddr    = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<title>Reservation — #${tokenId}</title>
+<style>${SHARED_CSS}</style>
+</head>
+<body><div class="page">
+
+  <div class="gold-bar gold-bar-top"></div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <div class="mode-chip">${ic('calendar','#7a5a20',13)}&nbsp; ${hasPreOrder ? 'Reservation + Pre-Order' : 'Table Reservation'}</div>
+      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
+    </div>
+    ${headerRight(rd)}
+  </div>
+
+  <!-- HERO: reservation TIME is the hero element -->
+  <div class="hero">
+    <div class="hero-eyebrow">Reservation Time</div>
+    <div class="hero-main time">${fmtTime}</div>
+    <div class="hero-sub">${fmtLong}</div>
+    <div class="hero-divider"></div>
+    <div class="hero-row">
+      <div class="token-pill">
+        <div class="token-pill-label">Booking Token</div>
+        <div class="token-pill-code">#${tokenId}</div>
+      </div>
+      <div class="status-pill ${isConf ? 'confirmed' : 'pending'}">
+        <div class="status-icon">${isConf ? ic('check','#0c0c0c',18) : ic('hourglass','#c9a84c',18)}</div>
+        <div class="status-text">${isConf ? 'Confirmed' : 'Pending'}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESERVATION DETAILS — all reservation-specific, nothing else -->
+  <div class="sec-hdr">
+    ${ic('users','#c9a84c',12)}
+    <span class="sec-label">Reservation Details</span>
+    <div class="sec-rule"></div>
+  </div>
+  <div class="detail-grid">
+    <div class="d-cell">
+      <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Guest Name</div>
+      <div class="d-val">${entry.customerName || '—'}</div>
+    </div>
+    <div class="d-cell">
+      <div class="d-label">${ic('users','#c0a050',11)}&nbsp;Party Size</div>
+      <div class="d-val">${entry.partySize || 1} <small>${(entry.partySize || 1) === 1 ? 'person' : 'people'}</small></div>
+    </div>
+    ${entry.customerPhone ? `
+    <div class="d-cell">
+      <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
+      <div class="d-val mono">+91 ${entry.customerPhone}</div>
+    </div>` : ''}
+    <div class="d-cell">
+      <div class="d-label">${ic('calendar','#c0a050',11)}&nbsp;Date</div>
+      <div class="d-val" style="font-size:12px;">${fmtShort} <small>· ${fmtDay}</small></div>
+    </div>
     ${entry.tablePreference ? `
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.chair}&nbsp;Preference</div>
-      <div style="font-size:10px;font-weight:800;color:#111;">${entry.tablePreference}</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('hash','#c0a050',11)}&nbsp;Table Pref.</div>
+      <div class="d-val" style="color:#7a5a30;">${entry.tablePreference}</div>
     </div>` : ''}
-    <div style="background:#faf6f0;border:1px solid #ede8de;border-radius:8px;padding:10px 11px;">
-      <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.clock}&nbsp;Duration</div>
-      <div style="font-size:10px;font-weight:800;color:#111;">~2 hours</div>
+    <div class="d-cell">
+      <div class="d-label">${ic('clock','#c0a050',11)}&nbsp;Time</div>
+      <div class="d-val mono">${fmtTime}</div>
     </div>
   </div>
 
   ${entry.specialRequests ? `
-  <div style="padding:9px 11px;background:#faf6f0;border:1px solid #e8ddd0;border-radius:8px;margin-bottom:10px;">
-    <div style="font-size:6.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#b09070;margin-bottom:3px;display:flex;align-items:center;gap:4px;">${IC.note}&nbsp;Special Request</div>
-    <div style="font-size:9px;color:#111;font-style:italic;">"${entry.specialRequests}"</div>
+  <div class="special">
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
   </div>` : ''}
 
-  <!-- PRE-ORDER OR TABLE ONLY -->
+  <!-- PRE-ORDER (if any) — else table-only message -->
   ${hasPreOrder ? `
-  <div style="border-top:1px dashed #e0d0bc;padding-top:10px;margin-top:2px;">
-    <div style="font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#9a8060;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
-      <span style="color:#9a8060;">${IC.utensils}</span>&nbsp;Pre-Order
+  <div class="order-section">
+    <div class="sec-hdr">
+      ${ic('utensils','#c9a84c',12)}
+      <span class="sec-label">Pre-Order Details</span>
+      <div class="sec-rule"></div>
     </div>
-    ${orderTableHTML(entry.items, entry.totalAmount, '#f9f5ef', '#9a8060', '#f0e8da', '#111', '#7a5a30')}
-    <p style="font-size:7.5px;color:#9a8060;margin-top:5px;text-align:center;">Your food will be ready shortly after you arrive</p>
+    ${orderTableHTML(entry.items, entry.totalAmount)}
+    <p style="font-size:10px;color:#9a8060;margin-top:8px;text-align:center;font-style:italic;">
+      Dishes will be served shortly after you are seated.
+    </p>
   </div>` : `
-  <div style="background:#faf6f0;border:1px solid #e8ddd0;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;">
-    <span style="color:#b09070;">${IC.chair}</span>
-    <div>
-      <div style="font-size:9.5px;font-weight:800;color:#7a5a30;margin-bottom:2px;">Table Reservation Only</div>
-      <div style="font-size:8px;color:#9a8060;line-height:1.5;">No pre-order — you will order from the menu when you arrive.</div>
+  <div class="table-only">
+    <div class="table-only-icon">${ic('chair','#c9a84c',18)}</div>
+    <div class="table-only-title">Table Reservation Only</div>
+    <div class="table-only-text">
+      No pre-order placed. Our team will take your order<br/>once you are comfortably seated.
     </div>
   </div>`}
 
-  <!-- INSTRUCTIONS -->
-  <div style="padding:9px 11px;background:#fffbf5;border:1px solid #e8ddd0;border-radius:8px;margin-top:10px;margin-bottom:12px;">
-    <div style="font-size:6.5px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#9a8060;margin-bottom:5px;">Important</div>
-    <div style="font-size:8px;color:#7a5a30;line-height:1.65;">
-      • Show this token at the reception when you arrive.<br/>
-      • Please arrive 5–10 minutes before <strong>${fmtTime}</strong> on <strong>${fmtDateShort}</strong>.<br/>
-      ${hasPreOrder ? '• Pre-ordered dishes will be served shortly after seating.<br/>' : ''}
-      • For modifications or cancellation, contact the restaurant directly.
-    </div>
-  </div>
-
-  ${footerHTML('#e0d0bc', '#ccc', '#aaa')}
+  ${footerHTML()}
 </div></body></html>`;
 
-  openPDF(html, `Reservation_Token_${token}.pdf`);
+  openTokenWindow(html, `Reservation_Token_${tokenId}.pdf`);
 };
 
 const notifyWaiter = async (serviceType = "Custom") => {
@@ -1417,14 +1638,14 @@ askNotificationPermission();
 };
 
 const placeReservation = async () => {
-if (!customerInfo.name.trim() || !customerInfo.phone || !reservationDate || !reservationTime) return;
-  
-  // If reservation already placed, just go to confirm
+  if (!customerInfo.name.trim() || !customerInfo.phone || !reservationDate || !reservationTime) return;
+
   if (waitlistEntry?._id && waitlistEntry?.mode === 'reservation') {
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     return;
   }
+
   const summary = {};
   Object.entries(cart).forEach(([key, qty]) => {
     const isMulti = key.includes('-');
@@ -1442,45 +1663,54 @@ if (!customerInfo.name.trim() || !customerInfo.phone || !reservationDate || !res
 
   const orderItems = Object.values(summary);
   const total = orderItems.reduce((a, i) => a + i.subtotal, 0);
-
-  // Build ISO datetime from date + time
   const [hours, minutes] = reservationTime.split(':').map(Number);
   const resDateTime = new Date(reservationDate);
   resDateTime.setHours(hours, minutes, 0, 0);
 
   try {
-const res = await axios.post(`${BASE_URL}/reservations/${tenantId}`, {
-  sessionId,
-  customerName: customerInfo.name,
-  customerPhone: customerInfo.phone?.replace(/\D/g, '') || '',
-  partySize,
-  reservationTime: resDateTime.toISOString(),
-  tablePreference,
-  specialRequests,
-  items: orderItems,
-  totalAmount: total,
-  status: 'pending'
-});
+    // ── Place reservation ──
+    const res = await axios.post(`${BASE_URL}/reservations/${tenantId}`, {
+      sessionId,
+      customerName: customerInfo.name,
+      customerPhone: customerInfo.phone?.replace(/\D/g, '') || '',
+      partySize,
+      reservationTime: resDateTime.toISOString(),
+      tablePreference,
+      specialRequests,
+      items: orderItems,
+      totalAmount: total,
+      status: 'pending'
+    });
 
-    setWaitlistEntry(res.data.reservation);
+setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
     setCart({}); setSuggestions({});
     setRegistrationStep('confirm');
-    // ── Notification for reservation ──
-const askResNotification = async () => {
-  if (!('Notification' in window)) return;
-  const perm = Notification.permission === 'default'
-    ? await Notification.requestPermission()
-    : Notification.permission;
-  if (perm === 'granted') {
-    new Notification('📅 Reservation Requested!', {
-      body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${new Date(resDateTime).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})} at ${new Date(resDateTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})} is pending confirmation.`,
-      icon: '/logo.png',
-    });
-  }
-};
-askResNotification();
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
+
+    // ── Auto-save / upsert customer in DB with visit count ──
+    const phone = customerInfo.phone?.replace(/\D/g, '') || '';
+    if (phone.length === 10) {
+      axios.post(`${BASE_URL}/customers/upsert`, {
+        tenantId,
+        name: customerInfo.name.trim(),
+        phone,
+        lastVisit: new Date().toISOString(),
+      }).catch(() => {}); // silent — don't block UI
+    }
+
+    // ── Notification ──
+    if ('Notification' in window) {
+      const perm = Notification.permission === 'default'
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      if (perm === 'granted') {
+        new Notification('📅 Reservation Requested!', {
+          body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
+          icon: '/logo.png',
+        });
+      }
+    }
   } catch (err) {
     console.error(err);
     triggerAlert('orderError', 'error');
@@ -1675,156 +1905,6 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     const isConf   = waitlistEntry.status === 'confirmed';
     const tokenId  = waitlistEntry._id?.slice(-6)?.toUpperCase() || 'XXXXXX';
 
-// REPLACE the entire downloadReservationPDF function inside the reservation confirm block:
-const downloadReservationPDF = () => {
-  const hasPreOrder = hasItems && waitlistEntry.items?.length > 0;
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Inter',sans-serif;background:#fff;color:#111;padding:0;}
-  .page{width:100%;max-width:420px;margin:0 auto;padding:44px 36px;}
-  .header{text-align:center;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #111;}
-  .brand-tag{font-size:8px;font-weight:800;letter-spacing:4px;color:#9a8060;text-transform:uppercase;margin-bottom:10px;}
-  .restaurant{font-size:24px;font-weight:900;color:#111;letter-spacing:-0.5px;margin-bottom:3px;}
-  .restaurant-sub{font-size:10px;color:#888;font-weight:500;letter-spacing:0.5px;}
-  .token-block{background:#faf6f0;border:1px solid #e8ddd0;border-radius:16px;padding:28px 24px;text-align:center;margin-bottom:24px;position:relative;overflow:hidden;}
-  .token-block::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);}
-  .token-label{font-size:8px;font-weight:800;letter-spacing:3px;color:#9a8060;text-transform:uppercase;margin-bottom:12px;}
-  .token-id{font-size:40px;font-weight:900;letter-spacing:10px;color:#111;font-family:monospace;margin-bottom:14px;}
-  .status-pill{display:inline-block;padding:5px 16px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;background:${isConf ? '#111' : '#f0ebe4'};color:${isConf ? '#fff' : '#7a5a30'};}
-  .time-row{display:flex;justify-content:center;gap:20px;margin-top:16px;padding-top:16px;border-top:1px solid #ede8e0;}
-  .time-item{display:flex;flex-direction:column;align-items:center;gap:3px;}
-  .time-val{font-size:13px;font-weight:800;color:#111;}
-  .time-key{font-size:8px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;}
-  .section{margin-bottom:20px;}
-  .section-title{font-size:8px;font-weight:800;letter-spacing:2px;color:#9a8060;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f0ebe4;}
-  .detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f8f5f0;}
-  .detail-key{font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:0.5px;}
-  .detail-val{font-size:10px;font-weight:700;color:#111;text-align:right;max-width:55%;}
-  .preorder-box{background:#faf6f0;border:1px solid #ede8e0;border-radius:12px;padding:16px;margin-bottom:20px;}
-  .preorder-item{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0ebe4;}
-  .preorder-item:last-of-type{border-bottom:none;}
-  .preorder-name{font-size:10px;font-weight:600;color:#333;}
-  .preorder-price{font-size:10px;font-weight:800;color:#111;}
-  .preorder-total{display:flex;justify-content:space-between;padding-top:10px;margin-top:6px;border-top:2px solid #e8ddd0;}
-  .preorder-total-key{font-size:10px;font-weight:800;color:#111;text-transform:uppercase;}
-  .preorder-total-val{font-size:13px;font-weight:900;color:#7a5a30;}
-  .table-only-box{background:#f5f1eb;border:1px solid #e8ddd0;border-radius:12px;padding:18px;margin-bottom:20px;text-align:center;}
-  .table-only-icon{font-size:28px;margin-bottom:8px;}
-  .table-only-text{font-size:10px;color:#7a5a30;font-weight:600;line-height:1.5;}
-  .instructions{background:#f5f1eb;border-radius:10px;padding:14px 16px;margin-bottom:20px;}
-  .instructions-title{font-size:8px;font-weight:800;letter-spacing:2px;color:#9a8060;text-transform:uppercase;margin-bottom:7px;}
-  .instructions-body{font-size:9px;color:#6a5a40;line-height:1.8;}
-  .footer{text-align:center;padding-top:16px;border-top:1px solid #f0ebe4;}
-  .footer-brand{font-size:8px;font-weight:800;letter-spacing:3px;color:#ccc;text-transform:uppercase;}
-  .footer-date{font-size:8px;color:#ddd;margin-top:3px;}
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="header">
-    <div class="brand-tag">Powered by Pratyeksha</div>
-    <div class="restaurant">${restaurantData?.name || 'PRATYEKSHA'}</div>
-    <div class="restaurant-sub">TABLE RESERVATION ${hasPreOrder ? '+ PRE-ORDER' : 'CONFIRMATION'}</div>
-  </div>
-
-  <div class="token-block">
-    <div class="token-label">Booking Token</div>
-    <div class="token-id">#${tokenId}</div>
-    <div class="status-pill">${isConf ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}</div>
-    ${resTime ? `
-    <div class="time-row">
-      <div class="time-item">
-        <div class="time-val">${resTime.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</div>
-        <div class="time-key">Date</div>
-      </div>
-      <div class="time-item">
-        <div class="time-val">${resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-        <div class="time-key">Time</div>
-      </div>
-      <div class="time-item">
-        <div class="time-val">${waitlistEntry.partySize} ${waitlistEntry.partySize === 1 ? 'guest' : 'guests'}</div>
-        <div class="time-key">Party</div>
-      </div>
-    </div>` : ''}
-  </div>
-
-  <div class="section">
-    <div class="section-title">Guest Details</div>
-    ${[
-      {k:'Guest Name', v: waitlistEntry.customerName},
-      {k:'Mobile', v: waitlistEntry.customerPhone ? `+91 ${waitlistEntry.customerPhone}` : '—'},
-      {k:'Party Size', v: `${waitlistEntry.partySize} ${waitlistEntry.partySize === 1 ? 'person' : 'people'}`},
-      waitlistEntry.specialRequests ? {k:'Special Request', v: waitlistEntry.specialRequests} : null,
-    ].filter(Boolean).map(r => `
-      <div class="detail-row">
-        <span class="detail-key">${r.k}</span>
-        <span class="detail-val">${r.v}</span>
-      </div>
-    `).join('')}
-  </div>
-
-  ${hasPreOrder ? `
-  <div class="preorder-box">
-    <div class="section-title" style="margin-bottom:12px;">Pre-Order Details</div>
-    ${waitlistEntry.items.map(i => `
-      <div class="preorder-item">
-        <span class="preorder-name">${i.quantity}× ${i.name}${i.portion && i.portion !== 'Single' ? ` (${i.portion})` : ''}</span>
-        <span class="preorder-price">₹${i.subtotal}</span>
-      </div>
-    `).join('')}
-    <div class="preorder-total">
-      <span class="preorder-total-key">Pre-Order Total</span>
-      <span class="preorder-total-val">₹${waitlistEntry.totalAmount.toLocaleString()}</span>
-    </div>
-    <p style="font-size:9px;color:#9a8060;margin-top:12px;line-height:1.6;text-align:center;">
-      Your pre-ordered food will be ready shortly after you arrive. No additional wait for food!
-    </p>
-  </div>
-  ` : `
-  <div class="table-only-box">
-    <div class="table-only-icon">🪑</div>
-    <div class="table-only-text">
-      Table reservation only — no pre-order.<br/>
-      You'll order from the menu when you arrive.
-    </div>
-  </div>
-  `}
-
-  <div class="instructions">
-    <div class="instructions-title">Important</div>
-    <div class="instructions-body">
-      • Please show this token at the reception on arrival.<br/>
-      • Arrive 5–10 minutes before your reservation time.<br/>
-      ${hasPreOrder ? '• Your pre-ordered food will be ready shortly after you arrive.<br/>' : '• Our team will take your order once you are seated.<br/>'}
-      • For changes, contact the restaurant directly.
-    </div>
-  </div>
-
-  <div class="footer">
-    <div class="footer-brand">Powered by Pratyeksha</div>
-    <div class="footer-date">Generated: ${new Date().toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
-  </div>
-</div>
-</body>
-</html>`;
-
-  const blob = new Blob([html], { type: 'text/html' });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, '_blank');
-  if (win) {
-    win.onload = () => {
-      setTimeout(() => {
-        win.print();
-        URL.revokeObjectURL(url);
-      }, 600);
-    };
-  }
-};
 
     return (
       <Shell centered={false}>
@@ -2980,9 +3060,9 @@ const downloadReservationPDF = () => {
                           totalAmount: 0,
                           status: 'pending'
                         });
-                        setWaitlistEntry(res.data.reservation);
-                        setReservationAskOrder(false);
-                        setRegistrationStep('confirm');
+setWaitlistEntry({ ...res.data.reservation, mode: 'reservation', _noPreorder: true });
+setReservationAskOrder(false);
+setRegistrationStep('confirm');
                         if ('Notification' in window && Notification.permission === 'granted') {
                           new Notification('📅 Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
