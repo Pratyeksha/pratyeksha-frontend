@@ -1901,11 +1901,13 @@ const requestFinalBill = async () => {
  
     // ── Refresh the local welcome card immediately so UI reflects
     //    the new visit count / dishes without needing a page reload ──
-    const phoneDigits = customerInfo.phone.replace(/\D/g, '');
+const phoneDigits = customerInfo.phone.replace(/\D/g, '');
     if (phoneDigits.length === 10) {
-      axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
-        .then(r => { if (r.data?.found) setWelcomeCard(r.data); })
-        .catch(() => {});
+      setTimeout(() => {
+        axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
+          .then(r => { if (r.data?.found) setWelcomeCard(r.data); })
+          .catch(() => {});
+      }, 800);
     }
  
     // ── Clear stored bill on checkout ──
@@ -4561,28 +4563,28 @@ const categoryIconMap = {
                       {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
 <div style={styles.billTableBody}>
   {finalBillItems.map((order, idx) => (
-    <div key={idx} style={styles.billTableRow}>
-      <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {order.quantity}x {language === 'mr' ? (order.name_mr || order.name) : order.name}
+    <div key={idx} style={{ ...styles.billTableRow, flexDirection: 'column', alignItems: 'flex-start', gap: '3px', paddingBottom: '10px', borderBottom: '1px solid rgba(211,191,162,0.07)', marginBottom: '4px' }}>
+      {/* Row 1: Dish name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#fff' }}>
+          {language === 'mr' ? (order.name_mr || order.name) : order.name}
+          {order.portion && order.portion !== 'Single' && (
+            <span style={{ fontSize: '0.62rem', color: primaryColor, marginLeft: '6px', fontWeight: '700' }}>({order.portion})</span>
+          )}
           {order.isExtraItem && (
-            <span style={{
-              fontSize: '0.48rem', padding: '2px 5px',
-              background: 'rgba(211,191,162,0.08)',
-              border: '1px solid rgba(211,191,162,0.15)',
-              borderRadius: '4px', color: '#8a704d',
-              fontWeight: '900', letterSpacing: '0.5px'
-            }}>EXTRA</span>
+            <span style={{ fontSize: '0.48rem', padding: '2px 5px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '4px', color: '#8a704d', fontWeight: '900', letterSpacing: '0.5px', marginLeft: '6px' }}>EXTRA</span>
           )}
         </span>
-        <span style={{ fontSize: '0.65rem', color: primaryColor }}>
-          ₹{convertToMrNumber(order.pricePerUnit)} / {language === 'mr' ? 'नग' : 'item'}
-          {order.portion && order.portion !== 'Single' ? ` · ${order.portion}` : ''}
+      </div>
+      {/* Row 2: Rate × qty → total */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        <span style={{ fontSize: '0.68rem', color: 'rgba(211,191,162,0.45)', fontWeight: '600' }}>
+          ₹{convertToMrNumber(order.pricePerUnit)} × {order.quantity}
+        </span>
+        <span style={{ fontSize: '0.9rem', fontWeight: '900', color: primaryColor }}>
+          ₹{convertToMrNumber(order.subtotal)}
         </span>
       </div>
-      <span style={{ flex: 1, textAlign: 'right', fontSize: '0.85rem' }}>
-        ₹{convertToMrNumber(order.subtotal)}
-      </span>
     </div>
   ))}
 </div>
@@ -4787,9 +4789,9 @@ const categoryIconMap = {
       )}
 
       {/* Instagram */}
-      {restaurantData?.instagram && (
-        <a href={restaurantData.instagram} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-          <div style={{
+
+          {(restaurantData?.instagram || restaurantData?.instaId) && (
+            <a href={restaurantData.instagram || restaurantData.instaId} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>                   <div style={{
             display: 'flex', alignItems: 'center', gap: '16px',
             padding: '18px 20px',
             background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
@@ -4828,8 +4830,7 @@ const categoryIconMap = {
 
       {/* Divider */}
       <div style={{ height: '1px', background: 'rgba(211,191,162,0.08)', margin: '4px 0' }} />
-
-      {/* Back to menu */}
+{/* Close billing */}
       <button
         style={{
           width: '100%', padding: '17px',
@@ -4843,10 +4844,10 @@ const categoryIconMap = {
         }}
         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
-        onClick={() => { setBillRequested(false); setIsBillOpen(false); setShowReviewPage(false); }}
+        onClick={() => { setIsBillOpen(false); }}
       >
-        <Utensils size={15} strokeWidth={2.5} />
-        {t[language].backMenu}
+        <X size={15} strokeWidth={2.5} />
+        {language === 'mr' ? 'बंद करा' : 'Close'}
       </button>
 
       {/* Powered by */}
