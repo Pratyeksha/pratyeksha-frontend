@@ -56,7 +56,7 @@ const [cart, setCart] = useState(() => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
-  const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, water: 0 });
+  const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, tissue: 0 });
 
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
@@ -172,7 +172,7 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       spoon: "Spoons",
       fork: "Forks",
       plates: "Empty Plates",
-      water: "Water Bottle",
+      tissue: "Tissues",
       clean: "Clean Table",
       other: "Other Request",
       sendRequest: "SEND REQUEST",
@@ -223,7 +223,7 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       spoon: "चमचे",
       fork: "काटा चमचे",
       plates: "रिकाम्या प्लेट्स",
-      water: "पाण्याची बाटली",
+      tissue: "टिश्यू",
       clean: "टेबल साफ करा",
       other: "इतर काही",
       sendRequest: "विनंती पाठवा",
@@ -1442,7 +1442,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
     setIsWaiterModalOpen(false);
     
     // Reset counts (Tissue removed as per your request)
-    setWaiterCounts({ spoon: 0, fork: 0, plates: 0, water: 0 });
+    setWaiterCounts({ spoon: 0, fork: 0, plates: 0, tissue: 0 });
   } catch (error) { 
     console.error("Waiter Request Error:", error.response?.data || error.message);
     triggerAlert("orderError", "error"); 
@@ -4144,14 +4144,14 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             </div>
             <div style={styles.modalScrollBody}>
               <div style={styles.waiterCardGrid}>
-              {['spoon', 'fork', 'plates', 'water'].map(id => (
+              {['spoon', 'fork', 'plates', 'tissue'].map(id => (
   <div key={id} style={styles.waiterCountCard}>
     <div style={{ color: primaryColor }}>
       {/* UPDATED ICON LOGIC */}
       {id === 'spoon' && <Utensils size={24} />}
       {id === 'fork' && <UtensilsCrossed size={24} />}
       {id === 'plates' && <Layers size={24} />}
-      {id === 'water' && <Droplets size={24} />}
+      {id === 'tissue' && <Box size={24} />}
     </div>
     <p style={styles.waiterLabel}>{t[language][id]}</p>
                     <div style={styles.countControls}>
