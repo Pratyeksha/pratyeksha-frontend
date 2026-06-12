@@ -1517,11 +1517,12 @@ const sendBatchToKitchen = async () => {
     try {
       // 🚀 AGGREGATE CART ITEMS: Group by ID and Portion
       const summary = {};
-      Object.entries(cart).forEach(([key, qty]) => {
-        const isMulti = key.includes('-');
-        const id = isMulti ? key.split('-')[0] : key;
-        const portion = isMulti ? key.split('-')[1] : 'Single';
-        const item = allMenuItems.find(i => i._id === id);
+Object.entries(cart).forEach(([key, qty]) => {
+  const isMulti = key.includes('-');
+  const id = isMulti ? key.split('-')[0] : key;
+  const portion = isMulti ? key.split('-')[1] : 'Single';
+  const item = allMenuItems.find(i => i._id === id);
+  if (!item) return; // ← skip if item not found in menu (catches any stray extra items)
         
         const summaryKey = `${id}-${portion}`;
         if (!summary[summaryKey]) {
