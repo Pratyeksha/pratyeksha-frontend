@@ -1526,6 +1526,23 @@ if (orderRes.data?._id) {
 }      
       // Update placedOrders with the aggregated view for the receipt
       setPlacedOrders(prev => [...prev, ...orderItems]); 
+      const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
+      if (knownPhone && knownPhone.length === 10) {
+        const visitItems = orderItems.map(i => ({
+          menuItemId: i.menuItemId,
+          name: i.name,
+          quantity: i.quantity,
+          subtotal: i.subtotal,
+        }));
+        axios.post(`${BASE_URL}/customers/upsert`, {
+          tenantId,
+          name: customerInfo.name?.trim() || welcomeCard?.name || 'Guest',
+          phone: knownPhone,
+          lastVisit: new Date().toISOString(),
+          lastOrderItems: visitItems,
+          visitAmount: total,
+        }).catch(() => {});
+      }
       triggerAlert("orderSuccess");
       setHasPlacedInitialOrder(true);
       setCart({}); 
@@ -1793,19 +1810,47 @@ const requestFinalBill = async () => {
   try {
     const socket = io("https://pratyeksha-backend.onrender.com");
     socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
-    await axios.post(`${BASE_URL}/customers`, {
-      tenantId, name: customerInfo.name, phone: customerInfo.phone,
-      lastVisit: new Date().toISOString()
+ 
+    // ── Build this visit's item list from finalBillItems (aggregated) ──
+    const visitItems = finalBillItems
+      .filter(i => !i.isExtraItem) // only real menu items count toward "most ordered"
+      .map(i => ({
+        menuItemId: i.menuItemId,
+        name: i.name,
+        quantity: i.quantity,
+        subtotal: i.subtotal,
+      }));
+ 
+    const visitTotal = finalBillItems.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+ 
+    // ── Upsert customer: increments visitCount, updates lastVisit,
+    //    lastOrderItems, totalSpend, and merges dish counts server-side ──
+    await axios.post(`${BASE_URL}/customers/upsert`, {
+      tenantId,
+      name: customerInfo.name.trim(),
+      phone: customerInfo.phone.replace(/\D/g, ''),
+      lastVisit: new Date().toISOString(),
+      lastOrderItems: visitItems,
+      visitAmount: visitTotal,
     });
+ 
+    // ── Refresh the local welcome card immediately so UI reflects
+    //    the new visit count / dishes without needing a page reload ──
+    const phoneDigits = customerInfo.phone.replace(/\D/g, '');
+    if (phoneDigits.length === 10) {
+      axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
+        .then(r => { if (r.data?.found) setWelcomeCard(r.data); })
+        .catch(() => {});
+    }
+ 
     // ── Clear stored bill on checkout ──
-sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+    sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
     setBillRequested(true);
   } catch (error) {
-sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+    sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
     setBillRequested(true);
   }
 };
-
   const hasNonVegInView = useMemo(() => {
     if (isOnlyVegTenant) return false;
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
@@ -4728,32 +4773,64 @@ onClick={isCounterScan
         {/* BODY */}
         <div style={{ padding: '16px 18px 18px' }}>
 
-          {/* ── STATS ROW — icons only, no emoji ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-            {[
-              { icon: <Utensils size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'भेटी' : 'Visits', val: welcomeCard.visitCount || 1, mono: true },
-              { icon: <ReceiptText size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'एकूण खर्च' : 'Total Spent', val: welcomeCard.totalSpend > 0 ? `₹${(welcomeCard.totalSpend).toLocaleString()}` : '—', gold: true },
-              { icon: <Timer size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit', val: welcomeCard.lastVisit ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—', small: true }
-            ].map((s, i) => (
-              <div key={i} style={{
-                background: '#111', border: '1px solid rgba(211,191,162,0.07)',
-                borderRadius: '12px', padding: '11px 9px', textAlign: 'center'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{s.icon}</div>
-                <div style={{
-                  fontSize: s.small ? '0.74rem' : s.mono ? '1.05rem' : '0.84rem',
-                  fontWeight: '900', color: s.gold ? '#d3bfa2' : '#fff',
-                  fontFamily: s.mono ? 'monospace' : 'inherit',
-                  lineHeight: 1.1, marginBottom: '4px'
-                }}>
-                  {s.val}
-                </div>
-                <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                  {s.label}
-                </div>
-              </div>
-            ))}
-          </div>
+{(() => {
+  const topDish = welcomeCard.allDishes?.[0]; // already sorted by count, server-side
+ 
+  const stats = [
+    {
+      icon: <Utensils size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
+      label: language === 'mr' ? 'भेटी' : 'Visits',
+      val: welcomeCard.visitCount || 1,
+      mono: true,
+    },
+    topDish
+      ? {
+          icon: <Flame size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
+          label: language === 'mr' ? 'सर्वात आवडते' : 'Top Dish',
+          val: topDish.name,
+          gold: true,
+          small: true, // smaller font since dish names can be long
+        }
+      : {
+          icon: <Flame size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
+          label: language === 'mr' ? 'सर्वात आवडते' : 'Top Dish',
+          val: '—',
+          small: true,
+        },
+    {
+      icon: <Timer size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
+      label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit',
+      val: welcomeCard.lastVisit
+        ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+        : '—',
+      small: true,
+    },
+  ];
+ 
+  return stats.map((s, i) => (
+    <div key={i} style={{
+      background: '#111', border: '1px solid rgba(211,191,162,0.07)',
+      borderRadius: '12px', padding: '11px 9px', textAlign: 'center'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{s.icon}</div>
+      <div style={{
+        fontSize: s.small ? '0.66rem' : s.mono ? '1.05rem' : '0.84rem',
+        fontWeight: '900', color: s.gold ? '#d3bfa2' : '#fff',
+        fontFamily: s.mono ? 'monospace' : 'inherit',
+        lineHeight: 1.2, marginBottom: '4px',
+        overflow: 'hidden', textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap', display: '-webkit-box',
+        WebkitLineClamp: s.small && !s.mono ? 2 : 1,
+        WebkitBoxOrient: 'vertical',
+      }}>
+        {s.val}
+      </div>
+      <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+        {s.label}
+      </div>
+    </div>
+  ));
+})()}
 
           {/* ── ALL-TIME FAVOURITE ── */}
           {welcomeCard.favDish && (
