@@ -267,17 +267,64 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       triggerAlert(data.restaurantName ? `Your pickup will be ready in ~10 min at ${data.restaurantName}!` : 'Order ready soon!', 'success');
     });
 
-    waitlistSocket.on('reservation_confirmed', (data) => {
+waitlistSocket.on('reservation_confirmed', (data) => {
   setWaitlistEntry(prev => prev ? { ...prev, status: 'confirmed' } : prev);
   setNotificationBanner({ type: 'reservation_confirmed', restaurantName: data.restaurantName, time: data.reservationTime });
 });
 
-    return () => {
-      waitlistSocket.off('table_assigned');
-      waitlistSocket.off('pickup_ready');
-      waitlistSocket.off('position_updated');
-      waitlistSocket.off('pickup_reminder');
-    };
+// ── Operator manual push → browser notification on customer device ──
+waitlistSocket.on('operator_notify', (data) => {
+  // Show browser / push notification
+  const fireNotification = (title, body, tag) => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: '/logo.png',
+        badge: '/logo.png',
+        tag: tag || 'operator-notify',
+        renotify: true,
+        vibrate: [200, 100, 200]
+      });
+      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/logo.png',
+            badge: '/logo.png',
+            tag: tag || 'operator-notify',
+            renotify: true,
+          });
+        }
+      });
+    }
+  };
+
+  const { title, body, tag, type } = data;
+
+  // Fire the notification
+  fireNotification(
+    title || (type === 'waitlist' ? 'Table Almost Ready!' : type === 'pickup' ? 'Pickup Ready!' : 'Reservation Update'),
+    body || 'Please check with the staff.',
+    tag
+  );
+
+  // Also show in-app alert for waitlist type
+  if (type === 'waitlist') {
+    triggerAlert(body || 'Your table is almost ready — please stay nearby!', 'success');
+  }
+});
+
+return () => {
+  waitlistSocket.off('table_assigned');
+  waitlistSocket.off('pickup_ready');
+  waitlistSocket.off('position_updated');
+  waitlistSocket.off('pickup_reminder');
+  waitlistSocket.off('reservation_confirmed');
+  waitlistSocket.off('operator_notify');
+};
   }, [isCounterScan, sessionId, waitlistSocket]);
 
 // REPLACE the existing useEffect that has:
@@ -984,7 +1031,6 @@ const footerHTML = () => `
   <div class="footer-rule"></div>
   <div class="footer">
     <div>
-      <div class="footer-brand">Pratyeksha</div>
       <div class="footer-brand-sub">Powered by Pratyeksha</div>
     </div>
     <div class="footer-date">${nowStamp()}</div>

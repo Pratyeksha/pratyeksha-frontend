@@ -2276,44 +2276,77 @@ const renderMonthHeatmap = () => {
                 )}
 
                 {/* Actions */}
-                <div style={{ padding: '0 16px 14px', display: 'flex', gap: '7px' }}>
-                  <button onClick={() => setAssignTableModal(entry)} style={{
-                    flex: 1, padding: '10px', borderRadius: '9px', border: 'none',
-                    background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
-                    color: '#000', fontWeight: '900', fontSize: '0.62rem',
-                    cursor: 'pointer', letterSpacing: '0.5px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                    transition: 'opacity 0.15s'
-                  }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                  >
-                    <TableProperties size={12} />
-                    ASSIGN TABLE
-                    <ChevronRight size={12} />
-                  </button>
-                  <button onClick={() => setConfirmModal({
-                    show: true, title: 'Mark as No-Show?',
-                    subtitle: `${entry.customerName} will be removed from the waitlist.`,
-                    onConfirm: async () => {
-                      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
-                      fetchCounterQueue();
-                      showNotif(`${entry.customerName} — marked no-show`);
-                    }
-                  })} style={{
-                    padding: '10px 12px', background: 'transparent',
-                    border: '1px solid #1a1a1a', color: '#2a2a2a',
-                    borderRadius: '9px', fontSize: '0.58rem', fontWeight: '900',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
-                    transition: 'all 0.15s'
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
-                  >
-                    <AlertOctagon size={11} />
-                    NO SHOW
-                  </button>
-                </div>
+<div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+
+  {/* Row 1: Assign + No-show */}
+  <div style={{ display: 'flex', gap: '7px' }}>
+    <button onClick={() => setAssignTableModal(entry)} style={{
+      flex: 1, padding: '10px', borderRadius: '9px', border: 'none',
+      background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+      color: '#000', fontWeight: '900', fontSize: '0.62rem',
+      cursor: 'pointer', letterSpacing: '0.5px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+      transition: 'opacity 0.15s'
+    }}
+      onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+    >
+      <TableProperties size={12} />
+      ASSIGN TABLE
+      <ChevronRight size={12} />
+    </button>
+    <button onClick={() => setConfirmModal({
+      show: true, title: 'Mark as No-Show?',
+      subtitle: `${entry.customerName} will be removed from the waitlist.`,
+      onConfirm: async () => {
+        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+        fetchCounterQueue();
+        showNotif(`${entry.customerName} — marked no-show`);
+      }
+    })} style={{
+      padding: '10px 12px', background: 'transparent',
+      border: '1px solid #1a1a1a', color: '#2a2a2a',
+      borderRadius: '9px', fontSize: '0.58rem', fontWeight: '900',
+      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
+      transition: 'all 0.15s'
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
+    >
+      <AlertOctagon size={11} />
+      NO SHOW
+    </button>
+  </div>
+
+  {/* Row 2: Notify customer — waitlist alert */}
+  <button onClick={async () => {
+    try {
+      await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, {
+        title: 'Your table is almost ready!',
+        body: `Hi ${entry.customerName}! Your table at ${restaurantData?.name || 'the restaurant'} will be ready very soon. Please stay nearby.`,
+        tag: 'waitlist-alert'
+      });
+      showNotif(`${entry.customerName} — notified to stay nearby`, 'success');
+    } catch (err) {
+      showNotif(err.response?.data?.error || 'Notification failed', 'error');
+    }
+  }} style={{
+    width: '100%', padding: '9px',
+    background: 'rgba(211,191,162,0.04)',
+    border: '1px solid rgba(211,191,162,0.12)',
+    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
+    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
+    letterSpacing: '0.5px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+    transition: 'all 0.15s'
+  }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
+  >
+    <BellRing size={11} /> NOTIFY — TABLE ALMOST READY
+  </button>
+
+</div>
               </div>
             );
           })}
@@ -2451,7 +2484,6 @@ const renderMonthHeatmap = () => {
                   </div>
                 )}
 
-                {/* Actions */}
 {/* Actions */}
 <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
 
@@ -2581,7 +2613,38 @@ const renderMonthHeatmap = () => {
     >
       <X size={11} /> CANCEL PICKUP
     </button>
+
+    
   )}
+  {/* ── RE-NOTIFY CUSTOMER — shown when pickup-ready ── */}
+{isReady && (
+  <button onClick={async () => {
+    try {
+      await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, {
+        title: 'Your pickup order is ready!',
+        body: `Hi ${entry.customerName}! Your order at ${restaurantData?.name || 'the restaurant'} is ready. Please collect it from the counter now.`,
+        tag: 'pickup-ready-reminder'
+      });
+      showNotif(`${entry.customerName} — re-notified for pickup`, 'success');
+    } catch (err) {
+      showNotif(err.response?.data?.error || 'Notification failed', 'error');
+    }
+  }} style={{
+    width: '100%', padding: '9px',
+    background: 'rgba(211,191,162,0.04)',
+    border: '1px solid rgba(211,191,162,0.12)',
+    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
+    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
+    letterSpacing: '0.5px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+    transition: 'all 0.15s'
+  }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
+  >
+    <BellRing size={11} /> RE-NOTIFY — ORDER READY
+  </button>
+)}
 
 </div>
               </div>
@@ -2901,6 +2964,44 @@ const renderMonthHeatmap = () => {
       <X size={11} /> CANCEL RESERVATION
     </button>
   )}
+
+  {/* ── NOTIFY CUSTOMER — send confirmation push ── */}
+{['pending', 'confirmed'].includes(entry.status) && (
+  <button onClick={async () => {
+    try {
+      const resTime = new Date(entry.reservationTime);
+      const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, {
+        title: entry.status === 'confirmed'
+          ? 'Reservation Confirmed!'
+          : 'Reservation Update',
+        body: entry.status === 'confirmed'
+          ? `Hi ${entry.customerName}! Your table for ${entry.partySize} at ${restaurantData?.name || 'the restaurant'} is confirmed for ${fmtDate} at ${fmtTime}. See you soon!`
+          : `Hi ${entry.customerName}! Your reservation at ${restaurantData?.name || 'the restaurant'} for ${fmtDate} at ${fmtTime} is being processed. We'll confirm shortly.`,
+        tag: 'reservation-notify'
+      });
+      showNotif(`${entry.customerName} — reservation notification sent`, 'success');
+    } catch (err) {
+      showNotif(err.response?.data?.error || 'Notification failed', 'error');
+    }
+  }} style={{
+    width: '100%', marginTop: '6px', padding: '9px',
+    background: 'rgba(211,191,162,0.04)',
+    border: '1px solid rgba(211,191,162,0.12)',
+    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
+    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
+    letterSpacing: '0.5px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+    transition: 'all 0.15s'
+  }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
+  >
+    <BellRing size={11} />
+    {entry.status === 'confirmed' ? 'NOTIFY — BOOKING CONFIRMED' : 'NOTIFY — RESERVATION UPDATE'}
+  </button>
+)}
 </div>
                   </div>
                 </div>
