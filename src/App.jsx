@@ -4696,7 +4696,7 @@ onClick={isCounterScan
         exit={{ y: 120, opacity: 0 }}
         transition={{ type: 'spring', damping: 26, stiffness: 280 }}
         style={{
-          width: '100%', maxWidth: '440px',
+          width: '100%', maxWidth: '480px',
           background: '#0c0c0c',
           border: '1px solid rgba(211,191,162,0.15)',
           borderRadius: '28px 28px 20px 20px',
@@ -4708,291 +4708,267 @@ onClick={isCounterScan
         {/* Gold shimmer top line */}
         <div style={{ height: '2px', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.7), transparent)', flexShrink: 0 }} />
 
-        {/* HEADER */}
+        <button onClick={() => setWelcomeDismissed(true)} style={{
+          position: 'absolute', top: '14px', right: '14px', zIndex: 2,
+          width: '26px', height: '26px', borderRadius: '8px',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+          color: '#555', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <X size={13} />
+        </button>
+
+        {/* ══════════ TOP STRIP — avatar + greeting + visit badge, horizontal ══════════ */}
         <div style={{
-          padding: '20px 20px 16px',
+          padding: '18px 50px 16px 18px',
           background: 'linear-gradient(180deg, rgba(211,191,162,0.06) 0%, transparent 100%)',
           borderBottom: '1px solid rgba(211,191,162,0.07)',
-          position: 'relative'
+          display: 'flex', alignItems: 'center', gap: '13px'
         }}>
-          <button onClick={() => setWelcomeDismissed(true)} style={{
-            position: 'absolute', top: '16px', right: '16px',
-            width: '28px', height: '28px', borderRadius: '8px',
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            color: '#555', cursor: 'pointer',
+          {/* Avatar */}
+          <div style={{
+            width: '46px', height: '46px', borderRadius: '14px', flexShrink: 0,
+            background: 'rgba(211,191,162,0.07)',
+            border: '1px solid rgba(211,191,162,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <X size={14} />
-          </button>
+            {welcomeCard.isLoyal
+              ? <Sparkles size={21} color="#d3bfa2" strokeWidth={1.5} />
+              : welcomeCard.visitCount >= 2
+              ? <UserCheck size={21} color="#d3bfa2" strokeWidth={1.5} />
+              : <Users size={21} color="#d3bfa2" strokeWidth={1.5} />}
+          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginRight: '36px' }}>
-            {/* Avatar icon — Lucide, no emoji */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{
-                width: '54px', height: '54px', borderRadius: '16px',
-                background: 'rgba(211,191,162,0.07)',
-                border: '1px solid rgba(211,191,162,0.18)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                {welcomeCard.isLoyal
-                  ? <Sparkles size={24} color="#d3bfa2" strokeWidth={1.5} />
-                  : welcomeCard.visitCount >= 2
-                  ? <UserCheck size={24} color="#d3bfa2" strokeWidth={1.5} />
-                  : <Users size={24} color="#d3bfa2" strokeWidth={1.5} />}
-              </div>
-              {welcomeCard.visitCount > 1 && (
-                <div style={{
-                  position: 'absolute', bottom: '-5px', right: '-5px',
-                  background: '#d3bfa2', color: '#000',
-                  fontSize: '0.48rem', fontWeight: '900',
-                  padding: '2px 5px', borderRadius: '8px',
-                  border: '1.5px solid #0c0c0c', fontFamily: 'monospace'
-                }}>
-                  {welcomeCard.visitCount}×
-                </div>
-              )}
+          {/* Greeting */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+              {welcomeCard.isLoyal ? 'LOYAL GUEST' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK' : 'WELCOME'}
             </div>
-
-            <div>
-              <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                {welcomeCard.isLoyal ? 'LOYAL GUEST' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK' : 'WELCOME'}
-              </div>
-              <div style={{ fontSize: '1.12rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-                {language === 'en'
-                  ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${welcomeCard.name?.split(' ')[0]}!`
-                  : `नमस्कार, ${welcomeCard.name?.split(' ')[0]}!`}
-              </div>
-              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.18)', marginTop: '3px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <MapPin size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-                {restaurantData?.name}
-              </div>
+            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {language === 'en'
+                ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${welcomeCard.name?.split(' ')[0]}!`
+                : `नमस्कार, ${welcomeCard.name?.split(' ')[0]}!`}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', marginTop: '2px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <MapPin size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+              {restaurantData?.name}
             </div>
           </div>
+
+          {/* Visit count badge */}
+          {welcomeCard.visitCount > 1 && (
+            <div style={{
+              flexShrink: 0, textAlign: 'center',
+              background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
+              borderRadius: '11px', padding: '8px 12px'
+            }}>
+              <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>
+                {welcomeCard.visitCount}×
+              </div>
+              <div style={{ fontSize: '0.42rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: '3px' }}>
+                {language === 'mr' ? 'भेटी' : 'Visits'}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* BODY */}
-        <div style={{ padding: '16px 18px 18px' }}>
+        {/* ══════════ BODY ══════════ */}
+        <div style={{ padding: '14px 16px 16px' }}>
 
-{(() => {
-  const topDish = welcomeCard.allDishes?.[0]; // already sorted by count, server-side
- 
-  const stats = [
-    {
-      icon: <Utensils size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
-      label: language === 'mr' ? 'भेटी' : 'Visits',
-      val: welcomeCard.visitCount || 1,
-      mono: true,
-    },
-    topDish
-      ? {
-          icon: <Flame size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
-          label: language === 'mr' ? 'सर्वात आवडते' : 'Top Dish',
-          val: topDish.name,
-          gold: true,
-          small: true, // smaller font since dish names can be long
-        }
-      : {
-          icon: <Flame size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
-          label: language === 'mr' ? 'सर्वात आवडते' : 'Top Dish',
-          val: '—',
-          small: true,
-        },
-    {
-      icon: <Timer size={14} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />,
-      label: language === 'mr' ? 'शेवटची भेट' : 'Last Visit',
-      val: welcomeCard.lastVisit
-        ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-        : '—',
-      small: true,
-    },
-  ];
- 
-  return stats.map((s, i) => (
-    <div key={i} style={{
-      background: '#111', border: '1px solid rgba(211,191,162,0.07)',
-      borderRadius: '12px', padding: '11px 9px', textAlign: 'center'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{s.icon}</div>
-      <div style={{
-        fontSize: s.small ? '0.66rem' : s.mono ? '1.05rem' : '0.84rem',
-        fontWeight: '900', color: s.gold ? '#d3bfa2' : '#fff',
-        fontFamily: s.mono ? 'monospace' : 'inherit',
-        lineHeight: 1.2, marginBottom: '4px',
-        overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap', display: '-webkit-box',
-        WebkitLineClamp: s.small && !s.mono ? 2 : 1,
-        WebkitBoxOrient: 'vertical',
-      }}>
-        {s.val}
-      </div>
-      <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-        {s.label}
-      </div>
-    </div>
-  ));
-})()}
+          {/* ── HORIZONTAL HIGHLIGHT ROW: Top Dish + Last Visit side by side ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '8px', marginBottom: '10px' }}>
 
-          {/* ── ALL-TIME FAVOURITE ── */}
-          {welcomeCard.favDish && (
+            {/* Top Dish — wide cell */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '12px 14px', marginBottom: '10px',
+              display: 'flex', alignItems: 'center', gap: '11px',
+              padding: '11px 13px',
               background: 'rgba(211,191,162,0.04)',
               border: '1px solid rgba(211,191,162,0.11)',
-              borderRadius: '13px', position: 'relative', overflow: 'hidden'
+              borderRadius: '13px', position: 'relative', overflow: 'hidden', minWidth: 0
             }}>
               <div style={{ position: 'absolute', top: 0, right: 0, width: '50px', height: '50px', background: 'radial-gradient(circle, rgba(211,191,162,0.06) 0%, transparent 70%)', borderRadius: '0 13px 0 50px' }} />
               <div style={{
-                width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
+                width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
                 background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <Sparkles size={16} color="#d3bfa2" strokeWidth={1.5} />
+                <Flame size={15} color="#d3bfa2" strokeWidth={1.5} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
-                  {language === 'mr' ? 'सर्वात आवडता पदार्थ' : 'All-Time Favourite'}
+                <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {language === 'mr' ? 'सर्वात आवडते' : 'Top Dish'}
                 </div>
-                <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {welcomeCard.favDish.name}
-                </div>
-                {welcomeCard.favDish.count > 1 && (
-                  <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.28)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Hash size={9} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
-                    {language === 'mr' ? `${welcomeCard.favDish.count} वेळा ऑर्डर केले` : `Ordered ${welcomeCard.favDish.count} times`}
-                  </div>
+                {welcomeCard.allDishes?.[0] ? (
+                  <>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {welcomeCard.allDishes[0].name}
+                    </div>
+                    <div style={{ fontSize: '0.54rem', color: 'rgba(211,191,162,0.28)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Hash size={8} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
+                      {language === 'mr' ? `${welcomeCard.allDishes[0].count} वेळा` : `Ordered ${welcomeCard.allDishes[0].count}×`}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'rgba(255,255,255,0.2)' }}>—</div>
                 )}
               </div>
             </div>
-          )}
 
-          {/* ── TOP DISHES ranked list — icon-based, no emoji ── */}
-          {welcomeCard.allDishes?.length > 1 && (
+            {/* Last Visit — narrow cell */}
             <div style={{
-              padding: '12px 14px', marginBottom: '10px',
-              background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '13px'
+              display: 'flex', alignItems: 'center', gap: '9px',
+              padding: '11px 12px',
+              background: '#111', border: '1px solid rgba(211,191,162,0.07)',
+              borderRadius: '13px', minWidth: 0
             }}>
-              <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Flame size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-                {language === 'mr' ? 'तुमचे सर्वात जास्त ऑर्डर' : 'Your Most Ordered'}
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
+                background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Timer size={15} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {welcomeCard.allDishes.slice(0, 4).map((dish, i) => {
-                  const maxCount = welcomeCard.allDishes[0]?.count || 1;
-                  const pct = Math.round((dish.count / maxCount) * 100);
-                  const rankColors = ['#d3bfa2', '#a89070', '#8a7060', '#6a5040'];
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-                      {/* rank badge */}
-                      <div style={{
-                        width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-                        background: i === 0 ? 'rgba(211,191,162,0.1)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${i === 0 ? 'rgba(211,191,162,0.25)' : 'rgba(255,255,255,0.05)'}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.5rem', fontWeight: '900', fontFamily: 'monospace',
-                        color: rankColors[i] || '#555'
-                      }}>
-                        {i + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                          <span style={{
-                            fontSize: '0.7rem', fontWeight: i === 0 ? '800' : '500',
-                            color: i === 0 ? '#d3bfa2' : 'rgba(255,255,255,0.35)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '155px'
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '0.44rem', color: 'rgba(255,255,255,0.2)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {language === 'mr' ? 'शेवटची भेट' : 'Last Visit'}
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff', fontFamily: 'monospace' }}>
+                  {welcomeCard.lastVisit
+                    ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                    : '—'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── HORIZONTAL SPLIT: Most Ordered (left) + Last Order (right) ── */}
+          {(welcomeCard.allDishes?.length > 1 || welcomeCard.lastOrderItems?.length > 0) && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: (welcomeCard.allDishes?.length > 1 && welcomeCard.lastOrderItems?.length > 0) ? '1fr 1fr' : '1fr',
+              gap: '8px', marginBottom: '10px'
+            }}>
+
+              {/* Most Ordered ranked list */}
+              {welcomeCard.allDishes?.length > 1 && (
+                <div style={{
+                  padding: '11px 12px',
+                  background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
+                  borderRadius: '13px', minWidth: 0
+                }}>
+                  <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '9px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Flame size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+                    {language === 'mr' ? 'जास्त ऑर्डर' : 'Most Ordered'}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                    {welcomeCard.allDishes.slice(0, 3).map((dish, i) => {
+                      const maxCount = welcomeCard.allDishes[0]?.count || 1;
+                      const pct = Math.round((dish.count / maxCount) * 100);
+                      const rankColors = ['#d3bfa2', '#a89070', '#8a7060'];
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                          <div style={{
+                            width: '15px', height: '15px', borderRadius: '4px', flexShrink: 0,
+                            background: i === 0 ? 'rgba(211,191,162,0.1)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${i === 0 ? 'rgba(211,191,162,0.25)' : 'rgba(255,255,255,0.05)'}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.46rem', fontWeight: '900', fontFamily: 'monospace',
+                            color: rankColors[i] || '#555'
                           }}>
-                            {dish.name}
-                          </span>
-                          <span style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '5px' }}>
-                            {dish.count}×
-                          </span>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                              <span style={{
+                                fontSize: '0.64rem', fontWeight: i === 0 ? '800' : '500',
+                                color: i === 0 ? '#d3bfa2' : 'rgba(255,255,255,0.35)',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90px'
+                              }}>
+                                {dish.name}
+                              </span>
+                              <span style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '4px' }}>
+                                {dish.count}×
+                              </span>
+                            </div>
+                            <div style={{ height: '2px', background: 'rgba(255,255,255,0.04)', borderRadius: '1px', overflow: 'hidden' }}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pct}%` }}
+                                transition={{ delay: i * 0.1 + 0.3, duration: 0.7, ease: 'easeOut' }}
+                                style={{
+                                  height: '100%',
+                                  background: i === 0 ? 'linear-gradient(90deg,#c9a84c,#d3bfa2)' : `rgba(211,191,162,${0.15 + (0.1 * (3 - i))})`,
+                                  borderRadius: '1px'
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ height: '2px', background: 'rgba(255,255,255,0.04)', borderRadius: '1px', overflow: 'hidden' }}>
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${pct}%` }}
-                            transition={{ delay: i * 0.1 + 0.3, duration: 0.7, ease: 'easeOut' }}
-                            style={{
-                              height: '100%',
-                              background: i === 0 ? 'linear-gradient(90deg,#c9a84c,#d3bfa2)' : `rgba(211,191,162,${0.15 + (0.1 * (3 - i))})`,
-                              borderRadius: '1px'
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── LAST ORDER ── */}
-          {welcomeCard.lastOrderItems?.length > 0 && (
-            <div style={{
-              padding: '12px 14px', marginBottom: '14px',
-              background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
-              borderRadius: '13px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '9px' }}>
-                <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Timer size={10} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-                  {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
-                </div>
-                {welcomeCard.lastOrderDate && (
-                  <div style={{ fontSize: '0.54rem', color: 'rgba(255,255,255,0.14)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Timer size={9} color="rgba(255,255,255,0.14)" strokeWidth={1.5} />
-                    {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                {welcomeCard.lastOrderItems.slice(0, 4).map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                      width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
-                      background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      <Utensils size={8} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+                </div>
+              )}
+
+              {/* Last Order list */}
+              {welcomeCard.lastOrderItems?.length > 0 && (
+                <div style={{
+                  padding: '11px 12px',
+                  background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
+                  borderRadius: '13px', minWidth: 0
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '9px' }}>
+                    <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <ReceiptText size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+                      {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
                     </div>
-                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: 'rgba(211,191,162,0.22)', fontFamily: 'monospace', minWidth: '18px' }}>
-                      ×{item.quantity}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.32)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.name}
-                    </span>
-                    {item.subtotal > 0 && (
-                      <span style={{ fontSize: '0.64rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0 }}>
-                        ₹{item.subtotal}
-                      </span>
+                    {welcomeCard.lastOrderDate && (
+                      <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.14)', fontWeight: '600' }}>
+                        {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </div>
                     )}
                   </div>
-                ))}
-              </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {welcomeCard.lastOrderItems.slice(0, 3).map((item, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.56rem', fontWeight: '900', color: 'rgba(211,191,162,0.22)', fontFamily: 'monospace', minWidth: '16px', flexShrink: 0 }}>
+                          ×{item.quantity}
+                        </span>
+                        <span style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.32)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.name}
+                        </span>
+                        {item.subtotal > 0 && (
+                          <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0 }}>
+                            ₹{item.subtotal}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── LOYALTY BADGE — icon only ── */}
+          {/* ── LOYALTY BADGE — compact horizontal ── */}
           {welcomeCard.isLoyal && (
             <div style={{
-              padding: '11px 14px', marginBottom: '14px',
+              padding: '9px 13px', marginBottom: '10px',
               background: 'rgba(211,191,162,0.04)',
               border: '1px solid rgba(211,191,162,0.12)',
-              borderRadius: '12px', textAlign: 'center',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
+              borderRadius: '11px',
+              display: 'flex', alignItems: 'center', gap: '9px'
             }}>
-              <Sparkles size={16} color="#d3bfa2" strokeWidth={1.5} />
-              <div>
-                <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#d3bfa2' }}>
-                  {language === 'mr' ? 'तुम्ही लॉयल गेस्ट आहात!' : "You're a Loyal Guest!"}
-                </div>
-                <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.18)', marginTop: '2px' }}>
+              <Sparkles size={15} color="#d3bfa2" strokeWidth={1.5} style={{ flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#d3bfa2' }}>
+                  {language === 'mr' ? "तुम्ही लॉयल गेस्ट आहात!" : "You're a Loyal Guest"}
+                </span>
+                <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.18)' }}>
                   {language === 'mr'
-                    ? `${welcomeCard.visitCount} भेटींसाठी आभार`
-                    : `Thank you for ${welcomeCard.visitCount} visits`}
-                </div>
+                    ? `· ${welcomeCard.visitCount} भेटींसाठी आभार`
+                    : `· thanks for ${welcomeCard.visitCount} visits`}
+                </span>
               </div>
             </div>
           )}
@@ -5001,16 +4977,16 @@ onClick={isCounterScan
           <button
             onClick={() => { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
             style={{
-              width: '100%', padding: '15px',
+              width: '100%', padding: '14px',
               background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
               border: 'none', borderRadius: '13px',
-              color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
+              color: '#0c0c0c', fontWeight: '900', fontSize: '0.84rem',
               cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
               boxShadow: '0 8px 24px rgba(211,191,162,0.18)'
             }}
           >
-            <Utensils size={15} strokeWidth={2.5} />
+            <Utensils size={14} strokeWidth={2.5} />
             {language === 'mr' ? 'चला ऑर्डर देऊया!' : "LET'S ORDER →"}
           </button>
         </div>
@@ -5114,7 +5090,6 @@ onClick={isCounterScan
                   setWelcomeCard(res.data);
                   setShowPhonePrompt(false);
                 } else {
-                  // New customer — just dismiss
                   setShowPhonePrompt(false);
                   setWelcomeDismissed(true);
                 }
