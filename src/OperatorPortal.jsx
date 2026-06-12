@@ -11,7 +11,7 @@ import {
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
 Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
-  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award, ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck
+  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award, ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText 
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -3633,12 +3633,10 @@ const renderMonthHeatmap = () => {
   </motion.div>
 )}
           {/* ── INSIGHTS ── */}
-         {activeTab==='insights' && (
+{activeTab==='insights' && (
   <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
 
-    {/* ═══════════════════════════════════════════════
-        KPI STRIP — top-line numbers, fixed duplicate label
-    ═══════════════════════════════════════════════ */}
+    {/* KPI STRIP */}
     <div style={styles.statsRow}>
       <div style={styles.glassStat}>
         <small style={styles.statLabel}>MONTHLY REVENUE</small>
@@ -3667,14 +3665,11 @@ const renderMonthHeatmap = () => {
       <p style={{fontSize:'0.9rem',color:'#fff',fontWeight:'500'}}>{insightsData.digest}</p>
     </div>
 
-    {/* ═══════════════════════════════════════════════
-        SECTION 1 — TODAY'S PULSE (most actionable, real-time)
-    ═══════════════════════════════════════════════ */}
+    {/* ═══════════ SECTION 1 — TODAY'S PULSE ═══════════ */}
     <SectionHeader icon={<Activity size={16}/>} title="Today's Pulse" subtitle="Live operational signals — act on these now" />
 
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'4px'}}>
 
-      {/* PEAK HOUR INTENSITY — now includes Golden Hours to fill space */}
       <div style={styles.biCard}>
         <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
         {hourlyAnalytics.hourly.length > 0 ? (() => {
@@ -3743,7 +3738,6 @@ const renderMonthHeatmap = () => {
                 ))}
               </div>
 
-              {/* GOLDEN HOURS — merged in to fill space */}
               <div style={{ borderTop: '1px solid #111', paddingTop: '12px' }}>
                 <div style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Award size={12} color="#d3bfa2"/> TOP REVENUE HOURS
@@ -3777,7 +3771,6 @@ const renderMonthHeatmap = () => {
         })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS TODAY</div>}
       </div>
 
-      {/* WAITLIST TODAY — compact, today-only summary */}
       <div style={styles.biCard}>
         <h4 style={styles.biTitle}><Users size={16}/> COUNTER & WAITLIST — TODAY</h4>
         {waitlistAnalytics ? (
@@ -3825,14 +3818,11 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
 
-    {/* ═══════════════════════════════════════════════
-        SECTION 2 — REVENUE & GROWTH
-    ═══════════════════════════════════════════════ */}
+    {/* ═══════════ SECTION 2 — REVENUE & GROWTH ═══════════ */}
     <SectionHeader icon={<TrendingUp size={16}/>} title="Revenue & Growth" subtitle="How money is moving — month over month" />
 
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
 
-      {/* REVENUE TREND — expanded with payment-mode mini breakdown to fill space */}
       <div style={styles.biCard}>
         <h4 style={styles.biTitle}><TrendingUp size={16}/> REVENUE TREND</h4>
         {trendsData?.revenue ? (()=>{
@@ -3860,7 +3850,6 @@ const renderMonthHeatmap = () => {
               ) : <span style={{fontSize:'0.75rem',color:'#555'}}>No previous data</span>}
             </div>
 
-            {/* Payment mode mini-breakdown */}
             {analytics.length > 0 && (() => {
               const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
               const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
@@ -3891,7 +3880,6 @@ const renderMonthHeatmap = () => {
         })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
       </div>
 
-      {/* WEEKLY PERFORMANCE */}
       <div style={styles.biCard}>
         <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
         {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
@@ -4029,12 +4017,9 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
 
-    {/* ═══════════════════════════════════════════════
-        SECTION 3 — MENU INTELLIGENCE
-    ═══════════════════════════════════════════════ */}
+    {/* ═══════════ SECTION 3 — MENU INTELLIGENCE ═══════════ */}
     <SectionHeader icon={<Percent size={16}/>} title="Menu Intelligence" subtitle="Profitability, popularity, and pricing decisions" />
 
-    {/* DISH PROFITABILITY — full width now (was cramped in 2-col) */}
     <div style={{...styles.biCard, marginBottom:'20px'}}>
       <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY — RECIPE COSTING</h4>
       {profitabilityData.length > 0 ? (
@@ -4174,7 +4159,31 @@ const renderMonthHeatmap = () => {
       );
     })()}
 
-    {/* CATEGORY RANKINGS */}
+{/* DEAD MENU ITEMS — NEW */}
+    {profitabilityData.length > 0 && (() => {
+      const dead = profitabilityData.filter(d => !d.totalQtySold || d.totalQtySold === 0);
+      if (dead.length === 0) return null;
+      return (
+        <div style={{...styles.biCard, marginBottom:'20px', borderLeft:'4px solid #c0392b'}}>
+          <h4 style={styles.biTitle}><XCircle size={16}/> DEAD MENU ITEMS — ZERO SALES</h4>
+          <p style={{fontSize:'0.72rem',color:'#555',marginTop:'-15px',marginBottom:'16px'}}>
+            {dead.length} item{dead.length>1?'s':''} sold 0 units this period. Consider removing, repricing, or repositioning on the menu.
+          </p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
+            {dead.map(d=>(
+              <div key={d._id} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #1a1a1a'}}>
+                <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{d.name}</div>
+                <div style={{fontSize:'0.6rem',color:'#555',marginTop:'3px'}}>
+                  {d.hasRecipe ? `Sell ₹${d.sellingPrice} · Cost ₹${d.ingredientCostPerServing}` : 'No recipe linked'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* CATEGORY PERFORMANCE SEGMENTATION */}
     {Object.keys(categoryRankings).length > 0 && (
       <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
         <h4 style={styles.biTitle}><Layers size={16} /> CATEGORY PERFORMANCE SEGMENTATION</h4>
@@ -4310,6 +4319,26 @@ const renderMonthHeatmap = () => {
           </div>
         )}
 
+        {/* DEAD STOCK — EXTRA ITEMS NEW */}
+        {(() => {
+          const deadExtras = (extraAnalytics.items || []).filter(i => !i.totalSold || i.totalSold === 0);
+          if (deadExtras.length === 0) return null;
+          return (
+            <div style={{marginTop:'16px', paddingTop:'16px', borderTop:'1px solid #111'}}>
+              <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                <Package size={12}/> DEAD STOCK — ZERO SALES THIS PERIOD ({deadExtras.length})
+              </div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                {deadExtras.map(i=>(
+                  <span key={i._id} style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(192,57,43,0.06)',border:'1px solid rgba(192,57,43,0.18)',borderRadius:'4px',color:'#888',fontWeight:'700'}}>
+                    {i.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
           <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
@@ -4317,9 +4346,7 @@ const renderMonthHeatmap = () => {
       </div>
     )}
 
-    {/* ═══════════════════════════════════════════════
-        SECTION 4 — OPERATIONS & RESOURCES
-    ═══════════════════════════════════════════════ */}
+    {/* ═══════════ SECTION 4 — OPERATIONS & RESOURCES ═══════════ */}
     <SectionHeader icon={<Layers size={16}/>} title="Operations & Resources" subtitle="Tables, staff, and inventory health" />
 
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
@@ -4356,6 +4383,19 @@ const renderMonthHeatmap = () => {
             </div>
           ))
         ) : <div style={{opacity:0.3,fontSize:'0.75rem',paddingTop:'30px',textAlign:'center'}}>NO DATA</div>}
+
+        {/* COST-PER-COVER — NEW */}
+        {profitabilityData.length > 0 && trendsData?.customers?.total > 0 && (() => {
+          const totalCost = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
+          const totalCovers = trendsData.customers.total;
+          const costPerCover = totalCovers > 0 ? Math.round(totalCost / totalCovers) : 0;
+          return (
+            <div style={{marginTop:'10px',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',display:'flex',justifyContent:'space-between'}}>
+              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>COST PER COVER</small>
+              <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#d3bfa2'}}>₹{costPerCover}</span>
+            </div>
+          );
+        })()}
       </div>
     </div>
 
@@ -4500,6 +4540,10 @@ const renderMonthHeatmap = () => {
       const healthyItems = totalItems - lowItems;
       const healthScore  = Math.round((healthyItems/totalItems)*100);
       const criticals    = inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
+
+      // DEAD STOCK — NEW (items with healthy stock but possibly unused — heuristic: stock unchanged & no recipe usage)
+      const totalStockValue = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
+
       return (
         <div style={{...styles.biCard, marginBottom:'20px', borderLeft:`4px solid ${healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}`}}>
           <h4 style={styles.biTitle}><Layers size={16}/> INVENTORY HEALTH SCORECARD</h4>
@@ -4522,6 +4566,12 @@ const renderMonthHeatmap = () => {
               ))}
             </div>
           </div>
+
+          <div style={{display:'flex',justifyContent:'space-between',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',marginBottom: criticals.length>0 ? '14px' : 0}}>
+            <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>TOTAL STOCK VALUE</small>
+            <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#8a704d'}}>₹{totalStockValue.toLocaleString()}</span>
+          </div>
+
           {criticals.length > 0 && (
             <div style={{background:'rgba(192,57,43,0.04)',border:'1px solid rgba(192,57,43,0.15)',borderRadius:'10px',padding:'14px'}}>
               <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
@@ -4593,9 +4643,7 @@ const renderMonthHeatmap = () => {
       );
     })()}
 
-    {/* ═══════════════════════════════════════════════
-        SECTION 5 — CUSTOMERS & CHANNELS
-    ═══════════════════════════════════════════════ */}
+    {/* ═══════════ SECTION 5 — CUSTOMERS & CHANNELS ═══════════ */}
     <SectionHeader icon={<Users size={16}/>} title="Customers & Channels" subtitle="Retention, acquisition, and where revenue comes from" />
 
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
@@ -4617,6 +4665,14 @@ const renderMonthHeatmap = () => {
               <span style={{fontSize:'0.8rem',fontWeight:'900',color:s.c}}>{s.v}</span>
             </div>
           ))}
+
+          {/* CHURN RISK — NEW (heuristic from repeat customer pool) */}
+          {trendsData.customers.repeat > 0 && (
+            <div style={{marginTop:'10px',padding:'10px 12px',background:'rgba(186,117,23,0.05)',border:'1px solid rgba(186,117,23,0.15)',borderRadius:'8px',fontSize:'0.65rem',color:'#888',display:'flex',alignItems:'flex-start',gap:'8px'}}>
+              <Lightbulb size={13} color="#BA7517" style={{flexShrink:0,marginTop:'1px'}}/>
+              <span>Track repeat customers who haven't visited in 30+ days — a churn alert list helps target win-back offers.</span>
+            </div>
+          )}
         </>) : <div style={{textAlign:'center',padding:'20px',fontSize:'0.75rem',color:'#444'}}>Start capturing customer phone numbers at billing to unlock retention metrics.</div>}
       </div>
       <div style={styles.biCard}>
@@ -4631,7 +4687,7 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
 
-    {/* WAITLIST & COUNTER — MONTHLY (mode split, party size, daily trend) */}
+    {/* WAITLIST & COUNTER — MONTHLY BREAKDOWN */}
     {waitlistAnalytics && (
       <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
         <h4 style={styles.biTitle}>
@@ -4653,6 +4709,26 @@ const renderMonthHeatmap = () => {
               <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
             </div>
           ))}
+        </div>
+
+        {/* NO-SHOW RATE — NEW */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'12px',marginBottom:'20px'}}>
+          {(() => {
+            const total = waitlistAnalytics.month.total || 0;
+            const walked = waitlistAnalytics.month.total - (waitlistAnalytics.month.seated + (waitlistAnalytics.month.pickupSettled||0));
+            const noShowPct = total > 0 ? Math.round((Math.max(0,walked) / total) * 100) : 0;
+            const repeatGroups = waitlistAnalytics.month.repeatGroups || 0;
+            return [
+              { l: 'NO-SHOW / WALK-AWAY RATE', v: `${noShowPct}%`, c: noShowPct > 20 ? '#E24B4A' : noShowPct > 10 ? '#BA7517' : '#4ade80', sub: `${Math.max(0,walked)} of ${total} groups` },
+              { l: 'REPEAT WAITLIST CUSTOMERS', v: repeatGroups, c: '#d3bfa2', sub: 'returning for waitlist/pickup' },
+            ].map(s=>(
+              <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+                <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '4px' }}>{s.sub}</div>
+              </div>
+            ));
+          })()}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
@@ -4697,6 +4773,17 @@ const renderMonthHeatmap = () => {
                 </div>
               );
             })}
+            {waitlistAnalytics.month.peakHour && (
+              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #111', fontSize: '0.62rem', color: '#555' }}>
+                Peak arrival: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
+                  {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
+                    : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
+                    : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
+                    : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
+                </span>
+                <span style={{ color: '#333', marginLeft: '8px' }}>({waitlistAnalytics.month.peakHour.count} groups)</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -4739,44 +4826,152 @@ const renderMonthHeatmap = () => {
       </div>
     )}
 
-    {/* PAYMENT MODE — full detail card */}
-    {analytics.length > 0 && (() => {
-      const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
-      const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
-      const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
-      const grand  = totalC + totalU + totalK;
-      if (grand === 0) return null;
-      const modes = [
-        { label:'Cash', icon:<Banknote size={14}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
-        { label:'UPI',  icon:<Smartphone size={14}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
-        { label:'Card', icon:<CreditCard size={14}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
-      ];
-      return (
-        <div style={{...styles.biCard, marginBottom:'20px'}}>
-          <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
-          <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
-            Understanding how customers pay helps optimise cash flow and settlement timing.
-          </p>
-          <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
-            {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
+    {/* ═══════════ SECTION 6 — FINANCIAL HEALTH ═══════════ */}
+    <SectionHeader icon={<Wallet size={16}/>} title="Financial Health" subtitle="Cash flow, profitability, and break-even tracking" />
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+
+      {/* PAYMENT MODE INTELLIGENCE */}
+      {analytics.length > 0 && (() => {
+        const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+        const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+        const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+        const grand  = totalC + totalU + totalK;
+        if (grand === 0) return <div style={styles.biCard}><h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4><div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div></div>;
+        const totalDigital = totalU + totalK;
+        const digitalPct = Math.round((totalDigital/grand)*100);
+        const modes = [
+          { label:'Cash', icon:<Banknote size={14}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
+          { label:'UPI',  icon:<Smartphone size={14}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
+          { label:'Card', icon:<CreditCard size={14}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
+        ];
+        return (
+          <div style={styles.biCard}>
+            <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
+            <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
+              Understanding how customers pay helps optimise cash flow and settlement timing.
+            </p>
+            <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
+              {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'16px'}}>
+              {modes.map(m=>(
+                <div key={m.label} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.68rem',color:'#888',marginBottom:'4px'}}>{m.icon} {m.label}</div>
+                  <div style={{fontSize:'0.95rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
+                  <div style={{fontSize:'0.58rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
+                </div>
+              ))}
+            </div>
+            {/* CASH VS DIGITAL */}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',marginBottom:'12px'}}>
+              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>DIGITAL ADOPTION (UPI+CARD)</small>
+              <span style={{fontSize:'0.8rem',fontWeight:'900',color:digitalPct>60?'#4ade80':'#BA7517'}}>{digitalPct}%</span>
+            </div>
+            <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5',display:'flex',alignItems:'flex-start',gap:'8px'}}>
+              <Lightbulb size={14} color="#d3bfa2" style={{flexShrink:0,marginTop:'1px'}}/>
+              <span><b style={{color:'#d3bfa2'}}>Insight:</b> {
+                totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
+                : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
+                : 'Balanced payment mix — good for cash flow predictability.'
+              }</span>
+            </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'16px'}}>
-            {modes.map(m=>(
-              <div key={m.label} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'7px',fontSize:'0.72rem',color:'#888',marginBottom:'4px'}}>{m.icon} {m.label}</div>
-                <div style={{fontSize:'1rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
-                <div style={{fontSize:'0.6rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
+        );
+      })()}
+
+      {/* P&L SUMMARY — NEW */}
+      {profitabilityData.length > 0 && (() => {
+        const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
+        const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0) + (extraAnalytics?.totalCost || 0);
+        const payrollCost = totalPayrollValue || staffEfficiency.reduce((a,s)=>{
+          const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+          return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+        },0);
+        const grossProfit = totalRevenue - ingredientCost;
+        const netProfit = grossProfit - payrollCost;
+        const netMarginPct = totalRevenue > 0 ? Math.round((netProfit/totalRevenue)*100) : 0;
+
+        return (
+          <div style={styles.biCard}>
+            <h4 style={styles.biTitle}><FileText size={16}/> P&L SUMMARY — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
+            <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
+              Revenue minus ingredient cost and staff payroll. Overheads (rent, utilities) not included.
+            </p>
+            {[
+              { l: 'TOTAL REVENUE', v: totalRevenue, c: '#fff', sign: '' },
+              { l: 'INGREDIENT COST', v: -ingredientCost, c: '#BA7517', sign: '-' },
+              { l: 'GROSS PROFIT', v: grossProfit, c: '#d3bfa2', sign: '', bold: true },
+              { l: 'STAFF PAYROLL', v: -payrollCost, c: '#BA7517', sign: '-' },
+            ].map(s=>(
+              <div key={s.l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #111'}}>
+                <small style={{fontSize:'0.65rem',color: s.bold?'#888':'#555',fontWeight:'900'}}>{s.l}</small>
+                <span style={{fontSize: s.bold?'0.85rem':'0.8rem',fontWeight:'900',color:s.c}}>{s.sign}₹{Math.abs(s.v).toLocaleString()}</span>
+              </div>
+            ))}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0 4px'}}>
+              <span style={{fontSize:'0.75rem',color:'#888',fontWeight:'900'}}>NET PROFIT</span>
+              <span style={{fontSize:'1.1rem',fontWeight:'900',padding:'4px 12px',borderRadius:'6px',
+                background: netProfit>=0 ? 'rgba(74,222,128,0.1)' : 'rgba(226,75,74,0.1)',
+                color: netProfit>=0 ? '#4ade80' : '#E24B4A'}}>
+                ₹{netProfit.toLocaleString()} <small style={{fontSize:'0.6rem',opacity:0.8}}>({netMarginPct}%)</small>
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+
+    {/* BREAK-EVEN TRACKER — NEW, full width */}
+    {profitabilityData.length > 0 && staffEfficiency.length > 0 && currentMonthAnalytics.length > 0 && (() => {
+      const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+      const monthlyPayroll = staffEfficiency.reduce((a,s)=>{
+        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+        return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+      },0);
+      const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
+      const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0) + (extraAnalytics?.totalCost || 0);
+      const foodCostPct = totalRevenue > 0 ? (ingredientCost/totalRevenue) : 0.3;
+      const contributionMarginPct = 1 - foodCostPct;
+      const breakEvenRevenue = contributionMarginPct > 0 ? monthlyPayroll / contributionMarginPct : 0;
+      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+      const breakEvenPerDay = breakEvenRevenue / daysInMonth;
+      const progressPct = breakEvenRevenue > 0 ? Math.min(100, Math.round((totalRevenue/breakEvenRevenue)*100)) : 0;
+
+      return (
+        <div style={{...styles.biCard, marginBottom:'20px', borderLeft: `4px solid ${progressPct>=100?'#4ade80':'#BA7517'}`}}>
+          <h4 style={styles.biTitle}><Activity size={16}/> BREAK-EVEN TRACKER</h4>
+          <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
+            Estimated monthly revenue needed to cover staff payroll, based on current food-cost margin. Excludes rent/utilities.
+          </p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'16px'}}>
+            {[
+              { l: 'MONTHLY PAYROLL', v: `₹${Math.round(monthlyPayroll).toLocaleString()}`, c:'#BA7517' },
+              { l: 'CONTRIBUTION MARGIN', v: `${Math.round(contributionMarginPct*100)}%`, c:'#d3bfa2' },
+              { l: 'BREAK-EVEN REVENUE', v: `₹${Math.round(breakEvenRevenue).toLocaleString()}`, c:'#fff' },
+              { l: 'BREAK-EVEN / DAY', v: `₹${Math.round(breakEvenPerDay).toLocaleString()}`, c:'#fff' },
+            ].map(s=>(
+              <div key={s.l} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
+                <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'4px'}}>{s.l}</div>
+                <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
               </div>
             ))}
           </div>
-          <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5',display:'flex',alignItems:'flex-start',gap:'8px'}}>
-            <Lightbulb size={14} color="#d3bfa2" style={{flexShrink:0,marginTop:'1px'}}/>
-            <span><b style={{color:'#d3bfa2'}}>Insight:</b> {
-              totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
-              : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
-              : 'Balanced payment mix — good for cash flow predictability.'
-            }</span>
+          <div style={{marginBottom:'6px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
+              <span style={{fontSize:'0.6rem',color:'#555'}}>This month's progress to break-even</span>
+              <span style={{fontSize:'0.6rem',color:progressPct>=100?'#4ade80':'#d3bfa2',fontWeight:'900'}}>{progressPct}%</span>
+            </div>
+            <div style={{height:'6px',background:'#111',borderRadius:'3px',overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${progressPct}%`,background: progressPct>=100?'#4ade80':'linear-gradient(90deg,#8a704d,#d3bfa2)',borderRadius:'3px'}}/>
+            </div>
           </div>
+          {progressPct >= 100 && (
+            <div style={{marginTop:'10px',fontSize:'0.65rem',color:'#4ade80',fontWeight:'800',display:'flex',alignItems:'center',gap:'6px'}}>
+              <ClipboardCheck size={13}/> Break-even achieved for this month
+            </div>
+          )}
         </div>
       );
     })()}

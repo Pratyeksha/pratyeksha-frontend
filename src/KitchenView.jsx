@@ -306,7 +306,11 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
       if (data.tenantId === tenantId) setWaiterCalls(prev => [{ id: Date.now(), ...data }, ...prev]);
     });
 
-    return () => {
+return () => {
+      socket.off("new_order");
+      socket.off("kds_item_cross_sync");
+      socket.off("order_modification_detected");
+      socket.off("waiter_called");
       socket.disconnect();
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
@@ -479,8 +483,9 @@ useEffect(() => {
     fetchWastageLog();
     if (wastageTab === 'report') fetchWastageAnalytics();
   }
-}, [showWastagePanel]);
- 
+}, [showWastagePanel, fetchWastageInventory, fetchWastageLog, fetchWastageAnalytics]);
+
+
 useEffect(() => {
   if (showWastagePanel && wastageTab === 'report') fetchWastageAnalytics();
 }, [wastageTab]);
@@ -705,8 +710,7 @@ useEffect(() => {
                 <p style={rs.subTitle}>
                   {isOnline
                     ? isSmallTablet ? "ONLINE" : "TITANIUM V17.0 • ONLINE"
-                    : "⚠️ DISCONNECTED"}
-                </p>
+: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><WifiOff size={11} color="#ff4d4d" /> DISCONNECTED</span>}                </p>
               )}
             </div>
           </div>
@@ -781,7 +785,7 @@ useEffect(() => {
     background: showWastagePanel ? 'rgba(211,191,162,0.08)' : '#191b22',
     position: 'relative'
   }}>
-  <i className="ti ti-trash-x" style={{ fontSize: 15, color: '#d3bfa2' }} />
+<Trash2 size={15} color="#d3bfa2" />
   {!isMobile && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>WASTAGE</span>}
   {wastageLog.filter(e => {
     const d = new Date(e.timestamp);
@@ -1782,10 +1786,14 @@ useEffect(() => {
         </AnimatePresence>
       </div>
 
-      <style>{`
+<style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-        body {
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+          body {
           margin: 0;
           background: #0d0e11;
           color: #fff;
@@ -2057,8 +2065,10 @@ onClick={() => {
       const sec = s % 60;
       return `${m}:${sec.toString().padStart(2,'0')}`;
     })()}
-    {(itemElapsed[idx]||0) >= 300 && (
-      <span style={{ fontSize: '0.48rem', letterSpacing: '0.5px' }}>⚠ SLOW</span>
+{(itemElapsed[idx]||0) >= 300 && (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.48rem', letterSpacing: '0.5px' }}>
+        <AlertTriangle size={8} strokeWidth={2.5} /> SLOW
+      </span>
     )}
   </div>
 )}
@@ -2108,8 +2118,11 @@ onClick={() => {
           color: urgency === 'high' ? '#0f1013' : '#d3bfa2',
           minHeight: 48
         }}>
-        {urgency === 'high' ? '🔥 OVERDUE — DISPATCH NOW' : 'COMPLETE TICKET'}
-      </button>
+<span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          {urgency === 'high' && <Flame size={15} color="#0f1013" strokeWidth={2.5} />}
+          {urgency === 'high' ? 'OVERDUE — DISPATCH NOW' : 'COMPLETE TICKET'}
+        </span>
+              </button>
     </motion.div>
   );
 };
