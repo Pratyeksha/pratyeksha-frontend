@@ -64,6 +64,7 @@ const [cart, setCart] = useState(() => {
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
   const [orderTrackingPanelOpen, setOrderTrackingPanelOpen] = useState(false);
+  const [orderPlacedScreen, setOrderPlacedScreen] = useState(false);
 
 // { orderId: 'pending' | 'ready' | 'served' }
 
@@ -1530,6 +1531,9 @@ if (orderRes.data?._id) {
       setCart({}); 
       setSuggestions({}); 
       setIsDrawerOpen(false);
+      setOrderPlacedScreen(true);
+setTimeout(() => setOrderPlacedScreen(false), 6000); // auto-dismiss after 6s
+
     } catch (error) { 
       console.error(error);
       triggerAlert("orderError", "error"); 
@@ -5046,6 +5050,350 @@ onClick={isCounterScan
   )}
 </AnimatePresence>
 
+ 
+<AnimatePresence>
+  {orderPlacedScreen && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ duration: 0.3 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9500,
+        background: '#080808',
+        fontFamily: 'Poppins, sans-serif',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'flex-start',
+        overflowY: 'auto'
+      }}
+    >
+      {/* ── ANIMATED BACKGROUND ── */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+        {/* Radial glow center */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 1.2, ease: 'easeOut' }}
+          style={{
+            position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
+            width: '500px', height: '500px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(201,168,76,0.07) 0%, rgba(211,191,162,0.03) 40%, transparent 70%)',
+          }}
+        />
+        {/* Rotating ring 1 */}
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 18, ease: 'linear' }}
+          style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '340px', height: '340px', borderRadius: '50%',
+            border: '1px solid rgba(201,168,76,0.06)',
+          }}
+        />
+        {/* Rotating ring 2 — opposite */}
+        <motion.div
+          animate={{ rotate: -360 }}
+          transition={{ repeat: Infinity, duration: 26, ease: 'linear' }}
+          style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '480px', height: '480px', borderRadius: '50%',
+            border: '1px dashed rgba(201,168,76,0.04)',
+          }}
+        />
+        {/* Floating particles */}
+        {[...Array(8)].map((_, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 80 }}
+            animate={{ opacity: [0, 0.5, 0], y: [80, -40, -120] }}
+            transition={{ delay: i * 0.3 + 0.4, duration: 3.5, repeat: Infinity, repeatDelay: i * 0.4 }}
+            style={{
+              position: 'absolute',
+              left: `${12 + i * 11}%`,
+              bottom: '20%',
+              width: i % 3 === 0 ? '4px' : '3px',
+              height: i % 3 === 0 ? '4px' : '3px',
+              borderRadius: '50%',
+              background: i % 2 === 0 ? 'rgba(201,168,76,0.6)' : 'rgba(211,191,162,0.4)',
+            }}
+          />
+        ))}
+      </div>
+ 
+      {/* ── CONTENT ── */}
+      <div style={{ width: '100%', maxWidth: '420px', padding: '60px 24px 40px', position: 'relative', zIndex: 1 }}>
+ 
+        {/* ── 3D KITCHEN ANIMATION ── */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+ 
+          {/* SVG Kitchen Scene */}
+          <div style={{ position: 'relative', width: '200px', height: '200px', margin: '0 auto 20px' }}>
+ 
+            {/* Outer glow ring */}
+            <motion.div
+              animate={{ scale: [1, 1.05, 1], opacity: [0.4, 0.8, 0.4] }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute', inset: '-10px', borderRadius: '50%',
+                border: '1px solid rgba(201,168,76,0.25)',
+                background: 'radial-gradient(circle, rgba(201,168,76,0.05) 0%, transparent 70%)',
+              }}
+            />
+ 
+            {/* Main circle bg */}
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'linear-gradient(145deg, #141414, #0c0c0c)',
+              border: '1px solid rgba(201,168,76,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden'
+            }}>
+              {/* Gold shimmer top */}
+              <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px', background: 'linear-gradient(90deg,transparent,#c9a84c,transparent)' }} />
+ 
+              {/* Animated SVG — cooking pot with steam */}
+              <svg width="110" height="110" viewBox="0 0 110 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+ 
+                {/* Steam lines — animated */}
+                <motion.line x1="38" y1="28" x2="38" y2="12"
+                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"
+                  animate={{ y1: [28, 22, 28], y2: [12, 6, 12], opacity: [0.6, 0.1, 0.6] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                />
+                <motion.line x1="55" y1="22" x2="55" y2="6"
+                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.8"
+                  animate={{ y1: [22, 15, 22], y2: [6, -1, 6], opacity: [0.8, 0.1, 0.8] }}
+                  transition={{ repeat: Infinity, duration: 2.3, delay: 0.4, ease: 'easeInOut' }}
+                />
+                <motion.line x1="72" y1="28" x2="72" y2="12"
+                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"
+                  animate={{ y1: [28, 22, 28], y2: [12, 6, 12], opacity: [0.6, 0.1, 0.6] }}
+                  transition={{ repeat: Infinity, duration: 1.8, delay: 0.8, ease: 'easeInOut' }}
+                />
+ 
+                {/* Pot lid */}
+                <motion.ellipse cx="55" cy="38" rx="28" ry="8"
+                  fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1.2"
+                  animate={{ cy: [38, 36, 38] }}
+                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                />
+                {/* Lid handle */}
+                <motion.rect x="49" y="31" width="12" height="6" rx="3"
+                  fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1"
+                  animate={{ y: [31, 29, 31] }}
+                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                />
+ 
+                {/* Pot body */}
+                <rect x="24" y="44" width="62" height="38" rx="8"
+                  fill="#141414" stroke="rgba(201,168,76,0.5)" strokeWidth="1.2"
+                />
+ 
+                {/* Pot liquid — bubbling fill */}
+                <motion.rect x="26" y="52" width="58" height="28" rx="5"
+                  fill="rgba(201,168,76,0.08)"
+                  animate={{ height: [28, 30, 28], y: [52, 50, 52] }}
+                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                />
+ 
+                {/* Bubble dots inside pot */}
+                {[[40,64],[55,60],[68,66],[48,70]].map(([cx,cy],i) => (
+                  <motion.circle key={i} cx={cx} cy={cy} r="2"
+                    fill="rgba(201,168,76,0.4)"
+                    animate={{ cy: [cy, cy - 6, cy], opacity: [0.4, 0.1, 0.4], r: [2, 1, 2] }}
+                    transition={{ repeat: Infinity, duration: 1.4, delay: i * 0.35, ease: 'easeInOut' }}
+                  />
+                ))}
+ 
+                {/* Pot handles */}
+                <path d="M24 52 Q14 52 14 60 Q14 68 24 68" stroke="rgba(201,168,76,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                <path d="M86 52 Q96 52 96 60 Q96 68 86 68" stroke="rgba(201,168,76,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+ 
+                {/* Stove grate */}
+                <rect x="18" y="82" width="74" height="6" rx="3"
+                  fill="#111" stroke="rgba(255,255,255,0.06)" strokeWidth="1"
+                />
+                {/* Grate lines */}
+                {[30,42,55,68,80].map((x,i) => (
+                  <line key={i} x1={x} y1="82" x2={x} y2="88"
+                    stroke="rgba(255,255,255,0.08)" strokeWidth="1"
+                  />
+                ))}
+                {/* Flame glow under pot */}
+                <motion.ellipse cx="55" cy="85" rx="20" ry="4"
+                  fill="rgba(201,168,76,0.08)"
+                  animate={{ rx: [20, 24, 20], opacity: [0.08, 0.18, 0.08] }}
+                  transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
+                />
+ 
+              </svg>
+            </div>
+ 
+            {/* Status dot pulse top-right */}
+            <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+              <motion.div
+                animate={{ scale: [1, 1.5, 1], opacity: [1, 0.3, 1] }}
+                transition={{ repeat: Infinity, duration: 1.6 }}
+                style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#c9a84c', boxShadow: '0 0 8px rgba(201,168,76,0.6)' }}
+              />
+            </div>
+          </div>
+ 
+          {/* ── HEADLINE ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <div style={{ fontSize: '0.52rem', color: 'rgba(201,168,76,0.45)', fontWeight: '900', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '10px' }}>
+              {language === 'mr' ? 'ऑर्डर पाठवली गेली!' : 'Order Confirmed!'}
+            </div>
+            <h1 style={{ fontSize: '1.7rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.6px', lineHeight: 1.15, marginBottom: '8px' }}>
+              {language === 'mr' ? 'किचनमध्ये जात आहे' : 'Heading to the Kitchen'}
+            </h1>
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.7, fontWeight: '500', maxWidth: '280px', margin: '0 auto' }}>
+              {language === 'mr'
+                ? 'तुमची ऑर्डर आमच्या शेफकडे गेली आहे. थोड्याच वेळात तयार होईल!'
+                : "Your order is with our chef. We'll keep you updated every step of the way."}
+            </p>
+          </motion.div>
+        </div>
+ 
+        {/* ── LIVE PIPELINE — 3 steps ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          style={{
+            background: '#0f0f0f',
+            border: '1px solid rgba(211,191,162,0.1)',
+            borderRadius: '20px', overflow: 'hidden',
+            marginBottom: '16px', position: 'relative'
+          }}
+        >
+          <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px', background: 'linear-gradient(90deg,transparent,rgba(201,168,76,0.4),transparent)' }} />
+ 
+          {/* Steps row */}
+          <div style={{ padding: '22px 20px 16px', position: 'relative' }}>
+ 
+            {/* Connecting track */}
+            <div style={{ position: 'absolute', top: '40px', left: '15%', right: '15%', height: '1px', background: 'rgba(255,255,255,0.05)' }} />
+            {/* Animated fill */}
+            <motion.div
+              initial={{ width: '5%' }}
+              animate={{ width: '25%' }}
+              transition={{ delay: 0.8, duration: 1.4, ease: 'easeOut' }}
+              style={{ position: 'absolute', top: '40px', left: '15%', height: '1px', background: 'linear-gradient(90deg,#c9a84c,rgba(201,168,76,0.3))' }}
+            />
+ 
+            <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+              {[
+                { icon: <CheckCircle2 size={18} color="#c9a84c" strokeWidth={2} />, label: language === 'mr' ? 'ऑर्डर\nमिळाली' : 'Order\nReceived', done: true },
+                { icon: <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 1.6 }}><Flame size={18} color="rgba(201,168,76,0.5)" strokeWidth={1.5} /></motion.div>, label: language === 'mr' ? 'किचनमध्ये\nबनत आहे' : 'In the\nKitchen', active: true },
+                { icon: <Utensils size={18} color="rgba(255,255,255,0.12)" strokeWidth={1.5} />, label: language === 'mr' ? 'सर्व्ह\nकरणार' : 'Ready to\nServe', done: false },
+              ].map((step, i) => (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '38px', height: '38px', borderRadius: '11px',
+                    background: step.done ? 'rgba(201,168,76,0.12)' : step.active ? 'rgba(201,168,76,0.06)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${step.done ? 'rgba(201,168,76,0.35)' : step.active ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {step.icon}
+                  </div>
+                  <div style={{
+                    fontSize: '0.54rem', fontWeight: '700', textAlign: 'center', lineHeight: 1.4,
+                    color: step.done ? '#d3bfa2' : step.active ? 'rgba(201,168,76,0.6)' : 'rgba(255,255,255,0.15)',
+                    whiteSpace: 'pre-line'
+                  }}>
+                    {step.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+ 
+          {/* Est time strip */}
+          <div style={{
+            padding: '12px 20px',
+            background: 'rgba(201,168,76,0.04)',
+            borderTop: '1px solid rgba(201,168,76,0.08)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Timer size={13} color="rgba(201,168,76,0.45)" strokeWidth={1.5} />
+              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', fontWeight: '600' }}>
+                {language === 'mr' ? 'अंदाजे तयारीची वेळ' : 'Estimated prep time'}
+              </span>
+            </div>
+            <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>
+              15–25 min
+            </span>
+          </div>
+        </motion.div>
+ 
+        {/* ── TABLE + ORDER COUNT ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}
+        >
+          {[
+            { icon: <MapPin size={14} color="rgba(201,168,76,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'टेबल' : 'Your Table', val: tableNumber },
+            { icon: <ReceiptText size={14} color="rgba(201,168,76,0.5)" strokeWidth={1.5} />, label: language === 'mr' ? 'ऑर्डर' : 'Round', val: `#${Object.keys(liveOrderStatuses).length}` },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: '#0c0c0c', border: '1px solid rgba(211,191,162,0.07)',
+              borderRadius: '13px', padding: '14px 16px',
+              display: 'flex', alignItems: 'center', gap: '10px'
+            }}>
+              {s.icon}
+              <div>
+                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: '0.92rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>
+                  {s.val}
+                </div>
+              </div>
+            </div>
+          ))}
+        </motion.div>
+ 
+        {/* ── DISMISS BUTTON ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2 }}
+        >
+          <button
+            onClick={() => setOrderPlacedScreen(false)}
+            style={{
+              width: '100%', padding: '16px',
+              background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+              border: 'none', borderRadius: '13px',
+              color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
+              cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
+              boxShadow: '0 8px 28px rgba(211,191,162,0.15)', marginBottom: '12px'
+            }}
+          >
+            <Utensils size={15} strokeWidth={2.5} />
+            {language === 'mr' ? 'मेनूकडे परत जा' : 'Back to Menu'}
+          </button>
+ 
+          {/* Auto-dismiss countdown */}
+          <div style={{ textAlign: 'center', fontSize: '0.58rem', color: 'rgba(255,255,255,0.12)', fontWeight: '600' }}>
+            {language === 'mr' ? 'काही सेकंदात आपोआप बंद होईल' : 'Auto-closing in a few seconds'}
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
 <style>{`
   .no-scrollbar::-webkit-scrollbar { display: none; }
