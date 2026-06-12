@@ -9,7 +9,7 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle 
+  Package, UserCheck, MinusCircle, PlusCircle ,GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -1790,6 +1790,14 @@ useEffect(() => {
 
 const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
+  const clearBillData = () => {
+    // Clear from BOTH storage types on checkout
+    const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+    setPlacedOrders([]);
+    setHasPlacedInitialOrder(false);
+  };
   try {
     const socket = io("https://pratyeksha-backend.onrender.com");
     socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
@@ -1797,11 +1805,10 @@ const requestFinalBill = async () => {
       tenantId, name: customerInfo.name, phone: customerInfo.phone,
       lastVisit: new Date().toISOString()
     });
-    // ── Clear stored bill on checkout ──
-sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+    clearBillData();
     setBillRequested(true);
-  } catch (error) {
-sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+  } catch {
+    clearBillData();
     setBillRequested(true);
   }
 };
@@ -1817,32 +1824,25 @@ const reservationValid = counterMode !== 'reservation' || (reservationDate && re
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
 
-// ── Persist cart to localStorage so it survives browser close ──
-useEffect(() => {
-  if (Object.keys(cart).length > 0) {
-    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
-  } else {
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
-  }
-}, [cart, tenantId]);
+// REPLACE all three placedOrders persistence useEffects with this single block:
 
-// ── Persist placedOrders to sessionStorage (survives refresh, cleared on tab close) ──
+// ── Persist placedOrders to localStorage (survives refresh AND tab close) ──
 useEffect(() => {
-  if (!tenantId) return;
+  if (!tenantId || !sessionId) return;
   const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
   if (placedOrders.length > 0) {
-    sessionStorage.setItem(key, JSON.stringify(placedOrders));
+    localStorage.setItem(key, JSON.stringify(placedOrders));
   } else {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
   }
 }, [placedOrders, tenantId, sessionId]);
 
-// ── Restore placedOrders on mount (after refresh, same session) ──
+// ── Restore placedOrders on mount from localStorage ──
 useEffect(() => {
   if (!tenantId || !sessionId) return;
   const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
   try {
-    const saved = sessionStorage.getItem(key);
+    const saved = localStorage.getItem(key);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1852,6 +1852,9 @@ useEffect(() => {
     }
   } catch { /* ignore */ }
 }, [tenantId, sessionId]);
+
+
+
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -4108,11 +4111,20 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
         {/* ITEMS LIST */}
         {(() => {
-          const categoryEmojis = {
-            'Cold Drinks': '🥤', 'Ice Cream': '🍦', 'Packaged Snacks': '🍟',
-            'Juices': '🧃', 'Mineral Water': '💧',
-            'Dairy': '🥛', 'Sweets': '🍬', 'Other': '📦'
+          const categoryIconMap = {
+            'Cold Drinks':    { icon: GlassWater,  color: '#6ba3d6' },
+            'Ice Cream':      { icon: IceCream2,   color: '#f0c0c0' },
+            'Packaged Snacks':{ icon: Cookie,      color: '#c9a84c' },
+            'Juices':         { icon: Apple,       color: '#8bc34a' },
+            'Mineral Water':  { icon: Droplets,    color: '#64b5f6' },
+            'Dairy':          { icon: Milk,        color: '#e0d8cc' },
+            'Sweets':         { icon: Candy,       color: '#f48fb1' },
+            'Coffee':         { icon: Coffee,      color: '#a1887f' },
+            'Snacks':         { icon: Sandwich,    color: '#ffb74d' },
+            'Beverages':      { icon: Wind,        color: '#80cbc4' },
+            'Other':          { icon: Box,         color: '#9e9e9e' },
           };
+          const getCatMeta = (cat) => categoryIconMap[cat] || { icon: Box, color: '#9e9e9e' };
 
           const filtered = extraItems.filter(i => {
             if (!i.isAvailable) return false;
@@ -4122,9 +4134,15 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           });
 
           if (filtered.length === 0) return (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#333' }}>
-              <ShoppingBag size={32} color="#2a2a2a" style={{ marginBottom: '14px' }} />
-              <div style={{ fontSize: '0.8rem', fontWeight: '700' }}>
+<div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '16px', margin: '0 auto 14px',
+                background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Package size={24} color="rgba(211,191,162,0.2)" strokeWidth={1.5} />
+              </div>
+              <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#333' }}>
                 {language === 'mr' ? 'कोणतीही वस्तू सापडली नाही' : 'No items found'}
               </div>
             </div>
@@ -4142,12 +4160,25 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             <div style={{ padding: '0 16px 120px' }}>
               {Object.entries(grouped).map(([cat, items]) => (
                 <div key={cat} style={{ marginBottom: '28px' }}>
-                  {/* Category label */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '0 4px' }}>
-                    <span style={{ fontSize: '1rem' }}>{categoryEmojis[cat] || '📦'}</span>
-                    <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#555', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
-                    <div style={{ flex: 1, height: '1px', background: 'rgba(211,191,162,0.08)' }} />
-                  </div>
+{/* Category label */}
+                  {(() => {
+                    const meta = getCatMeta(cat);
+                    const CatIcon = meta.icon;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '0 4px' }}>
+                        <div style={{
+                          width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
+                          background: `${meta.color}18`,
+                          border: `1px solid ${meta.color}35`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          <CatIcon size={13} color={meta.color} strokeWidth={1.8} />
+                        </div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#555', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(211,191,162,0.08)' }} />
+                      </div>
+                    );
+                  })()}
 
                   {/* Items */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -4168,16 +4199,21 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                             transition: 'all 0.2s ease'
                           }}
                         >
-                          {/* Emoji icon */}
-                          <div style={{
-                            width: '46px', height: '46px', borderRadius: '12px',
-                            background: 'rgba(211,191,162,0.06)',
-                            border: '1px solid rgba(211,191,162,0.1)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '1.4rem', flexShrink: 0
-                          }}>
-                            {categoryEmojis[item.category] || '📦'}
-                          </div>
+{/* Category icon */}
+                          {(() => {
+                            const meta = getCatMeta(item.category);
+                            const ItemIcon = meta.icon;
+                            return (
+                              <div style={{
+                                width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0,
+                                background: `${meta.color}12`,
+                                border: `1px solid ${meta.color}28`,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <ItemIcon size={20} color={meta.color} strokeWidth={1.5} />
+                              </div>
+                            );
+                          })()}
 
                           {/* Name + price */}
                           <div style={{ flex: 1, minWidth: 0 }}>
