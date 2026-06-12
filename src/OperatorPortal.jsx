@@ -10,8 +10,9 @@ import {
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
-Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
-  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award, ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText 
+  Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
+  Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
+  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown  
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -160,6 +161,7 @@ const istTodayStr = useMemo(() => {
   const [tenantConfig, setTenantConfig] = useState(null);
 
   const [queueSearch, setQueueSearch] = useState('');
+  const [wastageAnalytics, setWastageAnalytics] = useState(null);
 
   // ── These are re-fetched whenever viewDate changes (month selector)
   const [trendsData, setTrendsData] = useState(null);
@@ -267,6 +269,19 @@ const fetchCounterQueue = useCallback(async () => {
     setAvgWaitData(aRes.data);
   } catch { }
 }, [tenantId, reservationViewDate]);
+
+// Fetch wastage analytics for current month
+const fetchWastageAnalytics = async () => {
+  try {
+    const istNow = new Date(new Date().getTime() + 330 * 60 * 1000);
+    const month = istNow.getFullYear() + '-' + String(istNow.getMonth() + 1).padStart(2, '0');
+    const res = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}?month=${month}`);
+    setWastageAnalytics(res.data);
+  } catch (err) {
+    console.error('Wastage analytics fetch failed:', err.message);
+    setWastageAnalytics({ totalCost: 0, totalEntries: 0, byReason: {}, topWasted: [], dailyTrend: [], monthLabel: '' });
+  }
+};
 
 // Add this right after your existing waitlistEntries state
 useEffect(() => {
@@ -778,9 +793,11 @@ useEffect(() => {
    if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
   if (activeTab === 'extras') fetchExtraItems();
     if (activeTab === 'insights') {    // ← ADD THIS
+
     fetchExtraAnalytics();
+    fetchWastageAnalytics();
   }
-}, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue,fetchExtraAnalytics]);
+}, [activeTab, viewDate, fetchManagementData, fetchExtraItems, fetchCounterQueue,fetchExtraAnalytics]);
 
 useEffect(() => {
   if (activeTab === 'pending') fetchCounterQueue();
@@ -4643,6 +4660,146 @@ const renderMonthHeatmap = () => {
       );
     })()}
 
+
+{/* WASTAGE COST INTELLIGENCE — NEW */}
+{wastageAnalytics && (
+  <div style={{ ...styles.biCard, marginBottom: '20px', borderLeft: `4px solid ${(wastageAnalytics.totalCost || 0) > 0 ? '#f87171' : '#4ade80'}` }}>
+    <h4 style={styles.biTitle}>
+      <Trash2 size={16} /> WASTAGE COST INTELLIGENCE
+      <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
+        {wastageAnalytics.monthLabel}
+      </span>
+    </h4>
+    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
+      Spoilage, overcooked, dropped, and excess prep — tracked from your kitchen wastage log.
+    </p>
+
+    {/* KPI strip */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
+      {(() => {
+        const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
+        const wastagePct = totalRevAllDishes > 0 ? ((wastageAnalytics.totalCost || 0) / totalRevAllDishes) * 100 : 0;
+        return [
+          { l: 'TOTAL COST LOST', v: `₹${(wastageAnalytics.totalCost || 0).toLocaleString()}`, c: '#f87171' },
+          { l: 'ENTRIES THIS MONTH', v: wastageAnalytics.totalEntries || 0, c: '#d3bfa2' },
+          { l: 'WASTAGE % OF REVENUE', v: `${wastagePct.toFixed(1)}%`, c: wastagePct > 3 ? '#f87171' : wastagePct > 1 ? '#BA7517' : '#4ade80' },
+        ].map(s => (
+          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+          </div>
+        ));
+      })()}
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+      {/* TOP WASTED ITEMS */}
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <TrendingDown size={12} color="#f87171" /> TOP WASTED INGREDIENTS
+        </div>
+        {(wastageAnalytics.topWasted || []).length > 0 ? wastageAnalytics.topWasted.map((item, i) => (
+          <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #0d0d0d' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.6rem', color: i === 0 ? '#f87171' : '#555', fontWeight: '900', minWidth: '14px' }}>#{i + 1}</span>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#fff' }}>{item.name}</div>
+                <div style={{ fontSize: '0.58rem', color: '#444' }}>{item.count} entries{item.qty > 0 ? ` · ${item.qty} units` : ''}</div>
+              </div>
+            </div>
+            <span style={{ fontSize: '0.72rem', fontWeight: '900', color: i === 0 ? '#f87171' : '#888' }}>
+              {item.cost > 0 ? `₹${item.cost.toFixed(0)}` : `×${item.count}`}
+            </span>
+          </div>
+        )) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', paddingTop: '20px' }}>NO WASTAGE LOGGED</div>}
+      </div>
+
+      {/* BY REASON */}
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <AlertTriangle size={12} color="#fbbf24" /> BY REASON
+        </div>
+        {Object.keys(wastageAnalytics.byReason || {}).length > 0 ? (() => {
+          const reasonColors = {
+            'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
+            'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
+            'Customer Return': '#60a5fa', 'Other': '#9ca3af',
+          };
+          const total = wastageAnalytics.totalEntries || 1;
+          return Object.entries(wastageAnalytics.byReason)
+            .sort((a, b) => b[1].cost - a[1].cost)
+            .map(([reason, data]) => {
+              const pct = Math.round((data.count / total) * 100);
+              const rc = reasonColors[reason] || '#9ca3af';
+              return (
+                <div key={reason} style={{ marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: rc, display: 'inline-block' }} />
+                      {reason}
+                    </span>
+                    <span style={{ fontSize: '0.62rem', fontWeight: '900', color: rc }}>
+                      {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
+                      <span style={{ color: '#444', fontWeight: '600', marginLeft: '5px' }}>{pct}%</span>
+                    </span>
+                  </div>
+                  <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: rc + '80', borderRadius: '2px', transition: 'width 0.6s ease' }} />
+                  </div>
+                </div>
+              );
+            });
+        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', paddingTop: '20px' }}>NO DATA</div>}
+      </div>
+    </div>
+
+    {/* DAILY TREND SPARKLINE */}
+    {(wastageAnalytics.dailyTrend || []).length > 0 && (
+      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px', marginTop: '16px' }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <TrendingDown size={12} color="#f87171" /> DAILY WASTAGE COST TREND
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
+          {(() => {
+            const maxCost = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
+            return wastageAnalytics.dailyTrend.map((d) => (
+              <div key={d.date}
+                title={`${d.date}: ₹${d.cost.toFixed(0)} · ${d.count} entries`}
+                style={{
+                  flex: 1, minWidth: 0,
+                  height: `${Math.max(4, Math.round((d.cost / maxCost) * 100))}%`,
+                  background: d.cost > 0 ? `rgba(248,113,113,${0.3 + (d.cost / maxCost) * 0.5})` : '#111',
+                  borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
+                }}
+              />
+            ));
+          })()}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{wastageAnalytics.dailyTrend[0]?.date?.slice(5)}</span>
+          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{wastageAnalytics.dailyTrend[wastageAnalytics.dailyTrend.length - 1]?.date?.slice(5)}</span>
+        </div>
+      </div>
+    )}
+
+    {/* INSIGHT CALLOUT */}
+    {(wastageAnalytics.totalCost || 0) > 0 && (() => {
+      const topReason = Object.entries(wastageAnalytics.byReason || {}).sort((a,b)=>b[1].cost-a[1].cost)[0];
+      const topItem = (wastageAnalytics.topWasted || [])[0];
+      return (
+        <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(248,113,113,0.04)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '8px', fontSize: '0.68rem', color: '#666', lineHeight: '1.5', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <Lightbulb size={14} color="#f87171" style={{ flexShrink: 0, marginTop: '1px' }} />
+          <span>
+            <b style={{ color: '#f87171' }}>Insight:</b>{' '}
+            {topReason ? `"${topReason[0]}" is your biggest wastage driver (₹${topReason[1].cost.toFixed(0)}).` : ''}
+            {topItem ? ` ${topItem.name} accounts for the most loss — consider portion control or revised prep quantities.` : ''}
+          </span>
+        </div>
+      );
+    })()}
+  </div>
+)}
     {/* ═══════════ SECTION 5 — CUSTOMERS & CHANNELS ═══════════ */}
     <SectionHeader icon={<Users size={16}/>} title="Customers & Channels" subtitle="Retention, acquisition, and where revenue comes from" />
 

@@ -1580,14 +1580,23 @@ if (orderRes.data?._id) {
           quantity: i.quantity,
           subtotal: i.subtotal,
         }));
+      const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
+      if (knownPhone && knownPhone.length === 10) {
+        const visitItems = orderItems.map(i => ({
+          menuItemId: i.menuItemId,
+          name: i.name,
+          quantity: i.quantity,
+          subtotal: i.subtotal,
+        }));
         axios.post(`${BASE_URL}/customers/upsert`, {
           tenantId,
           name: customerInfo.name?.trim() || welcomeCard?.name || 'Guest',
           phone: knownPhone,
-          lastVisit: new Date().toISOString(),
           lastOrderItems: visitItems,
           visitAmount: total,
+          incrementVisit: false,   // ← progressive update only, no visit bump
         }).catch(() => {});
+      }
       }
       triggerAlert("orderSuccess");
       setHasPlacedInitialOrder(true);
@@ -1896,7 +1905,9 @@ const requestFinalBill = async () => {
       lastVisit: new Date().toISOString(),
       lastOrderItems: visitItems,
       visitAmount: visitTotal,
+      incrementVisit: true,   // ← ONLY checkout increments visit count
     });
+
  
     // ── Refresh the local welcome card immediately so UI reflects
     //    the new visit count / dishes without needing a page reload ──
@@ -4518,8 +4529,8 @@ const categoryIconMap = {
           )}
         </span>
         <span style={{ fontSize: '0.65rem', color: primaryColor }}>
-          {order.portion !== 'Single' ? order.portion : ''}
-          {order.isExtraItem ? ` · ₹${order.pricePerUnit} each` : ''}
+          ₹{convertToMrNumber(order.pricePerUnit)} / {language === 'mr' ? 'नग' : 'item'}
+          {order.portion && order.portion !== 'Single' ? ` · ${order.portion}` : ''}
         </span>
       </div>
       <span style={{ flex: 1, textAlign: 'right', fontSize: '0.85rem' }}>
@@ -4580,7 +4591,7 @@ const categoryIconMap = {
         {order.isExtraItem ? ' ⬦' : ''}
       </span>
       <span style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px', fontWeight: '500' }}>
-        @ ₹{convertToMrNumber(order.pricePerUnit)}
+        @ ₹{convertToMrNumber(order.pricePerUnit)} / item
         {order.portion !== 'Single' ? ` (${order.portion})` : ''}
         {order.isExtraItem ? ' · Extra Item' : ''}
       </span>
@@ -4588,7 +4599,6 @@ const categoryIconMap = {
     <b style={{ fontSize: '0.9rem', fontWeight: '900' }}>₹{convertToMrNumber(order.subtotal)}</b>
   </div>
 ))}
-{/* Extra items footnote in PDF */}
 {finalBillItems.some(i => i.isExtraItem) && (
   <div style={{ fontSize: '0.62rem', color: '#999', marginTop: '8px', fontStyle: 'italic' }}>
     ⬦ Extra items ordered separately at counter
