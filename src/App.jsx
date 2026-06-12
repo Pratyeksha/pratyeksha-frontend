@@ -1532,7 +1532,7 @@ if (orderRes.data?._id) {
       setSuggestions({}); 
       setIsDrawerOpen(false);
       setOrderPlacedScreen(true);
-setTimeout(() => setOrderPlacedScreen(false), 6000); // auto-dismiss after 6s
+setTimeout(() => setOrderPlacedScreen(false), 60000); // auto-dismiss after 6s
 
     } catch (error) { 
       console.error(error);
