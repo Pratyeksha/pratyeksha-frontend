@@ -3178,6 +3178,17 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 setWaitlistEntry({ ...res.data.reservation, mode: 'reservation', _noPreorder: true });
 setReservationAskOrder(false);
 setRegistrationStep('confirm');
+// In the "No, just reserve the table" button's onClick, after setRegistrationStep('confirm'):
+
+const phone = customerInfo.phone?.replace(/\D/g, '') || '';
+if (phone.length === 10) {
+  axios.post(`${BASE_URL}/customers/upsert`, {
+    tenantId,
+    name: customerInfo.name.trim(),
+    phone,
+    lastVisit: new Date().toISOString(),
+  }).catch(() => {});
+}
                         if ('Notification' in window && Notification.permission === 'granted') {
                           new Notification('📅 Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
