@@ -1489,38 +1489,28 @@ const notifyWaiter = async (serviceType = "Custom") => {
     }, 0);
   };
 useEffect(() => {
-  // Only for table scans — not counter mode
   if (!tenantId || tableNumber === 'Counter' || isCounterScan) return;
   if (welcomeDismissed) return;
 
   const savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`);
 
+  // Only show phone prompt if they have a SAVED phone (returning customer)
+  // New customers (no saved phone) get NO prompt — straight to menu
   if (savedPhone && savedPhone.length === 10) {
-    // Auto-recognize silently — no prompt needed
     setWelcomeLoading(true);
     axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${savedPhone}`)
       .then(r => {
         if (r.data?.found) {
           setWelcomeCard(r.data);
           setWelcomePhone(savedPhone);
-        } else {
-          // Phone saved but customer not in DB — show input after delay
-          const timer = setTimeout(() => setShowPhonePrompt(true), 1800);
-          return () => clearTimeout(timer);
         }
+        // If not found in DB, just ignore — don't show prompt
       })
-      .catch(() => {
-        const timer = setTimeout(() => setShowPhonePrompt(true), 1800);
-        return () => clearTimeout(timer);
-      })
+      .catch(() => {})
       .finally(() => setWelcomeLoading(false));
-  } else {
-    // No saved phone — show prompt after brief delay so menu loads first
-    const timer = setTimeout(() => setShowPhonePrompt(true), 1500);
-    return () => clearTimeout(timer);
   }
+  // ← NO else block — new customers see nothing, go straight to menu
 }, [tenantId, tableNumber, isCounterScan, welcomeDismissed]);
-
 
   
 const sendBatchToKitchen = async () => {
@@ -4488,13 +4478,70 @@ const categoryIconMap = {
             </div>
             
             <div style={styles.modalScrollBody}>
-              {!billRequested ? (
-                <div style={styles.formContainer}>
-                   <p style={styles.instructionText}>{t[language].enterDetails}</p>
-                   <input type="text" placeholder={t[language].fullName} style={styles.input} value={customerInfo.name} onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})} />
-                   <input type="tel" placeholder={t[language].mobileNumber} style={styles.input} value={customerInfo.phone} onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})} />
-                   <button style={{...styles.kitchenBtn, background: primaryColor}} onClick={requestFinalBill}>{t[language].generateBill}</button>
-                </div>
+{!billRequested ? (
+  <div style={styles.formContainer}>
+    <p style={styles.instructionText}>{t[language].enterDetails}</p>
+
+    {/* Name field */}
+    <input
+      type="text"
+      placeholder={t[language].fullName}
+      style={styles.input}
+      value={customerInfo.name}
+      onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+    />
+
+    {/* Phone — 10-digit enforced */}
+    <div style={{ position: 'relative', marginBottom: '15px' }}>
+      <span style={{
+        position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)',
+        fontSize: '0.9rem', color: 'rgba(211,191,162,0.5)', fontWeight: '700', pointerEvents: 'none'
+      }}>+91</span>
+      <input
+        type="tel"
+        inputMode="numeric"
+        maxLength={10}
+        placeholder="10-digit mobile number"
+        style={{
+          ...styles.input,
+          marginBottom: 0,
+          paddingLeft: '52px',
+          letterSpacing: '1.5px',
+          width: '100%', boxSizing: 'border-box'
+        }}
+        value={customerInfo.phone}
+        onInput={e => {
+          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+          setCustomerInfo(prev => ({ ...prev, phone: digits }));
+        }}
+      />
+    </div>
+
+    {/* Inline hint */}
+    {customerInfo.phone.length > 0 && customerInfo.phone.length !== 10 && (
+      <div style={{ fontSize: '0.62rem', color: '#BA7517', marginBottom: '10px', fontWeight: '700', textAlign: 'center' }}>
+        {10 - customerInfo.phone.length} more digits needed
+      </div>
+    )}
+
+    <button
+      disabled={!customerInfo.name.trim() || customerInfo.phone.length !== 10}
+      style={{
+        ...styles.kitchenBtn,
+        background: (customerInfo.name.trim() && customerInfo.phone.length === 10)
+          ? primaryColor : 'rgba(211,191,162,0.1)',
+        color: (customerInfo.name.trim() && customerInfo.phone.length === 10)
+          ? '#1a1a1a' : 'rgba(211,191,162,0.2)',
+        cursor: (customerInfo.name.trim() && customerInfo.phone.length === 10)
+          ? 'pointer' : 'not-allowed',
+        transition: 'all 0.2s'
+      }}
+      onClick={requestFinalBill}
+    >
+      {t[language].generateBill}
+    </button>
+  </div>
+
               ) : !showReviewPage ? (
                 <div style={styles.thankYouWrapperProfessional}>
                    <div style={styles.statusIconWrapper}><CheckCircle2 size={50} color={primaryColor} /></div>
@@ -4654,31 +4701,163 @@ const categoryIconMap = {
                       </button>
                    </div>
                 </div>
-              ) : (
-                <div style={styles.thankYouWrapperProfessional}>
-                   <div style={styles.statusIconWrapper}><Sparkles size={50} color={primaryColor} /></div>
-                   <h2 style={styles.professionalTitle}>{t[language].visitAgain}</h2>
-                   <p style={styles.professionalSubtitle}>We hope you enjoyed our service! Help us grow by rating us.</p>
-                   
-                   {restaurantData?.googleReview && (
-                      <a href={restaurantData.googleReview} target="_blank" rel="noreferrer" style={styles.googleProfessionalBtn}>
-                        <div style={styles.googleIconCircle}>
-                           <svg width="22" height="22" viewBox="0 0 24 24" fill="#4285F4">
-                             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                           </svg>
-                        </div>
-                        <span style={{flex: 1, textAlign: 'center'}}>{t[language].rateGoogle}</span>
-                        <ChevronRight size={18} color="#888" />
-                      </a>
-                   )}
-                   <button style={styles.professionalMenuBack} onClick={() => { setBillRequested(false); setIsBillOpen(false); setShowReviewPage(false); }}>
-                      {t[language].backMenu}
-                   </button>
-                </div>
-              )}
+) : (
+  <div style={{
+    padding: '0 0 60px',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center',
+    minHeight: '100%'
+  }}>
+
+    {/* ── HERO SECTION ── */}
+    <div style={{
+      width: '100%', padding: '52px 28px 40px',
+      background: 'linear-gradient(180deg, rgba(211,191,162,0.07) 0%, transparent 100%)',
+      borderBottom: '1px solid rgba(211,191,162,0.08)',
+      textAlign: 'center'
+    }}>
+      {/* Animated sparkle icon */}
+      <motion.div
+        animate={{ rotate: [0, 5, -5, 0], scale: [1, 1.05, 1] }}
+        transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+        style={{
+          width: '72px', height: '72px', borderRadius: '22px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 22px',
+          boxShadow: '0 0 0 8px rgba(211,191,162,0.04), 0 0 0 16px rgba(211,191,162,0.02)'
+        }}
+      >
+        <Sparkles size={32} color="#d3bfa2" strokeWidth={1.5} />
+      </motion.div>
+
+      <div style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.35)', textTransform: 'uppercase', marginBottom: '10px' }}>
+        {restaurantData?.name}
+      </div>
+      <h2 style={{ fontSize: '2rem', fontWeight: '900', color: '#fff', margin: '0 0 10px', letterSpacing: '-0.6px', lineHeight: 1.15 }}>
+        {t[language].visitAgain}
+      </h2>
+      <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.78rem', lineHeight: 1.8, maxWidth: '280px', margin: '0 auto', fontWeight: '500' }}>
+        {language === 'mr'
+          ? 'तुमच्या भेटीबद्दल आभार! पुन्हा भेटू लवकरच.'
+          : 'Thank you for dining with us. We hope to see you again soon!'}
+      </p>
+    </div>
+
+    {/* ── ACTION CARDS ── */}
+    <div style={{ width: '100%', maxWidth: '400px', padding: '28px 22px 0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+      {/* Google Review */}
+      {restaurantData?.googleReview && (
+        <a href={restaurantData.googleReview} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '16px',
+            padding: '18px 20px',
+            background: '#fff',
+            borderRadius: '18px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            transition: 'transform 0.15s, box-shadow 0.15s'
+          }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.3)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.25)'; }}
+          >
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '13px',
+              background: '#f8f9fa', border: '1px solid #eee',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111', marginBottom: '2px' }}>{t[language].rateGoogle}</div>
+              <div style={{ fontSize: '0.62rem', color: '#888', fontWeight: '600' }}>
+                {language === 'mr' ? 'तुमचा अनुभव शेअर करा' : 'Share your experience'}
+              </div>
+            </div>
+            <ChevronRight size={18} color="#ccc" />
+          </div>
+        </a>
+      )}
+
+      {/* Instagram */}
+      {restaurantData?.instagram && (
+        <a href={restaurantData.instagram} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '16px',
+            padding: '18px 20px',
+            background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
+            borderRadius: '18px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(131,58,180,0.3)',
+            transition: 'transform 0.15s, box-shadow 0.15s'
+          }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(131,58,180,0.4)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(131,58,180,0.3)'; }}
+          >
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '13px',
+              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              {/* Instagram icon SVG */}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#fff', marginBottom: '2px' }}>
+                {language === 'mr' ? 'इन्स्टाग्रामवर फॉलो करा' : 'Follow us on Instagram'}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
+                {language === 'mr' ? 'नवीन पदार्थ व ऑफर्स मिळवा' : 'Stay updated with our latest dishes'}
+              </div>
+            </div>
+            <ChevronRight size={18} color="rgba(255,255,255,0.5)" />
+          </div>
+        </a>
+      )}
+
+      {/* Divider */}
+      <div style={{ height: '1px', background: 'rgba(211,191,162,0.08)', margin: '4px 0' }} />
+
+      {/* Back to menu */}
+      <button
+        style={{
+          width: '100%', padding: '17px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.18)',
+          color: '#d3bfa2', borderRadius: '14px',
+          fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
+          letterSpacing: '0.5px', textTransform: 'uppercase',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
+          transition: 'all 0.15s'
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
+        onClick={() => { setBillRequested(false); setIsBillOpen(false); setShowReviewPage(false); }}
+      >
+        <Utensils size={15} strokeWidth={2.5} />
+        {t[language].backMenu}
+      </button>
+
+      {/* Powered by */}
+      <div style={{ textAlign: 'center', paddingTop: '8px' }}>
+        <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.1)', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
+          POWERED BY PRATYEKSHA
+        </span>
+      </div>
+    </div>
+  </div>
+)}
             </div>
           </motion.div>
         )}
