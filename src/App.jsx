@@ -1579,21 +1579,39 @@ setTimeout(() => setOrderPlacedScreen(false), 60000); // auto-dismiss after 6s
 
   try {
 const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
-  sessionId,
-  customerName: customerInfo.name,
-  customerPhone: customerInfo.phone?.replace(/\D/g, '') || '',
-  partySize,
-  mode: counterMode,
-  items: orderItems,
-  totalAmount: total,
-  scheduledPickupTime: scheduledPickupTime || null,
-  specialRequests: specialRequests || ''
-});
+      sessionId,
+      customerName: customerInfo.name,
+      customerPhone: customerInfo.phone?.replace(/\D/g, '') || '',
+      partySize,
+      mode: counterMode,
+      items: orderItems,
+      totalAmount: total,
+      scheduledPickupTime: scheduledPickupTime || null,
+      specialRequests: specialRequests || ''
+    });
     setWaitlistEntry(res.data.entry);
     setCart({}); setSuggestions({});
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
+
+    // ── ADD THIS: upsert customer into CustomerSchema ──
+    const phone = customerInfo.phone?.replace(/\D/g, '') || '';
+    if (phone.length === 10) {
+      axios.post(`${BASE_URL}/customers/upsert`, {
+        tenantId,
+        name: customerInfo.name.trim(),
+        phone,
+        lastVisit: new Date().toISOString(),
+        lastOrderItems: orderItems.map(i => ({
+          menuItemId: i.menuItemId,
+          name: i.name,
+          quantity: i.quantity,
+          subtotal: i.subtotal,
+        })),
+        visitAmount: total,
+      }).catch(() => {});
+    }
 
     // ── Request push notification permission after order placed ──
 const askNotificationPermission = async () => {
