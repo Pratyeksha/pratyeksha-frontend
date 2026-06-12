@@ -9,7 +9,7 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle ,GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box
+  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -1790,14 +1790,6 @@ useEffect(() => {
 
 const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
-  const clearBillData = () => {
-    // Clear from BOTH storage types on checkout
-    const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
-    setPlacedOrders([]);
-    setHasPlacedInitialOrder(false);
-  };
   try {
     const socket = io("https://pratyeksha-backend.onrender.com");
     socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
@@ -1805,10 +1797,11 @@ const requestFinalBill = async () => {
       tenantId, name: customerInfo.name, phone: customerInfo.phone,
       lastVisit: new Date().toISOString()
     });
-    clearBillData();
+    // ── Clear stored bill on checkout ──
+sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
     setBillRequested(true);
-  } catch {
-    clearBillData();
+  } catch (error) {
+sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
     setBillRequested(true);
   }
 };
@@ -1824,25 +1817,32 @@ const reservationValid = counterMode !== 'reservation' || (reservationDate && re
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
 
-// REPLACE all three placedOrders persistence useEffects with this single block:
-
-// ── Persist placedOrders to localStorage (survives refresh AND tab close) ──
+// ── Persist cart to localStorage so it survives browser close ──
 useEffect(() => {
-  if (!tenantId || !sessionId) return;
+  if (Object.keys(cart).length > 0) {
+    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
+  } else {
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+  }
+}, [cart, tenantId]);
+
+// ── Persist placedOrders to sessionStorage (survives refresh, cleared on tab close) ──
+useEffect(() => {
+  if (!tenantId) return;
   const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
   if (placedOrders.length > 0) {
-    localStorage.setItem(key, JSON.stringify(placedOrders));
+    sessionStorage.setItem(key, JSON.stringify(placedOrders));
   } else {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
   }
 }, [placedOrders, tenantId, sessionId]);
 
-// ── Restore placedOrders on mount from localStorage ──
+// ── Restore placedOrders on mount (after refresh, same session) ──
 useEffect(() => {
   if (!tenantId || !sessionId) return;
   const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
   try {
-    const saved = localStorage.getItem(key);
+    const saved = sessionStorage.getItem(key);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1852,9 +1852,6 @@ useEffect(() => {
     }
   } catch { /* ignore */ }
 }, [tenantId, sessionId]);
-
-
-
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -4111,7 +4108,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
         {/* ITEMS LIST */}
         {(() => {
-          const categoryIconMap = {
+const categoryIconMap = {
             'Cold Drinks':    { icon: GlassWater,  color: '#6ba3d6' },
             'Ice Cream':      { icon: IceCream2,   color: '#f0c0c0' },
             'Packaged Snacks':{ icon: Cookie,      color: '#c9a84c' },
