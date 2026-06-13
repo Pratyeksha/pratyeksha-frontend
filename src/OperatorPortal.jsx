@@ -1102,6 +1102,10 @@ const exportToExcel = useCallback((type = 'daily') => {
     } else if (type==='monthly') {
       filteredData = analytics.filter(d=>d._id?.startsWith(exportMonthStr));
       periodLabel = `Monthly · ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`;
+    } else if (type === 'annual') {
+      const year = viewDate.getFullYear();
+      filteredData = analytics.filter(d => d._id?.startsWith(`${year}-`));
+      periodLabel = `Annual · FY ${year}-${String(year + 1).slice(2)}`;
     }
 
     const totalRev       = filteredData.reduce((a,b)=>a+(b.revenue||0),0);
@@ -1779,6 +1783,143 @@ const exportToExcel = useCallback((type = 'daily') => {
       XLSX.utils.book_append_sheet(wb, ws, '📦 Stock');
     }
 
+
+    // ══════════════════════════════════
+    // SHEET 10: ★ GST INVOICE REGISTER
+    // Required for GSTR-1 filing
+    // ══════════════════════════════════
+    {
+      const ws = {};
+      addTitleBlock(
+        ws,
+        `${tenantConfig?.name || tenantId} — GST INVOICE REGISTER`,
+        `All tax invoices for ${periodLabel} · SAC 996331 · GST @ 5%`,
+        todayStr
+      );
+
+      // KPIs
+      const gstTotalRev   = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
+      const gstTaxable    = gstTotalRev / 1.05;
+      const gstCGST       = gstTaxable * 0.025;
+      const gstSGST       = gstTaxable * 0.025;
+      const gstTotalTax   = gstCGST + gstSGST;
+
+      const kpiLabels = ['TAXABLE VALUE', 'CGST @ 2.5%', 'SGST @ 2.5%', 'TOTAL GST'];
+      const kpiValues = [
+        `₹${Math.round(gstTaxable).toLocaleString()}`,
+        `₹${Math.round(gstCGST).toLocaleString()}`,
+        `₹${Math.round(gstSGST).toLocaleString()}`,
+        `₹${Math.round(gstTotalTax).toLocaleString()}`
+      ];
+      const kpiColors = [WHITE, GOLD, GOLD, GREEN];
+      kpiLabels.forEach((label, i) => {
+        const col = String.fromCharCode(65 + i * 2);
+        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiColors[i]) };
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      });
+
+      // Invoice summary by date (B2C aggregate — suitable for GSTR-3B)
+      const headers = [
+        'Date', 'Bill Count', 'Gross Revenue (₹)',
+        'Taxable Value (₹)', 'CGST 2.5% (₹)', 'SGST 2.5% (₹)',
+        'Total Tax (₹)', 'Cash (₹)', 'UPI (₹)', 'Card (₹)'
+      ];
+      XLSX.utils.sheet_add_aoa(ws, [[''], ['B2C OUTWARD SUPPLY SUMMARY (GSTR-3B TABLE 3.1)','','','','','','','','',''], headers], { origin: 'A8' });
+      styleCell(ws, 'A9', hdrStyle(DARK, GOLD, true, 10));
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: 8, c: 0 }, e: { r: 8, c: 9 } });
+      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 9, c: ci }), hdrStyle()));
+
+      filteredData.forEach((d, ri) => {
+        const taxable  = (d.revenue || 0) / 1.05;
+        const cgst     = taxable * 0.025;
+        const sgst     = taxable * 0.025;
+        const altBg    = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const row = [
+          d._id,
+          d.count || 0,
+          d.revenue || 0,
+          Math.round(taxable),
+          Math.round(cgst),
+          Math.round(sgst),
+          Math.round(cgst + sgst),
+          d.cash || 0,
+          d.upi || 0,
+          d.card || 0
+        ];
+        row.forEach((val, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: 10 + ri, c: ci });
+          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg) };
+          else ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 6 ? GREEN : ci >= 7 ? GOLD : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+        });
+      });
+
+      // Totals row
+      const totRow = filteredData.length + 11;
+      const totData = [
+        'PERIOD TOTALS',
+        filteredData.reduce((a, b) => a + (b.count || 0), 0),
+        gstTotalRev,
+        Math.round(gstTaxable),
+        Math.round(gstCGST),
+        Math.round(gstSGST),
+        Math.round(gstTotalTax),
+        filteredData.reduce((a, b) => a + (b.cash || 0), 0),
+        filteredData.reduce((a, b) => a + (b.upi || 0), 0),
+        filteredData.reduce((a, b) => a + (b.card || 0), 0),
+      ];
+      XLSX.utils.sheet_add_aoa(ws, [totData], { origin: `A${totRow}` });
+      totData.forEach((val, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: totRow - 1, c: ci });
+        ws[addr] = {
+          v: val, t: ci === 0 ? 's' : 'n',
+          s: ci === 0
+            ? hdrStyle(DARK, GOLD, true)
+            : { ...numFmt(true, ci === 6 ? GREEN : GOLD), fill: { patternType: 'solid', fgColor: { rgb: DARK } } }
+        };
+      });
+
+      // GSTR-3B Ready Summary block
+      const gstrStart = totRow + 3;
+      const gstrData = [
+        ['GSTR-3B READY SUMMARY (Table 3.1a)', ''],
+        ['Nature of Supply', 'B2C (Intra-State Restaurant Services)'],
+        ['SAC Code', '996331'],
+        ['GST Rate', '5% (Composition or Regular)'],
+        ['Total Taxable Value (₹)', Math.round(gstTaxable)],
+        ['Total CGST (₹)', Math.round(gstCGST)],
+        ['Total SGST (₹)', Math.round(gstSGST)],
+        ['Total Tax Liability (₹)', Math.round(gstTotalTax)],
+        ['Gross Revenue incl. Tax (₹)', Math.round(gstTotalRev)],
+        ['Period', periodLabel],
+        ['GSTIN', tenantConfig?.gstin || 'PENDING'],
+        ['', ''],
+        ['NOTE', 'This register is for reference. File via GST portal or CA verification.'],
+      ];
+      XLSX.utils.sheet_add_aoa(ws, gstrData, { origin: `A${gstrStart}` });
+      styleCell(ws, `A${gstrStart}`, hdrStyle(DARK, GREEN, true, 11));
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: gstrStart - 1, c: 0 }, e: { r: gstrStart - 1, c: 1 } });
+      gstrData.slice(1).forEach((row, ri) => {
+        const r = gstrStart + 1 + ri;
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        ws[`A${r}`] = { v: row[0], t: 's', s: cellStyle(false, '888888', altBg) };
+        ws[`B${r}`] = {
+          v: row[1], t: typeof row[1] === 'number' ? 'n' : 's',
+          s: typeof row[1] === 'number'
+            ? { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } }
+            : cellStyle(true, row[0] === 'NOTE' ? AMBER : WHITE, altBg, 'right')
+        };
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: gstrStart + gstrData.length + 4, c: 9 } });
+      ws['!cols'] = [16, 10, 16, 14, 14, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '🧾 GST Register');
+    }
+
     // ══════════════════════════════════
     // SHEET 10: SUMMARY (updated with new metrics)
     // ══════════════════════════════════
@@ -2146,11 +2287,12 @@ const renderMonthHeatmap = () => {
                 </div>
                 <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
               </div>
-              {['daily','weekly','monthly'].map(p=>(
+              {['daily','weekly','monthly','annual'].map(p=>(
                 <button key={p} onClick={()=>exportToExcel(p)}
                   style={{padding:'6px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#555',borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer'}}>
                   {p.toUpperCase()} XLS
                 </button>
+                
               ))}
             </div>
           )}
@@ -8383,12 +8525,6 @@ onClick={async () => {
     </div>
   )}
 </AnimatePresence>
-
-// ══════════════════════════════════════════════════════════════════
-// RESPONSIVE FIX — OperatorPortal
-// REPLACE the entire <style>{`...`}</style> block at the bottom
-// with this one. Everything else in the file stays unchanged.
-// ══════════════════════════════════════════════════════════════════
 
 <style>{`
 

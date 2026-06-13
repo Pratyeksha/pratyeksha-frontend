@@ -1900,7 +1900,6 @@ const requestFinalBill = async () => {
     });
 
  
-    // ── Refresh the local welcome card immediately so UI reflects
     //    the new visit count / dishes without needing a page reload ──
 const phoneDigits = customerInfo.phone.replace(/\D/g, '');
     if (phoneDigits.length === 10) {
@@ -4612,8 +4611,8 @@ const categoryIconMap = {
           <h4 style={{ margin: 0, fontSize: '0.7rem', fontWeight: '800', color: '#888' }}>TAX INVOICE</h4>
           <h1 style={{ fontSize: '1.5rem', fontWeight: '900', margin: '8px 0', color:"black" }}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
           <p style={{ fontSize: '0.7rem', color: '#333', margin: 0 }}>{restaurantData?.address?.street}, {restaurantData?.address?.city}</p>
-          <p style={{ fontSize: '0.75rem', fontWeight: '800', marginTop: '4px' }}>GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}</p>
-        </div>
+<p style={{ fontSize: '0.75rem', fontWeight: '800', marginTop: '4px' }}>GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}</p>
+          <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '2px' }}>SAC Code: 996331 · GST Rate: 5% (CGST 2.5% + SGST 2.5%)</p>        </div>
 
         {/* 2. Bill & Customer Meta Info */}
         <div style={{ borderTop: '2px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '20px' }}>
