@@ -9,7 +9,7 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box
+  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -3595,6 +3595,59 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
           </button>
         </div>
+        
+{hasNonVegInView && (
+  <div style={{
+    position: 'absolute', top: '15px', left: '15px',
+    display: 'flex',
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(211,191,162,0.18)',
+    borderRadius: '20px',
+    padding: '4px',
+    gap: '4px',
+    zIndex: 5
+  }}>
+    {/* VEG */}
+    <button
+      onClick={() => setFilterVegOnly(true)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '5px',
+        padding: '7px 12px', borderRadius: '16px', border: 'none',
+        cursor: 'pointer',
+        background: filterVegOnly ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : 'transparent',
+        transition: 'all 0.2s ease'
+      }}
+    >
+      <Leaf size={13} strokeWidth={2} color={filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'} />
+      <span style={{
+        fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
+        color: filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'
+      }}>
+        {language === 'mr' ? 'शाकाहारी' : 'VEG'}
+      </span>
+    </button>
+ 
+    {/* NON-VEG */}
+    <button
+      onClick={() => setFilterVegOnly(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '5px',
+        padding: '7px 12px', borderRadius: '16px', border: 'none',
+        cursor: 'pointer',
+        background: !filterVegOnly ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : 'transparent',
+        transition: 'all 0.2s ease'
+      }}
+    >
+      <Drumstick size={13} strokeWidth={2} color={!filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'} />
+      <span style={{
+        fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
+        color: !filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'
+      }}>
+        {language === 'mr' ? 'मांसाहारी' : 'NON-VEG'}
+      </span>
+    </button>
+  </div>
+)}
         <h1 style={{...styles.cafeName, color: primaryColor}}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
         <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
@@ -3607,78 +3660,6 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
   </div>
 </div>
-
-{/* VEG / NON-VEG MODE SWITCHER — only show when non-veg items exist in current view */}
-{hasNonVegInView && (
-  <div style={{
-    display: 'flex',
-    margin: '0 20px 12px',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(211,191,162,0.12)',
-    borderRadius: '14px',
-    padding: '5px',
-    gap: '5px'
-  }}>
-    {/* VEG button */}
-    <button
-      onClick={() => setFilterVegOnly(true)}
-      style={{
-        flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-        background: filterVegOnly ? 'rgba(74,124,63,0.15)' : 'transparent',
-        outline: filterVegOnly ? '1px solid rgba(74,124,63,0.4)' : '1px solid transparent',
-        transition: 'all 0.2s ease'
-      }}
-    >
-      {/* Veg symbol */}
-      <div style={{
-        width: '16px', height: '16px',
-        border: '2px solid #4a7c3f', borderRadius: '3px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}>
-        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#4a7c3f' }} />
-      </div>
-      <span style={{
-        fontSize: '0.72rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: filterVegOnly ? '#d3bfa2' : '#666'
-      }}>
-        {language === 'mr' ? 'शाकाहारी' : 'VEG'}
-      </span>
-    </button>
-
-    {/* NON-VEG button */}
-    <button
-      onClick={() => setFilterVegOnly(false)}
-      style={{
-        flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-        background: !filterVegOnly ? 'rgba(138,48,48,0.12)' : 'transparent',
-        outline: !filterVegOnly ? '1px solid rgba(138,48,48,0.4)' : '1px solid transparent',
-        transition: 'all 0.2s ease'
-      }}
-    >
-      {/* Non-veg symbol — triangle */}
-      <div style={{
-        width: '16px', height: '16px',
-        border: '2px solid #8a3030', borderRadius: '3px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}>
-        <div style={{
-          width: 0, height: 0,
-          borderLeft: '4px solid transparent',
-          borderRight: '4px solid transparent',
-          borderBottom: '7px solid #8a3030'
-        }} />
-      </div>
-      <span style={{
-        fontSize: '0.72rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: !filterVegOnly ? '#d3bfa2' : '#666'
-      }}>
-        {language === 'mr' ? 'मांसाहारी' : 'NON-VEG'}
-      </span>
-    </button>
-  </div>
-)}
 
       {/* CATEGORY NAV */}
       <div style={{...styles.navContainer, backgroundColor: secondaryColor}}>
@@ -3715,33 +3696,39 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 <div style={styles.itemContentLeft}>
   <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
   {/* VEG / NON-VEG INDICATOR */}
-  <span title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'} style={{
-    width: '14px', height: '14px', border: `2px solid ${item.isVeg !== false ? '#4a7c3f' : '#8a3030'}`,
-    borderRadius: '2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0
-  }}>
-    <span style={{
-      width: '6px', height: '6px', borderRadius: '50%',
-      background: item.isVeg !== false ? '#4a7c3f' : '#8a3030'
-    }} />
-  </span>
-
+<span title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'} style={{
+  width: '20px', height: '20px', borderRadius: '7px',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  flexShrink: 0,
+  background: item.isVeg !== false ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.05)',
+  border: `1px solid ${item.isVeg !== false ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.18)'}`
+}}>
+  {item.isVeg !== false
+    ? <Leaf size={11} strokeWidth={2.5} color="#d3bfa2" />
+    : <Drumstick size={11} strokeWidth={2.5} color="rgba(211,191,162,0.55)" />
+  }
+</span>
   {language === 'mr' ? item.name_mr : item.name}
   
- {item.spicylevel && (
-    <span style={{
-      fontSize: '0.58rem',
-      fontWeight: '900',
-      padding: '2px 6px',
-      borderRadius: '4px',
-      background: item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(255,77,77,0.15)' : 'rgba(211,191,162,0.15)',
-      color: item.spicylevel.toUpperCase() === 'HIGH' ? '#ff4d4d' : '#d3bfa2',
-      border: item.spicylevel.toUpperCase() === 'HIGH' ? '1px solid rgba(255,77,77,0.3)' : '1px solid rgba(211,191,162,0.3)',
-      letterSpacing: '0.5px'
-    }}>
-      🔥 {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
-    </span>
-  )}
+
+{item.spicylevel && (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: '3px',
+    fontSize: '0.58rem',
+    fontWeight: '900',
+    padding: '2px 7px',
+    borderRadius: '4px',
+    background: item.spicylevel.toUpperCase() === 'HIGH'
+      ? 'rgba(232,170,90,0.14)'
+      : 'rgba(211,191,162,0.12)',
+    color: item.spicylevel.toUpperCase() === 'HIGH' ? '#e8aa5a' : '#d3bfa2',
+    border: `1px solid ${item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(232,170,90,0.35)' : 'rgba(211,191,162,0.3)'}`,
+    letterSpacing: '0.5px'
+  }}>
+    <Flame size={9} strokeWidth={2.5} />
+    {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
+  </span>
+)}
   {item.servingSize && item.servingSize > 0 && (
     <span style={{
       fontSize: '0.58rem',
@@ -5791,6 +5778,8 @@ body: {
   overflowY: 'auto',          // ← ADD THIS
   WebkitOverflowScrolling: 'touch'  // ← ADD THIS for iOS momentum scroll
 },
+
+header: { padding: '50px 20px 10px', textAlign: 'center', position: 'relative' },
 contentWrapper: { 
   touchAction: 'pan-y',       // keep existing
   overflowY: 'visible',       // ← ADD THIS — don't clip children
