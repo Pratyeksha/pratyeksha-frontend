@@ -100,6 +100,7 @@ const [wastageAnalytics,    setWastageAnalytics]     = useState(null); // monthl
 const [wastageSaving,       setWastageSaving]        = useState(false);
 const [wastageLoading,      setWastageLoading]       = useState(false);
 
+const [itemFinalTimes, setItemFinalTimes] = useState({}); // { idx: seconds }
 
   const audioPlayer   = useRef(null);
   const alertPlayer   = useRef(null);
@@ -179,7 +180,7 @@ const [wastageLoading,      setWastageLoading]       = useState(false);
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
-    rec.continuous = true; rec.interimResults = false; rec.lang = 'en-IN';
+    rec.continuous = true; rec.interimResults = false; rec.lang = 'mr-IN';
 rec.onresult = (e) => {
   const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
 
@@ -236,7 +237,7 @@ rec.onresult = (e) => {
 };
 
 // ── Set recognition language to support both EN and MR ──
-rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
+rec.lang = 'hi-IN'; // Marathi — also recognizes Hindi + English numbers
     rec.onerror = rec.onend = () => setIsListening(false);
     recognitionRef.current = rec;
   }, [orders, recallQueue]);
@@ -307,14 +308,15 @@ rec.lang = 'mr-IN'; // Marathi — also recognizes Hindi + English numbers
     });
 
 return () => {
-      socket.off("new_order");
-      socket.off("kds_item_cross_sync");
-      socket.off("order_modification_detected");
-      socket.off("waiter_called");
-      socket.disconnect();
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
+  socket.off("new_order");
+  socket.off("kds_item_cross_sync");
+  socket.off("order_modification_detected");
+  socket.off("waiter_called");
+  socket.off("order_status_updated"); // ← ADD THIS
+  socket.disconnect();
+  window.removeEventListener('online', onOnline);
+  window.removeEventListener('offline', onOffline);
+};
   }, [tenantId]);
 
   /* ── actions ── */
@@ -408,8 +410,7 @@ return () => {
       }
       return true;
     });
-  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
-
+}, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode]);
 
   // Fetch today's wastage from DB
 const fetchWastageLog = useCallback(async () => {
@@ -488,7 +489,7 @@ useEffect(() => {
 
 useEffect(() => {
   if (showWastagePanel && wastageTab === 'report') fetchWastageAnalytics();
-}, [wastageTab]);
+}, [wastageTab, showWastagePanel, fetchWastageAnalytics]);
 
 
   const aggregatedTotals = useMemo(() => {
@@ -787,11 +788,9 @@ useEffect(() => {
   }}>
 <Trash2 size={15} color="#d3bfa2" />
   {!isMobile && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>WASTAGE</span>}
-  {wastageLog.filter(e => {
-    const d = new Date(e.timestamp);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
-  }).length > 0 && (
+  {wastageLog.filter(e =>
+  new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()
+).length > 0 && (
     <div style={{
       position: 'absolute', top: -6, right: -6,
       width: 16, height: 16, borderRadius: '50%',
@@ -799,7 +798,7 @@ useEffect(() => {
       fontSize: '0.48rem', fontWeight: 900,
       display: 'flex', alignItems: 'center', justifyContent: 'center'
     }}>
-      {wastageLog.filter(e => new Date(e.timestamp).toDateString() === new Date().toDateString()).length}
+{wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length}
     </div>
   )}
 </button>
@@ -1871,11 +1870,18 @@ useEffect(() => {
 
   const urgency = seconds >= 900 ? 'high' : seconds >= 450 ? 'medium' : 'low';
 
-  const toggleItemCrossed = async (idx) => {
-    const key  = `${order._id}-${idx}`;
-    const next = !checkedItemsGlobal[key];
-    setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
-    socketInstance?.emit("kds_item_cross_sync", {
+const toggleItemCrossed = async (idx) => {
+  const key  = `${order._id}-${idx}`;
+  const next = !checkedItemsGlobal[key];
+
+  // Capture final elapsed when crossing OFF → ON
+  if (next && itemStartTimes[idx]) {
+    const finalSecs = Math.floor((Date.now() - itemStartTimes[idx]) / 1000);
+    setItemFinalTimes(prev => ({ ...prev, [idx]: finalSecs }));
+  }
+
+  setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
+      socketInstance?.emit("kds_item_cross_sync", {
       orderId: order._id, tenantId: order.tenantId, idx, newState: next
     });
     try {
@@ -2072,16 +2078,16 @@ onClick={() => {
     )}
   </div>
 )}
-{checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (
-  <div style={{
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    marginTop: 4, fontSize: '0.55rem', fontWeight: 900,
-    color: '#555', fontFamily: 'monospace'
-  }}>
-    <Timer size={9} />
-    Done in {Math.floor((itemElapsed[idx]||0)/60)}m {((itemElapsed[idx]||0)%60)}s
-  </div>
-)}
+{checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (() => {
+  const s = itemFinalTimes[idx] ?? (itemElapsed[idx] || 0);
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4,
+      fontSize: '0.55rem', fontWeight: 900, color: '#555', fontFamily: 'monospace' }}>
+      <Timer size={9} />
+      Done in {Math.floor(s / 60)}m {s % 60}s
+    </div>
+  );
+})()}
                 {item.suggestion && (
                   <div style={{
                     color: '#bda88a', fontSize: '0.62rem', marginTop: 4,
