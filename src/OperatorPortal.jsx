@@ -7986,6 +7986,45 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
             </div>
           </div>
 
+{/* ADD THIS — Serving Size */}
+<div style={{ marginBottom: '12px' }}>
+  <label style={{
+    fontSize: '0.6rem', color: 'rgba(211,191,162,0.5)',
+    fontWeight: '800', letterSpacing: '1.5px', textTransform: 'uppercase',
+    display: 'block', marginBottom: '8px'
+  }}>
+    Serves (people per dish)
+  </label>
+  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+    {[1, 2, 3, 4].map(n => (
+      <button
+        key={n}
+        type="button"
+        onClick={() => setNewDish(prev => ({ ...prev, servingSize: n }))}
+        style={{
+          width: '48px', height: '48px', borderRadius: '12px',
+          border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '0.9rem',
+          background: (newDish.servingSize || 1) === n
+            ? 'linear-gradient(135deg, #d3bfa2, #bda88a)'
+            : 'rgba(211,191,162,0.05)',
+          color: (newDish.servingSize || 1) === n ? '#0c0c0c' : 'rgba(255,255,255,0.3)',
+          outline: (newDish.servingSize || 1) === n
+            ? 'none'
+            : '1px solid rgba(211,191,162,0.1)',
+          transition: 'all 0.15s'
+        }}
+      >
+        {n}
+      </button>
+    ))}
+  </div>
+  <div style={{
+    fontSize: '0.56rem', color: 'rgba(211,191,162,0.25)',
+    marginTop: '6px', fontWeight: '600'
+  }}>
+    How many people can comfortably share 1 portion
+  </div>
+</div>
           {/* INGREDIENTS */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
             <div>
