@@ -3729,31 +3729,32 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
   </span>
 )}
-  {item.servingSize && item.servingSize > 0 && (
-    <span style={{
-      fontSize: '0.58rem',
-      fontWeight: '800',
-      padding: '2px 7px',
-      borderRadius: '4px',
-      background: 'rgba(109,186,150,0.1)',
-      color: '#6dba96',
-      border: '1px solid rgba(109,186,150,0.25)',
-      letterSpacing: '0.3px',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '3px'
-    }}>
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6dba96" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-      {language === 'mr'
-        ? `${item.servingSize} जण`
-        : `Serves ${item.servingSize}`}
-    </span>
-  )}
+
+{item.servingSize && item.servingSize > 0 && !isCounterScan && (
+  <span style={{
+    fontSize: '0.58rem',
+    fontWeight: '800',
+    padding: '2px 7px',
+    borderRadius: '4px',
+    background: 'rgba(201,168,76,0.1)',
+    color: '#c9a84c',
+    border: '1px solid rgba(201,168,76,0.25)',
+    letterSpacing: '0.3px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px'
+  }}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+    {language === 'mr'
+      ? `${item.servingSize} जण`
+      : `Serves ${item.servingSize}`}
+  </span>
+)}
 </p>
   {/* 📋 PREMIUM INGREDIENTS LAYOUT BADGE ARRAYS */}
   <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
