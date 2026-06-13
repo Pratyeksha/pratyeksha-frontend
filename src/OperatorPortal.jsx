@@ -931,7 +931,7 @@ const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
     const wb = XLSX.utils.book_new();
 
-    // ── STYLE HELPERS ──
+    // ── STYLE HELPERS ── (unchanged)
     const GOLD  = 'C8A951';
     const DARK  = '1A1A1A';
     const MID   = '2A2A2A';
@@ -940,6 +940,7 @@ const exportToExcel = useCallback((type = 'daily') => {
     const RED   = 'C0392B';
     const AMBER = 'BA7517';
     const BLUE  = '2980B9';
+    const PINK  = 'F87171';
 
     const hdrStyle = (bgHex = DARK, fgHex = GOLD, bold = true, sz = 10) => ({
       font: { name: 'Arial', bold, sz, color: { rgb: fgHex } },
@@ -996,22 +997,9 @@ const exportToExcel = useCallback((type = 'daily') => {
       border: { bottom: { style: 'thin', color: { rgb: '222222' } } }
     });
 
-    const barStyle = (pct, color = GOLD) => ({
-      font: { name: 'Arial', bold: false, sz: 8, color: { rgb: color } },
-      fill: { patternType: 'solid', fgColor: { rgb: '0D0D0D' } },
-      alignment: { horizontal: 'left', vertical: 'center' },
-      border: { bottom: { style: 'thin', color: { rgb: '222222' } } }
-    });
-
     const styleCell = (ws, addr, style) => {
       if (!ws[addr]) ws[addr] = { v: ws[addr]?.v ?? '', t: 's' };
       ws[addr].s = style;
-    };
-
-    const setRange = (ws, data) => {
-      const rows = data.length;
-      const cols = data[0]?.length || 0;
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows - 1, c: cols - 1 } });
     };
 
     const addTitleBlock = (ws, title, subtitle, reportDate) => {
@@ -1035,7 +1023,7 @@ const exportToExcel = useCallback((type = 'daily') => {
     const todayStr = istNow.toISOString().split('T')[0];
     const exportMonthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
 
-    // ── INVENTORY ONLY EXPORT ──
+    // ── INVENTORY ONLY EXPORT ── (unchanged)
     if (type === 'inventory') {
       const ws = {};
       const totalValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0);
@@ -1043,7 +1031,6 @@ const exportToExcel = useCallback((type = 'daily') => {
 
       addTitleBlock(ws, `${tenantConfig?.name || tenantId} — INVENTORY REGISTER`, 'Full ingredient ledger with WAC, stock value, and status', todayStr);
 
-      // KPI row at row 5
       const kpiData = [
         ['TOTAL ITEMS', 'TOTAL VALUE', 'LOW STOCK', 'HEALTHY'],
         [inventory.length, `₹${totalValue.toLocaleString()}`, lowItems, inventory.length - lowItems]
@@ -1054,68 +1041,48 @@ const exportToExcel = useCallback((type = 'daily') => {
       ws['C6'] = { v: `₹${totalValue.toLocaleString()}`, t: 's', s: kpiStyle(GREEN) };
       ws['E6'] = { v: lowItems, t: 'n', s: kpiStyle(lowItems > 0 ? RED : GREEN) };
       ws['G6'] = { v: inventory.length - lowItems, t: 'n', s: kpiStyle(GREEN) };
-      [['A5', 'B5'], ['C5', 'D5'], ['E5', 'F5'], ['G5', 'H5'],
-       ['A6', 'B6'], ['C6', 'D6'], ['E6', 'F6'], ['G6', 'H6']].forEach(([s, e]) => {
+      [['A5','B5'],['C5','D5'],['E5','F5'],['G5','H5'],['A6','B6'],['C6','D6'],['E6','F6'],['G6','H6']].forEach(([s,e]) => {
         if (!ws['!merges']) ws['!merges'] = [];
-        const sr = parseInt(s[1]) - 1, sc = s.charCodeAt(0) - 65;
-        const er = parseInt(e[1]) - 1, ec = e.charCodeAt(0) - 65;
-        ws['!merges'].push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+        const sr = parseInt(s[1])-1, sc = s.charCodeAt(0)-65, er = parseInt(e[1])-1, ec = e.charCodeAt(0)-65;
+        ws['!merges'].push({ s:{r:sr,c:sc}, e:{r:er,c:ec} });
       });
 
-      // Table headers at row 8
-      const headers = ['Ingredient', 'Unit', 'Current Stock', 'Min Threshold', 'WAC (₹/unit)', 'Last Buy (₹)', 'Stock Value (₹)', 'Status', 'Drift'];
+      const headers = ['Ingredient','Unit','Current Stock','Min Threshold','WAC (₹/unit)','Last Buy (₹)','Stock Value (₹)','Status','Drift'];
       XLSX.utils.sheet_add_aoa(ws, [headers], { origin: 'A8' });
-      headers.forEach((_, ci) => {
-        const addr = XLSX.utils.encode_cell({ r: 7, c: ci });
-        styleCell(ws, addr, hdrStyle());
-      });
+      headers.forEach((_, ci) => { const addr = XLSX.utils.encode_cell({r:7,c:ci}); styleCell(ws, addr, hdrStyle()); });
 
-      // Data rows
       inventory.forEach((item, ri) => {
         const row = ri + 9;
         const isLow = item.currentStock <= item.minThreshold;
         const wac = item.weightedAvgCost || item.costPrice || 0;
         const last = item.lastPurchasePrice || wac;
-        const drift = wac > 0 ? ((last - wac) / wac * 100).toFixed(1) : '—';
-        const driftNum = wac > 0 ? (last - wac) / wac * 100 : 0;
+        const drift = wac > 0 ? ((last-wac)/wac*100).toFixed(1) : '—';
+        const driftNum = wac > 0 ? (last-wac)/wac*100 : 0;
         const stockVal = Math.max(0, Math.round(item.currentStock * wac));
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-
-        const rowData = [
-          item.itemName, item.unit, item.currentStock, item.minThreshold,
-          wac.toFixed(2), last.toFixed(2), stockVal,
-          isLow ? '⚠ LOW STOCK' : '✓ OK',
-          drift !== '—' ? `${driftNum > 0 ? '+' : ''}${drift}%` : '—'
-        ];
-
+        const altBg = ri%2===0 ? '0D0D0D' : '111111';
+        const rowData = [item.itemName, item.unit, item.currentStock, item.minThreshold, wac.toFixed(2), last.toFixed(2), stockVal, isLow ? '⚠ LOW STOCK' : '✓ OK', drift!=='—'?`${driftNum>0?'+':''}${drift}%`:'—'];
         rowData.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: row - 1, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
-          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'center') };
-          else if ([2, 3].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, isLow && ci === 2 ? 'E74C3C' : GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if ([4, 5].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'right') };
-          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 7) ws[addr] = { v: val, t: 's', s: statusStyle(!isLow) };
-          else ws[addr] = { v: val, t: 's', s: cellStyle(false, driftNum > 25 ? RED : driftNum > 10 ? AMBER : GREEN, altBg, 'center') };
+          const addr = XLSX.utils.encode_cell({r:row-1,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg,'center')};
+          else if ([2,3].includes(ci)) ws[addr]={v:val,t:'n',s:{...numFmt(false,isLow&&ci===2?'E74C3C':GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if ([4,5].includes(ci)) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg,'right')};
+          else if (ci===6) ws[addr]={v:val,t:'n',s:{...numFmt(true,GREEN),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===7) ws[addr]={v:val,t:'s',s:statusStyle(!isLow)};
+          else ws[addr]={v:val,t:'s',s:cellStyle(false,driftNum>25?RED:driftNum>10?AMBER:GREEN,altBg,'center')};
         });
       });
 
-      // Footer totals
       const footerRow = inventory.length + 9;
-      const footerData = ['TOTAL STOCK VALUE', '', '', '', '', '', `₹${totalValue.toLocaleString()}`, '', ''];
+      const footerData = ['TOTAL STOCK VALUE','','','','','',`₹${totalValue.toLocaleString()}`,'',''];
       XLSX.utils.sheet_add_aoa(ws, [footerData], { origin: `A${footerRow}` });
-      footerData.forEach((_, ci) => {
-        const addr = XLSX.utils.encode_cell({ r: footerRow - 1, c: ci });
-        styleCell(ws, addr, ci === 0 ? hdrStyle(DARK, GOLD, true, 9) : ci === 6 ? hdrStyle('0A2A1A', GREEN, true, 10) : hdrStyle());
-      });
-      if (!ws['!merges']) ws['!merges'] = [];
-      ws['!merges'].push({ s: { r: footerRow - 1, c: 0 }, e: { r: footerRow - 1, c: 5 } });
-      ws['!merges'].push({ s: { r: footerRow - 1, c: 6 }, e: { r: footerRow - 1, c: 8 } });
-
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: footerRow, c: 8 } });
-      ws['!cols'] = [24, 8, 14, 14, 14, 14, 16, 12, 10].map(w => ({ wch: w }));
-      ws['!rows'] = [{ hpt: 28 }, { hpt: 14 }, { hpt: 14 }, { hpt: 8 }, { hpt: 20 }, { hpt: 28 }, { hpt: 8 }, { hpt: 20 }];
-
+      footerData.forEach((_,ci) => { const addr = XLSX.utils.encode_cell({r:footerRow-1,c:ci}); styleCell(ws,addr,ci===0?hdrStyle(DARK,GOLD,true,9):ci===6?hdrStyle('0A2A1A',GREEN,true,10):hdrStyle()); });
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:footerRow-1,c:0},e:{r:footerRow-1,c:5}});
+      ws['!merges'].push({s:{r:footerRow-1,c:6},e:{r:footerRow-1,c:8}});
+      ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:footerRow,c:8}});
+      ws['!cols'] = [24,8,14,14,14,14,16,12,10].map(w=>({wch:w}));
+      ws['!rows'] = [{hpt:28},{hpt:14},{hpt:14},{hpt:8},{hpt:20},{hpt:28},{hpt:8},{hpt:20}];
       XLSX.utils.book_append_sheet(wb, ws, '📦 Inventory');
       XLSX.writeFile(wb, `Pratyeksha_Inventory_${todayStr}.xlsx`);
       showNotif('Inventory report exported — premium format');
@@ -1125,381 +1092,773 @@ const exportToExcel = useCallback((type = 'daily') => {
     // ── FILTER DATA BY PERIOD ──
     let filteredData = analytics;
     let periodLabel = '';
-    if (type === 'daily') {
-      filteredData = analytics.filter(d => d._id === todayStr);
+    if (type==='daily') {
+      filteredData = analytics.filter(d=>d._id===todayStr);
       periodLabel = `Daily · ${todayStr}`;
-    } else if (type === 'weekly') {
-      const weekAgo = new Date(istNow.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      filteredData = analytics.filter(d => d._id >= weekAgo && d._id <= todayStr);
+    } else if (type==='weekly') {
+      const weekAgo = new Date(istNow.getTime()-7*24*60*60*1000).toISOString().split('T')[0];
+      filteredData = analytics.filter(d=>d._id>=weekAgo&&d._id<=todayStr);
       periodLabel = `Weekly · ${weekAgo} to ${todayStr}`;
-    } else if (type === 'monthly') {
-      filteredData = analytics.filter(d => d._id?.startsWith(exportMonthStr));
-      periodLabel = `Monthly · ${viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+    } else if (type==='monthly') {
+      filteredData = analytics.filter(d=>d._id?.startsWith(exportMonthStr));
+      periodLabel = `Monthly · ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`;
     }
 
-    const totalRev = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
-    const totalOrders = filteredData.reduce((a, b) => a + (b.count || 0), 0);
-    const totalCash = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
-    const totalUPI = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
-    const totalCard = filteredData.reduce((a, b) => a + (b.card || 0), 0);
-    const avgOrder = totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0;
-    const totalInvValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0);
-    const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
-    const overallMargin = totalRev > 0 ? Math.round((totalGrossProfit / totalRev) * 100) : 0;
+    const totalRev       = filteredData.reduce((a,b)=>a+(b.revenue||0),0);
+    const totalOrders    = filteredData.reduce((a,b)=>a+(b.count||0),0);
+    const totalCash      = filteredData.reduce((a,b)=>a+(b.cash||0),0);
+    const totalUPI       = filteredData.reduce((a,b)=>a+(b.upi||0),0);
+    const totalCard      = filteredData.reduce((a,b)=>a+(b.card||0),0);
+    const avgOrder       = totalOrders>0 ? Math.round(totalRev/totalOrders) : 0;
+    const totalInvValue  = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*i.costPrice)),0);
+    const totalGrossProfit = profitabilityData.reduce((a,b)=>a+(b.grossProfit||0),0);
+    const overallMargin  = totalRev>0 ? Math.round((totalGrossProfit/totalRev)*100) : 0;
+    const totalIngredientCost = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
 
     // ══════════════════════════════════
-    // SHEET 1: EXECUTIVE DASHBOARD
+    // SHEET 1: EXECUTIVE DASHBOARD (unchanged)
     // ══════════════════════════════════
     {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — EXECUTIVE DASHBOARD`, `Performance summary for ${periodLabel}`, todayStr);
+      addTitleBlock(ws, `${tenantConfig?.name||tenantId} — EXECUTIVE DASHBOARD`, `Performance summary for ${periodLabel}`, todayStr);
 
-      // KPI row: 4 mega-KPIs at row 5-6
-      const kpiLabels = ['TOTAL REVENUE', 'TOTAL ORDERS', 'AVG ORDER VALUE', 'GROSS MARGIN'];
-      const kpiValues = [`₹${totalRev.toLocaleString()}`, totalOrders, `₹${avgOrder.toLocaleString()}`, `${overallMargin}%`];
-      const kpiColors = [GREEN, GOLD, BLUE, overallMargin > 40 ? GREEN : AMBER];
-
-      kpiLabels.forEach((label, i) => {
-        const col = String.fromCharCode(65 + i * 2);
-        const endCol = String.fromCharCode(66 + i * 2);
-        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
-        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiColors[i]) };
-        if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
-        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      const kpiLabels = ['TOTAL REVENUE','TOTAL ORDERS','AVG ORDER VALUE','GROSS MARGIN'];
+      const kpiValues = [`₹${totalRev.toLocaleString()}`,totalOrders,`₹${avgOrder.toLocaleString()}`,`${overallMargin}%`];
+      const kpiColors = [GREEN,GOLD,BLUE,overallMargin>40?GREEN:AMBER];
+      kpiLabels.forEach((label,i)=>{
+        const col = String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
       });
 
-      // Payment breakdown at row 8
       const payRow = [
-        ['PAYMENT BREAKDOWN', '', '', '', '', '', '', ''],
-        ['Mode', 'Amount (₹)', '% of Revenue', '', 'CHANNEL BREAKDOWN', '', '', ''],
-        ['💵 Cash', totalCash, totalRev > 0 ? `${Math.round((totalCash / totalRev) * 100)}%` : '0%', '', 'Dine-In', '', '', ''],
-        ['📱 UPI', totalUPI, totalRev > 0 ? `${Math.round((totalUPI / totalRev) * 100)}%` : '0%', '', 'Takeaway', '', '', ''],
-        ['💳 Card', totalCard, totalRev > 0 ? `${Math.round((totalCard / totalRev) * 100)}%` : '0%', '', 'Online', '', '', ''],
+        ['PAYMENT BREAKDOWN','','','','','','',''],
+        ['Mode','Amount (₹)','% of Revenue','','CHANNEL BREAKDOWN','','',''],
+        ['💵 Cash',totalCash,totalRev>0?`${Math.round((totalCash/totalRev)*100)}%`:'0%','','Dine-In','','',''],
+        ['📱 UPI', totalUPI,totalRev>0?`${Math.round((totalUPI/totalRev)*100)}%`:'0%','','Takeaway','','',''],
+        ['💳 Card',totalCard,totalRev>0?`${Math.round((totalCard/totalRev)*100)}%`:'0%','','Online','','',''],
       ];
       XLSX.utils.sheet_add_aoa(ws, payRow, { origin: 'A8' });
-      styleCell(ws, 'A8', hdrStyle());
-      ws['!merges'].push({ s: { r: 7, c: 0 }, e: { r: 7, c: 7 } });
-      ['A9', 'B9', 'C9'].forEach(addr => styleCell(ws, addr, hdrStyle(MID, GOLD)));
-      [['A10', false], ['A11', false], ['A12', false]].forEach(([addr]) => styleCell(ws, addr, cellStyle(true, WHITE)));
+      styleCell(ws,'A8',hdrStyle());
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:7,c:0},e:{r:7,c:7}});
+      ['A9','B9','C9'].forEach(addr=>styleCell(ws,addr,hdrStyle(MID,GOLD)));
 
-      // Revenue trend daily mini-chart (ASCII bar within cells)
-      const maxRev = Math.max(...filteredData.map(d => d.revenue || 0), 1);
-      const trendHeaders = ['Date', 'Revenue (₹)', 'Orders', 'Avg (₹)', 'Cash', 'UPI', 'Card', 'Bar Chart'];
-      XLSX.utils.sheet_add_aoa(ws, [[''], ['DAILY REVENUE BREAKDOWN', '', '', '', '', '', '', '']], { origin: 'A14' });
-      styleCell(ws, 'A15', hdrStyle());
-      ws['!merges'].push({ s: { r: 14, c: 0 }, e: { r: 14, c: 7 } });
-      XLSX.utils.sheet_add_aoa(ws, [trendHeaders], { origin: 'A16' });
-      trendHeaders.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 15, c: ci }), hdrStyle()));
+      const maxRev = Math.max(...filteredData.map(d=>d.revenue||0),1);
+      const trendHeaders = ['Date','Revenue (₹)','Orders','Avg (₹)','Cash','UPI','Card','Bar Chart'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],['DAILY REVENUE BREAKDOWN','','','','','','','']],{origin:'A14'});
+      styleCell(ws,'A15',hdrStyle());
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:14,c:0},e:{r:14,c:7}});
+      XLSX.utils.sheet_add_aoa(ws,[trendHeaders],{origin:'A16'});
+      trendHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:15,c:ci}),hdrStyle()));
 
-      filteredData.forEach((d, ri) => {
-        const barLen = Math.round((d.revenue / maxRev) * 20);
-        const bar = '█'.repeat(barLen) + '░'.repeat(20 - barLen);
-        const avg = d.count > 0 ? Math.round(d.revenue / d.count) : 0;
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-        const row = [d._id, d.revenue || 0, d.count || 0, avg, d.cash || 0, d.upi || 0, d.card || 0, bar];
-        row.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: 16 + ri, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg) };
-          else if (ci === 7) ws[addr] = { v: val, t: 's', s: { ...cellStyle(false, GOLD, altBg), font: { name: 'Consolas', sz: 7, color: { rgb: GOLD } } } };
-          else ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 1 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+      filteredData.forEach((d,ri)=>{
+        const barLen = Math.round((d.revenue/maxRev)*20);
+        const bar = '█'.repeat(barLen)+'░'.repeat(20-barLen);
+        const avg = d.count>0?Math.round(d.revenue/d.count):0;
+        const altBg = ri%2===0?'0D0D0D':'111111';
+        const row = [d._id,d.revenue||0,d.count||0,avg,d.cash||0,d.upi||0,d.card||0,bar];
+        row.forEach((val,ci)=>{
+          const addr = XLSX.utils.encode_cell({r:16+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg)};
+          else if (ci===7) ws[addr]={v:val,t:'s',s:{...cellStyle(false,GOLD,altBg),font:{name:'Consolas',sz:7,color:{rgb:GOLD}}}};
+          else ws[addr]={v:val,t:'n',s:{...numFmt(false,ci===1?GREEN:WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
         });
       });
 
-      // Summary footer
-      const sfRow = filteredData.length + 17;
-      const sfData = ['TOTALS / AVERAGES', totalRev, totalOrders, avgOrder, totalCash, totalUPI, totalCard, ''];
-      XLSX.utils.sheet_add_aoa(ws, [sfData], { origin: `A${sfRow}` });
-      sfData.forEach((val, ci) => {
-        const addr = XLSX.utils.encode_cell({ r: sfRow - 1, c: ci });
-        ws[addr] = { v: val, t: ci === 0 ? 's' : 'n', s: ci === 0 ? hdrStyle(DARK, GOLD, true) : { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: DARK } } } };
+      const sfRow = filteredData.length+17;
+      const sfData = ['TOTALS / AVERAGES',totalRev,totalOrders,avgOrder,totalCash,totalUPI,totalCard,''];
+      XLSX.utils.sheet_add_aoa(ws,[sfData],{origin:`A${sfRow}`});
+      sfData.forEach((val,ci)=>{
+        const addr = XLSX.utils.encode_cell({r:sfRow-1,c:ci});
+        ws[addr]={v:val,t:ci===0?'s':'n',s:ci===0?hdrStyle(DARK,GOLD,true):{...numFmt(true,GREEN),fill:{patternType:'solid',fgColor:{rgb:DARK}}}};
       });
-      if (!ws['!merges']) ws['!merges'] = [];
 
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sfRow + 2, c: 7 } });
-      ws['!cols'] = [16, 14, 10, 12, 12, 12, 12, 22].map(w => ({ wch: w }));
-      ws['!rows'] = [{ hpt: 30 }, { hpt: 14 }, { hpt: 12 }, { hpt: 8 }, { hpt: 22 }, { hpt: 30 }];
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:sfRow+2,c:7}});
+      ws['!cols']=[16,14,10,12,12,12,12,22].map(w=>({wch:w}));
+      ws['!rows']=[{hpt:30},{hpt:14},{hpt:12},{hpt:8},{hpt:22},{hpt:30}];
       XLSX.utils.book_append_sheet(wb, ws, '📊 Dashboard');
     }
 
     // ══════════════════════════════════
-    // SHEET 2: PROFITABILITY MATRIX
+    // SHEET 2: PROFITABILITY MATRIX (unchanged)
     // ══════════════════════════════════
     if (profitabilityData.length > 0) {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — DISH PROFITABILITY MATRIX`, 'Menu Engineering: Stars, Plowhorses, Puzzles & Dogs', periodLabel);
+      addTitleBlock(ws, `${tenantConfig?.name||tenantId} — DISH PROFITABILITY MATRIX`, 'Menu Engineering: Stars, Plowhorses, Puzzles & Dogs', periodLabel);
 
-      // Menu engineering quadrant classification
-      const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
-      const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
-
+      const avgSold = profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length;
+      const avgMargin = profitabilityData.reduce((a,b)=>a+(b.marginPct||0),0)/profitabilityData.length;
       const classify = (d) => {
-        const highSales = (d.totalQtySold || 0) >= avgSold;
-        const highMargin = (d.marginPct || 0) >= avgMargin;
-        if (highSales && highMargin) return { label: '⭐ STAR', color: GREEN };
-        if (highSales && !highMargin) return { label: '🐄 PLOWHORSE', color: BLUE };
-        if (!highSales && highMargin) return { label: '❓ PUZZLE', color: AMBER };
-        return { label: '🐕 DOG', color: RED };
+        const highSales=(d.totalQtySold||0)>=avgSold, highMargin=(d.marginPct||0)>=avgMargin;
+        if (highSales&&highMargin) return {label:'⭐ STAR',color:GREEN};
+        if (highSales&&!highMargin) return {label:'🐄 PLOWHORSE',color:BLUE};
+        if (!highSales&&highMargin) return {label:'❓ PUZZLE',color:AMBER};
+        return {label:'🐕 DOG',color:RED};
       };
 
-      // KPI summary
-      const kpiLabels = ['AVG MARGIN', 'STARS', 'PLOWHORSES', 'DOGS'];
-      const starCount = profitabilityData.filter(d => classify(d).label.includes('STAR')).length;
-      const phCount = profitabilityData.filter(d => classify(d).label.includes('PLOWHORSE')).length;
-      const dogCount = profitabilityData.filter(d => classify(d).label.includes('DOG')).length;
-      const kpiValues = [`${Math.round(avgMargin)}%`, starCount, phCount, dogCount];
-      const kpiColors = [overallMargin > 40 ? GREEN : AMBER, GREEN, BLUE, RED];
-      kpiLabels.forEach((label, i) => {
-        const col = String.fromCharCode(65 + i * 2);
-        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
-        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiColors[i]) };
-        if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
-        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      const starCount = profitabilityData.filter(d=>classify(d).label.includes('STAR')).length;
+      const phCount   = profitabilityData.filter(d=>classify(d).label.includes('PLOWHORSE')).length;
+      const dogCount  = profitabilityData.filter(d=>classify(d).label.includes('DOG')).length;
+      const kpiLabels = ['AVG MARGIN','STARS','PLOWHORSES','DOGS'];
+      const kpiValues = [`${Math.round(avgMargin)}%`,starCount,phCount,dogCount];
+      const kpiColors = [overallMargin>40?GREEN:AMBER,GREEN,BLUE,RED];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
       });
 
-      // Table
-      const headers = ['Rank', 'Dish Name', 'Category', 'Selling ₹', 'Cost ₹/serving', 'Margin %', 'Qty Sold', 'Total Revenue', 'Total Cost', 'Gross Profit', 'P&L', 'Recipe', 'Segment'];
-      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A8' });
-      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 8, c: ci }), hdrStyle()));
+      const headers = ['Rank','Dish Name','Category','Selling ₹','Cost ₹/serving','Margin %','Qty Sold','Total Revenue','Total Cost','Gross Profit','P&L','Recipe','Segment'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],headers],{origin:'A8'});
+      headers.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:8,c:ci}),hdrStyle()));
 
-      profitabilityData.forEach((d, ri) => {
-        const cls = classify(d);
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-        const profitColor = (d.grossProfit || 0) > 0 ? GREEN : RED;
-        const marginColor = (d.marginPct || 0) > 50 ? GREEN : (d.marginPct || 0) > 30 ? GOLD : RED;
-
-        const row = [
-          ri + 1, d.name, (d.category || '').replace('cat_', '').replace(/_/g, ' '),
-          d.sellingPrice || 0, d.ingredientCostPerServing || 0,
-          d.marginPct || 0, d.totalQtySold || 0,
-          d.totalRevenue || 0, Math.round(d.totalIngredientCost || 0),
-          Math.round(d.grossProfit || 0), (d.grossProfit || 0) > 0 ? 'PROFIT' : 'LOSS',
-          d.hasRecipe ? 'LINKED' : 'ESTIMATE',
-          cls.label
-        ];
-
-        row.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: 9 + ri, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 'n', s: cellStyle(false, '555555', altBg, 'center') };
-          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
-          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg) };
-          else if ([3, 4].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 4 ? AMBER : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 5) ws[addr] = { v: `${val}%`, t: 's', s: cellStyle(true, marginColor, altBg, 'center') };
-          else if ([6, 7, 8, 9].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(ci === 9, ci === 9 ? profitColor : ci === 7 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 10) ws[addr] = { v: val, t: 's', s: statusStyle(val === 'PROFIT') };
-          else if (ci === 11) ws[addr] = { v: val, t: 's', s: cellStyle(false, d.hasRecipe ? GREEN : AMBER, altBg, 'center') };
-          else ws[addr] = { v: val, t: 's', s: { ...cellStyle(true, cls.color, altBg, 'center'), font: { name: 'Arial', bold: true, sz: 8, color: { rgb: cls.color } } } };
+      profitabilityData.forEach((d,ri)=>{
+        const cls=classify(d), altBg=ri%2===0?'0D0D0D':'111111';
+        const profitColor=(d.grossProfit||0)>0?GREEN:RED;
+        const marginColor=(d.marginPct||0)>50?GREEN:(d.marginPct||0)>30?GOLD:RED;
+        const row=[ri+1,d.name,(d.category||'').replace('cat_','').replace(/_/g,' '),d.sellingPrice||0,d.ingredientCostPerServing||0,d.marginPct||0,d.totalQtySold||0,d.totalRevenue||0,Math.round(d.totalIngredientCost||0),Math.round(d.grossProfit||0),(d.grossProfit||0)>0?'PROFIT':'LOSS',d.hasRecipe?'LINKED':'ESTIMATE',cls.label];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:9+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'n',s:cellStyle(false,'555555',altBg,'center')};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===2) ws[addr]={v:val,t:'s',s:cellStyle(false,'666666',altBg)};
+          else if ([3,4].includes(ci)) ws[addr]={v:val,t:'n',s:{...numFmt(false,ci===4?AMBER:WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===5) ws[addr]={v:`${val}%`,t:'s',s:cellStyle(true,marginColor,altBg,'center')};
+          else if ([6,7,8,9].includes(ci)) ws[addr]={v:val,t:'n',s:{...numFmt(ci===9,ci===9?profitColor:ci===7?GREEN:WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===10) ws[addr]={v:val,t:'s',s:statusStyle(val==='PROFIT')};
+          else if (ci===11) ws[addr]={v:val,t:'s',s:cellStyle(false,d.hasRecipe?GREEN:AMBER,altBg,'center')};
+          else ws[addr]={v:val,t:'s',s:{...cellStyle(true,cls.color,altBg,'center'),font:{name:'Arial',bold:true,sz:8,color:{rgb:cls.color}}}};
         });
       });
 
-      const lastRow = profitabilityData.length + 10;
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 12 } });
-      ws['!cols'] = [6, 22, 14, 10, 14, 10, 10, 14, 12, 14, 10, 10, 14].map(w => ({ wch: w }));
+      const lastRow=profitabilityData.length+10;
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow,c:12}});
+      ws['!cols']=[6,22,14,10,14,10,10,14,12,14,10,10,14].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws, '💰 Profitability');
     }
 
     // ══════════════════════════════════
-    // SHEET 3: TOP DISHES
+    // SHEET 3: TOP DISHES (unchanged)
     // ══════════════════════════════════
     if (topPerformers.length > 0) {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — DISH PERFORMANCE`, 'Top and bottom performing menu items', periodLabel);
-
-      const maxSold = Math.max(...topPerformers.map(d => d.sold || 0), 1);
-      const headers = ['Rank', 'Dish Name', 'Category', 'Units Sold', 'Performance Bar', 'Contribution'];
-      XLSX.utils.sheet_add_aoa(ws, [[''], [''], headers], { origin: 'A5' });
-      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 6, c: ci }), hdrStyle()));
-
-      const totalSold = topPerformers.reduce((a, b) => a + (b.sold || 0), 0);
-      topPerformers.forEach((d, ri) => {
-        const barLen = Math.round((d.sold / maxSold) * 25);
-        const bar = '█'.repeat(barLen) + '░'.repeat(25 - barLen);
-        const pct = totalSold > 0 ? `${Math.round((d.sold / totalSold) * 100)}%` : '—';
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-        const medal = ri === 0 ? '🥇' : ri === 1 ? '🥈' : ri === 2 ? '🥉' : `#${ri + 1}`;
-
-        const row = [medal, d.name, (d.category || '').replace('cat_', '').replace(/_/g, ' '), d.sold || 0, bar, pct];
-        row.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: 7 + ri, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, GOLD, altBg, 'center') };
-          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
-          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg) };
-          else if (ci === 3) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 4) ws[addr] = { v: val, t: 's', s: { font: { name: 'Consolas', sz: 7, color: { rgb: GOLD } }, fill: { patternType: 'solid', fgColor: { rgb: altBg } }, alignment: { horizontal: 'left', vertical: 'center' } } };
-          else ws[addr] = { v: val, t: 's', s: cellStyle(false, GREEN, altBg, 'center') };
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — DISH PERFORMANCE`,'Top and bottom performing menu items',periodLabel);
+      const maxSold=Math.max(...topPerformers.map(d=>d.sold||0),1);
+      const headers=['Rank','Dish Name','Category','Units Sold','Performance Bar','Contribution'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],[''],headers],{origin:'A5'});
+      headers.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:6,c:ci}),hdrStyle()));
+      const totalSold=topPerformers.reduce((a,b)=>a+(b.sold||0),0);
+      topPerformers.forEach((d,ri)=>{
+        const barLen=Math.round((d.sold/maxSold)*25);
+        const bar='█'.repeat(barLen)+'░'.repeat(25-barLen);
+        const pct=totalSold>0?`${Math.round((d.sold/totalSold)*100)}%`:'—';
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const medal=ri===0?'🥇':ri===1?'🥈':ri===2?'🥉':`#${ri+1}`;
+        const row=[medal,d.name,(d.category||'').replace('cat_','').replace(/_/g,' '),d.sold||0,bar,pct];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:7+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,GOLD,altBg,'center')};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===2) ws[addr]={v:val,t:'s',s:cellStyle(false,'666666',altBg)};
+          else if (ci===3) ws[addr]={v:val,t:'n',s:{...numFmt(true,GREEN),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===4) ws[addr]={v:val,t:'s',s:{font:{name:'Consolas',sz:7,color:{rgb:GOLD}},fill:{patternType:'solid',fgColor:{rgb:altBg}},alignment:{horizontal:'left',vertical:'center'}}};
+          else ws[addr]={v:val,t:'s',s:cellStyle(false,GREEN,altBg,'center')};
         });
       });
-
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: topPerformers.length + 8, c: 5 } });
-      ws['!cols'] = [8, 26, 16, 12, 28, 12].map(w => ({ wch: w }));
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:topPerformers.length+8,c:5}});
+      ws['!cols']=[8,26,16,12,28,12].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws, '🍽️ Top Dishes');
     }
 
     // ══════════════════════════════════
-    // SHEET 4: STAFF EFFICIENCY
+    // SHEET 4: ★ NEW — P&L + BREAK-EVEN
+    // ══════════════════════════════════
+    if (profitabilityData.length > 0) {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name||tenantId} — P&L & BREAK-EVEN`, `Financial health summary for ${periodLabel}`, todayStr);
+
+      const monthStr = exportMonthStr;
+      const monthlyPayroll = staffEfficiency.reduce((a,s)=>{
+        const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+        return a+(Number(rec?.baseSalary||s.baseSalary)||0);
+      },0);
+      const extraRev    = extraAnalytics?.totalRevenue||0;
+      const extraCost   = extraAnalytics?.totalCost||0;
+      const totalRevPL  = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0)+extraRev;
+      const ingCostPL   = totalIngredientCost+extraCost;
+      const grossPL     = totalRevPL-ingCostPL;
+      const netPL       = grossPL-monthlyPayroll;
+      const netMarginPct = totalRevPL>0?Math.round((netPL/totalRevPL)*100):0;
+      const foodCostPct  = totalRevPL>0?(ingCostPL/totalRevPL):0.3;
+      const contribPct   = 1-foodCostPct;
+      const breakEvenRev = contribPct>0?monthlyPayroll/contribPct:0;
+      const daysInMonth  = new Date(viewDate.getFullYear(),viewDate.getMonth()+1,0).getDate();
+      const breakEvenDay = breakEvenRev/daysInMonth;
+      const progressPct  = breakEvenRev>0?Math.min(100,Math.round((totalRevPL/breakEvenRev)*100)):0;
+      const totalCovers  = trendsData?.customers?.total||0;
+      const costPerCover = totalCovers>0?Math.round(ingCostPL/totalCovers):0;
+
+      // KPIs
+      const kpiLabels=['TOTAL REVENUE','GROSS PROFIT','NET PROFIT','NET MARGIN'];
+      const kpiValues=[`₹${totalRevPL.toLocaleString()}`,`₹${grossPL.toLocaleString()}`,`₹${netPL.toLocaleString()}`,`${netMarginPct}%`];
+      const kpiColors=[GREEN,GOLD,netPL>=0?GREEN:RED,netMarginPct>15?GREEN:netMarginPct>5?AMBER:RED];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
+      });
+
+      // P&L table
+      const plData = [
+        ['P&L STATEMENT',''],
+        ['LINE ITEM','AMOUNT (₹)'],
+        ['Total Revenue (Menu + Extras)',totalRevPL],
+        ['(-) Ingredient Cost',ingCostPL],
+        ['= Gross Profit',grossPL],
+        ['(-) Staff Payroll',monthlyPayroll],
+        ['= Net Profit',netPL],
+        ['',''],
+        ['Net Margin %',`${netMarginPct}%`],
+        ['Food Cost % of Revenue',`${Math.round(foodCostPct*100)}%`],
+        ['Cost Per Cover',`₹${costPerCover}`],
+      ];
+      XLSX.utils.sheet_add_aoa(ws,plData,{origin:'A8'});
+      styleCell(ws,'A8',hdrStyle(DARK,GOLD,true,11));
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:7,c:0},e:{r:7,c:1}});
+      styleCell(ws,'A9',hdrStyle(MID,GOLD));
+      styleCell(ws,'B9',hdrStyle(MID,GOLD));
+      plData.slice(2).forEach((row,ri)=>{
+        const r=10+ri;
+        const isTotal=row[0].startsWith('=');
+        const isDed=row[0].startsWith('(-)');
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const aAddr=`A${r}`, bAddr=`B${r}`;
+        ws[aAddr]={v:row[0],t:'s',s:cellStyle(isTotal,isTotal?GOLD:isDed?AMBER:WHITE,isTotal?DARK:altBg)};
+        if (typeof row[1]==='number') {
+          ws[bAddr]={v:row[1],t:'n',s:{...numFmt(isTotal,isTotal?GOLD:isDed?AMBER:netPL>=0?GREEN:RED),fill:{patternType:'solid',fgColor:{rgb:isTotal?DARK:altBg}}}};
+        } else {
+          ws[bAddr]={v:row[1],t:'s',s:cellStyle(isTotal,isTotal?GOLD:WHITE,isTotal?DARK:altBg,'right')};
+        }
+      });
+
+      // Break-even section
+      const beStart=10+plData.slice(2).length+2;
+      const beData=[
+        ['BREAK-EVEN ANALYSIS',''],
+        ['Monthly Payroll (Fixed Cost)',monthlyPayroll],
+        ['Contribution Margin %',`${Math.round(contribPct*100)}%`],
+        ['Break-Even Revenue Needed',Math.round(breakEvenRev)],
+        ['Break-Even Per Day',Math.round(breakEvenDay)],
+        ['Actual Revenue This Month',totalRevPL],
+        ['Break-Even Progress',`${progressPct}%`],
+        ['Status',progressPct>=100?'✓ ACHIEVED':'⚠ IN PROGRESS'],
+      ];
+      XLSX.utils.sheet_add_aoa(ws,beData,{origin:`A${beStart}`});
+      styleCell(ws,`A${beStart}`,hdrStyle(DARK,BLUE,true,11));
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:beStart-1,c:0},e:{r:beStart-1,c:1}});
+      beData.slice(1).forEach((row,ri)=>{
+        const r=beStart+1+ri;
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        ws[`A${r}`]={v:row[0],t:'s',s:cellStyle(false,'888888',altBg)};
+        if (typeof row[1]==='number') {
+          ws[`B${r}`]={v:row[1],t:'n',s:{...numFmt(true,GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+        } else {
+          const isAchieved=row[1]==='✓ ACHIEVED';
+          ws[`B${r}`]={v:row[1],t:'s',s:cellStyle(true,isAchieved?GREEN:AMBER,altBg,'right')};
+        }
+      });
+
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:beStart+beData.length+2,c:7}});
+      ws['!cols']=[32,20,12,12,12,12,12,12].map(w=>({wch:w}));
+      XLSX.utils.book_append_sheet(wb, ws, '📈 P&L & Break-Even');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 5: ★ NEW — WASTAGE LOG
+    // ══════════════════════════════════
+    if (wastageAnalytics && (wastageAnalytics.totalEntries||0) > 0) {
+      const ws = {};
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — WASTAGE COST INTELLIGENCE`,`Kitchen wastage log — ${wastageAnalytics.monthLabel||periodLabel}`,todayStr);
+
+      const totalRevForWaste = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0)+(extraAnalytics?.totalRevenue||0);
+      const wastagePct = totalRevForWaste>0?((wastageAnalytics.totalCost||0)/totalRevForWaste*100).toFixed(1):0;
+
+      const kpiLabels=['TOTAL COST LOST','ENTRIES LOGGED','WASTAGE % OF REV','TOP WASTED'];
+      const topWastedItem=(wastageAnalytics.topWasted||[])[0]?.name||'—';
+      const kpiValues=[`₹${(wastageAnalytics.totalCost||0).toLocaleString()}`,wastageAnalytics.totalEntries||0,`${wastagePct}%`,topWastedItem];
+      const kpiColors=[PINK,GOLD,Number(wastagePct)>3?PINK:Number(wastagePct)>1?AMBER:GREEN,AMBER];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
+      });
+
+      // Top wasted items table
+      XLSX.utils.sheet_add_aoa(ws,[[''],['TOP WASTED INGREDIENTS','','','']],{origin:'A8'});
+      styleCell(ws,'A9',hdrStyle(DARK,PINK,true,10));
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:8,c:0},e:{r:8,c:3}});
+      const wasteHeaders=['Rank','Ingredient','Entries','Cost Lost (₹)'];
+      XLSX.utils.sheet_add_aoa(ws,[wasteHeaders],{origin:'A10'});
+      wasteHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:9,c:ci}),hdrStyle(MID,PINK)));
+      (wastageAnalytics.topWasted||[]).forEach((item,ri)=>{
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const row=[ri+1,item.name,item.count,item.cost||0];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:10+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'n',s:cellStyle(false,'555555',altBg,'center')};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(ri===0,ri===0?PINK:WHITE,altBg)};
+          else if (ci===2) ws[addr]={v:val,t:'n',s:{...numFmt(false,GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else ws[addr]={v:val,t:'n',s:{...numFmt(true,ri===0?PINK:WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+        });
+      });
+
+      // By reason breakdown
+      const byReasonStart=(wastageAnalytics.topWasted||[]).length+12;
+      XLSX.utils.sheet_add_aoa(ws,[[''],['WASTAGE BY REASON','','','']],{origin:`A${byReasonStart}`});
+      styleCell(ws,`A${byReasonStart+1}`,hdrStyle(DARK,AMBER,true,10));
+      if (!ws['!merges']) ws['!merges']=[];
+      ws['!merges'].push({s:{r:byReasonStart,c:0},e:{r:byReasonStart,c:3}});
+      const reasonHeaders=['Reason','Entries','% of Total','Cost Lost (₹)'];
+      XLSX.utils.sheet_add_aoa(ws,[reasonHeaders],{origin:`A${byReasonStart+2}`});
+      reasonHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:byReasonStart+1,c:ci}),hdrStyle(MID,AMBER)));
+      const totalEntries=wastageAnalytics.totalEntries||1;
+      Object.entries(wastageAnalytics.byReason||{}).sort((a,b)=>b[1].cost-a[1].cost).forEach(([reason,data],ri)=>{
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const pct=Math.round((data.count/totalEntries)*100);
+        const row=[reason,data.count,`${pct}%`,data.cost||0];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:byReasonStart+2+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(false,WHITE,altBg)};
+          else if (ci===1) ws[addr]={v:val,t:'n',s:{...numFmt(false,GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===2) ws[addr]={v:val,t:'s',s:cellStyle(false,AMBER,altBg,'center')};
+          else ws[addr]={v:val,t:'n',s:{...numFmt(true,PINK),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+        });
+      });
+
+      // Daily trend
+      const dailyStart=byReasonStart+2+Object.keys(wastageAnalytics.byReason||{}).length+2;
+      if ((wastageAnalytics.dailyTrend||[]).length>0) {
+        XLSX.utils.sheet_add_aoa(ws,[[''],['DAILY WASTAGE COST TREND','','','']],{origin:`A${dailyStart}`});
+        styleCell(ws,`A${dailyStart+1}`,hdrStyle(DARK,PINK,true,10));
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:dailyStart,c:0},e:{r:dailyStart,c:3}});
+        const dtHeaders=['Date','Entries','Cost (₹)','Trend Bar'];
+        XLSX.utils.sheet_add_aoa(ws,[dtHeaders],{origin:`A${dailyStart+2}`});
+        dtHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:dailyStart+1,c:ci}),hdrStyle(MID,PINK)));
+        const maxCost=Math.max(...wastageAnalytics.dailyTrend.map(d=>d.cost),1);
+        wastageAnalytics.dailyTrend.forEach((d,ri)=>{
+          const altBg=ri%2===0?'0D0D0D':'111111';
+          const barLen=Math.round((d.cost/maxCost)*20);
+          const bar='█'.repeat(barLen)+'░'.repeat(20-barLen);
+          const row=[d.date,d.count,d.cost,bar];
+          row.forEach((val,ci)=>{
+            const addr=XLSX.utils.encode_cell({r:dailyStart+2+ri,c:ci});
+            if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg)};
+            else if (ci===1) ws[addr]={v:val,t:'n',s:{...numFmt(false,GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+            else if (ci===2) ws[addr]={v:val,t:'n',s:{...numFmt(true,d.cost>0?PINK:GREEN),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+            else ws[addr]={v:val,t:'s',s:{font:{name:'Consolas',sz:7,color:{rgb:PINK}},fill:{patternType:'solid',fgColor:{rgb:altBg}},alignment:{horizontal:'left',vertical:'center'}}};
+          });
+        });
+      }
+
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:dailyStart+2+(wastageAnalytics.dailyTrend||[]).length+4,c:7}});
+      ws['!cols']=[26,12,12,22,12,12,12,12].map(w=>({wch:w}));
+      XLSX.utils.book_append_sheet(wb, ws, '🗑️ Wastage');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 6: ★ NEW — EXTRA ITEMS
+    // ══════════════════════════════════
+    if (extraAnalytics && (extraAnalytics.totalSold||0) > 0) {
+      const ws = {};
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — EXTRA ITEMS REVENUE`,'Supplementary catalog — cold drinks, snacks, ice cream, etc.',periodLabel);
+
+      const kpiLabels=['TOTAL REVENUE','TOTAL COST','GROSS PROFIT','UNITS SOLD'];
+      const kpiValues=[`₹${(extraAnalytics.totalRevenue||0).toLocaleString()}`,`₹${(extraAnalytics.totalCost||0).toLocaleString()}`,`₹${(extraAnalytics.totalProfit||0).toLocaleString()}`,extraAnalytics.totalSold||0];
+      const kpiColors=[GREEN,AMBER,(extraAnalytics.totalProfit||0)>0?GREEN:RED,GOLD];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
+      });
+
+      const headers=['Item','Category','Sell ₹','Margin %','Units Sold','Revenue (₹)','Cost (₹)','Profit (₹)','P&L'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],headers],{origin:'A8'});
+      headers.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:8,c:ci}),hdrStyle()));
+
+      const sortedExtras=(extraAnalytics.items||[]).filter(i=>i.totalSold>0).sort((a,b)=>b.profit-a.profit);
+      sortedExtras.forEach((item,ri)=>{
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const profitColor=(item.profit||0)>0?GREEN:RED;
+        const marginColor=(item.margin||0)>40?GREEN:AMBER;
+        const row=[item.name,item.category,item.price,`${item.margin||0}%`,item.totalSold,item.revenue||0,Math.round((item.revenue||0)-(item.profit||0)),item.profit||0,(item.profit||0)>0?'PROFIT':'LOSS'];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:9+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(false,'666666',altBg)};
+          else if (ci===2) ws[addr]={v:val,t:'n',s:{...numFmt(false,GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===3) ws[addr]={v:val,t:'s',s:cellStyle(true,marginColor,altBg,'center')};
+          else if (ci===4) ws[addr]={v:val,t:'n',s:{...numFmt(false,WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if ([5,6,7].includes(ci)) ws[addr]={v:val,t:'n',s:{...numFmt(ci===7,ci===7?profitColor:ci===5?GREEN:AMBER),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else ws[addr]={v:val,t:'s',s:statusStyle(val==='PROFIT')};
+        });
+      });
+
+      // Totals row
+      const totRow=sortedExtras.length+10;
+      const totData=['TOTALS','','',' ',sortedExtras.reduce((a,i)=>a+i.totalSold,0),extraAnalytics.totalRevenue||0,Math.round((extraAnalytics.totalRevenue||0)-(extraAnalytics.totalProfit||0)),extraAnalytics.totalProfit||0,''];
+      XLSX.utils.sheet_add_aoa(ws,[totData],{origin:`A${totRow}`});
+      totData.forEach((val,ci)=>{
+        const addr=XLSX.utils.encode_cell({r:totRow-1,c:ci});
+        ws[addr]={v:val,t:ci===0?'s':typeof val==='number'?'n':'s',s:ci===0?hdrStyle(DARK,GOLD,true):{...numFmt(true,ci===7?(extraAnalytics.totalProfit||0)>0?GREEN:RED:GREEN),fill:{patternType:'solid',fgColor:{rgb:DARK}}}};
+      });
+
+      // Category breakdown
+      if (Object.keys(extraAnalytics.byCategory||{}).length>1) {
+        const catStart=totRow+2;
+        XLSX.utils.sheet_add_aoa(ws,[['CATEGORY BREAKDOWN','','','']],{origin:`A${catStart}`});
+        styleCell(ws,`A${catStart}`,hdrStyle(DARK,GOLD,true,10));
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:catStart-1,c:0},e:{r:catStart-1,c:3}});
+        const catHeaders=['Category','Units Sold','Revenue (₹)','Profit (₹)'];
+        XLSX.utils.sheet_add_aoa(ws,[catHeaders],{origin:`A${catStart+1}`});
+        catHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:catStart,c:ci}),hdrStyle(MID,GOLD)));
+        Object.entries(extraAnalytics.byCategory).forEach(([cat,data],ri)=>{
+          const altBg=ri%2===0?'0D0D0D':'111111';
+          const row=[cat,data.sold,data.revenue||0,data.profit||0];
+          row.forEach((val,ci)=>{
+            const addr=XLSX.utils.encode_cell({r:catStart+1+ri,c:ci});
+            if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,GOLD,altBg)};
+            else ws[addr]={v:val,t:'n',s:{...numFmt(ci===3,(data.profit||0)>0?GREEN:AMBER),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          });
+        });
+      }
+
+      // Dead stock callout
+      const deadExtras=(extraAnalytics.items||[]).filter(i=>!i.totalSold||i.totalSold===0);
+      if (deadExtras.length>0) {
+        const deadStart=totRow+Object.keys(extraAnalytics.byCategory||{}).length+5;
+        XLSX.utils.sheet_add_aoa(ws,[[`DEAD STOCK — ${deadExtras.length} ITEMS WITH ZERO SALES`,'','','']],{origin:`A${deadStart}`});
+        styleCell(ws,`A${deadStart}`,hdrStyle(DARK,RED,true,10));
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:deadStart-1,c:0},e:{r:deadStart-1,c:3}});
+        XLSX.utils.sheet_add_aoa(ws,[['Item Name','Category','Sell ₹','']],{origin:`A${deadStart+1}`});
+        deadExtras.forEach((item,ri)=>{
+          const altBg=ri%2===0?'0D0D0D':'111111';
+          XLSX.utils.sheet_add_aoa(ws,[[item.name,item.category||'—',item.price||0,'']],{origin:`A${deadStart+2+ri}`});
+          ['A','B','C'].forEach((col,ci)=>styleCell(ws,`${col}${deadStart+2+ri}`,ci===2?{...numFmt(false,RED),fill:{patternType:'solid',fgColor:{rgb:altBg}}}:cellStyle(false,ci===0?WHITE:'666666',altBg)));
+        });
+      }
+
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:totRow+50,c:8}});
+      ws['!cols']=[24,16,10,12,12,14,12,14,10].map(w=>({wch:w}));
+      XLSX.utils.book_append_sheet(wb, ws, '🛒 Extra Items');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 7: ★ NEW — WAITLIST & COUNTER
+    // ══════════════════════════════════
+    if (waitlistAnalytics) {
+      const ws = {};
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — WAITLIST & COUNTER ANALYTICS`,`Counter queue performance — ${waitlistAnalytics.month?.monthLabel||periodLabel}`,todayStr);
+
+      const m=waitlistAnalytics.month||{};
+      const kpiLabels=['CONVERSION RATE','AVG WAIT TIME','PRE-ORDER REVENUE','NOTIF DELIVERED'];
+      const kpiValues=[`${m.conversionPct||0}%`,`${m.avgWaitMin||0} min`,`₹${(m.preOrderRevenue||0).toLocaleString()}`,`${m.notifDeliveredPct||0}%`];
+      const kpiColors=[
+        (m.conversionPct||0)>70?GREEN:(m.conversionPct||0)>50?GOLD:AMBER,
+        (m.avgWaitMin||0)<15?GREEN:(m.avgWaitMin||0)<25?GOLD:RED,
+        GREEN, BLUE
+      ];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiColors[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
+      });
+
+      // Summary table
+      const total=m.total||0;
+      const walked=Math.max(0,total-((m.seated||0)+(m.pickupSettled||0)));
+      const noShowPct=total>0?Math.round((walked/total)*100):0;
+      const summaryData=[
+        ['MONTHLY SUMMARY',''],
+        ['Total Groups',m.total||0],
+        ['Dine-In Waitlist',m.dineIn||0],
+        ['Pickup / Takeaway',m.pickup||0],
+        ['Seated (Dine-In)',m.seated||0],
+        ['Pickup Settled',m.pickupSettled||0],
+        ['No-Show / Walk-Away',walked],
+        ['No-Show Rate',`${noShowPct}%`],
+        ['Repeat Waitlist Customers',m.repeatGroups||0],
+        ['Pre-Order Revenue',`₹${(m.preOrderRevenue||0).toLocaleString()}`],
+        ['Avg Wait Time',`${m.avgWaitMin||0} min`],
+        ['Conversion Rate',`${m.conversionPct||0}%`],
+        ['Notif Delivered',`${m.notifDeliveredPct||0}%`],
+      ];
+      XLSX.utils.sheet_add_aoa(ws,summaryData,{origin:'A8'});
+      styleCell(ws,'A8',hdrStyle(DARK,GOLD,true,10));
+      styleCell(ws,'B8',hdrStyle(DARK,GOLD,true,10));
+      summaryData.slice(1).forEach((row,ri)=>{
+        const r=9+ri, altBg=ri%2===0?'0D0D0D':'111111';
+        ws[`A${r}`]={v:row[0],t:'s',s:cellStyle(false,'888888',altBg)};
+        const isRed=row[0].includes('No-Show')&&noShowPct>20;
+        const isGreen=row[0]==='Conversion Rate'&&(m.conversionPct||0)>70;
+        ws[`B${r}`]={v:row[1],t:typeof row[1]==='number'?'n':'s',s:cellStyle(true,isRed?RED:isGreen?GREEN:WHITE,altBg,'right')};
+      });
+
+      // Today's stats
+      const todayStart=8+summaryData.length+1;
+      const t2=waitlistAnalytics.today||{};
+      const todayData=[
+        ['TODAY\'S COUNTER',''],
+        ['Groups Today',t2.total||0],
+        ['Seated Today',t2.seated||0],
+        ['Pickup Today',t2.pickup||0],
+        ['Still Waiting',t2.waiting||0],
+        ['Walk-Aways / No-Show',t2.walked||0],
+      ];
+      XLSX.utils.sheet_add_aoa(ws,todayData,{origin:`A${todayStart}`});
+      styleCell(ws,`A${todayStart}`,hdrStyle(DARK,BLUE,true,10));
+      styleCell(ws,`B${todayStart}`,hdrStyle(DARK,BLUE,true,10));
+      todayData.slice(1).forEach((row,ri)=>{
+        const r=todayStart+1+ri, altBg=ri%2===0?'0D0D0D':'111111';
+        ws[`A${r}`]={v:row[0],t:'s',s:cellStyle(false,'888888',altBg)};
+        ws[`B${r}`]={v:row[1],t:'n',s:{...numFmt(true,row[0].includes('No-Show')&&(t2.walked||0)>0?RED:GREEN),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+      });
+
+      // Party size distribution
+      if (Object.keys(m.partySizes||{}).length>0) {
+        const psStart=todayStart+todayData.length+1;
+        XLSX.utils.sheet_add_aoa(ws,[['PARTY SIZE DISTRIBUTION','','']],{origin:`A${psStart}`});
+        styleCell(ws,`A${psStart}`,hdrStyle(DARK,GOLD,true,10));
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:psStart-1,c:0},e:{r:psStart-1,c:2}});
+        XLSX.utils.sheet_add_aoa(ws,[['Party Size','Groups','% of Total']],{origin:`A${psStart+1}`});
+        ['A','B','C'].forEach((col,ci)=>styleCell(ws,`${col}${psStart+1}`,hdrStyle(MID,GOLD)));
+        const totalGroups=Object.values(m.partySizes||{}).reduce((a,b)=>a+b,0)||1;
+        Object.entries(m.partySizes||{}).forEach(([size,count],ri)=>{
+          const altBg=ri%2===0?'0D0D0D':'111111';
+          const pct=Math.round((count/totalGroups)*100);
+          ws[`A${psStart+2+ri}`]={v:size,t:'s',s:cellStyle(false,GOLD,altBg,'center')};
+          ws[`B${psStart+2+ri}`]={v:count,t:'n',s:{...numFmt(true,WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          ws[`C${psStart+2+ri}`]={v:`${pct}%`,t:'s',s:cellStyle(false,AMBER,altBg,'center')};
+        });
+      }
+
+      // Daily footfall trend
+      if ((waitlistAnalytics.dailyTrend||[]).length>0) {
+        const ftStart=todayStart+todayData.length+Object.keys(m.partySizes||{}).length+4;
+        XLSX.utils.sheet_add_aoa(ws,[['DAILY FOOTFALL TREND','','','','']],{origin:`A${ftStart}`});
+        styleCell(ws,`A${ftStart}`,hdrStyle(DARK,GOLD,true,10));
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:ftStart-1,c:0},e:{r:ftStart-1,c:4}});
+        const ftHeaders=['Date','Total Groups','Seated','Pickup','Walk-Aways'];
+        XLSX.utils.sheet_add_aoa(ws,[ftHeaders],{origin:`A${ftStart+1}`});
+        ftHeaders.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:ftStart,c:ci}),hdrStyle(MID,GOLD)));
+        waitlistAnalytics.dailyTrend.forEach((d,ri)=>{
+          const altBg=ri%2===0?'0D0D0D':'111111';
+          const row=[d.date,d.total,d.seated,d.pickup,d.walked];
+          row.forEach((val,ci)=>{
+            const addr=XLSX.utils.encode_cell({r:ftStart+1+ri,c:ci});
+            if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg)};
+            else ws[addr]={v:val,t:'n',s:{...numFmt(false,ci===4?(d.walked||0)>0?RED:GREEN:WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          });
+        });
+      }
+
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:500,c:7}});
+      ws['!cols']=[28,14,14,14,14,14,14,14].map(w=>({wch:w}));
+      XLSX.utils.book_append_sheet(wb, ws, '🔢 Waitlist & Counter');
+    }
+
+    // ══════════════════════════════════
+    // SHEET 8: STAFF EFFICIENCY (was Sheet 4)
     // ══════════════════════════════════
     if (staffEfficiency.length > 0) {
       const ws = {};
       const monthStr = exportMonthStr;
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — STAFF PERFORMANCE`, `Workforce analytics for ${viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`, todayStr);
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — STAFF PERFORMANCE`,`Workforce analytics for ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`,todayStr);
 
-      const totalHrAll = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
-      const paidCount = staffEfficiency.filter(s => {
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-        return (rec?.status || s.salaryStatus) === 'Paid';
-      }).length;
-      const pendingPayroll = filteredStaff.reduce((acc, m) => {
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
-        return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
-      }, 0);
+      const totalHrAll=staffEfficiency.reduce((a,s)=>a+(s.totalHours||0),0);
+      const paidCount=staffEfficiency.filter(s=>{const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);return (rec?.status||s.salaryStatus)==='Paid';}).length;
+      const pendingPayroll=filteredStaff.reduce((acc,m)=>{const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===m._id?.toString()&&r.monthStr===monthStr);return (rec?.status||'Unpaid')==='Paid'?acc:acc+(Number(rec?.baseSalary||m.baseSalary)||0);},0);
 
-      const kpiLabels = ['TOTAL STAFF', 'TOTAL HOURS', 'SALARY PAID', 'PENDING PAYROLL'];
-      const kpiValues = [staffEfficiency.length, `${totalHrAll.toFixed(1)}h`, paidCount, `₹${pendingPayroll.toLocaleString()}`];
-      const kpiCols = [GREEN, BLUE, GREEN, pendingPayroll > 0 ? AMBER : GREEN];
-      kpiLabels.forEach((label, i) => {
-        const col = String.fromCharCode(65 + i * 2);
-        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
-        ws[`${col}6`] = { v: kpiValues[i], t: 's', s: kpiStyle(kpiCols[i]) };
-        if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
-        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      const kpiLabels=['TOTAL STAFF','TOTAL HOURS','SALARY PAID','PENDING PAYROLL'];
+      const kpiValues=[staffEfficiency.length,`${totalHrAll.toFixed(1)}h`,paidCount,`₹${pendingPayroll.toLocaleString()}`];
+      const kpiCols=[GREEN,BLUE,GREEN,pendingPayroll>0?AMBER:GREEN];
+      kpiLabels.forEach((label,i)=>{
+        const col=String.fromCharCode(65+i*2);
+        ws[`${col}5`]={v:label,t:'s',s:kpiLabelStyle()};
+        ws[`${col}6`]={v:kpiValues[i],t:'s',s:kpiStyle(kpiCols[i])};
+        if (!ws['!merges']) ws['!merges']=[];
+        ws['!merges'].push({s:{r:4,c:i*2},e:{r:4,c:i*2+1}});
+        ws['!merges'].push({s:{r:5,c:i*2},e:{r:5,c:i*2+1}});
       });
 
-      const headers = ['Name', 'Role', 'Shift', 'Days Present', 'Hours Logged', 'Rev/Hour (₹)', 'Base Salary (₹)', 'Salary Status', 'Efficiency Score'];
-      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A8' });
-      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 8, c: ci }), hdrStyle()));
+      const headers=['Name','Role','Shift','Days Present','Hours Logged','Rev/Hour (₹)','Base Salary (₹)','Salary Status','Efficiency Score'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],headers],{origin:'A8'});
+      headers.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:8,c:ci}),hdrStyle()));
 
-      staffEfficiency.forEach((s, ri) => {
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-        const salStatus = rec?.status || s.salaryStatus || 'Unpaid';
-        const isPaid = salStatus === 'Paid';
-        const effScore = s.totalHours > 0 ? Math.min(100, Math.round((s.daysPresent / 26) * 100)) : 0;
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-
-        const row = [
-          s.name, s.role, s.shiftType || 'Day Shift',
-          s.daysPresent, s.totalHours, s.revenuePerHour,
-          rec?.baseSalary || s.baseSalary, salStatus,
-          `${effScore}%`
-        ];
-
-        row.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: 9 + ri, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
-          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, GOLD, altBg) };
-          else if (ci === 2) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg, 'center') };
-          else if (ci === 3) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, s.daysPresent >= 20 ? GREEN : s.daysPresent >= 10 ? AMBER : RED), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 4) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, BLUE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 5) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, val > 0 ? GREEN : '444444'), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if (ci === 7) ws[addr] = { v: val, t: 's', s: statusStyle(isPaid) };
-          else ws[addr] = { v: val, t: 's', s: cellStyle(true, effScore >= 80 ? GREEN : effScore >= 50 ? GOLD : RED, altBg, 'center') };
+      staffEfficiency.forEach((s,ri)=>{
+        const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+        const salStatus=rec?.status||s.salaryStatus||'Unpaid';
+        const isPaid=salStatus==='Paid';
+        const effScore=s.totalHours>0?Math.min(100,Math.round((s.daysPresent/26)*100)):0;
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const row=[s.name,s.role,s.shiftType||'Day Shift',s.daysPresent,s.totalHours,s.revenuePerHour,rec?.baseSalary||s.baseSalary,salStatus,`${effScore}%`];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:9+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(false,GOLD,altBg)};
+          else if (ci===2) ws[addr]={v:val,t:'s',s:cellStyle(false,'666666',altBg,'center')};
+          else if (ci===3) ws[addr]={v:val,t:'n',s:{...numFmt(true,s.daysPresent>=20?GREEN:s.daysPresent>=10?AMBER:RED),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===4) ws[addr]={v:val,t:'n',s:{...numFmt(false,BLUE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===5) ws[addr]={v:val,t:'n',s:{...numFmt(true,val>0?GREEN:'444444'),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===6) ws[addr]={v:val,t:'n',s:{...numFmt(false,WHITE),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if (ci===7) ws[addr]={v:val,t:'s',s:statusStyle(isPaid)};
+          else ws[addr]={v:val,t:'s',s:cellStyle(true,effScore>=80?GREEN:effScore>=50?GOLD:RED,altBg,'center')};
         });
       });
 
-      const lastRow = staffEfficiency.length + 10;
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 8 } });
-      ws['!cols'] = [20, 12, 12, 12, 12, 14, 14, 14, 14].map(w => ({ wch: w }));
+      const lastRow=staffEfficiency.length+10;
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow,c:8}});
+      ws['!cols']=[20,12,12,12,12,14,14,14,14].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws, '👥 Staff');
     }
 
     // ══════════════════════════════════
-    // SHEET 5: INVENTORY SNAPSHOT
+    // SHEET 9: INVENTORY SNAPSHOT (was Sheet 5)
     // ══════════════════════════════════
     if (inventory.length > 0) {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — INVENTORY SNAPSHOT`, 'Current stock levels and WAC at time of export', todayStr);
-      const headers = ['Ingredient', 'Unit', 'Stock', 'Threshold', 'WAC (₹)', 'Last Buy (₹)', 'Value (₹)', 'Status'];
-      XLSX.utils.sheet_add_aoa(ws, [[''], headers], { origin: 'A5' });
-      headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 5, c: ci }), hdrStyle()));
-
-      inventory.forEach((item, ri) => {
-        const isLow = item.currentStock <= item.minThreshold;
-        const wac = item.weightedAvgCost || item.costPrice || 0;
-        const last = item.lastPurchasePrice || wac;
-        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
-        const row = [item.itemName, item.unit, item.currentStock, item.minThreshold, wac.toFixed(2), last.toFixed(2), Math.max(0, Math.round(item.currentStock * wac)), isLow ? '⚠ LOW' : '✓ OK'];
-        row.forEach((val, ci) => {
-          const addr = XLSX.utils.encode_cell({ r: 6 + ri, c: ci });
-          if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg) };
-          else if (ci === 1) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg, 'center') };
-          else if ([2, 3].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, ci === 2 && isLow ? RED : GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else if ([4, 5].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'right') };
-          else if (ci === 6) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
-          else ws[addr] = { v: val, t: 's', s: statusStyle(!isLow) };
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — INVENTORY SNAPSHOT`,'Current stock levels and WAC at time of export',todayStr);
+      const headers=['Ingredient','Unit','Stock','Threshold','WAC (₹)','Last Buy (₹)','Value (₹)','Status'];
+      XLSX.utils.sheet_add_aoa(ws,[[''],headers],{origin:'A5'});
+      headers.forEach((_,ci)=>styleCell(ws,XLSX.utils.encode_cell({r:5,c:ci}),hdrStyle()));
+      inventory.forEach((item,ri)=>{
+        const isLow=item.currentStock<=item.minThreshold;
+        const wac=item.weightedAvgCost||item.costPrice||0;
+        const last=item.lastPurchasePrice||wac;
+        const altBg=ri%2===0?'0D0D0D':'111111';
+        const row=[item.itemName,item.unit,item.currentStock,item.minThreshold,wac.toFixed(2),last.toFixed(2),Math.max(0,Math.round(item.currentStock*wac)),isLow?'⚠ LOW':'✓ OK'];
+        row.forEach((val,ci)=>{
+          const addr=XLSX.utils.encode_cell({r:6+ri,c:ci});
+          if (ci===0) ws[addr]={v:val,t:'s',s:cellStyle(true,WHITE,altBg)};
+          else if (ci===1) ws[addr]={v:val,t:'s',s:cellStyle(false,'666666',altBg,'center')};
+          else if ([2,3].includes(ci)) ws[addr]={v:val,t:'n',s:{...numFmt(false,ci===2&&isLow?RED:GOLD),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else if ([4,5].includes(ci)) ws[addr]={v:val,t:'s',s:cellStyle(false,'888888',altBg,'right')};
+          else if (ci===6) ws[addr]={v:val,t:'n',s:{...numFmt(true,GREEN),fill:{patternType:'solid',fgColor:{rgb:altBg}}}};
+          else ws[addr]={v:val,t:'s',s:statusStyle(!isLow)};
         });
       });
-
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: inventory.length + 7, c: 7 } });
-      ws['!cols'] = [22, 8, 12, 12, 12, 12, 14, 12].map(w => ({ wch: w }));
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:inventory.length+7,c:7}});
+      ws['!cols']=[22,8,12,12,12,12,14,12].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws, '📦 Stock');
     }
 
     // ══════════════════════════════════
-    // SHEET 6: SUMMARY
+    // SHEET 10: SUMMARY (updated with new metrics)
     // ══════════════════════════════════
     {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — REPORT SUMMARY`, `Complete overview for ${periodLabel}`, todayStr);
+      addTitleBlock(ws,`${tenantConfig?.name||tenantId} — REPORT SUMMARY`,`Complete overview for ${periodLabel}`,todayStr);
+      const extraRev=extraAnalytics?.totalRevenue||0;
+      const extraProfit=extraAnalytics?.totalProfit||0;
+      const wastageCost=wastageAnalytics?.totalCost||0;
+      const monthStr=exportMonthStr;
+      const monthlyPayroll=staffEfficiency.reduce((a,s)=>{const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);return a+(Number(rec?.baseSalary||s.baseSalary)||0);},0);
+      const m=waitlistAnalytics?.month||{};
 
-      const summaryData = [
-        ['', ''],
-        ['FINANCIAL SUMMARY', ''],
-        ['Period', periodLabel],
-        ['Total Revenue (₹)', totalRev],
-        ['Total Orders', totalOrders],
-        ['Avg Order Value (₹)', avgOrder],
-        ['Gross Profit (₹)', totalGrossProfit],
-        ['Overall Margin', `${overallMargin}%`],
-        ['', ''],
-        ['PAYMENT BREAKDOWN', ''],
-        ['Cash Collections (₹)', totalCash],
-        ['UPI Collections (₹)', totalUPI],
-        ['Card Collections (₹)', totalCard],
-        ['', ''],
-        ['INVENTORY SUMMARY', ''],
-        ['Total Ingredients', inventory.length],
-        ['Low Stock Items', inventory.filter(i => i.currentStock <= i.minThreshold).length],
-        ['Total Inventory Value (₹)', totalInvValue],
-        ['', ''],
-        ['STAFF SUMMARY', ''],
-        ['Total Staff', staff.length],
-        ['Active This Month', staffEfficiency.filter(s => s.daysPresent > 0).length],
-        ['Total Hours Logged', staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0).toFixed(1)],
-        ['', ''],
-        ['REPORT METADATA', ''],
-        ['Restaurant', tenantConfig?.name || tenantId],
-        ['Generated At (IST)', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })],
-        ['Generated By', 'PRATYEKSHA RESTAURANT OS'],
+      const summaryData=[
+        ['',''],
+        ['FINANCIAL SUMMARY',''],
+        ['Period',periodLabel],
+        ['Total Revenue (₹)',totalRev],
+        ['Extra Items Revenue (₹)',extraRev],
+        ['Total Orders',totalOrders],
+        ['Avg Order Value (₹)',avgOrder],
+        ['Gross Profit (₹)',totalGrossProfit+extraProfit],
+        ['Overall Margin',`${overallMargin}%`],
+        ['Wastage Cost Lost (₹)',wastageCost],
+        ['',''],
+        ['PAYMENT BREAKDOWN',''],
+        ['Cash Collections (₹)',totalCash],
+        ['UPI Collections (₹)',totalUPI],
+        ['Card Collections (₹)',totalCard],
+        ['',''],
+        ['WAITLIST & COUNTER',''],
+        ['Total Groups This Month',m.total||0],
+        ['Conversion Rate',`${m.conversionPct||0}%`],
+        ['Avg Wait Time',`${m.avgWaitMin||0} min`],
+        ['No-Show Rate',`${m.total>0?Math.round((Math.max(0,m.total-(m.seated||0)-(m.pickupSettled||0))/m.total)*100):0}%`],
+        ['Pre-Order Revenue (₹)',m.preOrderRevenue||0],
+        ['',''],
+        ['INVENTORY SUMMARY',''],
+        ['Total Ingredients',inventory.length],
+        ['Low Stock Items',inventory.filter(i=>i.currentStock<=i.minThreshold).length],
+        ['Total Inventory Value (₹)',inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0)],
+        ['',''],
+        ['STAFF SUMMARY',''],
+        ['Total Staff',staff.length],
+        ['Active This Month',staffEfficiency.filter(s=>s.daysPresent>0).length],
+        ['Total Hours Logged',staffEfficiency.reduce((a,s)=>a+(s.totalHours||0),0).toFixed(1)],
+        ['Monthly Payroll (₹)',monthlyPayroll],
+        ['',''],
+        ['REPORT METADATA',''],
+        ['Restaurant',tenantConfig?.name||tenantId],
+        ['Generated At (IST)',new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})],
+        ['Generated By','PRATYEKSHA RESTAURANT OS'],
       ];
 
-      XLSX.utils.sheet_add_aoa(ws, summaryData, { origin: 'A5' });
-      const sectionHeaders = ['FINANCIAL SUMMARY', 'PAYMENT BREAKDOWN', 'INVENTORY SUMMARY', 'STAFF SUMMARY', 'REPORT METADATA'];
-      summaryData.forEach((row, ri) => {
-        const addr = `A${ri + 5}`;
+      XLSX.utils.sheet_add_aoa(ws,summaryData,{origin:'A5'});
+      const sectionHeaders=['FINANCIAL SUMMARY','PAYMENT BREAKDOWN','WAITLIST & COUNTER','INVENTORY SUMMARY','STAFF SUMMARY','REPORT METADATA'];
+      summaryData.forEach((row,ri)=>{
+        const addr=`A${ri+5}`;
         if (sectionHeaders.includes(row[0])) {
-          styleCell(ws, addr, hdrStyle(DARK, GOLD));
-          if (!ws['!merges']) ws['!merges'] = [];
-          ws['!merges'].push({ s: { r: ri + 4, c: 0 }, e: { r: ri + 4, c: 1 } });
-        } else if (row[0] && row[1] !== '') {
-          styleCell(ws, addr, cellStyle(false, '888888'));
-          const valAddr = `B${ri + 5}`;
-          styleCell(ws, valAddr, typeof row[1] === 'number' ? numFmt(true, WHITE) : cellStyle(true, WHITE, '111111', 'right'));
+          styleCell(ws,addr,hdrStyle(DARK,GOLD));
+          if (!ws['!merges']) ws['!merges']=[];
+          ws['!merges'].push({s:{r:ri+4,c:0},e:{r:ri+4,c:1}});
+        } else if (row[0]&&row[1]!=='') {
+          styleCell(ws,addr,cellStyle(false,'888888'));
+          const valAddr=`B${ri+5}`;
+          styleCell(ws,valAddr,typeof row[1]==='number'?numFmt(true,WHITE):cellStyle(true,WHITE,'111111','right'));
         }
       });
 
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summaryData.length + 6, c: 1 } });
-      ws['!cols'] = [30, 28].map(w => ({ wch: w }));
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:summaryData.length+6,c:1}});
+      ws['!cols']=[30,28].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws, '📋 Summary');
     }
 
-    const filename = `Pratyeksha_${tenantConfig?.name || 'Report'}_${type}_${type === 'monthly' ? exportMonthStr : todayStr}.xlsx`;
-    XLSX.writeFile(wb, filename);
-    showNotif(`${type.toUpperCase()} premium report exported — ${Object.keys(wb.Sheets).length} sheets`);
+    const filename=`Pratyeksha_${tenantConfig?.name||'Report'}_${type}_${type==='monthly'?exportMonthStr:todayStr}.xlsx`;
+    XLSX.writeFile(wb,filename);
+    showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
 
-  }).catch(err => { console.error(err); showNotif('Export failed — check xlsx install', 'error'); });
-}, [analytics, inventory, topPerformers, profitabilityData, staffEfficiency, staff, filteredStaff, monthlySalaryRecords, attendanceDate, tenantConfig, tenantId, viewDate, showNotif]);
+  }).catch(err=>{ console.error(err); showNotif('Export failed — check xlsx install','error'); });
+},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics]);
 
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
@@ -1765,6 +2124,15 @@ const renderMonthHeatmap = () => {
               ))}
             </motion.div>
           )}
+          {activeTab==='inventory' &&(
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
+
+                  <button onClick={()=>exportToExcel('inventory')}
+                  style={{padding:'10px 18px',background:'transparent',border:'1px solid rgba(211,191,162,0.25)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer'}}>
+                  EXPORT XLS
+                </button>
+                </div>
+          )}
           {/* ── Insights month selector ── */}
           {activeTab==='insights' && (
             <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
@@ -1786,6 +2154,26 @@ const renderMonthHeatmap = () => {
               ))}
             </div>
           )}
+          {activeTab==='extras' &&(    
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '24px', borderBottom: '1px solid #151515' }}>
+
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>{extraItems.length}</div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>TOTAL ITEMS</div>
+        </div>
+        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#4ade80' }}>{extraItems.filter(i => i.isAvailable).length}</div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AVAILABLE</div>
+        </div>
+        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', borderTop: '2px solid #d3bfa2' }}>
+          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
+            ₹{extraItems.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '1px' }}>STOCK VALUE</div>
+        </div>
+      </div>
+    </div>)}
           {activeTab==='pending' && (
             <div style={styles.zoneControl}>
               {['all','fresh','delayed'].map(z=>(
@@ -5745,16 +6133,6 @@ setNewStaff({
             <motion.div key="inventory" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
               style={{display:'flex',flexDirection:'column',gap:'25px',paddingBottom:'100px',width:'100%',maxWidth:'1100px',margin:'0 auto'}}>
 
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
-                <div>
-                  <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>INGREDIENT REGISTER</h2>
-                  <p style={{margin:'4px 0 0',fontSize:'0.7rem',color:'#555'}}>Manage stock, costs and thresholds. Same-name items are merged automatically (case-insensitive).</p>
-                </div>
-                <button onClick={()=>exportToExcel('inventory')}
-                  style={{padding:'10px 18px',background:'transparent',border:'1px solid rgba(211,191,162,0.25)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer'}}>
-                  EXPORT XLS
-                </button>
-              </div>
 
 {/* ADD FORM */}
 <div style={{...styles.biCard, padding:'20px 25px'}}>
@@ -6360,12 +6738,12 @@ setNewStaff({
             <motion.div key="recipes" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
               style={{display:'flex',flexDirection:'column',gap:'25px',paddingBottom:'100px',width:'100%',maxWidth:'1100px',margin:'0 auto'}}>
 
-              <div style={{paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
+              {/* <div style={{paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
                 <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>RECIPE ENGINE</h2>
                 <p style={{margin:'4px 0 0',fontSize:'0.7rem',color:'#555'}}>
                   Link each dish to ingredients + quantities per serving. Powers auto stock deduction and profitability.
                 </p>
-              </div>
+              </div> */}
 
               {/* BUILDER */}
               <div style={{...styles.biCard,borderTop:'3px solid #d3bfa2'}}>
@@ -6653,7 +7031,7 @@ setNewStaff({
   <motion.div key="extras" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: '100px', width: '100%' }}>
 
-    {/* ── HEADER ── */}
+    {/* ── HEADER ──
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '24px', borderBottom: '1px solid #151515' }}>
       <div>
         <div style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>SUPPLEMENTARY CATALOG</div>
@@ -6679,7 +7057,7 @@ setNewStaff({
           <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>STOCK VALUE</div>
         </div>
       </div>
-    </div>
+    </div> */}
 
     {/* ── ADD NEW ITEM FORM ── */}
     <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '20px', padding: '28px', borderTop: '3px solid #d3bfa2' }}>

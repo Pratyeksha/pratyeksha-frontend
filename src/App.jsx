@@ -1911,11 +1911,11 @@ const phoneDigits = customerInfo.phone.replace(/\D/g, '');
       }, 800);
     }
  
-    // ── Clear stored bill on checkout ──
-    sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+// ── Clear stored bill on checkout (orders now vanish from this device only after billing) ──
+    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
   } catch (error) {
-    sessionStorage.removeItem(`pratyeksha_placed_${tenantId}_${sessionId}`);
+    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
   }
 };
@@ -1939,23 +1939,23 @@ useEffect(() => {
   }
 }, [cart, tenantId]);
 
-// ── Persist placedOrders to sessionStorage (survives refresh, cleared on tab close) ──
+// ── Persist placedOrders to LOCALSTORAGE so it survives refresh AND tab/browser close ──
 useEffect(() => {
-  if (!tenantId) return;
-  const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
+  if (!tenantId || isCounterScan) return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
   if (placedOrders.length > 0) {
-    sessionStorage.setItem(key, JSON.stringify(placedOrders));
+    localStorage.setItem(key, JSON.stringify(placedOrders));
   } else {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
   }
-}, [placedOrders, tenantId, sessionId]);
+}, [placedOrders, tenantId, tableNumber, isCounterScan]);
 
-// ── Restore placedOrders on mount (after refresh, same session) ──
+// ── Restore placedOrders on mount — works after refresh, tab close, even reopening on another device with same table link ──
 useEffect(() => {
-  if (!tenantId || !sessionId) return;
-  const key = `pratyeksha_placed_${tenantId}_${sessionId}`;
+  if (!tenantId || !tableNumber || isCounterScan) return;
+  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
   try {
-    const saved = sessionStorage.getItem(key);
+    const saved = localStorage.getItem(key);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1964,7 +1964,8 @@ useEffect(() => {
       }
     }
   } catch { /* ignore */ }
-}, [tenantId, sessionId]);
+}, [tenantId, tableNumber, isCounterScan]);
+
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
