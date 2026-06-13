@@ -8384,350 +8384,532 @@ onClick={async () => {
   )}
 </AnimatePresence>
 
+// ══════════════════════════════════════════════════════════════════
+// RESPONSIVE FIX — OperatorPortal
+// REPLACE the entire <style>{`...`}</style> block at the bottom
+// with this one. Everything else in the file stays unchanged.
+// ══════════════════════════════════════════════════════════════════
+
 <style>{`
 
-@keyframes moodPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.03); }
+/* ── BASE TOKENS ── */
+:root {
+  --gold: #d3bfa2;
+  --gold-dim: #8a704d;
+  --bg: #050505;
+  --card: #0d0d0d;
+  --border: #1a1a1a;
 }
 
-.custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-.custom-scroll::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
-.custom-scroll::-webkit-scrollbar-track { background: transparent; }
-.sidebar-nav::-webkit-scrollbar { width: 2px; }
-.sidebar-nav::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
-.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
-.spinner { border: 3px solid #111; border-top: 3px solid #d3bfa2; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-tr:hover td { background: rgba(255,255,255,0.01); }
-button[style*="transparent"]:hover { opacity: 0.8; }
-.mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+/* ── ANIMATIONS ── */
+@keyframes moodPulse {
+  0%,100%{opacity:1;transform:scale(1);}
+  50%{opacity:.4;transform:scale(1.03);}
+}
+@keyframes spin{
+  0%{transform:rotate(0deg);}
+  100%{transform:rotate(360deg);}
+}
 
-/* KDS scroll columns */
-.kds-scroll::-webkit-scrollbar { width: 3px; }
-.kds-scroll::-webkit-scrollbar-thumb { background: #2a1f0e; border-radius: 10px; }
-.kds-scroll::-webkit-scrollbar-track { background: transparent; }
+/* ── SCROLLBARS ── */
+.custom-scroll::-webkit-scrollbar{width:4px;height:4px;}
+.custom-scroll::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:10px;}
+.custom-scroll::-webkit-scrollbar-track{background:transparent;}
+.sidebar-nav::-webkit-scrollbar{width:2px;}
+.sidebar-nav::-webkit-scrollbar-thumb{background:#222;border-radius:10px;}
+.kds-scroll::-webkit-scrollbar{width:3px;}
+.kds-scroll::-webkit-scrollbar-thumb{background:#2a1f0e;border-radius:10px;}
 
-/* ═══════════════════════════════════════════════
-   TABLET — 681px to 1024px
-   Sidebar narrows, grids compress, header wraps
-═══════════════════════════════════════════════ */
-@media (min-width: 681px) and (max-width: 1024px) {
+/* ── UTILS ── */
+.spinner{border:3px solid #111;border-top:3px solid #d3bfa2;border-radius:50%;width:32px;height:32px;animation:spin .8s linear infinite;}
+tr:hover td{background:rgba(255,255,255,.01);}
+.mono{font-family:'JetBrains Mono','Courier New',monospace;}
 
-  .p-kds-row { grid-template-columns: 1.2fr 1px 1fr !important; }
+/* ══════════════════════════════════════════════════
+   DESKTOP — 1025px+  (default, already styled inline)
+══════════════════════════════════════════════════ */
 
-  /* Sidebar narrows */
-  .p-sidebar {
-    width: 200px !important;
-    min-width: 200px !important;
+/* ══════════════════════════════════════════════════
+   TABLET — 681 – 1024px
+══════════════════════════════════════════════════ */
+@media (min-width:681px) and (max-width:1024px){
+
+  /* Layout */
+  div[style*="width:'280px'"],
+  aside.p-sidebar{
+    width:200px!important;min-width:200px!important;
   }
-  .p-sidebar-logo { width: 110px !important; }
-  .p-nav-btn, .p-nav-active {
-    padding: 11px 14px !important;
-    font-size: 0.68rem !important;
+
+  /* Sidebar logo */
+  img.p-sidebar-logo{width:110px!important;}
+
+  /* Nav buttons */
+  button[style*="'14px 20px'"],
+  button[style*="'14px 20px'"] {
+    padding:11px 14px!important;font-size:.68rem!important;
   }
 
   /* Header */
-  .p-header {
-    padding: 0 28px !important;
-    min-height: 80px !important;
-    flex-wrap: wrap !important;
-    gap: 8px !important;
+  header[style*="topHeader"]{
+    padding:0 28px!important;min-height:80px!important;
+    flex-wrap:wrap!important;gap:8px!important;
   }
 
   /* Scroll area */
-  .p-scroll { padding: 28px 28px !important; }
+  section[style*="scrollArea"]{padding:28px 28px!important;}
 
-  /* Billing: stack floor + receipt vertically */
-  .p-billing-flex {
-    flex-direction: column !important;
-    gap: 32px !important;
-  }
-  .p-receipt {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
+  /* KDS row — keep side by side but compress */
+  .p-kds-row{grid-template-columns:1.2fr 1px 1fr!important;}
 
-  /* Table grid: more columns fit */
-  .p-table-grid {
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)) !important;
-  }
+  /* Queue cards — single col on tablet */
+  .p-queue-grid{grid-template-columns:1fr!important;}
 
-  /* KDS row: stack vertically */
-  .p-kds-row {
-    flex-direction: column !important;
-    gap: 24px !important;
-  }
-  .p-service-col {
-    border-left: none !important;
-    padding-left: 0 !important;
-    border-top: 1px solid #111 !important;
-    padding-top: 24px !important;
-  }
+  /* Billing */
+  .p-billing-flex{flex-direction:column!important;gap:32px!important;}
 
-  /* Insights 2-col grids → single col */
-  .p-2col { grid-template-columns: 1fr !important; }
+  /* Table grid */
+  .p-table-grid{grid-template-columns:repeat(auto-fill,minmax(72px,1fr))!important;}
 
-  /* Management 2-col → single col */
-  .p-mgmt-2col { grid-template-columns: 1fr !important; }
-
-  /* Extras add form: compress columns */
-  .p-extras-form {
-    grid-template-columns: 1fr 1fr 1fr !important;
-  }
-
-  /* Inventory add form */
-  .p-inv-form {
-    grid-template-columns: 1fr 1fr auto !important;
-  }
+  /* 2-col insights → single */
+  .p-2col{grid-template-columns:1fr!important;}
+  .p-mgmt-2col{grid-template-columns:1fr!important;}
 
   /* Menu grid */
-  .p-menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
-  }
+  .p-menu-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))!important;}
 
-  /* Queue grid single col */
-  .p-queue-grid {
-    grid-template-columns: 1fr !important;
-  }
+  /* Extras add form */
+  .p-extras-form{grid-template-columns:1fr 1fr 1fr!important;}
+
+  /* Inventory form */
+  .p-inv-form{grid-template-columns:1fr 1fr auto!important;}
 
   /* Stats row wraps */
-  .p-stats-row { flex-wrap: wrap !important; }
-  .p-stats-row > div { flex: 1 1 140px !important; }
+  .p-stats-row{flex-wrap:wrap!important;}
+  .p-stats-row>div{flex:1 1 140px!important;}
 
-  /* HUD counters wrap */
-  .p-hud { flex-wrap: wrap !important; }
+  /* HUD wraps */
+  .p-hud{flex-wrap:wrap!important;}
 
-  /* Category rankings */
-  .p-cat-grid { grid-template-columns: 1fr !important; }
-
-  /* Marketing offer grid */
-  .p-offer-grid { grid-template-columns: 1fr !important; }
-
-  /* Staff add form */
-  .p-staff-form {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
-  }
-
-  /* Attendance grid */
-  .p-attendance-grid {
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
-  }
-
-  /* Heatmap squares */
-  .p-heat-sq { height: 52px !important; }
-  .p-heat-sq-empty { height: 52px !important; }
-
-  /* Profitability KPI strip */
-  .p-kpi-3col { grid-template-columns: 1fr 1fr !important; }
-
-  /* Modal wider on tablet */
-  .p-modal-box { max-width: 90vw !important; }
-
-  /* Purchase history drawer narrower */
-  .p-purchase-drawer { width: 380px !important; }
-}
-
-/* ═══════════════════════════════════════════════
-   MOBILE — up to 680px
-   Sidebar becomes bottom nav bar
-═══════════════════════════════════════════════ */
-@media (max-width: 680px) {
-
-  .p-kds-row { grid-template-columns: 1fr !important; }
-  .p-service-divider { display: none !important; }
-  .p-service-col { border-top: 1px solid #141414 !important; }
-
-  /* ── SIDEBAR → BOTTOM NAV ── */
-  .p-sidebar {
-    position: fixed !important;
-    bottom: 0 !important; left: 0 !important; right: 0 !important;
-    width: 100vw !important;
-    height: auto !important;
-    flex-direction: row !important;
-    border-right: none !important;
-    border-top: 1px solid #1a1a1a !important;
-    z-index: 8000 !important;
-    background: #080808 !important;
-  }
-  .p-sidebar-top {
-    flex-direction: row !important;
-    padding: 6px 8px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    flex: 1 !important;
-    scrollbar-width: none !important;
-  }
-  .p-sidebar-top::-webkit-scrollbar { display: none !important; }
-  .p-sidebar-bottom { display: none !important; }
-  .p-sidebar-logo-wrap { display: none !important; }
-  .p-nav-stack {
-    flex-direction: row !important;
-    gap: 2px !important;
-    align-items: center !important;
-    width: max-content !important;
-  }
-  .p-nav-btn, .p-nav-active {
-    flex-direction: column !important;
-    font-size: 0.4rem !important;
-    padding: 7px 8px !important;
-    min-width: 56px !important;
-    gap: 3px !important;
-    border-radius: 8px !important;
-    white-space: nowrap !important;
-  }
-  /* Hide text label on very small screens, show only icon */
-  .p-nav-btn .p-nav-label,
-  .p-nav-active .p-nav-label { display: none !important; }
-
-  /* ── MAIN CONTENT ── */
-  .p-main { padding-bottom: 72px !important; }
-  .p-scroll { padding: 14px 14px !important; }
-  .p-header {
-    padding: 0 14px !important;
-    min-height: 58px !important;
-    flex-wrap: wrap !important;
-    gap: 6px !important;
-  }
-  .p-page-title { font-size: 0.85rem !important; letter-spacing: 0.5px !important; }
-
-  /* ── BILLING ── */
-  .p-billing-flex {
-    flex-direction: column !important;
-    gap: 20px !important;
-  }
-  .p-receipt {
-    position: fixed !important;
-    top: 0 !important; left: 0 !important;
-    width: 100vw !important;
-    height: calc(100vh - 72px) !important;
-    max-height: calc(100vh - 72px) !important;
-    border-radius: 0 !important;
-    z-index: 7000 !important;
-    margin: 0 !important;
-    padding: 24px 20px !important;
-    overflow-y: auto !important;
-  }
-  .p-table-grid {
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 8px !important;
-  }
-  .p-table-btn {
-    padding: 16px 6px !important;
-    border-radius: 10px !important;
-  }
-  .p-special-row { flex-direction: column !important; }
-  .p-special-row > button { flex: none !important; width: 100% !important; }
-
-  /* ── KDS ROW ── */
-  .p-kds-row {
-    flex-direction: column !important;
-    gap: 20px !important;
-  }
-  .p-service-col {
-    border-left: none !important;
-    padding-left: 0 !important;
-    border-top: 1px solid #111 !important;
-    padding-top: 20px !important;
-  }
-
-  /* ── COUNTER QUEUE ── */
-  .p-queue-grid { grid-template-columns: 1fr !important; }
-  .p-queue-tabs { overflow-x: auto !important; }
-
-  /* ── HUD COUNTERS ── */
-  .p-hud {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    scrollbar-width: none !important;
-  }
-  .p-hud::-webkit-scrollbar { display: none !important; }
-  .p-hud-box { min-width: 88px !important; padding: 4px 12px !important; }
-  .p-hud-val { font-size: 1.1rem !important; }
-
-  /* ── INSIGHTS ── */
-  .p-stats-row {
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-  }
-  .p-stats-row > div { flex: 1 1 120px !important; padding: 16px !important; }
-  .p-stats-val { font-size: 1.4rem !important; }
-  .p-2col { grid-template-columns: 1fr !important; }
-  .p-cat-grid { grid-template-columns: 1fr !important; }
-  .p-offer-grid { grid-template-columns: 1fr !important; }
-  .p-kpi-3col { grid-template-columns: 1fr 1fr !important; }
-  .p-heat-sq { height: 34px !important; border-radius: 5px !important; font-size: 0.6rem !important; }
-  .p-heat-sq-empty { height: 34px !important; }
-  .p-heatmap-card { padding: 16px !important; }
-
-  /* ── MENU ── */
-  .p-menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
-    gap: 12px !important;
-  }
-
-  /* ── MANAGEMENT / STAFF ── */
-  .p-mgmt-2col { grid-template-columns: 1fr !important; }
-  .p-staff-form {
-    grid-template-columns: 1fr 1fr !important;
-  }
-  .p-staff-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  .p-attendance-grid { grid-template-columns: 1fr !important; }
-  .p-floor-2col { grid-template-columns: 1fr !important; }
-
-  /* ── INVENTORY ── */
-  .p-inv-form { grid-template-columns: 1fr 1fr !important; }
-  .p-inv-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-
-  /* ── EXTRAS ── */
-  .p-extras-form { grid-template-columns: 1fr 1fr !important; }
-  .p-extras-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── MODALS → slide up from bottom ── */
-  .p-modal-backdrop {
-    align-items: flex-end !important;
-    padding: 0 !important;
-  }
-  .p-modal-box {
-    max-width: 100% !important;
-    width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
-    max-height: 90vh !important;
-    overflow-y: auto !important;
-    padding: 28px 20px !important;
-  }
+  /* Modal */
+  .p-modal-backdrop{align-items:center!important;}
+  .p-modal-box{max-width:90vw!important;}
 
   /* Purchase history drawer */
-  .p-purchase-drawer {
-    width: 100vw !important;
-    border-radius: 20px 20px 0 0 !important;
-    top: auto !important;
-    bottom: 0 !important;
-    height: 90vh !important;
+  .p-purchase-drawer{width:380px!important;}
+
+  /* Heat squares */
+  .p-heat-sq{height:52px!important;}
+  .p-heat-sq-empty{height:52px!important;}
+}
+
+/* ══════════════════════════════════════════════════
+   MOBILE — ≤680px
+══════════════════════════════════════════════════ */
+@media(max-width:680px){
+
+  /* ─── ROOT LAYOUT ─── */
+
+  /* The fixed dashboard wrapper */
+  div[style*="width:'100vw'"][style*="height:'100vh'"][style*="position:'fixed'"],
+  .p-dashboard-root{
+    flex-direction:column!important;
   }
 
-  /* Edit modal */
-  .p-edit-modal {
-    max-width: 100% !important;
-    width: 100% !important;
+  /* ─── SIDEBAR → BOTTOM TAB BAR ─── */
+  aside,
+  div[style*="width:'280px'"][style*="borderRight"]{
+    position:fixed!important;
+    bottom:0!important;left:0!important;right:0!important;
+    top:auto!important;
+    width:100vw!important;min-width:100vw!important;
+    height:60px!important;
+    flex-direction:row!important;
+    border-right:none!important;
+    border-top:1px solid #1a1a1a!important;
+    z-index:8000!important;
+    background:#080808!important;
+    overflow:hidden!important;
   }
 
-  /* Marketing grid */
-  .p-marketing-grid { grid-template-columns: 1fr !important; }
+  /* Sidebar top section → horizontal scrollable */
+  div[style*="padding:'40px 25px'"],
+  div[style*="padding:'30px 20px'"],
+  .p-sidebar-top{
+    flex-direction:row!important;
+    padding:0 6px!important;
+    overflow-x:auto!important;overflow-y:hidden!important;
+    flex:1!important;
+    height:60px!important;
+    align-items:center!important;
+    scrollbar-width:none!important;
+  }
+  .p-sidebar-top::-webkit-scrollbar{display:none!important;}
 
-  /* Salary slip modal */
-  .p-salary-modal { max-width: 100% !important; }
+  /* Hide logo & bottom section in mobile sidebar */
+  div[style*="marginBottom:'40px'"],
+  div[style*="padding:'25px'"][style*="borderTop:'1px solid #151515'"]{
+    display:none!important;
+  }
 
-  /* Roster ledger */
-  .p-roster-header { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
-  .p-roster-controls { flex-wrap: wrap !important; gap: 8px !important; }
+  /* Nav stack → row */
+  nav[style*="navStack"],
+  .p-nav-stack{
+    flex-direction:row!important;
+    gap:2px!important;
+    align-items:center!important;
+    width:max-content!important;
+    padding:0!important;
+    margin:0!important;
+  }
 
-  /* Assign table modal */
-  .p-assign-grid { grid-template-columns: repeat(4, 1fr) !important; }
-}`}</style>
+  /* Individual nav buttons */
+  button[style*="'14px 20px'"][style*="navBtn"],
+  button[style*="activeTab"],
+  .p-sidebar nav button{
+    flex-direction:column!important;
+    gap:2px!important;
+    font-size:.38rem!important;
+    padding:6px 8px!important;
+    min-width:52px!important;
+    max-width:68px!important;
+    height:56px!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    border-radius:8px!important;
+    letter-spacing:.2px!important;
+  }
+  /* Hide text, show only icon */
+  button[style*="navBtn"] span:not([style*="marginRight"]),
+  button[style*="activeTab"] span:not([style*="marginRight"]){
+    display:none!important;
+  }
+
+  /* ─── MAIN CONTENT ─── */
+  main{
+    padding-bottom:64px!important;
+    overflow:hidden!important;
+  }
+
+  /* Header */
+  header[style*="topHeader"]{
+    padding:0 14px!important;
+    min-height:54px!important;height:54px!important;
+    flex-wrap:wrap!important;gap:4px!important;
+    overflow:hidden!important;
+  }
+  h1[style*="pageTitle"]{font-size:.8rem!important;letter-spacing:.3px!important;}
+
+  /* HUD counters → horizontal scroll strip */
+  div[style*="hudCountersRow"]{
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch!important;
+    margin-right:0!important;
+    border-radius:0!important;
+  }
+  div[style*="hudCountersRow"]::-webkit-scrollbar{display:none!important;}
+  div[style*="hudStatBox"]{min-width:88px!important;padding:4px 10px!important;}
+  div[style*="hudStatValue"]{font-size:1.05rem!important;}
+
+  /* Scroll area */
+  section[style*="scrollArea"]{
+    padding:12px 12px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    height:calc(100vh - 54px - 60px)!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+
+  /* ─── ZONE BUTTONS ─── */
+  div[style*="zoneControl"]{gap:6px!important;}
+  div[style*="zoneControl"] button{
+    padding:7px 12px!important;font-size:.58rem!important;
+  }
+
+  /* ─── KDS ROW ─── */
+  .p-kds-row{
+    grid-template-columns:1fr!important;
+    gap:16px!important;
+  }
+  .p-service-divider{display:none!important;}
+
+  /* ─── COUNTER QUEUE ─── */
+  .p-queue-grid{grid-template-columns:1fr!important;}
+
+  /* Tab bar inside counter queue */
+  div[style*="queueTab"]{overflow-x:auto!important;scrollbar-width:none!important;}
+  div[style*="queueTab"]::-webkit-scrollbar{display:none!important;}
+  div[style*="queueTab"] button{
+    font-size:.5rem!important;padding:9px 10px!important;
+    white-space:nowrap!important;
+  }
+
+  /* Search input in queue */
+  div[style*="queueSearch"] input{width:120px!important;}
+
+  /* ─── BILLING ─── */
+  div[style*="flex:1"][style*="specialModeRow"]{
+    flex-direction:column!important;gap:12px!important;
+  }
+  div[style*="p-billing-flex"],
+  .p-billing-flex{flex-direction:column!important;gap:20px!important;}
+
+  /* Receipt panel → full screen overlay */
+  div[style*="width:'450px'"][style*="background:'#fff'"],
+  .p-receipt{
+    position:fixed!important;
+    top:54px!important;left:0!important;
+    width:100vw!important;
+    height:calc(100vh - 54px - 60px)!important;
+    max-height:none!important;
+    border-radius:0!important;
+    z-index:7000!important;
+    margin:0!important;
+    padding:20px 16px!important;
+    overflow-y:auto!important;
+    box-shadow:none!important;
+  }
+
+  .p-table-grid,
+  div[style*="tableGrid"]{
+    grid-template-columns:repeat(4,1fr)!important;
+    gap:8px!important;
+  }
+  div[style*="tableBtn"]{padding:18px 4px!important;border-radius:10px!important;}
+
+  div[style*="specialModeRow"]{flex-direction:column!important;}
+  div[style*="specialModeRow"] button{flex:none!important;width:100%!important;}
+
+  /* ─── INSIGHTS ─── */
+  div[style*="statsRow"],
+  .p-stats-row{
+    flex-direction:row!important;flex-wrap:wrap!important;gap:10px!important;
+  }
+  div[style*="glassStat"]{
+    flex:1 1 calc(50% - 10px)!important;
+    padding:16px!important;min-width:0!important;
+  }
+  div[style*="statVal"]{font-size:1.4rem!important;}
+
+  div[style*="heatmapCard"]{padding:14px!important;border-radius:16px!important;}
+  div[style*="heatSquare"]{height:36px!important;border-radius:6px!important;}
+  div[style*="heatSquareEmpty"]{height:36px!important;}
+  div[style*="calendarGrid"]{gap:5px!important;}
+  div[style*="dayHeader"]{font-size:.5rem!important;}
+
+  /* ─── MENU ─── */
+  div[style*="fullWidthGrid"]{
+    grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;
+    gap:12px!important;
+  }
+  div[style*="premiumCard"]{padding:18px!important;border-radius:16px!important;}
+
+  /* ─── MANAGEMENT / STAFF ─── */
+  div[style*="display:'grid'"][style*="gridTemplateColumns:'1fr 1fr'"] {
+    /* attendance grid */
+    grid-template-columns:1fr!important;
+  }
+  /* Roster table — allow horizontal scroll */
+  div[style*="overflowX:'auto'"][style*="staffEfficiency"],
+  div.p-staff-table-wrap{
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  /* Staff add form */
+  div[style*="gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))'"],
+  .p-staff-form{
+    grid-template-columns:1fr 1fr!important;
+  }
+  /* Floor HUD */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="biCard"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* ─── INVENTORY ─── */
+  div[style*="p-inv-form"],
+  .p-inv-form{grid-template-columns:1fr!important;}
+  div[style*="overflowX:'auto'"],
+  .p-inv-table-wrap{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;}
+  /* Inventory add form grid */
+  div[style*="gridTemplateColumns:"][style*="'2fr 1fr 1fr 1fr 1fr auto'"],
+  div[style*="gridTemplateColumns:"][style*="'2fr 1fr 1fr 1fr auto'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  /* ─── EXTRAS ─── */
+  div[style*="p-extras-form"],
+  .p-extras-form{grid-template-columns:1fr 1fr!important;}
+  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))'"],
+  .p-extras-grid{grid-template-columns:1fr!important;}
+
+  /* ─── MARKETING ─── */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="botCard"]{
+    grid-template-columns:1fr!important;
+  }
+  div[style*="offer-grid"],
+  div[style*="gridTemplateColumns:'repeat(2,1fr)'"][style*="offer"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* ─── MODALS → slide up from bottom ─── */
+  div[style*="modalBackdrop"],
+  .p-modal-backdrop{
+    align-items:flex-end!important;
+    padding:0!important;
+  }
+  div[style*="confirmBox"],
+  .p-modal-box{
+    max-width:100%!important;width:100%!important;
+    border-radius:20px 20px 0 0!important;
+    max-height:90vh!important;overflow-y:auto!important;
+    padding:24px 18px!important;
+    margin:0!important;
+  }
+
+  /* Purchase history drawer → bottom sheet */
+  div[style*="position:'fixed'"][style*="right:'0'"][style*="height:'100vh'"][style*="width:'420px'"],
+  .p-purchase-drawer{
+    width:100vw!important;
+    border-radius:20px 20px 0 0!important;
+    top:auto!important;bottom:0!important;
+    height:90vh!important;
+    right:0!important;
+  }
+
+  /* Assign table grid */
+  div[style*="gridTemplateColumns:'repeat(5, 1fr)'"]{
+    grid-template-columns:repeat(4,1fr)!important;
+    gap:8px!important;
+  }
+
+  /* Extras edit / add modals */
+  div[style*="confirmBox"][style*="width:'520px'"],
+  div[style*="confirmBox"][style*="width:'480px'"],
+  div[style*="confirmBox"][style*="width:'400px'"]{
+    width:100%!important;
+  }
+
+  /* ─── RECIPE CARDS ─── */
+  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))'"],
+  .p-recipe-grid{grid-template-columns:1fr!important;}
+
+  /* ─── RESERVATIONS tab ─── */
+  div[style*="gridTemplateColumns:'repeat(4,1fr)'"][style*="reservation"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+
+  /* Hour slot layout */
+  div[style*="flex:'70px'"][style*="paddingLeft:'70px'"]{
+    flex-direction:column!important;
+  }
+
+  /* ─── QUEUE inside pending tab ─── */
+  div[style*="padding:'18px 22px 22px'"]{
+    padding:12px 14px!important;
+  }
+
+  /* ─── STAFF TABLE ─── */
+  table{min-width:600px!important;}
+  div[style*="overflowX:'auto'"] table{min-width:600px!important;}
+
+  /* ─── WASTAGE / INSIGHTS BI CARDS ─── */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="biCard"],
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:'16px'"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* 4-col KPI strips → 2-col */
+  div[style*="gridTemplateColumns:'repeat(4,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+  div[style*="gridTemplateColumns:'repeat(3,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+
+  /* HUD 6-col billing → 3-col wrap */
+  div[style*="gridTemplateColumns:'repeat(6,1fr)'"]{
+    grid-template-columns:1fr 1fr 1fr!important;gap:8px!important;
+  }
+
+  /* Menu engineering matrix 2-col */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="matrix"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Category rankings */
+  div[style*="gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))'"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Extra items by category */
+  div[style*="gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  /* Staff floor HUD 2 cards */
+  div[style*="display:'grid'"][style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:'25px'"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Toast position */
+  div[style*="toast"]{
+    bottom:70px!important;right:12px!important;left:12px!important;
+    font-size:.78rem!important;padding:14px 16px!important;
+  }
+
+  /* Add dish modal veg/nonveg 2-col */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="isVeg"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Salary edit modal */
+  div[style*="confirmBox"][style*="width:'400px'"]{
+    width:100%!important;max-height:90vh!important;overflow-y:auto!important;
+  }
+
+  /* Billing settle button */
+  button[style*="settleBtn"]{margin-top:12px!important;}
+
+  /* Chef specialization button grid */
+  div[style*="gridColumn:'span 2'"]{grid-column:span 1!important;}
+
+  /* Attendance per-role grid */
+  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))'"],
+  .p-attendance-grid{grid-template-columns:1fr!important;}
+
+  /* Procurement predictor */
+  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))'"],
+  .p-procurement-grid{grid-template-columns:1fr 1fr!important;}
+
+  /* Inventory table scroll */
+  div[style*="overflowX:'auto'"].custom-scroll{
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   EXTRA SMALL — ≤380px (small Android phones)
+══════════════════════════════════════════════════ */
+@media(max-width:380px){
+  section[style*="scrollArea"]{padding:8px!important;}
+  div[style*="glassStat"]{flex:1 1 100%!important;}
+  .p-table-grid,
+  div[style*="tableGrid"]{grid-template-columns:repeat(3,1fr)!important;}
+  div[style*="gridTemplateColumns:'repeat(4,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+  div[style*="gridTemplateColumns:'repeat(3,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+  div[style*="gridTemplateColumns:'repeat(6,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+  div[style*="hudStatBox"]{min-width:78px!important;}
+  button[style*="navBtn"],button[style*="activeTab"],
+  .p-sidebar nav button{min-width:46px!important;font-size:.34rem!important;}
+}
+`}</style>
     </div>
   );
 };
