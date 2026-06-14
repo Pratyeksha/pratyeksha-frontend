@@ -29,6 +29,23 @@ const PratyekshaPremiumMenu = () => {
   const [tenantId, setTenantId] = useState('');
   const [tableNumber, setTableNumber] = useState('');
 
+  const numberToWordsClient = (num) => {
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
+             'Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen',
+             'Seventeen','Eighteen','Nineteen'];
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  if (!num || num === 0) return 'Zero Only';
+  if (num.toString().length > 9) return 'Overflow';
+  const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  if (!n) return '';
+  let str = '';
+  str += n[1] != 0 ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + ' Crore ' : '';
+  str += n[2] != 0 ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + ' Lakh ' : '';
+  str += n[3] != 0 ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + ' Thousand ' : '';
+  str += n[4] != 0 ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + ' Hundred ' : '';
+  str += n[5] != 0 ? (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + ' ' : '';
+  return str.trim() + ' Only';
+};
   // ADD near your other state declarations — generates a random 6-char alphanumeric token
 const generateToken = useCallback(() => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no confusable chars (0,O,I,1)
@@ -1857,8 +1874,7 @@ const finalBillItems = useMemo(() => {
   }, [placedOrders]);
 
 
-  const autoDownloadInvoicePDF = useCallback(() => {
-  // Fetch fresh tenant for cgst/sgst/fssai
+const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
   const cgstPct = (rd?.config?.cgstPercentage ?? 2.5);
   const sgstPct = (rd?.config?.sgstPercentage ?? 2.5);
@@ -1867,25 +1883,26 @@ const finalBillItems = useMemo(() => {
   const totalTaxRate = cgstRate + sgstRate;
 
   const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-  const taxable    = subtotal / (1 + totalTaxRate);
-  const cgstAmt    = taxable * cgstRate;
-  const sgstAmt    = taxable * sgstRate;
-  const grandTotal = subtotal;
+  // Items are priced INCLUSIVE of tax, so back-calculate:
+  const taxableAmt = subtotal / (1 + totalTaxRate);
+  const cgstAmt    = taxableAmt * cgstRate;
+  const sgstAmt    = taxableAmt * sgstRate;
+  const grandTotal = subtotal; // grand total = what customer pays (tax already inside)
 
-  const fssai = rd?.fssaiNumber ? `FSSAI: ${rd.fssaiNumber}` : '';
+  const fssai = rd?.fssaiNumber ? `FSSAI No: ${rd.fssaiNumber}` : '';
   const addr  = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
                   .filter(Boolean).join(', ');
 
   const itemsHTML = finalBillItems.map(item => `
     <tr>
-      <td style="padding:8px 6px; border-bottom:1px solid #f0f0f0; font-size:12px;">
+      <td style="padding:9px 8px; border-bottom:1px solid #f0f0f0; font-size:13px; color:#111;">
         ${item.quantity}× ${item.name}
-        ${item.portion && item.portion !== 'Single' ? `<span style="color:#c9a84c;font-size:10px;"> (${item.portion})</span>` : ''}
-        ${item.isExtraItem ? `<span style="font-size:9px;color:#888;"> [Extra]</span>` : ''}
+        ${item.portion && item.portion !== 'Single' ? `<span style="color:#c9a84c;font-size:11px;"> (${item.portion})</span>` : ''}
+        ${item.isExtraItem ? `<span style="font-size:10px;color:#888;"> [Extra]</span>` : ''}
         <br/><span style="font-size:10px;color:#999;">@ ₹${item.pricePerUnit || (item.subtotal / item.quantity)} each</span>
       </td>
-      <td style="padding:8px 6px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:700; font-size:12px;">
-        ₹${item.subtotal}
+      <td style="padding:9px 8px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:700; font-size:13px; color:#111;">
+        ₹${item.subtotal.toFixed(2)}
       </td>
     </tr>
   `).join('');
@@ -1919,25 +1936,65 @@ const finalBillItems = useMemo(() => {
     border-radius: 3px; margin-bottom: 22px;
   }
   .header { text-align:center; margin-bottom:18px; }
-  .rest-name { font-size:22px; font-weight:900; letter-spacing:-0.5px; margin-bottom:4px; }
-  .rest-sub  { font-size:10px; color:#888; line-height:1.8; }
+  .eyebrow {
+    font-size:9px; font-weight:900; letter-spacing:4px;
+    color:#c9a84c; text-transform:uppercase; margin-bottom:8px;
+  }
+  .rest-name {
+    font-size:24px; font-weight:900; letter-spacing:-0.5px;
+    color:#0c0c0c; margin-bottom:6px; line-height:1.2;
+  }
+  .rest-sub { font-size:10px; color:#666; line-height:1.9; }
+  .fssai-badge {
+    display:inline-block; margin-top:6px;
+    padding:3px 10px; border-radius:4px;
+    background:#f0f8f0; border:1px solid #c8e6c9;
+    font-size:9px; font-weight:700; color:#2e7d32;
+    letter-spacing:0.5px;
+  }
   .divider   { border:none; border-top:2px solid #111; margin:14px 0; }
-  .divider-dashed { border:none; border-top:1px dashed #ddd; margin:10px 0; }
-  .meta-row  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; font-size:11px; }
-  .meta-label { font-weight:800; font-size:9px; letter-spacing:1px; color:#999; text-transform:uppercase; margin-bottom:3px; }
-  .meta-val   { font-weight:700; font-size:13px; }
+  .divider-light { border:none; border-top:1px solid #e0e0e0; margin:10px 0; }
+  .divider-dashed { border:none; border-top:1px dashed #ccc; margin:10px 0; }
+  .meta-row  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+  .meta-label { font-size:9px; font-weight:800; letter-spacing:1px; color:#999; text-transform:uppercase; margin-bottom:3px; }
+  .meta-val   { font-weight:700; font-size:13px; color:#111; }
+  .bill-chip {
+    background:#0c0c0c; color:#d3bfa2;
+    padding:6px 14px; border-radius:8px;
+    font-size:11px; font-weight:900; letter-spacing:1px;
+  }
   table { width:100%; border-collapse:collapse; margin-bottom:8px; }
   thead th {
-    font-size:9px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase;
-    color:#999; padding:6px 6px 10px; text-align:left; border-bottom:2px solid #111;
+    font-size:9px; font-weight:800; letter-spacing:2px; text-transform:uppercase;
+    color:#999; padding:8px 8px 10px; text-align:left; border-bottom:2px solid #111;
   }
   thead th:last-child { text-align:right; }
-  .total-section { margin-top:8px; }
-  .total-row { display:flex; justify-content:space-between; font-size:12px; padding:5px 6px; color:#555; }
-  .grand-total { display:flex; justify-content:space-between; padding:12px 6px 0; border-top:2px solid #111; margin-top:6px; }
-  .grand-total span:first-child { font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; }
-  .grand-total span:last-child  { font-size:22px; font-weight:900; color:#7a5a20; }
-  .footer { text-align:center; margin-top:24px; font-size:9px; color:#ccc; letter-spacing:1px; }
+  .tax-section { margin-top:8px; }
+  .tax-row {
+    display:flex; justify-content:space-between;
+    font-size:12px; padding:5px 8px; color:#555;
+  }
+  .tax-row.subtotal-row { color:#111; font-weight:600; }
+  .grand-total {
+    display:flex; justify-content:space-between;
+    padding:13px 8px 0; border-top:2px solid #111; margin-top:8px;
+  }
+  .grand-total span:first-child {
+    font-size:11px; font-weight:900; letter-spacing:1px;
+    text-transform:uppercase; color:#111;
+  }
+  .grand-total span:last-child { font-size:26px; font-weight:900; color:#7a5a20; }
+  .words-row {
+    text-align:right; font-size:10px; color:#999;
+    font-style:italic; padding:4px 8px 0;
+  }
+  .sac-row {
+    text-align:right; font-size:9px; color:#bbb;
+    padding:4px 8px 0; letter-spacing:0.3px;
+  }
+  .footer { text-align:center; margin-top:24px; }
+  .footer-msg { font-size:12px; color:#555; margin-bottom:8px; font-style:italic; }
+  .footer-brand { font-size:8px; color:#ccc; letter-spacing:2px; text-transform:uppercase; font-weight:800; }
   .gold-bar-bottom {
     height:3px;
     background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
@@ -1946,6 +2003,8 @@ const finalBillItems = useMemo(() => {
   @media print {
     @page { size:A4; margin:0; }
     body { background:#fff !important; }
+    .page { padding:20px 28px !important; }
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   }
 </style>
 </head>
@@ -1953,38 +2012,45 @@ const finalBillItems = useMemo(() => {
 <div class="page">
   <div class="gold-bar"></div>
 
+  <!-- HEADER -->
   <div class="header">
-    <div style="font-size:9px;font-weight:800;letter-spacing:3px;color:#c9a84c;text-transform:uppercase;margin-bottom:6px;">TAX INVOICE</div>
-    <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+    <div class="eyebrow">TAX INVOICE</div>
+    <div class="rest-name">${rd?.name || 'RESTAURANT'}</div>
     <div class="rest-sub">
       ${addr ? `${addr}<br/>` : ''}
-      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `GSTIN: ${rd.gstin}<br/>` : ''}
-      ${fssai ? `${fssai}<br/>` : ''}
-      ${rd?.contact ? `Tel: ${rd.contact}` : ''}
+      ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
+      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `<strong>GSTIN: ${rd.gstin}</strong>` : 'GSTIN: PENDING'}
     </div>
+    ${fssai ? `<div class="fssai-badge">🛡️ ${fssai}</div>` : ''}
   </div>
 
   <hr class="divider"/>
 
+  <!-- BILL META -->
   <div class="meta-row">
     <div>
       <div class="meta-label">Customer</div>
       <div class="meta-val">${customerInfo.name || '—'}</div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">+91 ${customerInfo.phone || '—'} &nbsp;·&nbsp; Table ${tableNumber}</div>
+      <div style="font-size:11px;color:#888;margin-top:3px;">
+        ${customerInfo.phone ? `+91 ${customerInfo.phone}` : ''}
+        ${tableNumber ? ` &nbsp;·&nbsp; Table ${tableNumber}` : ''}
+      </div>
     </div>
     <div style="text-align:right;">
       <div class="meta-label">Date &amp; Time</div>
-      <div class="meta-val" style="font-size:11px;">${now}</div>
+      <div class="meta-val" style="font-size:12px;">${now}</div>
+      <div class="bill-chip" style="margin-top:6px;">SAC: 996331</div>
     </div>
   </div>
 
   <hr class="divider"/>
 
+  <!-- ITEMS TABLE -->
   <table>
     <thead>
       <tr>
         <th>Item Description</th>
-        <th style="text-align:right;">Total</th>
+        <th style="text-align:right;">Amount</th>
       </tr>
     </thead>
     <tbody>
@@ -1992,30 +2058,37 @@ const finalBillItems = useMemo(() => {
     </tbody>
   </table>
 
-  <div class="total-section">
-    <div class="total-row">
+  <!-- TAX BREAKDOWN -->
+  <div class="tax-section">
+    <div class="tax-row subtotal-row">
       <span>Subtotal (excl. tax)</span>
-      <span>₹${taxable.toFixed(2)}</span>
+      <span>₹${taxableAmt.toFixed(2)}</span>
     </div>
-    <div class="total-row">
+    <hr class="divider-light"/>
+    <div class="tax-row">
       <span>CGST @ ${cgstPct}%</span>
       <span>₹${cgstAmt.toFixed(2)}</span>
     </div>
-    <div class="total-row">
+    <div class="tax-row">
       <span>SGST @ ${sgstPct}%</span>
       <span>₹${sgstAmt.toFixed(2)}</span>
     </div>
     <div class="grand-total">
       <span>Grand Total</span>
-      <span>₹${grandTotal.toLocaleString()}</span>
+      <span>₹${grandTotal.toLocaleString('en-IN')}</span>
     </div>
-    <div style="font-size:10px;color:#999;font-style:italic;margin-top:6px;padding:0 6px;">
-      SAC Code: 996331 &nbsp;·&nbsp; GST Rate: ${(cgstPct + sgstPct).toFixed(1)}%
+    <div class="words-row">
+      <em>Amount in words: ${numberToWordsClient(Math.round(grandTotal))}</em>
     </div>
+    <div class="sac-row">GST Rate: ${(cgstPct + sgstPct).toFixed(1)}% &nbsp;·&nbsp; SAC Code: 996331</div>
   </div>
 
   <hr class="divider-dashed"/>
-  <div class="footer">THANK YOU FOR DINING WITH US &nbsp;·&nbsp; POWERED BY PRATYEKSHA</div>
+
+  <div class="footer">
+    <div class="footer-msg">Thank you for dining with us! 🙏</div>
+    <div class="footer-brand">Powered by Pratyeksha · pratyeksha.in</div>
+  </div>
   <div class="gold-bar-bottom"></div>
 </div>
 </body>
@@ -2040,7 +2113,6 @@ const finalBillItems = useMemo(() => {
     });
   });
 }, [restaurantData, finalBillItems, customerInfo, tableNumber]);
-
   // Add this useEffect to ask notification permission early, before order is placed
 useEffect(() => {
   if (!isCounterScan) return;
@@ -2053,7 +2125,6 @@ useEffect(() => {
     return () => clearTimeout(t);
   }
 }, [isCounterScan]);
-
 const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
   try {
@@ -2092,18 +2163,11 @@ const requestFinalBill = async () => {
 
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
-
-    // ── AUTO-DOWNLOAD PDF immediately on bill request ──
-    setTimeout(() => {
-      autoDownloadInvoicePDF();
-    }, 400); // small delay so state has settled
+    // ← NO auto-download here anymore
 
   } catch (error) {
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
-    setTimeout(() => {
-      autoDownloadInvoicePDF();
-    }, 400);
   }
 };
 
@@ -2154,6 +2218,34 @@ useEffect(() => {
   } catch { /* ignore */ }
 }, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
 
+
+// ── RESTORE placedOrders FROM SERVER on mount (multi-device safe) ──
+useEffect(() => {
+  if (!tenantId || !tableNumber || tableNumber === '' || tableNumber === 'Counter' || isCounterScan) return;
+  
+  axios.get(`${BASE_URL}/orders/table/${tenantId}/${tableNumber}`)
+    .then(r => {
+      if (r.data?.allItems?.length > 0) {
+        // Map server items to our placedOrders format
+        const serverItems = r.data.allItems.map(item => ({
+          menuItemId:   item.menuItemId || null,
+          name:         item.name || '',
+          name_mr:      item.name_mr || '',
+          quantity:     item.quantity || 1,
+          portion:      item.portion || 'Single',
+          pricePerUnit: item.pricePerUnit || 0,
+          subtotal:     item.subtotal || 0,
+          isExtraItem:  item.isExtraItem || false,
+          extraItemId:  item.extraItemId || null,
+        }));
+        setPlacedOrders(serverItems);
+        setHasPlacedInitialOrder(true);
+      }
+    })
+    .catch(() => {
+      // Silently fall back to localStorage (already handled above)
+    });
+}, [tenantId, tableNumber, isCounterScan]);
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -4808,12 +4900,41 @@ const categoryIconMap = {
     </div>
   ))}
 </div>
-                      <div style={styles.billTableFooter}>
-                         <div style={styles.billLineTotal}>
-                            <span>{t[language].grandTotal}</span>
-                            <span style={{color: primaryColor, fontSize: '1.2rem'}}>₹{convertToMrNumber(calculateGrandTotal())}</span>
-                         </div>
-                      </div>
+{/* Replace existing billTableFooter with this: */}
+<div style={styles.billTableFooter}>
+  {(() => {
+    const rd = restaurantData;
+    const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
+    const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
+    const totalTaxRate = (cgstPct + sgstPct) / 100;
+    const subtotal = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+    const taxableAmt = subtotal / (1 + totalTaxRate);
+    const cgstAmt = taxableAmt * (cgstPct / 100);
+    const sgstAmt = taxableAmt * (sgstPct / 100);
+    return (
+      <>
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
+          <span>Subtotal (excl. tax)</span>
+          <span>₹{convertToMrNumber(Math.round(taxableAmt))}</span>
+        </div>
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#888' }}>
+          <span>CGST @ {cgstPct}%</span>
+          <span>₹{cgstAmt.toFixed(2)}</span>
+        </div>
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#888', marginBottom: '12px' }}>
+          <span>SGST @ {sgstPct}%</span>
+          <span>₹{sgstAmt.toFixed(2)}</span>
+        </div>
+        <div style={styles.billLineTotal}>
+          <span>{t[language].grandTotal}</span>
+          <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
+            ₹{convertToMrNumber(calculateGrandTotal())}
+          </span>
+        </div>
+      </>
+    );
+  })()}
+</div>
                    </div>
 
                    {/* ========================================================================= */}
@@ -4898,16 +5019,20 @@ const categoryIconMap = {
 
                    {/* INTERACTIVE CONTROLS CONTAINER ROW */}
                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>
-                      <button 
-                        style={{ width: '100%', padding: '18px', borderRadius: '15px', background: 'linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%)', color: '#000000', fontWeight: '900', border: '1px solid #e2e2e2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}
-                        onClick={() => autoDownloadInvoicePDF()}>
-  <ReceiptText size={18} color="#000000" strokeWidth={2.5} />
-  <span>DOWNLOAD INVOICE AGAIN</span>
+<button 
+  style={{ 
+    width: '100%', padding: '18px', borderRadius: '15px', 
+    background: 'linear-gradient(135deg, #d3bfa2 0%, #bda88a 100%)', 
+    color: '#0c0c0c', fontWeight: '900', border: 'none', cursor: 'pointer', 
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', 
+    boxShadow: '0 8px 24px rgba(211,191,162,0.2)',
+    fontSize: '0.88rem', letterSpacing: '0.5px', textTransform: 'uppercase'
+  }}
+  onClick={() => autoDownloadInvoicePDF()}
+>
+  <ReceiptText size={18} color="#0c0c0c" strokeWidth={2.5} />
+  <span>DOWNLOAD TAX INVOICE</span>
 </button>
-
-                      <button style={styles.professionalContinueBtn} onClick={() => setShowReviewPage(true)}>
-                         {t[language].continue} <ChevronRight size={18} />
-                      </button>
                    </div>
                 </div>
 ) : (
