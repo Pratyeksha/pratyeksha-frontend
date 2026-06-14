@@ -3616,7 +3616,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         cursor: 'pointer',
         background: 'transparent',
         outline: filterVegOnly
-          ? '1.5px solid #c9a84c'
+          ? '1.5px solid rgba(211, 191, 162, 0.2)'
           : '1px solid transparent',
         transition: 'all 0.2s ease'
       }}
@@ -3650,7 +3650,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         cursor: 'pointer',
         background: 'transparent',
         outline: !filterVegOnly
-          ? '1.5px solid #c9a84c'
+          ? '1.5px solid rgba(211, 191, 162, 0.2)'
           : '1px solid transparent',
         transition: 'all 0.2s ease'
       }}
