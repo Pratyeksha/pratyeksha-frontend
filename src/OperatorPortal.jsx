@@ -12,7 +12,7 @@ import {
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
-  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown  
+  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText   
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -4296,6 +4296,280 @@ const renderMonthHeatmap = () => {
       <h4 style={styles.biTitle}><Sparkles size={16}/> SMART DIGEST</h4>
       <p style={{fontSize:'0.9rem',color:'#fff',fontWeight:'500'}}>{insightsData.digest}</p>
     </div>
+
+    {/* ═══ GST LIABILITY & FILING INTELLIGENCE ═══ */}
+{stats.revenue > 0 && (() => {
+  // GST rates for restaurant (as per Indian GST law)
+  // Non-AC / small restaurants: 5% GST (no ITC) → 2.5% CGST + 2.5% SGST
+  // AC restaurants / hotel restaurants: 18% GST (with ITC) — not computed here
+  // Composition scheme threshold: ₹1.5 Cr annual turnover
+ 
+  const monthlyRevenue = stats.revenue;
+ 
+  // 5% GST split (most common for restaurants)
+  const gstRate5 = 0.05;
+  const cgst5 = monthlyRevenue * 0.025;
+  const sgst5 = monthlyRevenue * 0.025;
+  const totalGst5 = cgst5 + sgst5;
+ 
+  // 18% GST split (AC / premium restaurants)
+  const gstRate18 = 0.18;
+  const cgst18 = monthlyRevenue * 0.09;
+  const sgst18 = monthlyRevenue * 0.09;
+  const totalGst18 = cgst18 + sgst18;
+ 
+  // Estimated annual turnover
+  const estimatedAnnual = monthlyRevenue * 12;
+  const compositionLimit = 15000000; // ₹1.5 Cr
+  const isCompositionEligible = estimatedAnnual < compositionLimit;
+ 
+  // Revenue AFTER GST (GST-exclusive base — assuming prices are GST-inclusive)
+  const revenueExGst5 = monthlyRevenue / 1.05;
+  const netRevenueAfterGst5 = monthlyRevenue - totalGst5;
+ 
+  // Cost & Profit (from profitabilityData if available)
+  const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0)
+    + (extraAnalytics?.totalCost || 0);
+  const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+  const payrollCost = staffEfficiency.reduce((a, s) => {
+    const rec = monthlySalaryRecords.find(r =>
+      r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
+    );
+    return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+  }, 0);
+ 
+  // Overall profit after GST, ingredient cost, and payroll
+  const grossAfterGst = netRevenueAfterGst5 - ingredientCost;
+  const netAfterAll = grossAfterGst - payrollCost;
+ 
+  // GSTR-1 / GSTR-3B filing dates
+  const now = new Date();
+  const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + 1, 11); // 11th of next month
+  const nextGstr3B = new Date(now.getFullYear(), now.getMonth() + 1, 20); // 20th of next month
+  const daysToGstr1 = Math.ceil((nextGstr1 - now) / (1000 * 60 * 60 * 24));
+  const daysToGstr3B = Math.ceil((nextGstr3B - now) / (1000 * 60 * 60 * 24));
+ 
+  return (
+    <div style={{
+      background: '#0f0f0f',
+      border: '1px solid rgba(211,191,162,0.12)',
+      borderLeft: '4px solid #c9a84c',
+      borderRadius: '16px',
+      padding: '20px',
+      marginBottom: '20px'
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '0.72rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          <ReceiptText size={15} color="#c9a84c" />
+          GST LIABILITY & FILING INTELLIGENCE
+        </h4>
+        <span style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>
+          {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase()}
+        </span>
+      </div>
+      <p style={{ fontSize: '0.68rem', color: '#444', marginBottom: '18px', marginTop: '6px' }}>
+        Based on ₹{monthlyRevenue.toLocaleString()} revenue this month · 5% GST (2.5% CGST + 2.5% SGST)
+      </p>
+ 
+      {/* ── MAIN GST SPLIT ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '18px' }}>
+        {[
+          { l: 'TOTAL REVENUE', v: `₹${monthlyRevenue.toLocaleString()}`, c: '#fff', sub: 'GST-inclusive' },
+          { l: 'CGST @ 2.5%', v: `₹${Math.round(cgst5).toLocaleString()}`, c: '#c9a84c', sub: 'Central GST' },
+          { l: 'SGST @ 2.5%', v: `₹${Math.round(sgst5).toLocaleString()}`, c: '#bda88a', sub: 'State GST' },
+          { l: 'TOTAL GST DUE', v: `₹${Math.round(totalGst5).toLocaleString()}`, c: '#f87171', sub: '5% of revenue' },
+        ].map(s => (
+          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+            <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', marginBottom: '5px', letterSpacing: '0.8px' }}>{s.l}</div>
+            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            <div style={{ fontSize: '0.54rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+ 
+      {/* ── VISUAL GST BAR ── */}
+      <div style={{ marginBottom: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <span style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900' }}>REVENUE BREAKDOWN</span>
+          <span style={{ fontSize: '0.58rem', color: '#444' }}>
+            GST = {Math.round((totalGst5 / monthlyRevenue) * 100)}% of revenue
+          </span>
+        </div>
+        <div style={{ display: 'flex', height: '10px', borderRadius: '5px', overflow: 'hidden', gap: '2px' }}>
+          {/* Net revenue bar */}
+          <div style={{
+            flex: 1,
+            background: 'rgba(211,191,162,0.4)',
+            borderRadius: '5px 0 0 5px',
+            position: 'relative'
+          }}
+            title={`Net Revenue: ₹${Math.round(netRevenueAfterGst5).toLocaleString()}`}
+          />
+          {/* CGST */}
+          <div style={{
+            width: '2.5%',
+            background: '#c9a84c',
+            title: `CGST: ₹${Math.round(cgst5).toLocaleString()}`
+          }} />
+          {/* SGST */}
+          <div style={{
+            width: '2.5%',
+            background: '#bda88a',
+            borderRadius: '0 5px 5px 0',
+            title: `SGST: ₹${Math.round(sgst5).toLocaleString()}`
+          }} />
+        </div>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '7px' }}>
+          {[
+            { c: 'rgba(211,191,162,0.4)', l: `Net Revenue ₹${Math.round(netRevenueAfterGst5).toLocaleString()}` },
+            { c: '#c9a84c', l: `CGST ₹${Math.round(cgst5).toLocaleString()}` },
+            { c: '#bda88a', l: `SGST ₹${Math.round(sgst5).toLocaleString()}` },
+          ].map(s => (
+            <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: s.c, flexShrink: 0 }} />
+              <span style={{ fontSize: '0.55rem', color: '#444', fontWeight: '700' }}>{s.l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+ 
+      {/* ── OVERALL PROFIT AFTER GST + COSTS ── */}
+      {profitabilityData.length > 0 && (
+        <>
+          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: '16px', marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>
+              OVERALL PROFIT BREAKDOWN
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+              {[
+                { l: 'TOTAL REVENUE',          v: monthlyRevenue,      c: '#fff',    sign: '',   bold: false },
+                { l: '— GST PAID (5%)',        v: -totalGst5,          c: '#f87171', sign: '-',  bold: false },
+                { l: 'NET REVENUE (after GST)', v: netRevenueAfterGst5, c: '#d3bfa2', sign: '',  bold: true  },
+                { l: '— INGREDIENT COST',      v: -ingredientCost,     c: '#BA7517', sign: '-',  bold: false },
+                { l: 'GROSS PROFIT',           v: netRevenueAfterGst5 - ingredientCost, c: '#d3bfa2', sign: '', bold: true },
+                ...(payrollCost > 0 ? [
+                  { l: '— STAFF PAYROLL',      v: -payrollCost,        c: '#BA7517', sign: '-',  bold: false },
+                  { l: 'NET PROFIT',           v: netAfterAll,         c: netAfterAll >= 0 ? '#4ade80' : '#f87171', sign: '', bold: true },
+                ] : []),
+              ].map((s, i) => (
+                <div key={i} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: s.bold ? '10px 10px' : '7px 10px',
+                  background: s.bold ? 'rgba(255,255,255,0.03)' : 'transparent',
+                  borderBottom: '1px solid #111',
+                  borderRadius: s.bold ? '6px' : '0',
+                  marginBottom: s.bold ? '4px' : '0'
+                }}>
+                  <span style={{
+                    fontSize: s.bold ? '0.66rem' : '0.62rem',
+                    color: s.bold ? '#888' : '#444',
+                    fontWeight: '900',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {s.l}
+                  </span>
+                  <span style={{
+                    fontSize: s.bold ? '0.9rem' : '0.78rem',
+                    fontWeight: '900',
+                    color: s.c
+                  }}>
+                    {s.sign}₹{Math.abs(Math.round(s.v)).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+ 
+      {/* ── FILING DEADLINES ── */}
+      <div style={{
+        background: '#050505',
+        border: '1px solid #111',
+        borderRadius: '10px',
+        padding: '14px',
+        marginBottom: '14px'
+      }}>
+        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>
+          UPCOMING GST FILING DEADLINES
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          {[
+            {
+              label: 'GSTR-1',
+              desc: 'Outward supplies',
+              date: nextGstr1.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+              days: daysToGstr1,
+              urgent: daysToGstr1 <= 5
+            },
+            {
+              label: 'GSTR-3B',
+              desc: 'Monthly summary + payment',
+              date: nextGstr3B.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+              days: daysToGstr3B,
+              urgent: daysToGstr3B <= 5
+            },
+          ].map(s => (
+            <div key={s.label} style={{
+              padding: '12px',
+              background: s.urgent ? 'rgba(248,113,113,0.06)' : '#0a0a0a',
+              border: `1px solid ${s.urgent ? 'rgba(248,113,113,0.25)' : '#151515'}`,
+              borderRadius: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: '900', color: s.urgent ? '#f87171' : '#d3bfa2' }}>
+                  {s.label}
+                </span>
+                <span style={{
+                  fontSize: '0.52rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px',
+                  background: s.urgent ? 'rgba(248,113,113,0.12)' : 'rgba(211,191,162,0.06)',
+                  color: s.urgent ? '#f87171' : '#555',
+                  border: `1px solid ${s.urgent ? 'rgba(248,113,113,0.3)' : '#1a1a1a'}`
+                }}>
+                  {s.days}d left
+                </span>
+              </div>
+              <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '4px' }}>{s.desc}</div>
+              <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#666' }}>Due: {s.date}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+ 
+      {/* ── COMPOSITION SCHEME ELIGIBILITY ── */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: '10px',
+        padding: '12px 14px',
+        background: isCompositionEligible ? 'rgba(74,222,128,0.04)' : 'rgba(201,168,76,0.04)',
+        border: `1px solid ${isCompositionEligible ? 'rgba(74,222,128,0.15)' : 'rgba(201,168,76,0.15)'}`,
+        borderRadius: '8px'
+      }}>
+        <span style={{ fontSize: '14px', flexShrink: 0 }}>💡</span>
+        <div>
+          <div style={{ fontSize: '0.6rem', color: isCompositionEligible ? '#4ade80' : '#c9a84c', fontWeight: '900', marginBottom: '4px' }}>
+            {isCompositionEligible
+              ? 'COMPOSITION SCHEME ELIGIBLE'
+              : 'BEYOND COMPOSITION THRESHOLD'}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: '#444', lineHeight: 1.6 }}>
+            Estimated annual turnover: <b style={{ color: '#d3bfa2' }}>₹{Math.round(estimatedAnnual / 100000).toLocaleString()}L</b>
+            {isCompositionEligible
+              ? ' — You qualify for the Composition Scheme (pay 5% flat, simpler filing). Consult your CA.'
+              : ' — Annual turnover exceeds ₹1.5 Cr composition limit. Regular GST filing required.'}
+          </div>
+          <div style={{ fontSize: '0.58rem', color: '#2a2a2a', marginTop: '5px' }}>
+            GST to keep aside this month: <b style={{ color: '#f87171' }}>₹{Math.round(totalGst5).toLocaleString()}</b>
+            {' '}(transfer to dedicated account before filing)
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})()}
+ 
 
     {/* ═══════════ SECTION 1 — TODAY'S PULSE ═══════════ */}
     <SectionHeader icon={<Activity size={16}/>} title="Today's Pulse" subtitle="Live operational signals — act on these now" />
