@@ -735,15 +735,15 @@ const showNotif = useCallback((msg, type='success') => {
 const generateBill = async (id) => {
   setSelectedTable(id);
   setDiscount(0);
-  setPaymentModes({ cash:0, upi:0, card:0 });
+  setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
     const [res, countRes] = await Promise.all([
       axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`),
-      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(()=>({ data:{ nextBillNo:1 } }))
+      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } }))
     ]);
     const rawItems = res.data.flatMap(o => o.items);
     if (!rawItems.length) { setTableBill(null); return; }
-    // ── Fix: aggregate by name + portion to avoid Half/Full merge
+
     const aggregated = rawItems.reduce((acc, item) => {
       const portionKey = item.portion || 'Single';
       const ex = acc.find(i => i.name === item.name && (i.portion || 'Single') === portionKey);
@@ -760,16 +760,27 @@ const generateBill = async (id) => {
       }
       return acc;
     }, []);
+
+    const taxPct   = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
+    const halfTax  = taxPct / 2;
+    const subtotal = aggregated.reduce((a, i) => a + i.subtotal, 0); // dishes total, NO tax
+    const cgst     = Math.round(subtotal * halfTax * 100) / 100;
+    const sgst     = Math.round(subtotal * halfTax * 100) / 100;
+    const grandTotal = subtotal + cgst + sgst;                       // tax ON TOP
+
     setTableBill({
-      items: aggregated,
-      total: aggregated.reduce((a,i) => a + i.subtotal, 0),
-      billNo: countRes.data.nextBillNo,
-      date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase(),
-      time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})
+      items:      aggregated,
+      subtotal,                 // ← dishes only
+      cgst,
+      sgst,
+      total:      grandTotal,   // ← final payable
+      billNo:     countRes.data.nextBillNo,
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
     });
   } catch (err) {
-    console.error("Bill Error:", err);
-    setSelectedTable(null); // ← Fix: clear on error so table doesn't stay highlighted
+    console.error('Bill Error:', err);
+    setSelectedTable(null);
   }
 };
 
@@ -835,9 +846,15 @@ const handleFinalSettle = async () => {
     setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
     
     try {
-        const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
-            discount, finalAmount: finalAmt, paymentMethods: paymentMethodDetails, customerPhone: ""
-        });
+const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
+    discount,
+    finalAmount:  finalAmt,
+    paymentMethods: paymentMethodDetails,
+    customerPhone: "",
+    subtotal:     tableBill.subtotal,   // ← dishes only, before tax
+    cgst:         tableBill.cgst,       // ← CGST amount
+    sgst:         tableBill.sgst,       // ← SGST amount
+});
         
         // ── Deduct extra items from stock on settlement ──
 if (extraItemsInBill.length > 0) {
@@ -3839,46 +3856,47 @@ const renderMonthHeatmap = () => {
     ))}
 
     {/* GST SPLIT */}
-    {(() => {
-      const taxPct = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
-      const halfTax = taxPct / 2;
-      const gross = dailySettlementBreakdown.gross;
-      const taxableBase = gross / (1 + taxPct);
-      const cgst = Math.round(gross * halfTax / (1 + taxPct));
-      const sgst = cgst;
-      const netRevenue = Math.round(taxableBase);
-      return (
-        <>
-          <div style={{borderRight:'1px solid #1c1f26',paddingRight:'12px'}}>
-            <small style={{...styles.statLabel,color:'#8a704d',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
-              CGST {(halfTax*100).toFixed(1)}%
-            </small>
-            <div style={{fontSize:'1rem',fontWeight:'900',color:'#8a704d',marginTop:'4px'}}>
-              ₹{cgst.toLocaleString()}
-            </div>
-          </div>
-          <div style={{borderRight:'1px solid #1c1f26',paddingRight:'12px'}}>
-            <small style={{...styles.statLabel,color:'#8a704d',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
-              SGST {(halfTax*100).toFixed(1)}%
-            </small>
-            <div style={{fontSize:'1rem',fontWeight:'900',color:'#8a704d',marginTop:'4px'}}>
-              ₹{sgst.toLocaleString()}
-            </div>
-          </div>
-          <div style={{borderLeft:'2px solid #d3bfa2',paddingLeft:'12px'}}>
-            <small style={{...styles.statLabel,color:'#d3bfa2',fontWeight:'900',fontSize:'0.52rem'}}>
-              GROSS SETTLED
-            </small>
-            <div style={{fontSize:'1.2rem',fontWeight:'900',color:'#d3bfa2',marginTop:'2px'}}>
-              ₹{gross.toLocaleString()}
-            </div>
-            <div style={{fontSize:'0.52rem',color:'#555',marginTop:'2px'}}>
-              NET ₹{netRevenue.toLocaleString()} + GST ₹{(cgst+sgst).toLocaleString()}
-            </div>
-          </div>
-        </>
-      );
-    })()}
+{(() => {
+  const taxPct  = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
+  const halfTax = taxPct / 2;
+  const gross   = dailySettlementBreakdown.gross;           // this is grandTotal sum
+  // If you now store cgst/sgst in each settlement, sum them directly from DB instead.
+  // Fallback approximation (tax-exclusive basis):
+  const subtotalSum = gross / (1 + taxPct);
+  const cgst = Math.round(subtotalSum * halfTax);
+  const sgst = cgst;
+  return (
+    <>
+      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
+          CGST {(halfTax * 100).toFixed(1)}%
+        </small>
+        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
+          ₹{cgst.toLocaleString()}
+        </div>
+      </div>
+      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
+          SGST {(halfTax * 100).toFixed(1)}%
+        </small>
+        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
+          ₹{sgst.toLocaleString()}
+        </div>
+      </div>
+      <div style={{ borderLeft: '2px solid #d3bfa2', paddingLeft: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', fontSize: '0.52rem' }}>
+          GROSS SETTLED
+        </small>
+        <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>
+          ₹{gross.toLocaleString()}
+        </div>
+        <div style={{ fontSize: '0.52rem', color: '#555', marginTop: '2px' }}>
+          NET ₹{Math.round(subtotalSum).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
+        </div>
+      </div>
+    </>
+  );
+})()}
   </div>
 </div>
               </div>
@@ -3921,23 +3939,21 @@ const renderMonthHeatmap = () => {
                   </div>
                   <div style={{borderTop:'1px solid #eee',paddingTop:'15px',fontSize:'0.8rem'}}>
              {/* In receipt JSX — replace hardcoded 1.05 and 0.025 */}
-{(() => {
-  const taxPct = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
-  const halfTax = taxPct / 2;
-  const subtotalBeforeTax = tableBill.total / (1 + taxPct);
-  const cgst = tableBill.total * halfTax;
-  const sgst = tableBill.total * halfTax;
-  return (
-    <>
-      <div style={styles.receiptRow}><span>Subtotal</span><span>₹{subtotalBeforeTax.toFixed(2)}</span></div>
-      <div style={styles.receiptRow}><span>CGST ({(halfTax*100).toFixed(1)}%)</span><span>₹{cgst.toFixed(2)}</span></div>
-      <div style={styles.receiptRow}><span>SGST ({(halfTax*100).toFixed(1)}%)</span><span>₹{sgst.toFixed(2)}</span></div>
-      <p style={{fontSize:'0.6rem',fontStyle:'italic',marginTop:'8px',fontWeight:'700',color:'#666'}}>
-        Rupees: {numberToWords(Math.round(tableBill.total-(tableBill.total*(discount/100))))}
-      </p>
-    </>
-  );
-})()}
+<div style={styles.receiptRow}>
+  <span>Subtotal</span>
+  <span>₹{tableBill.subtotal.toFixed(2)}</span>
+</div>
+<div style={styles.receiptRow}>
+  <span>CGST ({((tenantConfig?.config?.taxPercentage ?? 5) / 2).toFixed(1)}%)</span>
+  <span>₹{tableBill.cgst.toFixed(2)}</span>
+</div>
+<div style={styles.receiptRow}>
+  <span>SGST ({((tenantConfig?.config?.taxPercentage ?? 5) / 2).toFixed(1)}%)</span>
+  <span>₹{tableBill.sgst.toFixed(2)}</span>
+</div>
+<p style={{ fontSize: '0.6rem', fontStyle: 'italic', marginTop: '8px', fontWeight: '700', color: '#666' }}>
+  Rupees: {numberToWords(Math.round(tableBill.total - (tableBill.total * (discount / 100))))}
+</p>
                   </div>
                   <div style={{borderTop:'1px dashed #ddd',marginTop:'15px',paddingTop:'15px'}}>
                     <div style={styles.receiptRow}>
