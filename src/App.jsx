@@ -1856,6 +1856,191 @@ const finalBillItems = useMemo(() => {
     return Object.values(map);
   }, [placedOrders]);
 
+
+  const autoDownloadInvoicePDF = useCallback(() => {
+  // Fetch fresh tenant for cgst/sgst/fssai
+  const rd = restaurantData;
+  const cgstPct = (rd?.config?.cgstPercentage ?? 2.5);
+  const sgstPct = (rd?.config?.sgstPercentage ?? 2.5);
+  const cgstRate = cgstPct / 100;
+  const sgstRate = sgstPct / 100;
+  const totalTaxRate = cgstRate + sgstRate;
+
+  const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const taxable    = subtotal / (1 + totalTaxRate);
+  const cgstAmt    = taxable * cgstRate;
+  const sgstAmt    = taxable * sgstRate;
+  const grandTotal = subtotal;
+
+  const fssai = rd?.fssaiNumber ? `FSSAI: ${rd.fssaiNumber}` : '';
+  const addr  = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
+                  .filter(Boolean).join(', ');
+
+  const itemsHTML = finalBillItems.map(item => `
+    <tr>
+      <td style="padding:8px 6px; border-bottom:1px solid #f0f0f0; font-size:12px;">
+        ${item.quantity}× ${item.name}
+        ${item.portion && item.portion !== 'Single' ? `<span style="color:#c9a84c;font-size:10px;"> (${item.portion})</span>` : ''}
+        ${item.isExtraItem ? `<span style="font-size:9px;color:#888;"> [Extra]</span>` : ''}
+        <br/><span style="font-size:10px;color:#999;">@ ₹${item.pricePerUnit || (item.subtotal / item.quantity)} each</span>
+      </td>
+      <td style="padding:8px 6px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:700; font-size:12px;">
+        ₹${item.subtotal}
+      </td>
+    </tr>
+  `).join('');
+
+  const now = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true
+  });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Arial', sans-serif;
+    background: #fff; color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 210mm; min-height: 297mm;
+    margin: 0 auto; padding: 28px 32px;
+    background: #fff;
+  }
+  .gold-bar {
+    height: 4px;
+    background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
+    border-radius: 3px; margin-bottom: 22px;
+  }
+  .header { text-align:center; margin-bottom:18px; }
+  .rest-name { font-size:22px; font-weight:900; letter-spacing:-0.5px; margin-bottom:4px; }
+  .rest-sub  { font-size:10px; color:#888; line-height:1.8; }
+  .divider   { border:none; border-top:2px solid #111; margin:14px 0; }
+  .divider-dashed { border:none; border-top:1px dashed #ddd; margin:10px 0; }
+  .meta-row  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; font-size:11px; }
+  .meta-label { font-weight:800; font-size:9px; letter-spacing:1px; color:#999; text-transform:uppercase; margin-bottom:3px; }
+  .meta-val   { font-weight:700; font-size:13px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+  thead th {
+    font-size:9px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase;
+    color:#999; padding:6px 6px 10px; text-align:left; border-bottom:2px solid #111;
+  }
+  thead th:last-child { text-align:right; }
+  .total-section { margin-top:8px; }
+  .total-row { display:flex; justify-content:space-between; font-size:12px; padding:5px 6px; color:#555; }
+  .grand-total { display:flex; justify-content:space-between; padding:12px 6px 0; border-top:2px solid #111; margin-top:6px; }
+  .grand-total span:first-child { font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; }
+  .grand-total span:last-child  { font-size:22px; font-weight:900; color:#7a5a20; }
+  .footer { text-align:center; margin-top:24px; font-size:9px; color:#ccc; letter-spacing:1px; }
+  .gold-bar-bottom {
+    height:3px;
+    background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
+    border-radius:3px; margin-top:20px;
+  }
+  @media print {
+    @page { size:A4; margin:0; }
+    body { background:#fff !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="gold-bar"></div>
+
+  <div class="header">
+    <div style="font-size:9px;font-weight:800;letter-spacing:3px;color:#c9a84c;text-transform:uppercase;margin-bottom:6px;">TAX INVOICE</div>
+    <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+    <div class="rest-sub">
+      ${addr ? `${addr}<br/>` : ''}
+      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `GSTIN: ${rd.gstin}<br/>` : ''}
+      ${fssai ? `${fssai}<br/>` : ''}
+      ${rd?.contact ? `Tel: ${rd.contact}` : ''}
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="meta-row">
+    <div>
+      <div class="meta-label">Customer</div>
+      <div class="meta-val">${customerInfo.name || '—'}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">+91 ${customerInfo.phone || '—'} &nbsp;·&nbsp; Table ${tableNumber}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="meta-label">Date &amp; Time</div>
+      <div class="meta-val" style="font-size:11px;">${now}</div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item Description</th>
+        <th style="text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsHTML}
+    </tbody>
+  </table>
+
+  <div class="total-section">
+    <div class="total-row">
+      <span>Subtotal (excl. tax)</span>
+      <span>₹${taxable.toFixed(2)}</span>
+    </div>
+    <div class="total-row">
+      <span>CGST @ ${cgstPct}%</span>
+      <span>₹${cgstAmt.toFixed(2)}</span>
+    </div>
+    <div class="total-row">
+      <span>SGST @ ${sgstPct}%</span>
+      <span>₹${sgstAmt.toFixed(2)}</span>
+    </div>
+    <div class="grand-total">
+      <span>Grand Total</span>
+      <span>₹${grandTotal.toLocaleString()}</span>
+    </div>
+    <div style="font-size:10px;color:#999;font-style:italic;margin-top:6px;padding:0 6px;">
+      SAC Code: 996331 &nbsp;·&nbsp; GST Rate: ${(cgstPct + sgstPct).toFixed(1)}%
+    </div>
+  </div>
+
+  <hr class="divider-dashed"/>
+  <div class="footer">THANK YOU FOR DINING WITH US &nbsp;·&nbsp; POWERED BY PRATYEKSHA</div>
+  <div class="gold-bar-bottom"></div>
+</div>
+</body>
+</html>`;
+
+  import('html2pdf.js').then(mod => {
+    const h2p = mod.default || mod;
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;';
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    h2p().set({
+      margin: 0,
+      filename: `Invoice_Table${tableNumber}_${Date.now()}.pdf`,
+      image: { type: 'jpeg', quality: 1.0 },
+      html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 794 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(container).save().then(() => {
+      document.body.removeChild(container);
+    }).catch(() => {
+      document.body.removeChild(container);
+    });
+  });
+}, [restaurantData, finalBillItems, customerInfo, tableNumber]);
+
   // Add this useEffect to ask notification permission early, before order is placed
 useEffect(() => {
   if (!isCounterScan) return;
@@ -1874,21 +2059,18 @@ const requestFinalBill = async () => {
   try {
     const socket = io("https://pratyeksha-backend.onrender.com");
     socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
- 
-    // ── Build this visit's item list from finalBillItems (aggregated) ──
+
     const visitItems = finalBillItems
-      .filter(i => !i.isExtraItem) // only real menu items count toward "most ordered"
+      .filter(i => !i.isExtraItem)
       .map(i => ({
         menuItemId: i.menuItemId,
         name: i.name,
         quantity: i.quantity,
         subtotal: i.subtotal,
       }));
- 
+
     const visitTotal = finalBillItems.reduce((sum, i) => sum + (i.subtotal || 0), 0);
- 
-    // ── Upsert customer: increments visitCount, updates lastVisit,
-    //    lastOrderItems, totalSpend, and merges dish counts server-side ──
+
     await axios.post(`${BASE_URL}/customers/upsert`, {
       tenantId,
       name: customerInfo.name.trim(),
@@ -1896,12 +2078,10 @@ const requestFinalBill = async () => {
       lastVisit: new Date().toISOString(),
       lastOrderItems: visitItems,
       visitAmount: visitTotal,
-      incrementVisit: true,   // ← ONLY checkout increments visit count
+      incrementVisit: true,
     });
 
- 
-    //    the new visit count / dishes without needing a page reload ──
-const phoneDigits = customerInfo.phone.replace(/\D/g, '');
+    const phoneDigits = customerInfo.phone.replace(/\D/g, '');
     if (phoneDigits.length === 10) {
       setTimeout(() => {
         axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
@@ -1909,20 +2089,28 @@ const phoneDigits = customerInfo.phone.replace(/\D/g, '');
           .catch(() => {});
       }, 800);
     }
- 
-// ── Clear stored bill on checkout (orders now vanish from this device only after billing) ──
+
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
+
+    // ── AUTO-DOWNLOAD PDF immediately on bill request ──
+    setTimeout(() => {
+      autoDownloadInvoicePDF();
+    }, 400); // small delay so state has settled
+
   } catch (error) {
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
     setBillRequested(true);
+    setTimeout(() => {
+      autoDownloadInvoicePDF();
+    }, 400);
   }
 };
+
   const hasNonVegInView = useMemo(() => {
     if (isOnlyVegTenant) return false;
     return allMenuItems.some(i => i.isVeg !== true && i.isAvailable !== false);
   }, [allMenuItems, isOnlyVegTenant]);
-
 
 
 const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
@@ -1938,9 +2126,9 @@ useEffect(() => {
   }
 }, [cart, tenantId]);
 
-// ── Persist placedOrders to LOCALSTORAGE so it survives refresh AND tab/browser close ──
+// ── Persist placedOrders to localStorage on every change ──
 useEffect(() => {
-  if (!tenantId || isCounterScan) return;
+  if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
   const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
   if (placedOrders.length > 0) {
     localStorage.setItem(key, JSON.stringify(placedOrders));
@@ -1949,9 +2137,10 @@ useEffect(() => {
   }
 }, [placedOrders, tenantId, tableNumber, isCounterScan]);
 
-// ── Restore placedOrders on mount — works after refresh, tab close, even reopening on another device with same table link ──
+// ── Restore placedOrders on mount — after tenantId AND tableNumber are both known ──
 useEffect(() => {
-  if (!tenantId || !tableNumber || isCounterScan) return;
+  // tableNumber is set from URL params — wait until it's a real table (not empty string)
+  if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
   const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
   try {
     const saved = localStorage.getItem(key);
@@ -1963,7 +2152,7 @@ useEffect(() => {
       }
     }
   } catch { /* ignore */ }
-}, [tenantId, tableNumber, isCounterScan]);
+}, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
 
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
@@ -4711,23 +4900,10 @@ const categoryIconMap = {
                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>
                       <button 
                         style={{ width: '100%', padding: '18px', borderRadius: '15px', background: 'linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%)', color: '#000000', fontWeight: '900', border: '1px solid #e2e2e2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}
-                        onClick={() => {
-                          import('html2pdf.js').then((html2pdf) => {
-                            const element = document.getElementById('pdf-rendering-frame');
-                            const opt = {
-                              margin:       [0, 0, 0, 0],
-                              filename:     `TaxInvoice_Table_${tableNumber}.pdf`,
-                              image:        { type: 'jpeg', quality: 1.0 },
-                              html2canvas:  { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false },
-                              jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                            };
-                            html2pdf.default().set(opt).from(element).save();
-                          });
-                        }}
-                      >
-                        <ReceiptText size={18} color="#000000" strokeWidth={2.5} /> 
-                        <span>DOWNLOAD TAX INVOICE PDF</span>
-                      </button>
+                        onClick={() => autoDownloadInvoicePDF()}>
+  <ReceiptText size={18} color="#000000" strokeWidth={2.5} />
+  <span>DOWNLOAD INVOICE AGAIN</span>
+</button>
 
                       <button style={styles.professionalContinueBtn} onClick={() => setShowReviewPage(true)}>
                          {t[language].continue} <ChevronRight size={18} />
