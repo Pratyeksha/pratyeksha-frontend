@@ -764,9 +764,9 @@ const generateBill = async (id) => {
     const taxPct   = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
     const halfTax  = taxPct / 2;
     const subtotal = aggregated.reduce((a, i) => a + i.subtotal, 0); // dishes total, NO tax
-const cgst     = Math.round(subtotal * halfTax * 100) / 100;
-const sgst     = Math.round(subtotal * halfTax * 100) / 100;
-const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;  // ← add this round
+    const cgst     = Math.round(subtotal * halfTax * 100) / 100;
+    const sgst     = Math.round(subtotal * halfTax * 100) / 100;
+    const grandTotal = subtotal + cgst + sgst;                       // tax ON TOP
 
     setTableBill({
       items:      aggregated,
@@ -2263,25 +2263,25 @@ const renderMonthHeatmap = () => {
         <header style={styles.topHeader}>
           <div><h1 style={styles.pageTitle}>{activeTab.replace('_',' ').toUpperCase()}</h1></div>
           {/* ── Billing HUD ── */}
-{activeTab==='billing' && (
-  <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} style={styles.hudCountersRow}>
-    {[
-      {label:"TODAY'S INVOICES", val: hudLiveCounterBreakdown.total,    color:'#d3bfa2'},
-      {label:"DINE-IN SETTLED",  val: hudLiveCounterBreakdown.direct},
-      {label:"TAKEAWAY SETTLED", val: hudLiveCounterBreakdown.takeaway},
-      {label:"ONLINE SETTLED",   val: hudLiveCounterBreakdown.online},
-      {label:"CGST COLLECTED",   val: `₹${Math.round(dailySettlementBreakdown.cgst ?? 0).toLocaleString()}`, color:'#8a704d'},
-      {label:"SGST COLLECTED",   val: `₹${Math.round(dailySettlementBreakdown.sgst ?? 0).toLocaleString()}`, color:'#8a704d'},
-    ].map((s,i)=>(
-      <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
-        <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
-        <div style={{...styles.hudStatValue, color:s.color||'#fff'}} className="mono">
-          {typeof s.val === 'number' ? (s.val < 10 ? `0${s.val}` : s.val) : s.val}
-        </div>
-      </div>
-    ))}
-  </motion.div>
-)}
+          {activeTab==='billing' && (
+            <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} style={styles.hudCountersRow}>
+{[
+  {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
+  {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
+  {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
+  {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
+  {label:"CGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+  {label:"SGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+].map((s,i)=>(
+                <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
+                  <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
+                  <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
+                    {s.val<10?`0${s.val}`:s.val}
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
           {activeTab==='inventory' &&(
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
 
@@ -3857,38 +3857,41 @@ const renderMonthHeatmap = () => {
 
     {/* GST SPLIT */}
 {(() => {
-  const gross = dailySettlementBreakdown.gross ?? 0;
-  const cgst  = Math.round(dailySettlementBreakdown.cgst ?? 0);
-  const sgst  = Math.round(dailySettlementBreakdown.sgst ?? 0);
-  const net   = Math.round(gross - cgst - sgst);
-  const halfTaxLabel = ((tenantConfig?.config?.taxPercentage ?? 5) / 2).toFixed(1);
+  const taxPct  = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
+  const halfTax = taxPct / 2;
+  const gross   = dailySettlementBreakdown.gross;           // this is grandTotal sum
+  // If you now store cgst/sgst in each settlement, sum them directly from DB instead.
+  // Fallback approximation (tax-exclusive basis):
+  const subtotalSum = gross / (1 + taxPct);
+  const cgst = Math.round(subtotalSum * halfTax);
+  const sgst = cgst;
   return (
     <>
-      <div style={{borderRight:'1px solid #1c1f26', paddingRight:'12px'}}>
-        <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
-          CGST {halfTaxLabel}%
+      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
+          CGST {(halfTax * 100).toFixed(1)}%
         </small>
-        <div style={{fontSize:'1rem', fontWeight:'900', color:'#8a704d', marginTop:'4px'}}>
+        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
           ₹{cgst.toLocaleString()}
         </div>
       </div>
-      <div style={{borderRight:'1px solid #1c1f26', paddingRight:'12px'}}>
-        <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
-          SGST {halfTaxLabel}%
+      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
+          SGST {(halfTax * 100).toFixed(1)}%
         </small>
-        <div style={{fontSize:'1rem', fontWeight:'900', color:'#8a704d', marginTop:'4px'}}>
+        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
           ₹{sgst.toLocaleString()}
         </div>
       </div>
-      <div style={{borderLeft:'2px solid #d3bfa2', paddingLeft:'12px'}}>
-        <small style={{...styles.statLabel, color:'#d3bfa2', fontWeight:'900', fontSize:'0.52rem'}}>
+      <div style={{ borderLeft: '2px solid #d3bfa2', paddingLeft: '12px' }}>
+        <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', fontSize: '0.52rem' }}>
           GROSS SETTLED
         </small>
-        <div style={{fontSize:'1.2rem', fontWeight:'900', color:'#d3bfa2', marginTop:'2px'}}>
-          ₹{Math.round(gross).toLocaleString()}
+        <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>
+          ₹{gross.toLocaleString()}
         </div>
-        <div style={{fontSize:'0.52rem', color:'#555', marginTop:'2px'}}>
-          NET ₹{net.toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
+        <div style={{ fontSize: '0.52rem', color: '#555', marginTop: '2px' }}>
+          NET ₹{Math.round(subtotalSum).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
         </div>
       </div>
     </>
@@ -3908,26 +3911,11 @@ const renderMonthHeatmap = () => {
                       {tenantConfig?.address?`${tenantConfig.address.street}, ${tenantConfig.address.city}`:"Address Loading..."}
                     </p>
                     <p style={{fontSize:'0.7rem',fontWeight:'800'}}>GSTIN: {tenantConfig?.gstin||"27AABCU1234F1Z5"}</p>
-                    {tenantConfig?.fssai && (
-  <p style={{fontSize:'0.65rem',fontWeight:'700',color:'#555',margin:'2px 0 0'}}>
-    FSSAI: {tenantConfig.fssai}
-  </p>
-)}
                   </div>
-<div style={{borderTop:'2px solid #000',borderBottom:'2px solid #000',padding:'8px 0',display:'flex',justifyContent:'space-between'}}>
-  <div>
-    <div style={{fontSize:'0.6rem',fontWeight:'900',color:'#666'}}>BILL NO.</div>
-    <div style={{fontSize:'1.1rem',fontWeight:'900'}}>#{tableBill.billNo}</div>
-  </div>
-  <div style={{textAlign:'center'}}>
-    <div style={{fontSize:'0.6rem',fontWeight:'900',color:'#666'}}>TODAY'S</div>
-    <div style={{fontSize:'0.8rem',fontWeight:'700',color:'#888'}}>#{tableBill.dailyBillNo ?? '—'}</div>
-  </div>
-  <div style={{textAlign:'right'}}>
-    <div style={{fontSize:'0.75rem',fontWeight:'800'}}>{tableBill.date}</div>
-    <div style={{fontSize:'0.7rem'}}>{tableBill.time}</div>
-  </div>
-</div>
+                  <div style={{borderTop:'2px solid #000',borderBottom:'2px solid #000',padding:'8px 0',display:'flex',justifyContent:'space-between'}}>
+                    <div><div style={{fontSize:'0.6rem',fontWeight:'900',color:'#666'}}>BILL NO.</div><div style={{fontSize:'1.1rem',fontWeight:'900'}}>#{tableBill.billNo}</div></div>
+                    <div style={{textAlign:'right'}}><div style={{fontSize:'0.75rem',fontWeight:'800'}}>{tableBill.date}</div><div style={{fontSize:'0.7rem'}}>{tableBill.time}</div></div>
+                  </div>
                   <div style={{padding:'10px 0'}}>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.6rem',fontWeight:'900',color:'#888',marginBottom:'10px'}}><span>ITEM DESCRIPTION</span><span>TOTAL</span></div>
 {tableBill.items.map((it,i)=>(
