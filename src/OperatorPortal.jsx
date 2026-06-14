@@ -376,6 +376,9 @@ const fetchManagementData = useCallback(async () => {
       axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
       axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] }))
     ]);
+    // ADD after the existing Promise.all in fetchManagementData:
+const tenantRes = await axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }));
+if (tenantRes.data) setTenantConfig(tenantRes.data);
     setInventory(invRes.data || []);
     setStaff(staffRes.data || []);
     setMenuItems(menuRes.data || []);
@@ -737,10 +740,16 @@ const generateBill = async (id) => {
   setDiscount(0);
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
-    const [res, countRes] = await Promise.all([
+    const [res, countRes, tenantRes] = await Promise.all([
       axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`),
-      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } }))
+      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } })),
+      axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
     ]);
+
+    // Always refresh tenantConfig so cgst/sgst/address are fresh
+    if (tenantRes.data) setTenantConfig(tenantRes.data);
+    const freshTenant = tenantRes.data || tenantConfig;
+
     const rawItems = res.data.flatMap(o => o.items);
     if (!rawItems.length) { setTableBill(null); return; }
 
@@ -761,20 +770,30 @@ const generateBill = async (id) => {
       return acc;
     }, []);
 
-    const taxPct   = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
-    const halfTax  = taxPct / 2;
-    const subtotal = aggregated.reduce((a, i) => a + i.subtotal, 0); // dishes total, NO tax
-    const cgst     = Math.round(subtotal * halfTax * 100) / 100;
-    const sgst     = Math.round(subtotal * halfTax * 100) / 100;
-    const grandTotal = subtotal + cgst + sgst;                       // tax ON TOP
+    // Use tenant-stored cgst/sgst percentages
+    const cgstPct  = (freshTenant?.config?.cgstPercentage ?? 2.5) / 100;
+    const sgstPct  = (freshTenant?.config?.sgstPercentage ?? 2.5) / 100;
+    const totalTaxPct = cgstPct + sgstPct;
+
+    const subtotal   = aggregated.reduce((a, i) => a + i.subtotal, 0);
+    const cgst       = Math.round(subtotal * cgstPct * 100) / 100;
+    const sgst       = Math.round(subtotal * sgstPct * 100) / 100;
+    const grandTotal = subtotal + cgst + sgst;
 
     setTableBill({
-      items:      aggregated,
-      subtotal,                 // ← dishes only
+      items:         aggregated,
+      subtotal,
       cgst,
       sgst,
-      total:      grandTotal,   // ← final payable
-      billNo:     countRes.data.nextBillNo,
+      cgstPct:       (cgstPct * 100).toFixed(1),
+      sgstPct:       (sgstPct * 100).toFixed(1),
+      total:         grandTotal,
+      billNo:        countRes.data.nextBillNo,
+      totalBillCount: (freshTenant?.totalBillCount || 0) + 1,
+      fssaiNumber:   freshTenant?.fssaiNumber || '',
+      address:       freshTenant?.address
+                       ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
+                       : '',
       date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
     });
@@ -3856,42 +3875,42 @@ const renderMonthHeatmap = () => {
     ))}
 
     {/* GST SPLIT */}
+{/* Replace the existing CGST/SGST block in the floor settlement strip */}
 {(() => {
-  const taxPct  = (tenantConfig?.config?.taxPercentage ?? 5) / 100;
-  const halfTax = taxPct / 2;
-  const gross   = dailySettlementBreakdown.gross;           // this is grandTotal sum
-  // If you now store cgst/sgst in each settlement, sum them directly from DB instead.
-  // Fallback approximation (tax-exclusive basis):
-  const subtotalSum = gross / (1 + taxPct);
-  const cgst = Math.round(subtotalSum * halfTax);
-  const sgst = cgst;
+  const cgstRate = (tenantConfig?.config?.cgstPercentage ?? 2.5) / 100;
+  const sgstRate = (tenantConfig?.config?.sgstPercentage ?? 2.5) / 100;
+  const totalTax = cgstRate + sgstRate;
+  const gross    = dailySettlementBreakdown.gross;
+  const subtotal = gross / (1 + totalTax);
+  const cgst     = Math.round(subtotal * cgstRate);
+  const sgst     = Math.round(subtotal * sgstRate);
   return (
     <>
-      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
-        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
-          CGST {(halfTax * 100).toFixed(1)}%
+      <div style={{ borderRight:'1px solid #1c1f26', paddingRight:'12px' }}>
+        <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
+          CGST {(cgstRate * 100).toFixed(1)}%
         </small>
-        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
+        <div style={{ fontSize:'1rem', fontWeight:'900', color:'#8a704d', marginTop:'4px' }}>
           ₹{cgst.toLocaleString()}
         </div>
       </div>
-      <div style={{ borderRight: '1px solid #1c1f26', paddingRight: '12px' }}>
-        <small style={{ ...styles.statLabel, color: '#8a704d', fontSize: '0.52rem', letterSpacing: '0.5px' }}>
-          SGST {(halfTax * 100).toFixed(1)}%
+      <div style={{ borderRight:'1px solid #1c1f26', paddingRight:'12px' }}>
+        <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
+          SGST {(sgstRate * 100).toFixed(1)}%
         </small>
-        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#8a704d', marginTop: '4px' }}>
+        <div style={{ fontSize:'1rem', fontWeight:'900', color:'#8a704d', marginTop:'4px' }}>
           ₹{sgst.toLocaleString()}
         </div>
       </div>
-      <div style={{ borderLeft: '2px solid #d3bfa2', paddingLeft: '12px' }}>
-        <small style={{ ...styles.statLabel, color: '#d3bfa2', fontWeight: '900', fontSize: '0.52rem' }}>
+      <div style={{ borderLeft:'2px solid #d3bfa2', paddingLeft:'12px' }}>
+        <small style={{...styles.statLabel, color:'#d3bfa2', fontWeight:'900', fontSize:'0.52rem'}}>
           GROSS SETTLED
         </small>
-        <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#d3bfa2', marginTop: '2px' }}>
+        <div style={{ fontSize:'1.2rem', fontWeight:'900', color:'#d3bfa2', marginTop:'2px' }}>
           ₹{gross.toLocaleString()}
         </div>
-        <div style={{ fontSize: '0.52rem', color: '#555', marginTop: '2px' }}>
-          NET ₹{Math.round(subtotalSum).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
+        <div style={{ fontSize:'0.52rem', color:'#555', marginTop:'2px' }}>
+          NET ₹{Math.round(subtotal).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
         </div>
       </div>
     </>
@@ -3900,114 +3919,164 @@ const renderMonthHeatmap = () => {
   </div>
 </div>
               </div>
-              {tableBill && (
-                <motion.div initial={{x:20,opacity:0}} animate={{x:0,opacity:1}} style={styles.receipt}>
-                  <div style={{textAlign:'center',marginBottom:'20px'}}>
-                    <h4 style={{margin:0,fontSize:'0.7rem',letterSpacing:'2px',fontWeight:'800'}}>TAX INVOICE</h4>
-                    <h1 style={{margin:'5px 0',fontSize:'1.7rem',fontWeight:'900',textTransform:'uppercase'}}>
-                      {tenantConfig?.name||tenantId.split('_').join(' ')}
-                    </h1>
-                    <p style={{fontSize:'0.65rem',fontWeight:'700',color:'#444',margin:'0 0 5px'}}>
-                      {tenantConfig?.address?`${tenantConfig.address.street}, ${tenantConfig.address.city}`:"Address Loading..."}
-                    </p>
-                    <p style={{fontSize:'0.7rem',fontWeight:'800'}}>GSTIN: {tenantConfig?.gstin||"27AABCU1234F1Z5"}</p>
-                  </div>
-                  <div style={{borderTop:'2px solid #000',borderBottom:'2px solid #000',padding:'8px 0',display:'flex',justifyContent:'space-between'}}>
-                    <div><div style={{fontSize:'0.6rem',fontWeight:'900',color:'#666'}}>BILL NO.</div><div style={{fontSize:'1.1rem',fontWeight:'900'}}>#{tableBill.billNo}</div></div>
-                    <div style={{textAlign:'right'}}><div style={{fontSize:'0.75rem',fontWeight:'800'}}>{tableBill.date}</div><div style={{fontSize:'0.7rem'}}>{tableBill.time}</div></div>
-                  </div>
-                  <div style={{padding:'10px 0'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.6rem',fontWeight:'900',color:'#888',marginBottom:'10px'}}><span>ITEM DESCRIPTION</span><span>TOTAL</span></div>
-{tableBill.items.map((it,i)=>(
-  <div key={i} style={{display:'flex',justifyContent:'space-between',marginBottom:'10px',fontSize:'0.85rem'}}>
-    <span style={{fontWeight:'700'}}>
-      {it.quantity}x {it.name}
-      {it.portion && it.portion !== 'Single' && <span style={{fontSize:'0.7rem',color:'#999'}}> ({it.portion})</span>}
-      <br/>
-      <small style={{color:'#999'}}>
-        @ ₹{it.pricePerUnit
-          ? Number(it.pricePerUnit).toFixed(0)
-          : it.quantity > 0
-            ? (it.subtotal / it.quantity).toFixed(0)
-            : '—'
-        }
-      </small>
-    </span>
-    <b>₹{it.subtotal}</b>
-  </div>
-))}
-                  </div>
-                  <div style={{borderTop:'1px solid #eee',paddingTop:'15px',fontSize:'0.8rem'}}>
-             {/* In receipt JSX — replace hardcoded 1.05 and 0.025 */}
-<div style={styles.receiptRow}>
-  <span>Subtotal</span>
-  <span>₹{tableBill.subtotal.toFixed(2)}</span>
-</div>
-<div style={styles.receiptRow}>
-  <span>CGST ({((tenantConfig?.config?.taxPercentage ?? 5) / 2).toFixed(1)}%)</span>
-  <span>₹{tableBill.cgst.toFixed(2)}</span>
-</div>
-<div style={styles.receiptRow}>
-  <span>SGST ({((tenantConfig?.config?.taxPercentage ?? 5) / 2).toFixed(1)}%)</span>
-  <span>₹{tableBill.sgst.toFixed(2)}</span>
-</div>
-<p style={{ fontSize: '0.6rem', fontStyle: 'italic', marginTop: '8px', fontWeight: '700', color: '#666' }}>
-  Rupees: {numberToWords(Math.round(tableBill.total - (tableBill.total * (discount / 100))))}
-</p>
-                  </div>
-                  <div style={{borderTop:'1px dashed #ddd',marginTop:'15px',paddingTop:'15px'}}>
-                    <div style={styles.receiptRow}>
-                      <span style={{fontWeight:'900'}}>DISCOUNT %</span>
-                      <input type="number" value={discount} onChange={e=>setDiscount(e.target.value)} style={styles.discountInput}/>
-                    </div>
-                  </div>
-                  <div style={{margin:'20px 0'}}>
-                    <div style={{display:'flex',gap:'5px',marginBottom:'20px',background:'#f5f5f5',padding:'4px',borderRadius:'10px'}}>
-                      <button onClick={()=>setActivePaymentType('full')} style={activePaymentType==='full'?styles.activeMiniTab:styles.miniTab}>SINGLE MODE</button>
-                      <button onClick={()=>setActivePaymentType('split')} style={activePaymentType==='split'?styles.activeMiniTab:styles.miniTab}>SPLIT BILL</button>
-                    </div>
-                    {activePaymentType==='split' ? (
-                      <div style={{display:'flex',flexDirection:'column',gap:'15px'}}>
-                        {[['CASH',<Banknote size={14}/>,'cash'],['UPI',<Smartphone size={14}/>,'upi'],['CARD',<CreditCard size={14}/>,'card']].map(([lbl,ico,key])=>(
-                          <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                            <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'0.75rem',fontWeight:'900',color:'#555'}}>{ico} {lbl}</div>
-                            <input type="number" placeholder="₹0" style={styles.billInput} value={paymentModes[key]} onChange={e=>setPaymentModes({...paymentModes,[key]:e.target.value})}/>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
-                        {['cash','upi','card'].map(m=>(
-                          <button key={m} onClick={()=>setSelectedSingleMode(m)} style={selectedSingleMode===m?styles.activeModeBtn:styles.modeBtn}>
-                            {m==='cash'&&<Banknote size={16}/>}{m==='upi'&&<Smartphone size={16}/>}{m==='card'&&<CreditCard size={16}/>}
-                            {m.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{borderTop:'2px solid #000',paddingTop:'15px'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'1.5rem',fontWeight:'900'}}>
-                      <span>GRAND TOTAL</span>
-                      <span>₹{Math.round(tableBill.total-(tableBill.total*(discount/100)))}</span>
-                    </div>
-                    <div style={{fontSize:'0.6rem',fontWeight:'800',color:'#888',textAlign:'right',marginTop:'5px'}}>
-                      MODE: {activePaymentType==='split'?'SPLIT PAYMENT':selectedSingleMode.toUpperCase()}
-                    </div>
-                  </div>
-<button 
-    onClick={settleBill} 
-    style={{
-        ...styles.settleBtn, marginTop: '20px',
-        opacity: isSettling ? 0.5 : 1,
-        cursor: isSettling ? 'not-allowed' : 'pointer'
-    }}
-    disabled={isSettling}
->
-    {isSettling ? 'PROCESSING...' : 'FINALIZE SETTLEMENT'}
-</button>                  <div style={{textAlign:'center',marginTop:'20px',fontSize:'0.6rem',fontWeight:'900',color:'#ccc',letterSpacing:'1px'}}>POWERED BY PRATYEKSHA</div>
-                </motion.div>
-              )}
+{tableBill && (
+  <motion.div initial={{x:20,opacity:0}} animate={{x:0,opacity:1}} style={styles.receipt}>
+
+    {/* ── HEADER ── */}
+    <div style={{textAlign:'center', marginBottom:'16px'}}>
+      <h4 style={{margin:0, fontSize:'0.65rem', letterSpacing:'2px', fontWeight:'800', color:'#888'}}>TAX INVOICE</h4>
+      <h1 style={{margin:'5px 0', fontSize:'1.6rem', fontWeight:'900', textTransform:'uppercase'}}>
+        {tenantConfig?.name || tenantId.split('_').join(' ')}
+      </h1>
+      <p style={{fontSize:'0.65rem', color:'#555', margin:'0 0 3px', fontWeight:'600'}}>
+        {tableBill.address || 'Address not configured'}
+      </p>
+      <p style={{fontSize:'0.68rem', fontWeight:'800', margin:'2px 0'}}>
+        GSTIN: {tenantConfig?.gstin || '—'}
+      </p>
+      {tableBill.fssaiNumber && (
+        <p style={{fontSize:'0.65rem', fontWeight:'700', margin:'2px 0', color:'#666'}}>
+          FSSAI: {tableBill.fssaiNumber}
+        </p>
+      )}
+    </div>
+
+    {/* ── BILL META ── */}
+    <div style={{borderTop:'2px solid #000', borderBottom:'2px solid #000', padding:'8px 0', display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'12px'}}>
+      <div>
+        <div style={{fontSize:'0.55rem', fontWeight:'900', color:'#888', letterSpacing:'1px'}}>BILL NO. (TODAY)</div>
+        <div style={{fontSize:'1.1rem', fontWeight:'900'}}>#{tableBill.billNo}</div>
+        <div style={{fontSize:'0.55rem', color:'#aaa', marginTop:'2px'}}>Total #{tableBill.totalBillCount}</div>
+      </div>
+      <div>
+        <div style={{fontSize:'0.55rem', fontWeight:'900', color:'#888', letterSpacing:'1px'}}>TABLE</div>
+        <div style={{fontSize:'1.1rem', fontWeight:'900'}}>{selectedTable}</div>
+      </div>
+      <div style={{textAlign:'right'}}>
+        <div style={{fontSize:'0.75rem', fontWeight:'800'}}>{tableBill.date}</div>
+        <div style={{fontSize:'0.7rem', color:'#666'}}>{tableBill.time}</div>
+      </div>
+    </div>
+
+    {/* ── ITEMS ── */}
+    <div style={{padding:'6px 0'}}>
+      <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.58rem', fontWeight:'900', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>
+        <span>ITEM DESCRIPTION</span><span>TOTAL</span>
+      </div>
+      {tableBill.items.map((it, i) => (
+        <div key={i} style={{display:'flex', justifyContent:'space-between', marginBottom:'9px', fontSize:'0.82rem'}}>
+          <span style={{fontWeight:'700'}}>
+            {it.quantity}x {it.name}
+            {it.portion && it.portion !== 'Single' && (
+              <span style={{fontSize:'0.68rem', color:'#999'}}> ({it.portion})</span>
+            )}
+            <br/>
+            <small style={{color:'#999', fontSize:'0.65rem'}}>
+              @ ₹{it.pricePerUnit
+                ? Number(it.pricePerUnit).toFixed(0)
+                : it.quantity > 0 ? (it.subtotal / it.quantity).toFixed(0) : '—'}
+            </small>
+          </span>
+          <b>₹{Number(it.subtotal).toFixed(2)}</b>
+        </div>
+      ))}
+    </div>
+
+    {/* ── TAX BREAKDOWN ── */}
+    <div style={{borderTop:'1px solid #eee', paddingTop:'12px', fontSize:'0.8rem'}}>
+      <div style={styles.receiptRow}>
+        <span>Subtotal (excl. tax)</span>
+        <span>₹{Number(tableBill.subtotal).toFixed(2)}</span>
+      </div>
+      <div style={styles.receiptRow}>
+        <span>CGST @ {tableBill.cgstPct}%</span>
+        <span>₹{Number(tableBill.cgst).toFixed(2)}</span>
+      </div>
+      <div style={styles.receiptRow}>
+        <span>SGST @ {tableBill.sgstPct}%</span>
+        <span>₹{Number(tableBill.sgst).toFixed(2)}</span>
+      </div>
+      <p style={{fontSize:'0.58rem', fontStyle:'italic', marginTop:'8px', fontWeight:'700', color:'#888'}}>
+        {numberToWords(Math.round(tableBill.total - (tableBill.total * (discount / 100))))}
+      </p>
+    </div>
+
+    {/* ── DISCOUNT ── */}
+    <div style={{borderTop:'1px dashed #ddd', marginTop:'12px', paddingTop:'12px'}}>
+      <div style={styles.receiptRow}>
+        <span style={{fontWeight:'900'}}>DISCOUNT %</span>
+        <input type="number" value={discount}
+          onChange={e => setDiscount(e.target.value)}
+          style={styles.discountInput}/>
+      </div>
+      {discount > 0 && (
+        <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
+          <span>Discount amount</span>
+          <span>- ₹{(tableBill.total * (discount / 100)).toFixed(2)}</span>
+        </div>
+      )}
+    </div>
+
+    {/* ── PAYMENT MODE ── */}
+    <div style={{margin:'16px 0'}}>
+      <div style={{display:'flex', gap:'5px', marginBottom:'16px', background:'#f5f5f5', padding:'4px', borderRadius:'10px'}}>
+        <button onClick={() => setActivePaymentType('full')}
+          style={activePaymentType === 'full' ? styles.activeMiniTab : styles.miniTab}>SINGLE MODE</button>
+        <button onClick={() => setActivePaymentType('split')}
+          style={activePaymentType === 'split' ? styles.activeMiniTab : styles.miniTab}>SPLIT BILL</button>
+      </div>
+      {activePaymentType === 'split' ? (
+        <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+          {[['CASH', <Banknote size={14}/>, 'cash'], ['UPI', <Smartphone size={14}/>, 'upi'], ['CARD', <CreditCard size={14}/>, 'card']].map(([lbl, ico, key]) => (
+            <div key={key} style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'0.75rem', fontWeight:'900', color:'#555'}}>
+                {ico} {lbl}
+              </div>
+              <input type="number" placeholder="₹0" style={styles.billInput}
+                value={paymentModes[key]}
+                onChange={e => setPaymentModes({...paymentModes, [key]: e.target.value})}/>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px'}}>
+          {['cash','upi','card'].map(m => (
+            <button key={m} onClick={() => setSelectedSingleMode(m)}
+              style={selectedSingleMode === m ? styles.activeModeBtn : styles.modeBtn}>
+              {m === 'cash' && <Banknote size={16}/>}
+              {m === 'upi'  && <Smartphone size={16}/>}
+              {m === 'card' && <CreditCard size={16}/>}
+              {m.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {/* ── GRAND TOTAL ── */}
+    <div style={{borderTop:'2px solid #000', paddingTop:'14px'}}>
+      <div style={{display:'flex', justifyContent:'space-between', fontSize:'1.4rem', fontWeight:'900'}}>
+        <span>GRAND TOTAL</span>
+        <span>₹{Math.round(tableBill.total - (tableBill.total * (discount / 100)))}</span>
+      </div>
+      <div style={{fontSize:'0.58rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'4px'}}>
+        MODE: {activePaymentType === 'split' ? 'SPLIT PAYMENT' : selectedSingleMode.toUpperCase()}
+      </div>
+    </div>
+
+    {/* ── SETTLE BUTTON ── */}
+    <button onClick={settleBill}
+      style={{...styles.settleBtn, marginTop:'18px', opacity: isSettling ? 0.5 : 1, cursor: isSettling ? 'not-allowed' : 'pointer'}}
+      disabled={isSettling}>
+      {isSettling ? 'PROCESSING...' : 'FINALIZE SETTLEMENT'}
+    </button>
+
+    <div style={{textAlign:'center', marginTop:'18px', fontSize:'0.58rem', fontWeight:'900', color:'#ccc', letterSpacing:'1px'}}>
+      POWERED BY PRATYEKSHA
+    </div>
+
+  </motion.div>
+)}
             </motion.div>
           )}
 
