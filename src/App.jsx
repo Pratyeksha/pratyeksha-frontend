@@ -3600,8 +3600,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
   <div style={{
     position: 'absolute', top: '15px', left: '15px',
     display: 'flex',
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(211,191,162,0.18)',
+    background: 'rgba(0,0,0,0.3)',
+    border: '1px solid rgba(255,255,255,0.08)',
     borderRadius: '20px',
     padding: '4px',
     gap: '4px',
@@ -3614,19 +3614,22 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         display: 'flex', alignItems: 'center', gap: '5px',
         padding: '7px 12px', borderRadius: '16px', border: 'none',
         cursor: 'pointer',
-        background: filterVegOnly ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : 'transparent',
+        background: filterVegOnly
+          ? 'rgba(74,124,63,0.25)'
+          : 'transparent',
+        outline: filterVegOnly ? '1px solid rgba(74,124,63,0.6)' : '1px solid transparent',
         transition: 'all 0.2s ease'
       }}
     >
-      <Leaf size={13} strokeWidth={2} color={filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'} />
+      <Leaf size={13} strokeWidth={2.5} color={filterVegOnly ? '#6dba96' : 'rgba(255,255,255,0.25)'} />
       <span style={{
         fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'
+        color: filterVegOnly ? '#6dba96' : 'rgba(255,255,255,0.25)'
       }}>
         {language === 'mr' ? 'शाकाहारी' : 'VEG'}
       </span>
     </button>
- 
+
     {/* NON-VEG */}
     <button
       onClick={() => setFilterVegOnly(false)}
@@ -3634,14 +3637,17 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         display: 'flex', alignItems: 'center', gap: '5px',
         padding: '7px 12px', borderRadius: '16px', border: 'none',
         cursor: 'pointer',
-        background: !filterVegOnly ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : 'transparent',
+        background: !filterVegOnly
+          ? 'rgba(138,48,48,0.25)'
+          : 'transparent',
+        outline: !filterVegOnly ? '1px solid rgba(138,48,48,0.6)' : '1px solid transparent',
         transition: 'all 0.2s ease'
       }}
     >
-      <Drumstick size={13} strokeWidth={2} color={!filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'} />
+      <Drumstick size={13} strokeWidth={2.5} color={!filterVegOnly ? '#ff7070' : 'rgba(255,255,255,0.25)'} />
       <span style={{
         fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: !filterVegOnly ? '#0c0c0c' : 'rgba(211,191,162,0.4)'
+        color: !filterVegOnly ? '#ff7070' : 'rgba(255,255,255,0.25)'
       }}>
         {language === 'mr' ? 'मांसाहारी' : 'NON-VEG'}
       </span>
@@ -3696,18 +3702,28 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 <div style={styles.itemContentLeft}>
   <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
   {/* VEG / NON-VEG INDICATOR */}
-<span title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'} style={{
-  width: '20px', height: '20px', borderRadius: '7px',
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  flexShrink: 0,
-  background: item.isVeg !== false ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.05)',
-  border: `1px solid ${item.isVeg !== false ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.18)'}`
-}}>
-  {item.isVeg !== false
-    ? <Leaf size={11} strokeWidth={2.5} color="#d3bfa2" />
-    : <Drumstick size={11} strokeWidth={2.5} color="rgba(211,191,162,0.55)" />
-  }
-</span>
+{hasNonVegInView && !isOnlyVegTenant && (
+  <span
+    title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'}
+    style={{
+      width: '20px', height: '20px', borderRadius: '7px',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+      background: item.isVeg !== false
+        ? 'rgba(74,124,63,0.15)'
+        : 'rgba(138,48,48,0.15)',
+      border: `1px solid ${item.isVeg !== false
+        ? 'rgba(74,124,63,0.45)'
+        : 'rgba(138,48,48,0.45)'}`
+    }}
+  >
+    {item.isVeg !== false
+      ? <Leaf size={11} strokeWidth={2.5} color="#6dba96" />
+      : <Drumstick size={11} strokeWidth={2.5} color="#ff7070" />
+    }
+  </span>
+)}
+
   {language === 'mr' ? item.name_mr : item.name}
   
 
