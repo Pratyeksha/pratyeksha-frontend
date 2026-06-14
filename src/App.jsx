@@ -3702,7 +3702,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 <div style={styles.itemContentLeft}>
   <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
   {/* VEG / NON-VEG INDICATOR */}
-{hasNonVegInView && !isOnlyVegTenant && (
+{/* {hasNonVegInView && !isOnlyVegTenant && (
   <span
     title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'}
     style={{
@@ -3722,7 +3722,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       : <Drumstick size={11} strokeWidth={2.5} color="#ff7070" />
     }
   </span>
-)}
+)} */}
 
   {language === 'mr' ? item.name_mr : item.name}
   
