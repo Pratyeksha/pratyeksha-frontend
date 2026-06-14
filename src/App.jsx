@@ -1876,36 +1876,19 @@ const finalBillItems = useMemo(() => {
 
 const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
-  const cgstPct = (rd?.config?.cgstPercentage ?? 2.5);
-  const sgstPct = (rd?.config?.sgstPercentage ?? 2.5);
-  const cgstRate = cgstPct / 100;
-  const sgstRate = sgstPct / 100;
-  const totalTaxRate = cgstRate + sgstRate;
+  const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
+  const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
+  const totalTaxRate = (cgstPct + sgstPct) / 100;
 
-  const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-  // Items are priced INCLUSIVE of tax, so back-calculate:
-  const taxableAmt = subtotal / (1 + totalTaxRate);
-  const cgstAmt    = taxableAmt * cgstRate;
-  const sgstAmt    = taxableAmt * sgstRate;
-  const grandTotal = subtotal; // grand total = what customer pays (tax already inside)
+  const subtotal    = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const taxableAmt  = subtotal / (1 + totalTaxRate);
+  const cgstAmt     = taxableAmt * (cgstPct / 100);
+  const sgstAmt     = taxableAmt * (sgstPct / 100);
+  const grandTotal  = subtotal;
 
-  const fssai = rd?.fssaiNumber ? `FSSAI No: ${rd.fssaiNumber}` : '';
-  const addr  = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
-                  .filter(Boolean).join(', ');
-
-  const itemsHTML = finalBillItems.map(item => `
-    <tr>
-      <td style="padding:9px 8px; border-bottom:1px solid #f0f0f0; font-size:13px; color:#111;">
-        ${item.quantity}× ${item.name}
-        ${item.portion && item.portion !== 'Single' ? `<span style="color:#c9a84c;font-size:11px;"> (${item.portion})</span>` : ''}
-        ${item.isExtraItem ? `<span style="font-size:10px;color:#888;"> [Extra]</span>` : ''}
-        <br/><span style="font-size:10px;color:#999;">@ ₹${item.pricePerUnit || (item.subtotal / item.quantity)} each</span>
-      </td>
-      <td style="padding:9px 8px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:700; font-size:13px; color:#111;">
-        ₹${item.subtotal.toFixed(2)}
-      </td>
-    </tr>
-  `).join('');
+  const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
+    .filter(Boolean).join(', ');
+  const fssai = rd?.fssaiNumber ? rd.fssaiNumber : '';
 
   const now = new Date().toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -1913,125 +1896,151 @@ const autoDownloadInvoicePDF = useCallback(() => {
     hour: '2-digit', minute: '2-digit', hour12: true
   });
 
+  const itemRows = finalBillItems.map(item => `
+    <tr>
+      <td>
+        <span class="item-name">${item.quantity}× ${item.name}${item.portion && item.portion !== 'Single' ? ` <span class="portion">(${item.portion})</span>` : ''}${item.isExtraItem ? ' <span class="extra-tag">Extra</span>' : ''}</span>
+        <span class="item-rate">@ ₹${item.pricePerUnit || 0} each</span>
+      </td>
+      <td class="amt">₹${(item.subtotal || 0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
   const html = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<title>Invoice – ${rd?.name || 'Restaurant'}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    font-family: 'Arial', sans-serif;
+    font-family: Arial, sans-serif;
     background: #fff; color: #111;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .page {
-    width: 210mm; min-height: 297mm;
-    margin: 0 auto; padding: 28px 32px;
-    background: #fff;
-  }
+  .page { width:100%; max-width:680px; margin:0 auto; padding:32px 36px 40px; }
+
+  /* ── GOLD BARS ── */
   .gold-bar {
     height: 4px;
     background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
-    border-radius: 3px; margin-bottom: 22px;
+    border-radius: 3px;
   }
-  .header { text-align:center; margin-bottom:18px; }
+  .gold-bar-top    { margin-bottom: 26px; }
+  .gold-bar-bottom { margin-top: 26px; }
+
+  /* ── HEADER ── */
+  .header { text-align: center; margin-bottom: 20px; }
   .eyebrow {
-    font-size:9px; font-weight:900; letter-spacing:4px;
-    color:#c9a84c; text-transform:uppercase; margin-bottom:8px;
+    font-size: 8px; font-weight: 900; letter-spacing: 5px;
+    color: #c9a84c; text-transform: uppercase; margin-bottom: 10px;
   }
   .rest-name {
-    font-size:24px; font-weight:900; letter-spacing:-0.5px;
-    color:#0c0c0c; margin-bottom:6px; line-height:1.2;
+    font-size: 26px; font-weight: 900; color: #0c0c0c;
+    letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 8px;
   }
-  .rest-sub { font-size:10px; color:#666; line-height:1.9; }
-  .fssai-badge {
-    display:inline-block; margin-top:6px;
-    padding:3px 10px; border-radius:4px;
-    background:#f0f8f0; border:1px solid #c8e6c9;
-    font-size:9px; font-weight:700; color:#2e7d32;
-    letter-spacing:0.5px;
+  .rest-sub { font-size: 11px; color: #555; line-height: 1.9; }
+  .fssai {
+    display: inline-block; margin-top: 8px;
+    padding: 4px 12px; border-radius: 5px;
+    background: #f1f8f1; border: 1px solid #b2dfb2;
+    font-size: 10px; font-weight: 700; color: #2e7d32; letter-spacing: 0.3px;
   }
-  .divider   { border:none; border-top:2px solid #111; margin:14px 0; }
-  .divider-light { border:none; border-top:1px solid #e0e0e0; margin:10px 0; }
-  .divider-dashed { border:none; border-top:1px dashed #ccc; margin:10px 0; }
-  .meta-row  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
-  .meta-label { font-size:9px; font-weight:800; letter-spacing:1px; color:#999; text-transform:uppercase; margin-bottom:3px; }
-  .meta-val   { font-weight:700; font-size:13px; color:#111; }
-  .bill-chip {
-    background:#0c0c0c; color:#d3bfa2;
-    padding:6px 14px; border-radius:8px;
-    font-size:11px; font-weight:900; letter-spacing:1px;
+
+  /* ── DIVIDERS ── */
+  .div-solid  { border: none; border-top: 2px solid #111; margin: 16px 0; }
+  .div-light  { border: none; border-top: 1px solid #e0e0e0; margin: 10px 0; }
+  .div-dashed { border: none; border-top: 1px dashed #ccc; margin: 14px 0; }
+
+  /* ── META ROW ── */
+  .meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .meta-label { font-size: 8.5px; font-weight: 800; letter-spacing: 1.5px; color: #aaa; text-transform: uppercase; margin-bottom: 4px; }
+  .meta-val   { font-size: 14px; font-weight: 700; color: #111; }
+  .meta-sub   { font-size: 11px; color: #888; margin-top: 3px; }
+  .sac-chip {
+    display: inline-block; background: #0c0c0c; color: #d3bfa2;
+    padding: 5px 12px; border-radius: 7px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.5px; margin-top: 6px;
   }
-  table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+
+  /* ── ITEMS TABLE ── */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
   thead th {
-    font-size:9px; font-weight:800; letter-spacing:2px; text-transform:uppercase;
-    color:#999; padding:8px 8px 10px; text-align:left; border-bottom:2px solid #111;
+    font-size: 8.5px; font-weight: 800; letter-spacing: 2px;
+    text-transform: uppercase; color: #999;
+    padding: 8px 8px 10px; text-align: left; border-bottom: 2px solid #111;
   }
-  thead th:last-child { text-align:right; }
-  .tax-section { margin-top:8px; }
+  thead th.amt { text-align: right; }
+  tbody td {
+    padding: 10px 8px; border-bottom: 1px solid #f3f3f3; vertical-align: top;
+  }
+  tbody td.amt { text-align: right; font-weight: 700; font-size: 13px; white-space: nowrap; }
+  .item-name  { display: block; font-size: 13px; font-weight: 600; color: #111; }
+  .item-rate  { display: block; font-size: 10px; color: #999; margin-top: 2px; }
+  .portion    { color: #c9a84c; font-size: 11px; }
+  .extra-tag  {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    background: rgba(201,168,76,0.1); color: #8a6a20;
+    border: 1px solid rgba(201,168,76,0.25);
+  }
+
+  /* ── TAX SECTION ── */
+  .tax-block { margin-top: 6px; }
   .tax-row {
-    display:flex; justify-content:space-between;
-    font-size:12px; padding:5px 8px; color:#555;
+    display: flex; justify-content: space-between;
+    padding: 5px 8px; font-size: 12px; color: #555;
   }
-  .tax-row.subtotal-row { color:#111; font-weight:600; }
-  .grand-total {
-    display:flex; justify-content:space-between;
-    padding:13px 8px 0; border-top:2px solid #111; margin-top:8px;
+  .tax-row.sub { color: #111; font-weight: 600; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 4px; }
+  .grand {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 14px 8px 6px; border-top: 2.5px solid #111; margin-top: 8px;
   }
-  .grand-total span:first-child {
-    font-size:11px; font-weight:900; letter-spacing:1px;
-    text-transform:uppercase; color:#111;
-  }
-  .grand-total span:last-child { font-size:26px; font-weight:900; color:#7a5a20; }
-  .words-row {
-    text-align:right; font-size:10px; color:#999;
-    font-style:italic; padding:4px 8px 0;
-  }
-  .sac-row {
-    text-align:right; font-size:9px; color:#bbb;
-    padding:4px 8px 0; letter-spacing:0.3px;
-  }
-  .footer { text-align:center; margin-top:24px; }
-  .footer-msg { font-size:12px; color:#555; margin-bottom:8px; font-style:italic; }
-  .footer-brand { font-size:8px; color:#ccc; letter-spacing:2px; text-transform:uppercase; font-weight:800; }
-  .gold-bar-bottom {
-    height:3px;
-    background: linear-gradient(90deg,#bda88a,#c9a84c,#f0dca0,#c9a84c,#bda88a);
-    border-radius:3px; margin-top:20px;
-  }
+  .grand-label { font-size: 11px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+  .grand-amt   { font-size: 28px; font-weight: 900; color: #7a5a20; }
+  .words { text-align: right; font-size: 10px; color: #999; font-style: italic; padding: 4px 8px 0; }
+  .gst-note { text-align: right; font-size: 9px; color: #bbb; padding: 3px 8px 0; }
+
+  /* ── FOOTER ── */
+  .footer { text-align: center; margin-top: 22px; }
+  .footer-msg   { font-size: 13px; color: #555; font-style: italic; margin-bottom: 6px; }
+  .footer-brand { font-size: 8px; color: #ccc; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 800; }
+
   @media print {
-    @page { size:A4; margin:0; }
-    body { background:#fff !important; }
-    .page { padding:20px 28px !important; }
-    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    @page { size: A4 portrait; margin: 0; }
+    body  { background: #fff !important; }
+    .page { padding: 24px 30px 32px !important; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="gold-bar"></div>
 
-  <!-- HEADER -->
+  <div class="gold-bar gold-bar-top"></div>
+
+  <!-- RESTAURANT HEADER -->
   <div class="header">
-    <div class="eyebrow">TAX INVOICE</div>
+    <div class="eyebrow">Tax Invoice</div>
     <div class="rest-name">${rd?.name || 'RESTAURANT'}</div>
     <div class="rest-sub">
       ${addr ? `${addr}<br/>` : ''}
-      ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
-      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `<strong>GSTIN: ${rd.gstin}</strong>` : 'GSTIN: PENDING'}
+      ${rd?.contact ? `Tel: ${rd.contact}` : ''}
+      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING'
+        ? `<br/><strong>GSTIN: ${rd.gstin}</strong>`
+        : '<br/>GSTIN: Pending'}
     </div>
-    ${fssai ? `<div class="fssai-badge">🛡️ ${fssai}</div>` : ''}
+    ${fssai ? `<div class="fssai">🛡️ FSSAI No: ${fssai}</div>` : ''}
   </div>
 
-  <hr class="divider"/>
+  <hr class="div-solid"/>
 
   <!-- BILL META -->
-  <div class="meta-row">
+  <div class="meta">
     <div>
-      <div class="meta-label">Customer</div>
-      <div class="meta-val">${customerInfo.name || '—'}</div>
-      <div style="font-size:11px;color:#888;margin-top:3px;">
+      <div class="meta-label">Billed To</div>
+      <div class="meta-val">${customerInfo.name || 'Guest'}</div>
+      <div class="meta-sub">
         ${customerInfo.phone ? `+91 ${customerInfo.phone}` : ''}
         ${tableNumber ? ` &nbsp;·&nbsp; Table ${tableNumber}` : ''}
       </div>
@@ -2039,32 +2048,29 @@ const autoDownloadInvoicePDF = useCallback(() => {
     <div style="text-align:right;">
       <div class="meta-label">Date &amp; Time</div>
       <div class="meta-val" style="font-size:12px;">${now}</div>
-      <div class="bill-chip" style="margin-top:6px;">SAC: 996331</div>
+      <div class="sac-chip">SAC: 996331</div>
     </div>
   </div>
 
-  <hr class="divider"/>
+  <hr class="div-solid"/>
 
-  <!-- ITEMS TABLE -->
+  <!-- ITEMS -->
   <table>
     <thead>
       <tr>
         <th>Item Description</th>
-        <th style="text-align:right;">Amount</th>
+        <th class="amt">Amount</th>
       </tr>
     </thead>
-    <tbody>
-      ${itemsHTML}
-    </tbody>
+    <tbody>${itemRows}</tbody>
   </table>
 
   <!-- TAX BREAKDOWN -->
-  <div class="tax-section">
-    <div class="tax-row subtotal-row">
+  <div class="tax-block">
+    <div class="tax-row sub">
       <span>Subtotal (excl. tax)</span>
       <span>₹${taxableAmt.toFixed(2)}</span>
     </div>
-    <hr class="divider-light"/>
     <div class="tax-row">
       <span>CGST @ ${cgstPct}%</span>
       <span>₹${cgstAmt.toFixed(2)}</span>
@@ -2073,46 +2079,54 @@ const autoDownloadInvoicePDF = useCallback(() => {
       <span>SGST @ ${sgstPct}%</span>
       <span>₹${sgstAmt.toFixed(2)}</span>
     </div>
-    <div class="grand-total">
-      <span>Grand Total</span>
-      <span>₹${grandTotal.toLocaleString('en-IN')}</span>
+    <div class="grand">
+      <span class="grand-label">Grand Total</span>
+      <span class="grand-amt">₹${grandTotal.toLocaleString('en-IN')}</span>
     </div>
-    <div class="words-row">
-      <em>Amount in words: ${numberToWordsClient(Math.round(grandTotal))}</em>
-    </div>
-    <div class="sac-row">GST Rate: ${(cgstPct + sgstPct).toFixed(1)}% &nbsp;·&nbsp; SAC Code: 996331</div>
+    <div class="words"><em>${numberToWordsClient(Math.round(grandTotal))}</em></div>
+    <div class="gst-note">GST Rate: ${(cgstPct + sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%) &nbsp;·&nbsp; SAC 996331</div>
   </div>
 
-  <hr class="divider-dashed"/>
+  <hr class="div-dashed"/>
 
+  <!-- FOOTER -->
   <div class="footer">
     <div class="footer-msg">Thank you for dining with us! 🙏</div>
-    <div class="footer-brand">Powered by Pratyeksha · pratyeksha.in</div>
+    <div class="footer-brand">Powered by Pratyeksha</div>
   </div>
-  <div class="gold-bar-bottom"></div>
+
+  <div class="gold-bar gold-bar-bottom"></div>
 </div>
 </body>
 </html>`;
 
-  import('html2pdf.js').then(mod => {
-    const h2p = mod.default || mod;
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;';
-    container.innerHTML = html;
-    document.body.appendChild(container);
-    h2p().set({
-      margin: 0,
-      filename: `Invoice_Table${tableNumber}_${Date.now()}.pdf`,
-      image: { type: 'jpeg', quality: 1.0 },
-      html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 794 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(container).save().then(() => {
-      document.body.removeChild(container);
-    }).catch(() => {
-      document.body.removeChild(container);
-    });
-  });
+  // Open in new tab and print/save as PDF
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  if (win) {
+    win.onload = () => {
+      setTimeout(() => {
+        win.print();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+      }, 600);
+    };
+    // Fallback if onload doesn't fire (mobile browsers)
+    setTimeout(() => {
+      try { win.print(); } catch(e) {}
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }, 2000);
+  } else {
+    // Popup blocked — direct download fallback
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Invoice_Table${tableNumber}_${Date.now()}.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
 }, [restaurantData, finalBillItems, customerInfo, tableNumber]);
+
+
   // Add this useEffect to ask notification permission early, before order is placed
 useEffect(() => {
   if (!isCounterScan) return;
@@ -2161,12 +2175,16 @@ const requestFinalBill = async () => {
       }, 800);
     }
 
+    // ── CLEAR everything after checkout ──
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
     setBillRequested(true);
-    // ← NO auto-download here anymore
+    // placedOrders intentionally NOT cleared here — still needed for the bill summary display
+    // They clear when modal closes (see isBillOpen X handler below)
 
   } catch (error) {
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
     setBillRequested(true);
   }
 };
@@ -4788,8 +4806,19 @@ const categoryIconMap = {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{...styles.fullscreenModal, zIndex: 6000}}>
             <div style={styles.modalHeader}>
               <h2 style={{color: primaryColor}}>{t[language].checkout}</h2>
-              <X size={30} color={primaryColor} onClick={() => { setIsBillOpen(false); setBillRequested(false); setShowReviewPage(false); }} />
-            </div>
+<X size={30} color={primaryColor} onClick={() => { 
+  setIsBillOpen(false); 
+  setBillRequested(false); 
+  setShowReviewPage(false);
+  // ── Reset everything for next customer ──
+  setPlacedOrders([]);
+  setHasPlacedInitialOrder(false);
+  setCart({});
+  setSuggestions({});
+  setCustomerInfo({ name: '', phone: '' });
+  localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+  localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+}} />            </div>
             
             <div style={styles.modalScrollBody}>
 {!billRequested ? (
