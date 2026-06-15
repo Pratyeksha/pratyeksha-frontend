@@ -4003,6 +4003,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </header>
 
 {/* SEARCH BAR */}
+
 <div style={styles.searchWrapper}>
   <div style={{ position: 'relative' }}>
     <div style={styles.searchContainer}>
@@ -4013,102 +4014,209 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         style={styles.searchInput}
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
-        onBlur={() => setTimeout(() => setSearchQuery(sq => sq), 200)}
       />
       {searchQuery.length > 0 && (
         <button
           onClick={() => setSearchQuery('')}
-          style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: '4px' }}
+          style={{
+            background: 'none', border: 'none',
+            color: 'rgba(211,191,162,0.4)', cursor: 'pointer', padding: '4px',
+            display: 'flex', alignItems: 'center'
+          }}
         >
           <X size={14} />
         </button>
       )}
     </div>
-
-    {/* ── SEARCH SUGGESTIONS DROPDOWN ── */}
+ 
+    {/* ── PREMIUM SEARCH SUGGESTIONS DROPDOWN ── */}
     {globalSearchResults.length > 0 && searchQuery.length >= 2 && (
       <div style={{
-        position: 'absolute', top: '110%', left: 0, right: 0, zIndex: 2000,
-        background: '#121212', border: '1px solid rgba(211,191,162,0.2)',
-        borderRadius: '14px', overflow: 'hidden',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+        position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 2000,
+        background: '#0f0f0f',
+        border: '1px solid rgba(211,191,162,0.18)',
+        borderRadius: '18px',
+        overflow: 'hidden',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(211,191,162,0.06)'
       }}>
-        {globalSearchResults.map((item, idx) => {
-          const cat = categoryList.find(c => c.categoryId === item.categoryId);
-          const isCurrentCat = item.categoryId === selectedCategoryId;
-          return (
-            <div
-              key={item._id}
-              onClick={() => {
-                // Jump to that category and highlight the dish
-                setSelectedCategoryId(item.categoryId);
-                setSearchQuery(item.name);
-                // Scroll nav to show the selected category
-                setTimeout(() => {
-                  activeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                }, 100);
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '12px 16px',
-                borderBottom: idx < globalSearchResults.length - 1 ? '1px solid rgba(211,191,162,0.06)' : 'none',
-                cursor: 'pointer',
-                background: 'transparent',
-                transition: 'background 0.15s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              {/* Veg/non-veg dot */}
-              <div style={{
-                width: '8px', height: '8px', borderRadius: '2px', flexShrink: 0,
-                border: `2px solid ${item.isVeg ? '#4a7c3f' : '#8a3030'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <div style={{ width: '3px', height: '3px', borderRadius: '50%', background: item.isVeg ? '#4a7c3f' : '#8a3030' }} />
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.name}
-                </div>
-                <div style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.35)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>{cat?.name || item.categoryId}</span>
-                  {!isCurrentCat && (
-                    <span style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.54rem' }}>· tap to navigate →</span>
+        {/* Header strip */}
+        <div style={{
+          padding: '10px 16px 8px',
+          borderBottom: '1px solid rgba(211,191,162,0.07)',
+          display: 'flex', alignItems: 'center', gap: '8px'
+        }}>
+          <Search size={11} color="rgba(211,191,162,0.3)" />
+          <span style={{
+            fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2px',
+            color: 'rgba(211,191,162,0.28)', textTransform: 'uppercase'
+          }}>
+            {globalSearchResults.length} {language === 'mr' ? 'पदार्थ सापडले' : 'dishes found'}
+          </span>
+        </div>
+ 
+        {/* Results list */}
+        <div style={{ maxHeight: '320px', overflowY: 'auto' }} className="no-scrollbar">
+          {globalSearchResults.map((item, idx) => {
+            const cat = categoryList.find(c => c.categoryId === item.categoryId);
+            const isCurrentCat = item.categoryId === selectedCategoryId;
+            const isStar   = item._eng?.quadrant === 'star';
+            const isPuzzle = item._eng?.quadrant === 'puzzle';
+ 
+            return (
+              <div
+                key={item._id}
+                onMouseDown={e => {
+                  // onMouseDown fires before onBlur — prevents dropdown vanishing before click
+                  e.preventDefault();
+                  setSelectedCategoryId(item.categoryId);
+                  setSearchQuery(item.name); // fill search with dish name to highlight it
+                  setTimeout(() => {
+                    // Clear search entirely after navigation so dropdown disappears
+                    setSearchQuery('');
+                    activeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                  }, 80);
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '14px',
+                  padding: '13px 16px',
+                  borderBottom: idx < globalSearchResults.length - 1
+                    ? '1px solid rgba(211,191,162,0.05)'
+                    : 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.12s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.05)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {/* FSSAI dot — left edge */}
+                <div style={{
+                  width: '16px', height: '16px', flexShrink: 0,
+                  border: `1.5px solid ${item.isVeg !== false
+                    ? 'rgba(201,168,76,0.6)'
+                    : 'rgba(201,168,76,0.35)'}`,
+                  borderRadius: '3px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxSizing: 'border-box'
+                }}>
+                  {item.isVeg !== false ? (
+                    <div style={{
+                      width: '6px', height: '6px', borderRadius: '50%',
+                      background: 'rgba(201,168,76,0.75)'
+                    }} />
+                  ) : (
+                    <div style={{
+                      width: 0, height: 0,
+                      borderLeft: '3px solid transparent',
+                      borderRight: '3px solid transparent',
+                      borderBottom: '5px solid rgba(201,168,76,0.55)'
+                    }} />
                   )}
                 </div>
-              </div>
-
-              {/* Price + quadrant badge */}
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: primaryColor }}>
-                  ₹{item.priceFull || item.price}
+ 
+                {/* Text block — LEFT ALIGNED */}
+                <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  {/* Dish name */}
+                  <div style={{
+                    fontSize: '0.86rem', fontWeight: '700', color: '#fff',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    marginBottom: '3px'
+                  }}>
+                    {language === 'mr' ? (item.name_mr || item.name) : item.name}
+                  </div>
+ 
+                  {/* Category + nav hint */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <span style={{
+                      fontSize: '0.56rem', color: 'rgba(211,191,162,0.35)',
+                      fontWeight: '700'
+                    }}>
+                      {language === 'mr' ? (cat?.name_mr || cat?.name) : cat?.name}
+                    </span>
+                    {!isCurrentCat && (
+                      <>
+                        <span style={{ color: 'rgba(211,191,162,0.15)', fontSize: '0.5rem' }}>·</span>
+                        <span style={{
+                          fontSize: '0.52rem',
+                          color: 'rgba(201,168,76,0.45)',
+                          fontWeight: '800'
+                        }}>
+                          {language === 'mr' ? 'टॅप करून जा →' : 'tap to navigate →'}
+                        </span>
+                      </>
+                    )}
+                    {/* Engineering badge inline */}
+                    {isStar && (
+                      <span style={{
+                        fontSize: '0.48rem', fontWeight: '900', padding: '1px 5px',
+                        borderRadius: '3px',
+                        background: 'rgba(201,168,76,0.1)',
+                        color: '#c9a84c',
+                        border: '1px solid rgba(201,168,76,0.25)'
+                      }}>★ BESTSELLER</span>
+                    )}
+                    {isPuzzle && !isStar && (
+                      <span style={{
+                        fontSize: '0.48rem', fontWeight: '900', padding: '1px 5px',
+                        borderRadius: '3px',
+                        background: 'rgba(189,168,138,0.1)',
+                        color: '#bda88a',
+                        border: '1px solid rgba(189,168,138,0.22)'
+                      }}>✦ CHEF PICK</span>
+                    )}
+                  </div>
                 </div>
-                {item._eng?.quadrant === 'star' && (
-                  <div style={{ fontSize: '0.48rem', color: '#c9a84c', fontWeight: '900', letterSpacing: '0.5px' }}>★ BESTSELLER</div>
-                )}
-                {item._eng?.quadrant === 'puzzle' && (
-                  <div style={{ fontSize: '0.48rem', color: '#6dba96', fontWeight: '900', letterSpacing: '0.5px' }}>✦ CHEF PICK</div>
-                )}
+ 
+                {/* Price — right edge */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{
+                    fontSize: '0.88rem', fontWeight: '900', color: '#d3bfa2',
+                    fontFamily: 'monospace'
+                  }}>
+                    ₹{item.priceFull || item.price}
+                  </div>
+                  {item.priceHalf && (
+                    <div style={{
+                      fontSize: '0.54rem', color: 'rgba(211,191,162,0.3)',
+                      fontWeight: '700', marginTop: '1px'
+                    }}>
+                      H: ₹{item.priceHalf}
+                    </div>
+                  )}
+                </div>
+ 
+                {/* Arrow chevron */}
+                <ChevronRight size={13} color="rgba(211,191,162,0.2)" style={{ flexShrink: 0 }} />
               </div>
-            </div>
-          );
-        })}
-
-        {/* "See all results" footer */}
+            );
+          })}
+        </div>
+ 
+        {/* Footer — show all */}
         <div
-          onClick={() => {
+          onMouseDown={e => {
+            e.preventDefault();
             setSelectedCategoryId('all');
+            setSearchQuery('');
           }}
           style={{
-            padding: '10px 16px', textAlign: 'center',
-            fontSize: '0.62rem', color: 'rgba(211,191,162,0.35)',
-            fontWeight: '700', cursor: 'pointer', letterSpacing: '0.5px',
-            borderTop: '1px solid rgba(211,191,162,0.06)'
+            padding: '10px 16px',
+            borderTop: '1px solid rgba(211,191,162,0.07)',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            cursor: 'pointer',
+            fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)',
+            fontWeight: '800', letterSpacing: '0.5px',
+            transition: 'color 0.15s'
           }}
+          onMouseEnter={e => e.currentTarget.style.color = 'rgba(211,191,162,0.6)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.3)'}
         >
-          {language === 'mr' ? 'सर्व श्रेणींमध्ये पहा' : `Show all results across all categories`}
+          <Search size={11} />
+          {language === 'mr'
+            ? 'सर्व श्रेणींमध्ये पहा'
+            : `Show all results across every category`}
         </div>
       </div>
     )}
@@ -4143,41 +4251,68 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         <AnimatePresence mode="wait">
           <motion.div key={selectedCategoryId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.menuContainer}>
             {/* ── CATEGORY PERFORMANCE SUMMARY — shown when a specific category is selected ── */}
+
 {selectedCategoryId !== 'all' && !searchQuery && (() => {
-  const catItems = filteredMenuItems;
+  const catItems  = filteredMenuItems;
   const stars     = catItems.filter(i => i._eng?.quadrant === 'star').length;
   const puzzles   = catItems.filter(i => i._eng?.quadrant === 'puzzle').length;
   const totalSold = catItems.reduce((a, i) => a + (i._eng?.qtySold || 0), 0);
-  if (totalSold === 0) return null; // no data yet — show nothing
+  if (totalSold === 0) return null;
+ 
   return (
     <div style={{
       margin: '0 0 14px',
-      padding: '12px 16px',
+      padding: '11px 15px',
       background: 'rgba(201,168,76,0.04)',
       border: '1px solid rgba(201,168,76,0.1)',
-      borderRadius: '14px',
-      display: 'flex', alignItems: 'center', gap: '16px',
+      borderRadius: '13px',
+      display: 'flex', alignItems: 'center', gap: '14px',
       flexWrap: 'wrap'
     }}>
-      <div style={{ flex: 1, minWidth: '120px' }}>
-        <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
-          {language === 'mr' ? 'या श्रेणीत' : 'Category Insights'}
+      {/* Left: label + count */}
+      <div style={{ flex: 1, minWidth: '100px' }}>
+        <div style={{
+          fontSize: '0.46rem', color: 'rgba(211,191,162,0.28)',
+          fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px'
+        }}>
+          {language === 'mr' ? 'श्रेणी अंतर्दृष्टी' : 'Category Insights'}
         </div>
-        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
-          {catItems.length} {language === 'mr' ? 'पदार्थ' : 'dishes'} · {totalSold} {language === 'mr' ? 'विक्री' : 'sold (30 days)'}
+        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', fontWeight: '600' }}>
+          {catItems.length} {language === 'mr' ? 'पदार्थ' : 'dishes'}
+          {totalSold > 0 && ` · ${totalSold} ${language === 'mr' ? 'विक्री (३० दिवस)' : 'sold (30 days)'}`}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '8px' }}>
+ 
+      {/* Right: badges */}
+      <div style={{ display: 'flex', gap: '7px' }}>
         {stars > 0 && (
-          <div style={{ textAlign: 'center', padding: '6px 10px', background: 'rgba(201,168,76,0.08)', borderRadius: '8px', border: '1px solid rgba(201,168,76,0.15)' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace' }}>{stars}</div>
-            <div style={{ fontSize: '0.46rem', color: 'rgba(201,168,76,0.5)', fontWeight: '900', letterSpacing: '1px' }}>STARS</div>
+          <div style={{
+            textAlign: 'center', padding: '6px 11px',
+            background: 'rgba(201,168,76,0.08)',
+            borderRadius: '9px',
+            border: '1px solid rgba(201,168,76,0.18)'
+          }}>
+            <div style={{ fontSize: '1rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace', lineHeight: 1 }}>
+              {stars}
+            </div>
+            <div style={{ fontSize: '0.44rem', color: 'rgba(201,168,76,0.45)', fontWeight: '900', letterSpacing: '1px', marginTop: '2px' }}>
+              STARS
+            </div>
           </div>
         )}
         {puzzles > 0 && (
-          <div style={{ textAlign: 'center', padding: '6px 10px', background: 'rgba(109,186,150,0.06)', borderRadius: '8px', border: '1px solid rgba(109,186,150,0.12)' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#6dba96', fontFamily: 'monospace' }}>{puzzles}</div>
-            <div style={{ fontSize: '0.46rem', color: 'rgba(109,186,150,0.4)', fontWeight: '900', letterSpacing: '1px' }}>PICKS</div>
+          <div style={{
+            textAlign: 'center', padding: '6px 11px',
+            background: 'rgba(189,168,138,0.07)',
+            borderRadius: '9px',
+            border: '1px solid rgba(189,168,138,0.16)'
+          }}>
+            <div style={{ fontSize: '1rem', fontWeight: '900', color: '#bda88a', fontFamily: 'monospace', lineHeight: 1 }}>
+              {puzzles}
+            </div>
+            <div style={{ fontSize: '0.44rem', color: 'rgba(189,168,138,0.4)', fontWeight: '900', letterSpacing: '1px', marginTop: '2px' }}>
+              PICKS
+            </div>
           </div>
         )}
       </div>
@@ -4195,55 +4330,112 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       )}
     </div>
 <div style={styles.itemContentLeft}>
-  <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-
+<p style={{
+  fontSize: '1.05rem', fontWeight: '700', color: '#fff',
+  display: 'flex', alignItems: 'center', gap: '6px',
+  flexWrap: 'wrap', margin: '0 0 6px'
+}}>
+  {/* ── FSSAI Veg/Non-veg indicator (only shown when restaurant has both) ── */}
+  {hasNonVegInView && !isOnlyVegTenant && (
+    <span
+      title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'}
+      style={{
+        width: '15px', height: '15px', flexShrink: 0,
+        border: `1.5px solid ${item.isVeg !== false
+          ? 'rgba(201,168,76,0.65)'
+          : 'rgba(201,168,76,0.4)'}`,
+        borderRadius: '3px',
+        display: 'inline-flex', alignItems: 'center',
+        justifyContent: 'center', boxSizing: 'border-box'
+      }}
+    >
+      {item.isVeg !== false ? (
+        <div style={{
+          width: '6px', height: '6px', borderRadius: '50%',
+          background: 'rgba(201,168,76,0.8)'
+        }} />
+      ) : (
+        <div style={{
+          width: 0, height: 0,
+          borderLeft: '3px solid transparent',
+          borderRight: '3px solid transparent',
+          borderBottom: '5.5px solid rgba(201,168,76,0.65)'
+        }} />
+      )}
+    </span>
+  )}
+ 
+  {/* Dish name */}
   {language === 'mr' ? item.name_mr : item.name}
-  
-
-{item.spicylevel && (
-  <span style={{
-    display: 'inline-flex', alignItems: 'center', gap: '3px',
-    fontSize: '0.58rem',
-    fontWeight: '900',
-    padding: '2px 7px',
-    borderRadius: '4px',
-    background: item.spicylevel.toUpperCase() === 'HIGH'
-      ? 'rgba(232,170,90,0.14)'
-      : 'rgba(211,191,162,0.12)',
-    color: item.spicylevel.toUpperCase() === 'HIGH' ? '#e8aa5a' : '#d3bfa2',
-    border: `1px solid ${item.spicylevel.toUpperCase() === 'HIGH' ? 'rgba(232,170,90,0.35)' : 'rgba(211,191,162,0.3)'}`,
-    letterSpacing: '0.5px'
-  }}>
-    <Flame size={9} strokeWidth={2.5} />
-    {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
-  </span>
-)}
-
-{item.servingSize && item.servingSize > 0 && !isCounterScan && (
-  <span style={{
-    fontSize: '0.58rem',
-    fontWeight: '800',
-    padding: '2px 7px',
-    borderRadius: '4px',
-    background: 'rgba(201,168,76,0.1)',
-    color: '#c9a84c',
-    border: '1px solid rgba(201,168,76,0.25)',
-    letterSpacing: '0.3px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '3px'
-  }}>
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-    </svg>
-    {language === 'mr'
-      ? `${item.servingSize} जण`
-      : `Serves ${item.servingSize}`}
-  </span>
-)}
+ 
+  {/* ── ENGINEERING BADGE: BESTSELLER (gold) ── */}
+  {item._eng?.quadrant === 'star' && (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      fontSize: '0.5rem', fontWeight: '900', letterSpacing: '0.5px',
+      padding: '2px 7px', borderRadius: '4px',
+      background: 'rgba(201,168,76,0.12)',
+      color: '#c9a84c',
+      border: '1px solid rgba(201,168,76,0.3)'
+    }}>
+      ★ {language === 'mr' ? 'बेस्टसेलर' : 'BESTSELLER'}
+    </span>
+  )}
+ 
+  {/* ── ENGINEERING BADGE: CHEF RECOMMENDS (warm amber — NO green) ── */}
+  {item._eng?.quadrant === 'puzzle' && (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      fontSize: '0.5rem', fontWeight: '900', letterSpacing: '0.5px',
+      padding: '2px 7px', borderRadius: '4px',
+      background: 'rgba(189,168,138,0.12)',
+      color: '#bda88a',
+      border: '1px solid rgba(189,168,138,0.28)'
+    }}>
+      ✦ {language === 'mr' ? 'शेफ पसंती' : 'CHEF PICK'}
+    </span>
+  )}
+ 
+  {/* ── SPICE BADGE ── */}
+  {item.spicylevel && (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      fontSize: '0.58rem', fontWeight: '900', padding: '2px 7px',
+      borderRadius: '4px',
+      background: item.spicylevel.toUpperCase() === 'HIGH'
+        ? 'rgba(232,170,90,0.14)'
+        : 'rgba(211,191,162,0.12)',
+      color: item.spicylevel.toUpperCase() === 'HIGH' ? '#e8aa5a' : '#d3bfa2',
+      border: `1px solid ${item.spicylevel.toUpperCase() === 'HIGH'
+        ? 'rgba(232,170,90,0.35)'
+        : 'rgba(211,191,162,0.3)'}`,
+      letterSpacing: '0.5px'
+    }}>
+      <Flame size={9} strokeWidth={2.5} />
+      {t[language][`spice${item.spicylevel.charAt(0).toUpperCase() + item.spicylevel.slice(1).toLowerCase()}`] || item.spicylevel.toUpperCase()}
+    </span>
+  )}
+ 
+  {/* ── SERVES BADGE ── */}
+  {item.servingSize > 0 && (
+    <span style={{
+      fontSize: '0.58rem', fontWeight: '800', padding: '2px 7px',
+      borderRadius: '4px',
+      background: 'rgba(201,168,76,0.08)',
+      color: '#c9a84c',
+      border: '1px solid rgba(201,168,76,0.22)',
+      letterSpacing: '0.3px',
+      display: 'inline-flex', alignItems: 'center', gap: '3px'
+    }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      {language === 'mr' ? `${item.servingSize} जण` : `Serves ${item.servingSize}`}
+    </span>
+  )}
 </p>
   {/* 📋 PREMIUM INGREDIENTS LAYOUT BADGE ARRAYS */}
   <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
