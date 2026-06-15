@@ -139,6 +139,9 @@ const preserveScroll = (fn) => {
   });
 };
 
+const [searchResultCategory, setSearchResultCategory] = useState(null);
+// When user selects a search result from a different category, we jump to it
+
 const [waitlistEntry, setWaitlistEntry] = useState(null);
 const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
 const [partySize, setPartySize] = useState(1);
@@ -257,12 +260,27 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
   // ── HOOK CONFIGURATIONS (ALL HOOKS MUST STAY CONTINUOUSLY AT THE TOP) ──
   // =========================================================================
 
-  const filteredMenuItems = allMenuItems.filter(i => {
+const filteredMenuItems = useMemo(() => {
+  return allMenuItems.filter(i => {
     const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
-    const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.name_mr && i.name_mr.includes(searchQuery));
+    const nameEn = i.name?.toLowerCase() || '';
+    const nameMr = i.name_mr || '';
+    const matchesSearch = nameEn.includes(searchQuery.toLowerCase()) || nameMr.includes(searchQuery);
     const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
     return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
   });
+}, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
+
+// All matching search results across ALL categories (for search suggestion dropdown)
+const globalSearchResults = useMemo(() => {
+  if (!searchQuery || searchQuery.length < 2) return [];
+  const q = searchQuery.toLowerCase();
+  return allMenuItems.filter(i => {
+    const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
+    return matchesVeg && i.isAvailable !== false &&
+      (i.name?.toLowerCase().includes(q) || (i.name_mr || '').includes(searchQuery));
+  }).slice(0, 8);
+}, [allMenuItems, searchQuery, filterVegOnly]);
 
   useEffect(() => {
     if (!isCounterScan || !sessionId) return;
@@ -629,18 +647,22 @@ useEffect(() => {
     // 1. PHASE A: EXECUTE INITIAL REST DATA FETCH ON MOUNT
 const fetchMenuContent = async () => {
   try {
-    const [res, cat, menu, extras] = await Promise.all([
+    const [res, cat, extras] = await Promise.all([
       axios.get(`${BASE_URL}/tenant/${tenantId}`),
       axios.get(`${BASE_URL}/categories/${tenantId}`),
-      axios.get(`${BASE_URL}/menu/${tenantId}`),
-      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] }))  // ← ADD THIS
+      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] }))
     ]);
+
+    // Try engineered order, fall back to plain menu
+    const menuRes = await axios.get(`${BASE_URL}/menu/engineered/${tenantId}`)
+      .catch(() => axios.get(`${BASE_URL}/menu/${tenantId}`));
+
     setRestaurantData(res.data);
     setCategoryList(cat.data);
-    setAllMenuItems(menu.data);
-    setExtraItems(extras.data || []);  // ← ADD THIS
+    setAllMenuItems(menuRes.data);
+    setExtraItems(extras.data || []);
   } catch (error) {
-    console.error("Initial Setup Sync Error:", error);
+    console.error("Setup error:", error);
   } finally {
     setIsLoading(false);
   }
@@ -3980,12 +4002,116 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
 
-{/* SEARCH BAR + VEG FILTER */}
+{/* SEARCH BAR */}
 <div style={styles.searchWrapper}>
+  <div style={{ position: 'relative' }}>
+    <div style={styles.searchContainer}>
+      <Search size={18} color={primaryColor} />
+      <input
+        type="text"
+        placeholder={t[language].searchPlaceholder}
+        style={styles.searchInput}
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        onBlur={() => setTimeout(() => setSearchQuery(sq => sq), 200)}
+      />
+      {searchQuery.length > 0 && (
+        <button
+          onClick={() => setSearchQuery('')}
+          style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: '4px' }}
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
 
-  <div style={styles.searchContainer}>
-    <Search size={18} color={primaryColor} />
-    <input type="text" placeholder={t[language].searchPlaceholder} style={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+    {/* ── SEARCH SUGGESTIONS DROPDOWN ── */}
+    {globalSearchResults.length > 0 && searchQuery.length >= 2 && (
+      <div style={{
+        position: 'absolute', top: '110%', left: 0, right: 0, zIndex: 2000,
+        background: '#121212', border: '1px solid rgba(211,191,162,0.2)',
+        borderRadius: '14px', overflow: 'hidden',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+      }}>
+        {globalSearchResults.map((item, idx) => {
+          const cat = categoryList.find(c => c.categoryId === item.categoryId);
+          const isCurrentCat = item.categoryId === selectedCategoryId;
+          return (
+            <div
+              key={item._id}
+              onClick={() => {
+                // Jump to that category and highlight the dish
+                setSelectedCategoryId(item.categoryId);
+                setSearchQuery(item.name);
+                // Scroll nav to show the selected category
+                setTimeout(() => {
+                  activeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }, 100);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '12px 16px',
+                borderBottom: idx < globalSearchResults.length - 1 ? '1px solid rgba(211,191,162,0.06)' : 'none',
+                cursor: 'pointer',
+                background: 'transparent',
+                transition: 'background 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              {/* Veg/non-veg dot */}
+              <div style={{
+                width: '8px', height: '8px', borderRadius: '2px', flexShrink: 0,
+                border: `2px solid ${item.isVeg ? '#4a7c3f' : '#8a3030'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <div style={{ width: '3px', height: '3px', borderRadius: '50%', background: item.isVeg ? '#4a7c3f' : '#8a3030' }} />
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.name}
+                </div>
+                <div style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.35)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{cat?.name || item.categoryId}</span>
+                  {!isCurrentCat && (
+                    <span style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.54rem' }}>· tap to navigate →</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Price + quadrant badge */}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: primaryColor }}>
+                  ₹{item.priceFull || item.price}
+                </div>
+                {item._eng?.quadrant === 'star' && (
+                  <div style={{ fontSize: '0.48rem', color: '#c9a84c', fontWeight: '900', letterSpacing: '0.5px' }}>★ BESTSELLER</div>
+                )}
+                {item._eng?.quadrant === 'puzzle' && (
+                  <div style={{ fontSize: '0.48rem', color: '#6dba96', fontWeight: '900', letterSpacing: '0.5px' }}>✦ CHEF PICK</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* "See all results" footer */}
+        <div
+          onClick={() => {
+            setSelectedCategoryId('all');
+          }}
+          style={{
+            padding: '10px 16px', textAlign: 'center',
+            fontSize: '0.62rem', color: 'rgba(211,191,162,0.35)',
+            fontWeight: '700', cursor: 'pointer', letterSpacing: '0.5px',
+            borderTop: '1px solid rgba(211,191,162,0.06)'
+          }}
+        >
+          {language === 'mr' ? 'सर्व श्रेणींमध्ये पहा' : `Show all results across all categories`}
+        </div>
+      </div>
+    )}
   </div>
 </div>
 
@@ -4016,11 +4142,58 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       <motion.div style={styles.contentWrapper} drag="x" dragConstraints={{ left: 0, right: 0 }} onDragEnd={(_, info) => { if (info.offset.x < -50) handleSwipe('left'); if (info.offset.x > 50) handleSwipe('right'); }}>
         <AnimatePresence mode="wait">
           <motion.div key={selectedCategoryId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.menuContainer}>
-            {filteredMenuItems.map((item) => (
+            {/* ── CATEGORY PERFORMANCE SUMMARY — shown when a specific category is selected ── */}
+{selectedCategoryId !== 'all' && !searchQuery && (() => {
+  const catItems = filteredMenuItems;
+  const stars     = catItems.filter(i => i._eng?.quadrant === 'star').length;
+  const puzzles   = catItems.filter(i => i._eng?.quadrant === 'puzzle').length;
+  const totalSold = catItems.reduce((a, i) => a + (i._eng?.qtySold || 0), 0);
+  if (totalSold === 0) return null; // no data yet — show nothing
+  return (
+    <div style={{
+      margin: '0 0 14px',
+      padding: '12px 16px',
+      background: 'rgba(201,168,76,0.04)',
+      border: '1px solid rgba(201,168,76,0.1)',
+      borderRadius: '14px',
+      display: 'flex', alignItems: 'center', gap: '16px',
+      flexWrap: 'wrap'
+    }}>
+      <div style={{ flex: 1, minWidth: '120px' }}>
+        <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+          {language === 'mr' ? 'या श्रेणीत' : 'Category Insights'}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+          {catItems.length} {language === 'mr' ? 'पदार्थ' : 'dishes'} · {totalSold} {language === 'mr' ? 'विक्री' : 'sold (30 days)'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {stars > 0 && (
+          <div style={{ textAlign: 'center', padding: '6px 10px', background: 'rgba(201,168,76,0.08)', borderRadius: '8px', border: '1px solid rgba(201,168,76,0.15)' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace' }}>{stars}</div>
+            <div style={{ fontSize: '0.46rem', color: 'rgba(201,168,76,0.5)', fontWeight: '900', letterSpacing: '1px' }}>STARS</div>
+          </div>
+        )}
+        {puzzles > 0 && (
+          <div style={{ textAlign: 'center', padding: '6px 10px', background: 'rgba(109,186,150,0.06)', borderRadius: '8px', border: '1px solid rgba(109,186,150,0.12)' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#6dba96', fontFamily: 'monospace' }}>{puzzles}</div>
+            <div style={{ fontSize: '0.46rem', color: 'rgba(109,186,150,0.4)', fontWeight: '900', letterSpacing: '1px' }}>PICKS</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+})()}
+
+{filteredMenuItems.map((item) => (
               <div key={item._id} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
-                <div style={styles.tagContainer}>
-                  {item.isChefSpecial === true && <div style={styles.chefTag}><Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}</div>}
-                </div>
+    <div style={styles.tagContainer}>
+      {item.isChefSpecial === true && (
+        <div style={styles.chefTag}>
+          <Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}
+        </div>
+      )}
+    </div>
 <div style={styles.itemContentLeft}>
   <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
 
