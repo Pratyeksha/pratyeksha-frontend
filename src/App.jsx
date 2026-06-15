@@ -1843,15 +1843,10 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
   }
 };
 
-const calculateGrandTotal = () => {
-  const rd = restaurantData;
-  const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
-  const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-  const totalTaxRate = (cgstPct + sgstPct) / 100;
-  const subtotalInclusive = placedOrders.reduce((sum, item) => sum + (item.subtotal || 0), 0);
-  // Items already include tax — grand total is just the sum, rounded
-  return Math.round(subtotalInclusive);
-};
+  const calculateGrandTotal = () => {
+    const subtotal = placedOrders.reduce((sum, item) => sum + item.subtotal, 0);
+    return subtotal; // Assuming direct sum for simplicity as per UI requirement
+  };
 
 // 📊 UNIFIED RECEIPT AGGREGATOR
   const receiptData = useMemo(() => {
@@ -1905,38 +1900,32 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
   const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
   const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-  const totalTaxRate = (cgstPct + sgstPct) / 100;
-
-  // Items are tax-INCLUSIVE — back-calculate
-  const subtotalInclusive = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-  const taxableAmt  = subtotalInclusive / (1 + totalTaxRate);
-  const cgstAmt     = taxableAmt * (cgstPct / 100);
-  const sgstAmt     = taxableAmt * (sgstPct / 100);
-  const grandTotal  = Math.round(subtotalInclusive); // always rounded
+  const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const cgstAmt    = subtotal * (cgstPct / 100);
+  const sgstAmt    = subtotal * (sgstPct / 100);
+  const grandTotal = Math.round(subtotal + cgstAmt + sgstAmt);
+  const taxableAmt = subtotal; // items are priced ex-tax; tax is added on top
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
     .filter(Boolean).join(', ');
-  const fssai = rd?.fssaiNumber ? rd.fssaiNumber : '';
-
   const now = new Date().toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true
   });
-  const dateStr = new Date().toLocaleDateString('en-IN', {
+  const invoiceNo  = `INV-${Date.now().toString().slice(-8)}`;
+  const dateStr    = new Date().toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric'
   }).toUpperCase();
-  const timeStr = new Date().toLocaleTimeString([], {
-    hour: '2-digit', minute: '2-digit', hour12: true
-  });
+  const timeStr    = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const itemRows = finalBillItems.map(item => `
+  const itemRows = finalBillItems.map((item, idx) => `
     <tr>
-      <td>
+      <td class="desc">
         <span class="item-name">${item.quantity}x ${item.name}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}</span>
         <span class="item-rate">@ ₹${item.pricePerUnit} / item</span>
       </td>
-      <td class="num">₹${(item.subtotal || 0).toFixed(2)}</td>
+      <td class="num">₹${(item.pricePerUnit * item.quantity).toFixed(2)}</td>
     </tr>
   `).join('');
 
@@ -1944,23 +1933,31 @@ const autoDownloadInvoicePDF = useCallback(() => {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Tax Invoice</title>
+<title>Tax Invoice — ${invoiceNo}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 13px; color: #000; background: #fff;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    font-size: 13px;
+    color: #000;
+    background: #fff;
   }
   .page {
-    width: 595px; margin: 0 auto;
-    padding: 40px 44px 48px; background: #fff;
+    width: 595px;
+    margin: 0 auto;
+    padding: 40px 44px 48px;
+    background: #fff;
   }
-  .top-rule { border-top: 2.5px solid #000; }
+
+  /* ── HEADER ── */
+  .top-rule { border-top: 2.5px solid #000; margin-bottom: 0; }
+
   .header-meta {
-    text-align: center; padding: 20px 0 16px;
-    border-bottom: 1px solid #ccc; margin-bottom: 18px;
+    text-align: center;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 18px;
   }
   .invoice-label {
     font-size: 9px; font-weight: 700; letter-spacing: 4px;
@@ -1970,43 +1967,58 @@ const autoDownloadInvoicePDF = useCallback(() => {
     font-size: 26px; font-weight: 900; color: #000;
     letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 8px;
   }
-  .rest-sub { font-size: 11px; color: #444; line-height: 1.8; }
-  .rest-sub strong { font-weight: 800; }
-  .fssai-badge {
-    display: inline-block; margin-top: 7px;
-    padding: 4px 12px; border-radius: 4px;
-    background: #f1f8f1; border: 1px solid #b2dfb2;
-    font-size: 10px; font-weight: 700; color: #2e7d32; letter-spacing: 0.3px;
+  .rest-sub {
+    font-size: 11px; color: #444; line-height: 1.8;
   }
+  .rest-sub strong { font-weight: 800; }
+
+  /* ── BILL META ── */
   .meta-row {
     display: flex; justify-content: space-between;
-    margin-bottom: 18px; padding: 12px 0 14px;
+    margin-bottom: 18px; padding-bottom: 14px;
     border-bottom: 2px solid #000; border-top: 2px solid #000;
+    padding-top: 12px;
   }
   .meta-left .bill-label { font-size: 10px; color: #888; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 2px; }
   .meta-left .bill-no   { font-size: 16px; font-weight: 900; color: #000; }
   .meta-right { text-align: right; }
   .meta-right .date-val { font-size: 14px; font-weight: 800; color: #000; }
   .meta-right .time-val { font-size: 12px; color: #666; margin-top: 2px; }
+
   .customer-block {
     font-size: 12px; line-height: 1.7; color: #000;
-    padding-bottom: 16px; border-bottom: 1px solid #ccc; margin-bottom: 16px;
+    padding-bottom: 16px; border-bottom: 1px solid #ccc;
+    margin-bottom: 16px;
   }
+  .customer-block div { font-weight: 500; }
+
+  /* ── ITEMS TABLE ── */
   table.items { width: 100%; border-collapse: collapse; }
-  table.items thead tr { border-top: 2px solid #000; border-bottom: 2px solid #000; }
+  table.items thead tr {
+    border-top: 2px solid #000;
+    border-bottom: 2px solid #000;
+  }
   table.items th {
     font-size: 9px; font-weight: 800; letter-spacing: 2px;
-    text-transform: uppercase; color: #888; padding: 8px 6px; text-align: left;
+    text-transform: uppercase; color: #888;
+    padding: 8px 6px; text-align: left;
   }
   table.items th.num { text-align: right; }
-  table.items td { padding: 11px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  table.items td {
+    padding: 11px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
   .item-name { display: block; font-size: 13px; font-weight: 600; color: #000; }
   .item-rate { display: block; font-size: 10px; color: #999; margin-top: 3px; }
   td.num { text-align: right; font-size: 13px; font-weight: 700; color: #000; white-space: nowrap; }
+
+  /* ── TAX BLOCK ── */
   .tax-block { width: 280px; margin-left: auto; margin-top: 10px; }
   .tax-row {
     display: flex; justify-content: space-between;
-    padding: 5px 0; font-size: 12px; color: #444; border-bottom: 1px solid #f0f0f0;
+    padding: 5px 0; font-size: 12px; color: #444;
+    border-bottom: 1px solid #f0f0f0;
   }
   .tax-row.subtotal-row { font-weight: 700; color: #000; }
   .grand-row {
@@ -2014,9 +2026,11 @@ const autoDownloadInvoicePDF = useCallback(() => {
     padding: 12px 0 4px; border-top: 2.5px solid #000; margin-top: 8px;
   }
   .grand-label { font-size: 14px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
-  .grand-amt   { font-size: 26px; font-weight: 900; }
+  .grand-amt   { font-size: 26px; font-weight: 900; font-family: Arial, sans-serif; }
   .words-note  { text-align: right; font-size: 10px; color: #888; font-style: italic; margin-top: 4px; }
   .gst-note    { text-align: right; font-size: 9px; color: #bbb; margin-top: 3px; }
+
+  /* ── FOOTER ── */
   .footer {
     margin-top: 28px; border-top: 1px solid #ccc;
     padding-top: 14px; display: flex;
@@ -2024,18 +2038,14 @@ const autoDownloadInvoicePDF = useCallback(() => {
   }
   .footer-msg   { font-size: 11px; color: #666; font-style: italic; }
   .footer-brand { font-size: 8px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; color: #bbb; }
-  @media print {
-    @page { size: A4 portrait; margin: 0; }
-    body  { background: #fff !important; }
-    .page { padding: 24px 30px 32px !important; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  }
 </style>
 </head>
 <body>
-<div class="page">
+<div class="page" id="invoice-root">
+
   <div class="top-rule"></div>
 
+  <!-- RESTAURANT HEADER -->
   <div class="header-meta">
     <div class="invoice-label">Tax Invoice</div>
     <div class="rest-name">${rd?.name || 'RESTAURANT'}</div>
@@ -2043,19 +2053,17 @@ const autoDownloadInvoicePDF = useCallback(() => {
       ${addr ? `${addr}<br/>` : ''}
       ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
       ${rd?.gstin && rd.gstin !== 'GSTIN PENDING'
-        ? `<strong>GSTIN: ${rd.gstin}</strong>`
-        : '<strong>GSTIN: GSTIN PENDING</strong>'}
-    </div>
-    ${fssai ? `<div class="fssai-badge">🛡️ FSSAI No: ${fssai}</div>` : ''}
-    <div style="font-size:10px;color:#888;margin-top:6px;">
-      SAC Code: 996331 &nbsp;·&nbsp; GST Rate: ${(cgstPct + sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%)
+        ? `<strong>GSTIN: ${rd.gstin}</strong><br/>`
+        : '<strong>GSTIN: GSTIN PENDING</strong><br/>'}
+      <span style="font-size:10px;color:#888;">SAC Code: 996331 · GST Rate: ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%)</span>
     </div>
   </div>
 
+  <!-- BILL META -->
   <div class="meta-row">
     <div class="meta-left">
       <div class="bill-label">BILL NO.</div>
-      <div class="bill-no">#${Date.now().toString().slice(-6)}</div>
+      <div class="bill-no">#${invoiceNo.replace('INV-','')}</div>
     </div>
     <div class="meta-right">
       <div class="date-val">${dateStr}</div>
@@ -2063,27 +2071,32 @@ const autoDownloadInvoicePDF = useCallback(() => {
     </div>
   </div>
 
+  <!-- CUSTOMER -->
   <div class="customer-block">
     <div>Customer: ${customerInfo.name || 'Guest'}</div>
-    ${customerInfo.phone ? `<div>Phone: +91 ${customerInfo.phone}</div>` : ''}
+    ${customerInfo.phone ? `<div>Phone: ${customerInfo.phone}</div>` : ''}
     <div>Table: ${tableNumber}</div>
   </div>
 
+  <!-- ITEMS TABLE -->
   <table class="items">
     <thead>
       <tr>
         <th>Item Description</th>
-        <th class="num">Amount</th>
+        <th class="num">Total</th>
       </tr>
     </thead>
-    <tbody>${itemRows}</tbody>
+    <tbody>
+      ${itemRows}
+    </tbody>
   </table>
 
   ${finalBillItems.some(i => i.isExtraItem) ? `<div style="font-size:9.5px;color:#aaa;margin-top:6px;font-style:italic;">* Extra items ordered at counter</div>` : ''}
 
+  <!-- TAX BREAKDOWN -->
   <div class="tax-block">
     <div class="tax-row subtotal-row">
-      <span>Subtotal (excl. tax)</span>
+      <span>Subtotal</span>
       <span>₹${taxableAmt.toFixed(2)}</span>
     </div>
     <div class="tax-row">
@@ -2096,75 +2109,43 @@ const autoDownloadInvoicePDF = useCallback(() => {
     </div>
     <div class="grand-row">
       <span class="grand-label">Grand Total</span>
-      <span class="grand-amt">₹${grandTotal.toLocaleString('en-IN')}</span>
+      <span class="grand-amt">₹${grandTotal}</span>
     </div>
     <div class="words-note"><em>${numberToWordsClient(grandTotal)}</em></div>
-    <div class="gst-note">GST @ ${(cgstPct + sgstPct).toFixed(1)}% · SAC 996331</div>
+    <div class="gst-note">GST @ ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%) · SAC 996331</div>
   </div>
 
+  <!-- FOOTER -->
   <div class="footer">
     <div class="footer-msg">Thank you for dining with us! Please visit again.</div>
     <div class="footer-brand">Powered by Pratyeksha</div>
   </div>
+
 </div>
+
+<script>
+  window.onload = function() {
+    var element = document.getElementById('invoice-root');
+    var opt = {
+      margin:      [8, 8, 8, 8],
+      filename:    'TaxInvoice_Table${tableNumber}_${invoiceNo}.pdf',
+      image:       { type: 'jpeg', quality: 1.0 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save().then(function() {
+      setTimeout(function() { window.close(); }, 1000);
+    });
+  };
+</script>
 </body>
 </html>`;
 
-  // Use html2pdf.js loaded from CDN via dynamic import alternative
-  // Direct Blob → object URL → iframe print approach for clean PDF
-  const printAndSave = () => {
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;';
-    document.body.appendChild(iframe);
-    
-    const iDoc = iframe.contentDocument || iframe.contentWindow.document;
-    iDoc.open();
-    iDoc.write(html);
-    iDoc.close();
-
-    iframe.onload = () => {
-      setTimeout(() => {
-        try {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        } catch(e) {}
-        setTimeout(() => document.body.removeChild(iframe), 3000);
-      }, 500);
-    };
-
-    // Fallback: html2pdf from CDN
-    setTimeout(() => {
-      if (!iframe.parentNode) return;
-      // If iframe print didn't trigger, fall back to blob download
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      script.onload = () => {
-        const element = iframe.contentDocument?.getElementById('invoice-root') || (() => {
-          const div = document.createElement('div');
-          div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;';
-          div.innerHTML = html;
-          document.body.appendChild(div);
-          return div;
-        })();
-
-        if (window.html2pdf) {
-          window.html2pdf().set({
-            margin: [8, 8, 8, 8],
-            filename: `Invoice_Table${tableNumber}_${Date.now()}.pdf`,
-            image: { type: 'jpeg', quality: 1.0 },
-            html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 794 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-          }).from(element).save().finally(() => {
-            try { document.body.removeChild(iframe); } catch(e) {}
-            try { if (element.parentNode !== iframe.contentDocument?.body) document.body.removeChild(element); } catch(e) {}
-          });
-        }
-      };
-      document.head.appendChild(script);
-    }, 2500);
-  };
-
-  printAndSave();
+  // Open in new tab — html2pdf auto-downloads the PDF then closes
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient]);
 
   // Add this useEffect to ask notification permission early, before order is placed
@@ -5318,31 +5299,28 @@ const categoryIconMap = {
     const rd = restaurantData;
     const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
     const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-    const totalTaxRate = (cgstPct + sgstPct) / 100;
-    // Tax-inclusive back-calculation
-    const subtotalInclusive = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-    const taxableAmt  = subtotalInclusive / (1 + totalTaxRate);
-    const cgstAmt     = taxableAmt * (cgstPct / 100);
-    const sgstAmt     = taxableAmt * (sgstPct / 100);
-    const grandTotal  = Math.round(subtotalInclusive); // ← always rounded
+    const subtotal = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+    const cgstAmt = subtotal * (cgstPct / 100);
+    const sgstAmt = subtotal * (sgstPct / 100);
+    const grandTotal = subtotal + cgstAmt + sgstAmt;
     return (
       <>
-        <div style={{ ...styles.billLine, fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', paddingTop: '10px', borderTop: '1px solid rgba(211,191,162,0.1)' }}>
-          <span>Subtotal (excl. tax)</span>
-          <span>₹{taxableAmt.toFixed(2)}</span>
+<div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
+          <span>Subtotal</span>
+          <span>₹{subtotal.toFixed(2)}</span>
         </div>
-        <div style={{ ...styles.billLine, fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#888' }}>
           <span>CGST @ {cgstPct}%</span>
           <span>₹{cgstAmt.toFixed(2)}</span>
         </div>
-        <div style={{ ...styles.billLine, fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#888', marginBottom: '12px' }}>
           <span>SGST @ {sgstPct}%</span>
           <span>₹{sgstAmt.toFixed(2)}</span>
         </div>
-        <div style={styles.billLineTotal}>
+<div style={styles.billLineTotal}>
           <span>{t[language].grandTotal}</span>
           <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
-            ₹{convertToMrNumber(grandTotal)}
+            ₹{Math.round(grandTotal)}
           </span>
         </div>
       </>
@@ -5351,8 +5329,10 @@ const categoryIconMap = {
 </div>
                    </div>
 
+                   {/* ========================================================================= */}
+                   {/* 📥 PRINT DOM ENGINE ROOT: AUTO-SIZED & SHIFTED FOR PERFECT 1-PAGE A4 CENTERING */}
+                   {/* ========================================================================= */}
                 {/* 📥 PRINT DOM ENGINE ROOT: UPDATED WITH AGGREGATED finalBillItems */}
-
 <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
   <div id="pdf-rendering-frame" style={{ width: '210mm', display: 'flex', justifyContent: 'center', background: '#ffffff', padding: '15mm 0' }}>
     {receiptData && (
