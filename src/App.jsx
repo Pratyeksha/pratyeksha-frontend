@@ -1881,7 +1881,8 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
   const cgstAmt    = subtotal * (cgstPct / 100);
   const sgstAmt    = subtotal * (sgstPct / 100);
-  const grandTotal = subtotal + cgstAmt + sgstAmt;
+  const grandTotal = Math.round(subtotal + cgstAmt + sgstAmt);
+  const taxableAmt = subtotal; // items are priced ex-tax; tax is added on top
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
     .filter(Boolean).join(', ');
@@ -1890,14 +1891,17 @@ const autoDownloadInvoicePDF = useCallback(() => {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true
   });
-  const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
+  const invoiceNo  = `INV-${Date.now().toString().slice(-8)}`;
+  const dateStr    = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  }).toUpperCase();
+  const timeStr    = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const itemRows = finalBillItems.map((item, idx) => `
     <tr>
-      <td class="sr">${idx + 1}</td>
       <td class="desc">
-        ${item.quantity}× ${item.name}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}
-        <div class="rate">@ ₹${item.pricePerUnit} per unit</div>
+        <span class="item-name">${item.quantity}x ${item.name}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}</span>
+        <span class="item-rate">@ ₹${item.pricePerUnit} / item</span>
       </td>
       <td class="num">₹${(item.pricePerUnit * item.quantity).toFixed(2)}</td>
     </tr>
@@ -1908,157 +1912,156 @@ const autoDownloadInvoicePDF = useCallback(() => {
 <head>
 <meta charset="UTF-8"/>
 <title>Tax Invoice — ${invoiceNo}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
     color: #000;
     background: #fff;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
   .page {
-    width: 210mm;
-    min-height: 297mm;
+    width: 595px;
     margin: 0 auto;
-    padding: 18mm 18mm 20mm;
+    padding: 40px 44px 48px;
     background: #fff;
   }
 
-  /* ── TOP BORDER ── */
-  .top-rule { border-top: 3px solid #000; margin-bottom: 14px; }
-  .bottom-rule { border-top: 1px solid #000; margin-top: 14px; }
-
   /* ── HEADER ── */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-  .header-left h1 {
-    font-size: 22px; font-weight: 900; color: #000;
-    letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 5px;
-  }
-  .header-left p { font-size: 10px; color: #333; line-height: 1.7; }
-  .header-right { text-align: right; }
-  .header-right .invoice-label {
-    font-size: 9px; font-weight: 700; letter-spacing: 3px;
-    text-transform: uppercase; color: #777; margin-bottom: 5px;
-  }
-  .header-right .invoice-no {
-    font-size: 16px; font-weight: 900; font-family: 'Courier New', monospace;
-    color: #000; letter-spacing: 1px;
-  }
+  .top-rule { border-top: 2.5px solid #000; margin-bottom: 0; }
 
-  /* ── DIVIDER ── */
-  hr.solid  { border: none; border-top: 2px solid #000; margin: 12px 0; }
-  hr.light  { border: none; border-top: 1px solid #ccc; margin: 10px 0; }
-  hr.dashed { border: none; border-top: 1px dashed #aaa; margin: 10px 0; }
+  .header-meta {
+    text-align: center;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 18px;
+  }
+  .invoice-label {
+    font-size: 9px; font-weight: 700; letter-spacing: 4px;
+    text-transform: uppercase; color: #888; margin-bottom: 10px;
+  }
+  .rest-name {
+    font-size: 26px; font-weight: 900; color: #000;
+    letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 8px;
+  }
+  .rest-sub {
+    font-size: 11px; color: #444; line-height: 1.8;
+  }
+  .rest-sub strong { font-weight: 800; }
 
   /* ── BILL META ── */
-  .meta { display: flex; justify-content: space-between; margin-bottom: 14px; }
-  .meta-block { }
-  .meta-label { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
-  .meta-val   { font-size: 13px; font-weight: 700; color: #000; }
-  .meta-sub   { font-size: 10px; color: #555; margin-top: 2px; }
-  .sac-box {
-    display: inline-block;
-    border: 1px solid #000;
-    padding: 3px 9px;
-    font-size: 9px; font-weight: 700;
-    letter-spacing: 0.5px;
-    margin-top: 5px;
+  .meta-row {
+    display: flex; justify-content: space-between;
+    margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 2px solid #000; border-top: 2px solid #000;
+    padding-top: 12px;
   }
+  .meta-left .bill-label { font-size: 10px; color: #888; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .meta-left .bill-no   { font-size: 16px; font-weight: 900; color: #000; }
+  .meta-right { text-align: right; }
+  .meta-right .date-val { font-size: 14px; font-weight: 800; color: #000; }
+  .meta-right .time-val { font-size: 12px; color: #666; margin-top: 2px; }
+
+  .customer-block {
+    font-size: 12px; line-height: 1.7; color: #000;
+    padding-bottom: 16px; border-bottom: 1px solid #ccc;
+    margin-bottom: 16px;
+  }
+  .customer-block div { font-weight: 500; }
 
   /* ── ITEMS TABLE ── */
-  table.items { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-  table.items thead tr { border-bottom: 2px solid #000; border-top: 2px solid #000; }
+  table.items { width: 100%; border-collapse: collapse; }
+  table.items thead tr {
+    border-top: 2px solid #000;
+    border-bottom: 2px solid #000;
+  }
   table.items th {
-    font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
-    text-transform: uppercase; color: #000;
-    padding: 7px 6px; text-align: left;
+    font-size: 9px; font-weight: 800; letter-spacing: 2px;
+    text-transform: uppercase; color: #888;
+    padding: 8px 6px; text-align: left;
   }
   table.items th.num { text-align: right; }
-  table.items th.sr  { width: 28px; }
   table.items td {
-    padding: 9px 6px; border-bottom: 1px solid #e8e8e8;
-    vertical-align: top; font-size: 12px; color: #000;
+    padding: 11px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
   }
-  table.items td.sr   { color: #888; font-size: 10px; text-align: center; }
-  table.items td.desc { }
-  table.items td.num  { text-align: right; font-weight: 700; white-space: nowrap; font-family: 'Courier New', monospace; }
-  .rate { font-size: 10px; color: #888; margin-top: 2px; }
+  .item-name { display: block; font-size: 13px; font-weight: 600; color: #000; }
+  .item-rate { display: block; font-size: 10px; color: #999; margin-top: 3px; }
+  td.num { text-align: right; font-size: 13px; font-weight: 700; color: #000; white-space: nowrap; }
 
   /* ── TAX BLOCK ── */
-  .tax-block { width: 260px; margin-left: auto; margin-top: 8px; }
-  .tax-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11px; color: #333; border-bottom: 1px solid #f0f0f0; }
-  .tax-row.subtotal { font-weight: 600; color: #000; }
+  .tax-block { width: 280px; margin-left: auto; margin-top: 10px; }
+  .tax-row {
+    display: flex; justify-content: space-between;
+    padding: 5px 0; font-size: 12px; color: #444;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .tax-row.subtotal-row { font-weight: 700; color: #000; }
   .grand-row {
     display: flex; justify-content: space-between; align-items: baseline;
-    padding: 10px 0 4px; border-top: 2px solid #000; margin-top: 6px;
+    padding: 12px 0 4px; border-top: 2.5px solid #000; margin-top: 8px;
   }
-  .grand-label { font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
-  .grand-amt   { font-size: 22px; font-weight: 900; font-family: 'Courier New', monospace; }
-  .words-row   { text-align: right; font-size: 9.5px; color: #666; font-style: italic; margin-top: 3px; }
-  .gst-note    { text-align: right; font-size: 9px; color: #999; margin-top: 2px; }
+  .grand-label { font-size: 14px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
+  .grand-amt   { font-size: 26px; font-weight: 900; font-family: Arial, sans-serif; }
+  .words-note  { text-align: right; font-size: 10px; color: #888; font-style: italic; margin-top: 4px; }
+  .gst-note    { text-align: right; font-size: 9px; color: #bbb; margin-top: 3px; }
 
   /* ── FOOTER ── */
-  .footer { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .footer-msg { font-size: 11px; color: #555; font-style: italic; }
-  .footer-brand { font-size: 8px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #bbb; }
-
-  @media print {
-    @page { size: A4 portrait; margin: 0; }
-    body  { background: #fff !important; }
-    .page { padding: 16mm 16mm 18mm !important; }
+  .footer {
+    margin-top: 28px; border-top: 1px solid #ccc;
+    padding-top: 14px; display: flex;
+    justify-content: space-between; align-items: center;
   }
+  .footer-msg   { font-size: 11px; color: #666; font-style: italic; }
+  .footer-brand { font-size: 8px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; color: #bbb; }
 </style>
 </head>
 <body>
-<div class="page">
+<div class="page" id="invoice-root">
+
   <div class="top-rule"></div>
 
-  <!-- HEADER -->
-  <div class="header">
-    <div class="header-left">
-      <h1>${rd?.name || 'RESTAURANT'}</h1>
-      <p>
-        ${addr ? `${addr}<br/>` : ''}
-        ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
-        ${rd?.gstin && rd.gstin !== 'GSTIN PENDING' ? `<strong>GSTIN: ${rd.gstin}</strong><br/>` : 'GSTIN: Pending<br/>'}
-        ${rd?.fssaiNumber ? `FSSAI: ${rd.fssaiNumber}` : ''}
-      </p>
-    </div>
-    <div class="header-right">
-      <div class="invoice-label">Tax Invoice</div>
-      <div class="invoice-no">${invoiceNo}</div>
-      <div style="font-size:10px;color:#555;margin-top:5px;">${now}</div>
-      <div class="sac-box">SAC: 996331</div>
+  <!-- RESTAURANT HEADER -->
+  <div class="header-meta">
+    <div class="invoice-label">Tax Invoice</div>
+    <div class="rest-name">${rd?.name || 'RESTAURANT'}</div>
+    <div class="rest-sub">
+      ${addr ? `${addr}<br/>` : ''}
+      ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
+      ${rd?.gstin && rd.gstin !== 'GSTIN PENDING'
+        ? `<strong>GSTIN: ${rd.gstin}</strong><br/>`
+        : '<strong>GSTIN: GSTIN PENDING</strong><br/>'}
+      <span style="font-size:10px;color:#888;">SAC Code: 996331 · GST Rate: ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%)</span>
     </div>
   </div>
-
-  <hr class="solid"/>
 
   <!-- BILL META -->
-  <div class="meta">
-    <div class="meta-block">
-      <div class="meta-label">Billed To</div>
-      <div class="meta-val">${customerInfo.name || 'Guest'}</div>
-      <div class="meta-sub">${customerInfo.phone ? `+91 ${customerInfo.phone}` : ''}</div>
+  <div class="meta-row">
+    <div class="meta-left">
+      <div class="bill-label">BILL NO.</div>
+      <div class="bill-no">#${invoiceNo.replace('INV-','')}</div>
     </div>
-    <div class="meta-block" style="text-align:right;">
-      <div class="meta-label">Table</div>
-      <div class="meta-val">${tableNumber}</div>
-      <div class="meta-sub">Dine-In</div>
+    <div class="meta-right">
+      <div class="date-val">${dateStr}</div>
+      <div class="time-val">${timeStr}</div>
     </div>
   </div>
 
-  <hr class="solid"/>
+  <!-- CUSTOMER -->
+  <div class="customer-block">
+    <div>Customer: ${customerInfo.name || 'Guest'}</div>
+    ${customerInfo.phone ? `<div>Phone: ${customerInfo.phone}</div>` : ''}
+    <div>Table: ${tableNumber}</div>
+  </div>
 
   <!-- ITEMS TABLE -->
   <table class="items">
     <thead>
       <tr>
-        <th class="sr">#</th>
-        <th class="desc">Item Description</th>
-        <th class="num">Amount</th>
+        <th>Item Description</th>
+        <th class="num">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -2066,13 +2069,13 @@ const autoDownloadInvoicePDF = useCallback(() => {
     </tbody>
   </table>
 
-  ${finalBillItems.some(i => i.isExtraItem) ? `<div style="font-size:9.5px;color:#999;margin-top:6px;font-style:italic;">* Extra items ordered at counter</div>` : ''}
+  ${finalBillItems.some(i => i.isExtraItem) ? `<div style="font-size:9.5px;color:#aaa;margin-top:6px;font-style:italic;">* Extra items ordered at counter</div>` : ''}
 
-  <!-- TAX BLOCK -->
+  <!-- TAX BREAKDOWN -->
   <div class="tax-block">
-    <div class="tax-row subtotal">
+    <div class="tax-row subtotal-row">
       <span>Subtotal</span>
-      <span>₹${subtotal.toFixed(2)}</span>
+      <span>₹${taxableAmt.toFixed(2)}</span>
     </div>
     <div class="tax-row">
       <span>CGST @ ${cgstPct}%</span>
@@ -2084,10 +2087,10 @@ const autoDownloadInvoicePDF = useCallback(() => {
     </div>
     <div class="grand-row">
       <span class="grand-label">Grand Total</span>
-      <span class="grand-amt">₹${grandTotal.toFixed(2)}</span>
+      <span class="grand-amt">₹${grandTotal}</span>
     </div>
-    <div class="words-row">${numberToWordsClient(Math.round(grandTotal))}</div>
-    <div class="gst-note">GST @ ${(cgstPct + sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%) · SAC 996331</div>
+    <div class="words-note"><em>${numberToWordsClient(grandTotal)}</em></div>
+    <div class="gst-note">GST @ ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%) · SAC 996331</div>
   </div>
 
   <!-- FOOTER -->
@@ -2095,20 +2098,32 @@ const autoDownloadInvoicePDF = useCallback(() => {
     <div class="footer-msg">Thank you for dining with us! Please visit again.</div>
     <div class="footer-brand">Powered by Pratyeksha</div>
   </div>
+
 </div>
+
+<script>
+  window.onload = function() {
+    var element = document.getElementById('invoice-root');
+    var opt = {
+      margin:      [8, 8, 8, 8],
+      filename:    'TaxInvoice_Table${tableNumber}_${invoiceNo}.pdf',
+      image:       { type: 'jpeg', quality: 1.0 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save().then(function() {
+      setTimeout(function() { window.close(); }, 1000);
+    });
+  };
+</script>
 </body>
 </html>`;
 
-  // Force download — no popup
+  // Open in new tab — html2pdf auto-downloads the PDF then closes
   const blob = new Blob([html], { type: 'text/html' });
   const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `TaxInvoice_Table${tableNumber}_${invoiceNo}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  const win  = window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient]);
 
   // Add this useEffect to ask notification permission early, before order is placed
@@ -4937,10 +4952,10 @@ const categoryIconMap = {
           <span>SGST @ {sgstPct}%</span>
           <span>₹{sgstAmt.toFixed(2)}</span>
         </div>
-        <div style={styles.billLineTotal}>
+<div style={styles.billLineTotal}>
           <span>{t[language].grandTotal}</span>
           <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
-            ₹{grandTotal.toFixed(2)}
+            ₹{Math.round(grandTotal)}
           </span>
         </div>
       </>
