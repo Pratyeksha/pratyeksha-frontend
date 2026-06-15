@@ -2134,7 +2134,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
       jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save().then(function() {
-      setTimeout(function() { window.close(); }, 1000);
+      setTimeout(function() { window.close(); }, 90000);
     });
   };
 </script>
