@@ -12,7 +12,7 @@ import {
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
-  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText   
+  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify 
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -150,6 +150,8 @@ const istTodayStr = useMemo(() => {
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
   const logoPath = `${import.meta.env.BASE_URL}logo.png`;
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [inventory, setInventory] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -2247,199 +2249,242 @@ const renderMonthHeatmap = () => {
         )}
       </AnimatePresence>
 
-      {/* SIDEBAR */}
-<aside style={styles.sidebar} className="p-sidebar">
-<div style={styles.sidebarTop} className="sidebar-nav p-sidebar-top" >
-            <div style={styles.logoWrapper}><img src={logoPath} alt="Logo" style={styles.sidebarLogo} className="p-sidebar-logo-wrap"/></div>
-<nav style={styles.navStack} className="p-nav-stack">            {[
-              {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
-              {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
-              {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
-              {id:'extras', label:'EXTRA ITEMS', icon:<ShoppingBag size={18}/>},
-              {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
-              {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
-              {id:'management',label:'MANAGEMENT',   icon:<ShieldCheck size={18}/>},
-              {id:'inventory',label:'INVENTORY',     icon:<Layers size={18}/>},
-              {id:'recipes',  label:'RECIPES',       icon:<ChefHat size={18}/>},
-              {id:'marketing',label:'CAMPAIGN HUB',  icon:<MessageSquare size={18}/>},
-
-            ].map(tab=>(
-              <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
-                style={activeTab===tab.id?styles.activeTab:styles.navBtn}>
-                <span style={{marginRight:'15px'}}>{tab.icon}</span>{tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-        <div style={styles.sidebarBottom}>
-          <div style={styles.operatorCard}><User size={16} color="#d3bfa2"/><div><div style={{fontSize:'0.75rem',fontWeight:'900'}}>MANAGER</div><div style={{fontSize:'0.6rem',color:'#444'}}>SESSION ACTIVE</div></div></div>
-          <button onClick={handleLogout} style={styles.logoutBtn}>LOGOUT TERMINAL</button>
-        </div>
-      </aside>
-
-      {/* MAIN */}
-      <main style={styles.mainContent}>
-        <header style={styles.topHeader}>
-          <div><h1 style={styles.pageTitle}>{activeTab.replace('_',' ').toUpperCase()}</h1></div>
-          {/* ── Billing HUD ── */}
-          {activeTab==='billing' && (
-            <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} style={styles.hudCountersRow}>
-{[
-  {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
-  {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
-  {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
-  {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
-  {label:"CGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
-  {label:"SGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
-].map((s,i)=>(
-                <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
-                  <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
-                  <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
-                    {s.val<10?`0${s.val}`:s.val}
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          )}
-          {activeTab==='inventory' &&(
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
-
-                  <button onClick={()=>exportToExcel('inventory')}
-                  style={{padding:'10px 18px',background:'transparent',border:'1px solid rgba(211,191,162,0.25)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer'}}>
-                  EXPORT XLS
-                </button>
-                </div>
-          )}
-          {/* ── Insights month selector ── */}
-          {activeTab==='insights' && (
-            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-              <div style={styles.headerMonthSelector}>
-                <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
-                <div style={styles.headerMonthDisplay}>
-                  <Calendar size={14} color="#d3bfa2"/>
-                  <span style={{fontWeight:'900',fontSize:'0.85rem'}}>
-                    {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
-                  </span>
-                </div>
-                <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
-              </div>
-              {['daily','weekly','monthly','annual'].map(p=>(
-                <button key={p} onClick={()=>exportToExcel(p)}
-                  style={{padding:'6px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#555',borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer'}}>
-                  {p.toUpperCase()} XLS
-                </button>
-                
-              ))}
-            </div>
-          )}
-          {activeTab==='extras' &&(    
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '24px', borderBottom: '1px solid #151515' }}>
-
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>{extraItems.length}</div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>TOTAL ITEMS</div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#4ade80' }}>{extraItems.filter(i => i.isAvailable).length}</div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AVAILABLE</div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '20px 20px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', borderTop: '2px solid #d3bfa2' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
-            ₹{extraItems.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '1px' }}>STOCK VALUE</div>
-        </div>
-      </div>
-    </div>)}
-          {activeTab==='pending' && (
-            <div style={styles.zoneControl}>
-              {['all','fresh','delayed'].map(z=>(
-                <button key={z} onClick={()=>setOrderZone(z)} style={orderZone===z?styles.activeZoneBtn:styles.zoneBtn}>
-                  {z.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          )}
-{activeTab === 'menu' && (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-    {/* VEG / NON-VEG FILTER — unchanged */}
-    <div style={{ display: 'flex', background: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '4px', gap: '4px' }}>
+ 
+{/* MOBILE OVERLAY BACKDROP */}
+{sidebarOpen && (
+  <div
+    onClick={() => setSidebarOpen(false)}
+    style={{
+      display: 'none',
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.75)',
+      zIndex: 8999,
+    }}
+    className="p-mob-backdrop"
+  />
+)}
+ 
+<aside style={styles.sidebar} className={`p-sidebar ${sidebarOpen ? 'p-sidebar-open' : ''}`}>
+  <div style={styles.sidebarTop} className="p-sidebar-top">
+    <div style={styles.logoWrapper}>
+      <img src={logoPath} alt="Logo" style={styles.sidebarLogo} className="p-sidebar-logo-wrap"/>
+    </div>
+    <nav style={styles.navStack} className="p-nav-stack">
       {[
-        { val: 'all',    label: 'ALL' },
-        { val: 'veg',    label: 'VEG' },
-        { val: 'nonveg', label: 'NON-VEG' },
-      ].map(f => (
-        <button key={f.val} onClick={() => setMenuVegFilter(f.val)} style={{
-          padding: '7px 14px', border: 'none', borderRadius: '7px', cursor: 'pointer',
-          fontSize: '0.65rem', fontWeight: '900',
-          background: menuVegFilter === f.val ? '#d3bfa2' : 'transparent',
-          color: menuVegFilter === f.val ? '#000' : '#444',
-          transition: 'all 0.15s'
-        }}>
-          {f.val === 'veg' && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: menuVegFilter === 'veg' ? '#4a7c3f' : '#555', display: 'inline-block' }}/>
-              VEG
-            </span>
-          )}
-          {f.val === 'nonveg' && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `7px solid ${menuVegFilter === 'nonveg' ? '#8a3030' : '#555'}`, display: 'inline-block' }}/>
-              NON-VEG
-            </span>
-          )}
-          {f.val === 'all' && 'ALL'}
+        {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
+        {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
+        {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
+        {id:'extras',   label:'EXTRA ITEMS',   icon:<ShoppingBag size={18}/>},
+        {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
+        {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
+        {id:'management',label:'MANAGEMENT',  icon:<ShieldCheck size={18}/>},
+        {id:'inventory',label:'INVENTORY',    icon:<Layers size={18}/>},
+        {id:'recipes',  label:'RECIPES',      icon:<ChefHat size={18}/>},
+        {id:'marketing',label:'CAMPAIGN HUB', icon:<MessageSquare size={18}/>},
+      ].map(tab => (
+        <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
+          style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
+          className="p-nav-btn"
+          title={tab.label}>
+          <span style={{marginRight:'15px', flexShrink: 0}}>{tab.icon}</span>
+          <span className="p-nav-label">{tab.label}</span>
         </button>
       ))}
+    </nav>
+  </div>
+  <div style={styles.sidebarBottom} className="p-sidebar-bottom">
+    <div style={styles.operatorCard} className="p-op-card">
+      <User size={16} color="#d3bfa2"/>
+      <div className="p-op-text">
+        <div style={{fontSize:'0.75rem',fontWeight:'900'}}>MANAGER</div>
+        <div style={{fontSize:'0.6rem',color:'#444'}}>SESSION ACTIVE</div>
+      </div>
     </div>
+    <button onClick={handleLogout} style={styles.logoutBtn} className="p-logout-btn">
+      LOGOUT TERMINAL
+    </button>
+  </div>
+</aside>
 
-    {/* AUTO-HIDE TOGGLE — premium design */}
-    {tenantConfig && (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '8px 14px', background: '#000',
-        border: `1px solid ${tenantConfig.config?.autoHideDishesOnLowStock ? 'rgba(211,191,162,0.25)' : '#1a1a1a'}`,
-        borderRadius: '10px', transition: 'all 0.2s'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {/* Low stock icon — lucide Layers */}
-          <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444'} />
-          <span style={{
-            fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.5px',
-            color: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444'
-          }}>
-            AUTO-HIDE LOW STOCK
-          </span>
-        </div>
-        {/* Toggle pill */}
-        <button
-          type="button"
-          onClick={async () => {
-            const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
-            await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
-            setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
-            showNotif(`Auto-hide ${nv ? 'enabled — dishes hide when stock hits zero' : 'disabled'}`);
-          }}
-          style={{
-            width: '38px', height: '20px', borderRadius: '10px', border: 'none',
-            cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-            background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a'
-          }}
-        >
-          <div style={{
-            position: 'absolute', top: '3px',
-            left: tenantConfig.config?.autoHideDishesOnLowStock ? '20px' : '3px',
-            width: '14px', height: '14px', borderRadius: '50%',
-            background: tenantConfig.config?.autoHideDishesOnLowStock ? '#0c0c0c' : '#444',
-            transition: 'left 0.2s'
-          }} />
+
+<main style={styles.mainContent}>
+  <header style={styles.topHeader} className="p-top-header">
+ 
+    {/* HAMBURGER — mobile/tablet only */}
+    <button
+      className="p-hamburger"
+      onClick={() => setSidebarOpen(true)}
+      style={{
+        display: 'none',
+        background: 'transparent',
+        border: '1px solid #1a1a1a',
+        color: '#d3bfa2',
+        width: '38px', height: '38px',
+        borderRadius: '10px',
+        cursor: 'pointer',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+      aria-label="Open menu"
+    >
+      <AlignJustify size={18} color="#d3bfa2" />
+    </button>
+ 
+    <div className="p-header-left">
+      <h1 style={styles.pageTitle} className="p-page-title">
+        {activeTab.replace('_',' ').toUpperCase()}
+      </h1>
+    </div>
+ 
+    {/* ── Billing HUD ── */}
+    {activeTab==='billing' && (
+      <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}}
+        style={styles.hudCountersRow} className="p-hud">
+        {[
+          {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
+          {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
+          {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
+          {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
+          {label:"CGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+          {label:"SGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
+        ].map((s,i)=>(
+          <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
+            <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
+            <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
+              {typeof s.val === 'number' ? (s.val<10?`0${s.val}`:s.val) : s.val}
+            </div>
+          </div>
+        ))}
+      </motion.div>
+    )}
+ 
+    {activeTab==='inventory' && (
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
+        <button onClick={()=>exportToExcel('inventory')}
+          style={{padding:'10px 18px',background:'transparent',border:'1px solid rgba(211,191,162,0.25)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer'}}>
+          EXPORT XLS
         </button>
       </div>
     )}
-  </div>
-)}
-        </header>
+ 
+    {activeTab==='insights' && (
+      <div style={{display:'flex',alignItems:'center',gap:'10px'}} className="p-insights-header">
+        <div style={styles.headerMonthSelector}>
+          <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
+          <div style={styles.headerMonthDisplay}>
+            <Calendar size={14} color="#d3bfa2"/>
+            <span style={{fontWeight:'900',fontSize:'0.85rem'}}>
+              {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
+            </span>
+          </div>
+          <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
+        </div>
+        {['daily','weekly','monthly','annual'].map(p=>(
+          <button key={p} onClick={()=>exportToExcel(p)}
+            style={{padding:'6px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#555',borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer'}}
+            className="p-xls-btn">
+            {p.toUpperCase()} XLS
+          </button>
+        ))}
+      </div>
+    )}
+ 
+    {activeTab==='extras' && (
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'24px',borderBottom:'1px solid #151515'}}>
+        <div style={{display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
+          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid #1a1a1a',borderRadius:'12px'}}>
+            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#d3bfa2'}}>{extraItems.length}</div>
+            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'2px'}}>TOTAL ITEMS</div>
+          </div>
+          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid #1a1a1a',borderRadius:'12px'}}>
+            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#4ade80'}}>{extraItems.filter(i=>i.isAvailable).length}</div>
+            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'2px'}}>AVAILABLE</div>
+          </div>
+          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'12px',borderTop:'2px solid #d3bfa2'}}>
+            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#d3bfa2'}}>
+              ₹{extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}
+            </div>
+            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'1px'}}>STOCK VALUE</div>
+          </div>
+        </div>
+      </div>
+    )}
+ 
+    {activeTab==='pending' && (
+      <div style={styles.zoneControl}>
+        {['all','fresh','delayed'].map(z=>(
+          <button key={z} onClick={()=>setOrderZone(z)}
+            style={orderZone===z ? styles.activeZoneBtn : styles.zoneBtn}>
+            {z.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    )}
+ 
+    {activeTab==='menu' && (
+      <div style={{display:'flex',alignItems:'center',gap:'14px'}} className="p-menu-header-actions">
+        <div style={{display:'flex',background:'#000',border:'1px solid #1a1a1a',borderRadius:'10px',padding:'4px',gap:'4px'}}>
+          {[
+            {val:'all',    label:'ALL'},
+            {val:'veg',    label:'VEG'},
+            {val:'nonveg', label:'NON-VEG'},
+          ].map(f=>(
+            <button key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
+              padding:'7px 14px',border:'none',borderRadius:'7px',cursor:'pointer',
+              fontSize:'0.65rem',fontWeight:'900',
+              background: menuVegFilter===f.val ? '#d3bfa2' : 'transparent',
+              color: menuVegFilter===f.val ? '#000' : '#444',
+              transition:'all 0.15s'
+            }}>
+              {f.val==='veg' && (
+                <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}>
+                  <span style={{width:'8px',height:'8px',borderRadius:'50%',background:menuVegFilter==='veg'?'#4a7c3f':'#555',display:'inline-block'}}/>
+                  VEG
+                </span>
+              )}
+              {f.val==='nonveg' && (
+                <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}>
+                  <span style={{width:0,height:0,borderLeft:'4px solid transparent',borderRight:'4px solid transparent',borderBottom:`7px solid ${menuVegFilter==='nonveg'?'#8a3030':'#555'}`,display:'inline-block'}}/>
+                  NON-VEG
+                </span>
+              )}
+              {f.val==='all' && 'ALL'}
+            </button>
+          ))}
+        </div>
+ 
+        {tenantConfig && (
+          <div style={{
+            display:'flex',alignItems:'center',gap:'10px',
+            padding:'8px 14px',background:'#000',
+            border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.25)':'#1a1a1a'}`,
+            borderRadius:'10px',transition:'all 0.2s'
+          }} className="p-autohide-toggle">
+            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+              <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#444'}/>
+              <span style={{fontSize:'0.62rem',fontWeight:'900',letterSpacing:'0.5px',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#444'}}
+                className="p-autohide-label">
+                AUTO-HIDE LOW STOCK
+              </span>
+            </div>
+            <button type="button"
+              onClick={async()=>{
+                const nv=!tenantConfig.config?.autoHideDishesOnLowStock;
+                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});
+                setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));
+                showNotif(`Auto-hide ${nv?'enabled — dishes hide when stock hits zero':'disabled'}`);
+              }}
+              style={{width:'38px',height:'20px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',
+                background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#1a1a1a'}}>
+              <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'20px':'3px',width:'14px',height:'14px',borderRadius:'50%',
+                background:tenantConfig.config?.autoHideDishesOnLowStock?'#0c0c0c':'#444',transition:'left 0.2s'}}/>
+            </button>
+          </div>
+        )}
+      </div>
+    )}
+  </header>
 
         {/* ════════════════════════════════════════════════
             SCROLL AREA — all tab content lives here, 
@@ -8924,28 +8969,14 @@ onClick={async () => {
   )}
 </AnimatePresence>
 
+
 <style>{`
-
-/* ── BASE TOKENS ── */
-:root {
-  --gold: #d3bfa2;
-  --gold-dim: #8a704d;
-  --bg: #050505;
-  --card: #0d0d0d;
-  --border: #1a1a1a;
-}
-
-/* ── ANIMATIONS ── */
-@keyframes moodPulse {
-  0%,100%{opacity:1;transform:scale(1);}
-  50%{opacity:.4;transform:scale(1.03);}
-}
-@keyframes spin{
-  0%{transform:rotate(0deg);}
-  100%{transform:rotate(360deg);}
-}
-
-/* ── SCROLLBARS ── */
+ 
+/* ── BASE ── */
+@keyframes moodPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.03);}}
+@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@keyframes p-slide-in{from{transform:translateX(-100%);}to{transform:translateX(0);}}
+ 
 .custom-scroll::-webkit-scrollbar{width:4px;height:4px;}
 .custom-scroll::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:10px;}
 .custom-scroll::-webkit-scrollbar-track{background:transparent;}
@@ -8953,495 +8984,413 @@ onClick={async () => {
 .sidebar-nav::-webkit-scrollbar-thumb{background:#222;border-radius:10px;}
 .kds-scroll::-webkit-scrollbar{width:3px;}
 .kds-scroll::-webkit-scrollbar-thumb{background:#2a1f0e;border-radius:10px;}
-
-/* ── UTILS ── */
+ 
 .spinner{border:3px solid #111;border-top:3px solid #d3bfa2;border-radius:50%;width:32px;height:32px;animation:spin .8s linear infinite;}
 tr:hover td{background:rgba(255,255,255,.01);}
 .mono{font-family:'JetBrains Mono','Courier New',monospace;}
-
-/* ══════════════════════════════════════════════════
-   DESKTOP — 1025px+  (default, already styled inline)
-══════════════════════════════════════════════════ */
-
-/* ══════════════════════════════════════════════════
-   TABLET — 681 – 1024px
-══════════════════════════════════════════════════ */
-@media (min-width:681px) and (max-width:1024px){
-
-  /* Layout */
-  div[style*="width:'280px'"],
-  aside.p-sidebar{
-    width:200px!important;min-width:200px!important;
-  }
-
-  /* Sidebar logo */
-  img.p-sidebar-logo{width:110px!important;}
-
-  /* Nav buttons */
-  button[style*="'14px 20px'"],
-  button[style*="'14px 20px'"] {
-    padding:11px 14px!important;font-size:.68rem!important;
-  }
-
-  /* Header */
-  header[style*="topHeader"]{
-    padding:0 28px!important;min-height:80px!important;
-    flex-wrap:wrap!important;gap:8px!important;
-  }
-
-  /* Scroll area */
-  section[style*="scrollArea"]{padding:28px 28px!important;}
-
-  /* KDS row — keep side by side but compress */
-  .p-kds-row{grid-template-columns:1.2fr 1px 1fr!important;}
-
-  /* Queue cards — single col on tablet */
-  .p-queue-grid{grid-template-columns:1fr!important;}
-
-  /* Billing */
-  .p-billing-flex{flex-direction:column!important;gap:32px!important;}
-
-  /* Table grid */
-  .p-table-grid{grid-template-columns:repeat(auto-fill,minmax(72px,1fr))!important;}
-
-  /* 2-col insights → single */
-  .p-2col{grid-template-columns:1fr!important;}
-  .p-mgmt-2col{grid-template-columns:1fr!important;}
-
-  /* Menu grid */
-  .p-menu-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))!important;}
-
-  /* Extras add form */
-  .p-extras-form{grid-template-columns:1fr 1fr 1fr!important;}
-
-  /* Inventory form */
-  .p-inv-form{grid-template-columns:1fr 1fr auto!important;}
-
-  /* Stats row wraps */
-  .p-stats-row{flex-wrap:wrap!important;}
-  .p-stats-row>div{flex:1 1 140px!important;}
-
-  /* HUD wraps */
-  .p-hud{flex-wrap:wrap!important;}
-
-  /* Modal */
-  .p-modal-backdrop{align-items:center!important;}
-  .p-modal-box{max-width:90vw!important;}
-
-  /* Purchase history drawer */
-  .p-purchase-drawer{width:380px!important;}
-
-  /* Heat squares */
-  .p-heat-sq{height:52px!important;}
-  .p-heat-sq-empty{height:52px!important;}
-}
-
-/* ══════════════════════════════════════════════════
-   MOBILE — ≤680px
-══════════════════════════════════════════════════ */
-@media(max-width:680px){
-
-  /* ─── ROOT LAYOUT ─── */
-
-  /* The fixed dashboard wrapper */
-  div[style*="width:'100vw'"][style*="height:'100vh'"][style*="position:'fixed'"],
-  .p-dashboard-root{
-    flex-direction:column!important;
-  }
-
-  /* ─── SIDEBAR → BOTTOM TAB BAR ─── */
-  aside,
-  div[style*="width:'280px'"][style*="borderRight"]{
+ 
+/* ── DESKTOP — unchanged ── */
+ 
+/* ══════════════════════════════════════════════
+   TABLET  640px – 1024px
+══════════════════════════════════════════════ */
+@media (min-width:640px) and (max-width:1024px){
+ 
+  /* Show hamburger, hide nothing else */
+  .p-hamburger{display:flex!important;}
+ 
+  /* Sidebar → drawer */
+  .p-sidebar{
     position:fixed!important;
-    bottom:0!important;left:0!important;right:0!important;
-    top:auto!important;
-    width:100vw!important;min-width:100vw!important;
-    height:60px!important;
-    flex-direction:row!important;
-    border-right:none!important;
-    border-top:1px solid #1a1a1a!important;
-    z-index:8000!important;
-    background:#080808!important;
-    overflow:hidden!important;
+    left:0!important;top:0!important;bottom:0!important;
+    width:260px!important;min-width:260px!important;
+    z-index:9000!important;
+    transform:translateX(-100%)!important;
+    transition:transform 0.28s cubic-bezier(.4,0,.2,1)!important;
+    box-shadow:4px 0 32px rgba(0,0,0,0.7)!important;
   }
-
-  /* Sidebar top section → horizontal scrollable */
-  div[style*="padding:'40px 25px'"],
-  div[style*="padding:'30px 20px'"],
-  .p-sidebar-top{
-    flex-direction:row!important;
-    padding:0 6px!important;
-    overflow-x:auto!important;overflow-y:hidden!important;
-    flex:1!important;
-    height:60px!important;
-    align-items:center!important;
-    scrollbar-width:none!important;
+  .p-sidebar.p-sidebar-open{
+    transform:translateX(0)!important;
   }
-  .p-sidebar-top::-webkit-scrollbar{display:none!important;}
-
-  /* Hide logo & bottom section in mobile sidebar */
-  div[style*="marginBottom:'40px'"],
-  div[style*="padding:'25px'"][style*="borderTop:'1px solid #151515'"]{
-    display:none!important;
-  }
-
-  /* Nav stack → row */
-  nav[style*="navStack"],
-  .p-nav-stack{
-    flex-direction:row!important;
-    gap:2px!important;
-    align-items:center!important;
-    width:max-content!important;
-    padding:0!important;
-    margin:0!important;
-  }
-
-  /* Individual nav buttons */
-  button[style*="'14px 20px'"][style*="navBtn"],
-  button[style*="activeTab"],
-  .p-sidebar nav button{
-    flex-direction:column!important;
-    gap:2px!important;
-    font-size:.38rem!important;
-    padding:6px 8px!important;
-    min-width:52px!important;
-    max-width:68px!important;
-    height:56px!important;
-    white-space:nowrap!important;
-    overflow:hidden!important;
-    border-radius:8px!important;
-    letter-spacing:.2px!important;
-  }
-  /* Hide text, show only icon */
-  button[style*="navBtn"] span:not([style*="marginRight"]),
-  button[style*="activeTab"] span:not([style*="marginRight"]){
-    display:none!important;
-  }
-
-  /* ─── MAIN CONTENT ─── */
-  main{
-    padding-bottom:64px!important;
-    overflow:hidden!important;
-  }
-
+  .p-mob-backdrop{display:block!important;}
+ 
+  /* Nav labels visible */
+  .p-nav-label{display:inline!important;}
+ 
+  /* Main gets full width */
+  main{width:100%!important;margin-left:0!important;}
+ 
   /* Header */
-  header[style*="topHeader"]{
-    padding:0 14px!important;
-    min-height:54px!important;height:54px!important;
-    flex-wrap:wrap!important;gap:4px!important;
-    overflow:hidden!important;
+  .p-top-header{
+    padding:0 18px!important;
+    min-height:62px!important;
+    gap:10px!important;
+    flex-wrap:wrap!important;
   }
-  h1[style*="pageTitle"]{font-size:.8rem!important;letter-spacing:.3px!important;}
-
-  /* HUD counters → horizontal scroll strip */
-  div[style*="hudCountersRow"]{
+  .p-page-title{font-size:0.9rem!important;}
+ 
+  /* HUD → horizontal scroll */
+  .p-hud{
     flex-wrap:nowrap!important;
     overflow-x:auto!important;
     scrollbar-width:none!important;
     -webkit-overflow-scrolling:touch!important;
     margin-right:0!important;
-    border-radius:0!important;
+    max-width:calc(100vw - 140px)!important;
   }
-  div[style*="hudCountersRow"]::-webkit-scrollbar{display:none!important;}
-  div[style*="hudStatBox"]{min-width:88px!important;padding:4px 10px!important;}
-  div[style*="hudStatValue"]{font-size:1.05rem!important;}
-
+  .p-hud::-webkit-scrollbar{display:none!important;}
+  .p-hud > div{min-width:90px!important;padding:4px 12px!important;}
+ 
+  /* Insights header wraps */
+  .p-insights-header{flex-wrap:wrap!important;gap:6px!important;}
+  .p-xls-btn{padding:5px 8px!important;font-size:0.55rem!important;}
+ 
+  /* Extras KPI */
+  .p-extras-kpi > div{padding:12px 14px!important;}
+ 
+  /* Menu header actions */
+  .p-menu-header-actions{flex-wrap:wrap!important;gap:8px!important;}
+  .p-autohide-label{display:none!important;}
+ 
   /* Scroll area */
-  section[style*="scrollArea"]{
-    padding:12px 12px!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    height:calc(100vh - 54px - 60px)!important;
-    -webkit-overflow-scrolling:touch!important;
-  }
-
-  /* ─── ZONE BUTTONS ─── */
-  div[style*="zoneControl"]{gap:6px!important;}
-  div[style*="zoneControl"] button{
-    padding:7px 12px!important;font-size:.58rem!important;
-  }
-
-  /* ─── KDS ROW ─── */
+  section[style*="scrollArea"],
+  .scrollArea{padding:24px 20px!important;}
+ 
+  /* KDS row — stacked on tablet */
   .p-kds-row{
     grid-template-columns:1fr!important;
     gap:16px!important;
   }
   .p-service-divider{display:none!important;}
-
-  /* ─── COUNTER QUEUE ─── */
-  .p-queue-grid{grid-template-columns:1fr!important;}
-
-  /* Tab bar inside counter queue */
-  div[style*="queueTab"]{overflow-x:auto!important;scrollbar-width:none!important;}
-  div[style*="queueTab"]::-webkit-scrollbar{display:none!important;}
-  div[style*="queueTab"] button{
-    font-size:.5rem!important;padding:9px 10px!important;
-    white-space:nowrap!important;
+ 
+  /* Queue grid */
+  .p-queue-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important;}
+ 
+  /* 2-col grids */
+  div[style*="gridTemplateColumns:'1fr 1fr'"],
+  div[style*='gridTemplateColumns:"1fr 1fr"']{
+    grid-template-columns:1fr!important;
   }
-
-  /* Search input in queue */
-  div[style*="queueSearch"] input{width:120px!important;}
-
-  /* ─── BILLING ─── */
-  div[style*="flex:1"][style*="specialModeRow"]{
-    flex-direction:column!important;gap:12px!important;
+ 
+  /* 4-col → 2-col */
+  div[style*="gridTemplateColumns:'repeat(4,1fr)'"],
+  div[style*="repeat(4, 1fr)"]{
+    grid-template-columns:1fr 1fr!important;gap:10px!important;
   }
-  div[style*="p-billing-flex"],
-  .p-billing-flex{flex-direction:column!important;gap:20px!important;}
-
-  /* Receipt panel → full screen overlay */
-  div[style*="width:'450px'"][style*="background:'#fff'"],
-  .p-receipt{
-    position:fixed!important;
-    top:54px!important;left:0!important;
-    width:100vw!important;
-    height:calc(100vh - 54px - 60px)!important;
-    max-height:none!important;
-    border-radius:0!important;
-    z-index:7000!important;
-    margin:0!important;
-    padding:20px 16px!important;
-    overflow-y:auto!important;
-    box-shadow:none!important;
+ 
+  /* Table grid */
+  div[style*="tableGrid"]{grid-template-columns:repeat(4,1fr)!important;}
+ 
+  /* Billing receipt */
+  div[style*="width:'450px'"][style*="background:'#fff'"]{
+    width:100%!important;max-width:100%!important;margin:0!important;
   }
-
-  .p-table-grid,
-  div[style*="tableGrid"]{
-    grid-template-columns:repeat(4,1fr)!important;
-    gap:8px!important;
-  }
-  div[style*="tableBtn"]{padding:18px 4px!important;border-radius:10px!important;}
-
-  div[style*="specialModeRow"]{flex-direction:column!important;}
-  div[style*="specialModeRow"] button{flex:none!important;width:100%!important;}
-
-  /* ─── INSIGHTS ─── */
-  div[style*="statsRow"],
-  .p-stats-row{
-    flex-direction:row!important;flex-wrap:wrap!important;gap:10px!important;
-  }
-  div[style*="glassStat"]{
-    flex:1 1 calc(50% - 10px)!important;
-    padding:16px!important;min-width:0!important;
-  }
-  div[style*="statVal"]{font-size:1.4rem!important;}
-
-  div[style*="heatmapCard"]{padding:14px!important;border-radius:16px!important;}
-  div[style*="heatSquare"]{height:36px!important;border-radius:6px!important;}
-  div[style*="heatSquareEmpty"]{height:36px!important;}
-  div[style*="calendarGrid"]{gap:5px!important;}
-  div[style*="dayHeader"]{font-size:.5rem!important;}
-
-  /* ─── MENU ─── */
+ 
+  /* Full width grids */
   div[style*="fullWidthGrid"]{
-    grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;
-    gap:12px!important;
+    grid-template-columns:repeat(auto-fill,minmax(220px,1fr))!important;
   }
-  div[style*="premiumCard"]{padding:18px!important;border-radius:16px!important;}
-
-  /* ─── MANAGEMENT / STAFF ─── */
-  div[style*="display:'grid'"][style*="gridTemplateColumns:'1fr 1fr'"] {
-    /* attendance grid */
-    grid-template-columns:1fr!important;
-  }
-  /* Roster table — allow horizontal scroll */
-  div[style*="overflowX:'auto'"][style*="staffEfficiency"],
-  div.p-staff-table-wrap{
-    overflow-x:auto!important;
-    -webkit-overflow-scrolling:touch!important;
-  }
-  /* Staff add form */
-  div[style*="gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))'"],
-  .p-staff-form{
+ 
+  /* Heatmap squares */
+  div[style*="heatSquare"]{height:52px!important;border-radius:8px!important;}
+  div[style*="heatSquareEmpty"]{height:52px!important;}
+ 
+  /* Staff form */
+  div[style*="'repeat(auto-fit,minmax(200px,1fr))'"],
+  div[style*="repeat(auto-fit, minmax(200px, 1fr))"]{
     grid-template-columns:1fr 1fr!important;
   }
-  /* Floor HUD */
-  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="biCard"]{
-    grid-template-columns:1fr!important;
-  }
-
-  /* ─── INVENTORY ─── */
-  div[style*="p-inv-form"],
-  .p-inv-form{grid-template-columns:1fr!important;}
-  div[style*="overflowX:'auto'"],
-  .p-inv-table-wrap{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;}
-  /* Inventory add form grid */
-  div[style*="gridTemplateColumns:"][style*="'2fr 1fr 1fr 1fr 1fr auto'"],
-  div[style*="gridTemplateColumns:"][style*="'2fr 1fr 1fr 1fr auto'"]{
-    grid-template-columns:1fr 1fr!important;
-  }
-
-  /* ─── EXTRAS ─── */
-  div[style*="p-extras-form"],
-  .p-extras-form{grid-template-columns:1fr 1fr!important;}
-  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))'"],
-  .p-extras-grid{grid-template-columns:1fr!important;}
-
-  /* ─── MARKETING ─── */
-  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="botCard"]{
-    grid-template-columns:1fr!important;
-  }
-  div[style*="offer-grid"],
-  div[style*="gridTemplateColumns:'repeat(2,1fr)'"][style*="offer"]{
-    grid-template-columns:1fr!important;
-  }
-
-  /* ─── MODALS → slide up from bottom ─── */
-  div[style*="modalBackdrop"],
-  .p-modal-backdrop{
-    align-items:flex-end!important;
-    padding:0!important;
-  }
-  div[style*="confirmBox"],
+ 
+  /* Modals */
+  .p-modal-backdrop{align-items:flex-end!important;padding:0!important;}
   .p-modal-box{
     max-width:100%!important;width:100%!important;
     border-radius:20px 20px 0 0!important;
-    max-height:90vh!important;overflow-y:auto!important;
-    padding:24px 18px!important;
-    margin:0!important;
+    max-height:90vh!important;
+    padding:28px 20px!important;margin:0!important;
   }
-
-  /* Purchase history drawer → bottom sheet */
-  div[style*="position:'fixed'"][style*="right:'0'"][style*="height:'100vh'"][style*="width:'420px'"],
-  .p-purchase-drawer{
-    width:100vw!important;
-    border-radius:20px 20px 0 0!important;
-    top:auto!important;bottom:0!important;
-    height:90vh!important;
-    right:0!important;
+}
+ 
+/* ══════════════════════════════════════════════
+   MOBILE  ≤ 639px
+══════════════════════════════════════════════ */
+@media (max-width:639px){
+ 
+  /* ── SIDEBAR → drawer ── */
+  .p-hamburger{display:flex!important;}
+  .p-sidebar{
+    position:fixed!important;
+    left:0!important;top:0!important;bottom:0!important;
+    width:78vw!important;max-width:300px!important;
+    z-index:9000!important;
+    transform:translateX(-100%)!important;
+    transition:transform 0.28s cubic-bezier(.4,0,.2,1)!important;
+    box-shadow:4px 0 32px rgba(0,0,0,0.8)!important;
   }
-
-  /* Assign table grid */
-  div[style*="gridTemplateColumns:'repeat(5, 1fr)'"]{
-    grid-template-columns:repeat(4,1fr)!important;
+  .p-sidebar.p-sidebar-open{transform:translateX(0)!important;}
+  .p-mob-backdrop{display:block!important;}
+  .p-nav-label{display:inline!important;}
+  .p-op-text{display:block!important;}
+  .p-logout-btn{display:block!important;}
+  .p-op-card{display:flex!important;}
+ 
+  /* ── MAIN ── */
+  main{width:100vw!important;margin-left:0!important;overflow:hidden!important;}
+ 
+  /* Header */
+  .p-top-header{
+    padding:0 12px!important;
+    min-height:54px!important;height:54px!important;
     gap:8px!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
   }
-
-  /* Extras edit / add modals */
-  div[style*="confirmBox"][style*="width:'520px'"],
-  div[style*="confirmBox"][style*="width:'480px'"],
-  div[style*="confirmBox"][style*="width:'400px'"]{
-    width:100%!important;
+  .p-top-header::-webkit-scrollbar{display:none!important;}
+  .p-page-title{font-size:0.78rem!important;white-space:nowrap!important;}
+ 
+  /* HUD → scrollable strip */
+  .p-hud{
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch!important;
+    max-width:calc(100vw - 80px)!important;
+    margin-right:0!important;
+    border-radius:8px!important;
   }
-
-  /* ─── RECIPE CARDS ─── */
-  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))'"],
-  .p-recipe-grid{grid-template-columns:1fr!important;}
-
-  /* ─── RESERVATIONS tab ─── */
+  .p-hud::-webkit-scrollbar{display:none!important;}
+  .p-hud > div{min-width:80px!important;padding:4px 10px!important;}
+ 
+  /* Insights header */
+  .p-insights-header{
+    flex-wrap:wrap!important;gap:5px!important;
+    max-width:calc(100vw - 130px)!important;
+  }
+  .p-xls-btn{display:none!important;}
+ 
+  /* Extras KPI compact */
+  .p-extras-kpi{gap:6px!important;}
+  .p-extras-kpi > div{padding:10px 10px!important;}
+  .p-extras-kpi > div > div:first-child{font-size:1rem!important;}
+  .p-extras-kpi > div > div:last-child{font-size:0.48rem!important;}
+ 
+  /* Menu header actions */
+  .p-menu-header-actions{flex-wrap:wrap!important;gap:6px!important;}
+  .p-autohide-label{display:none!important;}
+  .p-autohide-toggle{padding:6px 10px!important;}
+ 
+  /* Zone buttons */
+  div[style*="zoneControl"] button{
+    padding:6px 10px!important;font-size:0.6rem!important;
+  }
+ 
+  /* ── SCROLL AREA ── */
+  section[style*="scrollArea"]{
+    padding:12px 10px 80px!important;
+    height:calc(100vh - 54px)!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+ 
+  /* ── KDS pending ── */
+  .p-kds-row{
+    grid-template-columns:1fr!important;gap:12px!important;
+  }
+  .p-service-divider{display:none!important;}
+  .p-queue-grid{grid-template-columns:1fr!important;}
+ 
+  /* Queue tab bar */
+  div[style*="queueTab"]{
+    overflow-x:auto!important;scrollbar-width:none!important;
+  }
+  div[style*="queueTab"] button{
+    font-size:0.5rem!important;padding:8px 8px!important;white-space:nowrap!important;
+  }
+ 
+  /* ── BILLING ── */
+  div[style*="flex:1"][style*="specialModeRow"],
+  div[style*="specialModeRow"]{flex-direction:column!important;gap:10px!important;}
+  div[style*="specialModeRow"] button{flex:none!important;width:100%!important;}
+ 
+  div[style*="tableGrid"]{grid-template-columns:repeat(4,1fr)!important;gap:8px!important;}
+  div[style*="tableBtn"]{padding:20px 4px!important;border-radius:10px!important;}
+ 
+  /* Receipt → full overlay */
+  div[style*="width:'450px'"][style*="background:'#fff'"]{
+    position:fixed!important;
+    inset:54px 0 0 0!important;
+    width:100vw!important;max-width:100vw!important;
+    border-radius:0!important;
+    z-index:7000!important;
+    margin:0!important;
+    padding:20px 14px 80px!important;
+    overflow-y:auto!important;
+  }
+ 
+  /* ── INSIGHTS ── */
+  div[style*="statsRow"]{
+    flex-direction:row!important;flex-wrap:wrap!important;gap:10px!important;
+  }
+  div[style*="glassStat"]{
+    flex:1 1 calc(50% - 10px)!important;padding:16px!important;min-width:0!important;
+  }
+  div[style*="statVal"]{font-size:1.3rem!important;}
+ 
+  div[style*="heatmapCard"]{padding:14px!important;border-radius:16px!important;}
+  div[style*="heatSquare"]{height:34px!important;border-radius:6px!important;}
+  div[style*="heatSquareEmpty"]{height:34px!important;}
+  div[style*="calendarGrid"]{gap:5px!important;}
+  div[style*="dayHeader"]{font-size:0.48rem!important;}
+ 
+  /* BI cards 2-col → 1-col */
+  div[style*="display:'grid'"][style*="1fr 1fr"],
+  div[style*='gridTemplateColumns:"1fr 1fr"']{
+    grid-template-columns:1fr!important;
+  }
+ 
+  /* 4-col → 2-col */
+  div[style*="repeat(4,1fr)"],
+  div[style*="'repeat(4,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+  /* 3-col → 2-col */
+  div[style*="repeat(3,1fr)"],
+  div[style*="'repeat(3,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+  /* 6-col → 2-col */
+  div[style*="repeat(6,1fr)"],
+  div[style*="'repeat(6,1fr)'"]{
+    grid-template-columns:1fr 1fr!important;gap:8px!important;
+  }
+ 
+  /* ── MENU ── */
+  div[style*="fullWidthGrid"]{
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important;gap:10px!important;
+  }
+  div[style*="premiumCard"]{padding:16px!important;border-radius:16px!important;}
+ 
+  /* ── MANAGEMENT ── */
+  div[style*="repeat(auto-fit,minmax(200px,1fr))"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+  div[style*="repeat(auto-fill,minmax(280px,1fr))"]{
+    grid-template-columns:1fr!important;
+  }
+  div[style*="overflowX:'auto'"],
+  div[style*='overflowX:"auto"']{
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+  }
+  table{min-width:560px!important;}
+ 
+  /* Attendance grid */
+  div[style*="repeat(auto-fill,minmax(280px,1fr))"]{
+    grid-template-columns:1fr!important;
+  }
+ 
+  /* ── INVENTORY ── */
+  div[style*="'2fr 1fr 1fr 1fr 1fr auto'"],
+  div[style*="'2fr 1fr 1fr 1fr auto'"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+ 
+  /* ── EXTRAS ── */
+  div[style*="repeat(auto-fill,minmax(260px,1fr))"]{
+    grid-template-columns:1fr!important;
+  }
+ 
+  /* Marketing 2-col */
+  div[style*="botCard"]{width:100%!important;max-width:100%!important;padding:24px 16px!important;}
+ 
+  /* Reservation KPI */
   div[style*="gridTemplateColumns:'repeat(4,1fr)'"][style*="reservation"]{
     grid-template-columns:1fr 1fr!important;gap:8px!important;
   }
-
-  /* Hour slot layout */
-  div[style*="flex:'70px'"][style*="paddingLeft:'70px'"]{
-    flex-direction:column!important;
+ 
+  /* ── MODALS → bottom sheet ── */
+  .p-modal-backdrop,
+  div[style*="modalBackdrop"]{
+    align-items:flex-end!important;padding:0!important;
   }
-
-  /* ─── QUEUE inside pending tab ─── */
-  div[style*="padding:'18px 22px 22px'"]{
-    padding:12px 14px!important;
+  .p-modal-box,
+  div[style*="confirmBox"]{
+    max-width:100%!important;width:100%!important;
+    border-radius:20px 20px 0 0!important;
+    max-height:90vh!important;overflow-y:auto!important;
+    padding:22px 16px!important;margin:0!important;
   }
-
-  /* ─── STAFF TABLE ─── */
-  table{min-width:600px!important;}
-  div[style*="overflowX:'auto'"] table{min-width:600px!important;}
-
-  /* ─── WASTAGE / INSIGHTS BI CARDS ─── */
-  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="biCard"],
-  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:'16px'"]{
-    grid-template-columns:1fr!important;
+  div[style*="confirmBox"][style*="width:'480px'"],
+  div[style*="confirmBox"][style*="width:'520px'"],
+  div[style*="confirmBox"][style*="width:'400px'"],
+  div[style*="confirmBox"][style*="width:'420px'"]{
+    width:100%!important;
   }
-
-  /* 4-col KPI strips → 2-col */
-  div[style*="gridTemplateColumns:'repeat(4,1fr)'"]{
-    grid-template-columns:1fr 1fr!important;gap:8px!important;
+ 
+  /* Assign table grid */
+  div[style*="gridTemplateColumns:'repeat(5, 1fr)'"]{
+    grid-template-columns:repeat(4,1fr)!important;gap:8px!important;
   }
-  div[style*="gridTemplateColumns:'repeat(3,1fr)'"]{
-    grid-template-columns:1fr 1fr!important;gap:8px!important;
+ 
+  /* Purchase history drawer → bottom sheet */
+  div[style*="position:'fixed'"][style*="right:'0'"][style*="width:'420px'"]{
+    width:100vw!important;right:0!important;
+    border-radius:20px 20px 0 0!important;
+    top:auto!important;bottom:0!important;height:90vh!important;
   }
-
-  /* HUD 6-col billing → 3-col wrap */
-  div[style*="gridTemplateColumns:'repeat(6,1fr)'"]{
-    grid-template-columns:1fr 1fr 1fr!important;gap:8px!important;
-  }
-
-  /* Menu engineering matrix 2-col */
-  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="matrix"]{
-    grid-template-columns:1fr!important;
-  }
-
-  /* Category rankings */
-  div[style*="gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))'"]{
-    grid-template-columns:1fr!important;
-  }
-
-  /* Extra items by category */
-  div[style*="gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'"]{
-    grid-template-columns:1fr 1fr!important;
-  }
-
-  /* Staff floor HUD 2 cards */
-  div[style*="display:'grid'"][style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:'25px'"]{
-    grid-template-columns:1fr!important;
-  }
-
-  /* Toast position */
+ 
+  /* Toast */
   div[style*="toast"]{
-    bottom:70px!important;right:12px!important;left:12px!important;
-    font-size:.78rem!important;padding:14px 16px!important;
+    bottom:16px!important;right:10px!important;left:10px!important;
+    font-size:0.75rem!important;padding:12px 14px!important;
   }
-
-  /* Add dish modal veg/nonveg 2-col */
+ 
+  /* Add dish modal veg grid */
   div[style*="gridTemplateColumns:'1fr 1fr'"][style*="isVeg"]{
     grid-template-columns:1fr!important;
   }
-
-  /* Salary edit modal */
-  div[style*="confirmBox"][style*="width:'400px'"]{
-    width:100%!important;max-height:90vh!important;overflow-y:auto!important;
+ 
+  /* Staff add form */
+  div[style*="'repeat(auto-fit,minmax(200px,1fr))'"]{
+    grid-template-columns:1fr 1fr!important;
   }
-
-  /* Billing settle button */
-  button[style*="settleBtn"]{margin-top:12px!important;}
-
-  /* Chef specialization button grid */
-  div[style*="gridColumn:'span 2'"]{grid-column:span 1!important;}
-
-  /* Attendance per-role grid */
-  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))'"],
-  .p-attendance-grid{grid-template-columns:1fr!important;}
-
-  /* Procurement predictor */
-  div[style*="gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))'"],
-  .p-procurement-grid{grid-template-columns:1fr 1fr!important;}
-
-  /* Inventory table scroll */
-  div[style*="overflowX:'auto'"].custom-scroll{
-    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+ 
+  /* Category rankings */
+  div[style*="repeat(auto-fit, minmax(300px, 1fr))"]{
+    grid-template-columns:1fr!important;
+  }
+ 
+  /* Menu engineering 2×2 → 1-col */
+  div[style*="matrix"]{grid-template-columns:1fr!important;}
+ 
+  /* Dead menu items */
+  div[style*="repeat(auto-fit,minmax(180px,1fr))"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+ 
+  /* Stats summary row compact */
+  div[style*="glassStat"] h2{font-size:1.3rem!important;}
+ 
+  /* Procurement */
+  div[style*="repeat(auto-fill,minmax(200px,1fr))"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+ 
+  /* Extras add form */
+  div[style*="'2fr 1fr 1fr 1fr 1fr 1fr auto'"]{
+    grid-template-columns:1fr 1fr!important;
   }
 }
-
-/* ══════════════════════════════════════════════════
-   EXTRA SMALL — ≤380px (small Android phones)
-══════════════════════════════════════════════════ */
-@media(max-width:380px){
-  section[style*="scrollArea"]{padding:8px!important;}
-  div[style*="glassStat"]{flex:1 1 100%!important;}
-  .p-table-grid,
+ 
+/* ══════════════════════════════════════════════
+   EXTRA SMALL  ≤ 380px
+══════════════════════════════════════════════ */
+@media (max-width:380px){
+  section[style*="scrollArea"]{padding:8px 8px 80px!important;}
   div[style*="tableGrid"]{grid-template-columns:repeat(3,1fr)!important;}
-  div[style*="gridTemplateColumns:'repeat(4,1fr)'"]{
-    grid-template-columns:1fr 1fr!important;
-  }
-  div[style*="gridTemplateColumns:'repeat(3,1fr)'"]{
-    grid-template-columns:1fr 1fr!important;
-  }
-  div[style*="gridTemplateColumns:'repeat(6,1fr)'"]{
-    grid-template-columns:1fr 1fr!important;
-  }
-  div[style*="hudStatBox"]{min-width:78px!important;}
-  button[style*="navBtn"],button[style*="activeTab"],
-  .p-sidebar nav button{min-width:46px!important;font-size:.34rem!important;}
+  .p-page-title{font-size:0.68rem!important;}
+  div[style*="glassStat"]{flex:1 1 100%!important;padding:12px!important;}
+  div[style*="repeat(4,1fr)"],div[style*="'repeat(4,1fr)'"]{grid-template-columns:1fr 1fr!important;}
+  div[style*="repeat(3,1fr)"],div[style*="'repeat(3,1fr)'"]{grid-template-columns:1fr!important;}
 }
 `}</style>
     </div>
