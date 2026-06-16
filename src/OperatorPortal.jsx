@@ -965,6 +965,22 @@ const [acknowledgedTables, setAcknowledgedTables] = useState({});
   return           { level: 'critical', color: 'rgba(138,48,48,0.35)',  pulse: true  };
 }, [orders]);
 
+
+const [ordersData, setOrdersData] = useState([]);
+
+useEffect(() => {
+  if (!tenantId) return;
+  axios.get(`${BASE_URL}/orders/${tenantId}?limit=1000`)
+    .then(r => {
+      console.log('[ordersData] fetched:', r.data?.length, 'orders');
+      setOrdersData(r.data || []);
+    })
+    .catch(err => {
+      console.error('[ordersData] fetch failed:', err.response?.status, err.message);
+      setOrdersData([]);
+    });
+}, [tenantId]);
+
 const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
     const wb = XLSX.utils.book_new();
@@ -1953,11 +1969,238 @@ const exportToExcel = useCallback((type = 'daily') => {
         };
       });
 
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: gstrStart + gstrData.length + 4, c: 9 } });
-      ws['!cols'] = [16, 10, 16, 14, 14, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
+// ── HSN / SAC SUMMARY BLOCK ──
+      const hsnStart = gstrStart + gstrData.length + 3;
+      const hsnData = [
+        ['HSN / SAC SUMMARY (GSTR-1 TABLE 12)', '', '', '', '', ''],
+        ['SAC Code', 'Description', 'UQC', 'Total Qty', 'Taxable Value (₹)', 'IGST', 'CGST (₹)', 'SGST (₹)', 'Total Tax (₹)'],
+        ['996331', 'Restaurant Services — Dine-In & Takeaway', 'NA', filteredData.reduce((a, b) => a + (b.count || 0), 0), Math.round(gstTaxable), 0, Math.round(gstCGST), Math.round(gstSGST), Math.round(gstTotalTax)],
+      ];
+      XLSX.utils.sheet_add_aoa(ws, hsnData, { origin: `A${hsnStart}` });
+      styleCell(ws, `A${hsnStart}`, hdrStyle(DARK, BLUE, true, 11));
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: hsnStart - 1, c: 0 }, e: { r: hsnStart - 1, c: 8 } });
+      // header row
+      hsnData[1].forEach((_, ci) => {
+        styleCell(ws, XLSX.utils.encode_cell({ r: hsnStart, c: ci }), hdrStyle(MID, BLUE));
+      });
+      // data row
+      hsnData[2].forEach((val, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: hsnStart + 1, c: ci });
+        if (ci === 0 || ci === 1 || ci === 2) {
+          ws[addr] = { v: val, t: 's', s: cellStyle(true, ci === 0 ? GOLD : ci === 2 ? '666666' : WHITE, '0D0D0D') };
+        } else {
+          ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, ci === 5 ? '444444' : ci >= 6 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: '0D0D0D' } } } };
+        }
+      });
+
+      // ── PAYMENT RECONCILIATION FOOTER ──
+      const payRecStart = hsnStart + 5;
+      const cashTotal = filteredData.reduce((a, b) => a + (b.cash || 0), 0);
+      const upiTotal  = filteredData.reduce((a, b) => a + (b.upi || 0), 0);
+      const cardTotal = filteredData.reduce((a, b) => a + (b.card || 0), 0);
+      const paySum    = cashTotal + upiTotal + cardTotal;
+      const payDiff   = Math.round(gstTotalRev) - paySum;
+      const isBalanced = payDiff === 0;
+
+      const payRecData = [
+        ['PAYMENT MODE RECONCILIATION', ''],
+        ['Cash Collected (₹)', cashTotal],
+        ['UPI Collected (₹)', upiTotal],
+        ['Card Collected (₹)', cardTotal],
+        ['─────────────────', '─────────────'],
+        ['Total Collected (₹)', paySum],
+        ['Gross Revenue (₹)', Math.round(gstTotalRev)],
+        ['Difference (₹)', payDiff],
+        ['Status', isBalanced ? '✓ BALANCED — No discrepancy' : `⚠ MISMATCH — ₹${Math.abs(payDiff)} unaccounted`],
+      ];
+      XLSX.utils.sheet_add_aoa(ws, payRecData, { origin: `A${payRecStart}` });
+      styleCell(ws, `A${payRecStart}`, hdrStyle(DARK, isBalanced ? GREEN : AMBER, true, 11));
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: payRecStart - 1, c: 0 }, e: { r: payRecStart - 1, c: 1 } });
+      payRecData.slice(1).forEach((row, ri) => {
+        const r = payRecStart + 1 + ri;
+        const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+        const isDivider = row[0].startsWith('─');
+        const isStatus  = row[0] === 'Status';
+        const isDiff    = row[0].startsWith('Difference');
+        ws[`A${r}`] = {
+          v: row[0], t: 's',
+          s: isDivider
+            ? cellStyle(false, '333333', '0A0A0A')
+            : cellStyle(false, isDiff ? (isBalanced ? GREEN : AMBER) : '888888', altBg)
+        };
+        if (isDivider) {
+          ws[`B${r}`] = { v: row[1], t: 's', s: cellStyle(false, '333333', '0A0A0A') };
+        } else if (isStatus) {
+          ws[`B${r}`] = { v: row[1], t: 's', s: cellStyle(true, isBalanced ? GREEN : AMBER, altBg, 'right') };
+        } else {
+          ws[`B${r}`] = {
+            v: row[1], t: 'n',
+            s: {
+              ...numFmt(
+                row[0].includes('Total') || isDiff,
+                isDiff ? (isBalanced ? GREEN : AMBER) : row[0].includes('Total') ? GOLD : WHITE
+              ),
+              fill: { patternType: 'solid', fgColor: { rgb: altBg } }
+            }
+          };
+        }
+      });
+
+      const finalGSTRow = payRecStart + payRecData.length + 2;
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: finalGSTRow, c: 9 } });
+      ws['!cols'] = [28, 14, 16, 14, 14, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
       XLSX.utils.book_append_sheet(wb, ws, '🧾 GST Register');
     }
 
+    // ══════════════════════════════════
+    // SHEET 11: INVOICE REGISTER
+    // Individual bill-level detail for GSTR-1
+    // Pass ordersData prop to enable this sheet
+    // ══════════════════════════════════
+{
+  const ws = {};
+  addTitleBlock(
+    ws,
+    `${tenantConfig?.name || tenantId} — INVOICE REGISTER`,
+    `Individual bill-level detail for ${periodLabel} · Required for GSTR-1`,
+    todayStr
+  );
+
+  if (!ordersData || ordersData.length === 0) {
+    ws['A5'] = { v: 'NO ORDER DATA AVAILABLE', t: 's', s: cellStyle(true, 'C0392B', '1A1208') };
+    ws['A6'] = { v: 'Check that /orders/:tenantId endpoint is returning data, and that ordersData state is populated before export.', t: 's', s: cellStyle(false, '888888', '0A0A0A') };
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 7, c: 13 } });
+    ws['!cols'] = [14, 12, 12, 10, 18, 14, 30, 14, 14, 12, 12, 12, 12, 12].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, '🧾 Invoice Register');
+  } else {
+    // KPIs
+const invTotal    = ordersData.filter(o => o.billDetails?.isSettlementAnchor === true).length;
+const invRevTotal = ordersData
+  .filter(o => o.billDetails?.isSettlementAnchor === true)
+  .reduce((a, b) => a + (b.billDetails?.grandTotal || 0), 0);    const invTaxable  = invRevTotal / 1.05;
+    const invCGST     = invTaxable * 0.025;
+    const invSGST     = invTaxable * 0.025;
+
+    const kpiLabels = ['TOTAL INVOICES', 'GROSS REVENUE', 'TOTAL CGST', 'TOTAL SGST'];
+    const kpiValues = [
+      invTotal,
+      `₹${Math.round(invRevTotal).toLocaleString()}`,
+      `₹${Math.round(invCGST).toLocaleString()}`,
+      `₹${Math.round(invSGST).toLocaleString()}`
+    ];
+    const kpiColors = [GOLD, GREEN, GOLD, GOLD];
+    kpiLabels.forEach((label, i) => {
+      const col = String.fromCharCode(65 + i * 2);
+      ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+      ws[`${col}6`] = { v: kpiValues[i], t: typeof kpiValues[i] === 'number' ? 'n' : 's', s: kpiStyle(kpiColors[i]) };
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+      ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+    });
+
+    const headers = [
+      'Invoice No', 'Date', 'Time (IST)', 'Table No',
+      'Customer Name', 'Phone',
+      'Items (Summary)', 'Gross Amount (₹)',
+      'Taxable Value (₹)', 'CGST 2.5% (₹)', 'SGST 2.5% (₹)',
+      'Total Tax (₹)', 'Payment Mode', 'Status'
+    ];
+    XLSX.utils.sheet_add_aoa(ws, [[''], ['BILL-LEVEL INVOICE DETAIL', '', '', '', '', '', '', '', '', '', '', '', '', ''], headers], { origin: 'A8' });
+    styleCell(ws, 'A9', hdrStyle(DARK, GOLD, true, 10));
+    if (!ws['!merges']) ws['!merges'] = [];
+    ws['!merges'].push({ s: { r: 8, c: 0 }, e: { r: 8, c: 13 } });
+    headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 9, c: ci }), hdrStyle()));
+
+const periodOrders = ordersData.filter(order => {
+  if (order.billDetails?.isSettlementAnchor !== true) return false; // ← one row per bill, not per order
+  const d = new Date(order.createdAt);
+  const dateStr = d.toISOString().split('T')[0];
+  if (type === 'daily')   return dateStr === todayStr;
+  if (type === 'weekly') {
+    const weekAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return dateStr >= weekAgo && dateStr <= todayStr;
+  }
+  if (type === 'monthly') return dateStr.startsWith(exportMonthStr);
+  if (type === 'annual')  return dateStr.startsWith(`${viewDate.getFullYear()}-`);
+  return true;
+});
+
+    periodOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    periodOrders.forEach((order, ri) => {
+      const createdAt  = new Date(order.createdAt);
+      const dateStr    = createdAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr    = createdAt.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+      const gross      = order.billDetails?.grandTotal || order.billDetails?.itemsTotal || 0;
+      const taxable    = gross / 1.05;
+      const cgst       = taxable * 0.025;
+      const sgst       = taxable * 0.025;
+      const itemSummary = (order.items || [])
+        .slice(0, 3)
+        .map(i => `${i.name}×${i.quantity}`)
+        .join(', ') + ((order.items || []).length > 3 ? ` +${order.items.length - 3} more` : '');
+      const payMode    = order.paymentMode || (order.billDetails?.cash > 0 ? 'Cash' : order.billDetails?.upi > 0 ? 'UPI' : 'Card') || '—';
+      const isPaid     = order.paymentStatus === 'paid' || order.paymentStatus === 'Paid' || order.status === 'settled';
+      const invoiceNo  = `INV-${String(ri + 1).padStart(4, '0')}`;
+      const altBg      = ri % 2 === 0 ? '0D0D0D' : '111111';
+
+      const row = [
+        invoiceNo, dateStr, timeStr, order.tableNumber || '—',
+        order.customerName || order.billDetails?.name || 'Guest',
+        order.customerPhone || order.billDetails?.phone || '—',
+        itemSummary || '—',
+        Math.round(gross), Math.round(taxable), Math.round(cgst), Math.round(sgst),
+        Math.round(cgst + sgst), payMode, isPaid ? '✓ PAID' : '⏳ PENDING'
+      ];
+
+      row.forEach((val, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: 10 + ri, c: ci });
+        if (ci === 0) ws[addr] = { v: val, t: 's', s: cellStyle(true, GOLD, altBg) };
+        else if ([1, 2].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, '888888', altBg, 'center') };
+        else if (ci === 3) ws[addr] = { v: val, t: 's', s: cellStyle(true, WHITE, altBg, 'center') };
+        else if ([4, 5].includes(ci)) ws[addr] = { v: val, t: 's', s: cellStyle(false, ci === 4 ? WHITE : '666666', altBg) };
+        else if (ci === 6) ws[addr] = { v: val, t: 's', s: cellStyle(false, '666666', altBg) };
+        else if ([7, 8].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(true, ci === 7 ? GREEN : WHITE), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+        else if ([9, 10, 11].includes(ci)) ws[addr] = { v: val, t: 'n', s: { ...numFmt(false, GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+        else if (ci === 12) ws[addr] = { v: val, t: 's', s: cellStyle(false, BLUE, altBg, 'center') };
+        else ws[addr] = { v: val, t: 's', s: statusStyle(isPaid) };
+      });
+    });
+
+    const invTotRow = periodOrders.length + 11;
+    const invTotData = [
+      'PERIOD TOTALS', '', '', '', '', '',
+      `${periodOrders.length} invoices`,
+      Math.round(invRevTotal), Math.round(invTaxable), Math.round(invCGST), Math.round(invSGST),
+      Math.round(invCGST + invSGST), '', ''
+    ];
+    XLSX.utils.sheet_add_aoa(ws, [invTotData], { origin: `A${invTotRow}` });
+    invTotData.forEach((val, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: invTotRow - 1, c: ci });
+      ws[addr] = {
+        v: val, t: typeof val === 'number' ? 'n' : 's',
+        s: ci === 0
+          ? hdrStyle(DARK, GOLD, true)
+          : typeof val === 'number'
+          ? { ...numFmt(true, ci === 7 ? GREEN : ci >= 8 ? GOLD : WHITE), fill: { patternType: 'solid', fgColor: { rgb: DARK } } }
+          : hdrStyle(DARK, ci === 6 ? GOLD : '333333')
+      };
+    });
+
+    const noteRow = invTotRow + 2;
+    ws[`A${noteRow}`] = { v: 'GSTR-1 NOTE', t: 's', s: cellStyle(true, AMBER, '0A0A0A') };
+    ws[`B${noteRow}`] = { v: 'All supplies are B2C (Intra-State). No B2B invoices. SAC: 996331. File GSTR-1 by 11th of following month.', t: 's', s: cellStyle(false, '888888', '0A0A0A') };
+    if (!ws['!merges']) ws['!merges'] = [];
+    ws['!merges'].push({ s: { r: noteRow - 1, c: 1 }, e: { r: noteRow - 1, c: 13 } });
+
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: noteRow + 2, c: 13 } });
+    ws['!cols'] = [14, 12, 12, 10, 18, 14, 30, 14, 14, 12, 12, 12, 12, 12].map(w => ({ wch: w }));
+    ws['!rows'] = [{ hpt: 30 }, { hpt: 14 }, { hpt: 12 }, { hpt: 8 }, { hpt: 22 }, { hpt: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws, '🧾 Invoice Register');
+  }
+}
     // ══════════════════════════════════
     // SHEET 10: SUMMARY (updated with new metrics)
     // ══════════════════════════════════
@@ -2037,7 +2280,7 @@ const exportToExcel = useCallback((type = 'daily') => {
     showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
 
   }).catch(err=>{ console.error(err); showNotif('Export failed — check xlsx install','error'); });
-},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics]);
+},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData]);
 
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
@@ -2346,8 +2589,6 @@ const renderMonthHeatmap = () => {
           {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
           {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
           {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
-          {label:"CGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
-          {label:"SGST COLLECTED",   val:`₹${Math.round(dailySettlementBreakdown.gross * 0.025).toLocaleString()}`, color:'#8a704d'},
         ].map((s,i)=>(
           <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
             <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
