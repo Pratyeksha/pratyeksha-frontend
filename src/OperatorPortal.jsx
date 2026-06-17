@@ -124,7 +124,8 @@ const [newExtraItem, setNewExtraItem] = useState({
   name: '', category: 'Cold Drinks', price: '', costPrice: '', // ← ADD costPrice
   unit: 'piece', currentStock: '', description: '', isAvailable: true, image: ''
 });
-
+const [extraRestockModal, setExtraRestockModal] = useState(null); // { item, qty }
+const [extraRestockQty, setExtraRestockQty] = useState('');
 
 const categoryIcons = {
   'Cold Drinks':     <Droplets   size={13} color="#d3bfa2" />,
@@ -930,7 +931,45 @@ useEffect(() => {
   }
 }, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue, fetchAnalytics]);
  
- 
+ // ── EXTRA ITEMS: realtime stock sync, low-stock sound alert, auto-hide on zero ──
+useEffect(() => {
+  if (!socket) return;
+
+  const lowStockAudio = new Audio('/sounds/low-stock-alert.mp3'); // place file in /public/sounds/
+  const outOfStockAudio = new Audio('/sounds/out-of-stock-alert.mp3');
+
+  const handleItemUpdated = (updatedItem) => {
+    setExtraItems(prev =>
+      prev.map(i => (i._id === updatedItem._id ? updatedItem : i))
+    );
+  };
+
+  const handleLowStock = (data) => {
+    lowStockAudio.play().catch(() => {}); // browsers may block autoplay until first user interaction
+    showNotif(`⚠ LOW STOCK: ${data.name} — only ${data.currentStock} ${data.unit}s left`, 'warning');
+  };
+
+  const handleOutOfStock = (data) => {
+    outOfStockAudio.play().catch(() => {});
+    showNotif(`🚫 ${data.name} is OUT OF STOCK — auto-hidden from menu`, 'error');
+  };
+
+  const handleBackInStock = (data) => {
+    showNotif(`✅ ${data.name} restocked — back on menu`, 'success');
+  };
+
+  socket.on('extra_item_updated', handleItemUpdated);
+  socket.on('extra_item_low_stock', handleLowStock);
+  socket.on('extra_item_out_of_stock', handleOutOfStock);
+  socket.on('extra_item_back_in_stock', handleBackInStock);
+
+  return () => {
+    socket.off('extra_item_updated', handleItemUpdated);
+    socket.off('extra_item_low_stock', handleLowStock);
+    socket.off('extra_item_out_of_stock', handleOutOfStock);
+    socket.off('extra_item_back_in_stock', handleBackInStock);
+  };
+}, [socket, showNotif]);
 
 useEffect(() => {
   if (activeTab === 'pending') fetchCounterQueue();
@@ -8314,33 +8353,249 @@ setNewStaff({
   <motion.div key="extras" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: '100px', width: '100%' }}>
 
-    {/* ── HEADER ──
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '24px', borderBottom: '1px solid #151515' }}>
-      <div>
-        <div style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>SUPPLEMENTARY CATALOG</div>
-        <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '900', color: '#fff' }}>EXTRA ITEMS REGISTRY</h2>
-        <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#444', lineHeight: '1.5' }}>
-          Cold drinks, ice creams, packaged snacks and any add-on products sold alongside main menu.
-          Items added here are tracked for stock and sales independently.
-        </p>
+    {/* ── EDIT ITEM MODAL ── */}
+    <AnimatePresence>
+      {extraItemEditModal && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) setExtraItemEditModal(null); }}
+        >
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+            style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderTop: '3px solid #d3bfa2', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '520px', maxHeight: '88vh', overflowY: 'auto' }}
+            className="custom-scroll"
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>EDIT EXTRA ITEM</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#444', fontWeight: '600' }}>{extraItemEditModal.name}</p>
+              </div>
+              <button onClick={() => setExtraItemEditModal(null)}
+                style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Name + Category */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Item Name *</div>
+                <input
+                  value={extraItemEditData.name || ''}
+                  onChange={e => setExtraItemEditData(p => ({ ...p, name: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Category</div>
+                <select
+                  value={extraItemEditData.category || 'Cold Drinks'}
+                  onChange={e => setExtraItemEditData(p => ({ ...p, category: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
+                >
+                  {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+{/* Sell Price + Cost Price */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+  <div>
+    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Sell Price (₹) *</div>
+    <input
+      type="number"
+      value={extraItemEditData.price ?? ''}
+      onChange={e => setExtraItemEditData(p => ({ ...p, price: e.target.value }))}
+      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#d3bfa2', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '900', outline: 'none', boxSizing: 'border-box' }}
+    />
+  </div>
+  <div>
+    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Cost Price (₹)</div>
+    <input
+      type="number"
+      value={extraItemEditData.costPrice ?? ''}
+      onChange={e => setExtraItemEditData(p => ({ ...p, costPrice: e.target.value }))}
+      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
+    />
+    {extraItemEditData.price > 0 && extraItemEditData.costPrice !== '' && (
+      <div style={{ fontSize: '0.6rem', color: '#4ade80', marginTop: '5px', fontWeight: '700' }}>
+        Margin: {Math.round(((Number(extraItemEditData.price) - Number(extraItemEditData.costPrice)) / Number(extraItemEditData.price)) * 100)}%
       </div>
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>{extraItems.length}</div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>TOTAL ITEMS</div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '12px' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#4ade80' }}>{extraItems.filter(i => i.isAvailable).length}</div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AVAILABLE</div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '12px 20px', background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px', borderTop: '2px solid #d3bfa2' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#d3bfa2' }}>
-            ₹{extraItems.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>STOCK VALUE</div>
-        </div>
-      </div>
-    </div> */}
+    )}
+  </div>
+</div>
+
+{/* Unit + Stock + Low Stock Threshold */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+  <div>
+    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Unit</div>
+    <select
+      value={extraItemEditData.unit || 'piece'}
+      onChange={e => setExtraItemEditData(p => ({ ...p, unit: e.target.value }))}
+      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
+    >
+      {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
+        <option key={u} value={u}>{u}</option>
+      ))}
+    </select>
+  </div>
+  <div>
+    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Current Stock</div>
+    <input
+      type="number"
+      value={extraItemEditData.currentStock ?? ''}
+      onChange={e => setExtraItemEditData(p => ({ ...p, currentStock: e.target.value }))}
+      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+    />
+  </div>
+  <div>
+    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Low Stock Alert At</div>
+    <input
+      type="number"
+      value={extraItemEditData.lowStockThreshold ?? ''}
+      onChange={e => setExtraItemEditData(p => ({ ...p, lowStockThreshold: e.target.value }))}
+      placeholder="e.g. 5"
+      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+    />
+  </div>
+</div>
+
+            {/* Description */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Description</div>
+              <input
+                value={extraItemEditData.description || ''}
+                onChange={e => setExtraItemEditData(p => ({ ...p, description: e.target.value }))}
+                placeholder="Optional short description"
+                style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#888', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* Availability toggle */}
+            <div onClick={() => setExtraItemEditData(p => ({ ...p, isAvailable: !p.isAvailable }))}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: extraItemEditData.isAvailable ? 'rgba(74,222,128,0.05)' : '#111', border: `1px solid ${extraItemEditData.isAvailable ? 'rgba(74,222,128,0.2)' : '#1a1a1a'}`, borderRadius: '10px', cursor: 'pointer', marginBottom: '24px', transition: 'all 0.15s' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: '800', color: extraItemEditData.isAvailable ? '#4ade80' : '#444' }}>
+                {extraItemEditData.isAvailable ? 'VISIBLE ON MENU' : 'HIDDEN FROM MENU'}
+              </span>
+              <div style={{ width: '38px', height: '20px', borderRadius: '10px', position: 'relative', background: extraItemEditData.isAvailable ? '#4ade80' : '#222', transition: 'background 0.2s', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: '3px', left: extraItemEditData.isAvailable ? '20px' : '3px', width: '14px', height: '14px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#000' : '#555', transition: 'left 0.2s' }} />
+              </div>
+            </div>
+
+{/* Save / Cancel — fixed payload builder */}
+<div style={{ display: 'flex', gap: '10px' }}>
+  <button
+    onClick={async () => {
+      if (!extraItemEditData.name?.trim()) return showNotif('Name is required', 'error');
+      if (!extraItemEditData.price || Number(extraItemEditData.price) <= 0) return showNotif('Valid price required', 'error');
+      try {
+        const payload = {
+          name:        extraItemEditData.name.trim(),
+          category:    extraItemEditData.category,
+          price:       Number(extraItemEditData.price),
+          // ← FIX: only coerce costPrice to a number if it was actually edited (non-empty string);
+          // never collapse '' to 0 and overwrite a real saved cost.
+          costPrice:   extraItemEditData.costPrice === '' ? 0 : Number(extraItemEditData.costPrice),
+          unit:        extraItemEditData.unit,
+          currentStock: Number(extraItemEditData.currentStock) || 0,
+          lowStockThreshold: extraItemEditData.lowStockThreshold === '' ? 5 : Number(extraItemEditData.lowStockThreshold),
+          description: extraItemEditData.description?.trim() || '',
+          isAvailable: extraItemEditData.isAvailable,
+        };
+        const res = await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`, payload);
+        // Trust the server's echoed item rather than refetching the whole list
+        setExtraItems(prev => prev.map(i => (i._id === res.data.item._id ? res.data.item : i)));
+        showNotif(`${payload.name} — updated`);
+        setExtraItemEditModal(null);
+      } catch (err) {
+        showNotif(err.response?.data?.error || 'Update failed', 'error');
+      }
+    }}
+    style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
+  >
+    SAVE CHANGES
+  </button>
+  <button
+    onClick={() => setExtraItemEditModal(null)}
+    style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
+  >
+    CANCEL
+  </button>
+</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* ── RESTOCK MODAL — replaces the ugly prompt() ── */}
+    <AnimatePresence>
+      {extraRestockModal && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) { setExtraRestockModal(null); setExtraRestockQty(''); } }}
+        >
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+            style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderTop: '3px solid rgba(211,191,162,0.4)', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '360px' }}
+          >
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>RESTOCK</h3>
+              <p style={{ margin: 0, fontSize: '0.65rem', color: '#444' }}>{extraRestockModal.name} · current: {extraRestockModal.currentStock} {extraRestockModal.unit}s</p>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '7px', textTransform: 'uppercase' }}>Quantity to Add</div>
+              <input
+                type="number" min="1" autoFocus
+                value={extraRestockQty}
+                onChange={e => setExtraRestockQty(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter' && extraRestockQty && Number(extraRestockQty) > 0) {
+                    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
+                    showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
+                    setExtraRestockModal(null); setExtraRestockQty('');
+                    fetchExtraItems();
+                  }
+                }}
+                placeholder="e.g. 24"
+                style={{ width: '100%', padding: '12px', background: '#111', border: '1px solid rgba(211,191,162,0.2)', color: '#d3bfa2', borderRadius: '8px', fontSize: '1.1rem', fontWeight: '900', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
+              />
+              {extraRestockQty && Number(extraRestockQty) > 0 && (
+                <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '7px', textAlign: 'center' }}>
+                  New total: <span style={{ color: '#d3bfa2', fontWeight: '800' }}>{extraRestockModal.currentStock + Number(extraRestockQty)} {extraRestockModal.unit}s</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={async () => {
+                  if (!extraRestockQty || Number(extraRestockQty) <= 0) return showNotif('Enter a valid quantity', 'error');
+                  try {
+                    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
+                    showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
+                    setExtraRestockModal(null); setExtraRestockQty('');
+                    fetchExtraItems();
+                  } catch { showNotif('Restock failed', 'error'); }
+                }}
+                style={{ flex: 1, padding: '11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
+              >
+                + ADD STOCK
+              </button>
+              <button
+                onClick={() => { setExtraRestockModal(null); setExtraRestockQty(''); }}
+                style={{ padding: '11px 16px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
+              >
+                CANCEL
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     {/* ── ADD NEW ITEM FORM ── */}
     <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '20px', padding: '28px', borderTop: '3px solid #d3bfa2' }}>
@@ -8355,22 +8610,15 @@ setNewStaff({
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-        {/* ITEM NAME */}
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Item Name *
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Item Name *</label>
           <input type="text" placeholder="e.g. Thums Up 300ml"
             style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
             value={newExtraItem.name}
             onChange={e => setNewExtraItem({ ...newExtraItem, name: e.target.value })} />
         </div>
-
-        {/* CATEGORY */}
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Category *
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category *</label>
           <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
             value={newExtraItem.category}
             onChange={e => setNewExtraItem({ ...newExtraItem, category: e.target.value })}>
@@ -8379,39 +8627,27 @@ setNewStaff({
             ))}
           </select>
         </div>
-
-        {/* PRICE */}
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Price (₹) *
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
           <input type="number" placeholder="e.g. 40"
             style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
             value={newExtraItem.price}
             onChange={e => setNewExtraItem({ ...newExtraItem, price: e.target.value })} />
         </div>
-
-                      {/* COST PRICE — add after the PRICE field */}
-<div>
-  <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-    Cost Price (₹) *
-  </label>
-  <input type="number" placeholder="e.g. 28"
-    style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-    value={newExtraItem.costPrice}
-    onChange={e => setNewExtraItem({ ...newExtraItem, costPrice: e.target.value })} />
-  {newExtraItem.price && newExtraItem.costPrice && (
-    <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
-      Margin: {Math.round(((newExtraItem.price - newExtraItem.costPrice) / newExtraItem.price) * 100)}%
-    </div>
-  )}
-</div>
-
-        {/* UNIT */}
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Unit
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
+          <input type="number" placeholder="e.g. 28"
+            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+            value={newExtraItem.costPrice}
+            onChange={e => setNewExtraItem({ ...newExtraItem, costPrice: e.target.value })} />
+          {newExtraItem.price && newExtraItem.costPrice && Number(newExtraItem.price) > 0 && (
+            <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
+              Margin: {Math.round(((newExtraItem.price - newExtraItem.costPrice) / newExtraItem.price) * 100)}%
+            </div>
+          )}
+        </div>
+        <div>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
           <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
             value={newExtraItem.unit}
             onChange={e => setNewExtraItem({ ...newExtraItem, unit: e.target.value })}>
@@ -8420,12 +8656,8 @@ setNewStaff({
             ))}
           </select>
         </div>
-
-        {/* STOCK */}
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Opening Stock
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Opening Stock</label>
           <input type="number" placeholder="e.g. 24"
             style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
             value={newExtraItem.currentStock}
@@ -8433,12 +8665,9 @@ setNewStaff({
         </div>
       </div>
 
-      {/* DESCRIPTION ROW */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'flex-end' }}>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>
-            Description (optional)
-          </label>
+          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description (optional)</label>
           <input type="text" placeholder="e.g. Chilled carbonated drink, served in bottle"
             style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
             value={newExtraItem.description}
@@ -8449,22 +8678,20 @@ setNewStaff({
             if (!newExtraItem.name?.trim()) return showNotif('Item name is required', 'error');
             if (!newExtraItem.price || Number(newExtraItem.price) <= 0) return showNotif('Valid price is required', 'error');
             try {
-// In the register button onClick:
-await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
-    name: newExtraItem.name.trim(),
-    category: newExtraItem.category,
-    price: Number(newExtraItem.price),
-    costPrice: Number(newExtraItem.costPrice) || 0,   // ← ADD
-    unit: newExtraItem.unit,
-    currentStock: Number(newExtraItem.currentStock) || 0,
-    description: newExtraItem.description.trim(),
-    isAvailable: true
-});
-// Reset:
-setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
+              await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
+                name: newExtraItem.name.trim(),
+                category: newExtraItem.category,
+                price: Number(newExtraItem.price),
+                costPrice: Number(newExtraItem.costPrice) || 0,
+                unit: newExtraItem.unit,
+                currentStock: Number(newExtraItem.currentStock) || 0,
+                description: newExtraItem.description.trim(),
+                isAvailable: true
+              });
+              setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
               showNotif(`${newExtraItem.name} added to catalog`);
               fetchExtraItems();
-            } catch { showNotif('Failed to add item', 'error'); }
+            } catch (err) { showNotif(err.response?.data?.error || 'Failed to add item', 'error'); }
           }}
           style={{ padding: '11px 28px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px' }}>
           + REGISTER ITEM
@@ -8474,35 +8701,34 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
 
     {/* ── CATEGORY FILTER + SEARCH ── */}
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-      {/* Category pills */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
         {['All', ...new Set(extraItems.map(i => i.category))].map(cat => (
           <button key={cat} onClick={() => setActiveExtraCategory(cat)} style={{
             padding: '7px 16px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer',
             border: activeExtraCategory === cat ? 'none' : '1px solid #1a1a1a',
             background: activeExtraCategory === cat ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
-            color: activeExtraCategory === cat ? '#000' : '#444',
-            transition: 'all 0.15s'
+            color: activeExtraCategory === cat ? '#000' : '#444', transition: 'all 0.15s'
           }}>
             {cat} {cat !== 'All' && `(${extraItems.filter(i => i.category === cat).length})`}
           </button>
         ))}
       </div>
-      {/* Search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #121212', borderRadius: '8px', padding: '8px 14px', flexShrink: 0 }}>
         <Search size={13} color="#444" />
         <input type="text" placeholder="Search items..." value={extraItemSearchQuery}
           onChange={e => setExtraItemSearchQuery(e.target.value)}
           style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
+        {extraItemSearchQuery && (
+          <button onClick={() => setExtraItemSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: 0, display: 'flex' }}>
+            <X size={12} />
+          </button>
+        )}
       </div>
     </div>
 
     {/* ── ITEMS GRID ── */}
     {extraItemsLoading ? (
-      <div style={{ textAlign: 'center', padding: '60px', color: '#333', fontSize: '0.8rem' }}>
-        <div className="spinner" style={{ margin: '0 auto 16px' }} />
-        LOADING CATALOG...
-      </div>
+      <div style={{ textAlign: 'center', padding: '60px', color: '#333', fontSize: '0.8rem' }}>LOADING CATALOG...</div>
     ) : (() => {
       const filtered = extraItems.filter(i => {
         const matchCat = activeExtraCategory === 'All' || i.category === activeExtraCategory;
@@ -8516,39 +8742,24 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
           <div style={{ color: '#333', fontSize: '0.85rem', fontWeight: '700' }}>
             {extraItemSearchQuery ? `NO ITEMS MATCH "${extraItemSearchQuery.toUpperCase()}"` : 'NO ITEMS IN THIS CATEGORY YET'}
           </div>
-          <div style={{ color: '#222', fontSize: '0.7rem', marginTop: '8px' }}>Use the form above to add your first item</div>
         </div>
       );
 
-      // Group by category
       const grouped = {};
       filtered.forEach(item => {
         if (!grouped[item.category]) grouped[item.category] = [];
         grouped[item.category].push(item);
       });
 
-      const categoryEmojis = {
-        'Cold Drinks': '🥤', 'Ice Cream': '🍦', 'Packaged Snacks': '🍟',
-        'Juices': '🧃', 'Mineral Water': '💧',
-        'Dairy': '🥛', 'Sweets': '🍬', 'Other': '📦'
-      };
-
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {Object.entries(grouped).map(([cat, items]) => (
-
             <div key={cat}>
-              {/* Category header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #151515' }}>
-<span style={{
-  width: '28px', height: '28px', borderRadius: '8px',
-  background: 'rgba(211,191,162,0.05)',
-  border: '1px solid rgba(211,191,162,0.1)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  flexShrink: 0
-}}>
-  {categoryIconsLg[cat] || <Box size={16} color="#d3bfa2" />}
-</span>                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
+                <span style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {categoryIconsLg[cat] || <Box size={16} color="#d3bfa2" />}
+                </span>
+                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
                 <span style={{ fontSize: '0.62rem', padding: '2px 8px', background: 'rgba(211,191,162,0.06)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900' }}>
                   {items.length} item{items.length !== 1 ? 's' : ''}
                 </span>
@@ -8558,62 +8769,61 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
                 </span>
               </div>
 
-              {/* Items grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '16px' }}>
                 {items.map(item => {
-                  const isLowStock = item.currentStock <= 5;
+                  const isLowStock = item.currentStock <= 5 && item.currentStock > 0;
                   const isOutOfStock = item.currentStock <= 0;
+                  const margin = item.price > 0 && item.costPrice >= 0
+                    ? Math.round(((item.price - (item.costPrice || 0)) / item.price) * 100) : null;
+
                   return (
                     <div key={item._id} style={{
-                      background: '#0a0a0a', borderRadius: '16px', padding: '20px',
+                      background: '#0a0a0a', borderRadius: '16px', padding: '18px',
                       border: `1px solid ${isOutOfStock ? 'rgba(192,57,43,0.2)' : isLowStock ? 'rgba(186,117,23,0.2)' : '#151515'}`,
                       borderTop: `2px solid ${isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? 'rgba(211,191,162,0.3)' : '#1a1a1a'}`,
                       opacity: item.isAvailable ? 1 : 0.55,
                       position: 'relative', transition: 'all 0.2s'
                     }}>
-                      {/* Availability dot */}
-                      <div style={{
-                        position: 'absolute', top: '16px', right: '16px',
-                        width: '7px', height: '7px', borderRadius: '50%',
-                        background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? '#4ade80' : '#333',
-                        boxShadow: item.isAvailable && !isOutOfStock ? '0 0 6px rgba(74,222,128,0.3)' : 'none'
-                      }} />
+
+                      {/* Status dot */}
+                      <div style={{ position: 'absolute', top: '16px', right: '16px', width: '7px', height: '7px', borderRadius: '50%', background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? '#4ade80' : '#333' }} />
 
                       {/* Category badge */}
-                      <div style={{ marginBottom: '12px' }}>
-                        <span style={{ fontSize: '0.52rem', padding: '3px 8px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-<span style={{
-  display: 'inline-flex', alignItems: 'center', gap: '5px',
-  fontSize: '0.52rem', padding: '3px 8px',
-  background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a',
-  borderRadius: '4px', color: '#555', fontWeight: '900',
-  textTransform: 'uppercase', letterSpacing: '0.5px'
-}}>
-  {categoryIcons[item.category] || <Box size={13} color="#555" />}
-  {item.category}
-</span>                        </span>
-                      </div>
-
-                      {/* Name + Price */}
                       <div style={{ marginBottom: '10px' }}>
-                        <h3 style={{ margin: '0 0 4px', fontSize: '0.95rem', fontWeight: '900', color: '#fff', paddingRight: '16px' }}>{item.name}</h3>
-                        {item.description && (
-                          <p style={{ margin: 0, fontSize: '0.65rem', color: '#444', lineHeight: '1.4' }}>{item.description}</p>
-                        )}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.52rem', padding: '3px 8px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {categoryIcons[item.category] || <Box size={13} color="#555" />}
+                          {item.category}
+                        </span>
                       </div>
 
-                      {/* Price + Unit */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                      {/* Name */}
+                      <h3 style={{ margin: '0 0 4px', fontSize: '0.95rem', fontWeight: '900', color: '#fff', paddingRight: '14px' }}>{item.name}</h3>
+                      {item.description && (
+                        <p style={{ margin: '0 0 10px', fontSize: '0.65rem', color: '#444', lineHeight: '1.4' }}>{item.description}</p>
+                      )}
+
+                      {/* Price row with margin */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>₹{item.price}</span>
                         <span style={{ fontSize: '0.62rem', color: '#444' }}>per {item.unit}</span>
-                        {item.totalSold > 0 && (
-                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: '#555', padding: '2px 8px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '4px' }}>
-                            {item.totalSold} sold
+                        {item.costPrice > 0 && (
+                          <span style={{ fontSize: '0.58rem', color: '#555' }}>cost ₹{item.costPrice}</span>
+                        )}
+                        {margin !== null && (
+                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', padding: '2px 7px', background: margin >= 40 ? 'rgba(74,222,128,0.07)' : 'rgba(186,117,23,0.07)', border: `1px solid ${margin >= 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`, borderRadius: '4px', color: margin >= 40 ? '#4ade80' : '#BA7517', fontWeight: '800' }}>
+                            {margin}% margin
                           </span>
                         )}
                       </div>
 
-
+                      {/* Sales badge */}
+                      {item.totalSold > 0 && (
+                        <div style={{ marginBottom: '10px' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#555', padding: '2px 8px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '4px' }}>
+                            {item.totalSold} sold · ₹{Math.round(item.totalRevenue || 0).toLocaleString()} revenue
+                          </span>
+                        </div>
+                      )}
 
                       {/* Stock bar */}
                       <div style={{ marginBottom: '14px' }}>
@@ -8624,12 +8834,7 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
                           </span>
                         </div>
                         <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, Math.max(0, (item.currentStock / Math.max(item.currentStock, 20)) * 100))}%`,
-                            background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : 'linear-gradient(90deg,#8a704d,#d3bfa2)',
-                            borderRadius: '2px', transition: 'width 0.6s ease'
-                          }} />
+                          <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, (item.currentStock / Math.max(item.currentStock, 20)) * 100))}%`, background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '2px', transition: 'width 0.6s ease' }} />
                         </div>
                       </div>
 
@@ -8638,73 +8843,56 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
                         Stock value: <span style={{ color: '#555', fontWeight: '800' }}>₹{Math.round(item.currentStock * item.price).toLocaleString()}</span>
                       </div>
 
-                      {/* Action buttons */}
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {/* Quick restock */}
+                      {/* Actions — 2 rows */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {/* Row 1: Restock (full width) */}
                         <button
-                          onClick={async () => {
-                            const qty = prompt(`Restock "${item.name}" — Enter quantity to add:`);
-                            if (!qty || isNaN(qty) || Number(qty) <= 0) return;
-                            await axios.patch(`${BASE_URL}/extra-items/item/${item._id}/restock`, { addQty: Number(qty) });
-                            fetchExtraItems();
-                            showNotif(`${item.name} restocked +${qty}`);
-                          }}
-                          style={{ flex: 1, padding: '9px 6px', background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8a704d'; }}
+                          onClick={() => { setExtraRestockModal(item); setExtraRestockQty(''); }}
+                          style={{ width: '100%', padding: '9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '9px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.09)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}
                         >
-                          + RESTOCK
+                          + ADD STOCK
                         </button>
 
-                        {/* Toggle availability */}
-                        <button
-                          onClick={async () => {
-                            await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`, { isAvailable: !item.isAvailable });
-                            fetchExtraItems();
-                            showNotif(`${item.name} ${!item.isAvailable ? 'activated' : 'hidden'}`);
-                          }}
-                          style={{
-                            flex: 1, padding: '9px 6px',
-                            background: item.isAvailable ? '#111' : 'rgba(74,222,128,0.06)',
-                            border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(74,222,128,0.2)',
-                            color: item.isAvailable ? '#444' : '#4ade80',
-                            borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s'
-                          }}
-                        >
-                          {item.isAvailable ? 'HIDE' : 'SHOW'}
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          onClick={() => {
-                            setExtraItemEditModal(item);
-                            setExtraItemEditData({ ...item });
-                          }}
-                          style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
-                        >
-                          ✎
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          onClick={() => setConfirmModal({
-                            show: true,
-                            title: `Remove "${item.name}"?`,
-                            subtitle: 'This will permanently delete the item from your catalog.',
-                            onConfirm: async () => {
-                              await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);
+                        {/* Row 2: HIDE/SHOW + EDIT + DELETE */}
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={async () => {
+                              await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`, { isAvailable: !item.isAvailable });
                               fetchExtraItems();
-                              showNotif(`${item.name} removed`);
-                            }
-                          })}
-                          style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-                        >
-                          ✕
-                        </button>
+                              showNotif(`${item.name} ${!item.isAvailable ? 'activated' : 'hidden'}`);
+                            }}
+                            style={{ flex: 1, padding: '9px 6px', background: item.isAvailable ? '#111' : 'rgba(74,222,128,0.06)', border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(74,222,128,0.2)', color: item.isAvailable ? '#444' : '#4ade80', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}
+                          >
+                            {item.isAvailable ? 'HIDE' : 'SHOW'}
+                          </button>
+                          <button
+                            onClick={() => { setExtraItemEditModal(item); setExtraItemEditData({ ...item }); }}
+                            style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={() => setConfirmModal({
+                              show: true,
+                              title: `Remove "${item.name}"?`,
+                              subtitle: 'This will permanently delete the item from your catalog.',
+                              onConfirm: async () => {
+                                await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);
+                                fetchExtraItems();
+                                showNotif(`${item.name} removed`);
+                              }
+                            })}
+                            style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -8715,7 +8903,6 @@ setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', u
         </div>
       );
     })()}
-
   </motion.div>
 )}
 
