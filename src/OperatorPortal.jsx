@@ -3079,7 +3079,7 @@ const renderMonthHeatmap = () => {
       paddingRight: '4px',
     }} className="custom-scroll kds-scroll">
 
-      {waiterRequests.length > 0 ? waiterRequests.map(req => (
+      {waiterRequests.length > 0 ? [...waiterRequests].reverse().map(req => (
         <motion.div
           initial={{ x: 12, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
           key={req._id}

@@ -390,26 +390,33 @@ return () => {
     return counts;
   }, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-      if (stationFilter === 'DINEIN' && isTakeaway) return false;
-      if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return false;
-      if (isNonVegMode) {
-        const hasNV = order.items.some(item => {
-          const v = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-          return !v;
-        });
-        if (!hasNV) return false;
-      }
-      if (selectedCategory !== 'ALL') {
-        return order.items.some(item => {
-          let cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
-          return cId === selectedCategory.toLowerCase().trim();
-        });
-      }
-      return true;
-    });
+const filteredOrders = useMemo(() => {
+  return orders.filter(order => {
+    // ── NEVER show orders that contain only extra items ──
+    const hasKitchenItems = order.items?.some(
+      item => !item.isExtraItem && item.extraItemId == null
+    );
+    if (!hasKitchenItems) return false;
+
+    const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
+    if (stationFilter === 'DINEIN' && isTakeaway) return false;
+    if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return false;
+    if (isNonVegMode) {
+      const hasNV = order.items.some(item => {
+        const v = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+        return !v;
+      });
+      if (!hasNV) return false;
+    }
+    if (selectedCategory !== 'ALL') {
+      return order.items.some(item => {
+        if (item.isExtraItem || item.extraItemId != null) return false;
+        let cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
+        return cId === selectedCategory.toLowerCase().trim();
+      });
+    }
+    return true;
+  });
 }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode]);
 
   // Fetch today's wastage from DB
@@ -492,26 +499,31 @@ useEffect(() => {
 }, [wastageTab, showWastagePanel, fetchWastageAnalytics]);
 
 
-  const aggregatedTotals = useMemo(() => {
-    const totals = {};
-    orders.forEach(o => o.items.forEach((i, idx) => {
+const aggregatedTotals = useMemo(() => {
+  const totals = {};
+  orders.forEach(o => o.items
+    .filter(i => !i.isExtraItem && i.extraItemId == null)  // ← skip extra items
+    .forEach((i, idx) => {
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const parcel = o.tableNumber?.toLowerCase() === 'takeaway' || i.isParcel;
       const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? ` (${i.portion})` : "";
       const key = `${i.name}${portion} ${parcel ? '[P]' : '[D]'}`;
       totals[key] = (totals[key] || 0) + i.quantity;
     }));
-    return totals;
-  }, [orders, checkedItemsGlobal]);
+  return totals;
+}, [orders, checkedItemsGlobal]);
+ 
 
-  const masterPrepMarqueeList = useMemo(() => {
-    const m = {};
-    filteredOrders.forEach(o => o.items.forEach((i, idx) => {
+const masterPrepMarqueeList = useMemo(() => {
+  const m = {};
+  filteredOrders.forEach(o => o.items
+    .filter(i => !i.isExtraItem && i.extraItemId == null)  // ← skip extra items
+    .forEach((i, idx) => {
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       m[i.name] = (m[i.name] || 0) + i.quantity;
     }));
-    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [filteredOrders, checkedItemsGlobal]);
+  return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
+}, [filteredOrders, checkedItemsGlobal]);
 
   const averageClearVelocityString = useMemo(() => {
     if (!completedTicketsCount) return "—";
@@ -1011,6 +1023,9 @@ useEffect(() => {
                           isNonVegMode={isNonVegMode}
                           tenantOnlyVeg={tenantOnlyVeg}
                           isMobile={true}
+                            itemFinalTimes={itemFinalTimes}
+  setItemFinalTimes={setItemFinalTimes}
+
                         />
                       )}
                     </motion.div>
@@ -1832,7 +1847,7 @@ useEffect(() => {
 const KDSOrderCard = ({
   order, onReady, isNewest, dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-  socketInstance, isNonVegMode, tenantOnlyVeg, isMobile, isTablet = false
+  socketInstance, isNonVegMode, tenantOnlyVeg, isMobile, isTablet = false,itemFinalTimes, setItemFinalTimes
 }) => {
   const [seconds, setSeconds] = useState(0);
   
@@ -1954,164 +1969,167 @@ const toggleItemCrossed = async (idx) => {
 
       {/* Item list */}
       <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scroll">
-        {order.items.map((item, idx) => {
-          let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
-          const isVeg = item.isVeg !== undefined
-            ? item.isVeg !== false
-            : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
+{order.items
+  .map((item, idx) => {
+    // ── Skip extra items entirely — they go to waiter, not kitchen ──
+    if (item.isExtraItem || item.extraItemId != null) return null;
 
-          if (selectedCategory !== 'ALL' && catId !== selectedCategory.toLowerCase().trim()) return null;
+    let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
+    const isVeg = item.isVeg !== undefined
+      ? item.isVeg !== false
+      : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
 
-          const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
-          const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
-const forceParcel =
-  order.tableNumber?.toLowerCase() === 'takeaway' ||
-  order.tableNumber?.toLowerCase() === 'counter' ||
-  order.source === 'counter-pickup' ||
-  order.source === 'takeaway' ||
-  order.source === 'waitlist' ||        // waitlist pickup assigned to counter
-  item.isParcel === true;
- 
-          if (!modeMatch) return (
-            <div key={idx} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 0', borderBottom: '1px solid #1c1f26',
-              opacity: crossed ? 0.06 : 0.2, pointerEvents: 'none', filter: 'grayscale(1)'
+    if (selectedCategory !== 'ALL' && catId !== selectedCategory.toLowerCase().trim()) return null;
+
+    const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
+    const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
+    const forceParcel =
+      order.tableNumber?.toLowerCase() === 'takeaway' ||
+      order.tableNumber?.toLowerCase() === 'counter' ||
+      order.source === 'counter-pickup' ||
+      order.source === 'takeaway' ||
+      order.source === 'waitlist' ||
+      item.isParcel === true;
+
+    if (!modeMatch) return (
+      <div key={idx} style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '9px 0', borderBottom: '1px solid #1c1f26',
+        opacity: crossed ? 0.06 : 0.2, pointerEvents: 'none', filter: 'grayscale(1)'
+      }}>
+        <div style={{
+          width: 28, height: 28,
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          borderRadius: 7, fontWeight: 900, color: '#d3bfa2',
+          background: '#0d0e11', fontFamily: 'monospace', flexShrink: 0
+        }}>{item.quantity}</div>
+        <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
+      </div>
+    );
+
+    return (
+      <div
+        key={idx}
+        onClick={() => {
+          toggleItemCrossed(idx);
+          if (!checkedItemsGlobal[`${order._id}-${idx}`] && !itemStartTimes[idx]) {
+            setItemStartTimes(prev => ({ ...prev, [idx]: Date.now() }));
+          }
+        }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 0', borderBottom: '1px solid #1c1f26',
+          cursor: 'pointer', opacity: crossed ? 0.2 : 1,
+          transition: '0.15s', WebkitTapHighlightColor: 'transparent'
+        }}>
+        <div style={{
+          width: 28, height: 28,
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          borderRadius: 7,
+          background: crossed ? '#0d0e11' : '#1e2129',
+          fontWeight: 900, color: '#d3bfa2', flexShrink: 0, fontFamily: 'monospace'
+        }}>
+          {item.quantity}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <span style={{
+              fontSize: isMobile ? '0.88rem' : isTablet ? '0.86rem' : '0.95rem',
+              fontWeight: 700, lineHeight: 1.3,
+              textDecoration: crossed ? 'line-through' : 'none',
+              color: item.isChefSpecial ? '#0f1013' : '#fff',
+              background: item.isChefSpecial ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'transparent',
+              padding: item.isChefSpecial ? '2px 7px' : 0,
+              borderRadius: item.isChefSpecial ? 5 : 0
             }}>
+              {item.isChefSpecial && <Sparkles size={11} style={{ display: 'inline', marginRight: 3 }} />}
+              {item.name}
+            </span>
+            {!tenantOnlyVeg && (
               <div style={{
-                width: 28, height: 28,
-                display: 'flex', justifyContent: 'center', alignItems: 'center',
-                borderRadius: 7, fontWeight: 900, color: '#d3bfa2',
-                background: '#0d0e11', fontFamily: 'monospace', flexShrink: 0
-              }}>{item.quantity}</div>
-              <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
-            </div>
-          );
-
-          return (
-            <div
-              key={idx}
-onClick={() => {
-  toggleItemCrossed(idx);
-  // ── Start item timer on first tap (begin cooking) ──
-  if (!checkedItemsGlobal[`${order._id}-${idx}`] && !itemStartTimes[idx]) {
-    setItemStartTimes(prev => ({ ...prev, [idx]: Date.now() }));
-  }
-}}              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 0', borderBottom: '1px solid #1c1f26',
-                cursor: 'pointer', opacity: crossed ? 0.2 : 1,
-                transition: '0.15s', WebkitTapHighlightColor: 'transparent'
+                width: 10, height: 10,
+                border: `1.5px solid ${isVeg ? '#4a7c3f' : '#8a3030'}`,
+                borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
               }}>
-              <div style={{
-                width: 28, height: 28,
-                display: 'flex', justifyContent: 'center', alignItems: 'center',
-                borderRadius: 7,
-                background: crossed ? '#0d0e11' : '#1e2129',
-                fontWeight: 900, color: '#d3bfa2', flexShrink: 0, fontFamily: 'monospace'
-              }}>
-                {item.quantity}
+                {isVeg
+                  ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4a7c3f' }} />
+                  : <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '4px solid #8a3030' }} />
+                }
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                  <span style={{
-                    fontSize: isMobile ? '0.88rem' : isTablet ? '0.86rem' : '0.95rem',
-                    fontWeight: 700, lineHeight: 1.3,
-                    textDecoration: crossed ? 'line-through' : 'none',
-                    color: item.isChefSpecial ? '#0f1013' : '#fff',
-                    background: item.isChefSpecial ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'transparent',
-                    padding: item.isChefSpecial ? '2px 7px' : 0,
-                    borderRadius: item.isChefSpecial ? 5 : 0
-                  }}>
-                    {item.isChefSpecial && <Sparkles size={11} style={{ display: 'inline', marginRight: 3 }} />}
-                    {item.name}
-                  </span>
-                  {!tenantOnlyVeg && (
-                    <div style={{
-                      width: 10, height: 10,
-                      border: `1.5px solid ${isVeg ? '#4a7c3f' : '#8a3030'}`,
-                      borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                    }}>
-                      {isVeg
-                        ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4a7c3f' }} />
-                        : <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '4px solid #8a3030' }} />
-                      }
-                    </div>
-                  )}
-                  <div style={{
-                    background: forceParcel ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)',
-                    color: forceParcel ? '#d3bfa2' : '#a0a5b5',
-                    fontSize: '0.5rem', padding: '2px 5px', borderRadius: 4,
-                    border: `1px solid ${forceParcel ? 'rgba(211,191,162,0.12)' : '#232731'}`,
-                    fontWeight: 900, display: 'flex', alignItems: 'center', gap: 2
-                  }}>
-                    {forceParcel ? <Package size={9} /> : <UtensilsCrossed size={9} />}
-                    {forceParcel ? 'PARCEL' : 'DINE-IN'}
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: '0.6rem', fontWeight: 900,
-                  color: item.portion?.toLowerCase() === 'half' ? '#d3bfa2' : '#7c8291',
-                  display: 'block', marginTop: 2
-                }}>
-                  {item.portion?.toUpperCase() || 'STANDARD'}
+            )}
+            <div style={{
+              background: forceParcel ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)',
+              color: forceParcel ? '#d3bfa2' : '#a0a5b5',
+              fontSize: '0.5rem', padding: '2px 5px', borderRadius: 4,
+              border: `1px solid ${forceParcel ? 'rgba(211,191,162,0.12)' : '#232731'}`,
+              fontWeight: 900, display: 'flex', alignItems: 'center', gap: 2
+            }}>
+              {forceParcel ? <Package size={9} /> : <UtensilsCrossed size={9} />}
+              {forceParcel ? 'PARCEL' : 'DINE-IN'}
+            </div>
+          </div>
+          <span style={{
+            fontSize: '0.6rem', fontWeight: 900,
+            color: item.portion?.toLowerCase() === 'half' ? '#d3bfa2' : '#7c8291',
+            display: 'block', marginTop: 2
+          }}>
+            {item.portion?.toUpperCase() || 'STANDARD'}
+          </span>
+
+          {/* ── ITEM-LEVEL COOK TIMER ── */}
+          {itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`] && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              marginTop: 4,
+              fontSize: '0.55rem', fontWeight: 900,
+              color: (itemElapsed[idx]||0) >= 300 ? '#d3bfa2' : 'rgba(211,191,162,0.4)',
+              background: (itemElapsed[idx]||0) >= 300 ? 'rgba(211,191,162,0.08)' : 'transparent',
+              padding: (itemElapsed[idx]||0) >= 300 ? '2px 6px' : '0',
+              borderRadius: 4,
+              border: (itemElapsed[idx]||0) >= 300 ? '1px solid rgba(211,191,162,0.2)' : 'none',
+              fontFamily: 'monospace'
+            }}>
+              <Timer size={9} />
+              {(() => {
+                const s = itemElapsed[idx] || 0;
+                const m = Math.floor(s / 60);
+                const sec = s % 60;
+                return `${m}:${sec.toString().padStart(2,'0')}`;
+              })()}
+              {(itemElapsed[idx]||0) >= 300 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.48rem', letterSpacing: '0.5px' }}>
+                  <AlertTriangle size={8} strokeWidth={2.5} /> SLOW
                 </span>
-
-                {/* ── ITEM-LEVEL COOK TIMER ── */}
-{itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`] && (
-  <div style={{
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    marginTop: 4,
-    fontSize: '0.55rem', fontWeight: 900,
-    color: (itemElapsed[idx]||0) >= 300 ? '#d3bfa2' : 'rgba(211,191,162,0.4)',
-    background: (itemElapsed[idx]||0) >= 300 ? 'rgba(211,191,162,0.08)' : 'transparent',
-    padding: (itemElapsed[idx]||0) >= 300 ? '2px 6px' : '0',
-    borderRadius: 4,
-    border: (itemElapsed[idx]||0) >= 300 ? '1px solid rgba(211,191,162,0.2)' : 'none',
-    fontFamily: 'monospace'
-  }}>
-    <Timer size={9} />
-    {(() => {
-      const s = itemElapsed[idx] || 0;
-      const m = Math.floor(s / 60);
-      const sec = s % 60;
-      return `${m}:${sec.toString().padStart(2,'0')}`;
-    })()}
-{(itemElapsed[idx]||0) >= 300 && (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.48rem', letterSpacing: '0.5px' }}>
-        <AlertTriangle size={8} strokeWidth={2.5} /> SLOW
-      </span>
-    )}
-  </div>
-)}
-{checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (() => {
-  const s = itemFinalTimes[idx] ?? (itemElapsed[idx] || 0);
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4,
-      fontSize: '0.55rem', fontWeight: 900, color: '#555', fontFamily: 'monospace' }}>
-      <Timer size={9} />
-      Done in {Math.floor(s / 60)}m {s % 60}s
-    </div>
-  );
-})()}
-                {item.suggestion && (
-                  <div style={{
-                    color: '#bda88a', fontSize: '0.62rem', marginTop: 4,
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    background: 'rgba(211,191,162,0.04)', padding: '4px 8px',
-                    borderRadius: 6, border: '1px solid rgba(211,191,162,0.08)'
-                  }}>
-                    <StickyNote size={9} />
-                    <span style={{ textTransform: 'uppercase' }}>{item.suggestion}</span>
-                  </div>
-                )}
-
-                
-              </div>
-              {crossed && <CheckSquare size={16} color="#d3bfa2" style={{ flexShrink: 0 }} />}
+              )}
             </div>
-          );
-        })}
+          )}
+          {checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (() => {
+            const s = itemFinalTimes[idx] ?? (itemElapsed[idx] || 0);
+            return (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4,
+                fontSize: '0.55rem', fontWeight: 900, color: '#555', fontFamily: 'monospace' }}>
+                <Timer size={9} />
+                Done in {Math.floor(s / 60)}m {s % 60}s
+              </div>
+            );
+          })()}
+
+          {item.suggestion && (
+            <div style={{
+              color: '#bda88a', fontSize: '0.62rem', marginTop: 4,
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: 'rgba(211,191,162,0.04)', padding: '4px 8px',
+              borderRadius: 6, border: '1px solid rgba(211,191,162,0.08)'
+            }}>
+              <StickyNote size={9} />
+              <span style={{ textTransform: 'uppercase' }}>{item.suggestion}</span>
+            </div>
+          )}
+        </div>
+        {crossed && <CheckSquare size={16} color="#d3bfa2" style={{ flexShrink: 0 }} />}
+      </div>
+    );
+  })}
       </div>
 
       {/* Done button */}
