@@ -48,6 +48,16 @@ const numberToWords = (num) => {
     return str.trim() + " Only";
 };
 
+const playSFX = (type = 'default') => {
+  const sounds = {
+    waitlist:    'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',  // chime
+    pickup:      'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3',  // bell
+    reservation: 'https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3',  // soft ping
+    default:     'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+  };
+  new Audio(sounds[type] || sounds.default).play().catch(() => {});
+};
+
 const calculateTenure = (joiningDateString) => {
     if (!joiningDateString) return 'N/A';
     const joinDate = new Date(joiningDateString);
@@ -95,7 +105,7 @@ const OperatorPortal = () => {
   const [selectedBroadcastItem, setSelectedBroadcastItem] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastText, setBroadcastMsg] = useState("");
-  const [notif, setNotif] = useState({ show: false, msg: '', type: 'success' });
+const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subtype: '' });
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
   const [wipingStaffId, setWipingStaffId] = useState(null); 
 
@@ -273,17 +283,16 @@ const fetchCounterQueue = useCallback(async () => {
 }, [tenantId, reservationViewDate]);
 
 // Fetch wastage analytics for current month
-const fetchWastageAnalytics = async () => {
+const fetchWastageAnalytics = useCallback(async () => {
   try {
-    const istNow = new Date(new Date().getTime() + 330 * 60 * 1000);
-    const month = istNow.getFullYear() + '-' + String(istNow.getMonth() + 1).padStart(2, '0');
+    const month = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
     const res = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}?month=${month}`);
     setWastageAnalytics(res.data);
   } catch (err) {
     console.error('Wastage analytics fetch failed:', err.message);
     setWastageAnalytics({ totalCost: 0, totalEntries: 0, byReason: {}, topWasted: [], dailyTrend: [], monthLabel: '' });
   }
-};
+}, [tenantId, viewDate]);
 
 // Add this right after your existing waitlistEntries state
 useEffect(() => {
@@ -318,27 +327,46 @@ const fetchExtraAnalytics = useCallback(async () => {
   }, [tenantId,fetchCounterQueue ]);
 
 // REPLACE fetchAnalytics entirely:
+ 
 const fetchAnalytics = useCallback(async () => {
   try {
     const istNow = new Date(new Date().getTime() + 330*60*1000);
     const todayStr = istNow.toISOString().split('T')[0];
     const selectedMonthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth()+1).padStart(2,'0');
-
+ 
+    // Check if viewDate is the current month — hourly only makes sense for today
+    const isCurrentMonth =
+      viewDate.getFullYear() === istNow.getFullYear() &&
+      viewDate.getMonth()    === istNow.getMonth();
+ 
+    // For past months, use the last day of that month as the "date" for hourly
+    const hourlyDate = isCurrentMonth
+      ? todayStr
+      : `${selectedMonthStr}-01`; // will return minimal data for past months (expected)
+ 
     const results = await Promise.allSettled([
       axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${selectedMonthStr}`),
-      axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${todayStr}&month=${selectedMonthStr}`),
+      axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${hourlyDate}&month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/preptime/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`),
       axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/waitlist/${tenantId}?month=${selectedMonthStr}`),
+      // ── NEW: wastage analytics for the selected month ──
+      axios.get(`${BASE_URL}/wastage/analytics/${tenantId}?month=${selectedMonthStr}`),
+      // ── NEW: extra items analytics (all-time by nature, but fetch fresh) ──
+      axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`),
     ]);
-
-    const [analyticsRes, hourlyRes, trendsRes, prepRes, profitRes, procureRes, staffEffRes, waitlistRes] = results;
-
+ 
+    const [
+      analyticsRes, hourlyRes, trendsRes, prepRes,
+      profitRes, procureRes, staffEffRes, waitlistRes,
+      wastageRes, extraRes
+    ] = results;
+ 
     const val = (r, fallback) => r.status === 'fulfilled' ? r.value.data : fallback;
-
+ 
     setAnalytics(val(analyticsRes, { salesData: [] }).salesData || []);
     setTopPerformers(val(analyticsRes, { topItems: [] }).topItems || []);
     setBottomPerformers(val(analyticsRes, { bottomItems: [] }).bottomItems || []);
@@ -352,15 +380,17 @@ const fetchAnalytics = useCallback(async () => {
     setProfitabilityData(val(profitRes, []));
     setProcurementData(val(procureRes, []));
     setStaffEfficiency(val(staffEffRes, { efficiency: [] }).efficiency || []);
-
-    // ← THIS was the bug: waitlistRes was missing from destructure, so it was always undefined
+ 
     const waitlistData = val(waitlistRes, null);
     setWaitlistAnalytics(waitlistData);
-    console.log('[Analytics] Waitlist data loaded:', waitlistData?.today);
-
+ 
+    // ── NEW: set wastage and extra analytics from combined fetch ──
+    setWastageAnalytics(val(wastageRes, null));
+    setExtraAnalytics(val(extraRes, null));
+ 
   } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, viewDate]);
-
+ 
 
 const fetchMonthlySalary = useCallback(async (monthStr) => {
   try {
@@ -424,6 +454,11 @@ const deductExtraItemStock = useCallback(async (itemId, qty) => {
   }
 }, []);
 
+useEffect(() => {
+  if (!isAuthenticated) return;
+  const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+  fetchMonthlySalary(monthPrefix);
+}, [isAuthenticated, viewDate, fetchMonthlySalary]);
 
 useEffect(() => {
   if (isAuthenticated) {
@@ -493,13 +528,57 @@ socket.on("menu_updated", (updatedItem) => {
   showNotif("Menu item removed by operator", "info");
 });
 
-socket.on('new_waitlist_entry', () => fetchCounterQueue());
-socket.on('new_reservation',    () => { fetchCounterQueue(); showNotif('New reservation received', 'info'); });
-socket.on('reservation_updated',() => fetchCounterQueue());
-socket.on('waitlist_cancelled',  () => fetchCounterQueue());
-socket.on('waitlist_assigned',   () => { fetchCounterQueue(); fetchInitialData(); });
-socket.on('waitlist_updated',    () => fetchCounterQueue());
-socket.on('pickup_ready',        () => fetchCounterQueue());
+socket.on('new_waitlist_entry', (data) => {
+  fetchCounterQueue();
+  playSFX('waitlist');
+  showNotif(
+    `New walk-in — ${data?.customerName || 'Guest'} · Party of ${data?.partySize || '?'}`,
+    'info', 'waitlist'
+  );
+});
+
+socket.on('new_reservation', (data) => {
+  fetchCounterQueue();
+  playSFX('reservation');
+  showNotif(
+    `Reservation — ${data?.customerName || 'Guest'} · ${data?.partySize || '?'} pax · ${
+      data?.reservationTime
+        ? new Date(data.reservationTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        : ''
+    }`,
+    'info', 'reservation'
+  );
+});
+
+socket.on('reservation_updated', () => fetchCounterQueue());
+
+socket.on('waitlist_cancelled', (data) => {
+  fetchCounterQueue();
+  showNotif(
+    `Waitlist cancelled — ${data?.customerName || 'Guest'}`,
+    'error', 'waitlist'
+  );
+});
+
+socket.on('waitlist_assigned', (data) => {
+  fetchCounterQueue();
+  fetchInitialData();
+  showNotif(
+    `Table assigned — ${data?.customerName || 'Guest'} → T${data?.tableNumber || '?'}`,
+    'success', 'waitlist'
+  );
+});
+
+socket.on('waitlist_updated', () => fetchCounterQueue());
+
+socket.on('pickup_ready', (data) => {
+  fetchCounterQueue();
+  playSFX('pickup');
+  showNotif(
+    `Pickup ready — ${data?.customerName || 'Customer'} · ₹${data?.totalAmount?.toLocaleString() || '?'}`,
+    'success', 'pickup'
+  );
+});
 
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
@@ -543,12 +622,12 @@ useEffect(() => {
   // ─────────────────────────────────────────────────────
   // COMPUTED VALUES
   // ─────────────────────────────────────────────────────
-  const currentMonthAnalytics = useMemo(() => {
-    if (!analytics || !Array.isArray(analytics)) return [];
-    const monthStr = (viewDate.getMonth()+1).toString().padStart(2,'0');
-    const yearStr = viewDate.getFullYear().toString();
-    return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
-  }, [analytics, viewDate]);
+const currentMonthAnalytics = useMemo(() => {
+  if (!analytics || !Array.isArray(analytics)) return [];
+  const monthStr = (viewDate.getMonth()+1).toString().padStart(2,'0');
+  const yearStr = viewDate.getFullYear().toString();
+  return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
+}, [analytics, viewDate]);
 
   const stats = useMemo(() => {
     const revenue = currentMonthAnalytics.reduce((a,b) => a+(b.revenue||0), 0);
@@ -563,17 +642,28 @@ useEffect(() => {
 const hudLiveCounterBreakdown = useMemo(() => {
   const fallback = { total: 0, direct: 0, takeaway: 0, online: 0 };
   if (!analytics?.length) return fallback;
-  const todayEntries = analytics.filter(d => d._id === istTodayStr); // ← IST today
-  if (!todayEntries.length) return fallback;
+ 
+  const istNow = new Date(new Date().getTime() + 330*60*1000);
+  const isCurrentMonth =
+    viewDate.getFullYear() === istNow.getFullYear() &&
+    viewDate.getMonth()    === istNow.getMonth();
+ 
+  // For current month: show today's live invoice count (original behaviour)
+  // For past months: show total for the selected month
+  const entriesToSum = isCurrentMonth
+    ? analytics.filter(d => d._id === istTodayStr)
+    : currentMonthAnalytics;
+ 
+  if (!entriesToSum.length) return fallback;
   let direct = 0, takeaway = 0, online = 0;
-  todayEntries.forEach(entry => {
+  entriesToSum.forEach(entry => {
     const src = (entry.source || 'direct').toLowerCase();
     if (src === 'takeaway') takeaway += (entry.count || 1);
     else if (src === 'zomato' || src === 'swiggy' || src === 'online') online += (entry.count || 1);
     else direct += (entry.count || 1);
   });
   return { total: direct + takeaway + online, direct, takeaway, online };
-}, [analytics, istTodayStr]); // ← removed attendanceDate dependency
+}, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
   const occupiedTables = useMemo(() => [
     ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
@@ -594,14 +684,23 @@ const filteredOrders = useMemo(() => {
 const dailySettlementBreakdown = useMemo(() => {
   let cashSum=0, upiSum=0, cardSum=0;
   if (analytics?.length) {
-    analytics.filter(d => d._id === istTodayStr).forEach(r => { // ← IST today
+    const istNow = new Date(new Date().getTime() + 330*60*1000);
+    const isCurrentMonth =
+      viewDate.getFullYear() === istNow.getFullYear() &&
+      viewDate.getMonth()    === istNow.getMonth();
+ 
+    const entriesToSum = isCurrentMonth
+      ? analytics.filter(d => d._id === istTodayStr)
+      : currentMonthAnalytics;
+ 
+    entriesToSum.forEach(r => {
       cashSum += Number(r.cash || 0);
       upiSum  += Number(r.upi  || 0);
       cardSum += Number(r.card || 0);
     });
   }
   return { cash: cashSum, upi: upiSum, card: cardSum, gross: cashSum+upiSum+cardSum };
-}, [analytics, istTodayStr]);
+}, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
   const advancedStats = useMemo(() => {
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
@@ -633,14 +732,6 @@ const dailySettlementBreakdown = useMemo(() => {
     return list;
   }, [staff, rosterSearchQuery, ledgerSortConfig, attendanceLogs, viewDate]);
 
-  
-useEffect(() => {
-  if (isAuthenticated) {
-    fetchAnalytics();
-    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-    if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
-  }
-}, [isAuthenticated, viewDate, fetchAnalytics, fetchMonthlySalary]);
 
 // Replace existing totalPayrollValue useMemo
 const totalPayrollValue = useMemo(() => {
@@ -707,9 +798,9 @@ const liveFloorIntelligence = useMemo(() => {
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
-const showNotif = useCallback((msg, type='success') => {
-  setNotif({ show: true, msg, type });
-  setTimeout(() => setNotif(p=>({...p, show:false})), 4000);
+const showNotif = useCallback((msg, type = 'success', subtype = '') => {
+  setNotif({ show: true, msg, type, subtype });
+  setTimeout(() => setNotif(p => ({ ...p, show: false })), 5000);
 }, []);
 
   const requestLedgerSort = (key) => {
@@ -821,15 +912,15 @@ const settleBill = () => {
 
 
 useEffect(() => {
- if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
-   if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+  if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
+  if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
   if (activeTab === 'extras') fetchExtraItems();
-    if (activeTab === 'insights') {    // ← ADD THIS
-
-    fetchExtraAnalytics();
-    fetchWastageAnalytics();
+  if (activeTab === 'insights') {
+    fetchAnalytics();
   }
-}, [activeTab, viewDate, fetchManagementData, fetchExtraItems, fetchCounterQueue,fetchExtraAnalytics]);
+}, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue, fetchAnalytics]);
+ 
+ 
 
 useEffect(() => {
   if (activeTab === 'pending') fetchCounterQueue();
@@ -2483,14 +2574,70 @@ const renderMonthHeatmap = () => {
   return (
     <div style={styles.dashboard}>
       {/* TOAST */}
-      <AnimatePresence>
-        {notif.show && (
-          <motion.div initial={{x:300,opacity:0}} animate={{x:0,opacity:1}} exit={{x:300,opacity:0}}
-            style={{...styles.toast, borderLeft:`4px solid ${notif.type==='success'?'#d3bfa2':'#8a704d'}`}}>
-            <Zap size={16} color={notif.type==='success'?'#d3bfa2':'#8a704d'}/> {notif.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
+{/* TOAST */}
+<AnimatePresence>
+  {notif.show && (() => {
+    const iconMap = {
+      waitlist:    <Users size={15} />,
+      pickup:      <ShoppingBag size={15} />,
+      reservation: <CalendarClock size={15} />,
+    };
+    const colorMap = {
+      success: '#d3bfa2',
+      error:   '#8a3030',
+      info:    '#8a704d',
+    };
+    const bgMap = {
+      waitlist:    'rgba(211,191,162,0.06)',
+      pickup:      'rgba(138,112,77,0.08)',
+      reservation: 'rgba(201,168,76,0.07)',
+    };
+    const accentColor = colorMap[notif.type] || '#d3bfa2';
+    const icon = iconMap[notif.subtype] || <Zap size={15} />;
+    const subtypeLabel = {
+      waitlist:    'WALK-IN',
+      pickup:      'PICKUP',
+      reservation: 'RESERVATION',
+    }[notif.subtype];
+
+    return (
+      <motion.div
+        initial={{ x: 340, opacity: 0, scale: 0.96 }}
+        animate={{ x: 0, opacity: 1, scale: 1 }}
+        exit={{ x: 340, opacity: 0, scale: 0.96 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        style={{
+          ...styles.toast,
+          borderLeft: `3px solid ${accentColor}`,
+          background: bgMap[notif.subtype] || 'rgba(13,13,13,0.97)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex', flexDirection: 'column', gap: '3px',
+          padding: '12px 16px', minWidth: '260px', maxWidth: '340px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ color: accentColor, flexShrink: 0 }}>{icon}</span>
+          {subtypeLabel && (
+            <span style={{
+              fontSize: '0.48rem', fontWeight: '900', letterSpacing: '1.5px',
+              color: accentColor, opacity: 0.7,
+              background: `${accentColor}18`,
+              padding: '2px 7px', borderRadius: '4px'
+            }}>
+              {subtypeLabel}
+            </span>
+          )}
+        </div>
+        <div style={{
+          fontSize: '0.72rem', fontWeight: '700', color: '#fff',
+          lineHeight: 1.4, paddingLeft: '23px'
+        }}>
+          {notif.msg}
+        </div>
+      </motion.div>
+    );
+  })()}
+</AnimatePresence>
 
  
 {/* MOBILE OVERLAY BACKDROP */}
@@ -2585,7 +2732,17 @@ const renderMonthHeatmap = () => {
       <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}}
         style={styles.hudCountersRow} className="p-hud">
         {[
-          {label:"TODAY'S INVOICES", val:hudLiveCounterBreakdown.total, color:'#d3bfa2'},
+          {
+            label: (() => {
+              const istNow = new Date(new Date().getTime() + 330*60*1000);
+              const isCurrentMonth =
+                viewDate.getFullYear() === istNow.getFullYear() &&
+                viewDate.getMonth()    === istNow.getMonth();
+              return isCurrentMonth ? "TODAY'S INVOICES" : "MONTH INVOICES";
+            })(),
+            val: hudLiveCounterBreakdown.total,
+            color: '#d3bfa2'
+          },          
           {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
           {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
           {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
@@ -4858,8 +5015,26 @@ const renderMonthHeatmap = () => {
  
 
     {/* ═══════════ SECTION 1 — TODAY'S PULSE ═══════════ */}
-    <SectionHeader icon={<Activity size={16}/>} title="Today's Pulse" subtitle="Live operational signals — act on these now" />
-
+    <SectionHeader
+      icon={<Activity size={16}/>}
+      title={(() => {
+        const istNow = new Date(new Date().getTime() + 330*60*1000);
+        const isCurrentMonth =
+          viewDate.getFullYear() === istNow.getFullYear() &&
+          viewDate.getMonth()    === istNow.getMonth();
+        return isCurrentMonth ? "Today's Pulse" : `${viewDate.toLocaleString('default',{month:'long'})} Pulse`;
+      })()}
+      subtitle={(() => {
+        const istNow = new Date(new Date().getTime() + 330*60*1000);
+        const isCurrentMonth =
+          viewDate.getFullYear() === istNow.getFullYear() &&
+          viewDate.getMonth()    === istNow.getMonth();
+        return isCurrentMonth
+          ? "Live operational signals — act on these now"
+          : `Historical data for ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`;
+      })()}
+    />
+    
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'4px'}}>
 
       <div style={styles.biCard}>
@@ -5602,13 +5777,15 @@ const renderMonthHeatmap = () => {
             <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900' }}>
               SHOWING: {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
             </div>
-            <button
-              onClick={() => {
-                const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-                fetchMonthlySalary(monthStr);
-                fetchAnalytics();
-                showNotif('Staff data refreshed');
-              }}
+              <button
+                onClick={async () => {
+                  const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+                  await Promise.all([
+                    fetchMonthlySalary(monthStr),
+                    fetchAnalytics(),
+                  ]);
+                  showNotif(`Data refreshed for ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`);
+                }}
               style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '6px 12px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}
             >
               ↻ REFRESH
