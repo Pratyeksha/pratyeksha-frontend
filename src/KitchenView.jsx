@@ -1964,8 +1964,14 @@ const toggleItemCrossed = async (idx) => {
 
           const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
           const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
-          const forceParcel = order.tableNumber?.toLowerCase() === 'takeaway' || item.isParcel;
-
+const forceParcel =
+  order.tableNumber?.toLowerCase() === 'takeaway' ||
+  order.tableNumber?.toLowerCase() === 'counter' ||
+  order.source === 'counter-pickup' ||
+  order.source === 'takeaway' ||
+  order.source === 'waitlist' ||        // waitlist pickup assigned to counter
+  item.isParcel === true;
+ 
           if (!modeMatch) return (
             <div key={idx} style={{
               display: 'flex', alignItems: 'center', gap: 10,
