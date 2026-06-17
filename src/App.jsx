@@ -1527,121 +1527,125 @@ const notifyWaiter = async (serviceType = "Custom") => {
       return acc + (price || 0) * qty;
     }, 0);
   };
+
 useEffect(() => {
+  // Only for dine-in table scans — not counter mode
   if (!tenantId || tableNumber === 'Counter' || isCounterScan) return;
   if (welcomeDismissed) return;
-
+ 
   const savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`);
-
-  // Only show phone prompt if they have a SAVED phone (returning customer)
-  // New customers (no saved phone) get NO prompt — straight to menu
+ 
   if (savedPhone && savedPhone.length === 10) {
+    // ── RETURNING CUSTOMER: try to recognize and show full welcome card ──
     setWelcomeLoading(true);
     axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${savedPhone}`)
       .then(r => {
         if (r.data?.found) {
           setWelcomeCard(r.data);
           setWelcomePhone(savedPhone);
+        } else {
+          // Phone saved locally but not in DB — show phone prompt
+          setShowPhonePrompt(true);
         }
-        // If not found in DB, just ignore — don't show prompt
       })
-      .catch(() => {})
+      .catch(() => {
+        // Network error — still show prompt as fallback
+        setShowPhonePrompt(true);
+      })
       .finally(() => setWelcomeLoading(false));
+  } else {
+    // ── NEW CUSTOMER: show phone prompt immediately on scan ──
+    // Small delay so menu loads first and feels settled
+    const timer = setTimeout(() => {
+      setShowPhonePrompt(true);
+    }, 1200);
+    return () => clearTimeout(timer);
   }
-  // ← NO else block — new customers see nothing, go straight to menu
 }, [tenantId, tableNumber, isCounterScan, welcomeDismissed]);
 
-  
+
 const sendBatchToKitchen = async () => {
-    try {
-      // 🚀 AGGREGATE CART ITEMS: Group by ID and Portion
-      const summary = {};
-Object.entries(cart).forEach(([key, qty]) => {
-  const isMulti = key.includes('-');
-  const id = isMulti ? key.split('-')[0] : key;
-  const portion = isMulti ? key.split('-')[1] : 'Single';
-  const item = allMenuItems.find(i => i._id === id);
-  if (!item) return; // ← skip if item not found in menu (catches any stray extra items)
-        
-        const summaryKey = `${id}-${portion}`;
-        if (!summary[summaryKey]) {
-          const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
-          summary[summaryKey] = { 
-            menuItemId: item._id, 
-            name: item.name, 
-            name_mr: item.name_mr,
-            quantity: 0, 
-            portion: portion, 
-            pricePerUnit: unitPrice, 
-            subtotal: 0,
-            suggestion: suggestions[key] || "",
-            isVeg: item.isVeg !== false   // ← ADD THIS
-          };
-        }
-        summary[summaryKey].quantity += qty;
-        summary[summaryKey].subtotal = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
-      });
-
-      const orderItems = Object.values(summary);
-      const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
-      
-      const payload = { 
-        tenantId, 
-        tableNumber, 
-        items: orderItems, 
-        billDetails: { itemsTotal: total, taxAmount: total * 0.05, grandTotal: total * 1.05 }, 
-        status: "pending", 
-        paymentStatus: "unpaid", 
-        createdAt: new Date().toISOString() 
-      };
-
-const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
-// ── Track this order for live status ──
-if (orderRes.data?._id) {
-  setLiveOrderStatuses(prev => ({ ...prev, [orderRes.data._id]: 'pending' }));
-}      
-      // Update placedOrders with the aggregated view for the receipt
-      setPlacedOrders(prev => [...prev, ...orderItems]); 
-      const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
-      if (knownPhone && knownPhone.length === 10) {
-        const visitItems = orderItems.map(i => ({
-          menuItemId: i.menuItemId,
-          name: i.name,
-          quantity: i.quantity,
-          subtotal: i.subtotal,
-        }));
-      const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
-      if (knownPhone && knownPhone.length === 10) {
-        const visitItems = orderItems.map(i => ({
-          menuItemId: i.menuItemId,
-          name: i.name,
-          quantity: i.quantity,
-          subtotal: i.subtotal,
-        }));
-        axios.post(`${BASE_URL}/customers/upsert`, {
-          tenantId,
-          name: customerInfo.name?.trim() || welcomeCard?.name || 'Guest',
-          phone: knownPhone,
-          lastOrderItems: visitItems,
-          visitAmount: total,
-          incrementVisit: false,   // ← progressive update only, no visit bump
-        }).catch(() => {});
+  try {
+    const summary = {};
+    Object.entries(cart).forEach(([key, qty]) => {
+      const isMulti = key.includes('-');
+      const id = isMulti ? key.split('-')[0] : key;
+      const portion = isMulti ? key.split('-')[1] : 'Single';
+      const item = allMenuItems.find(i => i._id === id);
+      if (!item) return;
+ 
+      const summaryKey = `${id}-${portion}`;
+      if (!summary[summaryKey]) {
+        const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+        summary[summaryKey] = {
+          menuItemId:   item._id,
+          name:         item.name,
+          name_mr:      item.name_mr,
+          quantity:     0,
+          portion:      portion,
+          pricePerUnit: unitPrice,
+          subtotal:     0,
+          suggestion:   suggestions[key] || "",
+          isVeg:        item.isVeg !== false
+        };
       }
-      }
-      triggerAlert("orderSuccess");
-      setHasPlacedInitialOrder(true);
-      setCart({}); 
-      setSuggestions({}); 
-      setIsDrawerOpen(false);
-      setOrderPlacedScreen(true);
-setTimeout(() => setOrderPlacedScreen(false), 60000); // auto-dismiss after 6s
-
-    } catch (error) { 
-      console.error(error);
-      triggerAlert("orderError", "error"); 
+      summary[summaryKey].quantity += qty;
+      summary[summaryKey].subtotal  = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
+    });
+ 
+    const orderItems = Object.values(summary);
+    const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
+ 
+    const payload = {
+      tenantId,
+      tableNumber,
+      items:       orderItems,
+      billDetails: { itemsTotal: total, taxAmount: total * 0.05, grandTotal: total * 1.05 },
+      status:        "pending",
+      paymentStatus: "unpaid",
+      createdAt:     new Date().toISOString()
+    };
+ 
+    const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
+    if (orderRes.data?._id) {
+      setLiveOrderStatuses(prev => ({ ...prev, [orderRes.data._id]: 'pending' }));
     }
-  };
-
+ 
+    setPlacedOrders(prev => [...prev, ...orderItems]);
+ 
+    // ── Customer upsert — single declaration, no duplicate ──
+    const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
+    if (knownPhone && knownPhone.length === 10) {
+      const visitItems = orderItems.map(i => ({
+        menuItemId: i.menuItemId,
+        name:       i.name,
+        quantity:   i.quantity,
+        subtotal:   i.subtotal,
+      }));
+      axios.post(`${BASE_URL}/customers/upsert`, {
+        tenantId,
+        name:           customerInfo.name?.trim() || welcomeCard?.name || 'Guest',
+        phone:          knownPhone,
+        lastOrderItems: visitItems,
+        visitAmount:    total,
+        incrementVisit: false,
+      }).catch(() => {});
+    }
+ 
+    triggerAlert("orderSuccess");
+    setHasPlacedInitialOrder(true);
+    setCart({});
+    setSuggestions({});
+    setIsDrawerOpen(false);
+    setOrderPlacedScreen(true);
+    setTimeout(() => setOrderPlacedScreen(false), 60000);
+ 
+  } catch (error) {
+    console.error(error);
+    triggerAlert("orderError", "error");
+  }
+};
+ 
   const placeWaitlistOrder = async () => {
   if (!customerInfo.name.trim()) return;
   const summary = {};
@@ -5604,63 +5608,185 @@ const categoryIconMap = {
         )}
       </AnimatePresence>
       {/* CART DRAWER */}
-      <AnimatePresence>
-        {isDrawerOpen && ( 
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} style={styles.sideDrawer}>
-            <div style={styles.drawerHeader}>
-              <h2 style={{color: primaryColor}}>{t[language].roundOrder}</h2>
-              <X size={30} color={primaryColor} onClick={() => setIsDrawerOpen(false)} />
-            </div>
-            <div style={styles.drawerContent}>
-              {totalItemsInCart > 0 ? (
-                Object.entries(cart).map(([key, qty]) => { 
-                  const isMulti = key.includes('-'); 
-                  const id = isMulti ? key.split('-')[0] : key; 
-                  const portion = isMulti ? key.split('-')[1] : ''; 
-                  const item = allMenuItems.find(i => i._id === id); 
-                  return (
-                    <div key={key} style={{...styles.drawerItemBlock, borderBottom: `1px solid ${borderColor}`}}>
-                      <div style={styles.drawerRow}>
-                        <div style={{textAlign:'left'}}>
-                          <p style={{margin:0, fontWeight:'600', color: '#fff'}}>{language === 'mr' ? item?.name_mr : item?.name}</p>
-                          {portion && <small style={{color: primaryColor}}>{t[language][portion.toLowerCase()] || portion}</small>}
-                        </div>
-                        <span style={{fontWeight:'700', color: primaryColor}}>x{convertToMrNumber(qty)}</span>
-                      </div>
-                      <div style={styles.suggestionInputWrapper}>
-                        <StickyNote size={14} style={{color: primaryColor, opacity: 0.7}} />
-                        <input type="text" placeholder={t[language].notes} style={styles.suggestionInput} value={suggestions[key] || ""} onChange={(e) => setSuggestions(prev => ({ ...prev, [key]: e.target.value }))} />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : ( <p style={{textAlign:'center', color:'#555', marginTop:'40px'}}>{t[language].emptyRound}</p> )}
-            </div>
+<AnimatePresence>
+  {isDrawerOpen && ( 
+    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} style={styles.sideDrawer}>
+      <div style={styles.drawerHeader}>
+        <h2 style={{color: primaryColor}}>{t[language].roundOrder}</h2>
+        <X size={30} color={primaryColor} onClick={() => setIsDrawerOpen(false)} />
+      </div>
 
-<div style={styles.drawerFooter}>
-  {totalItemsInCart > 0 && (
-    <button style={{...styles.kitchenBtn, background: primaryColor}}
-onClick={isCounterScan
-  ? counterMode === 'reservation' ? placeReservation : placeWaitlistOrder
-  : sendBatchToKitchen}>
-  {isCounterScan
-    ? counterMode === 'dine-in'
-      ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
-      : counterMode === 'reservation'
-      ? (language === 'mr' ? 'बुकिंग कन्फर्म करा ✓' : 'CONFIRM RESERVATION ✓')
-      : (language === 'mr' ? 'पिकअप ऑर्डर द्या ✓' : 'PLACE PICKUP ORDER ✓')
-    : t[language].orderNow}
-    </button>
-  )}
-  {!isCounterScan && (
-    <button style={styles.billLinkBtn} onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}>
-      {t[language].viewFinalBill}
-    </button>
-  )}
-</div>
-          </motion.div>
+      <div style={styles.drawerContent}>
+        {totalItemsInCart > 0 ? (
+          Object.entries(cart).map(([key, qty]) => { 
+            const isMulti = key.includes('-'); 
+            const id = isMulti ? key.split('-')[0] : key; 
+            const portion = isMulti ? key.split('-')[1] : ''; 
+            const item = allMenuItems.find(i => i._id === id);
+            if (!item) return null;
+
+            return (
+              <div key={key} style={{...styles.drawerItemBlock, borderBottom: `1px solid ${borderColor}`}}>
+
+                {/* ── NAME + PORTION + REMOVE ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: '600', color: '#fff', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {language === 'mr' ? item?.name_mr : item?.name}
+                    </p>
+                    {portion && (
+                      <small style={{ color: primaryColor, fontSize: '0.62rem', fontWeight: '700' }}>
+                        {t[language][portion.toLowerCase()] || portion}
+                      </small>
+                    )}
+                  </div>
+
+                  {/* Remove button — X icon, gold dim */}
+                  <button
+                    onClick={() => {
+                      setCart(prev => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                      setSuggestions(prev => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    style={{
+                      background: 'none', border: 'none',
+                      color: 'rgba(211,191,162,0.25)',
+                      cursor: 'pointer', padding: '4px',
+                      display: 'flex', alignItems: 'center',
+                      flexShrink: 0, marginLeft: '10px',
+                      transition: 'color 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'rgba(211,191,162,0.7)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.25)'}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                {/* ── QTY STEPPER ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '10px' }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    background: 'rgba(211,191,162,0.05)',
+                    border: '1px solid rgba(211,191,162,0.15)',
+                    borderRadius: '10px', overflow: 'hidden'
+                  }}>
+                    {/* MINUS */}
+                    <button
+                      onClick={() => {
+                        if (qty <= 1) {
+                          setCart(prev => { const n = {...prev}; delete n[key]; return n; });
+                          setSuggestions(prev => { const n = {...prev}; delete n[key]; return n; });
+                        } else {
+                          setCart(prev => ({ ...prev, [key]: prev[key] - 1 }));
+                        }
+                      }}
+                      style={{
+                        width: '34px', height: '34px',
+                        background: 'transparent', border: 'none',
+                        color: 'rgba(211,191,162,0.6)',
+                        cursor: 'pointer', fontWeight: '900',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'color 0.15s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#d3bfa2'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.6)'}
+                    >
+                      <Minus size={15} />
+                    </button>
+
+                    {/* COUNT */}
+                    <div style={{
+                      minWidth: '30px', textAlign: 'center',
+                      fontSize: '0.9rem', fontWeight: '900',
+                      color: '#fff', fontFamily: 'monospace',
+                      borderLeft:  '1px solid rgba(211,191,162,0.1)',
+                      borderRight: '1px solid rgba(211,191,162,0.1)',
+                      lineHeight: '34px', height: '34px',
+                      padding: '0 6px'
+                    }}>
+                      {convertToMrNumber(qty)}
+                    </div>
+
+                    {/* PLUS */}
+                    <button
+                      onClick={() => setCart(prev => ({ ...prev, [key]: prev[key] + 1 }))}
+                      style={{
+                        width: '34px', height: '34px',
+                        background: 'transparent', border: 'none',
+                        color: 'rgba(211,191,162,0.6)',
+                        cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'color 0.15s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#d3bfa2'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.6)'}
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── SPECIAL INSTRUCTIONS ── */}
+                <div style={styles.suggestionInputWrapper}>
+                  <StickyNote size={14} style={{ color: primaryColor, opacity: 0.7 }} />
+                  <input
+                    type="text"
+                    placeholder={t[language].notes}
+                    style={styles.suggestionInput}
+                    value={suggestions[key] || ""}
+                    onChange={e => setSuggestions(prev => ({ ...prev, [key]: e.target.value }))}
+                  />
+                </div>
+
+              </div>
+            );
+          })
+        ) : (
+          <p style={{ textAlign: 'center', color: '#555', marginTop: '40px' }}>
+            {t[language].emptyRound}
+          </p>
         )}
-      </AnimatePresence>
+      </div>
+
+      <div style={styles.drawerFooter}>
+        {totalItemsInCart > 0 && (
+          <button
+            style={{ ...styles.kitchenBtn, background: primaryColor }}
+            onClick={
+              isCounterScan
+                ? counterMode === 'reservation' ? placeReservation : placeWaitlistOrder
+                : sendBatchToKitchen
+            }
+          >
+            {isCounterScan
+              ? counterMode === 'dine-in'
+                ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
+                : counterMode === 'reservation'
+                ? (language === 'mr' ? 'बुकिंग कन्फर्म करा ✓' : 'CONFIRM RESERVATION ✓')
+                : (language === 'mr' ? 'पिकअप ऑर्डर द्या ✓' : 'PLACE PICKUP ORDER ✓')
+              : t[language].orderNow}
+          </button>
+        )}
+        {!isCounterScan && (
+          <button
+            style={styles.billLinkBtn}
+            onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}
+          >
+            {t[language].viewFinalBill}
+          </button>
+        )}
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       <AnimatePresence>
         {activeModel && ( 

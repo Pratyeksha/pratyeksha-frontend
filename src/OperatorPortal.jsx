@@ -74,6 +74,13 @@ const calculateTenure = (joiningDateString) => {
     return parts.join(' ') + ' with us';
 };
 
+const formatDuration = (totalMinutes) => {
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
 const OperatorPortal = () => {
   const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
     withCredentials: true,
@@ -147,6 +154,9 @@ const categoryIconsLg = {
 const [extraItemsInBill, setExtraItemsInBill] = useState([]);
 const [showExtraItemPicker, setShowExtraItemPicker] = useState(false);
 const [extraItemPickerSearch, setExtraItemPickerSearch] = useState('');
+
+const [editDishModal, setEditDishModal] = useState(null); // holds the dish being edited
+const [editDishData, setEditDishData] = useState({});
 
 const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 const [extraItemEditModal, setExtraItemEditModal] = useState(null);
@@ -3227,7 +3237,7 @@ const renderMonthHeatmap = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '12px' }} className="p-queue-grid">
           {filtered.map((entry) => {
             const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
-            const urgency  = waitMins > 30 ? 'critical' : waitMins > 20 ? 'high' : waitMins > 10 ? 'medium' : 'low';
+const urgency  = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
             const urgencyColor = {
               critical: '#d3bfa2',
               high:     '#8a704d',
@@ -3280,7 +3290,7 @@ const renderMonthHeatmap = () => {
                     border: `1px solid ${urgency !== 'low' ? borderTopColor : '#141414'}`
                   }}>
                     <Hourglass size={10} color={urgencyColor} />
-                    <span style={{ fontSize: '0.7rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{waitMins}m</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{formatDuration(waitMins)}</span>
                   </div>
                 </div>
 
@@ -3405,7 +3415,7 @@ const renderMonthHeatmap = () => {
             const pickupMinsLeft = entry.scheduledPickupTime
               ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
             const pickupDue  = pickupMinsLeft !== null && pickupMinsLeft <= 0;
-            const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 10;
+const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 20;
             const step = isReady ? 3 : isKitchenFired ? 2 : 1;
 
             const topBorder = isReady
@@ -3436,14 +3446,14 @@ const renderMonthHeatmap = () => {
                           </span>
                         </div>
                       )}
-                      {pickupMinsLeft !== null && (
+{pickupMinsLeft !== null && (
                         <span style={{
                           fontSize: '0.54rem', padding: '2px 6px', borderRadius: '5px', fontWeight: '900',
                           background: pickupDue ? 'rgba(138,112,77,0.12)' : pickupSoon ? 'rgba(138,112,77,0.06)' : '#0d0d0d',
                           color: pickupDue ? '#8a704d' : pickupSoon ? '#6a5a3a' : '#2a2a2a',
                           border: (pickupDue || pickupSoon) ? '1px solid rgba(138,112,77,0.25)' : '1px solid #141414'
                         }}>
-                          {pickupDue ? 'DUE NOW' : `${pickupMinsLeft}m left`}
+                          {pickupDue ? 'DUE NOW' : `${formatDuration(pickupMinsLeft)} left`}
                         </span>
                       )}
                     </div>
@@ -4047,34 +4057,326 @@ const renderMonthHeatmap = () => {
 )}
  
 {/* ── MENU ── */}
-{activeTab==='menu' && (
-  <motion.div key="menu" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-    
-    {/* MENU TOOLBAR */}
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 0 20px',borderBottom:'1px solid #151515'}}>
-      <div>
-        <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>MENU REGISTRY</h2>
-        <p style={{margin:'4px 0 0',fontSize:'0.7rem',color:'#555'}}>{menuItems.length} dishes configured · Edit pricing, visibility, or add new items</p>
-      </div>
-      <div style={{display:'flex',gap:'12px',alignItems:'center'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#000',border:'1px solid #121212',borderRadius:'8px',padding:'8px 14px'}}>
-          <Search size={13} color="#444"/>
-          <input type="text" placeholder="Search dishes..." value={searchQuery}
-            onChange={e=>setSearchQuery(e.target.value)}
-            style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'160px'}}/>
-        </div>
-        <button
-          onClick={() => setShowAddDishModal(true)}
+{activeTab === 'menu' && (
+  <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+    {/* ── EDIT DISH MODAL ── */}
+    <AnimatePresence>
+      {editDishModal && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           style={{
-            padding:'10px 20px',
-            background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
-            border:'none',color:'#000',borderRadius:'10px',
-            fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',
-            display:'flex',alignItems:'center',gap:'8px',
-            letterSpacing:'0.5px'
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px'
           }}
+          onClick={e => { if (e.target === e.currentTarget) setEditDishModal(null); }}
         >
-          <UtensilsCrossed size={14}/> + ADD DISH
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+            style={{
+              background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)',
+              borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '580px',
+              maxHeight: '88vh', overflowY: 'auto'
+            }}
+            className="custom-scroll"
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>EDIT DISH</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#444', fontWeight: '600' }}>
+                  {editDishModal.name}
+                </p>
+              </div>
+              <button onClick={() => setEditDishModal(null)}
+                style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* ── Section: Names ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>DISH NAMES</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {[
+                  { key: 'name',    label: 'English Name' },
+                  { key: 'name_mr', label: 'Marathi Name' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <input
+                      value={editDishData[f.key] ?? ''}
+                      onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value }))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Section: Pricing ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>PRICING</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                {[
+                  { key: 'price',     label: 'Base Price (₹)' },
+                  { key: 'priceHalf', label: 'Half Price (₹)' },
+                  { key: 'priceFull', label: 'Full Price (₹)' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <input
+                      type="number"
+                      value={editDishData[f.key] ?? ''}
+                      onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                      style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#d3bfa2', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '900' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Section: Category + Spice + Serving ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CLASSIFICATION</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>Category</div>
+                  <select
+                    value={editDishData.categoryId ?? ''}
+                    onChange={e => setEditDishData(p => ({ ...p, categoryId: e.target.value }))}
+                    style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
+                  >
+                    <option value="">— Select —</option>
+                    {categories.map(c => (
+                      <option key={c.categoryId} value={c.categoryId}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>Spice Level</div>
+                  <select
+                    value={editDishData.spicylevel ?? ''}
+                    onChange={e => setEditDishData(p => ({ ...p, spicylevel: e.target.value }))}
+                    style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
+                  >
+                    <option value="">None</option>
+                    <option value="low">🌶 Low</option>
+                    <option value="medium">🌶🌶 Medium</option>
+                    <option value="high">🌶🌶🌶 High</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>Serving Size (pax)</div>
+                  <input
+                    type="number" min="1"
+                    value={editDishData.servingSize ?? 1}
+                    onChange={e => setEditDishData(p => ({ ...p, servingSize: Number(e.target.value) }))}
+                    style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Section: Toggles ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>FLAGS</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                {[
+                  { key: 'isVeg',        label: 'Vegetarian',    onColor: '#4a7c3f' },
+                  { key: 'isAvailable',  label: 'Available',     onColor: '#d3bfa2' },
+                  { key: 'isChefSpecial',label: "Chef's Special", onColor: '#c9a84c' },
+                ].map(f => {
+                  const isOn = !!editDishData[f.key];
+                  return (
+                    <div key={f.key} onClick={() => setEditDishData(p => ({ ...p, [f.key]: !p[f.key] }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', background: isOn ? `${f.onColor}12` : '#111',
+                        border: `1px solid ${isOn ? `${f.onColor}40` : '#1a1a1a'}`,
+                        borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s'
+                      }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '800', color: isOn ? f.onColor : '#444' }}>{f.label}</span>
+                      <div style={{
+                        width: '32px', height: '17px', borderRadius: '9px', position: 'relative',
+                        background: isOn ? f.onColor : '#222', transition: 'background 0.2s', flexShrink: 0
+                      }}>
+                        <div style={{
+                          position: 'absolute', top: '3px',
+                          left: isOn ? '17px' : '3px',
+                          width: '11px', height: '11px', borderRadius: '50%',
+                          background: isOn ? '#000' : '#555', transition: 'left 0.2s'
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Section: Tags ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>TAGS <span style={{ color: '#333', fontWeight: '600' }}>(comma separated)</span></div>
+              <input
+                value={Array.isArray(editDishData.tags) ? editDishData.tags.join(', ') : (editDishData.tags ?? '')}
+                onChange={e => setEditDishData(p => ({ ...p, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))}
+                placeholder="e.g. popular, must-try, spicy"
+                style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
+              />
+              {Array.isArray(editDishData.tags) && editDishData.tags.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                  {editDishData.tags.map((tag, ti) => (
+                    <span key={ti} style={{ fontSize: '0.6rem', padding: '3px 10px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '6px', color: '#8a704d', fontWeight: '700' }}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Section: Ingredients description ── */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>INGREDIENTS DESCRIPTION</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {[
+                  { key: 'ingredients_en', label: 'English', field: 'en' },
+                  { key: 'ingredients_mr', label: 'Marathi', field: 'mr' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <textarea
+                      rows={2}
+                      value={
+                        Array.isArray(editDishData.ingredients?.[f.field])
+                          ? editDishData.ingredients[f.field].join(', ')
+                          : (editDishData.ingredients?.[f.field] ?? '')
+                      }
+                      onChange={e => setEditDishData(p => ({
+                        ...p,
+                        ingredients: {
+                          ...(p.ingredients || {}),
+                          [f.field]: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                        }
+                      }))}
+                      placeholder="e.g. Paneer, Tomato, Spices"
+                      style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#888', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Section: Chef message ── */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CHEF MESSAGE <span style={{ color: '#333', fontWeight: '600' }}>(shown on menu card)</span></div>
+              <textarea
+                rows={2}
+                value={editDishData.chefMessage ?? ''}
+                onChange={e => setEditDishData(p => ({ ...p, chefMessage: e.target.value }))}
+                placeholder="This is my personal favorite! You'll love the flavors."
+                style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#666', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.6 }}
+              />
+            </div>
+
+            {/* ── Save / Cancel ── */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={async () => {
+                  try {
+                    const payload = { ...editDishData };
+                    // Clean up empty number fields
+                    if (payload.priceHalf === '') delete payload.priceHalf;
+                    if (payload.priceFull === '') delete payload.priceFull;
+                    const res = await axios.patch(`${BASE_URL}/menu-item/${editDishModal._id}`, payload);
+                    socket.emit('menu_change_detected', { tenantId, itemId: editDishModal._id, updateData: res.data });
+                    setMenuItems(prev => prev.map(i => i._id === editDishModal._id ? res.data : i));
+                    showNotif(`${editDishData.name || editDishModal.name} — updated`);
+                    setEditDishModal(null);
+                  } catch (err) {
+                    showNotif('Update failed', 'error');
+                  }
+                }}
+                style={{
+                  flex: 1, padding: '12px',
+                  background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+                  border: 'none', color: '#000', borderRadius: '10px',
+                  fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px'
+                }}
+              >
+                SAVE CHANGES
+              </button>
+              <button
+                onClick={() => setEditDishModal(null)}
+                style={{
+                  padding: '12px 20px', background: 'transparent',
+                  border: '1px solid #1a1a1a', color: '#555', borderRadius: '10px',
+                  fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer'
+                }}
+              >
+                CANCEL
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* MENU TOOLBAR */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0 20px', borderBottom: '1px solid #151515', gap: '12px', flexWrap: 'wrap' }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>MENU REGISTRY</h2>
+        <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#555' }}>{menuItems.length} dishes configured · Edit pricing, visibility, or add new items</p>
+      </div>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+        {/* AUTO-HIDE TOGGLE */}
+        {tenantConfig && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '8px 14px', background: '#000',
+            border: `1px solid ${tenantConfig.config?.autoHideDishesOnLowStock ? 'rgba(211,191,162,0.3)' : '#1a1a1a'}`,
+            borderRadius: '10px', transition: 'all 0.2s'
+          }}>
+            <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444'} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+              <span style={{ fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px', color: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#444' }}>
+                AUTO-HIDE ON STOCK OUT
+              </span>
+              <span style={{ fontSize: '0.52rem', color: '#333', fontWeight: '600' }}>
+                {tenantConfig.config?.autoHideDishesOnLowStock ? 'Hides when ingredients hit zero' : 'Stays visible regardless of stock'}
+              </span>
+            </div>
+            <button type="button"
+              onClick={async () => {
+                const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
+                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
+                setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
+                showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
+              }}
+              style={{ width: '42px', height: '22px', borderRadius: '11px', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.25s', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#1a1a1a' }}>
+              <div style={{ position: 'absolute', top: '4px', left: tenantConfig.config?.autoHideDishesOnLowStock ? '22px' : '4px', width: '14px', height: '14px', borderRadius: '50%', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#0c0c0c' : '#444', transition: 'left 0.25s' }} />
+            </button>
+          </div>
+        )}
+
+        {/* SEARCH */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #121212', borderRadius: '8px', padding: '8px 14px' }}>
+          <Search size={13} color="#444" />
+          <input type="text" placeholder="Search dishes..." value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* ADD DISH */}
+        <button onClick={() => setShowAddDishModal(true)}
+          style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px', flexShrink: 0 }}>
+          <UtensilsCrossed size={14} /> + ADD DISH
         </button>
       </div>
     </div>
@@ -4082,11 +4384,11 @@ const renderMonthHeatmap = () => {
     {/* MENU GRID */}
     <div style={styles.fullWidthGrid}>
       {menuItems.filter(i => {
-  if (!i.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-  if (menuVegFilter === 'veg')    return i.isVeg === true;
-  if (menuVegFilter === 'nonveg') return i.isVeg === false;
-  return true;
-}).map(item => (
+        if (!i.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (menuVegFilter === 'veg') return i.isVeg === true;
+        if (menuVegFilter === 'nonveg') return i.isVeg === false;
+        return true;
+      }).map(item => (
         <div key={item._id} style={{
           ...styles.premiumCard,
           opacity: item.isAvailable ? 1 : 0.5,
@@ -4094,134 +4396,151 @@ const renderMonthHeatmap = () => {
           borderTop: `2px solid ${item.isAvailable ? '#1a1a1a' : '#0d0d0d'}`,
           transition: 'all 0.2s ease'
         }}>
-          {/* AVAILABILITY INDICATOR */}
-          <div style={{
-            position: 'absolute', top: '14px', right: '14px',
-            width: '7px', height: '7px', borderRadius: '50%',
-            background: item.isAvailable ? '#d3bfa2' : '#333',
-            boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none'
-          }}/>
 
-{/* HOT BADGE — dish sales velocity */}
-{hotDishes.has(item.name) && (
-  <div style={{
-    position:'absolute', top:'12px', left:'12px',
-    background:'rgba(186,117,23,0.15)', border:'1px solid rgba(186,117,23,0.4)',
-    padding:'2px 8px', borderRadius:'4px',
-    fontSize:'0.52rem', fontWeight:'900', color:'#BA7517',
-    display:'flex', alignItems:'center', gap:'4px'
-  }}>
-    🔥 HOT
-  </div>
-)}
-          {/* DISH NAME + PRICE */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px',paddingRight:'20px'}}>
+          {/* AVAILABILITY DOT */}
+          <div style={{ position: 'absolute', top: '14px', right: '14px', width: '7px', height: '7px', borderRadius: '50%', background: item.isAvailable ? '#d3bfa2' : '#333', boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none' }} />
+
+          {/* HOT BADGE */}
+          {hotDishes.has(item.name) && (
+            <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', fontWeight: '900', color: '#BA7517', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              🔥 HOT
+            </div>
+          )}
+
+          {/* DISH NAME */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', paddingRight: '20px' }}>
             <div>
-<div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'2px'}}>
-  {/* Veg/NonVeg indicator */}
-  <span title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'} style={{
-    width:'13px',height:'13px',
-    border:`2px solid ${item.isVeg !== false ? '#4a7c3f' : '#8a3030'}`,
-    borderRadius:'2px',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0
-  }}>
-    {item.isVeg !== false
-      ? <span style={{width:'5px',height:'5px',borderRadius:'50%',background:'#4a7c3f'}}/>
-      : <span style={{width:0,height:0,borderLeft:'3px solid transparent',borderRight:'3px solid transparent',borderBottom:`5px solid #8a3030`}}/>
-    }
-  </span>
-  <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#fff',lineHeight:'1.3'}}>{item.name}</h3>
-</div>              {item.name_mr && <div style={{fontSize:'0.65rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>{item.name_mr}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                <span title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'} style={{ width: '13px', height: '13px', border: `2px solid ${item.isVeg !== false ? '#4a7c3f' : '#8a3030'}`, borderRadius: '2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {item.isVeg !== false
+                    ? <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#4a7c3f' }} />
+                    : <span style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '5px solid #8a3030' }} />
+                  }
+                </span>
+                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '900', color: '#fff', lineHeight: '1.3' }}>{item.name}</h3>
+              </div>
+              {item.name_mr && <div style={{ fontSize: '0.65rem', color: '#444', marginTop: '3px', fontWeight: '600' }}>{item.name_mr}</div>}
+              {/* Tags preview */}
+              {item.tags?.length > 0 && (
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '5px' }}>
+                  {item.tags.slice(0, 2).map((tag, ti) => (
+                    <span key={ti} style={{ fontSize: '0.52rem', padding: '1px 7px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '700' }}>{tag}</span>
+                  ))}
+                  {item.tags.length > 2 && <span style={{ fontSize: '0.52rem', color: '#333' }}>+{item.tags.length - 2}</span>}
+                </div>
+              )}
             </div>
           </div>
 
           {/* PRICE ROW */}
-          <div style={{display:'flex',gap:'8px',marginBottom:'16px',flexWrap:'wrap'}}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             {item.priceHalf ? (
               <>
-                <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
-                  H ₹{item.priceHalf}
-                </span>
-                <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
-                  F ₹{item.priceFull||item.price}
-                </span>
+                <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>H ₹{item.priceHalf}</span>
+                <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>F ₹{item.priceFull || item.price}</span>
               </>
             ) : (
-              <span style={{fontSize:'0.72rem',padding:'3px 10px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800'}}>
-                ₹{item.price}
-              </span>
+              <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>₹{item.price}</span>
             )}
             {item.categoryId && (
-              <span style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(211,191,162,0.04)',border:'1px solid #1a1a1a',borderRadius:'6px',color:'#555',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>
-                {item.categoryId.replace(/^cat_/i,'').replace(/_/g,' ')}
+              <span style={{ fontSize: '0.62rem', padding: '3px 10px', background: 'rgba(211,191,162,0.04)', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#555', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {item.categoryId.replace(/^cat_/i, '').replace(/_/g, ' ')}
               </span>
             )}
             {item.isChefSpecial && (
-              <span style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.2)',borderRadius:'6px',color:'#d3bfa2',fontWeight:'800',display:'flex',alignItems:'center',gap:'4px'}}>
-                <Sparkles size={9}/> CHEF'S
+              <span style={{ fontSize: '0.62rem', padding: '3px 10px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Sparkles size={9} /> CHEF'S
+              </span>
+            )}
+            {item.spicylevel && (
+              <span style={{ fontSize: '0.58rem', padding: '2px 7px', background: 'rgba(186,117,23,0.06)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '5px', color: '#8a704d', fontWeight: '700' }}>
+                {'🌶'.repeat(item.spicylevel === 'low' ? 1 : item.spicylevel === 'medium' ? 2 : 3)}
               </span>
             )}
           </div>
 
-          {/* ACTION BUTTONS */}
-          <div style={{display:'flex',gap:'8px'}}>
+          {/* ACTION BUTTONS — 2 rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            {/* Row 1: Edit (full width) */}
             <button
-              onClick={() => setActivePriceEditItem(item)}
-              style={{
-                flex:1, padding:'10px 8px',
-                background:'transparent',border:'1px solid #222',
-                color:'#888',borderRadius:'8px',fontSize:'0.62rem',
-                fontWeight:'900',cursor:'pointer',
-                display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
-                transition:'all 0.15s'
+              onClick={() => {
+                setEditDishModal(item);
+                setEditDishData({
+                  name:         item.name,
+                  name_mr:      item.name_mr || '',
+                  price:        item.price || '',
+                  priceHalf:    item.priceHalf || '',
+                  priceFull:    item.priceFull || '',
+                  categoryId:   item.categoryId || '',
+                  spicylevel:   item.spicylevel || '',
+                  servingSize:  item.servingSize || 1,
+                  isVeg:        item.isVeg !== false,
+                  isAvailable:  item.isAvailable !== false,
+                  isChefSpecial: item.isChefSpecial || false,
+                  tags:         item.tags || [],
+                  ingredients:  item.ingredients || { en: [], mr: [] },
+                  chefMessage:  item.chefMessage || '',
+                });
               }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor='#222';e.currentTarget.style.color='#888';}}
-            >
-              PRICING
-            </button>
-            <button
-              onClick={() => updateMenu(item._id, {isAvailable: !item.isAvailable})}
               style={{
-                flex:1.2, padding:'10px 8px',
-                background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)',
-                border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)',
-                color: item.isAvailable ? '#444' : '#d3bfa2',
-                borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
-                transition:'all 0.15s'
+                width: '100%', padding: '9px',
+                background: 'rgba(211,191,162,0.04)',
+                border: '1px solid rgba(211,191,162,0.12)',
+                color: '#8a704d', borderRadius: '9px',
+                fontSize: '0.65rem', fontWeight: '900',
+                cursor: 'pointer', letterSpacing: '0.5px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                transition: 'all 0.15s'
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
             >
-              {item.isAvailable ? 'HIDE' : 'SHOW'}
+              ✎ EDIT ALL DETAILS
             </button>
-            <button
-              onClick={() => setPendingDeleteDish(item)}
-              style={{
-                width:'36px',height:'36px',
-                background:'transparent',border:'1px solid #1a1a1a',
-                color:'#333',borderRadius:'8px',fontSize:'0.7rem',
-                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
-                transition:'all 0.15s',flexShrink:0
-              }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#8a704d';}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}
-              title="Remove dish"
-            >
-              ✕
-            </button>
+
+            {/* Row 2: SHOW/HIDE + DELETE */}
+            <div style={{ display: 'flex', gap: '7px' }}>
+              <button
+                onClick={() => updateMenu(item._id, { isAvailable: !item.isAvailable })}
+                style={{
+                  flex: 1, padding: '9px 8px',
+                  background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)',
+                  border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)',
+                  color: item.isAvailable ? '#444' : '#d3bfa2',
+                  borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {item.isAvailable ? 'HIDE' : 'SHOW'}
+              </button>
+              <button
+                onClick={() => setPendingDeleteDish(item)}
+                style={{
+                  width: '36px', height: '36px',
+                  background: 'transparent', border: '1px solid #1a1a1a',
+                  color: '#333', borderRadius: '9px', fontSize: '0.7rem',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s', flexShrink: 0
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+                title="Remove dish"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       ))}
 
       {/* EMPTY STATE */}
-      {menuItems.filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-        <div style={{
-          gridColumn:'1/-1',textAlign:'center',padding:'60px',
-          background:'#0d0d0d',borderRadius:'20px',border:'1px dashed #1a1a1a'
-        }}>
-          <UtensilsCrossed size={32} color="#222" style={{marginBottom:'16px'}}/>
-          <div style={{color:'#333',fontSize:'0.85rem',fontWeight:'700'}}>
+      {menuItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+        <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: '#0d0d0d', borderRadius: '20px', border: '1px dashed #1a1a1a' }}>
+          <UtensilsCrossed size={32} color="#222" style={{ marginBottom: '16px' }} />
+          <div style={{ color: '#333', fontSize: '0.85rem', fontWeight: '700' }}>
             {searchQuery ? `NO DISHES MATCH "${searchQuery.toUpperCase()}"` : 'NO DISHES YET'}
           </div>
-          <div style={{color:'#222',fontSize:'0.7rem',marginTop:'8px'}}>
+          <div style={{ color: '#222', fontSize: '0.7rem', marginTop: '8px' }}>
             {!searchQuery && 'Click + ADD DISH to register your first menu item'}
           </div>
         </div>
