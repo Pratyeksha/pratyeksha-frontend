@@ -684,6 +684,31 @@ const fetchMenuContent = async () => {
           )
         );
       }
+// ── Live extra item stock/availability updates ──
+socket.on('extra_item_updated', (updatedItem) => {
+  if (updatedItem && updatedItem.tenantId === tenantId) {
+    setExtraItems(prev =>
+      prev.map(item => item._id === updatedItem._id ? { ...item, ...updatedItem } : item)
+    );
+  }
+});
+
+socket.on('extra_item_out_of_stock', ({ itemId }) => {
+  setExtraItems(prev =>
+    prev.map(item =>
+      item._id === itemId
+        ? { ...item, currentStock: 0, isAvailable: false }
+        : item
+    )
+  );
+  // Remove from cart if customer had it selected
+  setExtraItemCart(prev => {
+    const next = { ...prev };
+    delete next[itemId];
+    return next;
+  });
+});
+
   
     });
 
@@ -701,6 +726,8 @@ socket.on("order_status_updated", (data) => {
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
     return () => {
       socket.off("menu_updated");
+      socket.off("extra_item_updated");   // ← ADD
+      socket.off("extra_item_out_of_stock"); // ← ADD
       socket.disconnect();
     };
   }, [tenantId, language]);
@@ -4887,8 +4914,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             {language === 'mr' ? 'थंड पेये, आईस्क्रीम आणि इतर' : 'COLD DRINKS · ICE CREAM · SNACKS & MORE'}
           </p>
         </div>
-        <X size={28} color={primaryColor} onClick={() => setIsExtraItemsOpen(false)} />
-      </div>
+<X size={28} color={primaryColor} onClick={() => {
+  setIsExtraItemsOpen(false);
+  setExtraItemCart({});
+  setExtraItemSearchQuery('');
+  setActiveExtraCategory('All');
+}} />      </div>
 
       <div style={styles.modalScrollBody}>
 
@@ -5002,8 +5033,9 @@ const categoryIconMap = {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {items.map(item => {
                       const qty = extraItemCart[item._id] || 0;
-                      const isLow = item.currentStock > 0 && item.currentStock <= 5;
-                      const isOut = item.currentStock <= 0;
+const threshold = item.lowStockThreshold ?? 5;
+const isLow = item.currentStock > 0 && item.currentStock <= threshold;
+const isOut = item.currentStock <= 0;
                       return (
                         <motion.div
                           key={item._id}
@@ -5069,17 +5101,25 @@ const categoryIconMap = {
                               {language === 'mr' ? 'उपलब्ध नाही' : 'UNAVAILABLE'}
                             </div>
                           ) : qty === 0 ? (
-                            <button
-                              onClick={() => setExtraItemCart(prev => ({ ...prev, [item._id]: 1 }))}
-                              style={{
-                                padding: '9px 18px', borderRadius: '10px', border: `1px solid ${primaryColor}`,
-                                background: 'transparent', color: primaryColor, fontWeight: '900',
-                                fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0,
-                                transition: 'all 0.15s'
-                              }}
-                            >
-                              {language === 'mr' ? 'निवडा' : 'ADD'}
-                            </button>
+  <button
+    disabled={isOut}
+    onClick={() => {
+      if (isOut) return;
+      setExtraItemCart(prev => ({ ...prev, [item._id]: 1 }));
+    }}
+    style={{
+      padding: '9px 18px', borderRadius: '10px',
+      border: `1px solid ${isOut ? '#333' : primaryColor}`,
+      background: 'transparent',
+      color: isOut ? '#333' : primaryColor,
+      fontWeight: '900', fontSize: '0.72rem',
+      cursor: isOut ? 'not-allowed' : 'pointer',
+      flexShrink: 0, transition: 'all 0.15s',
+      opacity: isOut ? 0.4 : 1
+    }}
+  >
+    {language === 'mr' ? 'निवडा' : 'ADD'}
+  </button>
                           ) : (
                             <div style={{
                               display: 'flex', alignItems: 'center', gap: '10px',
@@ -5297,6 +5337,8 @@ const categoryIconMap = {
     </div>
   ))}
 </div>
+
+
 {/* Replace existing billTableFooter with this: */}
 <div style={styles.billTableFooter}>
   {(() => {
