@@ -834,15 +834,6 @@ const showNotif = useCallback((msg, type = 'success', subtype = '') => {
     } catch { showNotif("Invalid Credentials", "error"); }
   };
 
-  // After successful login, where you currently do localStorage.setItem('token', ...):
-axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-localStorage.setItem('token', response.data.token);
-
-useEffect(() => {
-  const token = localStorage.getItem('token');
-  if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-}, []);
-
   const handleLogout = () => {
     setConfirmModal({ show:true, title:"Terminate Session", subtitle:"Closing dashboard and clearing cache.",
       onConfirm: ()=>{ localStorage.clear(); window.location.reload(); } });
@@ -1119,9 +1110,7 @@ const [ordersData, setOrdersData] = useState([]);
 
 useEffect(() => {
   if (!tenantId) return;
-axios.get(`${BASE_URL}/orders/${tenantId}?limit=1000`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    })
+  axios.get(`${BASE_URL}/orders/${tenantId}?limit=1000`)
     .then(r => {
       console.log('[ordersData] fetched:', r.data?.length, 'orders');
       setOrdersData(r.data || []);
