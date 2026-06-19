@@ -166,6 +166,14 @@ const [extraItemEditModal, setExtraItemEditModal] = useState(null);
 const [extraItemEditData, setExtraItemEditData] = useState({});
 const [activeExtraCategory, setActiveExtraCategory] = useState('All');
 
+const [aggregatorConfig, setAggregatorConfig] = useState({ swiggy: { enabled: false }, zomato: { enabled: false } });
+const [sessionAlerts, setSessionAlerts] = useState([]); // [{ platform, message }]
+const [showAggregatorSettings, setShowAggregatorSettings] = useState(false);
+const [aggregatorEditData, setAggregatorEditData] = useState({ swiggy: {}, zomato: {} });
+const [incomingAggregatorOrders, setIncomingAggregatorOrders] = useState([]); // queue of orders awaiting accept/reject
+const [activeAggregatorPopup, setActiveAggregatorPopup] = useState(null);     // the one currently shown
+
+
   // ── IST today string — used for billing HUD and daily breakdowns
 const istTodayStr = useMemo(() => {
   return new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
@@ -336,8 +344,22 @@ const fetchExtraAnalytics = useCallback(async () => {
       setMenuItems(menuRes.data);
       setWaiterRequests(waiterRes.data); 
       fetchCounterQueue();
+      useEffect(() => {
+  if (isAuthenticated) {
+    fetchIncomingAggregatorOrders();
+  }
+}, [isAuthenticated, fetchIncomingAggregatorOrders]);
     } catch (err) { console.error("Data Sync Error:", err); }
   }, [tenantId,fetchCounterQueue ]);
+
+
+  const fetchAggregatorConfig = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/tenant/aggregator-config/${tenantId}`);
+    setAggregatorConfig(res.data);
+    setAggregatorEditData(res.data);
+  } catch { /* silent */ }
+}, [tenantId]);
 
 // REPLACE fetchAnalytics entirely:
  
@@ -605,6 +627,35 @@ socket.on('pickup_ready', (data) => {
         fetchInitialData();
         fetchAnalytics();
       });
+// ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
+      socket.on('aggregator_order_incoming', (data) => {
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+        setIncomingAggregatorOrders(prev => {
+          const exists = prev.find(o => o._id === data._id);
+          return exists ? prev : [...prev, data];
+        });
+        setActiveAggregatorPopup(prev => prev || data); // show immediately if nothing else is showing
+      });
+
+      // ── Operator (possibly on another device/tab) already decided — clear it everywhere ──
+      socket.on('aggregator_order_decided', ({ orderId }) => {
+        setIncomingAggregatorOrders(prev => prev.filter(o => o._id !== orderId));
+        setActiveAggregatorPopup(prev => (prev?._id === orderId ? null : prev));
+      });
+
+socket.on('aggregator_session_expired', (data) => {
+  setSessionAlerts(prev => {
+    if (prev.find(a => a.platform === data.platform)) return prev;
+    return [...prev, data];
+  });
+  new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+  showNotif(data.message, 'error');
+});
+
+socket.on('aggregator_session_restored', (data) => {
+  setSessionAlerts(prev => prev.filter(a => a.platform !== data.platform));
+  showNotif(`${data.platform.toUpperCase()} session restored`, 'success');
+});
     }
     return () => { socket.off(); };
 }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData, fetchCounterQueue]);
@@ -631,6 +682,41 @@ useEffect(() => {
     fetchMonthlySalary(monthPrefix); // ← ADD THIS
   }
 }, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, fetchMonthlySalary, tenantId]);
+
+const handleAggregatorAccept = async (order, prepTime = 30) => {
+  try {
+    await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
+      decision: 'accept',
+      prepTime
+    });
+    showNotif(`${order.platform?.toUpperCase() || 'Aggregator'} order accepted — sent to kitchen`, 'success');
+    setIncomingAggregatorOrders(prev => prev.filter(o => o._id !== order._id));
+    setActiveAggregatorPopup(null);
+    fetchInitialData(); // refresh pending/KDS list immediately
+  } catch (err) {
+    showNotif(err.response?.data?.error || 'Failed to accept order', 'error');
+  }
+};
+
+const handleAggregatorReject = async (order) => {
+  try {
+    await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
+      decision: 'reject'
+    });
+    showNotif(`${order.platform?.toUpperCase() || 'Aggregator'} order rejected`, 'info');
+    setIncomingAggregatorOrders(prev => prev.filter(o => o._id !== order._id));
+    setActiveAggregatorPopup(null);
+  } catch (err) {
+    showNotif(err.response?.data?.error || 'Failed to reject order', 'error');
+  }
+};
+
+// When the active popup is dismissed, show the next queued one if any
+useEffect(() => {
+  if (!activeAggregatorPopup && incomingAggregatorOrders.length > 0) {
+    setActiveAggregatorPopup(incomingAggregatorOrders[0]);
+  }
+}, [activeAggregatorPopup, incomingAggregatorOrders]);
 
   // ─────────────────────────────────────────────────────
   // COMPUTED VALUES
@@ -1137,7 +1223,16 @@ useEffect(() => {
       setOrdersData([]);
     });
 }, [tenantId]);
-
+const fetchIncomingAggregatorOrders = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/admin/orders/${tenantId}/aggregator-incoming`);
+    const list = res.data || [];
+    setIncomingAggregatorOrders(list);
+    if (list.length > 0 && !activeAggregatorPopup) {
+      setActiveAggregatorPopup(list[0]);
+    }
+  } catch { /* silent */ }
+}, [tenantId, activeAggregatorPopup]);
 const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
     const wb = XLSX.utils.book_new();
@@ -3009,22 +3104,33 @@ const renderMonthHeatmap = () => {
             borderLeft: `3px solid ${leftBar}`,
             flexShrink: 0, transition: 'all 0.2s'
           }}>
-            {/* Table badge */}
+{/* Table badge */}
             <div style={{
               width: '36px', height: '36px', borderRadius: '9px',
               background: tier === 'over' ? 'rgba(211,191,162,0.1)' : '#111',
               border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.25)' : '#1e1e1e'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: '900', fontSize: '0.85rem', color: '#d3bfa2',
-              flexShrink: 0, fontFamily: 'monospace'
+              fontWeight: '900', fontSize: order.source === 'swiggy' || order.source === 'zomato' ? '0.6rem' : '0.85rem',
+              color: '#d3bfa2', flexShrink: 0, fontFamily: 'monospace'
             }}>
               {order.tableNumber}
             </div>
 
             {/* Info */}
+{/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
                 <span style={{ fontWeight: '900', fontSize: '0.78rem', color: '#fff' }}>T{order.tableNumber}</span>
+                {(order.source === 'swiggy' || order.source === 'zomato') && (
+                  <span style={{
+                    fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px',
+                    background: order.source === 'zomato' ? 'rgba(203,32,45,0.15)' : 'rgba(252,128,25,0.15)',
+                    color: order.source === 'zomato' ? '#cb202d' : '#fc8019',
+                    border: `1px solid ${order.source === 'zomato' ? 'rgba(203,32,45,0.3)' : 'rgba(252,128,25,0.3)'}`
+                  }}>
+                    {order.source.toUpperCase()}
+                  </span>
+                )}
                 <span style={{ fontSize: '0.52rem', color: '#333' }}>·</span>
                 <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>{(order.items || []).length} item{(order.items || []).length !== 1 ? 's' : ''}</span>
               </div>
@@ -9962,6 +10068,97 @@ onClick={async () => {
   )}
 </AnimatePresence>
 
+<AnimatePresence>
+  {activeAggregatorPopup && (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+        style={{
+          background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.25)',
+          borderTop: `4px solid ${activeAggregatorPopup.platform === 'zomato' ? '#cb202d' : '#fc8019'}`,
+          borderRadius: '22px', padding: '32px', width: '100%', maxWidth: '460px',
+          boxShadow: '0 0 60px rgba(211,191,162,0.08)'
+        }}
+      >
+        {/* Platform badge + pulsing alert */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <motion.div
+              animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 1.2 }}
+              style={{
+                width: '12px', height: '12px', borderRadius: '50%',
+                background: activeAggregatorPopup.platform === 'zomato' ? '#cb202d' : '#fc8019'
+              }}
+            />
+            <span style={{ fontSize: '0.65rem', fontWeight: '900', letterSpacing: '2px', color: '#888', textTransform: 'uppercase' }}>
+              New Order
+            </span>
+          </div>
+          <span style={{
+            padding: '5px 14px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: '900',
+            background: activeAggregatorPopup.platform === 'zomato' ? 'rgba(203,32,45,0.15)' : 'rgba(252,128,25,0.15)',
+            color: activeAggregatorPopup.platform === 'zomato' ? '#cb202d' : '#fc8019',
+            border: `1px solid ${activeAggregatorPopup.platform === 'zomato' ? 'rgba(203,32,45,0.3)' : 'rgba(252,128,25,0.3)'}`
+          }}>
+            {activeAggregatorPopup.platform?.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Customer */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>
+            {activeAggregatorPopup.customerName || 'Online Customer'}
+          </div>
+          {activeAggregatorPopup.customerPhone && (
+            <div style={{ fontSize: '0.7rem', color: '#555', marginTop: '2px' }}>{activeAggregatorPopup.customerPhone}</div>
+          )}
+        </div>
+
+        {/* Items */}
+        <div style={{ background: '#000', border: '1px solid #1a1a1a', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scroll">
+          {(activeAggregatorPopup.items || []).map((it, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < activeAggregatorPopup.items.length - 1 ? '1px solid #141414' : 'none' }}>
+              <span style={{ fontSize: '0.78rem', color: '#ccc', fontWeight: '700' }}>{it.quantity}× {it.name}</span>
+              <span style={{ fontSize: '0.78rem', color: '#888', fontWeight: '700' }}>₹{it.subtotal}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Total */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '0 4px' }}>
+          <span style={{ fontSize: '0.7rem', color: '#555', fontWeight: '800', letterSpacing: '0.5px' }}>ORDER TOTAL</span>
+          <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#d3bfa2' }}>₹{activeAggregatorPopup.grandTotal?.toLocaleString()}</span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => handleAggregatorReject(activeAggregatorPopup)}
+            style={{ flex: 1, padding: '14px', background: 'transparent', border: '1px solid #2a1515', color: '#8a3030', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
+          >
+            REJECT
+          </button>
+          <button
+            onClick={() => handleAggregatorAccept(activeAggregatorPopup)}
+            style={{ flex: 2, padding: '14px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '12px', fontSize: '0.78rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
+          >
+            ACCEPT & SEND TO KITCHEN
+          </button>
+        </div>
+
+        {/* Queue indicator if more are waiting */}
+        {incomingAggregatorOrders.length > 1 && (
+          <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.62rem', color: '#444', fontWeight: '700' }}>
+            +{incomingAggregatorOrders.length - 1} more order{incomingAggregatorOrders.length - 1 > 1 ? 's' : ''} waiting
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* SALARY EDIT MODAL */}
 <AnimatePresence>
