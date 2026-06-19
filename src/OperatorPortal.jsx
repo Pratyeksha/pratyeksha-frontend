@@ -241,6 +241,7 @@ const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 
 const [waitlistAnalytics, setWaitlistAnalytics] = useState(null);
+const [aggregatorAnalytics, setAggregatorAnalytics] = useState(null);
 
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
@@ -379,7 +380,7 @@ const fetchAnalytics = useCallback(async () => {
       ? todayStr
       : `${selectedMonthStr}-01`; // will return minimal data for past months (expected)
  
-    const results = await Promise.allSettled([
+const results = await Promise.allSettled([
       axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/hourly/${tenantId}?date=${hourlyDate}&month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/trends/${tenantId}?month=${selectedMonthStr}`),
@@ -388,16 +389,16 @@ const fetchAnalytics = useCallback(async () => {
       axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`),
       axios.get(`${BASE_URL}/admin/analytics/staff-efficiency/${tenantId}?month=${selectedMonthStr}`),
       axios.get(`${BASE_URL}/admin/analytics/waitlist/${tenantId}?month=${selectedMonthStr}`),
-      // ── NEW: wastage analytics for the selected month ──
       axios.get(`${BASE_URL}/wastage/analytics/${tenantId}?month=${selectedMonthStr}`),
-      // ── NEW: extra items analytics (all-time by nature, but fetch fresh) ──
       axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`),
+      // ── NEW: swiggy/zomato aggregator analytics ──
+      axios.get(`${BASE_URL}/admin/analytics/aggregator/${tenantId}?month=${selectedMonthStr}`),
     ]);
  
     const [
       analyticsRes, hourlyRes, trendsRes, prepRes,
       profitRes, procureRes, staffEffRes, waitlistRes,
-      wastageRes, extraRes
+      wastageRes, extraRes, aggregatorRes
     ] = results;
  
     const val = (r, fallback) => r.status === 'fulfilled' ? r.value.data : fallback;
@@ -420,12 +421,12 @@ const fetchAnalytics = useCallback(async () => {
     setWaitlistAnalytics(waitlistData);
  
     // ── NEW: set wastage and extra analytics from combined fetch ──
-    setWastageAnalytics(val(wastageRes, null));
+ setWastageAnalytics(val(wastageRes, null));
     setExtraAnalytics(val(extraRes, null));
+    setAggregatorAnalytics(val(aggregatorRes, { enabled: false, swiggy: null, zomato: null }));
  
   } catch (err) { console.error("Analytics fetch error:", err); }
-}, [tenantId, viewDate]);
- 
+}, [tenantId, viewDate]); 
 
 const fetchMonthlySalary = useCallback(async (monthStr) => {
   try {
@@ -2059,6 +2060,84 @@ const exportToExcel = useCallback((type = 'daily') => {
       XLSX.utils.book_append_sheet(wb, ws, '👥 Staff');
     }
 
+    // INSERT DIRECTLY ABOVE IT:
+    // ══════════════════════════════════
+    // SHEET ★ — AGGREGATOR REVENUE (Swiggy/Zomato) — only if enabled
+    // ══════════════════════════════════
+    if (aggregatorAnalytics?.enabled && (aggregatorAnalytics.swiggy || aggregatorAnalytics.zomato)) {
+      const ws = {};
+      addTitleBlock(ws, `${tenantConfig?.name || tenantId} — AGGREGATOR REVENUE`, `Swiggy & Zomato orders via Dyno — ${periodLabel}`, todayStr);
+
+      const combinedRev = aggregatorAnalytics.combinedRevenue || 0;
+      const swiggyRev = aggregatorAnalytics.swiggy?.revenue || 0;
+      const zomatoRev = aggregatorAnalytics.zomato?.revenue || 0;
+
+      const kpiLabels = ['COMBINED REVENUE', 'SWIGGY ORDERS', 'ZOMATO ORDERS', 'COMBINED ORDERS'];
+      const kpiValues = [
+        `₹${combinedRev.toLocaleString()}`,
+        aggregatorAnalytics.swiggy?.orderCount || 0,
+        aggregatorAnalytics.zomato?.orderCount || 0,
+        (aggregatorAnalytics.swiggy?.orderCount || 0) + (aggregatorAnalytics.zomato?.orderCount || 0)
+      ];
+      const kpiColors = [GREEN, 'F97316', 'EF4444', GOLD];
+      kpiLabels.forEach((label, i) => {
+        const col = String.fromCharCode(65 + i * 2);
+        ws[`${col}5`] = { v: label, t: 's', s: kpiLabelStyle() };
+        ws[`${col}6`] = { v: kpiValues[i], t: typeof kpiValues[i] === 'number' ? 'n' : 's', s: kpiStyle(kpiColors[i]) };
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: 4, c: i * 2 }, e: { r: 4, c: i * 2 + 1 } });
+        ws['!merges'].push({ s: { r: 5, c: i * 2 }, e: { r: 5, c: i * 2 + 1 } });
+      });
+
+      let cursorRow = 9;
+
+      // Per-platform summary block
+      const platforms = [
+        { key: 'swiggy', label: 'SWIGGY', color: 'F97316', data: aggregatorAnalytics.swiggy },
+        { key: 'zomato', label: 'ZOMATO', color: 'EF4444', data: aggregatorAnalytics.zomato },
+      ].filter(p => p.data);
+
+      platforms.forEach(p => {
+        XLSX.utils.sheet_add_aoa(ws, [[`${p.label} SUMMARY`, '', '', '']], { origin: `A${cursorRow}` });
+        styleCell(ws, `A${cursorRow}`, hdrStyle(DARK, p.color, true, 11));
+        if (!ws['!merges']) ws['!merges'] = [];
+        ws['!merges'].push({ s: { r: cursorRow - 1, c: 0 }, e: { r: cursorRow - 1, c: 3 } });
+        cursorRow += 1;
+
+        const rows = [
+          ['Total Revenue', `₹${(p.data.revenue || 0).toLocaleString()}`],
+          ['Total Orders', p.data.orderCount || 0],
+          ['Avg Order Value', `₹${p.data.avgOrderValue || 0}`],
+          ['Rejected Orders', p.data.rejectedCount || 0],
+        ];
+        rows.forEach((row, ri) => {
+          const r = cursorRow + ri;
+          const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+          ws[`A${r}`] = { v: row[0], t: 's', s: cellStyle(false, '888888', altBg) };
+          ws[`B${r}`] = { v: row[1], t: typeof row[1] === 'number' ? 'n' : 's', s: cellStyle(true, p.color, altBg, 'right') };
+        });
+        cursorRow += rows.length + 1;
+
+        // Top items for this platform
+        if ((p.data.topItems || []).length > 0) {
+          XLSX.utils.sheet_add_aoa(ws, [['Top Item', 'Qty Sold', 'Revenue (₹)', '']], { origin: `A${cursorRow}` });
+          ['A', 'B', 'C'].forEach(col => styleCell(ws, `${col}${cursorRow}`, hdrStyle(MID, p.color)));
+          cursorRow += 1;
+          p.data.topItems.forEach((it, ri) => {
+            const altBg = ri % 2 === 0 ? '0D0D0D' : '111111';
+            ws[`A${cursorRow}`] = { v: it.name, t: 's', s: cellStyle(true, WHITE, altBg) };
+            ws[`B${cursorRow}`] = { v: it.qty, t: 'n', s: { ...numFmt(false, GOLD), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+            ws[`C${cursorRow}`] = { v: Math.round(it.revenue), t: 'n', s: { ...numFmt(true, GREEN), fill: { patternType: 'solid', fgColor: { rgb: altBg } } } };
+            cursorRow += 1;
+          });
+        }
+        cursorRow += 2;
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: cursorRow + 2, c: 7 } });
+      ws['!cols'] = [26, 16, 16, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
+      XLSX.utils.book_append_sheet(wb, ws, '🛵 Aggregators');
+    }
     // ══════════════════════════════════
     // SHEET 9: INVENTORY SNAPSHOT (was Sheet 5)
     // ══════════════════════════════════
@@ -2532,8 +2611,7 @@ const periodOrders = ordersData.filter(order => {
     showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
 
   }).catch(err=>{ console.error(err); showNotif('Export failed — check xlsx install','error'); });
-},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData]);
-
+},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData,aggregatorAnalytics]);
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
   const monthName = viewDate.toLocaleString('default',{month:'long',year:'numeric'});
@@ -6190,6 +6268,104 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
           <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
+        </div>
+      </div>
+    )}
+
+{/* SWIGGY / ZOMATO AGGREGATOR REVENUE — only shown if tenant has at least one platform enabled */}
+    {aggregatorAnalytics?.enabled && (aggregatorAnalytics.swiggy || aggregatorAnalytics.zomato) && (
+      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
+        <h4 style={styles.biTitle}><Truck size={16} /> ONLINE AGGREGATOR REVENUE — SWIGGY & ZOMATO</h4>
+        <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '18px' }}>
+          Orders received via Dyno integration for {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '20px' }}>
+          {[
+            { l: 'COMBINED AGGREGATOR REVENUE', v: `₹${(aggregatorAnalytics.combinedRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
+            { l: 'SWIGGY ORDERS', v: aggregatorAnalytics.swiggy?.orderCount || 0, c: '#fc8019' },
+            { l: 'ZOMATO ORDERS', v: aggregatorAnalytics.zomato?.orderCount || 0, c: '#cb202d' },
+          ].map(s => (
+            <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
+              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: aggregatorAnalytics.swiggyEnabled && aggregatorAnalytics.zomatoEnabled ? '1fr 1fr' : '1fr', gap: '16px' }}>
+
+          {/* SWIGGY CARD */}
+          {aggregatorAnalytics.swiggyEnabled && (
+            <div style={{ background: '#050505', border: '1px solid rgba(252,128,25,0.2)', borderTop: '2px solid #fc8019', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fc8019' }}>SWIGGY</span>
+                <span style={{ fontSize: '0.62rem', color: '#555' }}>{aggregatorAnalytics.swiggy?.orderCount || 0} orders</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
+                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>REVENUE</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{(aggregatorAnalytics.swiggy?.revenue || 0).toLocaleString()}</div>
+                </div>
+                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
+                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>AVG ORDER</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{aggregatorAnalytics.swiggy?.avgOrderValue || 0}</div>
+                </div>
+              </div>
+              {(aggregatorAnalytics.swiggy?.rejectedCount || 0) > 0 && (
+                <div style={{ fontSize: '0.6rem', color: '#f87171', marginBottom: '10px' }}>
+                  {aggregatorAnalytics.swiggy.rejectedCount} order{aggregatorAnalytics.swiggy.rejectedCount > 1 ? 's' : ''} rejected this month
+                </div>
+              )}
+              {(aggregatorAnalytics.swiggy?.topItems || []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP ITEMS</div>
+                  {aggregatorAnalytics.swiggy.topItems.map(it => (
+                    <div key={it.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.68rem' }}>
+                      <span style={{ color: '#ccc' }}>{it.name}</span>
+                      <span style={{ color: '#fc8019', fontWeight: '800' }}>{it.qty}×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ZOMATO CARD */}
+          {aggregatorAnalytics.zomatoEnabled && (
+            <div style={{ background: '#050505', border: '1px solid rgba(203,32,45,0.2)', borderTop: '2px solid #cb202d', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '900', color: '#cb202d' }}>ZOMATO</span>
+                <span style={{ fontSize: '0.62rem', color: '#555' }}>{aggregatorAnalytics.zomato?.orderCount || 0} orders</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
+                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>REVENUE</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{(aggregatorAnalytics.zomato?.revenue || 0).toLocaleString()}</div>
+                </div>
+                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
+                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>AVG ORDER</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{aggregatorAnalytics.zomato?.avgOrderValue || 0}</div>
+                </div>
+              </div>
+              {(aggregatorAnalytics.zomato?.rejectedCount || 0) > 0 && (
+                <div style={{ fontSize: '0.6rem', color: '#f87171', marginBottom: '10px' }}>
+                  {aggregatorAnalytics.zomato.rejectedCount} order{aggregatorAnalytics.zomato.rejectedCount > 1 ? 's' : ''} rejected this month
+                </div>
+              )}
+              {(aggregatorAnalytics.zomato?.topItems || []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP ITEMS</div>
+                  {aggregatorAnalytics.zomato.topItems.map(it => (
+                    <div key={it.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.68rem' }}>
+                      <span style={{ color: '#ccc' }}>{it.name}</span>
+                      <span style={{ color: '#cb202d', fontWeight: '800' }}>{it.qty}×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     )}
