@@ -17,6 +17,21 @@ import {
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
+// ADD near the top of OperatorPortal.jsx, after imports:
+axios.interceptors.response.use(
+  res => res,
+  async (error) => {
+    const config = error.config;
+    const isRetryable = error.response?.status === 503 || error.code === 'ERR_NETWORK';
+    if (isRetryable && !config._retried) {
+      config._retried = true;
+      await new Promise(r => setTimeout(r, 1500));
+      return axios(config);
+    }
+    return Promise.reject(error);
+  }
+);
+
 const OperatorLiveTimer = ({ createdAt }) => {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
