@@ -159,6 +159,8 @@ const [extraItemPickerSearch, setExtraItemPickerSearch] = useState('');
 const [editDishModal, setEditDishModal] = useState(null); // holds the dish being edited
 const [editDishData, setEditDishData] = useState({});
 
+const [recipes, setRecipes] = useState([]);
+
 const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
 const [extraItemEditModal, setExtraItemEditModal] = useState(null);
 const [extraItemEditData, setExtraItemEditData] = useState({});
@@ -992,6 +994,21 @@ const SectionHeader = ({ icon, title, subtitle }) => (
     </div>
   </div>
 );
+
+// ── ADD with your other fetch functions ──
+const fetchRecipes = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+    setRecipes(res.data || []);
+  } catch { setRecipes([]); }
+}, [tenantId]);
+
+// ── ADD in your useEffect that responds to tab changes ──
+useEffect(() => {
+  if (activeTab === 'recipes') {
+    fetchRecipes();
+  }
+}, [activeTab, fetchRecipes]);
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
@@ -8075,14 +8092,17 @@ setNewStaff({
                     <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>SELECT MENU ITEM</label>
                     <select style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',cursor:'pointer'}}
                       value={activeRecipeItemId}
-                      onChange={async e=>{
-                        setActiveRecipeItemId(e.target.value);
-                        if(e.target.value){
-                          const res=await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-                          const ex=res.data.find(r=>r.menuItemId?.toString()===e.target.value);
-                          setRecipeIngredientRows(ex?ex.ingredients.map(i=>({inventoryId:i.inventoryId?._id||i.inventoryId,quantityUsed:i.quantityUsed})):[{inventoryId:'',quantityUsed:''}]);
-                        }
-                      }}>
+onChange={e=>{
+  setActiveRecipeItemId(e.target.value);
+  if(e.target.value){
+    const ex = recipes.find(r => r.menuItemId?.toString() === e.target.value);
+    setRecipeIngredientRows(
+      ex?.ingredients?.length
+        ? ex.ingredients.map(i => ({ inventoryId: i.inventoryId?._id || i.inventoryId, quantityUsed: i.quantityUsed }))
+        : [{ inventoryId: '', quantityUsed: '' }]
+    );
+  }
+}}>
                       <option value="">-- Select a dish --</option>
                       {menuItems.map(m=><option key={m._id} value={m._id}>{m.name}</option>)}
                     </select>
@@ -8117,6 +8137,20 @@ setNewStaff({
                           style={{background:'transparent',border:'1px solid #222',color:'#444',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem'}}>✕</button>
                       </div>
                     ))}
+                    {recipeIngredientRows.some(row => {
+  const inv = inventory.find(i => i._id === row.inventoryId);
+  return inv && inv.currentStock <= 0;
+}) && (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: '8px',
+    padding: '10px 12px', borderRadius: '8px', marginBottom: '10px',
+    background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)'
+  }}>
+    <span style={{ fontSize: '0.7rem', color: '#f87171', fontWeight: '700' }}>
+      ⚠ One or more selected ingredients are currently out of stock. Recipe will save but auto-deduction won't fire until stock is replenished.
+    </span>
+  </div>
+)}
                     <div style={{display:'flex',gap:'12px',marginTop:'10px'}}>
                       <button onClick={()=>setRecipeIngredientRows(p=>[...p,{inventoryId:'',quantityUsed:''}])}
                         style={{...styles.ghostBtn,flex:1}}>+ ADD INGREDIENT</button>
@@ -8124,24 +8158,77 @@ setNewStaff({
   if(!activeRecipeItemId) return showNotif("Select a menu item first","error");
   const valid=recipeIngredientRows.filter(r=>r.inventoryId&&r.quantityUsed);
   if(!valid.length) return showNotif("Add at least one ingredient","error");
-  try {
-    await axios.post(`${BASE_URL}/recipes/save`,{tenantId,menuItemId:activeRecipeItemId,
-      ingredients:valid.map(r=>({inventoryId:r.inventoryId,quantityUsed:Number(r.quantityUsed)}))});
-    showNotif("Recipe saved ✓");
-    fetchAnalytics();
-    fetchManagementData(); // ← ADD: refresh recipe cards list
-  } catch { showNotif("Failed to save recipe","error"); }
+// Find the SAVE RECIPE button onClick in document 5, replace the try block:
+try {
+  await axios.post(`${BASE_URL}/recipes/save`, {
+    tenantId,
+    menuItemId: activeRecipeItemId,
+    ingredients: valid.map(r => ({ inventoryId: r.inventoryId, quantityUsed: Number(r.quantityUsed) }))
+  });
+  
+  // ← ADD THIS: refresh recipes state so card badges update immediately
+  const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+  setRecipes(recipesRes.data || []);
+  
+  showNotif("Recipe saved ✓");
+  fetchAnalytics();
+  fetchManagementData();
+} catch { showNotif("Failed to save recipe", "error"); }
 }}style={{...styles.mainBtn,flex:2,background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>SAVE RECIPE</button>
                     </div>
                   </div>
                 </div>
               </div>
 
+{/* RECIPE COVERAGE PROGRESS BAR */}
+{(() => {
+  const mappedCount = recipes.filter(r => r.ingredients?.length > 0).length;
+  const totalCount = menuItems.length;
+  const pct = totalCount > 0 ? Math.round((mappedCount / totalCount) * 100) : 0;
+  return (
+    <div style={{
+      background: '#050505', border: '1px solid #111',
+      borderRadius: '12px', padding: '16px 20px',
+      display: 'flex', alignItems: 'center', gap: '20px'
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '800', letterSpacing: '1px' }}>
+            RECIPE COVERAGE
+          </span>
+          <span style={{ fontSize: '0.65rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>
+            {mappedCount} / {totalCount} dishes
+          </span>
+        </div>
+        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', width: `${pct}%`,
+            background: 'linear-gradient(90deg,#d3bfa2,#bda88a)',
+            borderRadius: '2px', transition: 'width 0.6s ease'
+          }} />
+        </div>
+      </div>
+      <div style={{
+        fontSize: '1.4rem', fontWeight: '900',
+        color: pct === 100 ? '#d3bfa2' : '#333',
+        fontFamily: 'monospace', flexShrink: 0, minWidth: '48px', textAlign: 'right'
+      }}>
+        {pct}%
+      </div>
+      {pct < 100 && (
+        <div style={{ fontSize: '0.58rem', color: '#444', maxWidth: '140px', lineHeight: 1.5, flexShrink: 0 }}>
+          {totalCount - mappedCount} dishes without recipes — profitability data incomplete
+        </div>
+      )}
+    </div>
+  );
+})()}
               {/* RECIPE CARDS */}
               <div style={styles.biCard}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
-                  <h4 style={{...styles.biTitle,margin:0,color:'#fff'}}>CONFIGURED RECIPES ({menuItems.length} dishes)</h4>
-                  {/* ── Recipe search ── */}
+<h4 style={{...styles.biTitle,margin:0,color:'#fff'}}>
+  CONFIGURED RECIPES ({recipes.filter(r => r.ingredients?.length > 0).length} / {menuItems.length} dishes mapped)
+</h4>                  {/* ── Recipe search ── */}
                   <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#000',border:'1px solid #121212',borderRadius:'8px',padding:'8px 14px'}}>
                     <Search size={13} color="#444"/>
                     <input type="text" placeholder="Search dish..." value={recipeSearchQuery}
@@ -8149,30 +8236,126 @@ setNewStaff({
                       style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'130px'}}/>
                   </div>
                 </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'15px'}}>
-                  {menuItems.filter(m=>m.name.toLowerCase().includes(recipeSearchQuery.toLowerCase())).map(dish=>(
-                    <div key={dish._id}
-                      style={{background:'#050505',border:`1px solid ${activeRecipeItemId===dish._id?'rgba(211,191,162,0.4)':'#111'}`,
-                        padding:'16px',borderRadius:'12px',cursor:'pointer',
-                        transition:'border-color 0.2s'}}
-                      onClick={async()=>{
-                        setActiveRecipeItemId(dish._id);
-                        const res=await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-                        const ex=res.data.find(r=>r.menuItemId?.toString()===dish._id.toString());
-                        setRecipeIngredientRows(ex?ex.ingredients.map(i=>({inventoryId:i.inventoryId?._id||i.inventoryId,quantityUsed:i.quantityUsed})):[{inventoryId:'',quantityUsed:''}]);
-                        // scroll to builder
-                        window.scrollTo({top:0,behavior:'smooth'});
-                      }}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-                        <span style={{fontWeight:'900',color:'#fff',fontSize:'0.85rem'}}>{dish.name}</span>
-                        <span style={{fontSize:'0.6rem',padding:'2px 8px',borderRadius:'4px',background:'rgba(211,191,162,0.05)',color:'#555',border:'1px solid #111'}}>₹{dish.price}</span>
-                      </div>
-                      <div style={{fontSize:'0.65rem',color:'#444',fontStyle:'italic'}}>
-                        {activeRecipeItemId===dish._id?'✓ Currently editing':'Click to edit recipe →'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'15px'}}>
+  {menuItems.filter(m=>m.name.toLowerCase().includes(recipeSearchQuery.toLowerCase())).map(dish=>{
+    // Check if this dish has a recipe configured
+    const hasRecipe = recipes.some(r => r.menuItemId?.toString() === dish._id.toString() && r.ingredients?.length > 0);
+    const recipeForDish = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
+    const ingredientCount = recipeForDish?.ingredients?.length || 0;
+    
+    return (
+      <div key={dish._id}
+        style={{background:'#050505',border:`1px solid ${
+          activeRecipeItemId===dish._id 
+            ? 'rgba(211,191,162,0.4)' 
+            : hasRecipe 
+            ? 'rgba(211,191,162,0.15)' 
+            : '#111'
+        }`,
+          padding:'16px',borderRadius:'12px',cursor:'pointer',
+          transition:'border-color 0.2s',position:'relative'}}
+onClick={()=>{
+  setActiveRecipeItemId(dish._id);
+  const ex = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
+  setRecipeIngredientRows(
+    ex?.ingredients?.length
+      ? ex.ingredients.map(i => ({ inventoryId: i.inventoryId?._id || i.inventoryId, quantityUsed: i.quantityUsed }))
+      : [{ inventoryId: '', quantityUsed: '' }]
+  );
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}}>
+        
+        {/* Status badge top-right */}
+        <div style={{
+          position:'absolute',top:'10px',right:'10px',
+          fontSize:'0.5rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',
+          background: hasRecipe ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)',
+          border: `1px solid ${hasRecipe ? 'rgba(211,191,162,0.2)' : '#1a1a1a'}`,
+          color: hasRecipe ? '#d3bfa2' : '#333',
+          letterSpacing:'0.5px'
+        }}>
+          {hasRecipe ? `${ingredientCount} INGREDIENTS` : 'NOT MAPPED'}
+        </div>
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',paddingRight:'90px'}}>
+          <span style={{fontWeight:'900',color:'#fff',fontSize:'0.85rem'}}>{dish.name}</span>
+        </div>
+
+        {/* Price + profitability hint */}
+        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
+          <span style={{fontSize:'0.6rem',padding:'2px 8px',borderRadius:'4px',background:'rgba(211,191,162,0.05)',color:'#555',border:'1px solid #111'}}>
+            ₹{dish.price}
+          </span>
+          {dish._eng?.marginPct > 0 && (
+            <span style={{
+              fontSize:'0.58rem',padding:'2px 7px',borderRadius:'4px',
+              background: dish._eng.marginPct >= 55 ? 'rgba(211,191,162,0.06)' : 'rgba(255,100,100,0.06)',
+              color: dish._eng.marginPct >= 55 ? '#d3bfa2' : '#f87171',
+              border:`1px solid ${dish._eng.marginPct >= 55 ? 'rgba(211,191,162,0.15)' : 'rgba(248,113,113,0.15)'}`
+            }}>
+              {dish._eng.marginPct}% margin
+            </span>
+          )}
+        </div>
+
+        {/* Ingredient preview if mapped */}
+        {hasRecipe && recipeForDish?.ingredients?.length > 0 && (
+          <div style={{display:'flex',flexWrap:'wrap',gap:'4px',marginTop:'6px'}}>
+            {recipeForDish.ingredients.slice(0,3).map((ing,i) => (
+              <span key={i} style={{
+                fontSize:'0.55rem',padding:'1px 6px',borderRadius:'3px',
+                background:'#0a0a0a',border:'1px solid #151515',color:'#555'
+              }}>
+                {ing.inventoryId?.itemName || 'Unknown'} · {ing.quantityUsed} {ing.inventoryId?.unit || ''}
+              </span>
+            ))}
+            {recipeForDish.ingredients.length > 3 && (
+              <span style={{fontSize:'0.55rem',color:'#333',padding:'1px 4px'}}>
+                +{recipeForDish.ingredients.length - 3} more
+              </span>
+            )}
+          </div>
+        )}
+
+        {hasRecipe && (
+  <button
+    onClick={async (e) => {
+      e.stopPropagation();
+      if (!window.confirm(`Remove recipe for "${dish.name}"?`)) return;
+      try {
+        await axios.delete(`${BASE_URL}/recipes/${tenantId}/${dish._id}`);
+        // Refresh recipes state
+        const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+        setRecipes(recipesRes.data || []);
+        if (activeRecipeItemId === dish._id) {
+          setActiveRecipeItemId('');
+          setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
+        }
+        showNotif('Recipe removed');
+      } catch { showNotif('Failed to remove', 'error'); }
+    }}
+    style={{
+      marginTop: '8px', background: 'transparent',
+      border: '1px solid #1a1a1a', color: '#333',
+      padding: '5px 10px', borderRadius: '6px',
+      fontSize: '0.58rem', fontWeight: '800', cursor: 'pointer',
+      width: '100%', transition: 'all 0.15s'
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; e.currentTarget.style.color = '#f87171'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
+  >
+    REMOVE RECIPE
+  </button>
+)}
+
+        <div style={{fontSize:'0.65rem',color:'#333',fontStyle:'italic',marginTop:'8px'}}>
+          {activeRecipeItemId===dish._id ? '✓ Currently editing' : hasRecipe ? 'Click to edit →' : 'Click to add recipe →'}
+        </div>
+      </div>
+    );
+  })}
+
+</div>
               </div>
             </motion.div>
           )}

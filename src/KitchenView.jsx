@@ -276,15 +276,31 @@ rec.lang = 'hi-IN'; // Marathi — also recognizes Hindi + English numbers
     socket.on("connect",    () => setIsOnline(true));
     socket.on("disconnect", () => setIsOnline(false));
 
-    socket.on("new_order", (newOrder) => {
-      if (newOrder.tenantId !== tenantId) return;
-      setOrders(prev => [newOrder, ...prev]);
-      setMobileCardIndex(0);
-      const isTakeaway = newOrder.tableNumber?.toLowerCase() === 'takeaway';
-      if (isTakeaway) new Audio('https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3').play().catch(() => {});
-      else audioPlayer.current?.play().catch(() => {});
-      speakOrder(newOrder);
-    });
+
+socket.on("new_order", (newOrder) => {
+  if (newOrder.tenantId !== tenantId) return;
+ 
+  // ── Drop extra-item-only orders from KDS entirely ──
+  const allExtra = (newOrder.items || []).every(
+    i => i.isExtraItem === true || i.extraItemId != null
+  );
+  if (allExtra) return;
+ 
+  // ── Strip any extra items mixed into a regular order ──
+  const kitchenItems = (newOrder.items || []).filter(
+    i => !i.isExtraItem && i.extraItemId == null
+  );
+  if (kitchenItems.length === 0) return;
+ 
+  const cleanOrder = { ...newOrder, items: kitchenItems };
+ 
+  setOrders(prev => [cleanOrder, ...prev]);
+  setMobileCardIndex(0);
+  const isTakeaway = cleanOrder.tableNumber?.toLowerCase() === 'takeaway';
+  if (isTakeaway) new Audio('https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3').play().catch(() => {});
+  else audioPlayer.current?.play().catch(() => {});
+  speakOrder(cleanOrder);
+});
 
     socket.on("kds_item_cross_sync", ({ orderId, idx, newState }) => {
       setCheckedItemsGlobal(prev => ({ ...prev, [`${orderId}-${idx}`]: newState }));
