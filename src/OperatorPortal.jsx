@@ -12,7 +12,7 @@ import {
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
-  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify 
+  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package 
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -31,6 +31,7 @@ axios.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 
 const OperatorLiveTimer = ({ createdAt }) => {
   const [elapsed, setElapsed] = useState(0);
@@ -1097,6 +1098,60 @@ const SectionHeader = ({ icon, title, subtitle }) => (
   </div>
 );
 
+
+const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
+  <div style={{
+    background: urgent ? 'rgba(192,57,43,0.04)' : '#0f0f0f',
+    border: `1px solid ${urgent ? 'rgba(192,57,43,0.2)' : positive ? 'rgba(74,222,128,0.15)' : '#1a1a1a'}`,
+    borderLeft: `3px solid ${rec.color}`,
+    borderRadius: '14px', padding: '20px',
+    display: 'flex', flexDirection: 'column', gap: '12px'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+      <div style={{
+        width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
+        background: `${rec.color}15`, border: `1px solid ${rec.color}30`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: rec.color
+      }}>
+        {rec.icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '0.5rem', fontWeight: '900', color: rec.color, letterSpacing: '1.5px',
+          marginBottom: '5px', textTransform: 'uppercase'
+        }}>
+          {rec.category}
+        </div>
+        <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: '900', color: '#fff', lineHeight: 1.35 }}>
+          {rec.title}
+        </h4>
+      </div>
+    </div>
+ 
+    <p style={{ margin: 0, fontSize: '0.74rem', color: '#888', lineHeight: 1.65 }}>
+      {rec.insight}
+    </p>
+ 
+    <div style={{
+      background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
+      borderRadius: '10px', padding: '12px 14px'
+    }}>
+      <div style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <Lightbulb size={11} /> RECOMMENDED ACTION
+      </div>
+      <p style={{ margin: 0, fontSize: '0.74rem', color: '#ccc', lineHeight: 1.6 }}>
+        {rec.action}
+      </p>
+    </div>
+ 
+    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', paddingTop: '4px', borderTop: '1px solid #161616' }}>
+      <TrendingUp size={12} color="#4ade80" style={{ flexShrink: 0, marginTop: '6px' }} />
+      <p style={{ margin: '6px 0 0', fontSize: '0.68rem', color: '#4ade80', fontWeight: '700', lineHeight: 1.5 }}>
+        {rec.impact}
+      </p>
+    </div>
+  </div>
+);
 // ── ADD with your other fetch functions ──
 const fetchRecipes = useCallback(async () => {
   try {
@@ -5098,187 +5153,499 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
           )}
 
           {/* ── MARKETING ── */}
-{activeTab==='marketing' && (
-  <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
-    style={{display:'flex',flexDirection:'column',gap:'24px',maxWidth:'900px',margin:'0 auto',width:'100%'}}>
-
-    {/* ── SEASONAL INTELLIGENCE PANEL ── */}
+{activeTab === 'marketing' && (
+  <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
+ 
     {(() => {
-      const now = new Date(new Date().getTime() + 330*60*1000);
-      const month = now.getMonth(); // 0-indexed
-      const day = now.getDate();
-
-      const seasons = [
-        { name: 'SUMMER PEAK', months: [2,3,4], icon: '☀️', color: '#BA7517',
-          offers: ['Cold beverages combo — ₹99 deal', 'Free lassi with main course', 'Mango special thali launch', 'Cold drink + starter bundle'],
-          insight: 'Summer drives 35% more cold beverage sales. Push combo deals to increase ticket size.',
-          tips: ['Add seasonal drinks to menu', 'Run cold drink + meal combos', 'Promote morning breakfast deals'] },
-        { name: 'MONSOON SEASON', months: [5,6,7], icon: '🌧️', color: '#2980B9',
-          offers: ['Hot chai + snacks combo', 'Free hot soup with meal', 'Rainy day discount 10% off', 'Indoors cozy meal package'],
-          insight: 'Monsoon slows footfall 20%. Counter with delivery push and hot beverage promos.',
-          tips: ['Push Zomato/Swiggy offers', 'Hot soup combos', 'Weekend rain-day specials'] },
-        { name: 'FESTIVE SEASON', months: [8,9,10], icon: '🪔', color: '#d3bfa2',
-          offers: ['Diwali family meal pack', 'Festive thali special', 'Group booking discount 15%', 'Sweet box with every bill >₹500'],
-          insight: 'Festive months see 50%+ surge in group dining. Pre-book tables and launch thali packages.',
-          tips: ['Launch festive combos', 'Offer pre-booking discounts', 'Add mithai/sweets to menu'] },
-        { name: 'WINTER SEASON', months: [11,0,1], icon: '❄️', color: '#4ade80',
-          offers: ['Hot chocolate + dessert deal', 'Winter special soup thali', 'Evening snack combo 4-7pm', 'Birthday month 20% off'],
-          insight: 'Winter drives evening dining. Happy hour promos between 4-7 PM boost slow-period revenue.',
-          tips: ['Happy hour promos', 'Hot beverage menu', 'Evening snack specials'] }
-      ];
-
-      const current = seasons.find(s => s.months.includes(month));
-      const upcoming = seasons.find(s => s.months.includes((month + 1) % 12));
-      const daysToUpcoming = 30 - day + 1;
-
-      // Revenue growth suggestion based on stats
-      const growthPct = trendsData?.revenue?.growthPct;
-      const isGrowing = growthPct !== null && Number(growthPct) > 0;
-
+      // ════════════════════════════════════════════════════════
+      // RECOMMENDATION ENGINE — pure computation, no side effects
+      // Reads from: profitabilityData, wastageAnalytics, staffEfficiency,
+      // waitlistAnalytics, trendsData, hourlyAnalytics, extraAnalytics,
+      // inventory, monthlySalaryRecords, categoryRankings, stats
+      // ════════════════════════════════════════════════════════
+      const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+      const recs = []; // { id, priority(1-5, 1=urgent), category, title, insight, action, impact, icon, color }
+ 
+      // ── 1. MENU ENGINEERING: Puzzles need promotion ──
+      if (profitabilityData.length > 0) {
+        const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
+        const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
+        const puzzles = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) >= avgMargin && d.hasRecipe);
+        const plowhorses = profitabilityData.filter(d => (d.totalQtySold || 0) >= avgSold && (d.marginPct || 0) < avgMargin);
+        const dogs = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) < avgMargin && d.hasRecipe);
+ 
+        if (puzzles.length > 0) {
+          const topPuzzle = puzzles.sort((a, b) => b.marginPct - a.marginPct)[0];
+          recs.push({
+            id: 'puzzle-promo', priority: 2, category: 'MENU',
+            icon: <Puzzle size={16} />, color: '#BA7517',
+            title: `Promote "${topPuzzle.name}" — your highest hidden-margin dish`,
+            insight: `${puzzles.length} dish${puzzles.length > 1 ? 'es' : ''} earn ${Math.round(avgMargin)}%+ margin but sell below average. "${topPuzzle.name}" alone carries a ${topPuzzle.marginPct}% margin yet only sold ${topPuzzle.totalQtySold} times.`,
+            action: `Feature it as "Chef's Recommendation" at table-side, on your QR menu banner, or bundle it with a popular Star dish. Train waitstaff to suggest it during the first 2 minutes of seating.`,
+            impact: `If sold ${Math.max(10, Math.round(avgSold - topPuzzle.totalQtySold))} more times this month at ₹${topPuzzle.profit}/serving profit, that's ₹${Math.round((avgSold - topPuzzle.totalQtySold) * topPuzzle.profit).toLocaleString()} extra profit.`,
+          });
+        }
+ 
+        if (plowhorses.length > 0) {
+          const topPlow = plowhorses.sort((a, b) => b.totalQtySold - a.totalQtySold)[0];
+          const suggestedPrice = Math.ceil((topPlow.sellingPrice * 1.08) / 10) * 10;
+          recs.push({
+            id: 'plowhorse-price', priority: 2, category: 'PRICING',
+            icon: <Repeat size={16} />, color: '#2980B9',
+            title: `Reprice "${topPlow.name}" — high demand, thin margin`,
+            insight: `Sold ${topPlow.totalQtySold} times this period but margin is only ${topPlow.marginPct}% — well below your ${Math.round(avgMargin)}% average. Customers clearly want it; you're under-pricing it.`,
+            action: `Test a ₹${suggestedPrice - topPlow.sellingPrice} price increase (₹${topPlow.sellingPrice} → ₹${suggestedPrice}). At this volume, demand is unlikely to drop much.`,
+            impact: `At current volume, this alone adds ≈₹${((suggestedPrice - topPlow.sellingPrice) * topPlow.totalQtySold).toLocaleString()}/period without losing customers.`,
+          });
+        }
+ 
+        if (dogs.length >= 2) {
+          recs.push({
+            id: 'dogs-review', priority: 3, category: 'MENU',
+            icon: <XCircle size={16} />, color: '#c0392b',
+            title: `${dogs.length} menu items are dragging down your kitchen`,
+            insight: `These items have low sales AND low margin: ${dogs.slice(0, 3).map(d => d.name).join(', ')}${dogs.length > 3 ? ` +${dogs.length - 3} more` : ''}. They consume prep time, inventory shelf space, and menu real estate for almost no return.`,
+            action: `Remove or merge 2-3 of these with similar dishes. Simpler menus also reduce kitchen errors and speed up service.`,
+            impact: `Freeing kitchen capacity from low-yield dishes typically improves prep time on your bestsellers by 5-10%.`,
+          });
+        }
+      }
+ 
+      // ── 2. DEAD STOCK / ZERO SALES ──
+      if (profitabilityData.length > 0) {
+        const dead = profitabilityData.filter(d => !d.totalQtySold || d.totalQtySold === 0);
+        if (dead.length > 0) {
+          recs.push({
+            id: 'dead-menu', priority: 3, category: 'MENU',
+            icon: <Package size={16} />, color: '#c0392b',
+            title: `${dead.length} dish${dead.length > 1 ? 'es' : ''} sold zero units this period`,
+            insight: `"${dead[0].name}"${dead.length > 1 ? ` and ${dead.length - 1} other${dead.length > 2 ? 's' : ''}` : ''} generated no sales at all. These could be poorly placed on the menu, mispriced, or simply unwanted.`,
+            action: `Either reposition them higher on the menu (top-right corner gets the most eye traffic), run a one-week promo to test demand, or retire them entirely.`,
+            impact: `Removing dead weight tightens your menu, reduces ingredient waste risk, and lets staff master fewer recipes better.`,
+          });
+        }
+      }
+ 
+      const deadExtras = (extraAnalytics?.items || []).filter(i => !i.totalSold || i.totalSold === 0);
+      if (deadExtras.length > 0) {
+        recs.push({
+          id: 'dead-extras', priority: 4, category: 'EXTRAS',
+          icon: <ShoppingBag size={16} />, color: '#9ca3af',
+          title: `${deadExtras.length} extra item${deadExtras.length > 1 ? 's are' : ' is'} sitting unsold`,
+          insight: `${deadExtras.slice(0, 3).map(i => i.name).join(', ')} — zero sales this period despite being on your counter menu.`,
+          action: `Bundle these with popular dishes ("Order a Biryani, get 10% off a Cold Drink") or move them to a more visible spot in the customer-facing menu.`,
+          impact: `Converting dead stock into bundled upsells typically recovers 30-50% of locked-up inventory value.`,
+        });
+      }
+ 
+      // ── 3. WASTAGE INTELLIGENCE ──
+      if (wastageAnalytics && (wastageAnalytics.totalCost || 0) > 0) {
+        const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
+        const wastagePct = totalRevAllDishes > 0 ? (wastageAnalytics.totalCost / totalRevAllDishes) * 100 : 0;
+        const topReason = Object.entries(wastageAnalytics.byReason || {}).sort((a, b) => b[1].cost - a[1].cost)[0];
+        const topWastedItem = (wastageAnalytics.topWasted || [])[0];
+ 
+        if (wastagePct > 2) {
+          recs.push({
+            id: 'wastage-high', priority: 1, category: 'COST CONTROL',
+            icon: <Trash2 size={16} />, color: '#f87171',
+            title: `Wastage is eating ${wastagePct.toFixed(1)}% of revenue — above the 2% healthy threshold`,
+            insight: `₹${wastageAnalytics.totalCost.toLocaleString()} lost this month across ${wastageAnalytics.totalEntries} entries. ${topReason ? `Top cause: "${topReason[0]}" (₹${topReason[1].cost.toFixed(0)}).` : ''} ${topWastedItem ? ` Most-wasted ingredient: ${topWastedItem.name}.` : ''}`,
+            action: topReason?.[0] === 'Spoiled / Expired'
+              ? `Review your purchase order quantities for ${topWastedItem?.name || 'high-waste items'} — you may be over-ordering relative to actual usage. Consider smaller, more frequent deliveries.`
+              : topReason?.[0] === 'Overcooked'
+              ? `This points to a kitchen process issue — review timer discipline during peak hours, or add a prep checklist for ${topWastedItem?.name || 'the affected dish'}.`
+              : `Investigate the "${topReason?.[0] || 'top'}" pattern specifically — it's your single biggest controllable cost leak.`,
+            impact: `Cutting wastage to 1% of revenue would recover ≈₹${Math.round(wastageAnalytics.totalCost / 2).toLocaleString()}/month straight to your bottom line.`,
+          });
+        }
+      }
+ 
+      // ── 4. INVENTORY HEALTH ──
+      if (inventory.length > 0) {
+        const lowStock = inventory.filter(i => i.currentStock <= i.minThreshold && i.currentStock > 0);
+        const depleted = inventory.filter(i => i.currentStock <= 0);
+        if (depleted.length > 0) {
+          recs.push({
+            id: 'stock-depleted', priority: 1, category: 'OPERATIONS',
+            icon: <AlertTriangle size={16} />, color: '#c0392b',
+            title: `${depleted.length} ingredient${depleted.length > 1 ? 's are' : ' is'} fully out of stock right now`,
+            insight: `${depleted.slice(0, 3).map(i => i.itemName).join(', ')}${depleted.length > 3 ? ` +${depleted.length - 3} more` : ''} — any dish depending on these can't be served, risking lost sales and customer disappointment.`,
+            action: `Restock immediately or temporarily 86 the affected dishes from the customer menu to avoid order cancellations mid-service.`,
+            impact: `Each stockout typically costs 2-5 lost orders per service before staff notice and route around it.`,
+          });
+        } else if (lowStock.length > 2) {
+          recs.push({
+            id: 'stock-low', priority: 2, category: 'OPERATIONS',
+            icon: <Package size={16} />, color: '#BA7517',
+            title: `${lowStock.length} ingredients are running low`,
+            insight: `Below minimum threshold: ${lowStock.slice(0, 3).map(i => i.itemName).join(', ')}${lowStock.length > 3 ? ` +${lowStock.length - 3} more` : ''}.`,
+            action: `Place restock orders today — running out mid-service forces 86'ing popular dishes during peak hours, the worst possible time.`,
+            impact: `Proactive restocking protects against weekend/peak-hour stockouts when demand (and lost-sale cost) is highest.`,
+          });
+        }
+      }
+ 
+      // ── 5. STAFF / LABOR EFFICIENCY ──
+      if (staffEfficiency.length > 0) {
+        const lowAttendance = staffEfficiency.filter(s => s.daysPresent < 15 && s.role !== 'Manager');
+        const monthlyPayroll = staffEfficiency.reduce((a, s) => {
+          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+          return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+        }, 0);
+        const waiterCount = staffEfficiency.filter(s => s.role === 'Waiter').length;
+        const avgRevPerWaiterHour = waiterCount > 0
+          ? staffEfficiency.filter(s => s.role === 'Waiter').reduce((a, s) => a + (s.revenuePerHour || 0), 0) / waiterCount
+          : 0;
+ 
+        if (lowAttendance.length > 0) {
+          recs.push({
+            id: 'low-attendance', priority: 3, category: 'STAFF',
+            icon: <Users size={16} />, color: '#BA7517',
+            title: `${lowAttendance.length} staff member${lowAttendance.length > 1 ? 's have' : ' has'} unusually low attendance this month`,
+            insight: `${lowAttendance.slice(0, 2).map(s => `${s.name} (${s.daysPresent} days)`).join(', ')} — below the typical 20-26 working days.`,
+            action: `Check in with these team members. Frequent absences may signal scheduling conflicts, burnout, or a hiring need for backup coverage.`,
+            impact: `Understaffed shifts directly correlate with slower table turns and lower per-table revenue during peak hours.`,
+          });
+        }
+ 
+        if (hourlyAnalytics.hourly.length > 0 && waiterCount > 0) {
+          const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
+          recs.push({
+            id: 'staff-scheduling', priority: 3, category: 'STAFF',
+            icon: <Clock size={16} />, color: '#d3bfa2',
+            title: `Align staff shifts with your ${peak.hour === 0 ? '12am' : peak.hour < 12 ? `${peak.hour}am` : peak.hour === 12 ? '12pm' : `${peak.hour - 12}pm`} peak hour`,
+            insight: `Your busiest hour handles ${peak.orderCount} orders, but staffing isn't necessarily concentrated there. With ${waiterCount} waiters averaging ₹${Math.round(avgRevPerWaiterHour)}/hour in attributed revenue, the right scheduling multiplies this.`,
+            action: `Schedule your most experienced waitstaff during this window. Consider a 30-min staggered shift overlap before peak hour to pre-stage tables.`,
+            impact: `Optimized peak-hour staffing typically improves table turn time by 10-15%, directly increasing covers served.`,
+          });
+        }
+      }
+ 
+      // ── 6. WAITLIST / COUNTER CONVERSION ──
+      if (waitlistAnalytics?.month) {
+        const m = waitlistAnalytics.month;
+        const total = m.total || 0;
+        const walked = Math.max(0, total - (m.seated || 0) - (m.pickupSettled || 0));
+        const noShowPct = total > 0 ? Math.round((walked / total) * 100) : 0;
+ 
+        if (noShowPct > 15 && total >= 10) {
+          recs.push({
+            id: 'noshow-high', priority: 2, category: 'CUSTOMER EXPERIENCE',
+            icon: <UserCheck size={16} />, color: '#E24B4A',
+            title: `${noShowPct}% of waitlisted guests never came back — that's ${walked} lost groups`,
+            insight: `Average wait time is ${m.avgWaitMin} minutes. ${m.avgWaitMin > 20 ? 'This is likely the primary driver — guests give up and leave.' : 'Even with a reasonable wait, conversion is leaking somewhere in the notification or table-assignment flow.'}`,
+            action: m.avgWaitMin > 20
+              ? `Reduce average wait by adding express/2-top tables for smaller parties, or pre-bus tables faster. Even a 5-minute reduction in wait significantly cuts walk-aways.`
+              : `Verify push notifications are reliably reaching guests (currently ${m.notifDeliveredPct}% delivery rate). A missed "your table is ready" alert is a silent revenue leak.`,
+            impact: `Converting even half of these walk-aways back to seated guests = ${Math.round(walked / 2)} more covers/month at your avg order value of ₹${stats.avg}.`,
+          });
+        }
+ 
+        if (m.conversionPct >= 70) {
+          recs.push({
+            id: 'conversion-good', priority: 5, category: 'CUSTOMER EXPERIENCE',
+            icon: <ClipboardCheck size={16} />, color: '#4ade80',
+            title: `Strong ${m.conversionPct}% waitlist conversion — keep this engine running`,
+            insight: `Your counter/waitlist system is converting well above industry norms (typically 50-60%). This is a real competitive advantage.`,
+            action: `Consider promoting "Join our digital waitlist — no more standing in line" on your storefront and social media to drive more walk-in volume confidently.`,
+            impact: `A reliable waitlist system is a strong word-of-mouth driver — happy waitlist guests become repeat customers.`,
+          });
+        }
+ 
+        if ((m.preOrderRevenue || 0) > 0 && total > 0) {
+          const preOrderAdoption = Math.round(((m.preOrderRevenue > 0 ? 1 : 0) * 100));
+          recs.push({
+            id: 'preorder-push', priority: 4, category: 'CUSTOMER EXPERIENCE',
+            icon: <Hourglass size={16} />, color: '#60a5fa',
+            title: `Pre-orders generated ₹${m.preOrderRevenue.toLocaleString()} — push this harder`,
+            insight: `Guests who pre-order while waiting get faster service and you get kitchen lead-time. This is currently underused relative to total waitlist volume.`,
+            action: `Make pre-ordering the default prompt when a guest joins the waitlist, with a small incentive (5% off, free starter) for ordering ahead.`,
+            impact: `Higher pre-order adoption directly reduces table dwell time, increasing daily table turns.`,
+          });
+        }
+      }
+ 
+      // ── 7. CHURN / RETENTION ──
+      if (trendsData?.customers?.total > 0) {
+        const { total, repeat, repeatPct, avgVisits } = trendsData.customers;
+        if (repeatPct < 30 && total >= 20) {
+          recs.push({
+            id: 'low-retention', priority: 2, category: 'CUSTOMER RETENTION',
+            icon: <User size={16} />, color: '#BA7517',
+            title: `Only ${repeatPct}% of customers return — most guests are one-time visitors`,
+            insight: `Of ${total} unique customers, just ${repeat} have come back. Average visits per customer is ${avgVisits}x. Industry benchmark for healthy restaurants is 35-45% repeat rate.`,
+            action: `Launch a simple loyalty nudge: collect phone numbers consistently at billing (you're already doing this for some), and send a personalized "we miss you" or birthday offer via SMS/WhatsApp 30 days after a customer's last visit.`,
+            impact: `Moving repeat rate from ${repeatPct}% to 35% on your current customer base could add ${Math.round(total * (0.35 - repeatPct / 100))} more repeat visits — pure incremental revenue, since acquiring them already happened.`,
+          });
+        } else if (repeatPct >= 40) {
+          recs.push({
+            id: 'good-retention', priority: 5, category: 'CUSTOMER RETENTION',
+            icon: <Award size={16} />, color: '#4ade80',
+            title: `${repeatPct}% repeat rate is excellent — formalize this into a loyalty program`,
+            insight: `${repeat} of ${total} customers return on average ${avgVisits}x. This is strong organic loyalty you're not yet capturing systematically.`,
+            action: `Introduce a simple punch-card or points system ("Every 5th visit, 10% off") to make the loyalty explicit and trackable — this typically increases visit frequency further.`,
+            impact: `Formalized loyalty programs typically lift visit frequency by 15-20% among already-loyal customers.`,
+          });
+        }
+      }
+ 
+      // ── 8. PAYMENT MODE INSIGHT ──
+      if (analytics.length > 0) {
+        const totalC = analytics.reduce((a, b) => a + (b.cash || 0), 0);
+        const totalU = analytics.reduce((a, b) => a + (b.upi || 0), 0);
+        const totalK = analytics.reduce((a, b) => a + (b.card || 0), 0);
+        const grand = totalC + totalU + totalK;
+        if (grand > 0) {
+          const digitalPct = Math.round(((totalU + totalK) / grand) * 100);
+          if (digitalPct < 40) {
+            recs.push({
+              id: 'low-digital', priority: 4, category: 'OPERATIONS',
+              icon: <Smartphone size={16} />, color: '#2980B9',
+              title: `Only ${digitalPct}% of payments are digital — cash-heavy operations carry risk`,
+              insight: `Cash-dominant revenue makes reconciliation harder, increases handling risk, and slows down billing during peak hours.`,
+              action: `Place visible UPI QR codes at every table and the counter. Train staff to default-offer UPI first rather than asking "cash or card?"`,
+              impact: `Digital payments typically reduce settlement time by 20-30 seconds per table — meaningful at volume during peak hours.`,
+            });
+          }
+        }
+      }
+ 
+      // ── 9. GST / COMPLIANCE URGENCY ──
+      if (stats.revenue > 0) {
+        const now = new Date();
+        const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + 1, 11);
+        const daysToGstr1 = Math.ceil((nextGstr1 - now) / (1000 * 60 * 60 * 24));
+        if (daysToGstr1 <= 5 && daysToGstr1 > 0) {
+          recs.push({
+            id: 'gst-deadline', priority: 1, category: 'COMPLIANCE',
+            icon: <ReceiptText size={16} />, color: '#f87171',
+            title: `GSTR-1 filing due in ${daysToGstr1} day${daysToGstr1 > 1 ? 's' : ''}`,
+            insight: `Based on ₹${stats.revenue.toLocaleString()} revenue this month, your estimated GST liability is ₹${Math.round(stats.revenue * 0.05 / 1.05).toLocaleString()}.`,
+            action: `Export your GST Invoice Register from the Insights tab and forward to your CA, or file directly via the GST portal before the deadline to avoid late fees.`,
+            impact: `Late GSTR-1 filing carries penalties starting at ₹50/day — avoidable with a 10-minute export.`,
+          });
+        }
+      }
+ 
+      // ── 10. BREAK-EVEN STATUS ──
+      if (profitabilityData.length > 0 && staffEfficiency.length > 0 && currentMonthAnalytics.length > 0) {
+        const monthlyPayroll = staffEfficiency.reduce((a, s) => {
+          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+          return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+        }, 0);
+        const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
+        const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0) + (extraAnalytics?.totalCost || 0);
+        const foodCostPct = totalRevenue > 0 ? ingredientCost / totalRevenue : 0.3;
+        const contributionMarginPct = 1 - foodCostPct;
+        const breakEvenRevenue = contributionMarginPct > 0 ? monthlyPayroll / contributionMarginPct : 0;
+        const today = new Date(new Date().getTime() + 330 * 60 * 1000);
+        const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+        const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+        const progressPct = breakEvenRevenue > 0 ? Math.round((totalRevenue / breakEvenRevenue) * 100) : 0;
+ 
+        if (isCurrentMonth && progressPct < 100 && today.getDate() > daysInMonth * 0.6) {
+          const remaining = breakEvenRevenue - totalRevenue;
+          const daysLeft = daysInMonth - today.getDate();
+          recs.push({
+            id: 'breakeven-risk', priority: 1, category: 'FINANCIAL HEALTH',
+            icon: <Activity size={16} />, color: '#f87171',
+            title: `Behind break-even with ${daysLeft} days left this month`,
+            insight: `You're at ${progressPct}% of the ₹${Math.round(breakEvenRevenue).toLocaleString()} needed to cover payroll this month, with ₹${Math.round(remaining).toLocaleString()} still to go.`,
+            action: `Run a focused push for the remaining days: a limited-time combo offer, a social media post about your Star dishes, or extended hours on your typically busiest day (${hourlyAnalytics.dayOfWeek.length > 0 ? hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]).day : 'weekend'}).`,
+            impact: `Closing this gap protects your monthly profitability — every day of delay makes the daily revenue target steeper.`,
+          });
+        } else if (isCurrentMonth && progressPct >= 100) {
+          recs.push({
+            id: 'breakeven-achieved', priority: 5, category: 'FINANCIAL HEALTH',
+            icon: <ClipboardCheck size={16} />, color: '#4ade80',
+            title: `Break-even achieved — everything from here is profit`,
+            insight: `You've covered this month's payroll with ${daysInMonth - today.getDate()} days still remaining.`,
+            action: `Consider reinvesting incremental profit into marketing (social ads, influencer collabs) or staff bonuses to maintain morale during the strong run.`,
+            impact: `Reinvesting surplus during strong months compounds growth faster than letting it sit idle.`,
+          });
+        }
+      }
+ 
+      // ── 11. PEAK HOUR / DEAD HOUR OPTIMIZATION ──
+      if (hourlyAnalytics.hourly.length > 0) {
+        const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
+        const deadHours = operatingHours.filter(h => h.orderCount === 0);
+        if (deadHours.length >= 4) {
+          recs.push({
+            id: 'dead-hours', priority: 3, category: 'GROWTH OPPORTUNITY',
+            icon: <Zap size={16} />, color: '#BA7517',
+            title: `${deadHours.length} hours during operating time see zero orders`,
+            insight: `Dead windows: ${deadHours.slice(0, 4).map(h => h.hour === 0 ? '12am' : h.hour < 12 ? `${h.hour}am` : h.hour === 12 ? '12pm' : `${h.hour - 12}pm`).join(', ')}. This is unmonetized capacity — rent and base staff cost continue regardless.`,
+            action: `Launch a "Happy Hour" discount during the slowest 2-hour window, or partner with delivery aggregators (Swiggy/Zomato) specifically to fill these gaps with online orders.`,
+            impact: `Even modest volume during dead hours is near-pure margin since fixed costs are already covered by peak-hour revenue.`,
+          });
+        }
+      }
+ 
+      // ── 12. AGGREGATOR OPPORTUNITY (if not yet enabled) ──
+      if (!aggregatorConfig?.swiggy?.enabled && !aggregatorConfig?.zomato?.enabled && stats.revenue > 0) {
+        recs.push({
+          id: 'aggregator-opportunity', priority: 3, category: 'GROWTH OPPORTUNITY',
+          icon: <Globe size={16} />, color: '#2980B9',
+          title: `You're not yet live on Swiggy/Zomato — significant untapped demand`,
+          insight: `All ₹${stats.revenue.toLocaleString()} this month came from walk-ins, waitlist, and direct orders. Delivery aggregators typically add 20-40% incremental revenue for restaurants of your profile, especially filling dead hours.`,
+          action: `Enable aggregator integration from Settings → Aggregator Config. Start with your top 10 Star dishes only to control kitchen load during the rollout.`,
+          impact: `Even conservative aggregator adoption (15-20% of current revenue) would add ₹${Math.round(stats.revenue * 0.15).toLocaleString()}-₹${Math.round(stats.revenue * 0.2).toLocaleString()}/month.`,
+        });
+      }
+ 
+      // ── SORT BY PRIORITY (1=urgent first), then dedupe nothing, cap at reasonable count ──
+      recs.sort((a, b) => a.priority - b.priority);
+ 
+      const urgentCount = recs.filter(r => r.priority === 1).length;
+      const opportunityCount = recs.filter(r => r.priority <= 2).length;
+      const healthScore = Math.max(0, Math.min(100, 100 - (urgentCount * 15) - (recs.filter(r => r.priority === 2).length * 7)));
+ 
+      const categoryColors = {
+        'MENU': '#d3bfa2', 'PRICING': '#2980B9', 'COST CONTROL': '#f87171',
+        'OPERATIONS': '#BA7517', 'STAFF': '#8a704d', 'CUSTOMER EXPERIENCE': '#60a5fa',
+        'CUSTOMER RETENTION': '#4ade80', 'COMPLIANCE': '#f87171', 'FINANCIAL HEALTH': '#d3bfa2',
+        'GROWTH OPPORTUNITY': '#BA7517', 'EXTRAS': '#9ca3af'
+      };
+ 
       return (
         <>
-          {/* CURRENT SEASON */}
-          {current && (
-            <div style={{ background: '#0a0a0a', border: `1px solid ${current.color}33`, borderTop: `3px solid ${current.color}`, borderRadius: '20px', padding: '28px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                <div>
-                  <div style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>ACTIVE SEASON INTELLIGENCE</div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#fff' }}>{current.icon} {current.name}</h3>
-                  <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#666', lineHeight: '1.5', maxWidth: '500px' }}>{current.insight}</p>
-                </div>
-                <div style={{ textAlign: 'center', padding: '16px 20px', background: '#000', border: `1px solid ${current.color}44`, borderRadius: '12px' }}>
-                  <div style={{ fontSize: '1.6rem', fontWeight: '900', color: current.color }}>NOW</div>
-                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>ACTIVE SEASON</div>
-                </div>
-              </div>
-
-              {/* Suggested Offers */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '0.6rem', color: current.color, fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>💡 SUGGESTED OFFERS FOR THIS SEASON</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px' }}>
-                  {current.offers.map((offer, i) => (
-                    <div key={i} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#fff', fontWeight: '700' }}>🎯 {offer}</span>
-                      <button
-                        onClick={() => { setBroadcastMsg(`${current.icon} SPECIAL OFFER: ${offer}! Visit us today at ${tenantConfig?.name || tenantId}. Limited time only!`); showNotif('Offer copied to broadcast!'); }}
-                        style={{ background: 'transparent', border: `1px solid ${current.color}44`, color: current.color, padding: '4px 10px', borderRadius: '6px', fontSize: '0.58rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: '8px' }}
-                      >
-                        USE →
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Tips */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                {current.tips.map((tip, i) => (
-                  <span key={i} style={{ fontSize: '0.62rem', padding: '5px 12px', background: `${current.color}11`, border: `1px solid ${current.color}33`, borderRadius: '20px', color: current.color, fontWeight: '800' }}>
-                    ✓ {tip}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* UPCOMING SEASON */}
-          {upcoming && upcoming !== current && (
-            <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '16px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+          {/* ═══ HERO: BUSINESS HEALTH SCORE ═══ */}
+          <div style={{
+            background: 'linear-gradient(135deg, #0f0f0f 0%, #161616 100%)',
+            border: '1px solid rgba(211,191,162,0.15)',
+            borderRadius: '20px', padding: '32px', marginBottom: '24px',
+            position: 'relative', overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(211,191,162,0.06) 0%, transparent 70%)' }} />
+ 
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '24px', position: 'relative' }}>
               <div>
-                <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>NEXT SEASON — PREPARE NOW</div>
-                <h4 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: '900', color: '#fff' }}>{upcoming.icon} {upcoming.name}</h4>
-                <p style={{ margin: 0, fontSize: '0.7rem', color: '#555', maxWidth: '500px' }}>
-                  Start preparing menu changes and offers now. {daysToUpcoming} days until next season begins.
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Sparkles size={20} color="#d3bfa2" />
+                  <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px', textTransform: 'uppercase' }}>
+                    GROWTH COMMAND CENTER
+                  </span>
+                </div>
+                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px' }}>
+                  {urgentCount > 0
+                    ? `${urgentCount} thing${urgentCount > 1 ? 's' : ''} need your attention today`
+                    : opportunityCount > 0
+                    ? `${opportunityCount} growth opportunit${opportunityCount > 1 ? 'ies' : 'y'} identified`
+                    : `Operations are running smoothly`}
+                </h2>
+                <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: '#666', maxWidth: '520px', lineHeight: 1.6 }}>
+                  Analyzed across menu engineering, wastage, staffing, customer retention, waitlist conversion, and financial health for {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}.
                 </p>
               </div>
-              <div style={{ flexShrink: 0, textAlign: 'center', padding: '14px 20px', background: '#000', border: `1px solid ${upcoming.color}33`, borderRadius: '10px' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: '900', color: upcoming.color }}>{daysToUpcoming}d</div>
-                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginTop: '2px' }}>AWAY</div>
+ 
+              {/* Health score dial */}
+              <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <div style={{
+                  width: '110px', height: '110px', borderRadius: '50%',
+                  background: `conic-gradient(${healthScore >= 70 ? '#4ade80' : healthScore >= 40 ? '#BA7517' : '#c0392b'} ${healthScore * 3.6}deg, #1a1a1a 0deg)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
+                }}>
+                  <div style={{
+                    width: '88px', height: '88px', borderRadius: '50%', background: '#0f0f0f',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: '900', color: healthScore >= 70 ? '#4ade80' : healthScore >= 40 ? '#BA7517' : '#c0392b' }}>
+                      {healthScore}
+                    </span>
+                    <span style={{ fontSize: '0.48rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>HEALTH SCORE</span>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-
-          {/* GROWTH INTELLIGENCE */}
-          <div style={{ background: '#080808', border: `1px solid ${isGrowing ? 'rgba(74,222,128,0.2)' : 'rgba(192,57,43,0.2)'}`, borderRadius: '16px', padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <TrendingUp size={18} color={isGrowing ? '#4ade80' : '#c0392b'} />
-              <div>
-                <div style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '1.5px' }}>GROWTH INTELLIGENCE</div>
-                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
-                  Revenue is {isGrowing ? '▲ Growing' : '▼ Declining'} {growthPct !== null ? `${Math.abs(growthPct)}%` : ''} vs last month
-                </h4>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
-              {(isGrowing ? [
-                { title: 'MAINTAIN MOMENTUM', tip: 'Introduce a loyalty punch card — every 5th visit earns a free starter', icon: '⭐' },
-                { title: 'UPSELL OPPORTUNITY', tip: 'Train staff to suggest add-ons: "Would you like a cold drink with that?"', icon: '📈' },
-                { title: 'GOOGLE REVIEW PUSH', tip: 'Ask happy customers for a Google review. Each review boosts local discovery.', icon: '⭐' }
-              ] : [
-                { title: 'RECOVER WITH OFFERS', tip: 'Run a "2nd visit discount" campaign — send WhatsApp to your customer list', icon: '🎯' },
-                { title: 'MENU REVIEW', tip: 'Remove dogs from your menu (low sales + low margin) — simplify to cut costs', icon: '🍽️' },
-                { title: 'PEAK HOUR PUSH', tip: 'Add a happy hour offer during your slowest time slot to fill dead hours', icon: '⏰' }
-              ]).map((s, i) => (
-                <div key={i} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-                  <div style={{ fontSize: '1rem', marginBottom: '6px' }}>{s.icon}</div>
-                  <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900', marginBottom: '5px' }}>{s.title}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#888', lineHeight: '1.5' }}>{s.tip}</div>
+ 
+            {/* Quick stat strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginTop: '28px' }}>
+              {[
+                { l: 'URGENT ITEMS', v: urgentCount, c: urgentCount > 0 ? '#c0392b' : '#4ade80' },
+                { l: 'OPPORTUNITIES FOUND', v: recs.length, c: '#d3bfa2' },
+                { l: 'MONTHLY REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#fff' },
+                { l: 'REPEAT RATE', v: `${stats.loyaltyRate}%`, c: stats.loyaltyRate >= 35 ? '#4ade80' : '#BA7517' },
+              ].map(s => (
+                <div key={s.l} style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(211,191,162,0.06)' }}>
+                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '5px' }}>{s.l}</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '900', color: s.c }}>{s.v}</div>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* PROFITABILITY ALERT */}
-          {profitabilityData.length > 0 && (() => {
-            const dogs = profitabilityData.filter(d => (d.totalQtySold||0) < (profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length) && (d.marginPct||0) < 30);
-            const stars = profitabilityData.filter(d => (d.totalQtySold||0) >= (profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length) && (d.marginPct||0) >= 50);
-            if (!dogs.length && !stars.length) return null;
-            return (
-              <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '16px', padding: '20px' }}>
-                <div style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>📊 MENU PROFITABILITY ALERTS</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  {stars.length > 0 && (
-                    <div style={{ background: 'rgba(74,222,128,0.04)', border: '1px solid rgba(74,222,128,0.15)', borderRadius: '10px', padding: '14px' }}>
-                      <div style={{ fontSize: '0.62rem', color: '#4ade80', fontWeight: '900', marginBottom: '8px' }}>⭐ PROMOTE THESE (Star dishes)</div>
-                      {stars.slice(0,3).map((d,i) => <div key={i} style={{ fontSize: '0.72rem', color: '#ccc', padding: '3px 0' }}>→ {d.name} ({d.marginPct}% margin)</div>)}
-                    </div>
-                  )}
-                  {dogs.length > 0 && (
-                    <div style={{ background: 'rgba(192,57,43,0.04)', border: '1px solid rgba(192,57,43,0.15)', borderRadius: '10px', padding: '14px' }}>
-                      <div style={{ fontSize: '0.62rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px' }}>🐕 REVIEW THESE (Low margin + low sales)</div>
-                      {dogs.slice(0,3).map((d,i) => <div key={i} style={{ fontSize: '0.72rem', color: '#ccc', padding: '3px 0' }}>→ {d.name} ({d.marginPct}% margin)</div>)}
-                    </div>
-                  )}
-                </div>
+ 
+          {/* ═══ URGENT ACTIONS (priority 1) ═══ */}
+          {recs.filter(r => r.priority === 1).length > 0 && (
+            <>
+              <SectionHeader icon={<AlertOctagon size={16} />} title="Needs Action Today" subtitle="These directly affect revenue or compliance — address first" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
+                {recs.filter(r => r.priority === 1).map(rec => (
+                  <RecommendationCard key={rec.id} rec={rec} urgent />
+                ))}
               </div>
-            );
-          })()}
+            </>
+          )}
+ 
+          {/* ═══ HIGH-IMPACT OPPORTUNITIES (priority 2) ═══ */}
+          {recs.filter(r => r.priority === 2).length > 0 && (
+            <>
+              <SectionHeader icon={<TrendingUp size={16} />} title="High-Impact Opportunities" subtitle="Meaningful revenue or efficiency gains, act within the week" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+                {recs.filter(r => r.priority === 2).map(rec => (
+                  <RecommendationCard key={rec.id} rec={rec} />
+                ))}
+              </div>
+            </>
+          )}
+ 
+          {/* ═══ OPTIMIZATION SUGGESTIONS (priority 3) ═══ */}
+          {recs.filter(r => r.priority === 3).length > 0 && (
+            <>
+              <SectionHeader icon={<Lightbulb size={16} />} title="Optimization Suggestions" subtitle="Worth scheduling into your monthly review" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+                {recs.filter(r => r.priority === 3).map(rec => (
+                  <RecommendationCard key={rec.id} rec={rec} />
+                ))}
+              </div>
+            </>
+          )}
+ 
+          {/* ═══ STRATEGIC / LONGER-TERM (priority 4) ═══ */}
+          {recs.filter(r => r.priority === 4).length > 0 && (
+            <>
+              <SectionHeader icon={<Globe size={16} />} title="Strategic Considerations" subtitle="Bigger initiatives — plan over weeks, not days" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+                {recs.filter(r => r.priority === 4).map(rec => (
+                  <RecommendationCard key={rec.id} rec={rec} />
+                ))}
+              </div>
+            </>
+          )}
+ 
+          {/* ═══ WINS / WHAT'S WORKING (priority 5) ═══ */}
+          {recs.filter(r => r.priority === 5).length > 0 && (
+            <>
+              <SectionHeader icon={<Award size={16} />} title="What's Working Well" subtitle="Protect and double down on these strengths" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+                {recs.filter(r => r.priority === 5).map(rec => (
+                  <RecommendationCard key={rec.id} rec={rec} positive />
+                ))}
+              </div>
+            </>
+          )}
+ 
+          {recs.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', opacity: 0.4 }}>
+              <Sparkles size={32} color="#444" style={{ marginBottom: '12px' }} />
+              <p style={{ fontSize: '0.85rem', color: '#666' }}>Gathering more data to generate recommendations. Check back after a few days of operations.</p>
+            </div>
+          )}
+          
         </>
       );
     })()}
-
-    {/* ── BROADCAST SECTION (kept) ── */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-      <div style={styles.botCard}>
-        <div style={styles.cardHeaderSmall}><QrCode size={18}/> SYNC WHATSAPP DEVICE</div>
-        <div style={styles.qrContainer}>
-          {isBotReady ? <div style={{color:'#d3bfa2',fontWeight:'900'}}>BRIDGE ACTIVE</div> : qrCode ? <QRCodeSVG value={qrCode} size={180} bgColor="#000" fgColor="#d3bfa2"/> : <div className="spinner"/>}
-        </div>
-      </div>
-      <div style={styles.botCard}>
-        <div style={styles.cardHeaderSmall}><SendHorizontal size={18}/> BROADCAST CAMPAIGN</div>
-        <textarea
-          style={{...styles.input, height:'120px', resize:'none', fontSize:'0.8rem'}}
-          value={broadcastText}
-          onChange={e=>setBroadcastMsg(e.target.value)}
-          placeholder="Type your promo message here, or click USE → on any offer above to auto-fill..."
-        />
-        <button onClick={handleBroadcast} disabled={isBroadcasting}
-          style={{...styles.mainBtn, opacity: isBroadcasting ? 0.6 : 1, cursor: isBroadcasting ? 'not-allowed' : 'pointer'}}>
-          {isBroadcasting ? 'SENDING...' : '🚀 LAUNCH CAMPAIGN'}
-        </button>
-      </div>
-    </div>
   </motion.div>
 )}
           {/* ── INSIGHTS ── */}
