@@ -79,6 +79,7 @@ const KitchenView = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
 
+
   // Drawer state — used on both mobile and tablet
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileCardIndex, setMobileCardIndex] = useState(0);
@@ -135,10 +136,12 @@ const [itemFinalTimes, setItemFinalTimes] = useState({}); // { idx: seconds }
     window.speechSynthesis.speak(next);
   };
 
-  const speakOrder = (order) => {
+const speakOrder = (order) => {
     if (!('speechSynthesis' in window)) return;
-    let text = `Chef, new ticket for Table ${order.tableNumber}. `;
-    text += order.items.map(i => {
+    let text = (order.source === 'swiggy' || order.source === 'zomato')
+      ? `Chef, new ${order.source} order. `
+      : `Chef, new ticket for Table ${order.tableNumber}. `;
+      text += order.items.map(i => {
       const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? `${i.portion} ` : "";
       const type = (order.tableNumber?.toLowerCase() === 'takeaway' || i.isParcel) ? 'Parcel' : 'Dine in';
       let d = `${i.quantity} ${portion}${i.name} ${type}`;
@@ -291,13 +294,15 @@ socket.on("new_order", (newOrder) => {
     i => !i.isExtraItem && i.extraItemId == null
   );
   if (kitchenItems.length === 0) return;
- 
-  const cleanOrder = { ...newOrder, items: kitchenItems };
+  
+const cleanOrder = { ...newOrder, items: kitchenItems };
  
   setOrders(prev => [cleanOrder, ...prev]);
   setMobileCardIndex(0);
   const isTakeaway = cleanOrder.tableNumber?.toLowerCase() === 'takeaway';
-  if (isTakeaway) new Audio('https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3').play().catch(() => {});
+  const isAggregator = cleanOrder.source === 'swiggy' || cleanOrder.source === 'zomato';
+  if (isAggregator) new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+  else if (isTakeaway) new Audio('https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3').play().catch(() => {});
   else audioPlayer.current?.play().catch(() => {});
   speakOrder(cleanOrder);
 });
@@ -1865,8 +1870,11 @@ const KDSOrderCard = ({
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
   socketInstance, isNonVegMode, tenantOnlyVeg, isMobile, isTablet = false,itemFinalTimes, setItemFinalTimes
 }) => {
+  // ── aggregator order helper — local to this component, not the parent ──
+  const isAggregatorOrder = (o) => o.source === 'swiggy' || o.source === 'zomato';
+
   const [seconds, setSeconds] = useState(0);
-  
+
 const [itemStartTimes, setItemStartTimes] = useState({}); 
 // { idx: timestamp } — when chef tapped the item (started cooking)
 const [itemElapsed, setItemElapsed] = useState({});
@@ -1924,17 +1932,19 @@ const toggleItemCrossed = async (idx) => {
   // Card height: mobile fills full flex, tablet is slightly shorter than desktop
   const cardHeight = isMobile ? '100%' : isTablet ? 400 : 420;
 
+const aggBorderColor = order.source === 'zomato' ? '#cb202d' : order.source === 'swiggy' ? '#fc8019' : null;
   const cardStyle = {
     borderRadius: 18,
     padding: isMobile ? '16px' : isTablet ? '16px' : '20px',
     display: 'flex', flexDirection: 'column',
     height: cardHeight,
-    border: `1px solid ${isNewest ? '#d3bfa2' : '#1f222a'}`,
+    border: `1px solid ${aggBorderColor ? aggBorderColor + '55' : isNewest ? '#d3bfa2' : '#1f222a'}`,
     position: 'relative', overflow: 'hidden',
     background: '#13151a',
-    boxShadow: isNewest ? '0 0 30px rgba(211,191,162,0.06)' : '0 4px 15px rgba(0,0,0,0.2)',
+    boxShadow: aggBorderColor
+      ? `0 0 30px ${aggBorderColor}1a`
+      : isNewest ? '0 0 30px rgba(211,191,162,0.06)' : '0 4px 15px rgba(0,0,0,0.2)',
   };
-
   return (
     <motion.div
       layout
@@ -1942,20 +1952,31 @@ const toggleItemCrossed = async (idx) => {
       className={urgency === 'high' ? 'flash-card-pulse' : ''}
       style={cardStyle}>
 
-      {/* Urgency bar */}
+{/* Urgency bar — aggregator orders get their platform color regardless of urgency tier */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 4,
-        background: urgency === 'low' ? '#1f222a' : urgency === 'medium' ? 'linear-gradient(90deg,#1f222a,#d3bfa2)' : '#d3bfa2'
+        background: aggBorderColor
+          ? aggBorderColor
+          : urgency === 'low' ? '#1f222a' : urgency === 'medium' ? 'linear-gradient(90deg,#1f222a,#d3bfa2)' : '#d3bfa2'
       }} />
 
       {/* Card header */}
+{/* Card header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <h2 style={{
             fontSize: isMobile ? '1.8rem' : isTablet ? '1.8rem' : '2.1rem',
             margin: 0, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', lineHeight: 1
           }}>
-            {order.tableNumber?.toLowerCase() === 'takeaway'
+            {order.source === 'swiggy'
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fc8019' }}>
+                  <Package size={isMobile ? 20 : 22} /> SWIGGY
+                </span>
+              : order.source === 'zomato'
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cb202d' }}>
+                  <Package size={isMobile ? 20 : 22} /> ZOMATO
+                </span>
+              : order.tableNumber?.toLowerCase() === 'takeaway'
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
                   <Package size={isMobile ? 20 : 22} /> PARCEL
                 </span>
@@ -1964,6 +1985,11 @@ const toggleItemCrossed = async (idx) => {
           </h2>
           <span style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 800 }}>
             ID: {order._id.slice(-4).toUpperCase()}
+            {order.aggregatorOrderId && (
+              <span style={{ marginLeft: 6, color: order.source === 'zomato' ? '#cb202d' : '#fc8019' }}>
+                · #{order.aggregatorOrderId.toString().slice(-6).toUpperCase()}
+              </span>
+            )}
           </span>
         </div>
         <div style={{
@@ -1981,6 +2007,28 @@ const toggleItemCrossed = async (idx) => {
             {formatTime(seconds)}
           </span>
         </div>
+        {/* Aggregator platform tag + customer info strip */}
+      {isAggregatorOrder(order) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 10, padding: '7px 11px', borderRadius: 9,
+          background: order.source === 'zomato' ? 'rgba(203,32,45,0.08)' : 'rgba(252,128,25,0.08)',
+          border: `1px solid ${order.source === 'zomato' ? 'rgba(203,32,45,0.25)' : 'rgba(252,128,25,0.25)'}`
+        }}>
+          <span style={{
+            fontSize: '0.58rem', fontWeight: 900, letterSpacing: '1px',
+            color: order.source === 'zomato' ? '#cb202d' : '#fc8019',
+            display: 'flex', alignItems: 'center', gap: 5
+          }}>
+            <Zap size={11} /> {order.source.toUpperCase()} ORDER
+          </span>
+          {order.aggregatorCustomer?.name && (
+            <span style={{ fontSize: '0.62rem', color: '#8a8f9f', fontWeight: 700 }}>
+              {order.aggregatorCustomer.name}
+            </span>
+          )}
+        </div>
+      )}
       </div>
 
       {/* Item list */}
@@ -1999,15 +2047,17 @@ const toggleItemCrossed = async (idx) => {
 
     const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
     const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
-    const forceParcel =
+const forceParcel =
       order.tableNumber?.toLowerCase() === 'takeaway' ||
       order.tableNumber?.toLowerCase() === 'counter' ||
       order.source === 'counter-pickup' ||
       order.source === 'takeaway' ||
       order.source === 'waitlist' ||
+      order.source === 'swiggy' ||
+      order.source === 'zomato' ||
       item.isParcel === true;
-
-    if (!modeMatch) return (
+      
+      if (!modeMatch) return (
       <div key={idx} style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '9px 0', borderBottom: '1px solid #1c1f26',
@@ -2074,14 +2124,28 @@ const toggleItemCrossed = async (idx) => {
               </div>
             )}
             <div style={{
-              background: forceParcel ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)',
-              color: forceParcel ? '#d3bfa2' : '#a0a5b5',
+              background: order.source === 'zomato'
+                ? 'rgba(203,32,45,0.08)'
+                : order.source === 'swiggy'
+                ? 'rgba(252,128,25,0.08)'
+                : forceParcel ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)',
+              color: order.source === 'zomato'
+                ? '#cb202d'
+                : order.source === 'swiggy'
+                ? '#fc8019'
+                : forceParcel ? '#d3bfa2' : '#a0a5b5',
               fontSize: '0.5rem', padding: '2px 5px', borderRadius: 4,
-              border: `1px solid ${forceParcel ? 'rgba(211,191,162,0.12)' : '#232731'}`,
+              border: `1px solid ${
+                order.source === 'zomato' ? 'rgba(203,32,45,0.2)'
+                : order.source === 'swiggy' ? 'rgba(252,128,25,0.2)'
+                : forceParcel ? 'rgba(211,191,162,0.12)' : '#232731'
+              }`,
               fontWeight: 900, display: 'flex', alignItems: 'center', gap: 2
             }}>
-              {forceParcel ? <Package size={9} /> : <UtensilsCrossed size={9} />}
-              {forceParcel ? 'PARCEL' : 'DINE-IN'}
+              {(order.source === 'swiggy' || order.source === 'zomato')
+                ? <Zap size={9} />
+                : forceParcel ? <Package size={9} /> : <UtensilsCrossed size={9} />}
+              {order.source === 'zomato' ? 'ZOMATO' : order.source === 'swiggy' ? 'SWIGGY' : forceParcel ? 'PARCEL' : 'DINE-IN'}
             </div>
           </div>
           <span style={{
