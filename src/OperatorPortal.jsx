@@ -2986,15 +2986,15 @@ const renderMonthHeatmap = () => {
     <nav style={styles.navStack} className="p-nav-stack">
       {[
         {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
-        {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
         {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
-        {id:'extras',   label:'EXTRA ITEMS',   icon:<ShoppingBag size={18}/>},
-        {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
+        {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
+        // {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
         {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
+        {id:'intelligence',label:'INTELLIGENCE', icon:<MessageSquare size={18}/>},
         {id:'management',label:'MANAGEMENT',  icon:<ShieldCheck size={18}/>},
         {id:'inventory',label:'INVENTORY',    icon:<Layers size={18}/>},
+        {id:'extras',   label:'EXTRA ITEMS',   icon:<ShoppingBag size={18}/>},
         {id:'recipes',  label:'RECIPES',      icon:<ChefHat size={18}/>},
-        {id:'intelligence',label:'INTELLIGENCE', icon:<MessageSquare size={18}/>},
       ].map(tab => (
         <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
           style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
