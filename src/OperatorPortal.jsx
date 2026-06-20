@@ -1101,54 +1101,69 @@ const SectionHeader = ({ icon, title, subtitle }) => (
 
 const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
   <div style={{
-    background: urgent ? 'rgba(192,57,43,0.04)' : '#0f0f0f',
-    border: `1px solid ${urgent ? 'rgba(192,57,43,0.2)' : positive ? 'rgba(74,222,128,0.15)' : '#1a1a1a'}`,
+    background: urgent ? 'rgba(211,191,162,0.04)' : '#0d0d0d',
+    border: `1px solid ${urgent ? 'rgba(211,191,162,0.2)' : 'rgba(211,191,162,0.07)'}`,
     borderLeft: `3px solid ${rec.color}`,
-    borderRadius: '14px', padding: '20px',
+    borderRadius: '14px', padding: '18px 20px',
     display: 'flex', flexDirection: 'column', gap: '12px'
   }}>
+    {/* Top row: icon + category + title */}
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
       <div style={{
-        width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
-        background: `${rec.color}15`, border: `1px solid ${rec.color}30`,
+        width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0,
+        background: `${rec.color}15`, border: `1px solid ${rec.color}35`,
         display: 'flex', alignItems: 'center', justifyContent: 'center', color: rec.color
       }}>
         {rec.icon}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: '0.5rem', fontWeight: '900', color: rec.color, letterSpacing: '1.5px',
-          marginBottom: '5px', textTransform: 'uppercase'
+          fontSize: '0.5rem', fontWeight: '900', letterSpacing: '1.5px',
+          color: rec.color, textTransform: 'uppercase', marginBottom: '4px'
         }}>
           {rec.category}
         </div>
-        <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: '900', color: '#fff', lineHeight: 1.35 }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#fff', lineHeight: 1.35 }}>
           {rec.title}
-        </h4>
+        </div>
       </div>
     </div>
- 
-    <p style={{ margin: 0, fontSize: '0.74rem', color: '#888', lineHeight: 1.65 }}>
-      {rec.insight}
-    </p>
- 
-    <div style={{
-      background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
-      borderRadius: '10px', padding: '12px 14px'
-    }}>
-      <div style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-        <Lightbulb size={11} /> RECOMMENDED ACTION
+
+    {/* Stat highlight — the one number that matters */}
+    {rec.stat && (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '14px',
+        background: '#000', borderRadius: '10px', padding: '12px 14px',
+        border: '1px solid rgba(255,255,255,0.04)'
+      }}>
+        <div style={{
+          fontSize: '1.6rem', fontWeight: '900', color: rec.color,
+          fontFamily: 'monospace', lineHeight: 1, flexShrink: 0
+        }}>
+          {rec.stat.value}
+        </div>
+        <div style={{ fontSize: '0.6rem', color: '#666', fontWeight: '700', lineHeight: 1.4 }}>
+          {rec.stat.label}
+        </div>
+        {rec.stat.bar !== undefined && (
+          <div style={{ marginLeft: 'auto', width: '70px', flexShrink: 0 }}>
+            <div style={{ height: '5px', background: '#1a1a1a', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${Math.min(100, rec.stat.bar)}%`,
+                background: rec.color, borderRadius: '3px'
+              }} />
+            </div>
+          </div>
+        )}
       </div>
-      <p style={{ margin: 0, fontSize: '0.74rem', color: '#ccc', lineHeight: 1.6 }}>
-        {rec.action}
-      </p>
-    </div>
- 
-    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', paddingTop: '4px', borderTop: '1px solid #161616' }}>
-      <TrendingUp size={12} color="#4ade80" style={{ flexShrink: 0, marginTop: '6px' }} />
-      <p style={{ margin: '6px 0 0', fontSize: '0.68rem', color: '#4ade80', fontWeight: '700', lineHeight: 1.5 }}>
-        {rec.impact}
-      </p>
+    )}
+
+    {/* Action — one line, imperative */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <ArrowUp size={11} color={rec.color} style={{ transform: 'rotate(45deg)', flexShrink: 0 }} />
+      <span style={{ fontSize: '0.7rem', color: '#aaa', fontWeight: '600', lineHeight: 1.4 }}>
+        {rec.tag}
+      </span>
     </div>
   </div>
 );
@@ -2979,7 +2994,7 @@ const renderMonthHeatmap = () => {
         {id:'management',label:'MANAGEMENT',  icon:<ShieldCheck size={18}/>},
         {id:'inventory',label:'INVENTORY',    icon:<Layers size={18}/>},
         {id:'recipes',  label:'RECIPES',      icon:<ChefHat size={18}/>},
-        {id:'marketing',label:'CAMPAIGN HUB', icon:<MessageSquare size={18}/>},
+        {id:'intelligence',label:'INTELLIGENCE', icon:<MessageSquare size={18}/>},
       ].map(tab => (
         <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
           style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
@@ -5152,115 +5167,107 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             </motion.div>
           )}
 
-          {/* ── MARKETING ── */}
-{activeTab === 'marketing' && (
+          {/* ── INTELLIGENCE ── */}
+{activeTab === 'intelligence' && (
   <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
- 
+
     {(() => {
-      // ════════════════════════════════════════════════════════
-      // RECOMMENDATION ENGINE — pure computation, no side effects
-      // Reads from: profitabilityData, wastageAnalytics, staffEfficiency,
-      // waitlistAnalytics, trendsData, hourlyAnalytics, extraAnalytics,
-      // inventory, monthlySalaryRecords, categoryRankings, stats
-      // ════════════════════════════════════════════════════════
+      // ── Gold-only tone palette — no green/blue/red anywhere ──
+      const tone = {
+        urgent:   '#d3bfa2',
+        warning:  '#BA7517',
+        positive: '#8a9a7e',
+        info:     '#8a704d',
+        neutral:  '#6a6a6a',
+      };
+
       const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-      const recs = []; // { id, priority(1-5, 1=urgent), category, title, insight, action, impact, icon, color }
- 
-      // ── 1. MENU ENGINEERING: Puzzles need promotion ──
+      const recs = []; // { id, priority(1-5), category, icon, color, title, stat:{value,label,bar?}, tag }
+
+      // ── 1. MENU ENGINEERING ──
       if (profitabilityData.length > 0) {
         const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
         const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
         const puzzles = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) >= avgMargin && d.hasRecipe);
         const plowhorses = profitabilityData.filter(d => (d.totalQtySold || 0) >= avgSold && (d.marginPct || 0) < avgMargin);
         const dogs = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) < avgMargin && d.hasRecipe);
- 
+
         if (puzzles.length > 0) {
           const topPuzzle = puzzles.sort((a, b) => b.marginPct - a.marginPct)[0];
           recs.push({
             id: 'puzzle-promo', priority: 2, category: 'MENU',
-            icon: <Puzzle size={16} />, color: '#BA7517',
-            title: `Promote "${topPuzzle.name}" — your highest hidden-margin dish`,
-            insight: `${puzzles.length} dish${puzzles.length > 1 ? 'es' : ''} earn ${Math.round(avgMargin)}%+ margin but sell below average. "${topPuzzle.name}" alone carries a ${topPuzzle.marginPct}% margin yet only sold ${topPuzzle.totalQtySold} times.`,
-            action: `Feature it as "Chef's Recommendation" at table-side, on your QR menu banner, or bundle it with a popular Star dish. Train waitstaff to suggest it during the first 2 minutes of seating.`,
-            impact: `If sold ${Math.max(10, Math.round(avgSold - topPuzzle.totalQtySold))} more times this month at ₹${topPuzzle.profit}/serving profit, that's ₹${Math.round((avgSold - topPuzzle.totalQtySold) * topPuzzle.profit).toLocaleString()} extra profit.`,
+            icon: <Puzzle size={16} />, color: tone.warning,
+            title: `Promote "${topPuzzle.name}" — high margin, low orders`,
+            stat: { value: `${topPuzzle.marginPct}%`, label: `margin · sold only ${topPuzzle.totalQtySold}× this month`, bar: topPuzzle.marginPct },
+            tag: `Feature as Chef's Pick at table-side and QR menu`,
           });
         }
- 
+
         if (plowhorses.length > 0) {
           const topPlow = plowhorses.sort((a, b) => b.totalQtySold - a.totalQtySold)[0];
           const suggestedPrice = Math.ceil((topPlow.sellingPrice * 1.08) / 10) * 10;
           recs.push({
             id: 'plowhorse-price', priority: 2, category: 'PRICING',
-            icon: <Repeat size={16} />, color: '#2980B9',
-            title: `Reprice "${topPlow.name}" — high demand, thin margin`,
-            insight: `Sold ${topPlow.totalQtySold} times this period but margin is only ${topPlow.marginPct}% — well below your ${Math.round(avgMargin)}% average. Customers clearly want it; you're under-pricing it.`,
-            action: `Test a ₹${suggestedPrice - topPlow.sellingPrice} price increase (₹${topPlow.sellingPrice} → ₹${suggestedPrice}). At this volume, demand is unlikely to drop much.`,
-            impact: `At current volume, this alone adds ≈₹${((suggestedPrice - topPlow.sellingPrice) * topPlow.totalQtySold).toLocaleString()}/period without losing customers.`,
+            icon: <Repeat size={16} />, color: tone.info,
+            title: `"${topPlow.name}" is underpriced for its demand`,
+            stat: { value: `₹${topPlow.sellingPrice} → ₹${suggestedPrice}`, label: `${topPlow.totalQtySold} sold this period at only ${topPlow.marginPct}% margin` },
+            tag: `Raise price by ₹${suggestedPrice - topPlow.sellingPrice} — demand won't drop much`,
           });
         }
- 
+
         if (dogs.length >= 2) {
           recs.push({
             id: 'dogs-review', priority: 3, category: 'MENU',
-            icon: <XCircle size={16} />, color: '#c0392b',
-            title: `${dogs.length} menu items are dragging down your kitchen`,
-            insight: `These items have low sales AND low margin: ${dogs.slice(0, 3).map(d => d.name).join(', ')}${dogs.length > 3 ? ` +${dogs.length - 3} more` : ''}. They consume prep time, inventory shelf space, and menu real estate for almost no return.`,
-            action: `Remove or merge 2-3 of these with similar dishes. Simpler menus also reduce kitchen errors and speed up service.`,
-            impact: `Freeing kitchen capacity from low-yield dishes typically improves prep time on your bestsellers by 5-10%.`,
+            icon: <XCircle size={16} />, color: tone.urgent,
+            title: `${dogs.length} menu items underperform on both sales and margin`,
+            stat: { value: dogs.length, label: `low-sales, low-margin dishes: ${dogs.slice(0, 2).map(d => d.name).join(', ')}` },
+            tag: `Remove or merge 2-3 of these to simplify the menu`,
           });
         }
       }
- 
-      // ── 2. DEAD STOCK / ZERO SALES ──
+
+      // ── 2. DEAD STOCK ──
       if (profitabilityData.length > 0) {
         const dead = profitabilityData.filter(d => !d.totalQtySold || d.totalQtySold === 0);
         if (dead.length > 0) {
           recs.push({
             id: 'dead-menu', priority: 3, category: 'MENU',
-            icon: <Package size={16} />, color: '#c0392b',
+            icon: <Package size={16} />, color: tone.urgent,
             title: `${dead.length} dish${dead.length > 1 ? 'es' : ''} sold zero units this period`,
-            insight: `"${dead[0].name}"${dead.length > 1 ? ` and ${dead.length - 1} other${dead.length > 2 ? 's' : ''}` : ''} generated no sales at all. These could be poorly placed on the menu, mispriced, or simply unwanted.`,
-            action: `Either reposition them higher on the menu (top-right corner gets the most eye traffic), run a one-week promo to test demand, or retire them entirely.`,
-            impact: `Removing dead weight tightens your menu, reduces ingredient waste risk, and lets staff master fewer recipes better.`,
+            stat: { value: 0, label: `units sold — e.g. "${dead[0].name}"` },
+            tag: `Reposition on menu, run a trial promo, or retire`,
           });
         }
       }
- 
+
       const deadExtras = (extraAnalytics?.items || []).filter(i => !i.totalSold || i.totalSold === 0);
       if (deadExtras.length > 0) {
         recs.push({
           id: 'dead-extras', priority: 4, category: 'EXTRAS',
-          icon: <ShoppingBag size={16} />, color: '#9ca3af',
-          title: `${deadExtras.length} extra item${deadExtras.length > 1 ? 's are' : ' is'} sitting unsold`,
-          insight: `${deadExtras.slice(0, 3).map(i => i.name).join(', ')} — zero sales this period despite being on your counter menu.`,
-          action: `Bundle these with popular dishes ("Order a Biryani, get 10% off a Cold Drink") or move them to a more visible spot in the customer-facing menu.`,
-          impact: `Converting dead stock into bundled upsells typically recovers 30-50% of locked-up inventory value.`,
+          icon: <ShoppingBag size={16} />, color: tone.neutral,
+          title: `${deadExtras.length} extra item${deadExtras.length > 1 ? 's' : ''} sitting unsold`,
+          stat: { value: deadExtras.length, label: deadExtras.slice(0, 3).map(i => i.name).join(', ') },
+          tag: `Bundle with popular dishes for a small discount`,
         });
       }
- 
+
       // ── 3. WASTAGE INTELLIGENCE ──
       if (wastageAnalytics && (wastageAnalytics.totalCost || 0) > 0) {
         const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
         const wastagePct = totalRevAllDishes > 0 ? (wastageAnalytics.totalCost / totalRevAllDishes) * 100 : 0;
         const topReason = Object.entries(wastageAnalytics.byReason || {}).sort((a, b) => b[1].cost - a[1].cost)[0];
-        const topWastedItem = (wastageAnalytics.topWasted || [])[0];
- 
+
         if (wastagePct > 2) {
           recs.push({
             id: 'wastage-high', priority: 1, category: 'COST CONTROL',
-            icon: <Trash2 size={16} />, color: '#f87171',
-            title: `Wastage is eating ${wastagePct.toFixed(1)}% of revenue — above the 2% healthy threshold`,
-            insight: `₹${wastageAnalytics.totalCost.toLocaleString()} lost this month across ${wastageAnalytics.totalEntries} entries. ${topReason ? `Top cause: "${topReason[0]}" (₹${topReason[1].cost.toFixed(0)}).` : ''} ${topWastedItem ? ` Most-wasted ingredient: ${topWastedItem.name}.` : ''}`,
-            action: topReason?.[0] === 'Spoiled / Expired'
-              ? `Review your purchase order quantities for ${topWastedItem?.name || 'high-waste items'} — you may be over-ordering relative to actual usage. Consider smaller, more frequent deliveries.`
-              : topReason?.[0] === 'Overcooked'
-              ? `This points to a kitchen process issue — review timer discipline during peak hours, or add a prep checklist for ${topWastedItem?.name || 'the affected dish'}.`
-              : `Investigate the "${topReason?.[0] || 'top'}" pattern specifically — it's your single biggest controllable cost leak.`,
-            impact: `Cutting wastage to 1% of revenue would recover ≈₹${Math.round(wastageAnalytics.totalCost / 2).toLocaleString()}/month straight to your bottom line.`,
+            icon: <Trash2 size={16} />, color: tone.urgent,
+            title: `Wastage is above the healthy 2% threshold`,
+            stat: { value: `${wastagePct.toFixed(1)}%`, label: `of revenue · ₹${wastageAnalytics.totalCost.toLocaleString()} lost — mainly "${topReason?.[0] || 'various causes'}"`, bar: Math.min(100, wastagePct * 20) },
+            tag: `Review purchase quantities for the top-wasted item`,
           });
         }
       }
- 
+
       // ── 4. INVENTORY HEALTH ──
       if (inventory.length > 0) {
         const lowStock = inventory.filter(i => i.currentStock <= i.minThreshold && i.currentStock > 0);
@@ -5268,128 +5275,113 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         if (depleted.length > 0) {
           recs.push({
             id: 'stock-depleted', priority: 1, category: 'OPERATIONS',
-            icon: <AlertTriangle size={16} />, color: '#c0392b',
-            title: `${depleted.length} ingredient${depleted.length > 1 ? 's are' : ' is'} fully out of stock right now`,
-            insight: `${depleted.slice(0, 3).map(i => i.itemName).join(', ')}${depleted.length > 3 ? ` +${depleted.length - 3} more` : ''} — any dish depending on these can't be served, risking lost sales and customer disappointment.`,
-            action: `Restock immediately or temporarily 86 the affected dishes from the customer menu to avoid order cancellations mid-service.`,
-            impact: `Each stockout typically costs 2-5 lost orders per service before staff notice and route around it.`,
+            icon: <AlertTriangle size={16} />, color: tone.urgent,
+            title: `${depleted.length} ingredient${depleted.length > 1 ? 's' : ''} fully out of stock`,
+            stat: { value: depleted.length, label: depleted.slice(0, 3).map(i => i.itemName).join(', ') },
+            tag: `Restock now or hide affected dishes from menu`,
           });
         } else if (lowStock.length > 2) {
           recs.push({
             id: 'stock-low', priority: 2, category: 'OPERATIONS',
-            icon: <Package size={16} />, color: '#BA7517',
-            title: `${lowStock.length} ingredients are running low`,
-            insight: `Below minimum threshold: ${lowStock.slice(0, 3).map(i => i.itemName).join(', ')}${lowStock.length > 3 ? ` +${lowStock.length - 3} more` : ''}.`,
-            action: `Place restock orders today — running out mid-service forces 86'ing popular dishes during peak hours, the worst possible time.`,
-            impact: `Proactive restocking protects against weekend/peak-hour stockouts when demand (and lost-sale cost) is highest.`,
+            icon: <Package size={16} />, color: tone.warning,
+            title: `${lowStock.length} ingredients running low`,
+            stat: { value: lowStock.length, label: lowStock.slice(0, 3).map(i => i.itemName).join(', ') },
+            tag: `Place restock orders today to avoid peak-hour 86s`,
           });
         }
       }
- 
+
       // ── 5. STAFF / LABOR EFFICIENCY ──
       if (staffEfficiency.length > 0) {
         const lowAttendance = staffEfficiency.filter(s => s.daysPresent < 15 && s.role !== 'Manager');
-        const monthlyPayroll = staffEfficiency.reduce((a, s) => {
-          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-          return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
-        }, 0);
         const waiterCount = staffEfficiency.filter(s => s.role === 'Waiter').length;
         const avgRevPerWaiterHour = waiterCount > 0
           ? staffEfficiency.filter(s => s.role === 'Waiter').reduce((a, s) => a + (s.revenuePerHour || 0), 0) / waiterCount
           : 0;
- 
+
         if (lowAttendance.length > 0) {
           recs.push({
             id: 'low-attendance', priority: 3, category: 'STAFF',
-            icon: <Users size={16} />, color: '#BA7517',
-            title: `${lowAttendance.length} staff member${lowAttendance.length > 1 ? 's have' : ' has'} unusually low attendance this month`,
-            insight: `${lowAttendance.slice(0, 2).map(s => `${s.name} (${s.daysPresent} days)`).join(', ')} — below the typical 20-26 working days.`,
-            action: `Check in with these team members. Frequent absences may signal scheduling conflicts, burnout, or a hiring need for backup coverage.`,
-            impact: `Understaffed shifts directly correlate with slower table turns and lower per-table revenue during peak hours.`,
+            icon: <Users size={16} />, color: tone.warning,
+            title: `${lowAttendance.length} staff member${lowAttendance.length > 1 ? 's' : ''} with low attendance`,
+            stat: { value: lowAttendance[0]?.daysPresent || 0, label: `days present — ${lowAttendance.slice(0, 2).map(s => s.name).join(', ')}` },
+            tag: `Check in — may signal scheduling or burnout issues`,
           });
         }
- 
+
         if (hourlyAnalytics.hourly.length > 0 && waiterCount > 0) {
           const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
+          const peakLabel = peak.hour === 0 ? '12am' : peak.hour < 12 ? `${peak.hour}am` : peak.hour === 12 ? '12pm' : `${peak.hour - 12}pm`;
           recs.push({
             id: 'staff-scheduling', priority: 3, category: 'STAFF',
             icon: <Clock size={16} />, color: '#d3bfa2',
-            title: `Align staff shifts with your ${peak.hour === 0 ? '12am' : peak.hour < 12 ? `${peak.hour}am` : peak.hour === 12 ? '12pm' : `${peak.hour - 12}pm`} peak hour`,
-            insight: `Your busiest hour handles ${peak.orderCount} orders, but staffing isn't necessarily concentrated there. With ${waiterCount} waiters averaging ₹${Math.round(avgRevPerWaiterHour)}/hour in attributed revenue, the right scheduling multiplies this.`,
-            action: `Schedule your most experienced waitstaff during this window. Consider a 30-min staggered shift overlap before peak hour to pre-stage tables.`,
-            impact: `Optimized peak-hour staffing typically improves table turn time by 10-15%, directly increasing covers served.`,
+            title: `Align shifts with your ${peakLabel} peak hour`,
+            stat: { value: peak.orderCount, label: `orders at peak · ₹${Math.round(avgRevPerWaiterHour)}/hr avg per waiter` },
+            tag: `Schedule senior staff during this window`,
           });
         }
       }
- 
+
       // ── 6. WAITLIST / COUNTER CONVERSION ──
       if (waitlistAnalytics?.month) {
         const m = waitlistAnalytics.month;
         const total = m.total || 0;
         const walked = Math.max(0, total - (m.seated || 0) - (m.pickupSettled || 0));
         const noShowPct = total > 0 ? Math.round((walked / total) * 100) : 0;
- 
+
         if (noShowPct > 15 && total >= 10) {
           recs.push({
             id: 'noshow-high', priority: 2, category: 'CUSTOMER EXPERIENCE',
-            icon: <UserCheck size={16} />, color: '#E24B4A',
-            title: `${noShowPct}% of waitlisted guests never came back — that's ${walked} lost groups`,
-            insight: `Average wait time is ${m.avgWaitMin} minutes. ${m.avgWaitMin > 20 ? 'This is likely the primary driver — guests give up and leave.' : 'Even with a reasonable wait, conversion is leaking somewhere in the notification or table-assignment flow.'}`,
-            action: m.avgWaitMin > 20
-              ? `Reduce average wait by adding express/2-top tables for smaller parties, or pre-bus tables faster. Even a 5-minute reduction in wait significantly cuts walk-aways.`
-              : `Verify push notifications are reliably reaching guests (currently ${m.notifDeliveredPct}% delivery rate). A missed "your table is ready" alert is a silent revenue leak.`,
-            impact: `Converting even half of these walk-aways back to seated guests = ${Math.round(walked / 2)} more covers/month at your avg order value of ₹${stats.avg}.`,
+            icon: <UserCheck size={16} />, color: tone.urgent,
+            title: `${walked} waitlisted guests never came back`,
+            stat: { value: `${noShowPct}%`, label: `walk-away rate · avg wait ${m.avgWaitMin} min`, bar: noShowPct },
+            tag: m.avgWaitMin > 20 ? `Reduce wait — add small tables for 2-tops` : `Check push notification delivery (${m.notifDeliveredPct}%)`,
           });
         }
- 
+
         if (m.conversionPct >= 70) {
           recs.push({
             id: 'conversion-good', priority: 5, category: 'CUSTOMER EXPERIENCE',
-            icon: <ClipboardCheck size={16} />, color: '#4ade80',
-            title: `Strong ${m.conversionPct}% waitlist conversion — keep this engine running`,
-            insight: `Your counter/waitlist system is converting well above industry norms (typically 50-60%). This is a real competitive advantage.`,
-            action: `Consider promoting "Join our digital waitlist — no more standing in line" on your storefront and social media to drive more walk-in volume confidently.`,
-            impact: `A reliable waitlist system is a strong word-of-mouth driver — happy waitlist guests become repeat customers.`,
+            icon: <ClipboardCheck size={16} />, color: tone.positive,
+            title: `Strong waitlist conversion — keep it running`,
+            stat: { value: `${m.conversionPct}%`, label: `convert to seated, above industry norm`, bar: m.conversionPct },
+            tag: `Promote "no line, join digitally" on social media`,
           });
         }
- 
+
         if ((m.preOrderRevenue || 0) > 0 && total > 0) {
-          const preOrderAdoption = Math.round(((m.preOrderRevenue > 0 ? 1 : 0) * 100));
           recs.push({
             id: 'preorder-push', priority: 4, category: 'CUSTOMER EXPERIENCE',
-            icon: <Hourglass size={16} />, color: '#60a5fa',
-            title: `Pre-orders generated ₹${m.preOrderRevenue.toLocaleString()} — push this harder`,
-            insight: `Guests who pre-order while waiting get faster service and you get kitchen lead-time. This is currently underused relative to total waitlist volume.`,
-            action: `Make pre-ordering the default prompt when a guest joins the waitlist, with a small incentive (5% off, free starter) for ordering ahead.`,
-            impact: `Higher pre-order adoption directly reduces table dwell time, increasing daily table turns.`,
+            icon: <Hourglass size={16} />, color: tone.info,
+            title: `Pre-orders are working — push harder`,
+            stat: { value: `₹${m.preOrderRevenue.toLocaleString()}`, label: `generated from waitlist pre-orders` },
+            tag: `Make pre-order the default prompt when joining waitlist`,
           });
         }
       }
- 
+
       // ── 7. CHURN / RETENTION ──
       if (trendsData?.customers?.total > 0) {
         const { total, repeat, repeatPct, avgVisits } = trendsData.customers;
         if (repeatPct < 30 && total >= 20) {
           recs.push({
             id: 'low-retention', priority: 2, category: 'CUSTOMER RETENTION',
-            icon: <User size={16} />, color: '#BA7517',
-            title: `Only ${repeatPct}% of customers return — most guests are one-time visitors`,
-            insight: `Of ${total} unique customers, just ${repeat} have come back. Average visits per customer is ${avgVisits}x. Industry benchmark for healthy restaurants is 35-45% repeat rate.`,
-            action: `Launch a simple loyalty nudge: collect phone numbers consistently at billing (you're already doing this for some), and send a personalized "we miss you" or birthday offer via SMS/WhatsApp 30 days after a customer's last visit.`,
-            impact: `Moving repeat rate from ${repeatPct}% to 35% on your current customer base could add ${Math.round(total * (0.35 - repeatPct / 100))} more repeat visits — pure incremental revenue, since acquiring them already happened.`,
+            icon: <User size={16} />, color: tone.warning,
+            title: `Most guests visit only once`,
+            stat: { value: `${repeatPct}%`, label: `repeat rate · ${repeat} of ${total} customers return`, bar: repeatPct },
+            tag: `Send a "we miss you" SMS 30 days after last visit`,
           });
         } else if (repeatPct >= 40) {
           recs.push({
             id: 'good-retention', priority: 5, category: 'CUSTOMER RETENTION',
-            icon: <Award size={16} />, color: '#4ade80',
-            title: `${repeatPct}% repeat rate is excellent — formalize this into a loyalty program`,
-            insight: `${repeat} of ${total} customers return on average ${avgVisits}x. This is strong organic loyalty you're not yet capturing systematically.`,
-            action: `Introduce a simple punch-card or points system ("Every 5th visit, 10% off") to make the loyalty explicit and trackable — this typically increases visit frequency further.`,
-            impact: `Formalized loyalty programs typically lift visit frequency by 15-20% among already-loyal customers.`,
+            icon: <Award size={16} />, color: tone.positive,
+            title: `Excellent repeat rate — formalize it`,
+            stat: { value: `${repeatPct}%`, label: `repeat customers, avg ${avgVisits} visits each`, bar: repeatPct },
+            tag: `Add a simple punch-card loyalty system`,
           });
         }
       }
- 
+
       // ── 8. PAYMENT MODE INSIGHT ──
       if (analytics.length > 0) {
         const totalC = analytics.reduce((a, b) => a + (b.cash || 0), 0);
@@ -5401,16 +5393,15 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
           if (digitalPct < 40) {
             recs.push({
               id: 'low-digital', priority: 4, category: 'OPERATIONS',
-              icon: <Smartphone size={16} />, color: '#2980B9',
-              title: `Only ${digitalPct}% of payments are digital — cash-heavy operations carry risk`,
-              insight: `Cash-dominant revenue makes reconciliation harder, increases handling risk, and slows down billing during peak hours.`,
-              action: `Place visible UPI QR codes at every table and the counter. Train staff to default-offer UPI first rather than asking "cash or card?"`,
-              impact: `Digital payments typically reduce settlement time by 20-30 seconds per table — meaningful at volume during peak hours.`,
+              icon: <Smartphone size={16} />, color: tone.info,
+              title: `Cash-heavy payments slow down billing`,
+              stat: { value: `${digitalPct}%`, label: `of payments are digital`, bar: digitalPct },
+              tag: `Place UPI QR codes at every table`,
             });
           }
         }
       }
- 
+
       // ── 9. GST / COMPLIANCE URGENCY ──
       if (stats.revenue > 0) {
         const now = new Date();
@@ -5419,15 +5410,14 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         if (daysToGstr1 <= 5 && daysToGstr1 > 0) {
           recs.push({
             id: 'gst-deadline', priority: 1, category: 'COMPLIANCE',
-            icon: <ReceiptText size={16} />, color: '#f87171',
-            title: `GSTR-1 filing due in ${daysToGstr1} day${daysToGstr1 > 1 ? 's' : ''}`,
-            insight: `Based on ₹${stats.revenue.toLocaleString()} revenue this month, your estimated GST liability is ₹${Math.round(stats.revenue * 0.05 / 1.05).toLocaleString()}.`,
-            action: `Export your GST Invoice Register from the Insights tab and forward to your CA, or file directly via the GST portal before the deadline to avoid late fees.`,
-            impact: `Late GSTR-1 filing carries penalties starting at ₹50/day — avoidable with a 10-minute export.`,
+            icon: <ReceiptText size={16} />, color: tone.urgent,
+            title: `GSTR-1 filing due soon`,
+            stat: { value: `${daysToGstr1}d`, label: `left · est. liability ₹${Math.round(stats.revenue * 0.05 / 1.05).toLocaleString()}` },
+            tag: `Export GST Invoice Register and send to your CA`,
           });
         }
       }
- 
+
       // ── 10. BREAK-EVEN STATUS ──
       if (profitabilityData.length > 0 && staffEfficiency.length > 0 && currentMonthAnalytics.length > 0) {
         const monthlyPayroll = staffEfficiency.reduce((a, s) => {
@@ -5443,72 +5433,894 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
         const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
         const progressPct = breakEvenRevenue > 0 ? Math.round((totalRevenue / breakEvenRevenue) * 100) : 0;
- 
+
         if (isCurrentMonth && progressPct < 100 && today.getDate() > daysInMonth * 0.6) {
-          const remaining = breakEvenRevenue - totalRevenue;
           const daysLeft = daysInMonth - today.getDate();
           recs.push({
             id: 'breakeven-risk', priority: 1, category: 'FINANCIAL HEALTH',
-            icon: <Activity size={16} />, color: '#f87171',
-            title: `Behind break-even with ${daysLeft} days left this month`,
-            insight: `You're at ${progressPct}% of the ₹${Math.round(breakEvenRevenue).toLocaleString()} needed to cover payroll this month, with ₹${Math.round(remaining).toLocaleString()} still to go.`,
-            action: `Run a focused push for the remaining days: a limited-time combo offer, a social media post about your Star dishes, or extended hours on your typically busiest day (${hourlyAnalytics.dayOfWeek.length > 0 ? hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]).day : 'weekend'}).`,
-            impact: `Closing this gap protects your monthly profitability — every day of delay makes the daily revenue target steeper.`,
+            icon: <Activity size={16} />, color: tone.urgent,
+            title: `Behind break-even with ${daysLeft} days left`,
+            stat: { value: `${progressPct}%`, label: `of ₹${Math.round(breakEvenRevenue).toLocaleString()} payroll target reached`, bar: progressPct },
+            tag: `Run a limited-time offer to close the gap`,
           });
         } else if (isCurrentMonth && progressPct >= 100) {
           recs.push({
             id: 'breakeven-achieved', priority: 5, category: 'FINANCIAL HEALTH',
-            icon: <ClipboardCheck size={16} />, color: '#4ade80',
-            title: `Break-even achieved — everything from here is profit`,
-            insight: `You've covered this month's payroll with ${daysInMonth - today.getDate()} days still remaining.`,
-            action: `Consider reinvesting incremental profit into marketing (social ads, influencer collabs) or staff bonuses to maintain morale during the strong run.`,
-            impact: `Reinvesting surplus during strong months compounds growth faster than letting it sit idle.`,
+            icon: <ClipboardCheck size={16} />, color: tone.positive,
+            title: `Break-even achieved this month`,
+            stat: { value: `${progressPct}%`, label: `of payroll covered, ${daysInMonth - today.getDate()} days left`, bar: Math.min(100, progressPct) },
+            tag: `Reinvest surplus into marketing or staff bonuses`,
           });
         }
       }
- 
-      // ── 11. PEAK HOUR / DEAD HOUR OPTIMIZATION ──
+
+      // ── 11. PEAK / DEAD HOUR OPTIMIZATION ──
       if (hourlyAnalytics.hourly.length > 0) {
         const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
         const deadHours = operatingHours.filter(h => h.orderCount === 0);
         if (deadHours.length >= 4) {
           recs.push({
             id: 'dead-hours', priority: 3, category: 'GROWTH OPPORTUNITY',
-            icon: <Zap size={16} />, color: '#BA7517',
-            title: `${deadHours.length} hours during operating time see zero orders`,
-            insight: `Dead windows: ${deadHours.slice(0, 4).map(h => h.hour === 0 ? '12am' : h.hour < 12 ? `${h.hour}am` : h.hour === 12 ? '12pm' : `${h.hour - 12}pm`).join(', ')}. This is unmonetized capacity — rent and base staff cost continue regardless.`,
-            action: `Launch a "Happy Hour" discount during the slowest 2-hour window, or partner with delivery aggregators (Swiggy/Zomato) specifically to fill these gaps with online orders.`,
-            impact: `Even modest volume during dead hours is near-pure margin since fixed costs are already covered by peak-hour revenue.`,
+            icon: <Zap size={16} />, color: tone.warning,
+            title: `${deadHours.length} operating hours see zero orders`,
+            stat: { value: deadHours.length, label: `dead hours during open time` },
+            tag: `Try a Happy Hour discount during the slowest window`,
           });
         }
       }
- 
-      // ── 12. AGGREGATOR OPPORTUNITY (if not yet enabled) ──
+
+      // ── 12. AGGREGATOR OPPORTUNITY ──
       if (!aggregatorConfig?.swiggy?.enabled && !aggregatorConfig?.zomato?.enabled && stats.revenue > 0) {
         recs.push({
           id: 'aggregator-opportunity', priority: 3, category: 'GROWTH OPPORTUNITY',
-          icon: <Globe size={16} />, color: '#2980B9',
-          title: `You're not yet live on Swiggy/Zomato — significant untapped demand`,
-          insight: `All ₹${stats.revenue.toLocaleString()} this month came from walk-ins, waitlist, and direct orders. Delivery aggregators typically add 20-40% incremental revenue for restaurants of your profile, especially filling dead hours.`,
-          action: `Enable aggregator integration from Settings → Aggregator Config. Start with your top 10 Star dishes only to control kitchen load during the rollout.`,
-          impact: `Even conservative aggregator adoption (15-20% of current revenue) would add ₹${Math.round(stats.revenue * 0.15).toLocaleString()}-₹${Math.round(stats.revenue * 0.2).toLocaleString()}/month.`,
+          icon: <Globe size={16} />, color: tone.info,
+          title: `Not yet live on Swiggy or Zomato`,
+          stat: { value: `₹${Math.round(stats.revenue * 0.15).toLocaleString()}+`, label: `potential added revenue from aggregators` },
+          tag: `Enable from Settings → Aggregator Config`,
         });
       }
- 
-      // ── SORT BY PRIORITY (1=urgent first), then dedupe nothing, cap at reasonable count ──
+
+      // ── 13. REVENUE TREND ──
+      if (stats.avg > 0 && trendsData?.revenue) {
+        const { growthPct } = trendsData.revenue;
+        if (growthPct !== null && Number(growthPct) < -5) {
+          recs.push({
+            id: 'revenue-decline', priority: 1, category: 'FINANCIAL HEALTH',
+            icon: <TrendingDown size={16} />, color: tone.urgent,
+            title: `Revenue is down vs last month`,
+            stat: { value: `${growthPct}%`, label: `change from ${trendsData.revenue.previousMonthLabel}` },
+            tag: `Review what changed — pricing, footfall, or menu`,
+          });
+        }
+      }
+
+      // ── 14. SLOW TABLE TURN ──
+      if (trendsData?.tables?.slowest && trendsData.tables.overallAvgDwell > 0) {
+        const slow = trendsData.tables.slowest;
+        if (slow.avgDwell > trendsData.tables.overallAvgDwell * 1.4) {
+          recs.push({
+            id: 'slow-table', priority: 3, category: 'OPERATIONS',
+            icon: <Clock size={16} />, color: tone.warning,
+            title: `Table ${slow.table} holds guests far longer than average`,
+            stat: { value: `${slow.avgDwell}m`, label: `avg dwell vs ${trendsData.tables.overallAvgDwell}m restaurant average` },
+            tag: `Check seating comfort or service speed at this table`,
+          });
+        }
+      }
+
+      // ── 15. SLOW KITCHEN CATEGORY ──
+      if (prepTimeData?.byCategory?.length > 0) {
+        const slowest = prepTimeData.byCategory[0];
+        if (slowest.avgPrep > 18) {
+          recs.push({
+            id: 'slow-prep', priority: 2, category: 'OPERATIONS',
+            icon: <ChefHat size={16} />, color: tone.warning,
+            title: `"${slowest.category}" items are slow to prepare`,
+            stat: { value: `${slowest.avgPrep}m`, label: `avg prep time across ${slowest.count} orders`, bar: Math.min(100, slowest.avgPrep * 3) },
+            tag: `Pre-prep components ahead of peak hours`,
+          });
+        }
+      }
+
+      // ── 16. EXTRA ITEMS LOW MARGIN ──
+      if (extraAnalytics?.items?.length > 0) {
+        const lowMarginExtras = extraAnalytics.items.filter(i => i.totalSold > 5 && i.margin < 25);
+        if (lowMarginExtras.length > 0) {
+          const worst = lowMarginExtras.sort((a, b) => a.margin - b.margin)[0];
+          recs.push({
+            id: 'extras-margin', priority: 4, category: 'EXTRAS',
+            icon: <Percent size={16} />, color: tone.info,
+            title: `"${worst.name}" sells well but earns little`,
+            stat: { value: `${worst.margin}%`, label: `margin despite ${worst.totalSold} units sold`, bar: worst.margin },
+            tag: `Renegotiate supplier cost or raise the price slightly`,
+          });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+// ADD THESE NEW RECOMMENDATION BLOCKS — insert after recommendation #16
+// (extra items low margin) and BEFORE the "// ── SORT BY PRIORITY ──" line.
+// All use the same `recs.push()` pattern, `tone` palette, and existing
+// data sources already loaded in the component.
+// ══════════════════════════════════════════════════════════════════════
+
+      // ── 17. CATEGORY PERFORMANCE GAP ──
+      if (Object.keys(categoryRankings).length > 1) {
+        const catEntries = Object.entries(categoryRankings)
+          .map(([key, m]) => ({ key, ...m }))
+          .filter(c => c.totalSoldInCategory > 0)
+          .sort((a, b) => b.totalSoldInCategory - a.totalSoldInCategory);
+        if (catEntries.length >= 2) {
+          const top = catEntries[0];
+          const bottom = catEntries[catEntries.length - 1];
+          if (top.totalSoldInCategory > bottom.totalSoldInCategory * 4) {
+            recs.push({
+              id: 'category-imbalance', priority: 3, category: 'MENU',
+              icon: <Layers size={16} />, color: tone.warning,
+              title: `"${(bottom.category || bottom.key).replace('cat_', '').replace(/_/g, ' ')}" category is barely selling`,
+              stat: { value: bottom.totalSoldInCategory, label: `units vs ${top.totalSoldInCategory} in "${(top.category || top.key).replace('cat_', '').replace(/_/g, ' ')}"` },
+              tag: `Cross-promote weak category items as combos with bestsellers`,
+            });
+          }
+        }
+      }
+
+      // ── 18. WEEKEND VS WEEKDAY IMBALANCE ──
+      if (hourlyAnalytics.dayOfWeek.length > 0) {
+        const weekendDays = hourlyAnalytics.dayOfWeek.filter(d => ['Sat', 'Sun'].includes(d.day));
+        const weekdayDays = hourlyAnalytics.dayOfWeek.filter(d => !['Sat', 'Sun'].includes(d.day));
+        const weekendAvg = weekendDays.length > 0 ? weekendDays.reduce((a, b) => a + b.revenue, 0) / weekendDays.length : 0;
+        const weekdayAvg = weekdayDays.length > 0 ? weekdayDays.reduce((a, b) => a + b.revenue, 0) / weekdayDays.length : 0;
+        if (weekdayAvg > 0 && weekendAvg > 0 && weekdayAvg < weekendAvg * 0.5) {
+          recs.push({
+            id: 'weekday-slump', priority: 2, category: 'GROWTH OPPORTUNITY',
+            icon: <Calendar size={16} />, color: tone.warning,
+            title: `Weekdays earn far less than weekends`,
+            stat: { value: `₹${Math.round(weekdayAvg).toLocaleString()}`, label: `avg/weekday vs ₹${Math.round(weekendAvg).toLocaleString()} avg/weekend`, bar: Math.round((weekdayAvg / weekendAvg) * 100) },
+            tag: `Launch a "Weekday Special" combo to even out demand`,
+          });
+        }
+      }
+
+      // ── 19. PROCUREMENT — ITEMS RUNNING OUT SOON ──
+      if (procurementData.length > 0) {
+        const critical = procurementData.filter(p => p.daysRemaining !== null && p.daysRemaining <= 3 && p.daysRemaining >= 0);
+        if (critical.length > 0) {
+          recs.push({
+            id: 'procurement-critical', priority: 1, category: 'OPERATIONS',
+            icon: <Truck size={16} />, color: tone.urgent,
+            title: `${critical.length} ingredient${critical.length > 1 ? 's' : ''} will run out within 3 days`,
+            stat: { value: `${critical[0]?.daysRemaining}d`, label: `${critical[0]?.itemName} remaining at current usage rate` },
+            tag: `Place purchase orders today — based on 30-day consumption trend`,
+          });
+        }
+      }
+
+      // ── 20. INGREDIENT COST DRIFT (WAC vs last purchase) ──
+      if (inventory.length > 0) {
+        const drifting = inventory.filter(i => {
+          const wac = i.weightedAvgCost || i.costPrice || 0;
+          const last = i.lastPurchasePrice || wac;
+          if (wac <= 0) return false;
+          return ((last - wac) / wac) * 100 > 15;
+        });
+        if (drifting.length > 0) {
+          const worst = drifting.sort((a, b) => {
+            const da = ((a.lastPurchasePrice - a.weightedAvgCost) / a.weightedAvgCost) * 100;
+            const db = ((b.lastPurchasePrice - b.weightedAvgCost) / b.weightedAvgCost) * 100;
+            return db - da;
+          })[0];
+          const driftPct = Math.round(((worst.lastPurchasePrice - worst.weightedAvgCost) / worst.weightedAvgCost) * 100);
+          recs.push({
+            id: 'cost-drift', priority: 2, category: 'COST CONTROL',
+            icon: <TrendingUp size={16} />, color: tone.warning,
+            title: `"${worst.itemName}" purchase price is rising fast`,
+            stat: { value: `+${driftPct}%`, label: `vs weighted average cost — check supplier or switch vendor` },
+            tag: `Renegotiate or source an alternate supplier`,
+          });
+        }
+      }
+
+      // ── 21. EXTRA ITEMS CATEGORY WINNER ──
+      if (extraAnalytics?.byCategory && Object.keys(extraAnalytics.byCategory).length > 0) {
+        const catList = Object.entries(extraAnalytics.byCategory).sort((a, b) => b[1].profit - a[1].profit);
+        const bestCat = catList[0];
+        if (bestCat && bestCat[1].profit > 0) {
+          recs.push({
+            id: 'extras-winner', priority: 4, category: 'EXTRAS',
+            icon: <Award size={16} />, color: tone.positive,
+            title: `"${bestCat[0]}" is your most profitable extra category`,
+            stat: { value: `₹${Math.round(bestCat[1].profit).toLocaleString()}`, label: `profit from ${bestCat[1].sold} units sold` },
+            tag: `Expand this category with 2-3 more SKUs`,
+          });
+        }
+      }
+
+      // ── 22. AVG ORDER VALUE OPPORTUNITY ──
+      if (stats.avg > 0 && profitabilityData.length > 0) {
+        const highMarginCheap = profitabilityData.filter(d => d.marginPct >= 50 && d.sellingPrice < stats.avg * 0.4 && d.totalQtySold > 0);
+        if (highMarginCheap.length > 0) {
+          const pick = highMarginCheap.sort((a, b) => b.marginPct - a.marginPct)[0];
+          recs.push({
+            id: 'upsell-addon', priority: 3, category: 'GROWTH OPPORTUNITY',
+            icon: <Sparkles size={16} />, color: tone.info,
+            title: `"${pick.name}" is a perfect upsell add-on`,
+            stat: { value: `₹${pick.sellingPrice}`, label: `at ${pick.marginPct}% margin — train staff to suggest it` },
+            tag: `Add to "would you like to add..." prompt at order time`,
+          });
+        }
+      }
+
+      // ── 23. RESERVATION NO-SHOW (separate from waitlist) ──
+      if (reservationEntries?.length > 0) {
+        const total = reservationEntries.length;
+        const noShows = reservationEntries.filter(r => r.status === 'no-show').length;
+        const noShowPct = total > 0 ? Math.round((noShows / total) * 100) : 0;
+        if (noShowPct > 20 && total >= 5) {
+          recs.push({
+            id: 'reservation-noshow', priority: 3, category: 'CUSTOMER EXPERIENCE',
+            icon: <CalendarClock size={16} />, color: tone.warning,
+            title: `High no-show rate on table reservations`,
+            stat: { value: `${noShowPct}%`, label: `of ${total} reservations today didn't arrive`, bar: noShowPct },
+            tag: `Send a confirmation SMS reminder 2 hours before booking`,
+          });
+        }
+      }
+
+      // ── 24. STAFF OVERTIME / UNDERSTAFFING SIGNAL ──
+      if (staffEfficiency.length > 0 && hourlyAnalytics.hourly.length > 0) {
+        const totalOrders = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
+        const activeStaff = staffEfficiency.filter(s => s.daysPresent > 0).length;
+        const ordersPerStaff = activeStaff > 0 ? totalOrders / activeStaff : 0;
+        if (ordersPerStaff > 25 && activeStaff > 0) {
+          recs.push({
+            id: 'understaffed', priority: 2, category: 'STAFF',
+            icon: <AlertOctagon size={16} />, color: tone.warning,
+            title: `Team may be stretched thin today`,
+            stat: { value: Math.round(ordersPerStaff), label: `orders handled per active staff member` },
+            tag: `Consider adding part-time help during peak windows`,
+          });
+        }
+      }
+
+      // ── 25. PREP TIME DELAY RATE ──
+      if (prepTimeData && prepTimeData.totalTracked > 0) {
+        const delayedPct = prepTimeData.delayedPct || 0;
+        if (delayedPct > 25) {
+          recs.push({
+            id: 'kitchen-delays', priority: 2, category: 'OPERATIONS',
+            icon: <Hourglass size={16} />, color: tone.urgent,
+            title: `Over a quarter of orders are taking too long`,
+            stat: { value: `${delayedPct}%`, label: `of ${prepTimeData.totalTracked} orders took 15+ min to prep`, bar: delayedPct },
+            tag: `Identify bottleneck station and add prep support`,
+          });
+        }
+      }
+
+      // ── 26. BUSIEST HOUR KITCHEN STRAIN ──
+      if (prepTimeData?.busiestHour && prepTimeData.busiestHour.avg > 15) {
+        const h = prepTimeData.busiestHour.hour;
+        const hLabel = h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
+        recs.push({
+          id: 'busiest-hour-strain', priority: 3, category: 'OPERATIONS',
+          icon: <Flame size={16} />, color: tone.warning,
+          title: `Kitchen slows down most around ${hLabel}`,
+          stat: { value: `${prepTimeData.busiestHour.avg}m`, label: `average prep time during this hour` },
+          tag: `Pre-prep high-volume dishes before this window hits`,
+        });
+      }
+
+      // ── 27. TABLE TURN RATE OPPORTUNITY ──
+      if (trendsData?.tables?.performance?.length > 0) {
+        const avgTurns = trendsData.tables.performance.reduce((a, t) => a + t.turns, 0) / trendsData.tables.performance.length;
+        const underutilized = trendsData.tables.performance.filter(t => t.turns < avgTurns * 0.5);
+        if (underutilized.length > 0 && trendsData.tables.performance.length >= 4) {
+          recs.push({
+            id: 'table-underutilized', priority: 4, category: 'OPERATIONS',
+            icon: <TableProperties size={16} />, color: tone.info,
+            title: `${underutilized.length} table${underutilized.length > 1 ? 's' : ''} turning far less often`,
+            stat: { value: underutilized[0]?.turns || 0, label: `turns vs ${Math.round(avgTurns)} average — Table ${underutilized[0]?.table}` },
+            tag: `Check if location/seating is discouraging guests`,
+          });
+        }
+      }
+
+      // ── 28. SPICE LEVEL / CHEF SPECIAL PERFORMANCE ──
+      if (menuItems.length > 0 && profitabilityData.length > 0) {
+        const chefSpecials = menuItems.filter(m => m.isChefSpecial);
+        if (chefSpecials.length > 0) {
+          const specialNames = new Set(chefSpecials.map(m => m.name));
+          const specialPerf = profitabilityData.filter(d => specialNames.has(d.name));
+          const avgSpecialSold = specialPerf.length > 0 ? specialPerf.reduce((a, b) => a + (b.totalQtySold || 0), 0) / specialPerf.length : 0;
+          const avgAllSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
+          if (specialPerf.length > 0 && avgSpecialSold < avgAllSold * 0.7) {
+            recs.push({
+              id: 'chef-special-underperform', priority: 4, category: 'MENU',
+              icon: <ChefHat size={16} />, color: tone.info,
+              title: `Chef's Specials aren't outselling regular dishes`,
+              stat: { value: Math.round(avgSpecialSold), label: `avg sold vs ${Math.round(avgAllSold)} restaurant-wide average` },
+              tag: `Add tableside storytelling or a photo on the QR menu`,
+            });
+          }
+        }
+      }
+
+      // ── 29. STOCK VALUE TIED UP (CAPITAL EFFICIENCY) ──
+      if (inventory.length > 0 && stats.revenue > 0) {
+        const totalStockValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0);
+        const stockToRevenueRatio = totalStockValue / stats.revenue;
+        if (stockToRevenueRatio > 0.4) {
+          recs.push({
+            id: 'capital-tied-up', priority: 4, category: 'FINANCIAL HEALTH',
+            icon: <Wallet size={16} />, color: tone.info,
+            title: `A lot of cash is sitting in inventory`,
+            stat: { value: `₹${totalStockValue.toLocaleString()}`, label: `tied up vs ₹${stats.revenue.toLocaleString()} monthly revenue` },
+            tag: `Order smaller, more frequent batches for perishables`,
+          });
+        }
+      }
+
+      // ── 30. SOURCE MIX — OVER-RELIANCE ON ONE CHANNEL ──
+      if (advancedStats?.sources) {
+        const sourceEntries = Object.entries(advancedStats.sources).filter(([, v]) => v > 0);
+        const totalSrcRev = sourceEntries.reduce((a, [, v]) => a + v, 0);
+        if (totalSrcRev > 0) {
+          const dominant = sourceEntries.sort((a, b) => b[1] - a[1])[0];
+          const dominantPct = Math.round((dominant[1] / totalSrcRev) * 100);
+          if (dominantPct > 80 && sourceEntries.length > 1) {
+            recs.push({
+              id: 'channel-concentration', priority: 3, category: 'GROWTH OPPORTUNITY',
+              icon: <Globe size={16} />, color: tone.warning,
+              title: `Over-reliant on a single revenue channel`,
+              stat: { value: `${dominantPct}%`, label: `of revenue comes from "${dominant[0]}" alone`, bar: dominantPct },
+              tag: `Diversify — push underused channels like takeaway or delivery`,
+            });
+          }
+        }
+      }
+
+      // ── 31. NOTIFICATION DELIVERY FAILURE (waitlist push) ──
+      if (waitlistAnalytics?.month && waitlistAnalytics.month.total >= 10) {
+        const notifPct = waitlistAnalytics.month.notifDeliveredPct || 0;
+        if (notifPct < 50) {
+          recs.push({
+            id: 'notif-failure', priority: 2, category: 'CUSTOMER EXPERIENCE',
+            icon: <BellRing size={16} />, color: tone.warning,
+            title: `Push notifications aren't reaching most waitlist guests`,
+            stat: { value: `${notifPct}%`, label: `delivery rate — guests may be missing "table ready" alerts`, bar: notifPct },
+            tag: `Prompt guests to enable notifications when joining`,
+          });
+        }
+      }
+
+      // ══════════════════════════════════════════════════════════════════════
+      // ADD THESE NEW RECOMMENDATION BLOCKS — insert after recommendation #31
+      // (notification delivery failure) and BEFORE "// ── SORT BY PRIORITY ──"
+      // ══════════════════════════════════════════════════════════════════════
+
+      // ── 32. AGGREGATOR REVENUE SHARE (only if Dyno is connected) ──
+      if (aggregatorAnalytics?.enabled) {
+        const aggRev = aggregatorAnalytics.combinedRevenue || 0;
+        if (aggRev > 0 && stats.revenue > 0) {
+          const aggPct = Math.round((aggRev / stats.revenue) * 100);
+          if (aggPct > 35) {
+            recs.push({
+              id: 'aggregator-dependency', priority: 2, category: 'GROWTH OPPORTUNITY',
+              icon: <Truck size={16} />, color: tone.warning,
+              title: `Heavy reliance on Swiggy/Zomato for revenue`,
+              stat: { value: `${aggPct}%`, label: `of total revenue comes from aggregators — commission cuts into margin`, bar: aggPct },
+              tag: `Push dine-in/direct offers to reduce platform commission exposure`,
+            });
+          } else if (aggPct < 10) {
+            recs.push({
+              id: 'aggregator-underused', priority: 4, category: 'GROWTH OPPORTUNITY',
+              icon: <Truck size={16} />, color: tone.info,
+              title: `Aggregator channel is barely contributing`,
+              stat: { value: `${aggPct}%`, label: `of revenue — you're live but underutilizing the channel` },
+              tag: `Check item visibility, photos, and ratings on the platform`,
+            });
+          }
+        }
+      }
+
+      // ── 33. AGGREGATOR REJECTED ORDERS ──
+      if (aggregatorAnalytics?.enabled) {
+        const swiggyRej = aggregatorAnalytics.swiggy?.rejectedCount || 0;
+        const zomatoRej = aggregatorAnalytics.zomato?.rejectedCount || 0;
+        const totalRej = swiggyRej + zomatoRej;
+        if (totalRej >= 3) {
+          const worse = swiggyRej >= zomatoRej ? 'Swiggy' : 'Zomato';
+          recs.push({
+            id: 'aggregator-rejections', priority: 2, category: 'OPERATIONS',
+            icon: <XCircle size={16} />, color: tone.urgent,
+            title: `${totalRej} aggregator orders rejected this month`,
+            stat: { value: totalRej, label: `mostly on ${worse} — repeated rejections hurt platform ranking` },
+            tag: `Review why orders are being declined — stock, capacity, or timing`,
+          });
+        }
+      }
+
+      // ── 34. AGGREGATOR AVG ORDER VALUE GAP ──
+      if (aggregatorAnalytics?.enabled && stats.avg > 0) {
+        const swiggyAOV = aggregatorAnalytics.swiggy?.avgOrderValue || 0;
+        const zomatoAOV = aggregatorAnalytics.zomato?.avgOrderValue || 0;
+        const aggAOV = Math.max(swiggyAOV, zomatoAOV);
+        if (aggAOV > 0 && aggAOV < stats.avg * 0.7) {
+          recs.push({
+            id: 'aggregator-aov-gap', priority: 3, category: 'GROWTH OPPORTUNITY',
+            icon: <ShoppingBag size={16} />, color: tone.info,
+            title: `Online orders are smaller than dine-in`,
+            stat: { value: `₹${aggAOV}`, label: `avg aggregator order vs ₹${stats.avg} dine-in average` },
+            tag: `Add combo deals exclusive to Swiggy/Zomato to lift basket size`,
+          });
+        }
+      }
+
+      // ── 35. AGGREGATOR TOP ITEM CROSS-SELL ──
+      if (aggregatorAnalytics?.enabled) {
+        const swiggyTop = aggregatorAnalytics.swiggy?.topItems?.[0];
+        const zomatoTop = aggregatorAnalytics.zomato?.topItems?.[0];
+        const winner = swiggyTop && zomatoTop
+          ? (swiggyTop.qty >= zomatoTop.qty ? swiggyTop : zomatoTop)
+          : (swiggyTop || zomatoTop);
+        if (winner && winner.qty >= 10) {
+          recs.push({
+            id: 'aggregator-bestseller', priority: 5, category: 'GROWTH OPPORTUNITY',
+            icon: <Star size={16} />, color: tone.positive,
+            title: `"${winner.name}" is your online bestseller`,
+            stat: { value: `${winner.qty}×`, label: `ordered online — feature it as the hero image on your platform listing` },
+            tag: `Use this dish in Swiggy/Zomato ad campaigns`,
+          });
+        }
+      }
+
+      // ── 36. NEW CUSTOMER ACQUISITION TREND ──
+      if (trendsData?.customers && trendsData.customers.new > 0) {
+        const { new: newCust, total } = trendsData.customers;
+        const newPct = total > 0 ? Math.round((newCust / total) * 100) : 0;
+        if (newPct > 70 && total >= 15) {
+          recs.push({
+            id: 'high-new-low-repeat', priority: 3, category: 'CUSTOMER RETENTION',
+            icon: <User size={16} />, color: tone.info,
+            title: `Strong new customer flow, but few return`,
+            stat: { value: `${newPct}%`, label: `of guests this month are first-timers` },
+            tag: `Capture phone numbers and follow up with a return offer`,
+          });
+        }
+      }
+
+      // ── 37. AVERAGE VISITS PER LOYAL CUSTOMER ──
+      if (trendsData?.customers?.avgVisits >= 1) {
+        const avgV = trendsData.customers.avgVisits;
+        if (avgV >= 5) {
+          recs.push({
+            id: 'high-frequency-loyal', priority: 5, category: 'CUSTOMER RETENTION',
+            icon: <Repeat size={16} />, color: tone.positive,
+            title: `You have a strong base of frequent regulars`,
+            stat: { value: `${avgV}x`, label: `average visits per customer — exceptional loyalty` },
+            tag: `Introduce a VIP perk for your top 10% most frequent guests`,
+          });
+        }
+      }
+
+      // ── 38. INGREDIENT BREAKDOWN — SINGLE INGREDIENT DOMINATES COST ──
+      if (profitabilityData.length > 0) {
+        const ingredientCostMap = {};
+        profitabilityData.forEach(d => {
+          (d.ingredientBreakdown || []).forEach(ing => {
+            ingredientCostMap[ing.name] = (ingredientCostMap[ing.name] || 0) + (ing.lineCost || 0) * (d.totalQtySold || 0);
+          });
+        });
+        const totalIngCost = Object.values(ingredientCostMap).reduce((a, b) => a + b, 0);
+        if (totalIngCost > 0) {
+          const sorted = Object.entries(ingredientCostMap).sort((a, b) => b[1] - a[1]);
+          const top = sorted[0];
+          const topPct = Math.round((top[1] / totalIngCost) * 100);
+          if (topPct > 25) {
+            recs.push({
+              id: 'ingredient-concentration', priority: 3, category: 'COST CONTROL',
+              icon: <Package size={16} />, color: tone.warning,
+              title: `"${top[0]}" drives a quarter of your food cost`,
+              stat: { value: `${topPct}%`, label: `of total ingredient spend — small price changes hit hard`, bar: topPct },
+              tag: `Negotiate a bulk-rate contract for this ingredient`,
+            });
+          }
+        }
+      }
+
+      // ── 39. RECIPE COVERAGE GAP ──
+      if (profitabilityData.length > 0) {
+        const noRecipeCount = profitabilityData.filter(d => !d.hasRecipe).length;
+        const coveragePct = Math.round(((profitabilityData.length - noRecipeCount) / profitabilityData.length) * 100);
+        if (coveragePct < 60 && profitabilityData.length >= 5) {
+          recs.push({
+            id: 'recipe-coverage-gap', priority: 3, category: 'OPERATIONS',
+            icon: <ClipboardCheck size={16} />, color: tone.info,
+            title: `Most dishes have no linked recipe`,
+            stat: { value: `${coveragePct}%`, label: `recipe coverage — margins for the rest are estimates, not real`, bar: coveragePct },
+            tag: `Link recipes for your top 10 sellers first for accurate costing`,
+          });
+        }
+      }
+
+      // ── 40. DISCOUNT/MARKDOWN PATTERN (via settlement data, if discount tracked) ──
+      if (analytics.length > 0) {
+        const totalGross = analytics.reduce((a, b) => a + (b.revenue || 0), 0);
+        // Heuristic: compare subtotal-implied vs actual when available via profitabilityData totals
+        const totalListPrice = profitabilityData.reduce((a, d) => a + (d.sellingPrice * (d.totalQtySold || 0)), 0);
+        if (totalListPrice > 0 && totalGross > 0) {
+          const realizationPct = Math.round((totalGross / totalListPrice) * 100);
+          if (realizationPct < 85 && totalListPrice > 5000) {
+            recs.push({
+              id: 'price-realization-gap', priority: 3, category: 'FINANCIAL HEALTH',
+              icon: <Percent size={16} />, color: tone.warning,
+              title: `Actual revenue trails list-price potential`,
+              stat: { value: `${realizationPct}%`, label: `price realization — discounts or comps may be eating margin`, bar: realizationPct },
+              tag: `Audit discount approvals over the last 2 weeks`,
+            });
+          }
+        }
+      }
+
+      // ── 41. FIRST-HOUR VS LAST-HOUR PERFORMANCE ──
+      if (hourlyAnalytics.hourly.length > 0) {
+        const openHours = hourlyAnalytics.hourly.filter(h => h.orderCount > 0);
+        if (openHours.length >= 3) {
+          const first = openHours[0];
+          const last = openHours[openHours.length - 1];
+          if (last.orderCount > 0 && first.orderCount > last.orderCount * 3) {
+            const fLabel = first.hour === 0 ? '12am' : first.hour < 12 ? `${first.hour}am` : first.hour === 12 ? '12pm' : `${first.hour - 12}pm`;
+            recs.push({
+              id: 'closing-hour-weak', priority: 4, category: 'GROWTH OPPORTUNITY',
+              icon: <Clock size={16} />, color: tone.info,
+              title: `Closing hours see a steep drop-off`,
+              stat: { value: last.orderCount, label: `orders at close vs ${first.orderCount} at opening (${fLabel})` },
+              tag: `Consider a "last call" discount to capture late footfall`,
+            });
+          }
+        }
+      }
+
+      // ── 42. MENU SIZE VS SALES CONCENTRATION (80/20 CHECK) ──
+      if (profitabilityData.length >= 10) {
+        const sorted = [...profitabilityData].sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0));
+        const totalQty = sorted.reduce((a, b) => a + (b.totalQtySold || 0), 0);
+        if (totalQty > 0) {
+          const top20Count = Math.ceil(sorted.length * 0.2);
+          const top20Qty = sorted.slice(0, top20Count).reduce((a, b) => a + (b.totalQtySold || 0), 0);
+          const top20Pct = Math.round((top20Qty / totalQty) * 100);
+          if (top20Pct > 75) {
+            recs.push({
+              id: 'menu-overextended', priority: 4, category: 'MENU',
+              icon: <Layers size={16} />, color: tone.info,
+              title: `Just ${top20Count} dishes drive ${top20Pct}% of orders`,
+              stat: { value: `${sorted.length - top20Count}`, label: `other dishes contribute very little — menu may be oversized` },
+              tag: `Trim the long tail to simplify kitchen ops and reduce waste`,
+            });
+          }
+        }
+      }
+
+      // ── 43. VEG VS NON-VEG SALES SPLIT ──
+      if (menuItems.length > 0 && profitabilityData.length > 0) {
+        const vegNames = new Set(menuItems.filter(m => m.isVeg).map(m => m.name));
+        const vegSold = profitabilityData.filter(d => vegNames.has(d.name)).reduce((a, b) => a + (b.totalQtySold || 0), 0);
+        const nonVegSold = profitabilityData.filter(d => !vegNames.has(d.name)).reduce((a, b) => a + (b.totalQtySold || 0), 0);
+        const totalVN = vegSold + nonVegSold;
+        if (totalVN > 20) {
+          const vegPct = Math.round((vegSold / totalVN) * 100);
+          if (vegPct > 85 || vegPct < 15) {
+            recs.push({
+              id: 'veg-nonveg-skew', priority: 5, category: 'MENU',
+              icon: <Sparkles size={16} />, color: tone.neutral,
+              title: vegPct > 85 ? `Your guests strongly prefer vegetarian` : `Non-veg dominates your order mix`,
+              stat: { value: `${vegPct}%`, label: `of dishes sold are vegetarian` },
+              tag: vegPct > 85 ? `Lean into this — expand the veg menu, downsize non-veg SKUs` : `Ensure veg options are visible and appealing for mixed groups`,
+            });
+          }
+        }
+      }
+
+      // ── 44. EXTRA ITEMS ATTACH RATE ──
+      if (extraAnalytics?.totalSold > 0 && stats.avg > 0 && analytics.length > 0) {
+        const totalOrders = analytics.reduce((a, b) => a + (b.count || 0), 0);
+        if (totalOrders > 0) {
+          const attachRate = Math.round((extraAnalytics.totalSold / totalOrders) * 100);
+          if (attachRate < 15 && totalOrders >= 30) {
+            recs.push({
+              id: 'extras-low-attach', priority: 4, category: 'EXTRAS',
+              icon: <ShoppingBag size={16} />, color: tone.info,
+              title: `Extra items rarely make it onto the bill`,
+              stat: { value: `${attachRate}%`, label: `attach rate — extras are sold on only a small share of orders`, bar: attachRate },
+              tag: `Train waiters to suggest a drink/dessert at order time`,
+            });
+          }
+        }
+      }
+
+      // ── 45. SALARY PAYOUT DELAY ──
+      if (staffEfficiency.length > 0) {
+        const unpaidCount = staffEfficiency.filter(s => {
+          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
+          return (rec?.status || s.salaryStatus) !== 'Paid';
+        }).length;
+        const today = new Date(new Date().getTime() + 330 * 60 * 1000);
+        const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+        const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+        if (isCurrentMonth && unpaidCount > 0 && today.getDate() >= daysInMonth - 3) {
+          recs.push({
+            id: 'salary-payout-due', priority: 2, category: 'STAFF',
+            icon: <Wallet size={16} />, color: tone.urgent,
+            title: `${unpaidCount} staff salaries still unpaid as month closes`,
+            stat: { value: unpaidCount, label: `pending payments — only ${daysInMonth - today.getDate()} days left in the month` },
+            tag: `Process payroll before month-end to avoid morale issues`,
+          });
+        }
+      }
+
+      // ── 46. STAFF ROLE IMBALANCE (waiter-to-table ratio) ──
+      if (staffEfficiency.length > 0 && tableCount > 0) {
+        const activeWaiters = staffEfficiency.filter(s => s.role === 'Waiter' && s.daysPresent > 0).length;
+        if (activeWaiters > 0) {
+          const tablesPerWaiter = Math.round(tableCount / activeWaiters);
+          if (tablesPerWaiter > 8) {
+            recs.push({
+              id: 'waiter-overload', priority: 3, category: 'STAFF',
+              icon: <Users size={16} />, color: tone.warning,
+              title: `Each waiter is covering too many tables`,
+              stat: { value: tablesPerWaiter, label: `tables per active waiter — service speed may suffer` },
+              tag: `Hire or cross-train a helper for floor support during peak`,
+            });
+          }
+        }
+      }
+
+      // ── 47. PICKUP VS DINE-IN GROWTH SHIFT ──
+      if (waitlistAnalytics?.month && waitlistAnalytics.month.total > 0) {
+        const { dineIn, pickup } = waitlistAnalytics.month;
+        const totalQ = dineIn + pickup;
+        if (totalQ > 0) {
+          const pickupPct = Math.round((pickup / totalQ) * 100);
+          if (pickupPct > 50) {
+            recs.push({
+              id: 'pickup-shift', priority: 4, category: 'GROWTH OPPORTUNITY',
+              icon: <PackageCheck size={16} />, color: tone.info,
+              title: `Takeaway is overtaking dine-in demand`,
+              stat: { value: `${pickupPct}%`, label: `of counter activity is pickup orders`, bar: pickupPct },
+              tag: `Consider a dedicated pickup counter to speed up handoffs`,
+            });
+          }
+        }
+      }
+
+      // ── 48. REPEAT WAITLIST CUSTOMERS NOT CONVERTING TO LOYALTY ──
+      if (waitlistAnalytics?.month?.repeatGroups > 3 && trendsData?.customers) {
+        const repeatWaitlist = waitlistAnalytics.month.repeatGroups;
+        const repeatCustomers = trendsData.customers.repeat || 0;
+        if (repeatWaitlist > repeatCustomers * 0.3) {
+          recs.push({
+            id: 'waitlist-loyalty-gap', priority: 4, category: 'CUSTOMER RETENTION',
+            icon: <Repeat size={16} />, color: tone.info,
+            title: `Frequent waitlist guests aren't in your loyalty data`,
+            stat: { value: repeatWaitlist, label: `repeat waitlist groups — capture their phone numbers consistently` },
+            tag: `Make phone capture mandatory at waitlist join`,
+          });
+        }
+      }
+
+      // ── 49. COST PER COVER TREND ──
+      if (profitabilityData.length > 0 && trendsData?.customers?.total > 0) {
+        const totalCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
+        const totalCovers = trendsData.customers.total;
+        const costPerCover = totalCovers > 0 ? totalCost / totalCovers : 0;
+        const avgTicket = stats.avg;
+        if (costPerCover > 0 && avgTicket > 0 && (costPerCover / avgTicket) > 0.45) {
+          recs.push({
+            id: 'cost-per-cover-high', priority: 3, category: 'FINANCIAL HEALTH',
+            icon: <Wallet size={16} />, color: tone.warning,
+            title: `Food cost per guest is eating into ticket value`,
+            stat: { value: `₹${Math.round(costPerCover)}`, label: `cost per cover vs ₹${avgTicket} average ticket`, bar: Math.round((costPerCover / avgTicket) * 100) },
+            tag: `Review portion sizes or supplier pricing for top-cost dishes`,
+          });
+        }
+      }
+
+      // ── 50. SPLIT PAYMENT FREQUENCY (operational friction signal) ──
+      if (analytics.length > 0) {
+        const totalOrders = analytics.reduce((a, b) => a + (b.count || 0), 0);
+        const cardHeavy = analytics.reduce((a, b) => a + (b.card || 0), 0);
+        if (totalOrders > 20 && cardHeavy > 0 && stats.revenue > 0) {
+          const cardPct = Math.round((cardHeavy / stats.revenue) * 100);
+          if (cardPct > 50) {
+            recs.push({
+              id: 'card-dependency', priority: 5, category: 'OPERATIONS',
+              icon: <CreditCard size={16} />, color: tone.neutral,
+              title: `Card is your dominant payment method`,
+              stat: { value: `${cardPct}%`, label: `of revenue via card — ensure backup machines/connectivity` },
+              tag: `Keep a backup card reader on standby during peak hours`,
+            });
+          }
+        }
+      }
+
+      // ── 51. MONTH-OVER-MONTH ORDER COUNT TREND ──
+      if (trendsData?.revenue && currentMonthAnalytics.length > 0) {
+        const currOrders = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
+        const { previous, current } = trendsData.revenue;
+        if (previous > 0 && current > 0) {
+          const avgCurr = currOrders > 0 ? current / currOrders : 0;
+          if (avgCurr > 0 && stats.avg > 0 && avgCurr < stats.avg * 0.9) {
+            recs.push({
+              id: 'aov-declining', priority: 3, category: 'FINANCIAL HEALTH',
+              icon: <TrendingDown size={16} />, color: tone.warning,
+              title: `Average order value is trending down`,
+              stat: { value: `₹${Math.round(avgCurr)}`, label: `current avg vs ₹${stats.avg} typical — guests are spending less per visit` },
+              tag: `Train staff on upselling and combo suggestions`,
+            });
+          }
+        }
+      }
+
+      // ── 52. EXTRA ITEM STOCK-OUT RISK ──
+      if (extraItems?.length > 0) {
+        const nearOut = extraItems.filter(i => i.isAvailable && i.currentStock > 0 && i.currentStock <= (i.lowStockThreshold || 5));
+        if (nearOut.length > 0) {
+          recs.push({
+            id: 'extras-near-stockout', priority: 3, category: 'EXTRAS',
+            icon: <AlertTriangle size={16} />, color: tone.warning,
+            title: `${nearOut.length} extra item${nearOut.length > 1 ? 's' : ''} about to run out`,
+            stat: { value: nearOut.length, label: nearOut.slice(0, 3).map(i => i.name).join(', ') },
+            tag: `Restock before they auto-hide from the menu`,
+          });
+        }
+      }
+
+      // ── 53. KITCHEN CATEGORY SPEED CHAMPION ──
+      if (prepTimeData?.byCategory?.length > 1) {
+        const fastest = [...prepTimeData.byCategory].sort((a, b) => a.avgPrep - b.avgPrep)[0];
+        if (fastest && fastest.avgPrep <= 8 && fastest.count >= 10) {
+          recs.push({
+            id: 'fast-category', priority: 5, category: 'OPERATIONS',
+            icon: <Zap size={16} />, color: tone.positive,
+            title: `"${fastest.category}" is your fastest-moving category`,
+            stat: { value: `${fastest.avgPrep}m`, label: `avg prep across ${fastest.count} orders — great for upselling as quick add-ons` },
+            tag: `Highlight these as "ready in minutes" on the menu`,
+          });
+        }
+      }
+
+      // ── 54. RESERVATION PRE-ORDER ADOPTION ──
+      if (reservationEntries?.length > 0) {
+        const withPreorder = reservationEntries.filter(r => (r.items || []).length > 0).length;
+        const preorderPct = Math.round((withPreorder / reservationEntries.length) * 100);
+        if (preorderPct < 20 && reservationEntries.length >= 5) {
+          recs.push({
+            id: 'reservation-preorder-low', priority: 5, category: 'CUSTOMER EXPERIENCE',
+            icon: <CalendarClock size={16} />, color: tone.neutral,
+            title: `Few reservations include a pre-order`,
+            stat: { value: `${preorderPct}%`, label: `of bookings pre-ordered — pre-orders speed up kitchen prep` },
+            tag: `Prompt pre-ordering during the reservation flow`,
+          });
+        }
+      }
+
+      // ── 55. STOCK DRIFT — MULTIPLE ITEMS RISING TOGETHER (supplier-wide signal) ──
+      if (inventory.length >= 5) {
+        const risingCount = inventory.filter(i => {
+          const wac = i.weightedAvgCost || i.costPrice || 0;
+          const last = i.lastPurchasePrice || wac;
+          return wac > 0 && ((last - wac) / wac) * 100 > 8;
+        }).length;
+        const risingPct = Math.round((risingCount / inventory.length) * 100);
+        if (risingPct > 30) {
+          recs.push({
+            id: 'broad-cost-inflation', priority: 2, category: 'COST CONTROL',
+            icon: <TrendingUp size={16} />, color: tone.warning,
+            title: `Broad-based ingredient cost inflation detected`,
+            stat: { value: `${risingPct}%`, label: `of stocked ingredients show rising purchase prices`, bar: risingPct },
+            tag: `Consider a small, well-communicated menu price adjustment`,
+          });
+        }
+      }
+
+      // ── 56. ZERO-RECIPE HIGH-VOLUME DISH (costing blind spot) ──
+      if (profitabilityData.length > 0) {
+        const blindSpots = profitabilityData.filter(d => !d.hasRecipe && (d.totalQtySold || 0) > 20);
+        if (blindSpots.length > 0) {
+          const worst = blindSpots.sort((a, b) => b.totalQtySold - a.totalQtySold)[0];
+          recs.push({
+            id: 'costing-blindspot', priority: 2, category: 'COST CONTROL',
+            icon: <AlertTriangle size={16} />, color: tone.urgent,
+            title: `"${worst.name}" sells a lot but has no real cost data`,
+            stat: { value: worst.totalQtySold, label: `units sold with only an estimated margin — true profitability unknown` },
+            tag: `Link its recipe this week to know your real margin`,
+          });
+        }
+      }
+
+      // ── 57. AGGREGATOR DAILY TREND MOMENTUM ──
+      if (aggregatorAnalytics?.enabled) {
+        const platforms = ['swiggy', 'zomato'].filter(p => aggregatorAnalytics[p]?.dailyTrend?.length >= 6);
+        platforms.forEach(p => {
+          const trend = aggregatorAnalytics[p].dailyTrend;
+          const recent = trend.slice(-3).reduce((a, b) => a + b.revenue, 0);
+          const earlier = trend.slice(0, 3).reduce((a, b) => a + b.revenue, 0);
+          if (earlier > 0 && recent < earlier * 0.5) {
+            recs.push({
+              id: `${p}-momentum-drop`, priority: 3, category: 'GROWTH OPPORTUNITY',
+              icon: <TrendingDown size={16} />, color: tone.warning,
+              title: `${p.charAt(0).toUpperCase() + p.slice(1)} orders have slowed recently`,
+              stat: { value: `₹${recent.toLocaleString()}`, label: `last 3 days vs ₹${earlier.toLocaleString()} earlier in the period` },
+              tag: `Check listing visibility, ratings, or run a platform promo`,
+            });
+          }
+        });
+      }
+
+      // ── 58. CHURNED HIGH-VALUE CUSTOMER SIGNAL (heuristic via spend concentration) ──
+      if (trendsData?.customers?.total > 10 && trendsData.customers.repeatPct > 0) {
+        const { repeat, total } = trendsData.customers;
+        if (repeat > 0 && repeat < total * 0.15) {
+          recs.push({
+            id: 'thin-loyal-base', priority: 3, category: 'CUSTOMER RETENTION',
+            icon: <User size={16} />, color: tone.warning,
+            title: `Very few customers form your loyal base`,
+            stat: { value: repeat, label: `out of ${total} customers return — most revenue depends on new traffic` },
+            tag: `A loyalty program could meaningfully stabilize revenue`,
+          });
+        }
+      }
+
+      // ── 59. INVENTORY ITEMS NEVER PURCHASED RECENTLY (stale data flag) ──
+      if (inventory.length > 0) {
+        const staleItems = inventory.filter(i => {
+          if (!i.lastPurchaseDate) return false;
+          const daysSince = (Date.now() - new Date(i.lastPurchaseDate).getTime()) / (1000 * 60 * 60 * 24);
+          return daysSince > 45 && i.currentStock > 0;
+        });
+        if (staleItems.length >= 3) {
+          recs.push({
+            id: 'stale-purchase-data', priority: 5, category: 'OPERATIONS',
+            icon: <Package size={16} />, color: tone.neutral,
+            title: `${staleItems.length} ingredients haven't been repurchased in 45+ days`,
+            stat: { value: staleItems.length, label: `items — verify stock counts are still accurate` },
+            tag: `Do a physical stock audit for these items`,
+          });
+        }
+      }
+
+      // ── 60. OVERALL MARGIN HEALTH CHECK ──
+      if (profitabilityData.length > 0) {
+        const totalRev = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+        const totalProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
+        const overallMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 100) : 0;
+        if (overallMargin >= 55 && totalRev > 10000) {
+          recs.push({
+            id: 'strong-overall-margin', priority: 5, category: 'FINANCIAL HEALTH',
+            icon: <Award size={16} />, color: tone.positive,
+            title: `Your overall gross margin is excellent`,
+            stat: { value: `${overallMargin}%`, label: `blended margin across the full menu — well above industry norm`, bar: overallMargin },
+            tag: `This is a strong position to invest in marketing growth`,
+          });
+        } else if (overallMargin > 0 && overallMargin < 25 && totalRev > 10000) {
+          recs.push({
+            id: 'weak-overall-margin', priority: 2, category: 'FINANCIAL HEALTH',
+            icon: <AlertTriangle size={16} />, color: tone.urgent,
+            title: `Overall margin is thinner than ideal`,
+            stat: { value: `${overallMargin}%`, label: `blended margin — target is typically 30-40% for this segment`, bar: overallMargin },
+            tag: `Audit portion sizes and pricing across the top 10 sellers`,
+          });
+        }
+      }
+
+      // ── SORT BY PRIORITY ──
       recs.sort((a, b) => a.priority - b.priority);
- 
+
       const urgentCount = recs.filter(r => r.priority === 1).length;
       const opportunityCount = recs.filter(r => r.priority <= 2).length;
       const healthScore = Math.max(0, Math.min(100, 100 - (urgentCount * 15) - (recs.filter(r => r.priority === 2).length * 7)));
- 
-      const categoryColors = {
-        'MENU': '#d3bfa2', 'PRICING': '#2980B9', 'COST CONTROL': '#f87171',
-        'OPERATIONS': '#BA7517', 'STAFF': '#8a704d', 'CUSTOMER EXPERIENCE': '#60a5fa',
-        'CUSTOMER RETENTION': '#4ade80', 'COMPLIANCE': '#f87171', 'FINANCIAL HEALTH': '#d3bfa2',
-        'GROWTH OPPORTUNITY': '#BA7517', 'EXTRAS': '#9ca3af'
-      };
- 
+      const healthColor = healthScore >= 70 ? tone.positive : healthScore >= 40 ? tone.warning : tone.urgent;
+
       return (
         <>
           {/* ═══ HERO: BUSINESS HEALTH SCORE ═══ */}
@@ -5519,7 +6331,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             position: 'relative', overflow: 'hidden'
           }}>
             <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(211,191,162,0.06) 0%, transparent 70%)' }} />
- 
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '24px', position: 'relative' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
@@ -5539,19 +6351,19 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
                   Analyzed across menu engineering, wastage, staffing, customer retention, waitlist conversion, and financial health for {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}.
                 </p>
               </div>
- 
+
               {/* Health score dial */}
               <div style={{ textAlign: 'center', flexShrink: 0 }}>
                 <div style={{
                   width: '110px', height: '110px', borderRadius: '50%',
-                  background: `conic-gradient(${healthScore >= 70 ? '#4ade80' : healthScore >= 40 ? '#BA7517' : '#c0392b'} ${healthScore * 3.6}deg, #1a1a1a 0deg)`,
+                  background: `conic-gradient(${healthColor} ${healthScore * 3.6}deg, #1a1a1a 0deg)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
                 }}>
                   <div style={{
                     width: '88px', height: '88px', borderRadius: '50%', background: '#0f0f0f',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                   }}>
-                    <span style={{ fontSize: '1.6rem', fontWeight: '900', color: healthScore >= 70 ? '#4ade80' : healthScore >= 40 ? '#BA7517' : '#c0392b' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: '900', color: healthColor }}>
                       {healthScore}
                     </span>
                     <span style={{ fontSize: '0.48rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>HEALTH SCORE</span>
@@ -5559,14 +6371,14 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
                 </div>
               </div>
             </div>
- 
+
             {/* Quick stat strip */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginTop: '28px' }}>
               {[
-                { l: 'URGENT ITEMS', v: urgentCount, c: urgentCount > 0 ? '#c0392b' : '#4ade80' },
+                { l: 'URGENT ITEMS', v: urgentCount, c: urgentCount > 0 ? tone.urgent : tone.positive },
                 { l: 'OPPORTUNITIES FOUND', v: recs.length, c: '#d3bfa2' },
                 { l: 'MONTHLY REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#fff' },
-                { l: 'REPEAT RATE', v: `${stats.loyaltyRate}%`, c: stats.loyaltyRate >= 35 ? '#4ade80' : '#BA7517' },
+                { l: 'REPEAT RATE', v: `${stats.loyaltyRate}%`, c: stats.loyaltyRate >= 35 ? tone.positive : tone.warning },
               ].map(s => (
                 <div key={s.l} style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(211,191,162,0.06)' }}>
                   <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '5px' }}>{s.l}</div>
@@ -5575,80 +6387,80 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
               ))}
             </div>
           </div>
- 
+
           {/* ═══ URGENT ACTIONS (priority 1) ═══ */}
           {recs.filter(r => r.priority === 1).length > 0 && (
             <>
               <SectionHeader icon={<AlertOctagon size={16} />} title="Needs Action Today" subtitle="These directly affect revenue or compliance — address first" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
                 {recs.filter(r => r.priority === 1).map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} urgent />
                 ))}
               </div>
             </>
           )}
- 
+
           {/* ═══ HIGH-IMPACT OPPORTUNITIES (priority 2) ═══ */}
           {recs.filter(r => r.priority === 2).length > 0 && (
             <>
               <SectionHeader icon={<TrendingUp size={16} />} title="High-Impact Opportunities" subtitle="Meaningful revenue or efficiency gains, act within the week" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
                 {recs.filter(r => r.priority === 2).map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} />
                 ))}
               </div>
             </>
           )}
- 
+
           {/* ═══ OPTIMIZATION SUGGESTIONS (priority 3) ═══ */}
           {recs.filter(r => r.priority === 3).length > 0 && (
             <>
               <SectionHeader icon={<Lightbulb size={16} />} title="Optimization Suggestions" subtitle="Worth scheduling into your monthly review" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
                 {recs.filter(r => r.priority === 3).map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} />
                 ))}
               </div>
             </>
           )}
- 
+
           {/* ═══ STRATEGIC / LONGER-TERM (priority 4) ═══ */}
           {recs.filter(r => r.priority === 4).length > 0 && (
             <>
               <SectionHeader icon={<Globe size={16} />} title="Strategic Considerations" subtitle="Bigger initiatives — plan over weeks, not days" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
                 {recs.filter(r => r.priority === 4).map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} />
                 ))}
               </div>
             </>
           )}
- 
+
           {/* ═══ WINS / WHAT'S WORKING (priority 5) ═══ */}
           {recs.filter(r => r.priority === 5).length > 0 && (
             <>
               <SectionHeader icon={<Award size={16} />} title="What's Working Well" subtitle="Protect and double down on these strengths" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
                 {recs.filter(r => r.priority === 5).map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} positive />
                 ))}
               </div>
             </>
           )}
- 
+
           {recs.length === 0 && (
             <div style={{ textAlign: 'center', padding: '60px 20px', opacity: 0.4 }}>
               <Sparkles size={32} color="#444" style={{ marginBottom: '12px' }} />
               <p style={{ fontSize: '0.85rem', color: '#666' }}>Gathering more data to generate recommendations. Check back after a few days of operations.</p>
             </div>
           )}
-          
         </>
       );
     })()}
   </motion.div>
 )}
-          {/* ── INSIGHTS ── */}
+
+         {/* ── INSIGHTS ── */}
 {activeTab==='insights' && (
   <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
 
