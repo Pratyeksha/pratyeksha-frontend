@@ -132,6 +132,9 @@ const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subt
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
   const [wipingStaffId, setWipingStaffId] = useState(null); 
 
+
+  const [isDownloadingAllBills, setIsDownloadingAllBills] = useState(false);
+
   // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
 const [extraItems, setExtraItems] = useState([]);
 const [extraItemsLoading, setExtraItemsLoading] = useState(false);
@@ -1008,6 +1011,71 @@ const generateBill = async (id) => {
     });
   } catch (err) {
     console.error('Bill Error:', err);
+    setSelectedTable(null);
+  }
+};
+
+const generateOnlineBill = async () => {
+  setSelectedTable('Online');
+  setDiscount(0);
+  setPaymentModes({ cash: 0, upi: 0, card: 0 });
+  try {
+    const [res, countRes, tenantRes] = await Promise.all([
+      axios.get(`${BASE_URL}/admin/bills/${tenantId}/today`),
+      axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } })),
+      axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
+    ]);
+
+    if (tenantRes.data) setTenantConfig(tenantRes.data);
+    const freshTenant = tenantRes.data || tenantConfig;
+
+    // Only today's Swiggy/Zomato settled invoices
+    const onlineBills = (res.data?.bills || []).filter(b => b.isAggregator);
+    if (onlineBills.length === 0) { setTableBill(null); return; }
+
+    // Aggregate line items across all online orders for the on-screen summary view
+    const aggregated = [];
+    onlineBills.forEach(b => {
+      (b.items || []).forEach(item => {
+        const portionKey = item.portion || 'Single';
+        const ex = aggregated.find(i => i.name === item.name && (i.portion || 'Single') === portionKey);
+        if (ex) {
+          ex.quantity += Number(item.quantity || 1);
+          ex.subtotal += Number(item.subtotal || 0);
+        } else {
+          aggregated.push({ ...item, quantity: Number(item.quantity || 1), subtotal: Number(item.subtotal || 0) });
+        }
+      });
+    });
+
+    const cgstPct = (freshTenant?.config?.cgstPercentage ?? 2.5) / 100;
+    const sgstPct = (freshTenant?.config?.sgstPercentage ?? 2.5) / 100;
+    const subtotal = aggregated.reduce((a, i) => a + i.subtotal, 0);
+    const cgst = Math.round(subtotal * cgstPct * 100) / 100;
+    const sgst = Math.round(subtotal * sgstPct * 100) / 100;
+    const grandTotal = onlineBills.reduce((a, b) => a + (Number(b.grandTotal) || 0), 0);
+
+    setTableBill({
+      items: aggregated,
+      subtotal,
+      cgst,
+      sgst,
+      cgstPct: (cgstPct * 100).toFixed(1),
+      sgstPct: (sgstPct * 100).toFixed(1),
+      total: grandTotal,
+      billNo: countRes.data.nextBillNo,
+      totalBillCount: (freshTenant?.totalBillCount || 0) + 1,
+      fssaiNumber: freshTenant?.fssaiNumber || '',
+      address: freshTenant?.address
+        ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
+        : '',
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+      isOnlineSummary: true,
+      orderCount: onlineBills.length
+    });
+  } catch (err) {
+    console.error('Online Bill Error:', err);
     setSelectedTable(null);
   }
 };
@@ -2697,6 +2765,134 @@ const periodOrders = ordersData.filter(order => {
 
   }).catch(err=>{ console.error(err); showNotif('Export failed — check xlsx install','error'); });
 },[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData,aggregatorAnalytics]);
+
+
+
+const downloadAllTodaysInvoices = useCallback(async () => {
+  setIsDownloadingAllBills(true);
+  try {
+    const res = await axios.get(`${BASE_URL}/admin/bills/${tenantId}/today`);
+    const bills = res.data?.bills || [];
+
+    if (bills.length === 0) {
+      showNotif('No settled invoices found for today', 'info');
+      return;
+    }
+
+    // Build one styled invoice block per bill, each forced onto its own PDF page
+    const invoiceBlocks = bills.map((bill, idx) => {
+      const itemRows = (bill.items || []).map(it => `
+        <tr>
+          <td style="padding:6px 0;font-size:0.82rem;font-weight:700;">
+            ${it.quantity}x ${it.name}${it.portion && it.portion !== 'Single' ? ` <span style="font-size:0.68rem;color:#999;">(${it.portion})</span>` : ''}
+            <br/><small style="color:#999;font-size:0.65rem;">@ ₹${Number(it.pricePerUnit || (it.subtotal / (it.quantity || 1))).toFixed(0)}</small>
+          </td>
+          <td style="padding:6px 0;text-align:right;font-weight:700;font-size:0.82rem;">₹${Number(it.subtotal).toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      const paymentMode = bill.paymentDetails?.method === 'split'
+        ? `SPLIT (Cash ₹${bill.paymentDetails.cash || 0} · UPI ₹${bill.paymentDetails.upi || 0} · Card ₹${bill.paymentDetails.card || 0})`
+        : (bill.paymentDetails?.method || '—').toUpperCase();
+
+      const sourceTag = bill.isAggregator
+        ? `<span style="background:${bill.aggregatorPlatform === 'zomato' ? '#cb202d' : '#fc8019'};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.6rem;font-weight:900;letter-spacing:0.5px;">${bill.aggregatorPlatform.toUpperCase()}</span>`
+        : '';
+
+      return `
+        <div style="width:210mm;min-height:297mm;background:#fff;padding:18mm;font-family:Arial,sans-serif;color:#000;box-sizing:border-box;${idx > 0 ? 'page-break-before:always;' : ''}">
+          <div style="text-align:center;margin-bottom:16px;">
+            <h4 style="margin:0;font-size:0.65rem;letter-spacing:2px;font-weight:800;color:#888;">TAX INVOICE ${sourceTag}</h4>
+            <h1 style="margin:5px 0;font-size:1.6rem;font-weight:900;text-transform:uppercase;">${bill.businessName || ''}</h1>
+            <p style="font-size:0.65rem;color:#555;margin:0 0 3px;font-weight:600;">${bill.address || 'Address not configured'}</p>
+            <p style="font-size:0.68rem;font-weight:800;margin:2px 0;">GSTIN: ${bill.gstin || '—'}</p>
+            ${bill.fssaiNumber ? `<p style="font-size:0.65rem;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${bill.fssaiNumber}</p>` : ''}
+          </div>
+
+          <div style="border-top:2px solid #000;border-bottom:2px solid #000;padding:8px 0;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+            <div>
+              <div style="font-size:0.55rem;font-weight:900;color:#888;letter-spacing:1px;">BILL NO. (TODAY)</div>
+              <div style="font-size:1.1rem;font-weight:900;">#${bill.billNo}</div>
+              <div style="font-size:0.55rem;color:#aaa;margin-top:2px;">Total #${bill.totalBillCount}</div>
+            </div>
+            <div>
+              <div style="font-size:0.55rem;font-weight:900;color:#888;letter-spacing:1px;">${bill.isAggregator ? 'CUSTOMER' : 'TABLE'}</div>
+              <div style="font-size:1.1rem;font-weight:900;">${bill.isAggregator ? (bill.customerName || 'Online') : bill.tableNumber}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.75rem;font-weight:800;">${new Date(bill.settledAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase()}</div>
+              <div style="font-size:0.7rem;color:#666;">${new Date(bill.settledAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+            </div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <td style="font-size:0.58rem;font-weight:900;color:#888;letter-spacing:0.5px;padding-bottom:8px;">ITEM DESCRIPTION</td>
+                <td style="font-size:0.58rem;font-weight:900;color:#888;letter-spacing:0.5px;padding-bottom:8px;text-align:right;">TOTAL</td>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+
+          <div style="border-top:1px solid #eee;padding-top:12px;margin-top:12px;font-size:0.8rem;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;">
+              <span>Subtotal (excl. tax)</span><span>₹${Number(bill.subtotal).toFixed(2)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;">
+              <span>CGST @ ${bill.cgstPct}%</span><span>₹${Number(bill.cgst).toFixed(2)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;">
+              <span>SGST @ ${bill.sgstPct}%</span><span>₹${Number(bill.sgst).toFixed(2)}</span>
+            </div>
+            <p style="font-size:0.58rem;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
+          </div>
+
+          <div style="border-top:2px solid #000;padding-top:14px;margin-top:14px;">
+            <div style="display:flex;justify-content:space-between;font-size:1.4rem;font-weight:900;">
+              <span>GRAND TOTAL</span><span>₹${Math.round(bill.grandTotal)}</span>
+            </div>
+            <div style="font-size:0.58rem;font-weight:800;color:#888;text-align:right;margin-top:4px;">
+              MODE: ${paymentMode}
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-top:24px;font-size:0.58rem;font-weight:900;color:#ccc;letter-spacing:1px;">
+            POWERED BY PRATYEKSHA
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:-99999px;left:-99999px;';
+    container.innerHTML = invoiceBlocks;
+    document.body.appendChild(container);
+
+    const html2pdf = (await import('html2pdf.js')).default;
+    const todayStr = new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
+
+    await html2pdf().set({
+      margin: 0,
+      filename: `Pratyeksha_All_Invoices_${todayStr}.pdf`,
+      image: { type: 'jpeg', quality: 1.0 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(container).save();
+
+    document.body.removeChild(container);
+    showNotif(`${bills.length} invoice${bills.length !== 1 ? 's' : ''} downloaded`, 'success');
+  } catch (err) {
+    console.error('Download all invoices error:', err);
+    showNotif('Failed to generate invoice PDF', 'error');
+  } finally {
+    setIsDownloadingAllBills(false);
+  }
+}, [tenantId, showNotif]);
+
+
+
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
   const monthName = viewDate.toLocaleString('default',{month:'long',year:'numeric'});
@@ -3052,6 +3248,7 @@ const renderMonthHeatmap = () => {
     </div>
  
     {/* ── Billing HUD ── */}
+{/* ── Billing HUD ── */}
     {activeTab==='billing' && (
       <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}}
         style={styles.hudCountersRow} className="p-hud">
@@ -3080,7 +3277,27 @@ const renderMonthHeatmap = () => {
         ))}
       </motion.div>
     )}
- 
+
+    {activeTab==='billing' && (
+      <button
+        onClick={downloadAllTodaysInvoices}
+        disabled={isDownloadingAllBills}
+        style={{
+          marginLeft: '12px', padding: '10px 18px',
+          background: isDownloadingAllBills ? '#0d0d0d' : 'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          border: 'none', color: isDownloadingAllBills ? '#444' : '#000',
+          borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900',
+          cursor: isDownloadingAllBills ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0,
+          letterSpacing: '0.3px'
+        }}
+      >
+        <FileText size={14} />
+        {isDownloadingAllBills ? 'GENERATING...' : "DOWNLOAD TODAY'S INVOICES"}
+      </button>
+    )}
+
+    
     {activeTab==='inventory' && (
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
         <button onClick={()=>exportToExcel('inventory')}
@@ -4880,7 +5097,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
               <div style={{flex:1}}>
                 <div style={styles.specialModeRow}>
                   <button onClick={()=>generateBill('Takeaway')} style={selectedTable==='Takeaway'?styles.activeSpecBtn:styles.specBtn}><ShoppingBag size={16}/> DIRECT TAKEAWAY</button>
-                  <button onClick={()=>generateBill('Online')} style={selectedTable==='Online'?styles.activeSpecBtn:styles.specBtn}><Truck size={16}/> ONLINE ORDERING</button>
+                  <button onClick={generateOnlineBill} style={selectedTable==='Online'?styles.activeSpecBtn:styles.specBtn}><Truck size={16}/> ONLINE ORDERING</button>
                 </div>
                 <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
                 <div style={styles.tableGrid}>
