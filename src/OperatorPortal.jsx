@@ -1375,13 +1375,23 @@ useEffect(() => {
 const fetchIncomingAggregatorOrders = useCallback(async () => {
   try {
     const res = await axios.get(`${BASE_URL}/admin/orders/${tenantId}/aggregator-incoming`);
-    const list = res.data || [];
+    const list = (res.data || []).map(order => ({
+      _id: order._id,
+      platform: order.source,
+      orderId: order.aggregatorOrderId,
+      customerName: order.aggregatorCustomer?.name || 'Online Customer',
+      customerPhone: order.aggregatorCustomer?.phone || '',
+      items: order.items || [],
+      grandTotal: order.billDetails?.grandTotal || 0,
+      createdAt: order.createdAt
+    }));
     setIncomingAggregatorOrders(list);
     if (list.length > 0 && !activeAggregatorPopup) {
       setActiveAggregatorPopup(list[0]);
     }
   } catch { /* silent */ }
 }, [tenantId, activeAggregatorPopup]);
+
 
 useEffect(() => {
   if (isAuthenticated) {
