@@ -429,7 +429,12 @@ const filteredOrders = useMemo(() => {
       });
       if (!hasNV) return false;
     }
-    if (selectedCategory !== 'ALL') {
+
+    // ── Aggregator orders (Swiggy/Zomato) bypass category filtering —
+    // their item names won't reliably map to internal categoryIds,
+    // and the chef must never lose visibility of an accepted online order ──
+    const isAggregator = order.source === 'swiggy' || order.source === 'zomato';
+    if (selectedCategory !== 'ALL' && !isAggregator) {
       return order.items.some(item => {
         if (item.isExtraItem || item.extraItemId != null) return false;
         let cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
