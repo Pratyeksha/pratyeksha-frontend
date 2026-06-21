@@ -353,7 +353,7 @@ const fetchExtraAnalytics = useCallback(async () => {
 }, [tenantId]);
 
 
-  const fetchInitialData = useCallback(async () => {
+const fetchInitialData = useCallback(async () => {
     try {
       const [orderRes, menuRes, waiterRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
@@ -364,13 +364,8 @@ const fetchExtraAnalytics = useCallback(async () => {
       setMenuItems(menuRes.data);
       setWaiterRequests(waiterRes.data); 
       fetchCounterQueue();
-      useEffect(() => {
-  if (isAuthenticated) {
-    fetchIncomingAggregatorOrders();
-  }
-}, [isAuthenticated, fetchIncomingAggregatorOrders]);
     } catch (err) { console.error("Data Sync Error:", err); }
-  }, [tenantId,fetchCounterQueue ]);
+  }, [tenantId, fetchCounterQueue]);
 
 
   const fetchAggregatorConfig = useCallback(async () => {
@@ -1387,6 +1382,14 @@ const fetchIncomingAggregatorOrders = useCallback(async () => {
     }
   } catch { /* silent */ }
 }, [tenantId, activeAggregatorPopup]);
+
+useEffect(() => {
+  if (isAuthenticated) {
+    fetchIncomingAggregatorOrders();
+  }
+}, [isAuthenticated, fetchIncomingAggregatorOrders]);
+
+
 const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
     const wb = XLSX.utils.book_new();
@@ -2767,121 +2770,181 @@ const periodOrders = ordersData.filter(order => {
 },[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData,aggregatorAnalytics]);
 
 
-
 const downloadAllTodaysInvoices = useCallback(async () => {
   setIsDownloadingAllBills(true);
   try {
     const res = await axios.get(`${BASE_URL}/admin/bills/${tenantId}/today`);
     const bills = res.data?.bills || [];
 
+    console.log('[downloadAllTodaysInvoices] bills fetched:', bills.length, bills);
+
     if (bills.length === 0) {
       showNotif('No settled invoices found for today', 'info');
+      setIsDownloadingAllBills(false);
       return;
     }
 
-    // Build one styled invoice block per bill, each forced onto its own PDF page
-    const invoiceBlocks = bills.map((bill, idx) => {
-      const itemRows = (bill.items || []).map(it => `
-        <tr>
-          <td style="padding:6px 0;font-size:0.82rem;font-weight:700;">
-            ${it.quantity}x ${it.name}${it.portion && it.portion !== 'Single' ? ` <span style="font-size:0.68rem;color:#999;">(${it.portion})</span>` : ''}
-            <br/><small style="color:#999;font-size:0.65rem;">@ ₹${Number(it.pricePerUnit || (it.subtotal / (it.quantity || 1))).toFixed(0)}</small>
-          </td>
-          <td style="padding:6px 0;text-align:right;font-weight:700;font-size:0.82rem;">₹${Number(it.subtotal).toFixed(2)}</td>
-        </tr>
-      `).join('');
+    // ── Builds ONE invoice's inner HTML (no page-break styling — each is captured separately) ──
+    const buildInvoiceHTML = (bill) => {
+      const itemRows = (bill.items || []).map(it => {
+        const unitPrice = it.pricePerUnit
+          ? Number(it.pricePerUnit).toFixed(0)
+          : (it.quantity > 0 ? (it.subtotal / it.quantity).toFixed(0) : '—');
+        return `
+          <div style="display:flex;justify-content:space-between;margin-bottom:9px;font-size:14px;">
+            <span style="font-weight:700;">
+              ${it.quantity}x ${it.name}${it.portion && it.portion !== 'Single' ? ` <span style="font-size:11px;color:#999;">(${it.portion})</span>` : ''}
+              <br/><span style="color:#999;font-size:11px;">@ ₹${unitPrice}</span>
+            </span>
+            <b>₹${Number(it.subtotal || 0).toFixed(2)}</b>
+          </div>
+        `;
+      }).join('');
 
       const paymentMode = bill.paymentDetails?.method === 'split'
-        ? `SPLIT (Cash ₹${bill.paymentDetails.cash || 0} · UPI ₹${bill.paymentDetails.upi || 0} · Card ₹${bill.paymentDetails.card || 0})`
+        ? 'SPLIT PAYMENT'
         : (bill.paymentDetails?.method || '—').toUpperCase();
 
       const sourceTag = bill.isAggregator
-        ? `<span style="background:${bill.aggregatorPlatform === 'zomato' ? '#cb202d' : '#fc8019'};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.6rem;font-weight:900;letter-spacing:0.5px;">${bill.aggregatorPlatform.toUpperCase()}</span>`
+        ? `<span style="background:${bill.aggregatorPlatform === 'zomato' ? '#cb202d' : '#fc8019'};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:900;letter-spacing:0.5px;margin-left:8px;">${(bill.aggregatorPlatform || '').toUpperCase()}</span>`
         : '';
 
+      const settledDate = bill.settledAt ? new Date(bill.settledAt) : new Date();
+      const dateStr = isNaN(settledDate.getTime())
+        ? '—'
+        : settledDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+      const timeStr = isNaN(settledDate.getTime())
+        ? '—'
+        : settledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+      const grandTotal = Math.round(bill.grandTotal || 0);
+      const tableOrCustomerLabel = bill.isAggregator ? 'CUSTOMER' : 'TABLE';
+      const tableOrCustomerValue = bill.isAggregator ? (bill.customerName || 'Online') : (bill.tableNumber || '—');
+
       return `
-        <div style="width:210mm;min-height:297mm;background:#fff;padding:18mm;font-family:Arial,sans-serif;color:#000;box-sizing:border-box;${idx > 0 ? 'page-break-before:always;' : ''}">
+        <div style="width:794px;background:#ffffff;padding:68px;font-family:Arial,sans-serif;color:#000000;box-sizing:border-box;">
+
           <div style="text-align:center;margin-bottom:16px;">
-            <h4 style="margin:0;font-size:0.65rem;letter-spacing:2px;font-weight:800;color:#888;">TAX INVOICE ${sourceTag}</h4>
-            <h1 style="margin:5px 0;font-size:1.6rem;font-weight:900;text-transform:uppercase;">${bill.businessName || ''}</h1>
-            <p style="font-size:0.65rem;color:#555;margin:0 0 3px;font-weight:600;">${bill.address || 'Address not configured'}</p>
-            <p style="font-size:0.68rem;font-weight:800;margin:2px 0;">GSTIN: ${bill.gstin || '—'}</p>
-            ${bill.fssaiNumber ? `<p style="font-size:0.65rem;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${bill.fssaiNumber}</p>` : ''}
+            <h4 style="margin:0;font-size:10px;letter-spacing:2px;font-weight:800;color:#888;">TAX INVOICE${sourceTag}</h4>
+            <h1 style="margin:5px 0;color:#555;font-size:26px;font-weight:900;text-transform:uppercase;">${bill.businessName || ''}</h1>
+            <p style="font-size:10px;color:#555;margin:0 0 3px;font-weight:600;">${bill.address || 'Address not configured'}</p>
+            <p style="font-size:11px;font-weight:800;margin:2px 0;">GSTIN: ${bill.gstin || '—'}</p>
+            ${bill.fssaiNumber ? `<p style="font-size:10px;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${bill.fssaiNumber}</p>` : ''}
           </div>
 
           <div style="border-top:2px solid #000;border-bottom:2px solid #000;padding:8px 0;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
             <div>
-              <div style="font-size:0.55rem;font-weight:900;color:#888;letter-spacing:1px;">BILL NO. (TODAY)</div>
-              <div style="font-size:1.1rem;font-weight:900;">#${bill.billNo}</div>
-              <div style="font-size:0.55rem;color:#aaa;margin-top:2px;">Total #${bill.totalBillCount}</div>
+              <div style="font-size:9px;font-weight:900;color:#888;letter-spacing:1px;">BILL NO. (TODAY)</div>
+              <div style="font-size:18px;font-weight:900;">#${bill.billNo ?? '—'}</div>
+              <div style="font-size:9px;color:#aaa;margin-top:2px;">Total #${bill.totalBillCount ?? '—'}</div>
             </div>
             <div>
-              <div style="font-size:0.55rem;font-weight:900;color:#888;letter-spacing:1px;">${bill.isAggregator ? 'CUSTOMER' : 'TABLE'}</div>
-              <div style="font-size:1.1rem;font-weight:900;">${bill.isAggregator ? (bill.customerName || 'Online') : bill.tableNumber}</div>
+              <div style="font-size:9px;font-weight:900;color:#888;letter-spacing:1px;">${tableOrCustomerLabel}</div>
+              <div style="font-size:18px;font-weight:900;">${tableOrCustomerValue}</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:0.75rem;font-weight:800;">${new Date(bill.settledAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase()}</div>
-              <div style="font-size:0.7rem;color:#666;">${new Date(bill.settledAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+              <div style="font-size:12px;font-weight:800;">${dateStr}</div>
+              <div style="font-size:11px;color:#666;">${timeStr}</div>
             </div>
           </div>
 
-          <table style="width:100%;border-collapse:collapse;">
-            <thead>
-              <tr>
-                <td style="font-size:0.58rem;font-weight:900;color:#888;letter-spacing:0.5px;padding-bottom:8px;">ITEM DESCRIPTION</td>
-                <td style="font-size:0.58rem;font-weight:900;color:#888;letter-spacing:0.5px;padding-bottom:8px;text-align:right;">TOTAL</td>
-              </tr>
-            </thead>
-            <tbody>${itemRows}</tbody>
-          </table>
+          <div style="padding:6px 0;">
+            <div style="display:flex;justify-content:space-between;font-size:9px;font-weight:900;color:#888;margin-bottom:8px;letter-spacing:0.5px;">
+              <span>ITEM DESCRIPTION</span><span>TOTAL</span>
+            </div>
+            ${itemRows}
+          </div>
 
-          <div style="border-top:1px solid #eee;padding-top:12px;margin-top:12px;font-size:0.8rem;">
+          <div style="border-top:1px solid #eee;padding-top:12px;font-size:13px;">
             <div style="display:flex;justify-content:space-between;padding:4px 0;">
-              <span>Subtotal (excl. tax)</span><span>₹${Number(bill.subtotal).toFixed(2)}</span>
+              <span>Subtotal (excl. tax)</span><span>₹${Number(bill.subtotal || 0).toFixed(2)}</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:4px 0;">
-              <span>CGST @ ${bill.cgstPct}%</span><span>₹${Number(bill.cgst).toFixed(2)}</span>
+              <span>CGST @ ${bill.cgstPct ?? '—'}%</span><span>₹${Number(bill.cgst || 0).toFixed(2)}</span>
             </div>
             <div style="display:flex;justify-content:space-between;padding:4px 0;">
-              <span>SGST @ ${bill.sgstPct}%</span><span>₹${Number(bill.sgst).toFixed(2)}</span>
+              <span>SGST @ ${bill.sgstPct ?? '—'}%</span><span>₹${Number(bill.sgst || 0).toFixed(2)}</span>
             </div>
-            <p style="font-size:0.58rem;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
+            <p style="font-size:9px;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
           </div>
 
           <div style="border-top:2px solid #000;padding-top:14px;margin-top:14px;">
-            <div style="display:flex;justify-content:space-between;font-size:1.4rem;font-weight:900;">
-              <span>GRAND TOTAL</span><span>₹${Math.round(bill.grandTotal)}</span>
+            <div style="display:flex;justify-content:space-between;font-size:22px;font-weight:900;">
+              <span>GRAND TOTAL</span>
+              <span>₹${grandTotal}</span>
             </div>
-            <div style="font-size:0.58rem;font-weight:800;color:#888;text-align:right;margin-top:4px;">
+            <div style="font-size:9px;font-weight:800;color:#888;text-align:right;margin-top:4px;">
               MODE: ${paymentMode}
             </div>
           </div>
 
-          <div style="text-align:center;margin-top:24px;font-size:0.58rem;font-weight:900;color:#ccc;letter-spacing:1px;">
+          <div style="text-align:center;margin-top:24px;font-size:9px;font-weight:900;color:#ccc;letter-spacing:1px;">
             POWERED BY PRATYEKSHA
           </div>
         </div>
       `;
-    }).join('');
+    };
 
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:-99999px;left:-99999px;';
-    container.innerHTML = invoiceBlocks;
-    document.body.appendChild(container);
+    // ── Dynamically import both libs we need: html2canvas (for the actual capture) + jsPDF (for page assembly) ──
+    const html2canvas = (await import('html2canvas')).default;
+    const { jsPDF } = await import('jspdf');
 
-    const html2pdf = (await import('html2pdf.js')).default;
-    const todayStr = new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
+    const pdf = new jsPDF({ unit: 'px', format: 'a4', orientation: 'portrait' });
+    const pdfPageWidth = pdf.internal.pageSize.getWidth();
+    const pdfPageHeight = pdf.internal.pageSize.getHeight();
 
-    await html2pdf().set({
-      margin: 0,
-      filename: `Pratyeksha_All_Invoices_${todayStr}.pdf`,
-      image: { type: 'jpeg', quality: 1.0 },
-      html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    }).from(container).save();
+    // ── Single off-screen render host — reused per bill so memory stays low ──
+    const renderHost = document.createElement('div');
+    renderHost.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: -9999px;
+      width: 794px;
+      background: #ffffff;
+    `;
+    document.body.appendChild(renderHost);
 
-    document.body.removeChild(container);
+    for (let i = 0; i < bills.length; i++) {
+      renderHost.innerHTML = buildInvoiceHTML(bills[i]);
+
+      // Force reflow + wait for paint before capturing
+      renderHost.getBoundingClientRect();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const targetEl = renderHost.firstElementChild;
+      console.log(`[downloadAllTodaysInvoices] bill ${i + 1}/${bills.length} render size:`, targetEl.scrollWidth, 'x', targetEl.scrollHeight);
+
+      if (targetEl.scrollHeight < 50) {
+        console.error(`[downloadAllTodaysInvoices] bill ${i + 1} failed to render — skipping`);
+        continue;
+      }
+
+      const canvas = await html2canvas(targetEl, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: true,
+        width: targetEl.scrollWidth,
+        height: targetEl.scrollHeight,
+        windowWidth: targetEl.scrollWidth,
+        windowHeight: targetEl.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
+      // Scale the captured image to fit the PDF page width, preserving aspect ratio
+      const imgWidth = pdfPageWidth;
+      const imgHeight = (canvas.height * pdfPageWidth) / canvas.width;
+
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+    }
+
+    document.body.removeChild(renderHost);
+
+    const todayStr = new Date(new Date().getTime() + 330 * 60 * 1000).toISOString().split('T')[0];
+    pdf.save(`Pratyeksha_All_Invoices_${todayStr}.pdf`);
+
     showNotif(`${bills.length} invoice${bills.length !== 1 ? 's' : ''} downloaded`, 'success');
   } catch (err) {
     console.error('Download all invoices error:', err);
@@ -2890,8 +2953,6 @@ const downloadAllTodaysInvoices = useCallback(async () => {
     setIsDownloadingAllBills(false);
   }
 }, [tenantId, showNotif]);
-
-
 
 const generateSalarySlip = useCallback((member) => {
   const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
@@ -5229,7 +5290,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
     {/* ── HEADER ── */}
     <div style={{textAlign:'center', marginBottom:'16px'}}>
       <h4 style={{margin:0, fontSize:'0.65rem', letterSpacing:'2px', fontWeight:'800', color:'#888'}}>TAX INVOICE</h4>
-      <h1 style={{margin:'5px 0', fontSize:'1.6rem', fontWeight:'900', textTransform:'uppercase'}}>
+      <h1 style={{margin:'5px 0', fontSize:'1.6rem', fontWeight:'900', textTransform:'uppercase',color:'#555'}}>
         {tenantConfig?.name || tenantId.split('_').join(' ')}
       </h1>
       <p style={{fontSize:'0.65rem', color:'#555', margin:'0 0 3px', fontWeight:'600'}}>
