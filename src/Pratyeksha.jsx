@@ -10,7 +10,6 @@ const S = ({s=20,sw=1.5,children,...rest}) => (
 );
 
 /* ─── icons ─── */
-const IcoStar   = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(184,151,90,.4)" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 const IcoStarF  = ({s=13}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="#b8975a" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 const IcoLogo   = () => <S s={15}><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></S>;
 const IcoLayers = ({size=20}) => <S s={size}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></S>;
@@ -28,6 +27,18 @@ const IcoPhone  = ({size=16}) => <S s={size}><path d="M22 16.92v3a2 2 0 0 1-2.18
 const IcoMail   = ({size=14}) => <S s={size}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></S>;
 const IcoPin    = ({size=15}) => <S s={size}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></S>;
 const IcoUser   = ({size=52}) => <S s={size} sw={1}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></S>;
+const IcoTrend  = ({size=16}) => <S s={size}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></S>;
+const IcoBell   = ({size=16}) => <S s={size}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></S>;
+const IcoMic    = ({size=16}) => <S s={size}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></S>;
+const IcoGlobe  = ({size=16}) => <S s={size}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></S>;
+const IcoZap    = ({size=16}) => <S s={size}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></S>;
+const IcoTarget = ({size=16}) => <S s={size}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></S>;
+const IcoPackage= ({size=16}) => <S s={size}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></S>;
+const IcoRepeat = ({size=16}) => <S s={size}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></S>;
+const IcoGrid   = ({size=16}) => <S s={size}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></S>;
+const IcoPieChart = ({size=16}) => <S s={size}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></S>;
+const IcoAward  = ({size=16}) => <S s={size}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></S>;
+const IcoActivity=({size=16}) => <S s={size}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></S>;
 
 /* ─── helpers ─── */
 const Stars5 = () => <div style={{display:'flex',gap:2,marginBottom:14}}>{[0,1,2,3,4].map(i=><IcoStarF key={i}/>)}</div>;
@@ -50,17 +61,11 @@ const ModPH = ({icon,label,sublabel,tag}) => (
   </div>
 );
 
-/* ═══════════════════════════════════════════
-   CSS  –  injected once via a <style> tag
-   KEY FIX: html/body must allow scrolling.
-   Never use overflow:hidden on both axes of body.
-═══════════════════════════════════════════ */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@300;400&display=swap');
 
 html,body{overflow-anchor:none;}
 #root{min-height:100vh;overflow:visible;}
-
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 :root{
   --gold:#b8975a;--gold-light:#d4b88a;--gold-pale:#f0e6d3;
@@ -71,26 +76,8 @@ html,body{overflow-anchor:none;}
   --border:rgba(184,151,90,0.12);--border2:rgba(184,151,90,0.24);
   --r-sm:6px;--r-md:12px;--r-lg:18px;--r-xl:24px;
 }
-
-html{
-  scroll-behavior:smooth;
-  overflow-x:hidden;
-  overflow-y:scroll;
-  width:100%;
-  height:auto;
-}
-body{
-  background:var(--cream);
-  color:var(--text);
-  font-family:'DM Sans',sans-serif;
-  overflow-x:hidden;
-  overflow-y:auto;   /* ← was 'visible', change to 'auto' */
-  line-height:1.65;
-  cursor:none;
-  width:100%;
-  min-height:100vh;
-  position:relative;
-}
+html{scroll-behavior:smooth;overflow-x:hidden;overflow-y:scroll;width:100%;height:auto;}
+body{background:var(--cream);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;overflow-y:auto;line-height:1.65;cursor:none;width:100%;min-height:100vh;position:relative;}
 @media(max-width:768px){body{cursor:auto;}}
 img{max-width:100%;display:block;}
 
@@ -100,7 +87,6 @@ body.ch #cur-dot{width:10px;height:10px;}
 body.ch #cur-ring{width:48px;height:48px;border-color:var(--gold);}
 @media(max-width:768px){#cur-dot,#cur-ring{display:none;}}
 
-
 #loader{position:fixed;inset:0;z-index:9999;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;transition:opacity .6s ease;}
 #loader.out{opacity:0;pointer-events:none;visibility:hidden;}
 .l-logo{font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--gold);letter-spacing:3px;}
@@ -108,7 +94,6 @@ body.ch #cur-ring{width:48px;height:48px;border-color:var(--gold);}
 .l-bar{width:140px;height:1px;background:rgba(184,151,90,.1);overflow:hidden;}
 .l-fill{height:100%;width:0;background:var(--gold);animation:lf 2.4s ease forwards;}
 @keyframes lf{to{width:100%;}}
-
 
 nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:22px 72px;transition:all .35s;}
 nav.s{background:rgba(250,248,244,.97);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:14px 72px;box-shadow:0 2px 24px rgba(0,0,0,.05);}
@@ -126,13 +111,11 @@ nav.s{background:rgba(250,248,244,.97);backdrop-filter:blur(20px);border-bottom:
 .nav-ham{display:none;flex-direction:column;gap:4px;background:none;border:none;cursor:pointer;padding:4px;}
 .nav-ham span{width:20px;height:1.5px;background:var(--ink);display:block;transition:all .3s;}
 
-
 #mmenu{display:none;position:fixed;inset:0;background:var(--cream);z-index:199;flex-direction:column;align-items:center;justify-content:center;gap:32px;}
 #mmenu.open{display:flex;}
 #mmenu a{font-family:'DM Serif Display',serif;font-size:1.8rem;color:var(--ink);text-decoration:none;cursor:pointer;}
 #mmenu a:hover{color:var(--gold);}
 .mm-close{position:absolute;top:24px;right:24px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text2);}
-
 
 .hero{min-height:100vh;width:100%;display:grid;grid-template-columns:1fr 1fr;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 30% 60%,rgba(184,151,90,.04),transparent);pointer-events:none;}
@@ -155,7 +138,6 @@ nav.s{background:rgba(250,248,244,.97);backdrop-filter:blur(20px);border-bottom:
 .kpi-l{font-size:.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-top:4px;}
 .kpi-s{width:1px;background:var(--border);align-self:stretch;}
 
-
 .hero-dash{background:var(--ink3);border:1px solid rgba(184,151,90,.12);border-radius:var(--r-xl);overflow:hidden;width:320px;box-shadow:0 32px 80px rgba(0,0,0,.6);animation:dashF 8s ease-in-out infinite;}
 @keyframes dashF{0%,100%{transform:rotate(-2deg) translateY(0);}50%{transform:rotate(-2deg) translateY(-18px);}}
 .dh{padding:14px 18px;border-bottom:1px solid rgba(184,151,90,.08);display:flex;justify-content:space-between;align-items:center;}
@@ -176,17 +158,16 @@ nav.s{background:rgba(250,248,244,.97);backdrop-filter:blur(20px);border-bottom:
 .chk{background:rgba(62,201,122,.1);color:var(--green);}
 .emp{background:rgba(255,255,255,.04);color:rgba(255,255,255,.18);}
 
-
 .trust{background:var(--ink);padding:18px 72px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(184,151,90,.07);flex-wrap:wrap;gap:12px;width:100%;}
 .trust-lbl{font-size:.56rem;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,.22);}
 .trust-pills{display:flex;gap:24px;flex-wrap:wrap;}
 .tp{display:flex;align-items:center;gap:7px;font-size:.74rem;color:rgba(255,255,255,.4);}
+.tp-dot{width:4px;height:4px;border-radius:50%;background:rgba(184,151,90,.4);}
 .integ{padding:20px 72px;background:var(--cream2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;width:100%;}
 .integ-lbl{font-size:.58rem;letter-spacing:2.5px;text-transform:uppercase;color:var(--text3);}
 .integ-pills{display:flex;gap:22px;flex-wrap:wrap;}
 .ip{display:flex;align-items:center;gap:7px;font-size:.76rem;color:var(--text2);}
 .idot{width:6px;height:6px;border-radius:50%;}
-
 
 section{padding:96px 72px;width:100%;}
 .eye{font-size:.6rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;font-weight:500;}
@@ -196,6 +177,15 @@ section{padding:96px 72px;width:100%;}
 .center{text-align:center;}
 .center .sdesc{margin:0 auto;}
 
+/* ── OUTCOMES STRIP ── */
+.outcomes-strip{background:var(--ink2);width:100%;padding:72px 72px;}
+.outcomes-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(184,151,90,.08);border:1px solid rgba(184,151,90,.08);border-radius:var(--r-lg);overflow:hidden;margin-top:48px;}
+.oc{background:var(--ink3);padding:32px 28px;transition:background .3s;}
+.oc:hover{background:rgba(184,151,90,.04);}
+.oc-icon{width:40px;height:40px;border-radius:10px;background:rgba(184,151,90,.07);border:1px solid rgba(184,151,90,.14);display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:var(--gold);}
+.oc-v{font-family:'DM Serif Display',serif;font-size:1.9rem;color:var(--gold);line-height:1;margin-bottom:5px;}
+.oc-t{font-size:.8rem;font-weight:600;color:#fff;margin-bottom:4px;}
+.oc-d{font-size:.7rem;color:rgba(255,255,255,.28);line-height:1.6;}
 
 #about{background:var(--ink2);padding:100px 72px;width:100%;}
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;margin-bottom:80px;}
@@ -248,6 +238,20 @@ section{padding:96px 72px;width:100%;}
 .nl{font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.28);margin-top:8px;}
 .ns{font-size:.68rem;color:rgba(184,151,90,.33);margin-top:3px;}
 
+/* ── BENEFITS ── */
+.benefits-sec{background:var(--cream);width:100%;padding:96px 72px;}
+.benefits-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:56px;}
+.ben-card{background:var(--cream2);border:1px solid var(--border);border-radius:var(--r-lg);padding:32px 28px;transition:all .3s;cursor:pointer;position:relative;overflow:hidden;}
+.ben-card:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.06);}
+.ben-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:0;transition:opacity .3s;}
+.ben-card:hover::after{opacity:1;}
+.ben-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
+.ben-icon{width:44px;height:44px;min-width:44px;border-radius:11px;background:var(--ink2);border:1px solid rgba(184,151,90,.14);display:flex;align-items:center;justify-content:center;color:var(--gold);}
+.ben-title{font-size:.95rem;font-weight:600;color:var(--ink);}
+.ben-sub{font-size:.72rem;color:var(--text3);letter-spacing:.3px;margin-top:1px;}
+.ben-list{list-style:none;display:flex;flex-direction:column;gap:8px;padding:0;}
+.ben-item{display:flex;align-items:flex-start;gap:9px;font-size:.76rem;color:var(--text2);line-height:1.6;}
+.ben-dot{width:4px;height:4px;border-radius:50%;background:var(--gold);margin-top:7px;flex-shrink:0;}
 
 .why-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;margin-top:60px;}
 .why-l{background:var(--ink2);padding:60px 52px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;}
@@ -288,6 +292,11 @@ section{padding:96px 72px;width:100%;}
 .sc-bl{bottom:10px;left:10px;border-bottom:1px solid rgba(184,151,90,.2);border-left:1px solid rgba(184,151,90,.2);}
 .sc-br{bottom:10px;right:10px;border-bottom:1px solid rgba(184,151,90,.2);border-right:1px solid rgba(184,151,90,.2);}
 
+/* ── MODULE HIGHLIGHTS STRIP ── */
+.mod-highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+.mh-pill{background:rgba(184,151,90,.05);border:1px solid rgba(184,151,90,.1);border-radius:var(--r-sm);padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:.7rem;color:var(--text2);}
+.mh-pill-icon{color:var(--gold);flex-shrink:0;}
+
 .hiw{background:var(--ink2);width:100%;}
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:60px;position:relative;}
 .steps::before{content:'';position:absolute;top:25px;left:12.5%;right:12.5%;height:1px;background:linear-gradient(90deg,transparent,var(--border2),var(--gold),var(--border2),transparent);}
@@ -312,6 +321,22 @@ section{padding:96px 72px;width:100%;}
 .cy{color:var(--green);font-weight:700;}
 .cn{color:rgba(255,255,255,.15);font-weight:700;}
 .cp{color:var(--gold);font-weight:700;}
+
+/* ── INTELLIGENCE SECTION ── */
+.intel-sec{background:var(--ink);width:100%;padding:96px 72px;}
+.intel-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start;margin-top:56px;}
+.intel-cats{display:flex;flex-direction:column;gap:12px;}
+.intel-cat{background:rgba(184,151,90,.04);border:1px solid rgba(184,151,90,.08);border-radius:var(--r-md);padding:20px 22px;cursor:pointer;transition:all .3s;}
+.intel-cat:hover,.intel-cat.active{background:rgba(184,151,90,.06);border-color:rgba(184,151,90,.2);}
+.ic-head{display:flex;align-items:center;gap:11px;margin-bottom:6px;}
+.ic-icon{width:32px;height:32px;border-radius:8px;background:rgba(184,151,90,.08);border:1px solid rgba(184,151,90,.14);display:flex;align-items:center;justify-content:center;color:var(--gold);}
+.ic-title{font-size:.84rem;font-weight:600;color:#fff;}
+.ic-desc{font-size:.72rem;color:rgba(255,255,255,.28);line-height:1.6;}
+.intel-panel{background:rgba(184,151,90,.03);border:1px solid rgba(184,151,90,.1);border-radius:var(--r-lg);padding:28px;position:sticky;top:100px;}
+.intel-panel-title{font-size:.58rem;letter-spacing:2px;text-transform:uppercase;color:rgba(184,151,90,.4);margin-bottom:16px;}
+.intel-items{display:flex;flex-direction:column;gap:10px;}
+.intel-item{display:flex;align-items:flex-start;gap:10px;font-size:.76rem;color:rgba(255,255,255,.4);line-height:1.6;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.03);}
+.intel-item-dot{width:6px;height:6px;min-width:6px;border-radius:50%;background:var(--gold);margin-top:6px;opacity:.5;}
 
 .t-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:52px;}
 .t-card{background:var(--cream);border:1px solid var(--border);border-radius:var(--r-lg);padding:28px;transition:all .3s;position:relative;overflow:hidden;cursor:pointer;}
@@ -396,10 +421,11 @@ footer{background:var(--ink);padding:60px 72px 0;display:grid;grid-template-colu
 
 @media(max-width:1100px){
   nav,nav.s{padding:16px 28px;}
-  section,#about{padding-left:28px;padding-right:28px;}
+  section,#about,.outcomes-strip,.benefits-sec,.intel-sec,.modules-sec{padding-left:28px;padding-right:28px;}
   .trust,.integ{padding-left:28px;padding-right:28px;}
   footer{padding:52px 28px 0;gap:32px;}
   .about-grid{gap:48px;}
+  .intel-grid{grid-template-columns:1fr;}
 }
 @media(max-width:900px){
   nav,nav.s{padding:13px 20px;}
@@ -409,7 +435,7 @@ footer{background:var(--ink);padding:60px 72px 0;display:grid;grid-template-colu
   .hero-r{display:none;}
   .hero-l{padding:110px 20px 60px;}
   .hero-h1{font-size:2.6rem;}
-  section,#about{padding-top:60px;padding-bottom:60px;padding-left:20px;padding-right:20px;}
+  section,#about,.outcomes-strip,.benefits-sec,.intel-sec,.modules-sec{padding-top:60px;padding-bottom:60px;padding-left:20px;padding-right:20px;}
   .trust,.integ{padding-left:20px;padding-right:20px;}
   footer{grid-template-columns:1fr 1fr;padding:40px 20px 0;}
   .sh2{font-size:2.2rem;}
@@ -434,12 +460,15 @@ footer{background:var(--ink);padding:60px 72px 0;display:grid;grid-template-colu
   .demo-l{padding:40px 24px 24px;}
   .demo-r{padding:0 24px 40px;}
   .f2{grid-template-columns:1fr;}
+  .benefits-grid{grid-template-columns:1fr;}
+  .outcomes-grid{grid-template-columns:1fr 1fr;}
+  .mod-highlights{grid-template-columns:1fr 1fr;}
 }
 @media(max-width:480px){
   .hero-h1{font-size:2rem;}
   .hero-btns{flex-direction:column;}
   .hero-btns .btn-p,.hero-btns .btn-o{justify-content:center;}
-  section,#about{padding-top:48px;padding-bottom:48px;padding-left:16px;padding-right:16px;}
+  section,#about,.outcomes-strip,.benefits-sec,.intel-sec,.modules-sec{padding-top:48px;padding-bottom:48px;padding-left:16px;padding-right:16px;}
   .sh2{font-size:1.85rem;}
   .nums{grid-template-columns:1fr;}
   .steps{grid-template-columns:1fr;}
@@ -447,6 +476,8 @@ footer{background:var(--ink);padding:60px 72px 0;display:grid;grid-template-colu
   .about-values{grid-template-columns:1fr;}
   .team-grid{grid-template-columns:1fr;}
   .trust,.integ{padding-left:16px;padding-right:16px;flex-direction:column;align-items:flex-start;}
+  .outcomes-grid{grid-template-columns:1fr;}
+  .mod-highlights{grid-template-columns:1fr;}
 }
 `;
 
@@ -458,19 +489,17 @@ export default function Pratyeksha() {
   const [submitting, setSubmitting] = useState(false);
   const [stats, setStats] = useState({tenantCount:47, ordersCount:15000, citiesCount:4});
   const [form, setForm] = useState({name:'',restaurant:'',phone:'',email:'',type:'',tables:'',city:''});
+  const [activeIntel, setActiveIntel] = useState(0);
   const dotRef = useRef(null);
   const ringRef = useRef(null);
 
-useEffect(()=>{
-    /* inject main CSS */
+  useEffect(()=>{
     if (!document.getElementById('pratyeksha-css')) {
       const el = document.createElement('style');
       el.id = 'pratyeksha-css';
       el.textContent = CSS;
       document.head.appendChild(el);
     }
-
-    /* inject scroll-unlock AFTER main CSS so it wins */
     if (!document.getElementById('pratyeksha-scroll-fix')) {
       const sf = document.createElement('style');
       sf.id = 'pratyeksha-scroll-fix';
@@ -481,19 +510,11 @@ useEffect(()=>{
       `;
       document.head.appendChild(sf);
     }
-
-    /* stats */
     fetch(`${BASE_URL}/platform-stats`)
       .then(r=>r.json()).then(d=>{ if(d.success&&d.stats) setStats(d.stats); }).catch(()=>{});
-
-    /* loader */
     const t = setTimeout(()=>{ setLoaderOut(true); initReveal(); }, 2600);
-
-    /* scroll → nav */
     const onScroll = ()=> setNavScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, {passive:true});
-
-    /* cursor */
     let cx=0, cy=0, rx=0, ry=0, raf;
     const onMove = e => { cx=e.clientX; cy=e.clientY;
       if(dotRef.current){ dotRef.current.style.left=cx+'px'; dotRef.current.style.top=cy+'px'; }
@@ -505,7 +526,6 @@ useEffect(()=>{
     };
     raf=requestAnimationFrame(tick);
     document.addEventListener('mousemove', onMove, {passive:true});
-
     return () => {
       clearTimeout(t); cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
@@ -526,32 +546,46 @@ useEffect(()=>{
   const addH = ()=>document.body.classList.add('ch');
   const remH = ()=>document.body.classList.remove('ch');
   const hp = {onMouseEnter:addH, onMouseLeave:remH};
-
-  const go = id=>{
-    setMenuOpen(false);
-    const el=document.getElementById(id);
-    if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
-  };
-
+  const go = id=>{ setMenuOpen(false); const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
   const chg = e => setForm(p=>({...p,[e.target.id.replace('f-','')]:e.target.value}));
-
   const submit = async e=>{
-    e.preventDefault();
-    setSubmitting(true);
+    e.preventDefault(); setSubmitting(true);
     try{
-      await fetch(`${BASE_URL}/demo-request`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          name:form.name, restaurant:form.restaurant, phone:form.phone,
-          email:form.email, type:form.type, tables:form.tables, city:form.city
-        })
+      await fetch(`${BASE_URL}/demo-request`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:form.name,restaurant:form.restaurant,phone:form.phone,email:form.email,type:form.type,tables:form.tables,city:form.city})
       });
     }catch{}
     setShowThanks(true);
     setForm({name:'',restaurant:'',phone:'',email:'',type:'',tables:'',city:''});
     setSubmitting(false);
   };
+
+  const intelCategories = [
+    {
+      icon:<IcoBar size={14}/>,title:'Menu Engineering',desc:'Dish profitability, Star/Plowhorse/Puzzle/Dog matrix, dead-item detection',
+      items:['Re-price your Paneer Tikka — it has 8% margin, not 22%','3 dishes unsold in 14 days — candidates for menu removal','Your most-ordered item has a recipe coverage gap — link ingredients to get true cost','Combo opportunity: Masala Chai + Samosa ordered together 67% of the time']
+    },
+    {
+      icon:<IcoActivity size={14}/>,title:'Operations Intelligence',desc:'Table performance, kitchen prep time, peak hours, dwell time analytics',
+      items:['Table 3 averages 94-minute dwell — highest in the restaurant','Kitchen prep times spiked 40% on Friday evenings — consider pre-prep','Peak hour 7–9 PM generates 58% of daily revenue — staff accordingly','3 tables have below-average revenue per cover — investigate floor layout']
+    },
+    {
+      icon:<IcoPackage size={14}/>,title:'Inventory Health',desc:'Stock alerts, WAC drift, procurement timing, capital tied up in ingredients',
+      items:['Onions are 3 days from stockout based on 30-day usage','Tomato puree cost spiked 31% above WAC — switch vendor or adjust recipe costing','₹14,200 tied up in slow-moving dry goods — review par levels','Procurement predictor: order cream and butter by Thursday to avoid weekend gap']
+    },
+    {
+      icon:<IcoUsers size={14}/>,title:'Staff & Payroll',desc:'Efficiency tracking, revenue per hour, scheduling optimization, payroll status',
+      items:['Waiter Ramesh generates ₹2,100/hour — highest efficiency on floor','3 staff members clocked overtime this week — review scheduling','Payroll pending: ₹48,000 due by end of month for 6 staff','Understaffed on Tuesday lunch — only 1 waiter covering 8 tables']
+    },
+    {
+      icon:<IcoDollar size={14}/>,title:'Financial Health',desc:'P&L, break-even tracker, GST compliance, aggregator performance',
+      items:['You are 73% to this month\'s break-even — on track','GSTR-3B deadline in 8 days — ₹12,400 GST due','Zomato commission 22% vs Swiggy 18% — review platform mix','Food cost ratio at 34% — industry benchmark is 28-32%, action needed']
+    },
+    {
+      icon:<IcoRepeat size={14}/>,title:'Customer Retention',desc:'Repeat rate, loyalty tracking, revenue source breakdown, waitlist conversion',
+      items:['Repeat customer rate dropped from 42% to 31% — investigate','17 loyalty customers haven\'t visited in 30+ days — send a campaign','Waitlist-to-seated conversion at 61% — industry average is 74%','Online channel growing 18% MoM — consider expanding aggregator hours']
+    },
+  ];
 
   return (
     <>
@@ -580,8 +614,8 @@ useEffect(()=>{
 
       {/* Mobile menu */}
       <div id="mmenu" className={menuOpen?'open':''}>
-        <button className="mm-close" onClick={()=>setMenuOpen(false)}>✕</button>
-        {[['about','About'],['features','Features'],['modules','Modules'],['compare','Compare'],['contact','Book Demo']].map(([id,label])=>(
+        <button className="mm-close" onClick={()=>setMenuOpen(false)}>&#10005;</button>
+        {[['about','About'],['features','Features'],['modules','Modules'],['benefits','Business Impact'],['compare','Compare'],['contact','Book Demo']].map(([id,label])=>(
           <a key={id} onClick={()=>go(id)}>{label}</a>
         ))}
       </div>
@@ -593,10 +627,10 @@ useEffect(()=>{
           <div className="nav-name">Pratyeksha</div>
         </a>
         <div className="nav-links">
-          {[['about','About'],['features','Features'],['modules','Modules'],['compare','Compare'],['contact','Contact']].map(([id,label])=>(
+          {[['about','About'],['features','Features'],['modules','Modules'],['benefits','Impact'],['compare','Compare'],['contact','Contact']].map(([id,label])=>(
             <a key={id} onClick={()=>go(id)} {...hp}>{label}</a>
           ))}
-          <a className="nav-cta" onClick={()=>go('contact')} {...hp}>Book a Demo →</a>
+          <a className="nav-cta" onClick={()=>go('contact')} {...hp}>Book a Demo</a>
         </div>
         <button className="nav-ham" onClick={()=>setMenuOpen(v=>!v)}><span/><span/><span/></button>
       </nav>
@@ -604,19 +638,21 @@ useEffect(()=>{
       {/* ═══ HERO ═══ */}
       <section id="home" className="hero" style={{padding:0}}>
         <div className="hero-l">
-          <div className="hero-eye"><span className="eye-line"/>For Cafes &amp; Restaurants · Made in India</div>
+          <div className="hero-eye"><span className="eye-line"/>Three Modules · One Complete Platform · Made in India</div>
           <h1 className="hero-h1">The Platform Built<br/>for <em>Modern Dining</em></h1>
-          <p className="hero-sub">Pratyeksha unifies your kitchen, floor, inventory, and analytics — with AR menus your guests will talk about. Built for the way Indian restaurants actually operate.</p>
+          <p className="hero-sub">Pratyeksha unifies your Customer Menu, Kitchen Display, and Operator Portal — with AR menus, voice-controlled KDS, and 60 live business recommendations. Built for the way Indian restaurants actually operate.</p>
           <div className="hero-btns">
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Book Free Demo →</button>
-            <button className="btn-o" onClick={()=>go('modules')} {...hp}>▷ &nbsp;See All Modules</button>
+            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Book Free Demo</button>
+            <button className="btn-o" onClick={()=>go('modules')} {...hp}>See All Modules</button>
           </div>
           <div className="hero-kpis">
             <div className="kpi"><span className="kpi-v">3 min</span><span className="kpi-l">Setup Time</span></div>
             <div className="kpi-s"/>
             <div className="kpi"><span className="kpi-v">AR + 3D</span><span className="kpi-l">Menu First</span></div>
             <div className="kpi-s"/>
-            <div className="kpi"><span className="kpi-v">24 / 7</span><span className="kpi-l">Live Support</span></div>
+            <div className="kpi"><span className="kpi-v">60</span><span className="kpi-l">Live AI Insights</span></div>
+            <div className="kpi-s"/>
+            <div className="kpi"><span className="kpi-v">24/7</span><span className="kpi-l">Live Support</span></div>
           </div>
         </div>
         <div className="hero-r">
@@ -624,7 +660,7 @@ useEffect(()=>{
           <div className="hero-dash">
             <div className="dh"><span className="dh-t">Live Dashboard</span><span className="dh-l"><span className="ldot"/>Live</span></div>
             <div className="ds">
-              <div className="dc"><div className="dn">₹24,380</div><div className="dl">Today's Revenue</div></div>
+              <div className="dc"><div className="dn">&#8377;24,380</div><div className="dl">Today's Revenue</div></div>
               <div className="dc"><div className="dn">+18.4%</div><div className="dl">vs Yesterday</div></div>
             </div>
             {[['Table 1','OCCUPIED','occ'],['Table 4','CHECKOUT','chk'],['Table 7','OCCUPIED','occ'],['Table 9','EMPTY','emp']].map(([t,s,c])=>(
@@ -637,7 +673,7 @@ useEffect(()=>{
       <div className="trust">
         <span className="trust-lbl">Trusted across Maharashtra</span>
         <div className="trust-pills">
-          {['Kolhapur','Pune','Mumbai','Sangli'].map(c=><div className="tp" key={c}><IcoStar/>{c}</div>)}
+          {['Kolhapur','Pune','Mumbai','Sangli'].map(c=><div className="tp" key={c}><span className="tp-dot"/>{c}</div>)}
         </div>
       </div>
 
@@ -655,22 +691,22 @@ useEffect(()=>{
         <div className="center reveal">
           <div className="eye">Why Pratyeksha</div>
           <h2 className="sh2">Everything your establishment<br/><em>actually needs</em></h2>
-          <p className="sdesc">One complete platform. Every department. Real-time connected — built for the way Indian cafes and restaurants actually operate.</p>
+          <p className="sdesc">One complete platform across three modules — Customer Menu, Kitchen Display, and Operator Portal. Every department connected in real-time, built for the way Indian cafes and restaurants actually operate.</p>
         </div>
         <div className="feat-grid">
           {[
-            {icon:<IcoLayers/>,t:'AR + 3D Menu',d:'Customers scan your QR and see every dish in AR — full 3D rotation on their own phone, no app required. Chef narrates specials in Marathi and English.',lnk:'ar-module',lbl:'Explore AR Menu →'},
-            {icon:<IcoMon/>,t:'Kitchen Display System',d:'Voice-controlled KDS with FIFO speech queue, category-wise ticket routing, and per-section pending counts. Say "complete table 7" — done.',lnk:'kds-module',lbl:'Explore KDS →'},
-            {icon:<IcoFile/>,t:'Smart Billing Hub',d:'IST-sequential invoices, split payments across Cash, UPI, and Card. Auto-aggregates multi-round orders into a single GST-compliant receipt.',lnk:'billing-module',lbl:'Explore Billing →'},
-            {icon:<IcoBox/>,t:'Inventory + Recipe Engine',d:'Every settlement automatically deducts exact ingredients — down to the gram. Link recipes once, watch stock, procurement, and profitability update in real-time.',lnk:'inventory-module',lbl:'Explore Inventory →'},
-            {icon:<IcoBar/>,t:'Insights Dashboard',d:'Peak-hour heatmaps, dish profitability from actual recipe costs, staff efficiency in revenue per hour. One-click Excel exports.',lnk:'insights-module',lbl:'Explore Insights →'},
-            {icon:<IcoUsers/>,t:'Staff + Attendance',d:'Clock-in/out with IST timestamps. Monthly attendance ledger. Live floor coverage density. Payroll tracking with exportable reports.',lnk:'staff-module',lbl:'Explore Staff →'},
+            {icon:<IcoLayers/>,t:'AR + 3D Customer Menu',d:'Customers scan your QR and see every dish in full 3D on their own phone — no app required. Rotate, zoom, and virtually place dishes on the table before ordering. Chef narrates specials in Marathi and English.',lnk:'ar-module',lbl:'Explore AR Menu'},
+            {icon:<IcoMon/>,t:'Voice-Controlled Kitchen Display',d:'Voice-activated KDS with FIFO speech queue, per-item cooking timers, and category-wise ticket routing. Say "complete table 7" with wet hands — done. Fully bilingual in English and Marathi.',lnk:'kds-module',lbl:'Explore KDS'},
+            {icon:<IcoFile/>,t:'Smart Billing Hub',d:'One-tap settlement aggregates every order round into a single CGST/SGST-compliant invoice. Split across Cash, UPI, and Card in any ratio. IST-sequential bill numbers. Zero reconciliation.',lnk:'billing-module',lbl:'Explore Billing'},
+            {icon:<IcoBox/>,t:'Inventory + Recipe Engine',d:'Link each dish to exact ingredients once. Every settlement automatically deducts precise amounts — down to the gram. Weighted Average Cost recalculates on every restock. Auto-procurement predictor.',lnk:'inventory-module',lbl:'Explore Inventory'},
+            {icon:<IcoBar/>,t:'Business Intelligence Suite',d:'Peak-hour heatmaps, true dish profitability from real ingredient costs, Menu Engineering Matrix, GST compliance countdown, full P&L, and 60 live AI recommendations. One-click Excel export.',lnk:'insights-module',lbl:'Explore Insights'},
+            {icon:<IcoUsers/>,t:'Staff, Attendance & Payroll',d:'Clock-in/clock-out with IST timestamps. Monthly attendance ledger feeds directly into payroll calculation. One-tap salary slip PDF with deductions. Live floor coverage density per shift.',lnk:'staff-module',lbl:'Explore Staff'},
           ].map(({icon,t,d,lnk,lbl},i)=>(
             <div className={`feat reveal rd${(i%3)+1}`} key={t} {...hp}>
               <div className="feat-icon">{icon}</div>
               <div className="feat-t">{t}</div>
               <div className="feat-d">{d}</div>
-              <button className="feat-lnk" onClick={()=>go(lnk)}>{lbl}</button>
+              <button className="feat-lnk" onClick={()=>go(lnk)}>{lbl} &rarr;</button>
             </div>
           ))}
         </div>
@@ -678,11 +714,39 @@ useEffect(()=>{
           {[[`${stats.tenantCount}+`,'Active Establishments','Cafes & Restaurants'],
             [`${stats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
             [`${stats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
-            ['4.9★','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
+            ['4.9','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
             <div className="nc" key={l}><div className="nv">{v}</div><div className="nl">{l}</div><div className="ns">{s}</div></div>
           ))}
         </div>
       </section>
+
+      {/* ═══ OUTCOMES ═══ */}
+      <div className="outcomes-strip reveal">
+        <div className="center">
+          <div className="eye" style={{color:'rgba(184,151,90,.6)'}}>Measured Impact</div>
+          <h2 className="sh2" style={{color:'#fff'}}>What changes in <em>week one</em></h2>
+          <p className="sdesc" style={{color:'rgba(255,255,255,.38)',margin:'0 auto'}}>Not promises — outcomes verified by restaurant owners currently on the platform across Maharashtra.</p>
+        </div>
+        <div className="outcomes-grid">
+          {[
+            {icon:<IcoDollar size={16}/>,v:'&#8377;20k–80k',t:'Margin Recovered Monthly',d:'By identifying dishes losing money via the recipe-based profitability matrix — a single pricing correction owners were unable to see without real cost data.'},
+            {icon:<IcoZap size={16}/>,v:'40%',t:'Faster Kitchen Throughput',d:'Voice KDS eliminates screen-touching during service. FIFO speech queue and aggregate summary view cut per-ticket time significantly.'},
+            {icon:<IcoClock size={16}/>,v:'Under 1hr',t:'Full Onboarding',d:'No hardware. No on-site visit. Menu digitized with 3D visuals, QR codes printed and sent, first live order running within hours.'},
+            {icon:<IcoRepeat size={16}/>,v:'3x',t:'More Google Reviews',d:'The post-checkout Google Review prompt shown at the exact moment guests are most satisfied drives review volume without any extra staff effort.'},
+            {icon:<IcoTarget size={16}/>,v:'Zero',t:'End-of-Day Reconciliation',d:'Automatic CGST/SGST, sequential invoice numbering, and settlement guards eliminate the traditional nightly billing cross-check entirely.'},
+            {icon:<IcoPieChart size={16}/>,v:'60',t:'Live Business Recommendations',d:'A continuously updating AI engine covering menu engineering, inventory health, staff scheduling, GST deadlines, and aggregator performance.'},
+            {icon:<IcoActivity size={16}/>,v:'Real-time',t:'Multi-Device Sync',d:'Socket.IO sync across every kitchen station, billing screen, and manager device. A kitchen mark propagates to billing in under a second.'},
+            {icon:<IcoGlobe size={16}/>,v:'Bilingual',t:'English + Marathi Throughout',d:'Every customer-facing screen available in both languages. Voice commands understood in both. The platform respects how your staff and guests actually communicate.'},
+          ].map(({icon,v,t,d})=>(
+            <div className="oc reveal" key={t} {...hp}>
+              <div className="oc-icon">{icon}</div>
+              <div className="oc-v" dangerouslySetInnerHTML={{__html:v}}/>
+              <div className="oc-t">{t}</div>
+              <div className="oc-d">{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ═══ WHY US ═══ */}
       <section style={{background:'var(--cream2)',paddingTop:0,paddingBottom:96}}>
@@ -692,17 +756,17 @@ useEffect(()=>{
             <div className="why-h">Not just software.<br/><em>A dedicated partner</em> for your establishment.</div>
             <div className="why-b">Most restaurant software is built by engineers who've never worked a dinner rush. Pratyeksha was designed alongside real restaurant owners in Kolhapur, Pune, and Mumbai — people who know what it means when a table is waiting and the kitchen is three orders behind simultaneously.</div>
             <div className="why-sts">
-              {[['<1hr','Onboarding'],['Zero','Hardware Needed'],['Live','Support Always']].map(([v,l])=>(
+              {[['Less than 1hr','Onboarding'],['Zero','Hardware Needed'],['Live','Support Always'],['60','AI Recommendations']].map(([v,l])=>(
                 <div key={l}><div className="ws-v">{v}</div><div className="ws-l">{l}</div></div>
               ))}
             </div>
           </div>
           <div className="why-r">
             {[
-              {icon:<IcoShield/>,t:'Built for Indian Regulations',d:'IST-anchored billing, GST-compliant invoices with CGST/SGST split, and Swiggy/Zomato order reconciliation — all out of the box.'},
-              {icon:<IcoClock/>,t:'Real-Time Across Every Device',d:"A menu change on the portal reflects on every customer's phone within seconds. A kitchen ticket completed updates billing instantly."},
-              {icon:<IcoDollar/>,t:'Pays for Itself in Week One',d:'Owners tracking dish profitability through our recipe engine routinely find items losing margin. One pricing correction can recover ₹20,000–₹80,000 per month.'},
-              {icon:<IcoPhone/>,t:'Human Support, Always',d:'Not a ticket system. Not a chatbot. When you call, our team answers — and we know your restaurant by name.'},
+              {icon:<IcoShield/>,t:'Built for Indian Regulations',d:'IST-anchored billing, GST-compliant invoices with CGST/SGST split, GSTIN and FSSAI number on every bill, Swiggy/Zomato order reconciliation, and GSTR-1/GSTR-3B filing-ready exports — all out of the box.'},
+              {icon:<IcoClock/>,t:'Real-Time Across Every Device',d:'A menu change on the portal reflects on every customer phone within seconds. A kitchen ticket completed updates billing instantly. Socket.IO sync across every screen, every station, always.'},
+              {icon:<IcoDollar/>,t:'Pays for Itself in Week One',d:'Owners tracking dish profitability through our recipe engine routinely find items losing margin. One pricing correction can recover ₹20,000–₹80,000 per month — that\'s years of platform cost recovered in days.'},
+              {icon:<IcoPhone/>,t:'Human Support, Always',d:'Not a ticket system. Not a chatbot. When you call, our team answers — and we know your restaurant by name. Dedicated support that understands Indian kitchens, GST, and dinner rush realities.'},
             ].map(({icon,t,d})=>(
               <div className="why-pt" key={t}>
                 <div className="wpi">{icon}</div>
@@ -714,121 +778,283 @@ useEffect(()=>{
       </section>
 
       {/* ═══ MODULES ═══ */}
-      <section id="modules" className="modules-sec">
+      <section id="modules" className="modules-sec" style={{paddingTop:96,paddingBottom:96}}>
         <div className="center reveal" style={{marginBottom:80}}>
           <div className="eye">Platform Modules</div>
-          <h2 className="sh2">Six modules. <em>One system.</em></h2>
-          <p className="sdesc">Deeply integrated modules that communicate in real-time — so your kitchen, billing, and inventory are always in perfect sync.</p>
+          <h2 className="sh2">Three modules. <em>One system.</em></h2>
+          <p className="sdesc">Customer Menu, Kitchen Display, and Operator Portal — deeply integrated modules communicating in real-time so your floor, kitchen, billing, and inventory are always in perfect sync.</p>
         </div>
 
+        {/* MODULE 1 — CUSTOMER MENU */}
         <div id="ar-module" className="mod-row reveal">
           <div>
-            <div className="mbadge"><IcoLayers size={13}/>Module 01 — AR Customer Experience</div>
+            <div className="mbadge"><IcoLayers size={13}/>Module 01 — Customer Menu &amp; Ordering App</div>
             <div className="meye">Customer Experience</div>
             <h3 className="mh3">The menu your guests will <em>talk about</em></h3>
-            <p className="mp">India's first restaurant QR menu with AR dish visualization. Customers rotate, zoom, and virtually place dishes on their table before ordering — in Marathi and English with chef narration.</p>
+            <p className="mp">India's first restaurant QR menu with AR dish visualization. Customers rotate, zoom, and virtually place dishes on their table before ordering — in Marathi and English with chef narration. No app install required. Works on any smartphone.</p>
             <ul className="mul">
-              <ChkItem>AR food preview — works on any smartphone, no app install</ChkItem>
-              <ChkItem>Chef model narrates daily specials in Marathi &amp; English</ChkItem>
-              <ChkItem>Live menu sync — disable a dish and it disappears within seconds</ChkItem>
-              <ChkItem>Digital GST-compliant invoice PDF downloadable at checkout</ChkItem>
+              <ChkItem>AR food preview with "View in Your Space" — full 3D rotation on any phone</ChkItem>
+              <ChkItem>Bilingual menu (English + Marathi) — instant toggle, no separate cards</ChkItem>
+              <ChkItem>Auto Bestseller and Chef Pick badges calculated from real sales data</ChkItem>
+              <ChkItem>Half/Full portion pricing with independent add-to-cart controls</ChkItem>
+              <ChkItem>Live order status tracking — In the Kitchen, Ready, Served</ChkItem>
+              <ChkItem>One-tap service requests (spoons, napkins, table cleaning) direct to staff</ChkItem>
+              <ChkItem>QR-based digital waitlist — join, see live position, pre-order while waiting</ChkItem>
+              <ChkItem>Instant GST-compliant digital invoice, downloadable as PDF</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoGlobe size={12}/>,t:'No App Install'},{icon:<IcoMic size={12}/>,t:'Chef Narration'},{icon:<IcoBell size={12}/>,t:'Push Notifications'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <ModPH icon={<IcoLayers size={24}/>} label="AR Menu Screenshot" sublabel="Replace: screenshots/ar-menu.jpg" tag="AR · 3D · Bilingual"/>
         </div>
 
+        {/* MODULE 2 — KDS */}
         <div id="kds-module" className="mod-row reveal" style={{direction:'rtl'}}>
           <div style={{direction:'ltr'}}>
             <div className="mbadge"><IcoMon size={13}/>Module 02 — Kitchen Display System</div>
             <div className="meye">Kitchen Intelligence</div>
             <h3 className="mh3">A display that <em>thinks with you</em></h3>
-            <p className="mp">Designed for real kitchen chaos — voice commands, FIFO speech queue so new orders announce themselves, and per-category routing so each station only sees what's relevant.</p>
+            <p className="mp">Designed for real kitchen chaos — voice commands in English and Marathi, FIFO speech queue so new orders announce themselves, per-item cooking timers, and category-wise routing so each station only sees what's relevant.</p>
             <ul className="mul">
-              <ChkItem>Voice: "Complete table 7" — hands-free dispatch</ChkItem>
-              <ChkItem>Category sidebar with live pending counts</ChkItem>
-              <ChkItem>86-kill toggle removes a dish instantly when you run out</ChkItem>
-              <ChkItem>Prep time tracker feeds into analytics</ChkItem>
+              <ChkItem>Voice control: "Complete table 7," "&#2335;&#2375;&#2348;&#2354; &#2340;&#2351;&#2366;&#2352;" — hands-free dispatch</ChkItem>
+              <ChkItem>Per-item cooking timer with 5-minute SLOW flag — catch delays while still cooking</ChkItem>
+              <ChkItem>Prep Queue marquee: top 5 most-needed dishes across all active tickets</ChkItem>
+              <ChkItem>Aggregate Summary view — total of every dish across the kitchen for batch cooking</ChkItem>
+              <ChkItem>86-kill toggle removes a sold-out dish from the live customer menu instantly</ChkItem>
+              <ChkItem>Wastage logging with auto cost calculation and inventory deduction</ChkItem>
+              <ChkItem>Recall system — bring back any of the last 10 completed tickets</ChkItem>
+              <ChkItem>Swiggy/Zomato orders on the same screen with platform color-coding</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoMic size={12}/>,t:'Bilingual Voice'},{icon:<IcoZap size={12}/>,t:'FIFO Queue'},{icon:<IcoTarget size={12}/>,t:'Per-Item Timers'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <div style={{direction:'ltr'}}>
             <ModPH icon={<IcoMon size={24}/>} label="KDS Screenshot" sublabel="Replace: screenshots/kds.jpg" tag="Voice · FIFO · Real-time"/>
           </div>
         </div>
 
+        {/* MODULE 3 — BILLING */}
         <div id="billing-module" className="mod-row reveal">
           <div>
             <div className="mbadge"><IcoFile size={13}/>Module 03 — Smart Billing Hub</div>
-            <div className="meye">Billing Hub</div>
+            <div className="meye">Billing &amp; Settlement</div>
             <h3 className="mh3">Settlement that's <em>always right</em></h3>
-            <p className="mp">From live floor map to printed receipt — all in under 60 seconds. No reconciliation. No end-of-day surprises.</p>
+            <p className="mp">From live floor map to printed receipt — under 60 seconds. No reconciliation. No end-of-day surprises. CGST/SGST calculated automatically. Every bill audit-ready from the moment it's issued.</p>
             <ul className="mul">
-              <ChkItem>Live floor map — occupied, checkout, empty tables</ChkItem>
-              <ChkItem>Split a bill across Cash, UPI, and Card in any ratio</ChkItem>
-              <ChkItem>IST-sequential bill numbers — always audit-ready</ChkItem>
-              <ChkItem>Auto-aggregates multiple ordering rounds into one clean receipt</ChkItem>
+              <ChkItem>Live floor map — occupied, checkout-requested, and empty tables at a glance</ChkItem>
+              <ChkItem>Auto-aggregates every order round into a single consolidated invoice</ChkItem>
+              <ChkItem>Split payments across Cash, UPI, and Card in any ratio with mismatch validation</ChkItem>
+              <ChkItem>IST-sequential bill numbers with GSTIN, FSSAI, and GST breakdown on every bill</ChkItem>
+              <ChkItem>Concurrent-settlement lock and duplicate-settlement guard</ChkItem>
+              <ChkItem>Download all today's invoices as a single multi-page PDF in one click</ChkItem>
+              <ChkItem>Daily Settlement HUD — Cash, UPI, Card totals with CGST/SGST collected</ChkItem>
+              <ChkItem>Direct Takeaway and Online Ordering billing modes</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoShield size={12}/>,t:'GST Compliant'},{icon:<IcoGrid size={12}/>,t:'Split Payment'},{icon:<IcoFile size={12}/>,t:'Audit-Ready'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <ModPH icon={<IcoFile size={24}/>} label="Billing Screenshot" sublabel="Replace: screenshots/billing.jpg" tag="GST · Split · Real-time"/>
         </div>
 
+        {/* MODULE 4 — INVENTORY */}
         <div id="inventory-module" className="mod-row reveal" style={{direction:'rtl'}}>
           <div style={{direction:'ltr'}}>
             <div className="mbadge"><IcoBox size={13}/>Module 04 — Inventory + Recipe Engine</div>
             <div className="meye">Inventory Intelligence</div>
             <h3 className="mh3">Stock that manages <em>itself</em></h3>
-            <p className="mp">Link each dish to its exact ingredients once. Every settlement automatically deducts the precise amounts — no manual entry, no end-of-week guesswork.</p>
+            <p className="mp">Link each dish to its exact ingredients once. Every settlement automatically deducts the precise amounts — no manual entry, no end-of-week guesswork. Weighted Average Cost recalculates on every restock purchase.</p>
             <ul className="mul">
-              <ChkItem>Recipe engine — one-time setup, lifelong accuracy</ChkItem>
-              <ChkItem>Auto stock deduction at every settlement — down to the gram</ChkItem>
-              <ChkItem>Procurement predictor from actual usage patterns</ChkItem>
-              <ChkItem>Real dish profitability from actual ingredient costs</ChkItem>
+              <ChkItem>Recipe engine — one-time setup, auto deduction at every settlement down to the gram</ChkItem>
+              <ChkItem>Weighted Average Cost auto-recalculates on restock with 25% price-spike alert</ChkItem>
+              <ChkItem>Procurement Predictor — days of stock remaining from rolling 30-day usage</ChkItem>
+              <ChkItem>Real dish profitability from live ingredient costs, not estimates</ChkItem>
+              <ChkItem>Full purchase history ledger with vendor name and batch ID capture</ChkItem>
+              <ChkItem>Auto-hide menu items the instant a linked ingredient hits zero stock</ChkItem>
+              <ChkItem>Monthly wastage reports — cost lost by ingredient, by reason, daily trend</ChkItem>
+              <ChkItem>Export full inventory register as a styled Excel workbook in one click</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoZap size={12}/>,t:'Auto-Deduct'},{icon:<IcoDollar size={12}/>,t:'WAC Costing'},{icon:<IcoTrend size={12}/>,t:'Procurement AI'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <div style={{direction:'ltr'}}>
             <ModPH icon={<IcoBox size={24}/>} label="Inventory Screenshot" sublabel="Replace: screenshots/inventory.jpg" tag="Recipe-linked · Auto-deduct"/>
           </div>
         </div>
 
+        {/* MODULE 5 — INSIGHTS */}
         <div id="insights-module" className="mod-row reveal">
           <div>
-            <div className="mbadge"><IcoBar size={13}/>Module 05 — Insights Dashboard</div>
-            <div className="meye">Business Intelligence</div>
+            <div className="mbadge"><IcoBar size={13}/>Module 05 — Business Intelligence Dashboard</div>
+            <div className="meye">Analytics &amp; Insights</div>
             <h3 className="mh3">Data that drives <em>real decisions</em></h3>
-            <p className="mp">Not vanity metrics. Real operational intelligence — which dishes are losing money, when your kitchen is overwhelmed, how productively your team works.</p>
+            <p className="mp">Not vanity metrics. Real operational intelligence — which dishes are losing money, when your kitchen is overwhelmed, whether customers are actually returning. Month navigator with auto-generated smart digest, trend, and forecast.</p>
             <ul className="mul">
-              <ChkItem>Peak-hour heatmap by every hour of the day</ChkItem>
-              <ChkItem>Dish profitability matrix using real ingredient costs</ChkItem>
-              <ChkItem>Month-on-month revenue comparison — auto-calculated</ChkItem>
-              <ChkItem>One-click Excel export for daily, weekly, or monthly</ChkItem>
+              <ChkItem>Menu Intelligence — Star/Plowhorse/Puzzle/Dog matrix, dead-item detection</ChkItem>
+              <ChkItem>Peak-hour heatmap calendar — which hours and days actually drive revenue</ChkItem>
+              <ChkItem>Table performance — revenue, turns, dwell time, and cost per cover</ChkItem>
+              <ChkItem>Full P&L with break-even tracker and live progress bar</ChkItem>
+              <ChkItem>GST compliance — CGST/SGST due, GSTR-1/GSTR-3B deadline countdowns</ChkItem>
+              <ChkItem>Aggregator revenue — per-platform Swiggy/Zomato performance breakdown</ChkItem>
+              <ChkItem>Customer retention — repeat rate, loyalty score, revenue source breakdown</ChkItem>
+              <ChkItem>Excel export suite: 12 sheets including GST register and invoice register</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoPieChart size={12}/>,t:'P&L Tracker'},{icon:<IcoAward size={12}/>,t:'Menu Matrix'},{icon:<IcoTrend size={12}/>,t:'Forecasting'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <ModPH icon={<IcoBar size={24}/>} label="Analytics Screenshot" sublabel="Replace: screenshots/insights.jpg" tag="Real-time · Exportable"/>
         </div>
 
+        {/* MODULE 6 — STAFF */}
         <div id="staff-module" className="mod-row reveal" style={{direction:'rtl'}}>
           <div style={{direction:'ltr'}}>
-            <div className="mbadge"><IcoUsers size={13}/>Module 06 — Staff + Attendance</div>
+            <div className="mbadge"><IcoUsers size={13}/>Module 06 — Staff, Attendance &amp; Payroll</div>
             <div className="meye">Workforce Management</div>
             <h3 className="mh3">Your team, <em>fully accounted for</em></h3>
-            <p className="mp">From daily attendance to monthly payroll — every piece of workforce data in one place. Live floor coverage shows which tables are attended before problems emerge.</p>
+            <p className="mp">From daily clock-in to monthly salary slip — every piece of workforce data in one place. Live floor coverage shows which tables have active waitstaff before a problem reaches the customer.</p>
             <ul className="mul">
-              <ChkItem>Clock-in/out with IST timestamps — ledger auto-updates</ChkItem>
-              <ChkItem>Live floor coverage — which tables have active waitstaff</ChkItem>
-              <ChkItem>Payroll tracking with paid/unpaid status</ChkItem>
-              <ChkItem>Revenue per hour logged — per team member, monthly</ChkItem>
+              <ChkItem>Clock-in/clock-out with IST timestamps and auto overtime flagging</ChkItem>
+              <ChkItem>Monthly attendance ledger feeds directly into payroll calculation</ChkItem>
+              <ChkItem>One-tap salary slip PDF with attendance-based deductions</ChkItem>
+              <ChkItem>Pending payroll total auto-calculated — no manual addition</ChkItem>
+              <ChkItem>Live floor coverage — which waiters are on shift, which tables are covered</ChkItem>
+              <ChkItem>Revenue per hour tracked per team member, monthly</ChkItem>
+              <ChkItem>Full staff roster with role, shift type, cuisine specialization, and tenure</ChkItem>
+              <ChkItem>Table assignment map — assign specific tables to specific waitstaff</ChkItem>
             </ul>
-            <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module →</button>
+            <div className="mod-highlights">
+              {[{icon:<IcoClock size={12}/>,t:'Auto Payroll'},{icon:<IcoGrid size={12}/>,t:'Floor Map'},{icon:<IcoTrend size={12}/>,t:'Staff Efficiency'}].map(({icon,t})=>(
+                <div className="mh-pill" key={t}><span className="mh-pill-icon">{icon}</span>{t}</div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              <button className="btn-p" onClick={()=>go('contact')} {...hp}>Get This Module &rarr;</button>
+            </div>
           </div>
           <div style={{direction:'ltr'}}>
             <ModPH icon={<IcoUsers size={24}/>} label="Staff Screenshot" sublabel="Replace: screenshots/staff.jpg" tag="Clock-in · Payroll · Live"/>
           </div>
         </div>
       </section>
+
+      {/* ═══ BUSINESS BENEFITS ═══ */}
+      <section id="benefits" className="benefits-sec">
+        <div className="center reveal">
+          <div className="eye">Business Impact</div>
+          <h2 className="sh2">Ten ways Pratyeksha<br/><em>improves your bottom line</em></h2>
+          <p className="sdesc">Organized by the real problems owners care about — not features, but outcomes.</p>
+        </div>
+        <div className="benefits-grid">
+          {[
+            {
+              icon:<IcoDollar/>,title:'More Revenue',sub:'Without more work',
+              items:['AR dish preview and Bestseller badges drive higher order confidence and larger baskets','Half/Full portion pricing captures customers who\'d otherwise skip a dish entirely','Extra items catalog turns idle counter stock into an active second revenue line','Menu Engineering Matrix shows precisely which dishes to promote, re-price, or drop','Aggregator integration opens a second sales channel without separate staff or tablets']
+            },
+            {
+              icon:<IcoShield/>,title:'Less Money Lost',sub:'To waste, theft, and error',
+              items:['Wastage logging converts vague waste into an exact rupee figure per item and reason','WAC price-spike alerts catch suppliers quietly raising prices before margins erode','Duplicate-settlement guard prevents tables from being accidentally billed twice','Auto inventory deduction means stock counts stay accurate without manual subtraction','Recipe-based profitability exposes dishes that look popular but lose money per plate']
+            },
+            {
+              icon:<IcoZap/>,title:'Faster Service',sub:'Happier customers',
+              items:['Live order timers with Fresh-Warm-Hot-Critical tiers make delayed tables visually impossible to miss','Per-item cooking timers flag slow dishes while still cooking, not after complaints','Aggregate Summary view lets kitchen batch-cook the same dish for multiple tables at once','One-tap service requests (spoons, napkins) eliminate the wait for a waiter to walk by','QR-based digital waitlist removes the awkward "how much longer?" conversation entirely']
+            },
+            {
+              icon:<IcoTarget/>,title:'Zero Order Mix-Ups',sub:'Zero miscommunication',
+              items:['Live order modification alerts — if a customer changes their order, the kitchen gets an instant flashing alert','Distinct sounds for dine-in vs takeaway vs Swiggy vs Zomato — chef knows order type before reading','Multi-screen real-time sync — one station marking an item done updates every other screen instantly','Recall system lets you undo a mistaken Complete without recreating the order from scratch','Aggregator accept/reject popup stops Swiggy/Zomato orders from silently flooding the kitchen']
+            },
+            {
+              icon:<IcoFile/>,title:'GST Takes Care of Itself',sub:'Compliance without effort',
+              items:['Automatic CGST/SGST on every bill — no manual tax math, no counter errors','Sequential invoice numbering with GSTIN and FSSAI printed automatically on every receipt','GST Invoice Register and Individual Invoice Register exports pre-formatted for GSTR-3B and GSTR-1','GSTR-1/GSTR-3B filing deadline countdowns visible inside the dashboard at all times','Download all today\'s invoices as one PDF — end-of-day reconciliation takes minutes, not hours']
+            },
+            {
+              icon:<IcoUsers/>,title:'Staff Without Spreadsheets',sub:'Payroll in one tap',
+              items:['Clock-in/clock-out with auto-calculated hours removes the need for a paper attendance register','Monthly attendance ledger feeds directly into payroll — no manual cross-check between systems','One-tap salary slip PDF turns a task that takes an evening into a single click per employee','Pending payroll total calculated automatically — instant answer to how much you owe staff','Live floor coverage catches understaffing in real time, not after a customer complains']
+            },
+            {
+              icon:<IcoBar/>,title:'Smarter Decisions',sub:'Backed by real numbers',
+              items:['60 AI-style business recommendations continuously surface what to act on — no digging required','Business health score gives one number to glance at before drilling into details','Month-over-month revenue trend and forecast lets you see a slowdown before month-end','Peak-hour intensity chart tells you exactly when to schedule more staff — and when you\'re overstaffed','Procurement Predictor stops you from over-ordering "just in case" or running out mid-service']
+            },
+            {
+              icon:<IcoGlobe/>,title:'Stronger Online Presence',sub:'Without lifting a finger',
+              items:['Google Review prompt shown at the exact moment guests are most satisfied — not three days later','Instagram follow prompt on the thank-you screen grows your social following with every visit','Custom broadcast/campaign tool lets you message past customers about new dishes or offers directly','Reservation pre-ordering means the kitchen preps ahead — table turns faster, next seating sooner','AR menu generates genuine word-of-mouth — customers screenshot and share, building reach for free']
+            },
+          ].map(({icon,title,sub,items})=>(
+            <div className="ben-card reveal" key={title} {...hp}>
+              <div className="ben-head">
+                <div className="ben-icon">{icon}</div>
+                <div><div className="ben-title">{title}</div><div className="ben-sub">{sub}</div></div>
+              </div>
+              <ul className="ben-list">
+                {items.map((item,i)=>(
+                  <li className="ben-item" key={i}><span className="ben-dot"/>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ INTELLIGENCE ENGINE ═══ */}
+      <div className="intel-sec">
+        <div className="center reveal">
+          <div className="eye" style={{color:'rgba(184,151,90,.6)'}}>Intelligence Engine</div>
+          <h2 className="sh2" style={{color:'#fff'}}>60 live recommendations.<br/><em>Always on.</em></h2>
+          <p className="sdesc" style={{color:'rgba(255,255,255,.38)',margin:'0 auto'}}>A continuously updating recommendation engine covering every corner of your business — so you never have to dig through reports to know what needs attention right now.</p>
+        </div>
+        <div className="intel-grid reveal">
+          <div className="intel-cats">
+            {intelCategories.map((cat,i)=>(
+              <div className={`intel-cat${activeIntel===i?' active':''}`} key={i} onClick={()=>setActiveIntel(i)} {...hp}>
+                <div className="ic-head">
+                  <div className="ic-icon">{cat.icon}</div>
+                  <div className="ic-title">{cat.title}</div>
+                </div>
+                <div className="ic-desc">{cat.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div className="intel-panel">
+            <div className="intel-panel-title">Sample Recommendations — {intelCategories[activeIntel].title}</div>
+            <div className="intel-items">
+              {intelCategories[activeIntel].items.map((item,i)=>(
+                <div className="intel-item" key={i}>
+                  <span className="intel-item-dot"/>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ═══ HOW IT WORKS ═══ */}
       <section className="hiw">
@@ -839,9 +1065,9 @@ useEffect(()=>{
         </div>
         <div className="steps">
           {[
-            ['1','Book a Demo','Talk to our team. We configure your account — menu, categories, tax settings — during the call itself.'],
-            ['2','Upload Your Menu','Share your menu and we digitize it with 3D visuals, categories, prices, portions, and ingredients.'],
-            ['3','Place QR Codes','We print and send your table QR codes. Guests scan, see AR dishes, and order — no app needed.'],
+            ['1','Book a Demo','Talk to our team. We configure your account — menu, categories, tax settings, GSTIN — during the call itself.'],
+            ['2','Upload Your Menu','Share your menu and we digitize it with 3D visuals, categories, prices, portions, and linked ingredients.'],
+            ['3','Place QR Codes','We print and send your table QR codes. Guests scan, see AR dishes, and order — no app install needed.'],
             ['4','Start Operating','Every order, kitchen ticket, settlement, and insight flows live from day one. Your team adapts in minutes.'],
           ].map(([n,t,d],i)=>(
             <div className={`step reveal rd${i+1}`} key={n}>
@@ -858,24 +1084,27 @@ useEffect(()=>{
         <div className="center reveal">
           <div className="eye">Competitive Edge</div>
           <h2 className="sh2">Built differently, <em>by design</em></h2>
-          <p className="sdesc">Features that legacy systems charge enterprise prices for — with an AR-first experience no other system in India even offers.</p>
+          <p className="sdesc">Features that legacy systems charge enterprise prices for — with an AR-first, voice-controlled experience no other system in India even offers.</p>
         </div>
         <div className="cmp-wrap reveal">
           <div className="cmp-hdr">
             <div className="cmp-hc"/>
             <div className="cmp-hc fc"><div className="cmp-badge">Our Platform</div><div className="cmp-hn">Pratyeksha</div><div className="cmp-hs">Cafes &amp; Restaurants</div></div>
-            <div className="cmp-hc"><div className="cmp-hn" style={{color:'rgba(255,255,255,.38)'}}>Standard POS</div><div className="cmp-hs">₹2k–₹5k / month</div></div>
-            <div className="cmp-hc"><div className="cmp-hn" style={{color:'rgba(255,255,255,.38)'}}>Generic System</div><div className="cmp-hs">₹1k–₹3k / month</div></div>
+            <div className="cmp-hc"><div className="cmp-hn" style={{color:'rgba(255,255,255,.38)'}}>Standard POS</div><div className="cmp-hs">&#8377;2k–5k / month</div></div>
+            <div className="cmp-hc"><div className="cmp-hn" style={{color:'rgba(255,255,255,.38)'}}>Generic System</div><div className="cmp-hs">&#8377;1k–3k / month</div></div>
           </div>
           {[
-            ['AR / 3D Menu',<><span className="cy">✓</span> Full AR + Chef model</>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>],
-            ['Voice-controlled KDS',<><span className="cy">✓</span> FIFO speech queue</>,<><span className="cp">◐</span><span style={{color:'rgba(255,255,255,.2)'}}> Basic KOT only</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> No KDS</span></>],
-            ['Auto inventory deduction',<><span className="cy">✓</span> Every settlement</>,<><span className="cp">◐</span><span style={{color:'rgba(255,255,255,.2)'}}> Manual tracking</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
-            ['Recipe-based profitability',<><span className="cy">✓</span> Real ingredient costs</>,<><span className="cp">◐</span><span style={{color:'rgba(255,255,255,.2)'}}> Limited</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
-            ['Swiggy + Zomato sync',<><span className="cy">✓</span> Unified queue</>,<><span className="cy">✓</span><span style={{color:'rgba(255,255,255,.2)'}}> Available</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> Manual import</span></>],
-            ['Multilingual menu',<><span className="cy">✓</span> English + Marathi</>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> English only</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> English only</span></>],
-            ['Setup time',<><span className="cy">✓</span> Under 1 hour</>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> Days of setup</span></>,<><span className="cp">◐</span><span style={{color:'rgba(255,255,255,.2)'}}> Half day</span></>],
-            ['Dedicated human support',<><span className="cy">✓</span> Named support team</>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> Ticket system</span></>,<><span className="cn">✗</span><span style={{color:'rgba(255,255,255,.2)'}}> Self-service only</span></>],
+            ['AR / 3D Menu',<><span className="cy">+</span> Full AR + Chef model</>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>],
+            ['Voice-controlled KDS',<><span className="cy">+</span> FIFO speech queue</>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Basic KOT only</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> No KDS</span></>],
+            ['Recipe-based profitability',<><span className="cy">+</span> Real ingredient costs</>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Limited</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
+            ['Auto inventory deduction',<><span className="cy">+</span> Every settlement</>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Manual tracking</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
+            ['60 AI recommendations',<><span className="cy">+</span> Live, always updating</>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> None</span></>],
+            ['Wastage cost tracking',<><span className="cy">+</span> Rupee-level accuracy</>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Quantity only</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
+            ['Swiggy + Zomato sync',<><span className="cy">+</span> Unified queue</>,<><span className="cy">+</span><span style={{color:'rgba(255,255,255,.2)'}}> Available</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> Manual import</span></>],
+            ['Multilingual menu',<><span className="cy">+</span> English + Marathi</>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> English only</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> English only</span></>],
+            ['GSTR-ready exports',<><span className="cy">+</span> GSTR-1 &amp; GSTR-3B</>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Basic export</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> No</span></>],
+            ['Setup time',<><span className="cy">+</span> Under 1 hour</>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> Days of setup</span></>,<><span className="cp">~</span><span style={{color:'rgba(255,255,255,.2)'}}> Half day</span></>],
+            ['Dedicated human support',<><span className="cy">+</span> Named support team</>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> Ticket system</span></>,<><span className="cn">-</span><span style={{color:'rgba(255,255,255,.2)'}}> Self-service only</span></>],
           ].map(([lbl,c1,c2,c3])=>(
             <div className="cmp-row" key={lbl}>
               <div className="cmp-c lbl">{lbl}</div>
@@ -896,9 +1125,9 @@ useEffect(()=>{
         </div>
         <div className="t-grid">
           {[
-            {av:'RS',text:'"The AR menu doubled our social media tags in one week. Two regulars specifically told us they came back because they wanted to show their friends the experience. Nothing else comes close."',name:'Raj S.',role:'Owner · Jay Ambe Fusion, Kolhapur',d:'rd1'},
-            {av:'NK',text:'"Our kitchen is 40% faster since switching. Voice control means my chefs don\'t touch the screen during a rush — orders announce themselves. It genuinely changed how we work."',name:'Nilesh K.',role:'Head Chef · Premium Cafe, Pune',d:'rd2'},
-            {av:'PM',text:'"The profitability matrix revealed our most popular item had a 12% margin. We adjusted pricing and recovered ₹40,000 in the first month. That one insight paid for the service for years."',name:'Pratik M.',role:'Owner · Cloud Kitchen, Mumbai',d:'rd3'},
+            {av:'RS',text:'"The AR menu doubled our social media tags in one week. Two regulars specifically came back because they wanted to show their friends the experience. The Bestseller badges also visibly changed what tables were ordering."',name:'Raj S.',role:'Owner · Jay Ambe Fusion, Kolhapur',d:'rd1'},
+            {av:'NK',text:'"Our kitchen is 40% faster since switching. Voice control means my chefs never touch the screen during a rush — orders announce themselves via the FIFO queue. The per-item timers catch slow dishes before guests notice."',name:'Nilesh K.',role:'Head Chef · Premium Cafe, Pune',d:'rd2'},
+            {av:'PM',text:'"The profitability matrix revealed our most popular item had 12% margin. We adjusted pricing and recovered ₹40,000 in the first month. That single insight from the recipe engine paid for the platform for years."',name:'Pratik M.',role:'Owner · Cloud Kitchen, Mumbai',d:'rd3'},
           ].map(({av,text,name,role,d})=>(
             <div className={`t-card reveal ${d}`} key={av} {...hp}>
               <Stars5/>
@@ -922,7 +1151,7 @@ useEffect(()=>{
         <div className="about-grid reveal">
           <div className="about-img-wrap">
             <div className="about-img-frame">
-              UPDATE: swap for <img src={logoImg} alt="Founder" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+              <img src={logoImg} alt="Pratyeksha" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
               <div className="about-ph"><IcoUser/><span>Founder Photo</span></div>
             </div>
             <div className="about-badge">
@@ -937,10 +1166,10 @@ useEffect(()=>{
             <p className="about-body">We saw talented chefs and dedicated restaurant owners in Kolhapur, Pune, and Mumbai lose margin to bad billing, scramble through paper orders during rush hour, and have no way of knowing which dishes were actually profitable. We decided to fix that — with technology that respects how Indian restaurants actually work, not how Western software imagines they do.</p>
             <div className="about-values">
               {[
-                {icon:<IcoLayers size={16}/>,t:'Innovation First',d:"Constant research drives features your competitors haven't shipped yet — like AR menus and voice KDS."},
-                {icon:<IcoClock size={16}/>,t:'Simplicity',d:"Designed for owners and staff who don't have time for instruction manuals — live in under an hour."},
-                {icon:<IcoPhone size={16}/>,t:'Human Support',d:"Real people who know your restaurant by name. Not a ticket system — a dedicated team."},
-                {icon:<IcoDollar size={16}/>,t:'Fair Pricing',d:"Transparent, cost-effective pricing designed for SMBs — the platform pays for itself in week one."},
+                {icon:<IcoLayers size={16}/>,t:'Innovation First',d:"Constant research drives features your competitors haven't shipped yet — AR menus, voice KDS, and 60 live AI recommendations."},
+                {icon:<IcoClock size={16}/>,t:'Simplicity',d:"Designed for owners and staff who don't have time for instruction manuals — live in under an hour, no hardware required."},
+                {icon:<IcoPhone size={16}/>,t:'Human Support',d:"Real people who know your restaurant by name. Not a ticket system — a dedicated team that understands Indian kitchens."},
+                {icon:<IcoDollar size={16}/>,t:'Fair Pricing',d:"Transparent pricing designed for SMBs — the platform pays for itself in week one through margin recovery alone."},
               ].map(({icon,t,d})=>(
                 <div className="av" key={t}>
                   <div className="av-icon">{icon}</div>
@@ -955,7 +1184,7 @@ useEffect(()=>{
           {[[`${stats.tenantCount}+`,'Active Clients','Cafes & Restaurants'],
             [`${stats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
             [`${stats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
-            ['4.9★','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
+            ['4.9','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
             <div className="as" key={l}><div className="as-v">{v}</div><div className="as-l">{l}</div><div className="as-s">{s}</div></div>
           ))}
         </div>
@@ -964,10 +1193,9 @@ useEffect(()=>{
           <h2 className="sh2" style={{color:'#fff'}}>People behind <em>Pratyeksha</em></h2>
         </div>
         <div className="team-grid reveal">
-          {[['P','Pratyeksha Founder','Co-founder & CEO'],['T','Co-founder Name','Co-founder & CTO']].map(([letter,name,role])=>(
+          {[['P','Co-founder & CEO','Strategy, Product & Customer Success'],['T','Co-founder & CTO','Engineering, Platform & Infrastructure']].map(([letter,name,role])=>(
             <div className="team-card" key={letter} {...hp}>
               <div className="team-photo">
-                {/* UPDATE: <img src={`/images/team-${letter.toLowerCase()}.jpg`} alt={name}/> */}
                 <div className="team-ph">{letter}</div>
               </div>
               <div className="team-info"><div className="team-name">{name}</div><div className="team-role">{role}</div></div>
@@ -982,12 +1210,12 @@ useEffect(()=>{
           <div className="demo-l">
             <div className="demo-eye">Book a Demo</div>
             <h3 className="demo-h">See Pratyeksha in<br/><em>your establishment</em></h3>
-            <p className="demo-d">Our team walks you through every module live — tailored to your restaurant type, team size, and current operational challenges. No pressure, no commitment.</p>
+            <p className="demo-d">Our team walks you through every module live — tailored to your restaurant type, team size, and current operational challenges. Account configured during the call itself. No pressure, no commitment.</p>
             <div className="demo-feats">
               {[
-                {icon:<IcoClock size={15}/>,t:'30-minute personalized walkthrough',d:'Focused on your specific restaurant type — not a generic product tour'},
-                {icon:<IcoFile size={15}/>,t:'Account configured during the call',d:'Menu, categories, pricing, and tax settings loaded while we talk'},
-                {icon:<IcoPin/>,t:'Local expertise, Indian context',d:'Built for Kolhapur, Pune, and Mumbai — we understand GST, UPI, and Indian kitchens'},
+                {icon:<IcoClock size={15}/>,t:'30-minute personalized walkthrough',d:'Focused on your specific restaurant type, not a generic product tour — we ask about your challenges first'},
+                {icon:<IcoFile size={15}/>,t:'Account configured during the call',d:'Menu, categories, pricing, tax settings, GSTIN, and FSSAI number loaded while we talk'},
+                {icon:<IcoPin/>,t:'Local expertise, Indian context',d:'Built for Kolhapur, Pune, and Mumbai — we understand GST, UPI, Swiggy, and Indian kitchens intimately'},
               ].map(({icon,t,d})=>(
                 <div className="df" key={t}>
                   <div className="df-icon">{icon}</div>
@@ -1033,9 +1261,9 @@ useEffect(()=>{
               </div>
               <input className="fi" id="f-city" placeholder="City (e.g. Kolhapur, Pune, Mumbai)" value={form.city} onChange={chg}/>
               <button type="submit" className="fsub" disabled={submitting} {...hp}>
-                {submitting?'Sending...':'Request Free Demo →'}
+                {submitting?'Sending...':'Request Free Demo'}
               </button>
-              <p className="fnote">We'll reach you within 4 hours during business hours. No spam, ever.</p>
+              <p className="fnote">We will reach you within 4 hours during business hours. No spam, ever.</p>
             </form>
           </div>
         </div>
@@ -1046,7 +1274,7 @@ useEffect(()=>{
         <div>
           <div className="f-brand">Pratyeksha</div>
           <div className="f-desc">India's most complete restaurant and cafe management platform — with the world's first AR-first digital menu built for dine-in, takeaway, and delivery.</div>
-          <div className="f-tag">Visualize · Order · Relish</div>
+          <div className="f-tag">Visualize &middot; Order &middot; Relish</div>
         </div>
         <div className="f-col">
           <h5>Platform</h5>
@@ -1056,7 +1284,7 @@ useEffect(()=>{
         </div>
         <div className="f-col">
           <h5>Company</h5>
-          {[['about','About Us'],['contact','Book a Demo'],['compare','Compare'],['contact','Contact Sales']].map(([id,label],i)=>(
+          {[['about','About Us'],['benefits','Business Impact'],['contact','Book a Demo'],['compare','Compare']].map(([id,label],i)=>(
             <a key={i} onClick={()=>go(id)}>{label}</a>
           ))}
           <h5 style={{marginTop:18}}>Integrations</h5>
@@ -1071,7 +1299,7 @@ useEffect(()=>{
           <div style={{fontSize:'.72rem',color:'rgba(255,255,255,.28)',lineHeight:1.65}}>Kolhapur, Maharashtra<br/>India</div>
         </div>
         <div className="f-btm">
-          <div className="f-btm-t">© 2026 Pratyeksha. All rights reserved. Built in India 🇮🇳</div>
+          <div className="f-btm-t">&#169; 2026 Pratyeksha. All rights reserved. Built in India.</div>
           <div className="f-btm-links">
             <a href="#">Privacy Policy</a>
             <a href="#">Terms of Service</a>
