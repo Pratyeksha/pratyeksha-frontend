@@ -601,22 +601,6 @@ function S8() {
         )}
       </div>
 
-      {/* Voice control */}
-      <div style={{ width:'87%', background:CD, border:`1px solid ${G}22`, borderRadius:12, padding:'9px 13px', zIndex:1, marginBottom:7, opacity:s>=3?1:0, transition:'opacity 0.5s ease' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
-          <div style={{ position:'relative', width:30, height:30, flexShrink:0 }}>
-            {pulse && <div style={{ position:'absolute', inset:-4, borderRadius:'50%', border:`1.5px solid ${G}55`, animation:'ping 1s ease infinite' }}/>}
-            <div style={{ width:30, height:30, borderRadius:'50%', background:`${G}15`, border:`1px solid ${G}40`, display:'flex', alignItems:'center', justifyContent:'center' }}><Mic size={13} color={G}/></div>
-          </div>
-          <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:8.5, color:G, fontWeight:700 }}>VOICE — EN + मराठी</span>
-        </div>
-        {[{ en:'"Complete table 7"', mr:'"टेबल सात तयार"' },{ en:'"Recall last"', mr:'"परत आण"' }].map((c,i) => (
-          <div key={i} style={{ display:'flex', gap:5, marginBottom:5, opacity:s>=4?1:0, transition:'opacity 0.4s ease' }}>
-            <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:8.5, color:G, background:`${G}10`, border:`1px solid ${G}22`, padding:'2px 7px', borderRadius:5 }}>{c.en}</span>
-            <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:8.5, color:`${GL}45`, padding:'2px 7px' }}>{c.mr}</span>
-          </div>
-        ))}
-      </div>
 
       {/* Batch aggregate */}
       {s>=5 && (
