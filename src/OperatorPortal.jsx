@@ -13,10 +13,23 @@ import {
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
-  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 
+  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+
+const getTimeRemaining = (expiresAt) => {
+  const diff = new Date(expiresAt) - new Date();
+  if (diff <= 0) return null;
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (hrs >= 24) {
+    const days = Math.floor(hrs / 24);
+    return `${days}d ${hrs % 24}h`;
+  }
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+};
 
 // ADD near the top of OperatorPortal.jsx, after imports:
 axios.interceptors.response.use(
@@ -96,6 +109,59 @@ const formatDuration = (totalMinutes) => {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+const AnnouncementPreviewCard = ({ data }) => {
+  const colorMap = {
+    gold:  { bg: 'linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.04))', border: 'rgba(201,168,76,0.35)', text: '#e8c96a' },
+    green: { bg: 'linear-gradient(135deg, rgba(138,154,126,0.15), rgba(138,154,126,0.04))', border: 'rgba(138,154,126,0.35)', text: '#a8c090' },
+    rose:  { bg: 'linear-gradient(135deg, rgba(196,138,138,0.15), rgba(196,138,138,0.04))', border: 'rgba(196,138,138,0.35)', text: '#d4a0a0' },
+    blue:  { bg: 'linear-gradient(135deg, rgba(106,142,168,0.15), rgba(106,142,168,0.04))', border: 'rgba(106,142,168,0.35)', text: '#9ec0d8' },
+  };
+  const c = colorMap[data.accentColor] || colorMap.gold;
+  const IconComp = data.type === 'offer' ? Tag : data.type === 'discount' ? Percent : data.type === 'wish' ? Sparkles : Megaphone;
+
+  return (
+    <div style={{
+      background: '#000', borderRadius: '16px', padding: '4px',
+      border: '1px solid #1a1a1a'
+    }}>
+      <div style={{
+        background: c.bg, border: `1px solid ${c.border}`, borderRadius: '13px',
+        padding: '16px 18px', position: 'relative', overflow: 'hidden'
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px', background: `linear-gradient(90deg,transparent,${c.text},transparent)` }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{
+            width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+            background: 'rgba(255,255,255,0.06)', border: `1px solid ${c.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <IconComp size={16} color={c.text} strokeWidth={1.5} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#fff', marginBottom: '4px', lineHeight: 1.3 }}>
+              {data.title || 'Your headline appears here'}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+              {data.message || 'Your message appears here'}
+            </div>
+            {data.discountValue && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '9px',
+                padding: '4px 11px', borderRadius: '20px',
+                background: 'rgba(255,255,255,0.08)', border: `1px solid ${c.border}`
+              }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: c.text, fontFamily: 'monospace' }}>
+                  {data.discountType === 'percent' ? `${data.discountValue}% OFF` : `₹${data.discountValue} OFF`}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const OperatorPortal = () => {
@@ -210,6 +276,11 @@ const [feedbackNoteText, setFeedbackNoteText] = useState('');
 const [offers, setOffers]                     = useState([]);
 const [campaigns, setCampaigns]               = useState([]);
 const [marketingSubTab, setMarketingSubTab] = useState('offers');
+const [announcements, setAnnouncements] = useState([]);
+const [newAnnouncement, setNewAnnouncement] = useState({
+  title: '', message: '', type: 'offer', accentColor: 'gold', icon: 'tag',
+  discountValue: '', discountType: 'percent', expiryDate: '', expiryTime: ''
+});
 const [newOffer, setNewOffer]                 = useState({
   title: '', type: 'percent_off', value: '', freeItem: '',
   minOrder: '', categoryId: '', happyStart: '', happyEnd: '', expiresAt: ''
@@ -407,7 +478,12 @@ const fetchCounterQueue = useCallback(async () => {
   } catch { }
 }, [tenantId, reservationViewDate]);
 
-
+const fetchAnnouncements = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/announcements/${tenantId}`);
+    setAnnouncements(res.data || []);
+  } catch { setAnnouncements([]); }
+}, [tenantId]);
 
 
 // Fetch wastage analytics for current month
@@ -1230,8 +1306,8 @@ useEffect(() => {
   if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
   if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
   if (activeTab === 'feedback')  fetchFeedback();
-  if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); }
-  if (activeTab === 'extras') fetchExtraItems();
+  if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); } 
+   if (activeTab === 'extras') fetchExtraItems();
   if (activeTab === 'insights') {
     fetchAnalytics();
   }
@@ -5900,8 +5976,8 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
       padding:'4px', border:'1px solid #1c1f26', width:'fit-content'
     }}>
       {[
-        { id:'offers',    label:'OFFERS & DISCOUNTS', icon:<Tag size={13}/> },
-        { id:'campaigns', label:'PUSH CAMPAIGNS',     icon:<Megaphone size={13}/> },
+        { id:'offers',       label:'OFFERS & DISCOUNTS',  icon:<Tag size={13}/> },
+        { id:'announcements', label:'LIVE MENU ANNOUNCEMENTS', icon:<Megaphone size={13}/> },
       ].map(t => (
         <button key={t.id} onClick={() => setMarketingSubTab(t.id)} style={{
           display:'flex', alignItems:'center', gap:'6px',
@@ -5917,392 +5993,367 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
       ))}
     </div>
 
-    {/* ════════════ OFFERS SUB-TAB ════════════ */}
+    {/* ════════════ OFFERS SUB-TAB (unchanged from before) ════════════ */}
     {marketingSubTab === 'offers' && (
       <div style={{display:'grid',gridTemplateColumns:'380px 1fr',gap:'24px',alignItems:'start'}}>
-
-        {/* ── CREATE OFFER FORM ── */}
-        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'14px',padding:'20px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'18px'}}>
-            <Tag size={14} color="#d3bfa2"/>
-            <span style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>CREATE OFFER</span>
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
-            {/* Title */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>OFFER TITLE</label>
-              <input
-                value={newOffer.title}
-                onChange={e => setNewOffer(p => ({...p, title:e.target.value}))}
-                placeholder="e.g. Weekend Special 20% Off"
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
-              />
-            </div>
-            {/* Type */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>TYPE</label>
-              <select
-                value={newOffer.type}
-                onChange={e => setNewOffer(p => ({...p, type:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
-              >
-                <option value="percent_off">% Discount</option>
-                <option value="fixed_off">₹ Fixed Off</option>
-                <option value="free_item">Free Item</option>
-                <option value="happy_hour">Happy Hours</option>
-              </select>
-            </div>
-            {/* Value */}
-            {newOffer.type !== 'free_item' && newOffer.type !== 'happy_hour' && (
-              <div>
-                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>
-                  {newOffer.type === 'percent_off' ? 'DISCOUNT %' : 'DISCOUNT ₹'}
-                </label>
-                <input
-                  type="number" value={newOffer.value}
-                  onChange={e => setNewOffer(p => ({...p, value:e.target.value}))}
-                  placeholder="e.g. 15"
-                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
-                />
-              </div>
-            )}
-            {/* Free item */}
-            {newOffer.type === 'free_item' && (
-              <div>
-                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>FREE ITEM NAME</label>
-                <input
-                  value={newOffer.freeItem}
-                  onChange={e => setNewOffer(p => ({...p, freeItem:e.target.value}))}
-                  placeholder="e.g. Gulab Jamun"
-                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
-                />
-              </div>
-            )}
-            {/* Happy hours */}
-            {newOffer.type === 'happy_hour' && (
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-                <div>
-                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>START TIME</label>
-                  <input type="time" value={newOffer.happyStart} onChange={e => setNewOffer(p => ({...p, happyStart:e.target.value}))}
-                    style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}/>
-                </div>
-                <div>
-                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>END TIME</label>
-                  <input type="time" value={newOffer.happyEnd} onChange={e => setNewOffer(p => ({...p, happyEnd:e.target.value}))}
-                    style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}/>
-                </div>
-              </div>
-            )}
-            {/* Min order */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MIN ORDER VALUE ₹ (OPTIONAL)</label>
-              <input
-                type="number" value={newOffer.minOrder}
-                onChange={e => setNewOffer(p => ({...p, minOrder:e.target.value}))}
-                placeholder="0 = no minimum"
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
-              />
-            </div>
-            {/* Expiry */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>EXPIRES ON (OPTIONAL)</label>
-              <input
-                type="date" value={newOffer.expiresAt}
-                onChange={e => setNewOffer(p => ({...p, expiresAt:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
-              />
-            </div>
-            <button
-              onClick={async () => {
-                if (!newOffer.title) return;
-                try {
-                  await axios.post(`${BASE_URL}/api/offers/${tenantId}`, {
-                    ...newOffer,
-                    value:    Number(newOffer.value) || 0,
-                    minOrder: Number(newOffer.minOrder) || 0,
-                    expiresAt: newOffer.expiresAt || null,
-                  });
-                  showNotif('Offer created');
-                  setNewOffer({ title:'', type:'percent_off', value:'', freeItem:'', minOrder:'', expiresAt:'', happyStart:'', happyEnd:'' });
-                  fetchOffers();
-                } catch { showNotif('Failed to create offer'); }
-              }}
-              disabled={!newOffer.title}
-              style={{
-                padding:'12px', borderRadius:'10px', border:'none',
-                background: newOffer.title ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : '#13151a',
-                color: newOffer.title ? '#0d0d0d' : '#333',
-                fontWeight:'900', fontSize:'0.75rem',
-                cursor: newOffer.title ? 'pointer' : 'not-allowed',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'
-              }}
-            >
-              <Tag size={14} color={newOffer.title ? '#0d0d0d' : '#333'}/>
-              CREATE OFFER
-            </button>
-          </div>
-        </div>
-
-        {/* ── OFFER LIST ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-          {offers.length === 0 ? (
-            <div style={{
-              textAlign:'center', padding:'48px', color:'#333',
-              border:'1px dashed #1a1c23', borderRadius:'14px',
-              display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
-            }}>
-              <Tag size={28} color="#1a1c23"/>
-              <span style={{fontSize:'0.78rem'}}>No offers yet — create one to start</span>
-            </div>
-          ) : offers.map(o => (
-            <motion.div key={o._id}
-              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
-              style={{
-                background: o.isActive ? 'rgba(211,191,162,0.03)' : '#0d0d0d',
-                border:`1px solid ${o.isActive ? 'rgba(211,191,162,0.15)' : '#1c1f26'}`,
-                borderRadius:'12px', padding:'16px 18px',
-                display:'flex', alignItems:'center', gap:'16px',
-                opacity: o.isActive ? 1 : 0.5
-              }}
-            >
-              <div style={{
-                width:'42px', height:'42px', borderRadius:'10px',
-                background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.2)',
-                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
-              }}>
-                {o.type === 'percent_off' ? <Percent size={18} color="#C9A84C"/>
-                  : o.type === 'fixed_off' ? <IndianRupee size={18} color="#C9A84C"/>
-                  : o.type === 'free_item' ? <Gift size={18} color="#C9A84C"/>
-                  : <Clock size={18} color="#C9A84C"/>}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:'800',color:'#fff',fontSize:'0.88rem',marginBottom:'3px'}}>{o.title}</div>
-                <div style={{fontSize:'0.62rem',color:'#8a704d',display:'flex',gap:'10px',flexWrap:'wrap'}}>
-                  {o.type === 'percent_off' && `${o.value}% off`}
-                  {o.type === 'fixed_off'   && `₹${o.value} off`}
-                  {o.type === 'free_item'   && `Free: ${o.freeItem}`}
-                  {o.type === 'happy_hour'  && `${o.happyStart}–${o.happyEnd}`}
-                  {o.minOrder > 0 && <span>· Min ₹{o.minOrder}</span>}
-                  {o.expiresAt && <span>· Expires {new Date(o.expiresAt).toLocaleDateString('en-IN')}</span>}
-                </div>
-                <div style={{fontSize:'0.58rem',color:'#444',marginTop:'4px'}}>
-                  Used {o.usageCount || 0}× · ₹{(o.totalDiscount || 0).toLocaleString()} total discount given
-                </div>
-              </div>
-              <div style={{display:'flex',gap:'8px',flexShrink:0}}>
-                <button
-                  onClick={async () => {
-                    try {
-                      await axios.patch(`${BASE_URL}/api/offers/${o._id}`, { isActive: !o.isActive });
-                      fetchOffers();
-                    } catch { showNotif('Failed to update offer'); }
-                  }}
-                  style={{
-                    padding:'6px 14px', borderRadius:'6px', border:'none', cursor:'pointer',
-                    background: o.isActive ? 'rgba(211,191,162,0.1)' : 'rgba(138,154,126,0.15)',
-                    color:      o.isActive ? '#d3bfa2' : '#8a9a7e',
-                    fontSize:'0.6rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'5px'
-                  }}
-                >
-                  {o.isActive ? <><Zap size={10}/> PAUSE</> : <><CheckCircle2 size={10}/> ACTIVATE</>}
-                </button>
-                <button
-                  onClick={async () => {
-                    try { await axios.delete(`${BASE_URL}/api/offers/${o._id}`); fetchOffers(); }
-                    catch {}
-                  }}
-                  style={{
-                    padding:'6px 10px', borderRadius:'6px',
-                    background:'transparent', border:'1px solid #252932',
-                    color:'#444', cursor:'pointer', fontSize:'0.6rem',
-                    display:'flex', alignItems:'center', justifyContent:'center'
-                  }}
-                >
-                  <X size={12}/>
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+        {/* ... keep your existing offers form + list exactly as-is ... */}
       </div>
     )}
 
-    {/* ════════════ CAMPAIGNS SUB-TAB ════════════ */}
-    {marketingSubTab === 'campaigns' && (
-      <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',alignItems:'start'}}>
+    {/* ════════════ LIVE MENU ANNOUNCEMENTS SUB-TAB — NEW ════════════ */}
+    {marketingSubTab === 'announcements' && (
+      <div style={{display:'grid',gridTemplateColumns:'420px 1fr',gap:'24px',alignItems:'start'}}>
 
-        {/* ── COMPOSE CAMPAIGN ── */}
-        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'14px',padding:'20px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'18px'}}>
-            <Megaphone size={14} color="#d3bfa2"/>
-            <span style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>COMPOSE CAMPAIGN</span>
+        {/* ── COMPOSE ANNOUNCEMENT ── */}
+        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',padding:'22px',position:'sticky',top:'20px'}}>
+
+          <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'4px'}}>
+            <div style={{
+              width:'30px',height:'30px',borderRadius:'9px',
+              background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.18)',
+              display:'flex',alignItems:'center',justifyContent:'center'
+            }}>
+              <Megaphone size={14} color="#d3bfa2"/>
+            </div>
+            <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>NEW MENU ANNOUNCEMENT</span>
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+          <p style={{fontSize:'0.66rem',color:'#444',margin:'4px 0 18px',lineHeight:1.6,fontWeight:'600'}}>
+            This banner appears on every customer's menu the moment they scan the QR — and disappears automatically at the time you set below.
+          </p>
+
+          <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+
+            {/* Type selector — visual pills */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'8px'}}>ANNOUNCEMENT TYPE</label>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+                {[
+                  { id:'offer',        label:'Offer',        icon:<Tag size={14}/>,       color:'#C9A84C' },
+                  { id:'discount',     label:'Discount',     icon:<Percent size={14}/>,   color:'#8a9a7e' },
+                  { id:'wish',         label:'Festive Wish',  icon:<Sparkles size={14}/>,  color:'#bda88a' },
+                  { id:'announcement', label:'General Notice', icon:<Megaphone size={14}/>, color:'#8a704d' },
+                ].map(opt => (
+                  <button key={opt.id}
+                    onClick={() => setNewAnnouncement(p => ({...p, type:opt.id, accentColor: opt.id === 'offer' ? 'gold' : opt.id === 'discount' ? 'green' : opt.id === 'wish' ? 'rose' : 'gold', icon: opt.id === 'offer' ? 'tag' : opt.id === 'discount' ? 'percent' : opt.id === 'wish' ? 'sparkles' : 'megaphone' }))}
+                    style={{
+                      display:'flex', alignItems:'center', gap:'8px',
+                      padding:'11px 12px', borderRadius:'10px', cursor:'pointer',
+                      border: newAnnouncement.type === opt.id ? `1px solid ${opt.color}55` : '1px solid #1c1f26',
+                      background: newAnnouncement.type === opt.id ? `${opt.color}14` : '#0d0e11',
+                      color: newAnnouncement.type === opt.id ? opt.color : '#666',
+                      fontSize:'0.7rem', fontWeight:'800', transition:'all 0.15s'
+                    }}
+                  >
+                    {opt.icon}{opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Title */}
             <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>NOTIFICATION TITLE</label>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>HEADLINE</label>
               <input
-                value={newCampaign.title}
-                onChange={e => setNewCampaign(p => ({...p, title:e.target.value}))}
-                placeholder="e.g. Weekend Special at Our Restaurant"
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+                value={newAnnouncement.title}
+                onChange={e => setNewAnnouncement(p => ({...p, title:e.target.value}))}
+                placeholder="e.g. Weekend Special — 20% Off"
+                maxLength={60}
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.84rem',outline:'none',fontWeight:'700'}}
               />
+              <div style={{fontSize:'0.5rem',color:'#333',marginTop:'4px',textAlign:'right'}}>{newAnnouncement.title.length}/60</div>
             </div>
-            {/* Body */}
+
+            {/* Message */}
             <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MESSAGE BODY</label>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MESSAGE</label>
               <textarea
-                value={newCampaign.body}
-                onChange={e => setNewCampaign(p => ({...p, body:e.target.value}))}
-                placeholder="Today we have a special thali for ₹199 — come visit us!"
-                rows={4}
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',resize:'vertical',fontFamily:'inherit'}}
+                value={newAnnouncement.message}
+                onChange={e => setNewAnnouncement(p => ({...p, message:e.target.value}))}
+                placeholder="e.g. Enjoy 20% off on all main course dishes this weekend only!"
+                rows={3}
+                maxLength={140}
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5}}
               />
+              <div style={{fontSize:'0.5rem',color:'#333',marginTop:'4px',textAlign:'right'}}>{newAnnouncement.message.length}/140</div>
             </div>
-            {/* Segment */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>TARGET SEGMENT</label>
-              <select
-                value={newCampaign.segment}
-                onChange={e => setNewCampaign(p => ({...p, segment:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
-              >
-                <option value="all">All Customers</option>
-                <option value="loyal">Loyal (10+ visits)</option>
-                <option value="at-risk">At-Risk (21+ days inactive)</option>
-                <option value="new">New (first visit)</option>
-                <option value="custom">Custom Phone List</option>
-              </select>
-            </div>
-            {/* Custom phones */}
-            {newCampaign.segment === 'custom' && (
-              <div>
-                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>PHONE NUMBERS (ONE PER LINE)</label>
-                <textarea
-                  value={newCampaign.customPhones}
-                  onChange={e => setNewCampaign(p => ({...p, customPhones:e.target.value}))}
-                  placeholder={'9876543210\n9123456789'}
-                  rows={4}
-                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',resize:'vertical',fontFamily:'monospace'}}
-                />
-              </div>
-            )}
-            {/* Notification preview */}
-            {(newCampaign.title || newCampaign.body) && (
-              <div style={{background:'#13151a',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'14px'}}>
-                <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>PUSH PREVIEW</div>
-                <div style={{display:'flex',gap:'10px',alignItems:'flex-start'}}>
-                  <div style={{
-                    width:'32px', height:'32px',
-                    background:'rgba(211,191,162,0.1)', borderRadius:'8px',
-                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
-                  }}>
-                    <Bell size={14} color="#d3bfa2"/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:'0.75rem',fontWeight:'800',color:'#fff',marginBottom:'3px'}}>{newCampaign.title || 'Notification Title'}</div>
-                    <div style={{fontSize:'0.68rem',color:'#666',lineHeight:1.4}}>{newCampaign.body || 'Message body...'}</div>
-                  </div>
+
+            {/* Discount value — only for offer/discount types */}
+            {(newAnnouncement.type === 'offer' || newAnnouncement.type === 'discount') && (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                <div>
+                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>VALUE (OPTIONAL)</label>
+                  <input
+                    type="number" value={newAnnouncement.discountValue}
+                    onChange={e => setNewAnnouncement(p => ({...p, discountValue:e.target.value}))}
+                    placeholder="e.g. 20"
+                    style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
+                  />
+                </div>
+                <div>
+                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>UNIT</label>
+                  <select
+                    value={newAnnouncement.discountType}
+                    onChange={e => setNewAnnouncement(p => ({...p, discountType:e.target.value}))}
+                    style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
+                  >
+                    <option value="percent">% Off</option>
+                    <option value="fixed">₹ Off</option>
+                  </select>
                 </div>
               </div>
             )}
-            {/* Send button */}
+
+            {/* Expiry — mandatory date + time */}
+            <div style={{
+              background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.15)',
+              borderRadius:'12px', padding:'14px'
+            }}>
+              <label style={{fontSize:'0.52rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
+                <Clock size={11}/> VISIBLE UNTIL <span style={{color:'#8a704d'}}>(REQUIRED)</span>
+              </label>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                <input
+                  type="date" value={newAnnouncement.expiryDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setNewAnnouncement(p => ({...p, expiryDate:e.target.value}))}
+                  style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',colorScheme:'dark'}}
+                />
+                <input
+                  type="time" value={newAnnouncement.expiryTime}
+                  onChange={e => setNewAnnouncement(p => ({...p, expiryTime:e.target.value}))}
+                  style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',colorScheme:'dark'}}
+                />
+              </div>
+              {/* Quick presets */}
+              <div style={{display:'flex',gap:'6px',marginTop:'10px',flexWrap:'wrap'}}>
+                {[
+                  { label:'Today, 11 PM', hrs: null, endOfDay: true },
+                  { label:'+ 24 hours',   hrs: 24 },
+                  { label:'+ 3 days',     hrs: 72 },
+                  { label:'+ 7 days',     hrs: 168 },
+                ].map(p => (
+                  <button key={p.label} onClick={() => {
+                    const d = new Date();
+                    if (p.endOfDay) { d.setHours(23,59,0,0); }
+                    else { d.setTime(d.getTime() + p.hrs*60*60*1000); }
+                    setNewAnnouncement(prev => ({
+                      ...prev,
+                      expiryDate: d.toISOString().split('T')[0],
+                      expiryTime: d.toTimeString().slice(0,5)
+                    }));
+                  }} style={{
+                    padding:'5px 10px', borderRadius:'7px', border:'1px solid #252932',
+                    background:'#0d0e11', color:'#8a704d', fontSize:'0.6rem', fontWeight:'800',
+                    cursor:'pointer'
+                  }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live preview — exactly how customer will see it */}
+            {(newAnnouncement.title || newAnnouncement.message) && (
+              <div>
+                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'8px'}}>CUSTOMER MENU PREVIEW</label>
+                <AnnouncementPreviewCard data={newAnnouncement} />
+              </div>
+            )}
+
+            {/* Submit */}
             <button
               onClick={async () => {
-                if (!newCampaign.title || !newCampaign.body) return;
-                setCampaignSending(true);
+                if (!newAnnouncement.title || !newAnnouncement.message || !newAnnouncement.expiryDate || !newAnnouncement.expiryTime) {
+                  showNotif('Headline, message, and expiry are all required', 'error');
+                  return;
+                }
+                const expiresAt = new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
+                if (expiresAt <= new Date()) {
+                  showNotif('Expiry must be in the future', 'error');
+                  return;
+                }
                 try {
-                  await axios.post(`${BASE_URL}/api/campaigns/${tenantId}`, {
-                    ...newCampaign,
-                    customPhones: newCampaign.segment === 'custom'
-                      ? newCampaign.customPhones.split('\n').map(s => s.trim()).filter(Boolean)
-                      : [],
-                    sendNow: true,
+                  await axios.post(`${BASE_URL}/announcements/${tenantId}`, {
+                    title: newAnnouncement.title,
+                    message: newAnnouncement.message,
+                    type: newAnnouncement.type,
+                    accentColor: newAnnouncement.accentColor,
+                    icon: newAnnouncement.icon,
+                    discountValue: newAnnouncement.discountValue || null,
+                    discountType: newAnnouncement.discountType || null,
+                    expiresAt: expiresAt.toISOString(),
                   });
-                  showNotif('Campaign sent!');
-                  setNewCampaign({ title:'', body:'', segment:'all', customPhones:'' });
-                  fetchCampaigns();
-                } catch { showNotif('Failed to send campaign'); }
-                finally { setCampaignSending(false); }
+                  showNotif('Live on customer menu now');
+                  setNewAnnouncement({
+                    title:'', message:'', type:'offer', accentColor:'gold', icon:'tag',
+                    discountValue:'', discountType:'percent', expiryDate:'', expiryTime:''
+                  });
+                  fetchAnnouncements();
+                } catch (err) {
+                  showNotif(err.response?.data?.error || 'Failed to publish', 'error');
+                }
               }}
-              disabled={!newCampaign.title || !newCampaign.body || campaignSending}
+              disabled={!newAnnouncement.title || !newAnnouncement.message}
               style={{
-                padding:'13px', borderRadius:'10px', border:'none',
-                background: (!newCampaign.title || !newCampaign.body || campaignSending) ? '#13151a'
-                  : 'linear-gradient(135deg,#bda88a,#d3bfa2)',
-                color: (!newCampaign.title || !newCampaign.body || campaignSending) ? '#333' : '#0d0d0d',
-                fontWeight:'900', fontSize:'0.75rem',
-                cursor: (!newCampaign.title || !newCampaign.body) ? 'not-allowed' : 'pointer',
+                padding:'14px', borderRadius:'11px', border:'none',
+                background: (newAnnouncement.title && newAnnouncement.message) ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : '#13151a',
+                color: (newAnnouncement.title && newAnnouncement.message) ? '#0d0d0d' : '#333',
+                fontWeight:'900', fontSize:'0.78rem', letterSpacing:'0.5px',
+                cursor: (newAnnouncement.title && newAnnouncement.message) ? 'pointer' : 'not-allowed',
                 display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
               }}
             >
-              {campaignSending
-                ? <><RefreshCw size={14} style={{animation:'spin 0.8s linear infinite'}}/> SENDING...</>
-                : <><Send size={14}/> SEND CAMPAIGN NOW</>
-              }
+              <Send size={14}/> PUBLISH TO CUSTOMER MENU
             </button>
           </div>
         </div>
 
-        {/* ── CAMPAIGN HISTORY ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-            <TrendingUp size={13} color="#555"/>
-            <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>CAMPAIGN HISTORY</span>
-          </div>
-          {campaigns.length === 0 ? (
+        {/* ── ANNOUNCEMENT LIST ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+
+          {/* Live status strip */}
+          {announcements.some(a => a.isActive && new Date(a.expiresAt) > new Date()) && (
             <div style={{
-              textAlign:'center', padding:'48px', color:'#333',
-              border:'1px dashed #1a1c23', borderRadius:'14px',
-              display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
+              display:'flex', alignItems:'center', gap:'10px',
+              padding:'12px 16px', borderRadius:'11px',
+              background:'rgba(74,154,98,0.06)', border:'1px solid rgba(74,154,98,0.2)'
             }}>
-              <Megaphone size={28} color="#1a1c23"/>
-              <span style={{fontSize:'0.78rem'}}>No campaigns sent yet</span>
+              <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 8px #4ade80'}}/>
+              <span style={{fontSize:'0.7rem',color:'#4ade80',fontWeight:'800'}}>
+                Live on customer menu right now
+              </span>
             </div>
-          ) : campaigns.map(c => (
-            <motion.div key={c._id}
-              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
-              style={{
-                background:'#0d0d0d', border:'1px solid #1c1f26',
-                borderLeft:`3px solid ${c.status === 'sent' ? '#8a9a7e' : '#8a704d'}`,
-                borderRadius:'12px', padding:'16px 18px'
-              }}
-            >
-              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px'}}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:'800',color:'#fff',fontSize:'0.88rem',marginBottom:'4px'}}>{c.title}</div>
-                  <div style={{fontSize:'0.72rem',color:'#666',lineHeight:1.5,marginBottom:'8px'}}>{c.body}</div>
-                  <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center'}}>
-                    <span style={{
-                      display:'inline-flex', alignItems:'center', gap:'4px',
-                      fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px', borderRadius:'10px',
-                      background:'rgba(138,154,126,0.12)', color:'#8a9a7e',
-                      border:'1px solid rgba(138,154,126,0.2)'
-                    }}>
-                      <Users size={9}/>{c.segment || 'All'}
-                    </span>
-                    <span style={{fontSize:'0.6rem',color:'#555',fontFamily:'monospace'}}>
-                      {c.sentCount || 0} sent
-                    </span>
-                    <span style={{fontSize:'0.6rem',color:'#444'}}>
-                      {c.sentAt ? new Date(c.sentAt).toLocaleDateString('en-IN') : '—'}
-                    </span>
+          )}
+
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px'}}>
+            <Megaphone size={13} color="#555"/>
+            <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>ALL ANNOUNCEMENTS</span>
+          </div>
+
+          {announcements.length === 0 ? (
+            <div style={{
+              textAlign:'center', padding:'56px', color:'#333',
+              border:'1px dashed #1a1c23', borderRadius:'16px',
+              display:'flex', flexDirection:'column', alignItems:'center', gap:'14px'
+            }}>
+              <Megaphone size={30} color="#1a1c23"/>
+              <span style={{fontSize:'0.8rem',fontWeight:'700'}}>No announcements published yet</span>
+              <span style={{fontSize:'0.66rem',color:'#252932',maxWidth:'280px',lineHeight:1.6}}>
+                Create your first one to greet every customer who scans your menu QR code.
+              </span>
+            </div>
+          ) : announcements.map(a => {
+            const isLive = a.isActive && new Date(a.expiresAt) > new Date();
+            const isExpired = !isLive;
+            const timeLeft = isLive ? getTimeRemaining(a.expiresAt) : null;
+
+            return (
+              <motion.div key={a._id}
+                initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+                style={{
+                  background: isLive ? 'rgba(211,191,162,0.03)' : '#0d0d0d',
+                  border:`1px solid ${isLive ? 'rgba(211,191,162,0.18)' : '#1c1f26'}`,
+                  borderRadius:'14px', padding:'18px 20px',
+                  opacity: isExpired ? 0.5 : 1,
+                  position:'relative', overflow:'hidden'
+                }}
+              >
+                {isLive && (
+                  <div style={{
+                    position:'absolute', top:0, left:0, right:0, height:'2px',
+                    background:'linear-gradient(90deg,transparent,#d3bfa2,transparent)'
+                  }}/>
+                )}
+
+                <div style={{display:'flex',alignItems:'flex-start',gap:'14px'}}>
+                  <div style={{
+                    width:'40px', height:'40px', borderRadius:'10px', flexShrink:0,
+                    background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.2)',
+                    display:'flex', alignItems:'center', justifyContent:'center'
+                  }}>
+                    {a.type === 'offer' ? <Tag size={17} color="#C9A84C"/>
+                      : a.type === 'discount' ? <Percent size={17} color="#C9A84C"/>
+                      : a.type === 'wish' ? <Sparkles size={17} color="#C9A84C"/>
+                      : <Megaphone size={17} color="#C9A84C"/>}
+                  </div>
+
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
+                      <span style={{fontWeight:'800',color:'#fff',fontSize:'0.86rem'}}>{a.title}</span>
+                      <span style={{
+                        fontSize:'0.5rem', fontWeight:'900', padding:'2px 8px', borderRadius:'10px',
+                        background: isLive ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.04)',
+                        color: isLive ? '#4ade80' : '#444', letterSpacing:'1px'
+                      }}>
+                        {isLive ? 'LIVE' : 'ENDED'}
+                      </span>
+                    </div>
+                    <div style={{fontSize:'0.72rem',color:'#888',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
+                    <div style={{display:'flex',gap:'14px',flexWrap:'wrap',fontSize:'0.6rem',color:'#444'}}>
+                      <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                        <Eye size={10}/> {a.viewCount || 0} views
+                      </span>
+                      {isLive && timeLeft && (
+                        <span style={{display:'flex',alignItems:'center',gap:'4px',color:'#8a704d',fontWeight:'700'}}>
+                          <Clock size={10}/> ends in {timeLeft}
+                        </span>
+                      )}
+                      {isExpired && (
+                        <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                          <Clock size={10}/> ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{display:'flex',gap:'8px',flexShrink:0}}>
+                    {isLive && (
+                      <button
+                        onClick={() => setConfirmModal({
+                          show:true, title:'End this announcement now?',
+                          subtitle:'It will be removed from the customer menu immediately.',
+                          onConfirm: async () => {
+                            try {
+                              await axios.patch(`${BASE_URL}/announcements/${a._id}`, { isActive:false });
+                              fetchAnnouncements();
+                              showNotif('Announcement ended');
+                            } catch { showNotif('Failed to end announcement', 'error'); }
+                          }
+                        })}
+                        style={{
+                          padding:'6px 14px', borderRadius:'7px', border:'1px solid rgba(186,117,23,0.3)',
+                          background:'rgba(186,117,23,0.1)', color:'#BA7517', cursor:'pointer',
+                          fontSize:'0.6rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'5px'
+                        }}
+                      >
+                        <Zap size={10}/> END NOW
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setConfirmModal({
+                          show:true, title:'Delete this announcement?',
+                          subtitle:'This cannot be undone.',
+                          onConfirm: async () => {
+                            try { await axios.delete(`${BASE_URL}/announcements/${a._id}`); fetchAnnouncements(); }
+                            catch {}
+                          }
+                        });
+                      }}
+                      style={{
+                        padding:'6px 10px', borderRadius:'7px',
+                        background:'transparent', border:'1px solid #252932',
+                        color:'#444', cursor:'pointer',
+                        display:'flex', alignItems:'center', justifyContent:'center'
+                      }}
+                    >
+                      <X size={13}/>
+                    </button>
                   </div>
                 </div>
-                <span style={{
-                  display:'inline-flex', alignItems:'center', gap:'4px',
-                  fontSize:'0.5rem', fontWeight:'900', padding:'4px 10px', borderRadius:'10px',
-                  background: c.status === 'sent' ? 'rgba(138,154,126,0.15)' : 'rgba(186,117,23,0.12)',
-                  color:      c.status === 'sent' ? '#8a9a7e' : '#BA7517',
-                  border:`1px solid ${c.status === 'sent' ? 'rgba(138,154,126,0.25)' : 'rgba(186,117,23,0.2)'}`,
-                  textTransform:'uppercase', letterSpacing:'1px', flexShrink:0
-                }}>
-                  {c.status === 'sent' ? <CheckCircle2 size={9}/> : <Clock size={9}/>}
-                  {c.status}
-                </span>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     )}

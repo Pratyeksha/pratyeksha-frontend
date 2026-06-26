@@ -108,7 +108,8 @@ const [reservationAskOrder, setReservationAskOrder] = useState(false);
 
 
 const [customerPhone, setCustomerPhone] = useState('');
-
+const [activeAnnouncement, setActiveAnnouncement] = useState(null);
+const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 // true = show the "want to pre-order?" prompt after reservation fields filled
 
 // ── COUNTER / WAITLIST MODE ──
@@ -142,6 +143,8 @@ const preserveScroll = (fn) => {
     if (scrollRef.current) scrollRef.current.scrollTop = y;
   });
 };
+
+
 
 const [searchResultCategory, setSearchResultCategory] = useState(null);
 // When user selects a search result from a different category, we jump to it
@@ -311,6 +314,14 @@ waitlistSocket.on('reservation_confirmed', (data) => {
   setNotificationBanner({ type: 'reservation_confirmed', restaurantName: data.restaurantName, time: data.reservationTime });
 });
 
+socket.on('announcement_updated', (data) => {
+  setActiveAnnouncement(data.announcement);
+  setAnnouncementDismissed(false);
+});
+socket.on('announcement_ended', () => {
+  setActiveAnnouncement(null);
+});
+
 // ── Operator manual push → browser notification on customer device ──
 waitlistSocket.on('operator_notify', (data) => {
   // Show browser / push notification
@@ -423,6 +434,15 @@ setRegistrationStep('confirm');
 })
   }
 }, [urlTenantId]); 
+
+useEffect(() => {
+  if (!tenantId) return;
+  axios.get(`${BASE_URL}/announcements/${tenantId}/active`)
+    .then(r => {
+      if (r.data?.active) setActiveAnnouncement(r.data.announcement);
+    })
+    .catch(() => {});
+}, [tenantId]);
 
   // =========================================================================
   // ── CONDITIONAL RENDER LAYOUTS (MUST ALWAYS GO AFTER ALL HOOK DECLARATIONS) ──
@@ -4068,7 +4088,75 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         <h1 style={{...styles.cafeName, color: primaryColor}}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
         <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
+{activeAnnouncement && !announcementDismissed && (() => {
+  const colorMap = {
+    gold:  { bg: 'linear-gradient(135deg, rgba(201,168,76,0.14), rgba(201,168,76,0.03))', border: 'rgba(201,168,76,0.3)', text: '#e8c96a' },
+    green: { bg: 'linear-gradient(135deg, rgba(138,154,126,0.14), rgba(138,154,126,0.03))', border: 'rgba(138,154,126,0.3)', text: '#a8c090' },
+    rose:  { bg: 'linear-gradient(135deg, rgba(196,138,138,0.14), rgba(196,138,138,0.03))', border: 'rgba(196,138,138,0.3)', text: '#d4a0a0' },
+    blue:  { bg: 'linear-gradient(135deg, rgba(106,142,168,0.14), rgba(106,142,168,0.03))', border: 'rgba(106,142,168,0.3)', text: '#9ec0d8' },
+  };
+  const c = colorMap[activeAnnouncement.accentColor] || colorMap.gold;
+  const IconComp = activeAnnouncement.type === 'offer' ? Tag
+    : activeAnnouncement.type === 'discount' ? Percent
+    : activeAnnouncement.type === 'wish' ? Sparkles
+    : Megaphone;
 
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      style={{ margin: '0 20px 14px' }}
+    >
+      <div style={{
+        background: c.bg, border: `1px solid ${c.border}`, borderRadius: '16px',
+        padding: '14px 16px', position: 'relative', overflow: 'hidden'
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px', background: `linear-gradient(90deg,transparent,${c.text},transparent)` }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{
+            width: '38px', height: '38px', borderRadius: '11px', flexShrink: 0,
+            background: 'rgba(255,255,255,0.06)', border: `1px solid ${c.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <IconComp size={17} color={c.text} strokeWidth={1.5} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#fff', marginBottom: '3px', lineHeight: 1.3 }}>
+              {activeAnnouncement.title}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>
+              {activeAnnouncement.message}
+            </div>
+            {activeAnnouncement.discountValue && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '9px',
+                padding: '4px 12px', borderRadius: '20px',
+                background: 'rgba(255,255,255,0.08)', border: `1px solid ${c.border}`
+              }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '900', color: c.text, fontFamily: 'monospace' }}>
+                  {activeAnnouncement.discountType === 'percent'
+                    ? `${activeAnnouncement.discountValue}% OFF`
+                    : `₹${activeAnnouncement.discountValue} OFF`}
+                </span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setAnnouncementDismissed(true)}
+            style={{
+              width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.3)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+})()}
 {/* SEARCH BAR */}
 
 <div style={styles.searchWrapper}>
