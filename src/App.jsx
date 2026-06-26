@@ -9,7 +9,7 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick
+  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
