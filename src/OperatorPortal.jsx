@@ -5623,10 +5623,6 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
   </motion.div>
 )}
 
-
-// ─────────────────────────────────────────────────────────────────────────
-// TAB 2 — FEEDBACK  (activeTab === 'feedback')
-// ─────────────────────────────────────────────────────────────────────────
 {activeTab === 'feedback' && (
   <motion.div key="feedback" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
 
@@ -5893,10 +5889,6 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
   </motion.div>
 )}
 
-
-// ─────────────────────────────────────────────────────────────────────────
-// TAB 3 — MARKETING  (activeTab === 'marketing')
-// ─────────────────────────────────────────────────────────────────────────
 {activeTab === 'marketing' && (
   <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
 
