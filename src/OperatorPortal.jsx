@@ -298,6 +298,63 @@ const [reservationViewDate, setReservationViewDate] = useState(() => {
 });
 const [reservationEditModal, setReservationEditModal] = useState(null);
 
+
+// ═══════════════════════════════════════════════════════════════
+// ADD THIS HOOK near the top of OperatorPortal, after your
+// existing state declarations (around line where acknowledgedTables is defined)
+// ═══════════════════════════════════════════════════════════════
+
+// Tracks the oldest active order's createdAt per table
+// Shape: { "3": Date, "7": Date, ... }
+const [tableTimerStartMap, setTableTimerStartMap] = useState({});
+// Elapsed minutes per table — updated every 30s by a single interval
+const [tableElapsedMap, setTableElapsedMap] = useState({});
+
+// Rebuild tableTimerStartMap whenever orders list changes
+useEffect(() => {
+  const map = {};
+  orders.forEach(order => {
+    if (!['pending', 'ready', 'served'].includes(order.status)) return;
+    const tbl = order.tableNumber?.toString();
+    if (!tbl) return;
+    const t = new Date(order.createdAt).getTime();
+    if (!map[tbl] || t < map[tbl]) map[tbl] = t; // keep oldest
+  });
+  setTableTimerStartMap(map);
+}, [orders]);
+
+// Single interval that recalculates ALL elapsed times every 30s
+useEffect(() => {
+  const calc = () => {
+    const now = Date.now();
+    const elapsed = {};
+    Object.entries(tableTimerStartMap).forEach(([tbl, startMs]) => {
+      elapsed[tbl] = Math.floor((now - startMs) / 60000);
+    });
+    setTableElapsedMap(elapsed);
+  };
+  calc(); // immediate first calc
+  const id = setInterval(calc, 30000);
+  return () => clearInterval(id);
+}, [tableTimerStartMap]);
+
+// ── HELPER — formats minutes into display string ──────────────
+const formatTableTimer = (mins) => {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+// ── HELPER — returns timer colour from the gold/amber palette only ──
+// No red, green, blue anywhere.
+const getTimerStyle = (mins) => {
+  if (mins >= 30) return { color: '#d3bfa2', fontWeight: '900' };  // gold primary — critical age
+  if (mins >= 15) return { color: '#BA7517', fontWeight: '800' };  // amber warning
+  if (mins >= 5)  return { color: '#8a704d', fontWeight: '700' };  // gold-deep — warming up
+  return { color: '#444',    fontWeight: '600' };                  // muted — fresh
+};
+
 const fetchCounterQueue = useCallback(async () => {
   try {
     const [qRes, aRes, rRes] = await Promise.all([
@@ -322,6 +379,9 @@ const fetchCounterQueue = useCallback(async () => {
     setAvgWaitData(aRes.data);
   } catch { }
 }, [tenantId, reservationViewDate]);
+
+
+
 
 // Fetch wastage analytics for current month
 const fetchWastageAnalytics = useCallback(async () => {
@@ -5170,68 +5230,158 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
                   <button onClick={()=>generateBill('Takeaway')} style={selectedTable==='Takeaway'?styles.activeSpecBtn:styles.specBtn}><ShoppingBag size={16}/> DIRECT TAKEAWAY</button>
                   <button onClick={generateOnlineBill} style={selectedTable==='Online'?styles.activeSpecBtn:styles.specBtn}><Truck size={16}/> ONLINE ORDERING</button>
                 </div>
-                <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
-                <div style={styles.tableGrid}>
-{Array.from({length:tableCount},(_,i)=>i+1).map(n=>{
-  const id=n.toString();
-  const isOcc=occupiedTables.includes(id);
-  const hasChk=checkoutRequests.includes(id);
-  const isSel=selectedTable===id;
-  const mood = isOcc ? getTableMood(id) : null;
-  const isAcked = acknowledgedTables[id] && (Date.now() - acknowledgedTables[id]) < 5*60*1000;
-  const showAlert = mood?.level === 'critical' && !isAcked;
+{/* ── DINING FLOOR OCCUPANCY GRID ── */}
+<h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
+<div style={styles.tableGrid}>
+  {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
+    const id = n.toString();
+    const isOcc     = occupiedTables.includes(id);
+    const hasChk    = checkoutRequests.includes(id);
+    const isSel     = selectedTable === id;
+    const mood      = isOcc ? getTableMood(id) : null;
+    const isAcked   = acknowledgedTables[id] && (Date.now() - acknowledgedTables[id]) < 5 * 60 * 1000;
+    const showAlert = mood?.level === 'critical' && !isAcked;
 
-  return (
-    <div key={n} style={{position:'relative'}}>
-      {/* PULSING RING for hot/critical */}
-      {mood?.pulse && !isSel && !isAcked && (
-        <div style={{
-          position:'absolute',inset:'-3px',borderRadius:'18px',
-          border:`2px solid ${mood.level==='critical'?'rgba(138,48,48,0.6)':'rgba(186,117,23,0.5)'}`,
-          animation:'moodPulse 1.5s ease-in-out infinite',
-          pointerEvents:'none',zIndex:1
-        }}/>
-      )}
-      <button onClick={()=>generateBill(id)} style={{
-        ...styles.tableBtn, transition:'all 0.2s ease', width:'100%',
-        display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'6px',
-        background: isSel ? '#d3bfa2' : hasChk ? 'rgba(211,191,162,0.15)' : mood ? mood.color : '#0d0d0d',
-        color: isSel?'#000':hasChk?'#d3bfa2':isOcc?'rgba(211,191,162,0.7)':'#333',
-        border: isSel?'1px solid #d3bfa2':hasChk?'1px dashed #d3bfa2':isOcc?'1px solid rgba(211,191,162,0.25)':'1px solid #151515'
-      }}>
-        {hasChk && <motion.div animate={{scale:[1,1.1,1]}} transition={{repeat:Infinity,duration:2}}><BellRing size={14} style={{color:'#d3bfa2'}}/></motion.div>}
-        <span style={{fontSize:'1rem',fontWeight:'900'}}>T{n}</span>
-        {mood && !isSel && (
-          <span style={{
-            fontSize:'0.5rem',fontWeight:'900',letterSpacing:'0.5px',
-            color: mood.level==='critical'?'#c97070':mood.level==='hot'?'#BA7517':mood.level==='warm'?'#8a704d':'#666'
-          }}>
-            {mood.level==='critical'?'CRITICAL':mood.level==='hot'?'HOT':mood.level==='warm'?'WARM':'ACTIVE'}
-          </span>
+    // ── Timer values for this table ──────────────────────────
+    const elapsedMins  = tableElapsedMap[id];           // undefined if table is free
+    const timerVisible = isOcc && !isSel && elapsedMins !== undefined;
+    const timerStyle   = timerVisible ? getTimerStyle(elapsedMins) : {};
+
+    return (
+      <div key={n} style={{ position: 'relative' }}>
+
+        {/* PULSING RING for hot/critical */}
+        {mood?.pulse && !isSel && !isAcked && (
+          <div style={{
+            position: 'absolute', inset: '-3px', borderRadius: '18px',
+            border: `2px solid ${mood.level === 'critical'
+              ? 'rgba(138,48,48,0.6)'
+              : 'rgba(186,117,23,0.5)'}`,
+            animation: 'moodPulse 1.5s ease-in-out infinite',
+            pointerEvents: 'none', zIndex: 1
+          }} />
         )}
-      </button>
-      {/* ACKNOWLEDGE button for critical tables */}
-      {showAlert && (
+
         <button
-          onClick={e=>{
-            e.stopPropagation();
-            setAcknowledgedTables(p=>({...p,[id]:Date.now()}));
-            showNotif(`T${n} alert snoozed 5 min`,"info");
-          }}
+          onClick={() => generateBill(id)}
           style={{
-            position:'absolute',bottom:'-10px',left:'50%',transform:'translateX(-50%)',
-            background:'rgba(138,48,48,0.8)',border:'none',color:'#fff',
-            padding:'2px 8px',borderRadius:'4px',fontSize:'0.5rem',fontWeight:'900',
-            cursor:'pointer',whiteSpace:'nowrap',zIndex:2
+            ...styles.tableBtn,
+            transition: 'all 0.2s ease',
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',                   // tighter gap — timer sits below num
+            background: isSel
+              ? '#d3bfa2'
+              : hasChk
+              ? 'rgba(211,191,162,0.15)'
+              : mood
+              ? mood.color
+              : '#0d0d0d',
+            color: isSel
+              ? '#000'
+              : hasChk
+              ? '#d3bfa2'
+              : isOcc
+              ? 'rgba(211,191,162,0.7)'
+              : '#333',
+            border: isSel
+              ? '1px solid #d3bfa2'
+              : hasChk
+              ? '1px dashed #d3bfa2'
+              : isOcc
+              ? '1px solid rgba(211,191,162,0.25)'
+              : '1px solid #151515',
           }}
         >
-          ACK
+          {/* Bill-request bell */}
+          {hasChk && (
+            <motion.div
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+            >
+              <BellRing size={14} style={{ color: '#d3bfa2' }} />
+            </motion.div>
+          )}
+
+          {/* Table number */}
+          <span style={{ fontSize: '1rem', fontWeight: '900', lineHeight: 1 }}>
+            T{n}
+          </span>
+
+          {/* ── PER-TABLE ELAPSED TIMER ── */}
+          {timerVisible && (
+            <span style={{
+              fontSize: '0.52rem',
+              letterSpacing: '0.3px',
+              lineHeight: 1,
+              fontFamily: 'monospace',
+              ...timerStyle,
+            }}>
+              {formatTableTimer(elapsedMins)}
+            </span>
+          )}
+
+          {/* Mood label (WARM / HOT / CRITICAL) — only when not selected */}
+          {mood && !isSel && (
+            <span style={{
+              fontSize: '0.46rem',
+              fontWeight: '900',
+              letterSpacing: '0.5px',
+              lineHeight: 1,
+              color: mood.level === 'critical'
+                ? '#c97070'
+                : mood.level === 'hot'
+                ? '#BA7517'
+                : mood.level === 'warm'
+                ? '#8a704d'
+                : '#555',
+            }}>
+              {mood.level === 'critical'
+                ? 'CRITICAL'
+                : mood.level === 'hot'
+                ? 'HOT'
+                : mood.level === 'warm'
+                ? 'WARM'
+                : 'ACTIVE'}
+            </span>
+          )}
         </button>
-      )}
-    </div>
-  );
-})}
-                </div>
+
+        {/* ACK button for critical tables */}
+        {showAlert && (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              setAcknowledgedTables(p => ({ ...p, [id]: Date.now() }));
+              showNotif(`T${n} alert snoozed 5 min`, 'info');
+            }}
+            style={{
+              position: 'absolute',
+              bottom: '-10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(138,48,48,0.8)',
+              border: 'none',
+              color: '#fff',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontSize: '0.5rem',
+              fontWeight: '900',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              zIndex: 2,
+            }}
+          >
+            ACK
+          </button>
+        )}
+      </div>
+    );
+  })}
+</div>
                 <div style={{...styles.biCard,marginTop:'25px',borderTop:'2px solid #d3bfa2',background:'#090909',padding:'20px'}}>
   <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px',textAlign:'center'}}>
     {[

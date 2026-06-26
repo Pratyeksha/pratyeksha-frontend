@@ -487,11 +487,43 @@ export default function Pratyeksha() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showThanks, setShowThanks] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [stats, setStats] = useState({tenantCount:47, ordersCount:15000, citiesCount:4});
+
+  // ── Backend-driven platform stats — defaults shown only until fetch resolves ──
+  const [stats, setStats] = useState({ tenantCount: 0, ordersCount: 0, citiesCount: 0 });
+  const [statsLoaded, setStatsLoaded] = useState(false);
+
   const [form, setForm] = useState({name:'',restaurant:'',phone:'',email:'',type:'',tables:'',city:''});
   const [activeIntel, setActiveIntel] = useState(0);
   const dotRef = useRef(null);
   const ringRef = useRef(null);
+
+  // ── Fetch platform stats from backend with retry on failure ──
+  const fetchPlatformStats = async (attempt = 1) => {
+    try {
+      const r = await fetch(`${BASE_URL}/platform-stats`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (d?.success && d?.stats) {
+        setStats({
+          tenantCount: Number(d.stats.tenantCount) || 0,
+          ordersCount: Number(d.stats.ordersCount) || 0,
+          citiesCount: Number(d.stats.citiesCount) || 0,
+        });
+        setStatsLoaded(true);
+      } else {
+        throw new Error('Malformed stats payload');
+      }
+    } catch (err) {
+      console.warn(`[platform-stats] fetch attempt ${attempt} failed:`, err.message);
+      // Retry up to 3 times with backoff before giving up silently
+      if (attempt < 3) {
+        setTimeout(() => fetchPlatformStats(attempt + 1), attempt * 1500);
+      } else {
+        // Keep statsLoaded false — UI will show graceful fallback, not fake numbers
+        setStatsLoaded(false);
+      }
+    }
+  };
 
   useEffect(()=>{
     if (!document.getElementById('pratyeksha-css')) {
@@ -510,8 +542,10 @@ export default function Pratyeksha() {
       `;
       document.head.appendChild(sf);
     }
-    fetch(`${BASE_URL}/platform-stats`)
-      .then(r=>r.json()).then(d=>{ if(d.success&&d.stats) setStats(d.stats); }).catch(()=>{});
+
+    // ── Fetch real backend stats on mount ──
+    fetchPlatformStats();
+
     const t = setTimeout(()=>{ setLoaderOut(true); initReveal(); }, 2600);
     const onScroll = ()=> setNavScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, {passive:true});
@@ -558,7 +592,12 @@ export default function Pratyeksha() {
     setShowThanks(true);
     setForm({name:'',restaurant:'',phone:'',email:'',type:'',tables:'',city:''});
     setSubmitting(false);
+    // ── Refresh stats after a successful demo request — keeps numbers live ──
+    fetchPlatformStats();
   };
+
+  // ── Helper: render a stat value with a graceful placeholder while loading ──
+  const sv = (n, suffix = '+') => statsLoaded ? `${n}${suffix}` : '—';
 
   const intelCategories = [
     {
@@ -711,10 +750,10 @@ export default function Pratyeksha() {
           ))}
         </div>
         <div className="nums reveal">
-          {[[`${stats.tenantCount}+`,'Active Establishments','Cafes & Restaurants'],
-            [`${stats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
-            [`${stats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
-            ['4.9','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
+          {[[sv(stats.tenantCount),'Active Establishments','Cafes & Restaurants'],
+            [sv(stats.ordersCount),'Orders Processed','Via Pratyeksha'],
+            [sv(stats.citiesCount),'Cities Covered','Across Maharashtra'],
+            ['4.9','Customer Rating',statsLoaded ? `From ${stats.tenantCount} reviews` : 'Loading…']].map(([v,l,s])=>(
             <div className="nc" key={l}><div className="nv">{v}</div><div className="nl">{l}</div><div className="ns">{s}</div></div>
           ))}
         </div>
@@ -1146,7 +1185,7 @@ export default function Pratyeksha() {
         <div className="center reveal" style={{marginBottom:72}}>
           <div className="eye" style={{color:'rgba(184,151,90,.6)'}}>Our Story</div>
           <h2 className="sh2" style={{color:'#fff'}}>We help restaurants <em>grow</em><br/>and guests <em>remember</em></h2>
-          <p className="sdesc" style={{color:'rgba(255,255,255,.38)'}}>From a simple idea in Kolhapur to a platform serving {stats.tenantCount}+ establishments across Maharashtra — built by people who understand the dinner rush firsthand.</p>
+          <p className="sdesc" style={{color:'rgba(255,255,255,.38)'}}>From a simple idea in Kolhapur to a platform serving {sv(stats.tenantCount)} establishments across Maharashtra — built by people who understand the dinner rush firsthand.</p>
         </div>
         <div className="about-grid reveal">
           <div className="about-img-wrap">
@@ -1155,7 +1194,7 @@ export default function Pratyeksha() {
               <div className="about-ph"><IcoUser/><span>Founder Photo</span></div>
             </div>
             <div className="about-badge">
-              <div className="about-badge-num">{stats.tenantCount}+</div>
+              <div className="about-badge-num">{sv(stats.tenantCount)}</div>
               <div className="about-badge-lbl">Active<br/>Clients</div>
             </div>
           </div>
@@ -1181,10 +1220,10 @@ export default function Pratyeksha() {
           </div>
         </div>
         <div className="about-stats reveal">
-          {[[`${stats.tenantCount}+`,'Active Clients','Cafes & Restaurants'],
-            [`${stats.ordersCount}+`,'Orders Processed','Via Pratyeksha'],
-            [`${stats.citiesCount}+`,'Cities Covered','Across Maharashtra'],
-            ['4.9','Customer Rating',`From ${stats.tenantCount} reviews`]].map(([v,l,s])=>(
+          {[[sv(stats.tenantCount),'Active Clients','Cafes & Restaurants'],
+            [sv(stats.ordersCount),'Orders Processed','Via Pratyeksha'],
+            [sv(stats.citiesCount),'Cities Covered','Across Maharashtra'],
+            ['4.9','Customer Rating',statsLoaded ? `From ${stats.tenantCount} reviews` : 'Loading…']].map(([v,l,s])=>(
             <div className="as" key={l}><div className="as-v">{v}</div><div className="as-l">{l}</div><div className="as-s">{s}</div></div>
           ))}
         </div>
