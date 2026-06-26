@@ -314,11 +314,11 @@ waitlistSocket.on('reservation_confirmed', (data) => {
   setNotificationBanner({ type: 'reservation_confirmed', restaurantName: data.restaurantName, time: data.reservationTime });
 });
 
-socket.on('announcement_updated', (data) => {
+waitlistSocket.on('announcement_updated', (data) => {
   setActiveAnnouncement(data.announcement);
   setAnnouncementDismissed(false);
 });
-socket.on('announcement_ended', () => {
+waitlistSocket.on('announcement_ended', () => {
   setActiveAnnouncement(null);
 });
 
@@ -374,8 +374,9 @@ return () => {
   waitlistSocket.off('pickup_reminder');
   waitlistSocket.off('reservation_confirmed');
   waitlistSocket.off('operator_notify');
-};
-  }, [isCounterScan, sessionId, waitlistSocket]);
+  waitlistSocket.off('announcement_updated');
+  waitlistSocket.off('announcement_ended');
+};  }, [isCounterScan, sessionId, waitlistSocket]);
 
 // REPLACE the existing useEffect that has:
 // "axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)"
