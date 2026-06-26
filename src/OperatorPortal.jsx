@@ -12,7 +12,8 @@ import {
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
-  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package 
+  ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
+  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -191,6 +192,32 @@ const [showAggregatorSettings, setShowAggregatorSettings] = useState(false);
 const [aggregatorEditData, setAggregatorEditData] = useState({ swiggy: {}, zomato: {} });
 const [incomingAggregatorOrders, setIncomingAggregatorOrders] = useState([]); // queue of orders awaiting accept/reject
 const [activeAggregatorPopup, setActiveAggregatorPopup] = useState(null);     // the one currently shown
+
+// ── Customer Intelligence ──
+const [customerDir, setCustomerDir]           = useState({ customers: [], summary: {} });
+const [customerSegFilter, setCustomerSegFilter] = useState('all');
+const [customerSearch, setCustomerSearch]     = useState('');
+const [customerLoading, setCustomerLoading]   = useState(false);
+const [customerProfile, setCustomerProfile]   = useState(null); // drawer
+ 
+// ── Feedback ──
+const [feedbackData, setFeedbackData]         = useState({ feedback: [], summary: {} });
+const [feedbackLoading, setFeedbackLoading]   = useState(false);
+const [feedbackNoteModal, setFeedbackNoteModal] = useState(null);
+const [feedbackNoteText, setFeedbackNoteText] = useState('');
+ 
+// ── Marketing ──
+const [offers, setOffers]                     = useState([]);
+const [campaigns, setCampaigns]               = useState([]);
+const [marketingTab, setMarketingTab]         = useState('offers'); // 'offers' | 'campaigns'
+const [newOffer, setNewOffer]                 = useState({
+  title: '', type: 'percent_off', value: '', freeItem: '',
+  minOrder: '', categoryId: '', happyStart: '', happyEnd: '', expiresAt: ''
+});
+const [newCampaign, setNewCampaign]           = useState({
+  title: '', body: '', segment: 'all', customPhones: ''
+});
+const [campaignSending, setCampaignSending]   = useState(false);
 
 
   // ── IST today string — used for billing HUD and daily breakdowns
@@ -630,6 +657,11 @@ socket.on("menu_updated", (updatedItem) => {
           }
           return prevOrders;
         });
+
+          socket.on('low_rating_alert', (data) => {
+    new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
+    showNotif(`⚠ Low rating (${data.rating}★) from Table ${data.tableNumber} — check Feedback tab`, 'error');
+  });
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
       });
 
@@ -757,6 +789,49 @@ useEffect(() => {
     fetchMonthlySalary(monthPrefix); // ← ADD THIS
   }
 }, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, fetchMonthlySalary, tenantId]);
+
+const fetchCustomerDir = useCallback(async (seg = 'all', search = '') => {
+  setCustomerLoading(true);
+  try {
+    const res = await axios.get(
+      `${BASE_URL}/customers/directory/${tenantId}?segment=${seg}&search=${search}&limit=300`
+    );
+    setCustomerDir(res.data || { customers: [], summary: {} });
+  } catch { setCustomerDir({ customers: [], summary: {} }); }
+  finally { setCustomerLoading(false); }
+}, [tenantId]);
+ 
+const fetchCustomerProfile = useCallback(async (phone) => {
+  try {
+    const res = await axios.get(`${BASE_URL}/customers/profile/${tenantId}/${phone}`);
+    setCustomerProfile(res.data);
+  } catch { setCustomerProfile(null); }
+}, [tenantId]);
+ 
+const fetchFeedback = useCallback(async () => {
+  setFeedbackLoading(true);
+  try {
+    const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+    const res = await axios.get(`${BASE_URL}/feedback/${tenantId}?month=${monthStr}&limit=100`);
+    setFeedbackData(res.data || { feedback: [], summary: {} });
+  } catch { setFeedbackData({ feedback: [], summary: {} }); }
+  finally { setFeedbackLoading(false); }
+}, [tenantId, viewDate]);
+ 
+const fetchOffers = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/offers/${tenantId}`);
+    setOffers(res.data || []);
+  } catch { setOffers([]); }
+}, [tenantId]);
+ 
+const fetchCampaigns = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/campaigns/${tenantId}`);
+    setCampaigns(res.data || []);
+  } catch { setCampaigns([]); }
+}, [tenantId]);
+
 
 const handleAggregatorAccept = async (order, prepTime = 30) => {
   try {
@@ -1153,6 +1228,9 @@ const settleBill = () => {
 useEffect(() => {
   if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
   if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+  if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
+  if (activeTab === 'feedback')  fetchFeedback();
+  if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); }
   if (activeTab === 'extras') fetchExtraItems();
   if (activeTab === 'insights') {
     fetchAnalytics();
@@ -1459,6 +1537,23 @@ useEffect(() => {
   }
 }, [isAuthenticated, fetchIncomingAggregatorOrders]);
 
+
+const SEG_META = {
+  all:       { label:'All',      color:'#d3bfa2', bg:'rgba(211,191,162,0.1)'  },
+  new:       { label:'New',      color:'#8a9a7e', bg:'rgba(138,154,126,0.12)' },
+  regular:   { label:'Regular',  color:'#8a704d', bg:'rgba(138,112,77,0.12)'  },
+  loyal:     { label:'Loyal',    color:'#C9A84C', bg:'rgba(201,168,76,0.12)'  },
+  'at-risk': { label:'At-Risk',  color:'#BA7517', bg:'rgba(186,117,23,0.12)'  },
+  champion:  { label:'Champion', color:'#d3bfa2', bg:'rgba(211,191,162,0.15)' },
+};
+
+const SEG_ICONS_COMPONENT = {
+  new:       <UserCheck  size={12}/>,
+  regular:   <User       size={12}/>,
+  loyal:     <Star       size={12}/>,
+  'at-risk': <AlertCircle size={12}/>,
+  champion:  <Crown      size={12}/>,
+};
 
 const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
@@ -3312,17 +3407,19 @@ const renderMonthHeatmap = () => {
     </div>
     <nav style={styles.navStack} className="p-nav-stack">
       {[
-        {id:'pending',  label:'LIVE KITCHEN',  icon:<CookingPot size={18}/>},
-        {id:'billing',  label:'BILLING HUB',   icon:<ReceiptIndianRupee size={18}/>},
-        {id:'menu',     label:'MENU EDITOR',   icon:<UtensilsCrossed size={18}/>},
-        // {id:'reservations', label:'RESERVATIONS', icon:<CalendarClock size={18}/>},
-        {id:'insights', label:'INSIGHTS',      icon:<BarChart3 size={18}/>},
-        {id:'intelligence',label:'INTELLIGENCE', icon:<MessageSquare size={18}/>},
-        {id:'management',label:'MANAGEMENT',  icon:<ShieldCheck size={18}/>},
-        {id:'inventory',label:'INVENTORY',    icon:<Layers size={18}/>},
-        {id:'extras',   label:'EXTRA ITEMS',   icon:<ShoppingBag size={18}/>},
-        {id:'recipes',  label:'RECIPES',      icon:<ChefHat size={18}/>},
-      ].map(tab => (
+  {id:'pending',      label:'LIVE KITCHEN',   icon:<CookingPot size={18}/>},
+  {id:'billing',      label:'BILLING HUB',    icon:<ReceiptIndianRupee size={18}/>},
+  {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
+  {id:'customers',    label:'CUSTOMERS',      icon:<Users size={18}/>},        // ← NEW
+  {id:'feedback',     label:'FEEDBACK',       icon:<Star size={18}/>},         // ← NEW
+  {id:'marketing',    label:'MARKETING',      icon:<Megaphone size={18}/>},    // ← NEW
+  {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
+  {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
+  {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
+  {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
+  {id:'extras',       label:'EXTRA ITEMS',    icon:<ShoppingBag size={18}/>},
+  {id:'recipes',      label:'RECIPES',        icon:<ChefHat size={18}/>},
+].map(tab => (
         <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
           style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
           className="p-nav-btn"
@@ -4729,6 +4826,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
   </motion.div>
 )}
  
+
 {/* ── MENU ── */}
 {activeTab === 'menu' && (
   <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -5219,6 +5317,1001 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         </div>
       )}
     </div>
+  </motion.div>
+)}
+
+{activeTab === 'customers' && (
+  <motion.div key="customers" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+
+    {/* ── SUMMARY STRIP ── */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>
+      {[
+        { label:'TOTAL CUSTOMERS', val: customerDir.summary?.total    || 0, color:'#d3bfa2' },
+        { label:'NEW',             val: customerDir.summary?.new      || 0, color:'#8a9a7e' },
+        { label:'REGULAR',         val: customerDir.summary?.regular  || 0, color:'#8a704d' },
+        { label:'LOYAL',           val: customerDir.summary?.loyal    || 0, color:'#C9A84C' },
+        { label:'AT-RISK',         val: customerDir.summary?.atRisk   || 0, color:'#BA7517' },
+        { label:'CHAMPION',        val: customerDir.summary?.champion || 0, color:'#d3bfa2' },
+      ].map(({label,val,color}) => (
+        <div key={label} style={{
+          background:'#0d0d0d', border:'1px solid #1c1f26',
+          borderTop:`2px solid ${color}`, borderRadius:'12px',
+          padding:'14px 14px 12px'
+        }}>
+          <div style={{fontSize:'1.4rem',fontWeight:'900',color,fontFamily:'monospace'}}>{val}</div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* ── LIFETIME REVENUE ── */}
+    <div style={{
+      background:'#090909', border:'1px solid rgba(211,191,162,0.15)',
+      borderRadius:'12px', padding:'16px 20px',
+      display:'flex', alignItems:'center', justifyContent:'space-between'
+    }}>
+      <div>
+        <div style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>LIFETIME CUSTOMER REVENUE</div>
+        <div style={{fontSize:'2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>
+          ₹{(customerDir.summary?.totalRevenue || 0).toLocaleString()}
+        </div>
+      </div>
+      <div style={{textAlign:'right'}}>
+        <div style={{fontSize:'0.58rem',color:'#444',fontStyle:'italic'}}>
+          Avg ₹{customerDir.summary?.total > 0 ? Math.round((customerDir.summary?.totalRevenue||0)/customerDir.summary.total).toLocaleString() : 0} per customer
+        </div>
+        <button
+          onClick={() => fetchCustomerDir(customerSegFilter, customerSearch)}
+          style={{
+            marginTop:'8px', display:'flex', alignItems:'center', gap:'6px',
+            background:'transparent', border:'1px solid rgba(211,191,162,0.2)',
+            color:'#d3bfa2', padding:'6px 12px', borderRadius:'8px',
+            cursor:'pointer', fontSize:'0.62rem', fontWeight:'900'
+          }}
+        >
+          <RefreshCw size={12}/> REFRESH
+        </button>
+      </div>
+    </div>
+
+    {/* ── SEGMENT PILLS + SEARCH ── */}
+    <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+      {Object.entries(SEG_META).map(([seg, meta]) => (
+        <button
+          key={seg}
+          onClick={() => { setCustomerSegFilter(seg); fetchCustomerDir(seg, customerSearch); }}
+          style={{
+            display:'flex', alignItems:'center', gap:'5px',
+            padding:'7px 14px', borderRadius:'20px', border:'none',
+            cursor:'pointer', fontWeight:'900', fontSize:'0.62rem',
+            letterSpacing:'1px', textTransform:'uppercase', transition:'all 0.15s',
+            background: customerSegFilter === seg ? meta.color : '#13151a',
+            color:      customerSegFilter === seg ? '#0d0d0d'  : meta.color,
+            boxShadow:  customerSegFilter === seg ? `0 0 12px ${meta.color}40` : 'none',
+          }}
+        >
+          {seg !== 'all' && SEG_ICONS_COMPONENT[seg]}
+          {meta.label}
+        </button>
+      ))}
+      {/* Search */}
+      <div style={{flex:1, position:'relative', minWidth:'200px'}}>
+        <Search size={13} color="#555" style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)'}}/>
+        <input
+          value={customerSearch}
+          onChange={e => { setCustomerSearch(e.target.value); fetchCustomerDir(customerSegFilter, e.target.value); }}
+          placeholder="Search name or phone..."
+          style={{
+            width:'100%', padding:'9px 12px 9px 34px',
+            background:'#13151a', border:'1px solid #252932',
+            borderRadius:'8px', color:'#fff', fontSize:'0.78rem', outline:'none'
+          }}
+        />
+      </div>
+    </div>
+
+    {/* ── CUSTOMER TABLE ── */}
+    {customerLoading ? (
+      <div style={{textAlign:'center',padding:'48px',color:'#333',fontSize:'0.78rem'}}>Loading customers...</div>
+    ) : (
+      <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'14px',overflow:'hidden'}}>
+        {/* Header */}
+        <div style={{
+          display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
+          padding:'10px 16px', borderBottom:'1px solid #1c1f26', background:'#090909'
+        }}>
+          {['CUSTOMER','SEGMENT','VISITS','TOTAL SPENT','AVG ORDER','LAST SEEN','TOP DISH'].map(h => (
+            <div key={h} style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px'}}>{h}</div>
+          ))}
+        </div>
+        {/* Rows */}
+        <div style={{maxHeight:'480px',overflowY:'auto'}} className="custom-scroll">
+          {(customerDir.customers || []).length === 0 ? (
+            <div style={{padding:'48px',textAlign:'center',color:'#333',fontSize:'0.78rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'12px'}}>
+              <Users size={32} color="#1a1c23"/>
+              No customers found
+            </div>
+          ) : (customerDir.customers || []).map((c, i) => {
+            const meta = SEG_META[c.segment] || SEG_META.regular;
+            return (
+              <div
+                key={c._id}
+                onClick={() => fetchCustomerProfile(c.phone)}
+                style={{
+                  display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
+                  padding:'12px 16px', cursor:'pointer',
+                  borderBottom:'1px solid rgba(255,255,255,0.03)',
+                  transition:'background 0.15s',
+                  background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.04)'}
+                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'}
+              >
+                {/* Name + phone */}
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:'6px',fontWeight:'800',fontSize:'0.82rem',color:'#fff'}}>
+                    {c.segment === 'champion' && <Crown size={12} color="#C9A84C"/>}
+                    {c.name}
+                  </div>
+                  <div style={{fontSize:'0.6rem',color:'#555',marginTop:'2px',fontFamily:'monospace'}}>{c.phone}</div>
+                </div>
+                {/* Segment */}
+                <div style={{display:'flex',alignItems:'center'}}>
+                  <span style={{
+                    display:'inline-flex', alignItems:'center', gap:'4px',
+                    fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px',
+                    borderRadius:'10px', background:meta.bg, color:meta.color,
+                    border:`1px solid ${meta.color}33`, letterSpacing:'0.5px'
+                  }}>
+                    {SEG_ICONS_COMPONENT[c.segment]}
+                    {meta.label}
+                  </span>
+                </div>
+                {/* Visits */}
+                <div style={{display:'flex',alignItems:'center'}}>
+                  <span style={{fontSize:'0.88rem',fontWeight:'800',color:'#d3bfa2',fontFamily:'monospace'}}>{c.visitCount}</span>
+                </div>
+                {/* Spend */}
+                <div style={{display:'flex',alignItems:'center'}}>
+                  <span style={{fontSize:'0.88rem',fontWeight:'800',color:'#d3bfa2',fontFamily:'monospace'}}>₹{c.totalSpend?.toLocaleString()}</span>
+                </div>
+                {/* Avg */}
+                <div style={{display:'flex',alignItems:'center'}}>
+                  <span style={{fontSize:'0.82rem',color:'#8a704d',fontFamily:'monospace'}}>₹{c.avgOrderValue?.toLocaleString()}</span>
+                </div>
+                {/* Last seen */}
+                <div style={{display:'flex',alignItems:'center'}}>
+                  <span style={{fontSize:'0.72rem',color:c.daysSinceVisit > 21 ? '#BA7517' : '#666'}}>
+                    {c.daysSinceVisit > 365 ? 'Long ago' : `${c.daysSinceVisit}d ago`}
+                  </span>
+                </div>
+                {/* Top dish */}
+                <div style={{display:'flex',alignItems:'center',overflow:'hidden'}}>
+                  <span style={{fontSize:'0.68rem',color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.topDish || '—'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+
+    {/* ── CUSTOMER PROFILE DRAWER ── */}
+    <AnimatePresence>
+      {customerProfile && (
+        <>
+          <motion.div
+            initial={{opacity:0}} animate={{opacity:0.6}} exit={{opacity:0}}
+            onClick={() => setCustomerProfile(null)}
+            style={{position:'fixed',inset:0,background:'#000',zIndex:3000}}
+          />
+          <motion.div
+            initial={{x:'100%'}} animate={{x:0}} exit={{x:'100%'}}
+            transition={{type:'spring',stiffness:300,damping:32}}
+            style={{
+              position:'fixed',right:0,top:0,bottom:0,width:'420px',
+              background:'#0d0e11', border:'1px solid #1f222a',
+              borderRadius:'20px 0 0 20px', zIndex:3001,
+              display:'flex', flexDirection:'column', overflow:'hidden'
+            }}
+          >
+            {/* Drawer header */}
+            <div style={{padding:'20px 24px',borderBottom:'1px solid #1a1c23',background:'#0a0b0e'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>
+                    {customerProfile.customer?.name || 'Guest'}
+                  </div>
+                  <div style={{fontSize:'0.68rem',color:'#555',fontFamily:'monospace',marginTop:'3px'}}>
+                    {customerProfile.customer?.phone}
+                  </div>
+                  {customerProfile.customer?.segment && (
+                    <span style={{
+                      display:'inline-flex', alignItems:'center', gap:'4px', marginTop:'6px',
+                      fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px', borderRadius:'10px',
+                      background: SEG_META[customerProfile.customer.segment]?.bg || SEG_META.regular.bg,
+                      color:      SEG_META[customerProfile.customer.segment]?.color || SEG_META.regular.color,
+                      border:`1px solid ${SEG_META[customerProfile.customer.segment]?.color || '#8a704d'}33`
+                    }}>
+                      {SEG_ICONS_COMPONENT[customerProfile.customer.segment]}
+                      {SEG_META[customerProfile.customer.segment]?.label || 'Regular'}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => setCustomerProfile(null)} style={{
+                  background:'#13151a', border:'1px solid #252932',
+                  color:'#555', padding:'8px', borderRadius:'9px', cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center'
+                }}>
+                  <X size={16}/>
+                </button>
+              </div>
+            </div>
+
+            <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}} className="custom-scroll">
+              {/* Stats grid */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'20px'}}>
+                {[
+                  { label:'Total Visits',  val: customerProfile.customer?.visitCount || 0 },
+                  { label:'Total Spent',   val: `₹${(customerProfile.customer?.totalSpend||0).toLocaleString()}` },
+                  { label:'Avg Order',     val: `₹${customerProfile.avgOrderValue?.toLocaleString() || 0}` },
+                  { label:'Last Seen',     val: `${customerProfile.daysSinceVisit || '—'}d ago` },
+                ].map(({label,val}) => (
+                  <div key={label} style={{background:'#13151a',border:'1px solid #1f222a',borderRadius:'10px',padding:'14px'}}>
+                    <div style={{fontSize:'1.2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>{val}</div>
+                    <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dish preferences */}
+              {(customerProfile.allDishes || []).length > 0 && (
+                <div style={{marginBottom:'20px'}}>
+                  <div style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>DISH PREFERENCES</div>
+                  {customerProfile.allDishes.slice(0,5).map((d, i) => (
+                    <div key={d.name} style={{
+                      display:'flex', alignItems:'center', justifyContent:'space-between',
+                      padding:'9px 0', borderBottom:'1px solid #13151a'
+                    }}>
+                      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                        <span style={{
+                          width:'22px', height:'22px', borderRadius:'6px',
+                          background: i === 0 ? 'rgba(201,168,76,0.15)' : '#13151a',
+                          border:`1px solid ${i === 0 ? 'rgba(201,168,76,0.3)' : '#1f222a'}`,
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          fontSize:'0.55rem', fontWeight:'900',
+                          color: i === 0 ? '#C9A84C' : '#444', fontFamily:'monospace'
+                        }}>{i + 1}</span>
+                        <span style={{fontSize:'0.8rem',color:'#c8ccd6'}}>{d.name}</span>
+                      </div>
+                      <span style={{fontSize:'0.65rem',color:'#8a704d',fontFamily:'monospace'}}>{d.count}×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recent orders */}
+              {(customerProfile.recentOrders || []).length > 0 && (
+                <div>
+                  <div style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>RECENT ORDERS</div>
+                  {customerProfile.recentOrders.slice(0,5).map((o) => (
+                    <div key={o._id} style={{
+                      background:'#13151a', border:'1px solid #1f222a',
+                      borderRadius:'10px', padding:'12px 14px', marginBottom:'8px',
+                      display:'flex', justifyContent:'space-between', alignItems:'center'
+                    }}>
+                      <div>
+                        <div style={{fontSize:'0.72rem',color:'#d3bfa2',fontWeight:'800'}}>
+                          Table {o.tableNumber} · {o.items?.length || 0} items
+                        </div>
+                        <div style={{fontSize:'0.6rem',color:'#444',marginTop:'3px'}}>
+                          {new Date(o.createdAt).toLocaleDateString('en-IN')}
+                        </div>
+                      </div>
+                      <div style={{fontFamily:'monospace',fontWeight:'900',color:'#d3bfa2',fontSize:'0.88rem'}}>
+                        ₹{(o.billDetails?.grandTotal || 0).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  </motion.div>
+)}
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// TAB 2 — FEEDBACK  (activeTab === 'feedback')
+// ─────────────────────────────────────────────────────────────────────────
+{activeTab === 'feedback' && (
+  <motion.div key="feedback" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+
+    {/* ── MONTH NAV + MARK ALL READ ── */}
+    <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+      <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()-1); setViewDate(d); }} style={{
+        background:'#13151a', border:'1px solid #252932', color:'#d3bfa2',
+        padding:'7px 12px', borderRadius:'8px', cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center'
+      }}>‹</button>
+      <span style={{fontFamily:'monospace',fontSize:'0.75rem',color:'#d3bfa2',fontWeight:'900',minWidth:'120px',textAlign:'center'}}>
+        {viewDate.toLocaleString('default',{month:'long',year:'numeric'}).toUpperCase()}
+      </span>
+      <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()+1); setViewDate(d); }} style={{
+        background:'#13151a', border:'1px solid #252932', color:'#d3bfa2',
+        padding:'7px 12px', borderRadius:'8px', cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center'
+      }}>›</button>
+      {(feedbackData.summary?.unread || 0) > 0 && (
+        <button
+          onClick={async () => {
+            try {
+              await axios.patch(`${BASE_URL}/api/feedback/${tenantId}/mark-all-read`);
+              fetchFeedback();
+              showNotif('All marked as read');
+            } catch {}
+          }}
+          style={{
+            marginLeft:'auto', background:'transparent',
+            border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2',
+            padding:'7px 14px', borderRadius:'8px', cursor:'pointer',
+            fontSize:'0.65rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'6px'
+          }}
+        >
+          <CheckCircle2 size={13}/> MARK ALL READ ({feedbackData.summary.unread})
+        </button>
+      )}
+    </div>
+
+    {/* ── KPI ROW ── */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px'}}>
+      {[
+        { label:'AVG RATING',    val:`${feedbackData.summary?.avgRating || 0}★`, color:'#C9A84C'                                                                },
+        { label:'TOTAL REVIEWS', val: feedbackData.summary?.total || 0,           color:'#d3bfa2'                                                                },
+        { label:'NPS SCORE',     val:`${feedbackData.summary?.nps || 0}%`,        color:(feedbackData.summary?.nps||0) >= 50 ? '#8a9a7e' : '#8a704d'             },
+        { label:'UNREAD',        val: feedbackData.summary?.unread || 0,           color:(feedbackData.summary?.unread||0) > 0 ? '#BA7517' : '#555'               },
+      ].map(({label,val,color}) => (
+        <div key={label} style={{
+          background:'#0d0d0d', border:'1px solid #1c1f26',
+          borderTop:`2px solid ${color}`, borderRadius:'12px', padding:'16px'
+        }}>
+          <div style={{fontSize:'1.8rem',fontWeight:'900',color,fontFamily:'monospace',lineHeight:1}}>{val}</div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginTop:'6px'}}>{label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* ── RATING DISTRIBUTION ── */}
+    <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'12px',padding:'18px 20px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
+        <BarChart2 size={14} color="#d3bfa2"/>
+        <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>RATING DISTRIBUTION</span>
+      </div>
+      {[5,4,3,2,1].map(n => {
+        const count = feedbackData.summary?.ratingDist?.[n] || 0;
+        const pct   = feedbackData.summary?.total > 0 ? Math.round((count / feedbackData.summary.total) * 100) : 0;
+        return (
+          <div key={n} style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'8px'}}>
+            <span style={{color:'#C9A84C',fontFamily:'monospace',fontSize:'0.75rem',width:'18px',textAlign:'right'}}>{n}★</span>
+            <div style={{flex:1,height:'6px',background:'#1a1c23',borderRadius:'3px',overflow:'hidden'}}>
+              <div style={{
+                height:'100%', width:`${pct}%`,
+                background: n >= 4 ? '#8a9a7e' : n === 3 ? '#8a704d' : '#BA7517',
+                borderRadius:'3px', transition:'width 0.5s'
+              }}/>
+            </div>
+            <span style={{fontSize:'0.62rem',color:'#555',fontFamily:'monospace',width:'36px',textAlign:'right'}}>{count}</span>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* ── FEEDBACK LIST ── */}
+    {feedbackLoading ? (
+      <div style={{textAlign:'center',padding:'40px',color:'#333',fontSize:'0.78rem'}}>Loading...</div>
+    ) : (feedbackData.feedback || []).length === 0 ? (
+      <div style={{
+        textAlign:'center', padding:'48px',
+        color:'#333', border:'1px dashed #1a1c23', borderRadius:'14px',
+        display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
+      }}>
+        <Star size={28} color="#1a1c23"/>
+        <span style={{fontSize:'0.78rem'}}>No feedback this month</span>
+      </div>
+    ) : (
+      <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+        {(feedbackData.feedback || []).map(f => (
+          <motion.div key={f._id}
+            initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+            style={{
+              background: f.isRead ? '#0d0d0d' : 'rgba(211,191,162,0.03)',
+              border:`1px solid ${f.rating <= 2 ? 'rgba(186,117,23,0.25)' : '#1c1f26'}`,
+              borderLeft:`3px solid ${f.rating >= 4 ? '#8a9a7e' : f.rating === 3 ? '#8a704d' : '#BA7517'}`,
+              borderRadius:'12px', padding:'14px 16px'
+            }}
+          >
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px'}}>
+              <div style={{flex:1}}>
+                {/* Top row */}
+                <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px',flexWrap:'wrap'}}>
+                  {/* Star icons */}
+                  <div style={{display:'flex',gap:'2px'}}>
+                    {[1,2,3,4,5].map(n => (
+                      <Star key={n} size={12} color={n <= f.rating ? '#C9A84C' : '#252932'} fill={n <= f.rating ? '#C9A84C' : 'transparent'}/>
+                    ))}
+                  </div>
+                  <span style={{fontSize:'0.68rem',fontWeight:'800',color:'#d3bfa2'}}>{f.customerName}</span>
+                  {f.tableNumber && (
+                    <span style={{
+                      fontSize:'0.58rem', color:'#555',
+                      background:'#13151a', border:'1px solid #252932',
+                      padding:'2px 7px', borderRadius:'4px'
+                    }}>T{f.tableNumber}</span>
+                  )}
+                  {!f.isRead && (
+                    <span style={{
+                      fontSize:'0.48rem', fontWeight:'900', color:'#BA7517',
+                      background:'rgba(186,117,23,0.1)', border:'1px solid rgba(186,117,23,0.2)',
+                      padding:'2px 7px', borderRadius:'4px', letterSpacing:'1px'
+                    }}>UNREAD</span>
+                  )}
+                  {f.grandTotal > 0 && (
+                    <span style={{fontSize:'0.6rem',color:'#8a704d',fontFamily:'monospace',marginLeft:'auto'}}>
+                      ₹{f.grandTotal.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {/* Comment */}
+                {f.comment && (
+                  <div style={{fontSize:'0.78rem',color:'#8a8f9f',lineHeight:1.5,marginBottom:'6px',fontStyle:'italic'}}>
+                    "{f.comment}"
+                  </div>
+                )}
+                {/* Dish feedback */}
+                <div style={{display:'flex',gap:'16px',flexWrap:'wrap'}}>
+                  {f.favDish && (
+                    <span style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.6rem',color:'#555'}}>
+                      <ThumbsUp size={10} color="#8a9a7e"/>
+                      <span style={{color:'#8a9a7e'}}>{f.favDish}</span>
+                    </span>
+                  )}
+                  {f.leastDish && (
+                    <span style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.6rem',color:'#555'}}>
+                      <ThumbsDown size={10} color="#BA7517"/>
+                      <span style={{color:'#BA7517'}}>{f.leastDish}</span>
+                    </span>
+                  )}
+                </div>
+                {/* Operator note */}
+                {f.operatorNote && (
+                  <div style={{
+                    marginTop:'8px', padding:'7px 10px',
+                    background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)',
+                    borderRadius:'6px', fontSize:'0.65rem', color:'#555',
+                    display:'flex', alignItems:'flex-start', gap:'6px'
+                  }}>
+                    <MessageSquare size={10} color="#555" style={{flexShrink:0,marginTop:'1px'}}/>
+                    {f.operatorNote}
+                  </div>
+                )}
+              </div>
+              {/* Right side */}
+              <div style={{display:'flex',flexDirection:'column',gap:'6px',alignItems:'flex-end',flexShrink:0}}>
+                <span style={{fontSize:'0.55rem',color:'#333'}}>
+                  {new Date(f.createdAt).toLocaleDateString('en-IN')}
+                </span>
+                <button
+                  onClick={() => { setFeedbackNoteModal(f); setFeedbackNoteText(f.operatorNote || ''); }}
+                  style={{
+                    background:'#13151a', border:'1px solid #252932',
+                    color:'#d3bfa2', padding:'5px 10px', borderRadius:'6px',
+                    cursor:'pointer', fontSize:'0.58rem', fontWeight:'900',
+                    display:'flex', alignItems:'center', gap:'4px'
+                  }}
+                >
+                  <MessageSquare size={10}/> NOTE
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    )}
+
+    {/* ── NOTE MODAL ── */}
+    <AnimatePresence>
+      {feedbackNoteModal && (
+        <>
+          <motion.div initial={{opacity:0}} animate={{opacity:0.6}} exit={{opacity:0}}
+            onClick={() => setFeedbackNoteModal(null)}
+            style={{position:'fixed',inset:0,background:'#000',zIndex:4000}}/>
+          <motion.div
+            initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}}
+            style={{
+              position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
+              background:'#13151a', border:'1px solid rgba(211,191,162,0.2)',
+              borderRadius:'16px', padding:'24px', width:'380px', zIndex:4001
+            }}
+          >
+            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
+              <MessageSquare size={15} color="#d3bfa2"/>
+              <span style={{fontWeight:'900',color:'#d3bfa2',fontSize:'0.85rem'}}>
+                Internal Note — {feedbackNoteModal.customerName}
+              </span>
+            </div>
+            <div style={{display:'flex',gap:'2px',marginBottom:'12px'}}>
+              {[1,2,3,4,5].map(n => (
+                <Star key={n} size={16} color={n <= feedbackNoteModal.rating ? '#C9A84C' : '#252932'} fill={n <= feedbackNoteModal.rating ? '#C9A84C' : 'transparent'}/>
+              ))}
+            </div>
+            <textarea
+              value={feedbackNoteText}
+              onChange={e => setFeedbackNoteText(e.target.value)}
+              placeholder="Add your internal note about this feedback..."
+              rows={4}
+              style={{
+                width:'100%', background:'#0d0e11', border:'1px solid #252932',
+                color:'#fff', borderRadius:'8px', padding:'10px 12px',
+                fontSize:'0.82rem', resize:'vertical', outline:'none',
+                fontFamily:'inherit', marginBottom:'14px'
+              }}
+            />
+            <div style={{display:'flex',gap:'10px'}}>
+              <button onClick={() => setFeedbackNoteModal(null)} style={{
+                flex:1, padding:'10px', background:'transparent',
+                border:'1px solid #252932', color:'#555',
+                borderRadius:'8px', cursor:'pointer', fontWeight:'700'
+              }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    await axios.patch(`${BASE_URL}/api/feedback/${feedbackNoteModal._id}/note`, { operatorNote: feedbackNoteText });
+                    showNotif('Note saved');
+                    setFeedbackNoteModal(null);
+                    setFeedbackNoteText('');
+                    fetchFeedback();
+                  } catch { showNotif('Failed to save note'); }
+                }}
+                style={{
+                  flex:2, padding:'10px',
+                  background:'linear-gradient(135deg,#bda88a,#d3bfa2)',
+                  border:'none', color:'#0d0d0d',
+                  borderRadius:'8px', cursor:'pointer', fontWeight:'900',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'
+                }}
+              >
+                <CheckCircle2 size={14} color="#0d0d0d"/> SAVE NOTE
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  </motion.div>
+)}
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// TAB 3 — MARKETING  (activeTab === 'marketing')
+// ─────────────────────────────────────────────────────────────────────────
+{activeTab === 'marketing' && (
+  <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+
+    {/* ── SUB-TABS ── */}
+    <div style={{
+      display:'flex', background:'#0d0d0d', borderRadius:'10px',
+      padding:'4px', border:'1px solid #1c1f26', width:'fit-content'
+    }}>
+      {[
+        { id:'offers',    label:'OFFERS & DISCOUNTS', icon:<Tag size={13}/> },
+        { id:'campaigns', label:'PUSH CAMPAIGNS',     icon:<Megaphone size={13}/> },
+      ].map(t => (
+        <button key={t.id} onClick={() => setMarketingSubTab(t.id)} style={{
+          display:'flex', alignItems:'center', gap:'6px',
+          padding:'9px 20px', borderRadius:'8px', border:'none',
+          cursor:'pointer', fontSize:'0.65rem', fontWeight:'900', letterSpacing:'1px',
+          transition:'all 0.15s',
+          background:    marketingSubTab === t.id ? 'rgba(211,191,162,0.1)' : 'transparent',
+          color:         marketingSubTab === t.id ? '#d3bfa2' : '#444',
+          borderBottom:  marketingSubTab === t.id ? '2px solid #d3bfa2' : '2px solid transparent',
+        }}>
+          {t.icon}{t.label}
+        </button>
+      ))}
+    </div>
+
+    {/* ════════════ OFFERS SUB-TAB ════════════ */}
+    {marketingSubTab === 'offers' && (
+      <div style={{display:'grid',gridTemplateColumns:'380px 1fr',gap:'24px',alignItems:'start'}}>
+
+        {/* ── CREATE OFFER FORM ── */}
+        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'14px',padding:'20px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'18px'}}>
+            <Tag size={14} color="#d3bfa2"/>
+            <span style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>CREATE OFFER</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+            {/* Title */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>OFFER TITLE</label>
+              <input
+                value={newOffer.title}
+                onChange={e => setNewOffer(p => ({...p, title:e.target.value}))}
+                placeholder="e.g. Weekend Special 20% Off"
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+              />
+            </div>
+            {/* Type */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>TYPE</label>
+              <select
+                value={newOffer.type}
+                onChange={e => setNewOffer(p => ({...p, type:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
+              >
+                <option value="percent_off">% Discount</option>
+                <option value="fixed_off">₹ Fixed Off</option>
+                <option value="free_item">Free Item</option>
+                <option value="happy_hour">Happy Hours</option>
+              </select>
+            </div>
+            {/* Value */}
+            {newOffer.type !== 'free_item' && newOffer.type !== 'happy_hour' && (
+              <div>
+                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>
+                  {newOffer.type === 'percent_off' ? 'DISCOUNT %' : 'DISCOUNT ₹'}
+                </label>
+                <input
+                  type="number" value={newOffer.value}
+                  onChange={e => setNewOffer(p => ({...p, value:e.target.value}))}
+                  placeholder="e.g. 15"
+                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+                />
+              </div>
+            )}
+            {/* Free item */}
+            {newOffer.type === 'free_item' && (
+              <div>
+                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>FREE ITEM NAME</label>
+                <input
+                  value={newOffer.freeItem}
+                  onChange={e => setNewOffer(p => ({...p, freeItem:e.target.value}))}
+                  placeholder="e.g. Gulab Jamun"
+                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+                />
+              </div>
+            )}
+            {/* Happy hours */}
+            {newOffer.type === 'happy_hour' && (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                <div>
+                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>START TIME</label>
+                  <input type="time" value={newOffer.happyStart} onChange={e => setNewOffer(p => ({...p, happyStart:e.target.value}))}
+                    style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>END TIME</label>
+                  <input type="time" value={newOffer.happyEnd} onChange={e => setNewOffer(p => ({...p, happyEnd:e.target.value}))}
+                    style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}/>
+                </div>
+              </div>
+            )}
+            {/* Min order */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MIN ORDER VALUE ₹ (OPTIONAL)</label>
+              <input
+                type="number" value={newOffer.minOrder}
+                onChange={e => setNewOffer(p => ({...p, minOrder:e.target.value}))}
+                placeholder="0 = no minimum"
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+              />
+            </div>
+            {/* Expiry */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>EXPIRES ON (OPTIONAL)</label>
+              <input
+                type="date" value={newOffer.expiresAt}
+                onChange={e => setNewOffer(p => ({...p, expiresAt:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                if (!newOffer.title) return;
+                try {
+                  await axios.post(`${BASE_URL}/api/offers/${tenantId}`, {
+                    ...newOffer,
+                    value:    Number(newOffer.value) || 0,
+                    minOrder: Number(newOffer.minOrder) || 0,
+                    expiresAt: newOffer.expiresAt || null,
+                  });
+                  showNotif('Offer created');
+                  setNewOffer({ title:'', type:'percent_off', value:'', freeItem:'', minOrder:'', expiresAt:'', happyStart:'', happyEnd:'' });
+                  fetchOffers();
+                } catch { showNotif('Failed to create offer'); }
+              }}
+              disabled={!newOffer.title}
+              style={{
+                padding:'12px', borderRadius:'10px', border:'none',
+                background: newOffer.title ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : '#13151a',
+                color: newOffer.title ? '#0d0d0d' : '#333',
+                fontWeight:'900', fontSize:'0.75rem',
+                cursor: newOffer.title ? 'pointer' : 'not-allowed',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'
+              }}
+            >
+              <Tag size={14} color={newOffer.title ? '#0d0d0d' : '#333'}/>
+              CREATE OFFER
+            </button>
+          </div>
+        </div>
+
+        {/* ── OFFER LIST ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+          {offers.length === 0 ? (
+            <div style={{
+              textAlign:'center', padding:'48px', color:'#333',
+              border:'1px dashed #1a1c23', borderRadius:'14px',
+              display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
+            }}>
+              <Tag size={28} color="#1a1c23"/>
+              <span style={{fontSize:'0.78rem'}}>No offers yet — create one to start</span>
+            </div>
+          ) : offers.map(o => (
+            <motion.div key={o._id}
+              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+              style={{
+                background: o.isActive ? 'rgba(211,191,162,0.03)' : '#0d0d0d',
+                border:`1px solid ${o.isActive ? 'rgba(211,191,162,0.15)' : '#1c1f26'}`,
+                borderRadius:'12px', padding:'16px 18px',
+                display:'flex', alignItems:'center', gap:'16px',
+                opacity: o.isActive ? 1 : 0.5
+              }}
+            >
+              <div style={{
+                width:'42px', height:'42px', borderRadius:'10px',
+                background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.2)',
+                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+              }}>
+                {o.type === 'percent_off' ? <Percent size={18} color="#C9A84C"/>
+                  : o.type === 'fixed_off' ? <IndianRupee size={18} color="#C9A84C"/>
+                  : o.type === 'free_item' ? <Gift size={18} color="#C9A84C"/>
+                  : <Clock size={18} color="#C9A84C"/>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:'800',color:'#fff',fontSize:'0.88rem',marginBottom:'3px'}}>{o.title}</div>
+                <div style={{fontSize:'0.62rem',color:'#8a704d',display:'flex',gap:'10px',flexWrap:'wrap'}}>
+                  {o.type === 'percent_off' && `${o.value}% off`}
+                  {o.type === 'fixed_off'   && `₹${o.value} off`}
+                  {o.type === 'free_item'   && `Free: ${o.freeItem}`}
+                  {o.type === 'happy_hour'  && `${o.happyStart}–${o.happyEnd}`}
+                  {o.minOrder > 0 && <span>· Min ₹{o.minOrder}</span>}
+                  {o.expiresAt && <span>· Expires {new Date(o.expiresAt).toLocaleDateString('en-IN')}</span>}
+                </div>
+                <div style={{fontSize:'0.58rem',color:'#444',marginTop:'4px'}}>
+                  Used {o.usageCount || 0}× · ₹{(o.totalDiscount || 0).toLocaleString()} total discount given
+                </div>
+              </div>
+              <div style={{display:'flex',gap:'8px',flexShrink:0}}>
+                <button
+                  onClick={async () => {
+                    try {
+                      await axios.patch(`${BASE_URL}/api/offers/${o._id}`, { isActive: !o.isActive });
+                      fetchOffers();
+                    } catch { showNotif('Failed to update offer'); }
+                  }}
+                  style={{
+                    padding:'6px 14px', borderRadius:'6px', border:'none', cursor:'pointer',
+                    background: o.isActive ? 'rgba(211,191,162,0.1)' : 'rgba(138,154,126,0.15)',
+                    color:      o.isActive ? '#d3bfa2' : '#8a9a7e',
+                    fontSize:'0.6rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'5px'
+                  }}
+                >
+                  {o.isActive ? <><Zap size={10}/> PAUSE</> : <><CheckCircle2 size={10}/> ACTIVATE</>}
+                </button>
+                <button
+                  onClick={async () => {
+                    try { await axios.delete(`${BASE_URL}/api/offers/${o._id}`); fetchOffers(); }
+                    catch {}
+                  }}
+                  style={{
+                    padding:'6px 10px', borderRadius:'6px',
+                    background:'transparent', border:'1px solid #252932',
+                    color:'#444', cursor:'pointer', fontSize:'0.6rem',
+                    display:'flex', alignItems:'center', justifyContent:'center'
+                  }}
+                >
+                  <X size={12}/>
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* ════════════ CAMPAIGNS SUB-TAB ════════════ */}
+    {marketingSubTab === 'campaigns' && (
+      <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',alignItems:'start'}}>
+
+        {/* ── COMPOSE CAMPAIGN ── */}
+        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'14px',padding:'20px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'18px'}}>
+            <Megaphone size={14} color="#d3bfa2"/>
+            <span style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>COMPOSE CAMPAIGN</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+            {/* Title */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>NOTIFICATION TITLE</label>
+              <input
+                value={newCampaign.title}
+                onChange={e => setNewCampaign(p => ({...p, title:e.target.value}))}
+                placeholder="e.g. Weekend Special at Our Restaurant"
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none'}}
+              />
+            </div>
+            {/* Body */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MESSAGE BODY</label>
+              <textarea
+                value={newCampaign.body}
+                onChange={e => setNewCampaign(p => ({...p, body:e.target.value}))}
+                placeholder="Today we have a special thali for ₹199 — come visit us!"
+                rows={4}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',resize:'vertical',fontFamily:'inherit'}}
+              />
+            </div>
+            {/* Segment */}
+            <div>
+              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>TARGET SEGMENT</label>
+              <select
+                value={newCampaign.segment}
+                onChange={e => setNewCampaign(p => ({...p, segment:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
+              >
+                <option value="all">All Customers</option>
+                <option value="loyal">Loyal (10+ visits)</option>
+                <option value="at-risk">At-Risk (21+ days inactive)</option>
+                <option value="new">New (first visit)</option>
+                <option value="custom">Custom Phone List</option>
+              </select>
+            </div>
+            {/* Custom phones */}
+            {newCampaign.segment === 'custom' && (
+              <div>
+                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>PHONE NUMBERS (ONE PER LINE)</label>
+                <textarea
+                  value={newCampaign.customPhones}
+                  onChange={e => setNewCampaign(p => ({...p, customPhones:e.target.value}))}
+                  placeholder={'9876543210\n9123456789'}
+                  rows={4}
+                  style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',resize:'vertical',fontFamily:'monospace'}}
+                />
+              </div>
+            )}
+            {/* Notification preview */}
+            {(newCampaign.title || newCampaign.body) && (
+              <div style={{background:'#13151a',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'14px'}}>
+                <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>PUSH PREVIEW</div>
+                <div style={{display:'flex',gap:'10px',alignItems:'flex-start'}}>
+                  <div style={{
+                    width:'32px', height:'32px',
+                    background:'rgba(211,191,162,0.1)', borderRadius:'8px',
+                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+                  }}>
+                    <Bell size={14} color="#d3bfa2"/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.75rem',fontWeight:'800',color:'#fff',marginBottom:'3px'}}>{newCampaign.title || 'Notification Title'}</div>
+                    <div style={{fontSize:'0.68rem',color:'#666',lineHeight:1.4}}>{newCampaign.body || 'Message body...'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Send button */}
+            <button
+              onClick={async () => {
+                if (!newCampaign.title || !newCampaign.body) return;
+                setCampaignSending(true);
+                try {
+                  await axios.post(`${BASE_URL}/api/campaigns/${tenantId}`, {
+                    ...newCampaign,
+                    customPhones: newCampaign.segment === 'custom'
+                      ? newCampaign.customPhones.split('\n').map(s => s.trim()).filter(Boolean)
+                      : [],
+                    sendNow: true,
+                  });
+                  showNotif('Campaign sent!');
+                  setNewCampaign({ title:'', body:'', segment:'all', customPhones:'' });
+                  fetchCampaigns();
+                } catch { showNotif('Failed to send campaign'); }
+                finally { setCampaignSending(false); }
+              }}
+              disabled={!newCampaign.title || !newCampaign.body || campaignSending}
+              style={{
+                padding:'13px', borderRadius:'10px', border:'none',
+                background: (!newCampaign.title || !newCampaign.body || campaignSending) ? '#13151a'
+                  : 'linear-gradient(135deg,#bda88a,#d3bfa2)',
+                color: (!newCampaign.title || !newCampaign.body || campaignSending) ? '#333' : '#0d0d0d',
+                fontWeight:'900', fontSize:'0.75rem',
+                cursor: (!newCampaign.title || !newCampaign.body) ? 'not-allowed' : 'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
+              }}
+            >
+              {campaignSending
+                ? <><RefreshCw size={14} style={{animation:'spin 0.8s linear infinite'}}/> SENDING...</>
+                : <><Send size={14}/> SEND CAMPAIGN NOW</>
+              }
+            </button>
+          </div>
+        </div>
+
+        {/* ── CAMPAIGN HISTORY ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
+            <TrendingUp size={13} color="#555"/>
+            <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>CAMPAIGN HISTORY</span>
+          </div>
+          {campaigns.length === 0 ? (
+            <div style={{
+              textAlign:'center', padding:'48px', color:'#333',
+              border:'1px dashed #1a1c23', borderRadius:'14px',
+              display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
+            }}>
+              <Megaphone size={28} color="#1a1c23"/>
+              <span style={{fontSize:'0.78rem'}}>No campaigns sent yet</span>
+            </div>
+          ) : campaigns.map(c => (
+            <motion.div key={c._id}
+              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+              style={{
+                background:'#0d0d0d', border:'1px solid #1c1f26',
+                borderLeft:`3px solid ${c.status === 'sent' ? '#8a9a7e' : '#8a704d'}`,
+                borderRadius:'12px', padding:'16px 18px'
+              }}
+            >
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px'}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:'800',color:'#fff',fontSize:'0.88rem',marginBottom:'4px'}}>{c.title}</div>
+                  <div style={{fontSize:'0.72rem',color:'#666',lineHeight:1.5,marginBottom:'8px'}}>{c.body}</div>
+                  <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center'}}>
+                    <span style={{
+                      display:'inline-flex', alignItems:'center', gap:'4px',
+                      fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px', borderRadius:'10px',
+                      background:'rgba(138,154,126,0.12)', color:'#8a9a7e',
+                      border:'1px solid rgba(138,154,126,0.2)'
+                    }}>
+                      <Users size={9}/>{c.segment || 'All'}
+                    </span>
+                    <span style={{fontSize:'0.6rem',color:'#555',fontFamily:'monospace'}}>
+                      {c.sentCount || 0} sent
+                    </span>
+                    <span style={{fontSize:'0.6rem',color:'#444'}}>
+                      {c.sentAt ? new Date(c.sentAt).toLocaleDateString('en-IN') : '—'}
+                    </span>
+                  </div>
+                </div>
+                <span style={{
+                  display:'inline-flex', alignItems:'center', gap:'4px',
+                  fontSize:'0.5rem', fontWeight:'900', padding:'4px 10px', borderRadius:'10px',
+                  background: c.status === 'sent' ? 'rgba(138,154,126,0.15)' : 'rgba(186,117,23,0.12)',
+                  color:      c.status === 'sent' ? '#8a9a7e' : '#BA7517',
+                  border:`1px solid ${c.status === 'sent' ? 'rgba(138,154,126,0.25)' : 'rgba(186,117,23,0.2)'}`,
+                  textTransform:'uppercase', letterSpacing:'1px', flexShrink:0
+                }}>
+                  {c.status === 'sent' ? <CheckCircle2 size={9}/> : <Clock size={9}/>}
+                  {c.status}
+                </span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    )}
   </motion.div>
 )}
 
