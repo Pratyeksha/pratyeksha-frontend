@@ -2250,6 +2250,38 @@ const requestFinalBill = async () => {
 const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
+// Add this function in your customer menu component:
+const registerPushSubscription = async () => {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          'YOUR_VAPID_PUBLIC_KEY_HERE' // same VAPID key you already use for waitlist notifications
+        )
+      });
+    }
+    // Save subscription to backend tied to this customer's phone
+    if (customerPhone && sub) {
+      await axios.post(`${BASE_URL}/customers/push-subscription`, {
+        tenantId,
+        phone: customerPhone,
+        subscription: sub
+      });
+    }
+  } catch (err) {
+    console.log('Push subscription failed:', err.message);
+  }
+};
+
+// Call it after customer identifies themselves (phone entry or CRM welcome)
+useEffect(() => {
+  if (customerPhone) registerPushSubscription();
+}, [customerPhone]);
+
 
 // ── Persist cart to localStorage so it survives browser close ──
 useEffect(() => {

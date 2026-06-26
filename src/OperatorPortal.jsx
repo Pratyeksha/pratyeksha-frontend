@@ -209,7 +209,7 @@ const [feedbackNoteText, setFeedbackNoteText] = useState('');
 // ── Marketing ──
 const [offers, setOffers]                     = useState([]);
 const [campaigns, setCampaigns]               = useState([]);
-const [marketingTab, setMarketingTab]         = useState('offers'); // 'offers' | 'campaigns'
+const [marketingSubTab, setMarketingSubTab] = useState('offers');
 const [newOffer, setNewOffer]                 = useState({
   title: '', type: 'percent_off', value: '', freeItem: '',
   minOrder: '', categoryId: '', happyStart: '', happyEnd: '', expiresAt: ''
@@ -1536,6 +1536,8 @@ useEffect(() => {
     fetchIncomingAggregatorOrders();
   }
 }, [isAuthenticated, fetchIncomingAggregatorOrders]);
+
+
 
 
 const SEG_META = {
