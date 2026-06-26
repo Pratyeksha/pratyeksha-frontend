@@ -105,6 +105,10 @@ const [reservationTime, setReservationTime] = useState('');
 const [specialRequests, setSpecialRequests] = useState('');
 const [tablePreference, setTablePreference] = useState('');
 const [reservationAskOrder, setReservationAskOrder] = useState(false);
+
+
+const [customerPhone, setCustomerPhone] = useState('');
+
 // true = show the "want to pre-order?" prompt after reservation fields filled
 
 // ── COUNTER / WAITLIST MODE ──
