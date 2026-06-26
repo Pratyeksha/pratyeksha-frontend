@@ -4090,74 +4090,294 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
-  const colorMap = {
-    gold:  { bg: 'linear-gradient(135deg, rgba(201,168,76,0.14), rgba(201,168,76,0.03))', border: 'rgba(201,168,76,0.3)', text: '#e8c96a' },
-    green: { bg: 'linear-gradient(135deg, rgba(138,154,126,0.14), rgba(138,154,126,0.03))', border: 'rgba(138,154,126,0.3)', text: '#a8c090' },
-    rose:  { bg: 'linear-gradient(135deg, rgba(196,138,138,0.14), rgba(196,138,138,0.03))', border: 'rgba(196,138,138,0.3)', text: '#d4a0a0' },
-    blue:  { bg: 'linear-gradient(135deg, rgba(106,142,168,0.14), rgba(106,142,168,0.03))', border: 'rgba(106,142,168,0.3)', text: '#9ec0d8' },
+  const typeConfig = {
+    offer:    {
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+        </svg>
+      ),
+      label: 'SPECIAL OFFER',
+      accentFg:   '#e8c96a',
+      accentMid:  '#c9a84c',
+      accentDim:  'rgba(201,168,76,0.18)',
+      borderCol:  'rgba(201,168,76,0.35)',
+      pillBg:     'rgba(201,168,76,0.12)',
+      glowCol:    'rgba(201,168,76,0.12)',
+    },
+    discount: {
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+          <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="3"/>
+          <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="3"/>
+        </svg>
+      ),
+      label: 'LIMITED DISCOUNT',
+      accentFg:   '#d3bfa2',
+      accentMid:  '#bda88a',
+      accentDim:  'rgba(211,191,162,0.15)',
+      borderCol:  'rgba(211,191,162,0.3)',
+      pillBg:     'rgba(211,191,162,0.1)',
+      glowCol:    'rgba(211,191,162,0.08)',
+    },
+    wish: {
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      ),
+      label: 'FROM THE KITCHEN',
+      accentFg:   '#e8c96a',
+      accentMid:  '#c9a84c',
+      accentDim:  'rgba(201,168,76,0.14)',
+      borderCol:  'rgba(201,168,76,0.28)',
+      pillBg:     'rgba(201,168,76,0.1)',
+      glowCol:    'rgba(201,168,76,0.08)',
+    },
+    announcement: {
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 3L9.218 10.083"/>
+          <path d="M11.698 20.334L7 17l.001-5.001L22 3"/>
+          <path d="M8 11.5V17"/>
+          <path d="M2 7l5 3v6l-5 3V7z"/>
+        </svg>
+      ),
+      label: 'ANNOUNCEMENT',
+      accentFg:   '#d3bfa2',
+      accentMid:  '#bda88a',
+      accentDim:  'rgba(211,191,162,0.13)',
+      borderCol:  'rgba(211,191,162,0.28)',
+      pillBg:     'rgba(211,191,162,0.08)',
+      glowCol:    'rgba(211,191,162,0.06)',
+    },
   };
-  const c = colorMap[activeAnnouncement.accentColor] || colorMap.gold;
-  const IconComp = activeAnnouncement.type === 'offer' ? Tag
-    : activeAnnouncement.type === 'discount' ? Percent
-    : activeAnnouncement.type === 'wish' ? Sparkles
-    : Megaphone;
+
+  const cfg = typeConfig[activeAnnouncement.type] || typeConfig.announcement;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -12 }}
-      animate={{ opacity: 1, y: 0 }}
-      style={{ margin: '0 20px 14px' }}
+      key={activeAnnouncement._id || activeAnnouncement.title}
+      initial={{ opacity: 0, y: -18, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -12, scale: 0.97 }}
+      transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+      style={{ margin: '0 16px 16px', position: 'relative' }}
     >
+      {/* Outer ambient glow */}
+      <motion.div
+        animate={{ opacity: [0.5, 1, 0.5] }}
+        transition={{ repeat: Infinity, duration: 3.5, ease: 'easeInOut' }}
+        style={{
+          position: 'absolute', inset: '-1px',
+          borderRadius: '22px',
+          background: `radial-gradient(ellipse at 50% 0%, ${cfg.glowCol} 0%, transparent 70%)`,
+          pointerEvents: 'none', zIndex: 0
+        }}
+      />
+
+      {/* Main card */}
       <div style={{
-        background: c.bg, border: `1px solid ${c.border}`, borderRadius: '16px',
-        padding: '14px 16px', position: 'relative', overflow: 'hidden'
+        position: 'relative', zIndex: 1,
+        background: 'linear-gradient(145deg, #0f0f0f 0%, #0c0c0c 100%)',
+        border: `1px solid ${cfg.borderCol}`,
+        borderRadius: '20px',
+        overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px', background: `linear-gradient(90deg,transparent,${c.text},transparent)` }} />
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-          <div style={{
-            width: '38px', height: '38px', borderRadius: '11px', flexShrink: 0,
-            background: 'rgba(255,255,255,0.06)', border: `1px solid ${c.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <IconComp size={17} color={c.text} strokeWidth={1.5} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '0.86rem', fontWeight: '900', color: '#fff', marginBottom: '3px', lineHeight: 1.3 }}>
-              {activeAnnouncement.title}
-            </div>
-            <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>
-              {activeAnnouncement.message}
-            </div>
-            {activeAnnouncement.discountValue && (
+
+        {/* Top shimmer line */}
+        <motion.div
+          animate={{ x: ['-100%', '100%'] }}
+          transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut', repeatDelay: 2 }}
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            height: '1px',
+            background: `linear-gradient(90deg, transparent, ${cfg.accentFg}, transparent)`,
+            zIndex: 2
+          }}
+        />
+
+        {/* Subtle corner accent */}
+        <div style={{
+          position: 'absolute', top: 0, right: 0,
+          width: '80px', height: '80px',
+          background: `radial-gradient(circle at top right, ${cfg.accentDim} 0%, transparent 70%)`,
+          pointerEvents: 'none'
+        }} />
+
+        <div style={{ padding: '14px 16px 14px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '13px' }}>
+
+            {/* Icon container — animated ring */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <motion.div
+                animate={{ scale: [1, 1.08, 1], opacity: [0.5, 1, 0.5] }}
+                transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute', inset: '-4px', borderRadius: '16px',
+                  border: `1px solid ${cfg.borderCol}`,
+                  pointerEvents: 'none'
+                }}
+              />
               <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '9px',
-                padding: '4px 12px', borderRadius: '20px',
-                background: 'rgba(255,255,255,0.08)', border: `1px solid ${c.border}`
+                width: '48px', height: '48px', borderRadius: '14px',
+                background: cfg.accentDim,
+                border: `1px solid ${cfg.borderCol}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: cfg.accentFg,
+                position: 'relative', zIndex: 1,
+                boxShadow: `0 4px 16px ${cfg.glowCol}`
               }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: '900', color: c.text, fontFamily: 'monospace' }}>
-                  {activeAnnouncement.discountType === 'percent'
-                    ? `${activeAnnouncement.discountValue}% OFF`
-                    : `₹${activeAnnouncement.discountValue} OFF`}
-                </span>
+                {cfg.icon}
               </div>
-            )}
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+
+              {/* Top row — label chip + dismiss */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  background: cfg.pillBg,
+                  border: `1px solid ${cfg.borderCol}`,
+                  borderRadius: '20px', padding: '3px 10px'
+                }}>
+                  {/* Pulsing dot */}
+                  <motion.div
+                    animate={{ scale: [1, 1.6, 1], opacity: [1, 0.3, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.8 }}
+                    style={{
+                      width: '5px', height: '5px', borderRadius: '50%',
+                      background: cfg.accentMid, flexShrink: 0
+                    }}
+                  />
+                  <span style={{
+                    fontSize: '0.44rem', fontWeight: '900', letterSpacing: '2px',
+                    color: cfg.accentMid, textTransform: 'uppercase'
+                  }}>
+                    {cfg.label}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setAnnouncementDismissed(true)}
+                  style={{
+                    width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    color: 'rgba(255,255,255,0.25)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = cfg.borderCol; e.currentTarget.style.color = cfg.accentFg; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              {/* Title */}
+              <div style={{
+                fontSize: '0.92rem', fontWeight: '900', color: '#fff',
+                letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: '4px'
+              }}>
+                {activeAnnouncement.title}
+              </div>
+
+              {/* Message */}
+              <div style={{
+                fontSize: '0.72rem', color: 'rgba(255,255,255,0.38)',
+                lineHeight: 1.6, fontWeight: '500'
+              }}>
+                {activeAnnouncement.message}
+              </div>
+
+              {/* Discount pill — if applicable */}
+              {activeAnnouncement.discountValue && (
+                <motion.div
+                  initial={{ scale: 0.85, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.3, type: 'spring', damping: 18 }}
+                  style={{ marginTop: '10px', display: 'inline-flex', alignItems: 'center', gap: '7px' }}
+                >
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    background: cfg.accentDim,
+                    border: `1px solid ${cfg.borderCol}`,
+                    borderRadius: '10px', padding: '6px 13px',
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    {/* Shimmer sweep */}
+                    <motion.div
+                      animate={{ x: ['-80px', '120px'] }}
+                      transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut', repeatDelay: 1.5 }}
+                      style={{
+                        position: 'absolute', top: 0, bottom: 0, width: '40px',
+                        background: `linear-gradient(90deg, transparent, ${cfg.accentDim}, transparent)`,
+                        pointerEvents: 'none'
+                      }}
+                    />
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                      stroke={cfg.accentFg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                    <span style={{
+                      fontSize: '0.82rem', fontWeight: '900',
+                      color: cfg.accentFg, fontFamily: 'monospace', letterSpacing: '0.5px'
+                    }}>
+                      {activeAnnouncement.discountType === 'percent'
+                        ? `${activeAnnouncement.discountValue}% OFF`
+                        : `₹${activeAnnouncement.discountValue} OFF`}
+                    </span>
+                  </div>
+
+                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>
+                    {language === 'mr' ? 'आजच वापरा' : 'TODAY ONLY'}
+                  </span>
+                </motion.div>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => setAnnouncementDismissed(true)}
-            style={{
-              width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.3)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}
-          >
-            <X size={13} />
-          </button>
+
+          {/* Bottom strip — restaurant name + timestamp feel */}
+          <div style={{
+            marginTop: '12px', paddingTop: '10px',
+            borderTop: `1px solid rgba(255,255,255,0.04)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{
+                width: '18px', height: '18px', borderRadius: '5px',
+                background: cfg.accentDim, border: `1px solid ${cfg.borderCol}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                  stroke={cfg.accentMid} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/>
+                  <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700' }}>
+                {restaurantData?.name}
+              </span>
+            </div>
+            <span style={{
+              fontSize: '0.5rem', color: cfg.accentMid,
+              fontWeight: '900', letterSpacing: '1px',
+              opacity: 0.6
+            }}>
+              LIVE
+            </span>
+          </div>
         </div>
       </div>
     </motion.div>
   );
 })()}
+
 {/* SEARCH BAR */}
 
 <div style={styles.searchWrapper}>
