@@ -3488,15 +3488,15 @@ const renderMonthHeatmap = () => {
   {id:'pending',      label:'LIVE KITCHEN',   icon:<CookingPot size={18}/>},
   {id:'billing',      label:'BILLING HUB',    icon:<ReceiptIndianRupee size={18}/>},
   {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
-  {id:'customers',    label:'CUSTOMERS',      icon:<Users size={18}/>},        // ← NEW
-  {id:'feedback',     label:'FEEDBACK',       icon:<Star size={18}/>},         // ← NEW
-  {id:'marketing',    label:'MARKETING',      icon:<Megaphone size={18}/>},    // ← NEW
   {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
   {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
   {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
   {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
   {id:'extras',       label:'EXTRA ITEMS',    icon:<ShoppingBag size={18}/>},
   {id:'recipes',      label:'RECIPES',        icon:<ChefHat size={18}/>},
+  {id:'customers',    label:'CUSTOMERS',      icon:<Users size={18}/>},        // ← NEW
+  {id:'marketing',    label:'MARKETING',      icon:<Megaphone size={18}/>},    // ← NEW
+
 ].map(tab => (
         <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
           style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
@@ -5701,663 +5701,831 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
   </motion.div>
 )}
 
-{activeTab === 'feedback' && (
-  <motion.div key="feedback" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
 
-    {/* ── MONTH NAV + MARK ALL READ ── */}
-    <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-      <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()-1); setViewDate(d); }} style={{
-        background:'#13151a', border:'1px solid #252932', color:'#d3bfa2',
-        padding:'7px 12px', borderRadius:'8px', cursor:'pointer',
-        display:'flex', alignItems:'center', justifyContent:'center'
-      }}>‹</button>
-      <span style={{fontFamily:'monospace',fontSize:'0.75rem',color:'#d3bfa2',fontWeight:'900',minWidth:'120px',textAlign:'center'}}>
-        {viewDate.toLocaleString('default',{month:'long',year:'numeric'}).toUpperCase()}
-      </span>
-      <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth()+1); setViewDate(d); }} style={{
-        background:'#13151a', border:'1px solid #252932', color:'#d3bfa2',
-        padding:'7px 12px', borderRadius:'8px', cursor:'pointer',
-        display:'flex', alignItems:'center', justifyContent:'center'
-      }}>›</button>
-      {(feedbackData.summary?.unread || 0) > 0 && (
+
+{activeTab === 'marketing' && (
+<motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
+  style={{display:'flex',flexDirection:'column',gap:'0px'}}>
+ 
+  {/* ══════════════════════════════════════════════════════════════════════
+      SECTION A — LIVE MENU ANNOUNCEMENTS
+  ══════════════════════════════════════════════════════════════════════ */}
+  <div style={{
+    display:'flex',alignItems:'center',gap:'14px',
+    padding:'28px 0 18px',
+    borderBottom:'1px solid rgba(211,191,162,0.07)'
+  }}>
+    <div style={{
+      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
+      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.14)',
+      display:'flex',alignItems:'center',justifyContent:'center'
+    }}>
+      <Megaphone size={16} color="#d3bfa2"/>
+    </div>
+    <div>
+      <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'3px',textTransform:'uppercase'}}>
+        Live Menu Announcements
+      </div>
+      <div style={{fontSize:'0.62rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>
+        Banners that appear on every customer's QR menu in real time — auto-expire at the time you set
+      </div>
+    </div>
+    {/* Live pill */}
+    {announcements.some(a => a.isActive && new Date(a.expiresAt) > new Date()) && (
+      <div style={{
+        marginLeft:'auto',display:'flex',alignItems:'center',gap:'7px',
+        padding:'6px 14px',borderRadius:'20px',
+        background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.18)'
+      }}>
+        <div style={{
+          width:'6px',height:'6px',borderRadius:'50%',background:'#d3bfa2',
+          boxShadow:'0 0 8px rgba(211,191,162,0.5)',
+          animation:'moodPulse 2s ease-in-out infinite'
+        }}/>
+        <span style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'1.5px'}}>
+          LIVE ON MENU
+        </span>
+      </div>
+    )}
+  </div>
+ 
+  <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',padding:'20px 0 32px',borderBottom:'1px solid rgba(211,191,162,0.06)'}}>
+ 
+    {/* ── COMPOSE FORM ── */}
+    <div style={{
+      background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',
+      padding:'22px',position:'sticky',top:'20px'
+    }}>
+      <div style={{display:'flex',flexDirection:'column',gap:'15px'}}>
+ 
+        {/* Type picker */}
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>TYPE</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'7px'}}>
+            {[
+              {id:'offer',        label:'Offer',         icon:<Tag size={13}/>      },
+              {id:'discount',     label:'Discount',      icon:<Percent size={13}/>  },
+              {id:'wish',         label:'Festive Wish',  icon:<Sparkles size={13}/> },
+              {id:'announcement', label:'Notice',        icon:<Megaphone size={13}/>},
+            ].map(opt => (
+              <button key={opt.id}
+                onClick={() => setNewAnnouncement(p => ({...p, type:opt.id}))}
+                style={{
+                  display:'flex',alignItems:'center',gap:'8px',
+                  padding:'10px 11px',borderRadius:'9px',cursor:'pointer',
+                  border: newAnnouncement.type === opt.id
+                    ? '1px solid rgba(211,191,162,0.35)'
+                    : '1px solid #1c1f26',
+                  background: newAnnouncement.type === opt.id
+                    ? 'rgba(211,191,162,0.07)'
+                    : '#0d0e11',
+                  color: newAnnouncement.type === opt.id ? '#d3bfa2' : '#555',
+                  fontSize:'0.68rem',fontWeight:'800',transition:'all 0.15s'
+                }}
+              >
+                {opt.icon}{opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+ 
+        {/* Headline */}
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
+            <span>HEADLINE</span>
+            <span style={{color:'#333'}}>{newAnnouncement.title.length}/60</span>
+          </div>
+          <input
+            value={newAnnouncement.title}
+            onChange={e => setNewAnnouncement(p=>({...p,title:e.target.value}))}
+            placeholder="e.g. Weekend Special — 20% Off"
+            maxLength={60}
+            style={{
+              width:'100%',padding:'10px 12px',
+              background:'#0d0e11',border:'1px solid #252932',
+              color:'#fff',borderRadius:'9px',fontSize:'0.83rem',
+              outline:'none',fontWeight:'700'
+            }}
+          />
+        </div>
+ 
+        {/* Message */}
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
+            <span>MESSAGE</span>
+            <span style={{color:'#333'}}>{newAnnouncement.message.length}/140</span>
+          </div>
+          <textarea
+            value={newAnnouncement.message}
+            onChange={e => setNewAnnouncement(p=>({...p,message:e.target.value}))}
+            placeholder="e.g. Enjoy 20% off on all main course dishes this weekend only!"
+            rows={3} maxLength={140}
+            style={{
+              width:'100%',padding:'10px 12px',
+              background:'#0d0e11',border:'1px solid #252932',
+              color:'#fff',borderRadius:'9px',fontSize:'0.79rem',
+              outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5
+            }}
+          />
+        </div>
+ 
+        {/* Discount value — only for offer/discount */}
+        {(newAnnouncement.type === 'offer' || newAnnouncement.type === 'discount') && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>VALUE (OPTIONAL)</div>
+              <input
+                type="number" value={newAnnouncement.discountValue}
+                onChange={e => setNewAnnouncement(p=>({...p,discountValue:e.target.value}))}
+                placeholder="e.g. 20"
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
+              />
+            </div>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>UNIT</div>
+              <select
+                value={newAnnouncement.discountType}
+                onChange={e => setNewAnnouncement(p=>({...p,discountType:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
+              >
+                <option value="percent">% Off</option>
+                <option value="fixed">₹ Off</option>
+              </select>
+            </div>
+          </div>
+        )}
+ 
+        {/* Expiry */}
+        <div style={{
+          background:'rgba(211,191,162,0.03)',
+          border:'1px solid rgba(211,191,162,0.1)',
+          borderRadius:'11px',padding:'14px'
+        }}>
+          <div style={{fontSize:'0.5rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',marginBottom:'10px'}}>
+            <Clock size={10}/> VISIBLE UNTIL <span style={{color:'#555',marginLeft:'4px'}}>(required)</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
+            <input
+              type="date" value={newAnnouncement.expiryDate}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={e => setNewAnnouncement(p=>({...p,expiryDate:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
+            />
+            <input
+              type="time" value={newAnnouncement.expiryTime}
+              onChange={e => setNewAnnouncement(p=>({...p,expiryTime:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
+            />
+          </div>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            {[
+              {label:'Today 11 PM', fn:()=>{const d=new Date();d.setHours(23,59,0,0);return d;}},
+              {label:'+24h',        fn:()=>new Date(Date.now()+86400000)},
+              {label:'+3 days',     fn:()=>new Date(Date.now()+3*86400000)},
+              {label:'+7 days',     fn:()=>new Date(Date.now()+7*86400000)},
+            ].map(p=>(
+              <button key={p.label} onClick={()=>{
+                const d=p.fn();
+                setNewAnnouncement(prev=>({
+                  ...prev,
+                  expiryDate:d.toISOString().split('T')[0],
+                  expiryTime:d.toTimeString().slice(0,5)
+                }));
+              }} style={{
+                padding:'4px 10px',borderRadius:'6px',
+                border:'1px solid #252932',background:'transparent',
+                color:'#8a704d',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
+              }}>{p.label}</button>
+            ))}
+          </div>
+        </div>
+ 
+        {/* Live preview */}
+        {(newAnnouncement.title || newAnnouncement.message) && (
+          <div style={{
+            background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.1)',
+            borderRadius:'11px',padding:'14px'
+          }}>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'10px'}}>CUSTOMER MENU PREVIEW</div>
+            <div style={{
+              background:'#13151a',borderRadius:'10px',padding:'14px',
+              borderLeft:'3px solid #C9A84C',
+              display:'flex',alignItems:'flex-start',gap:'12px'
+            }}>
+              <div style={{
+                width:'34px',height:'34px',borderRadius:'8px',flexShrink:0,
+                background:'rgba(201,168,76,0.12)',border:'1px solid rgba(201,168,76,0.22)',
+                display:'flex',alignItems:'center',justifyContent:'center'
+              }}>
+                {newAnnouncement.type==='offer'?<Tag size={15} color="#C9A84C"/>
+                  :newAnnouncement.type==='discount'?<Percent size={15} color="#C9A84C"/>
+                  :newAnnouncement.type==='wish'?<Sparkles size={15} color="#C9A84C"/>
+                  :<Megaphone size={15} color="#C9A84C"/>}
+              </div>
+              <div>
+                <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff',marginBottom:'4px'}}>{newAnnouncement.title||'Your headline'}</div>
+                <div style={{fontSize:'0.7rem',color:'#888',lineHeight:1.5}}>{newAnnouncement.message||'Your message'}</div>
+                {(newAnnouncement.discountValue && newAnnouncement.type !== 'wish') && (
+                  <div style={{marginTop:'8px',display:'inline-flex',padding:'3px 10px',borderRadius:'6px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)'}}>
+                    <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#C9A84C'}}>
+                      {newAnnouncement.discountValue}{newAnnouncement.discountType==='percent'?'%':'₹'} OFF
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+ 
+        {/* Publish button */}
         <button
           onClick={async () => {
+            if (!newAnnouncement.title || !newAnnouncement.message || !newAnnouncement.expiryDate || !newAnnouncement.expiryTime) {
+              showNotif('Headline, message and expiry are required', 'error'); return;
+            }
+            const expiresAt = new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
+            if (expiresAt <= new Date()) { showNotif('Expiry must be in the future', 'error'); return; }
             try {
-              await axios.patch(`${BASE_URL}/api/feedback/${tenantId}/mark-all-read`);
-              fetchFeedback();
-              showNotif('All marked as read');
-            } catch {}
+              await axios.post(`${BASE_URL}/announcements/${tenantId}`, {
+                title: newAnnouncement.title, message: newAnnouncement.message,
+                type: newAnnouncement.type, accentColor: newAnnouncement.accentColor,
+                icon: newAnnouncement.icon,
+                discountValue: newAnnouncement.discountValue || null,
+                discountType: newAnnouncement.discountType || null,
+                expiresAt: expiresAt.toISOString(),
+              });
+              showNotif('Live on customer menu now ✓');
+              setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',expiryDate:'',expiryTime:''});
+              fetchAnnouncements();
+            } catch(err) { showNotif(err.response?.data?.error||'Failed to publish','error'); }
           }}
+          disabled={!newAnnouncement.title || !newAnnouncement.message}
           style={{
-            marginLeft:'auto', background:'transparent',
-            border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2',
-            padding:'7px 14px', borderRadius:'8px', cursor:'pointer',
-            fontSize:'0.65rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'6px'
+            padding:'13px',borderRadius:'10px',border:'none',
+            background:(newAnnouncement.title&&newAnnouncement.message)
+              ?'linear-gradient(135deg,#bda88a,#d3bfa2)':'#13151a',
+            color:(newAnnouncement.title&&newAnnouncement.message)?'#0d0d0d':'#333',
+            fontWeight:'900',fontSize:'0.76rem',letterSpacing:'0.5px',
+            cursor:(newAnnouncement.title&&newAnnouncement.message)?'pointer':'not-allowed',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'
           }}
         >
-          <CheckCircle2 size={13}/> MARK ALL READ ({feedbackData.summary.unread})
+          <Send size={13}/> PUBLISH TO CUSTOMER MENU
         </button>
-      )}
-    </div>
-
-    {/* ── KPI ROW ── */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px'}}>
-      {[
-        { label:'AVG RATING',    val:`${feedbackData.summary?.avgRating || 0}★`, color:'#C9A84C'                                                                },
-        { label:'TOTAL REVIEWS', val: feedbackData.summary?.total || 0,           color:'#d3bfa2'                                                                },
-        { label:'NPS SCORE',     val:`${feedbackData.summary?.nps || 0}%`,        color:(feedbackData.summary?.nps||0) >= 50 ? '#8a9a7e' : '#8a704d'             },
-        { label:'UNREAD',        val: feedbackData.summary?.unread || 0,           color:(feedbackData.summary?.unread||0) > 0 ? '#BA7517' : '#555'               },
-      ].map(({label,val,color}) => (
-        <div key={label} style={{
-          background:'#0d0d0d', border:'1px solid #1c1f26',
-          borderTop:`2px solid ${color}`, borderRadius:'12px', padding:'16px'
-        }}>
-          <div style={{fontSize:'1.8rem',fontWeight:'900',color,fontFamily:'monospace',lineHeight:1}}>{val}</div>
-          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginTop:'6px'}}>{label}</div>
-        </div>
-      ))}
-    </div>
-
-    {/* ── RATING DISTRIBUTION ── */}
-    <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'12px',padding:'18px 20px'}}>
-      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
-        <BarChart2 size={14} color="#d3bfa2"/>
-        <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>RATING DISTRIBUTION</span>
       </div>
-      {[5,4,3,2,1].map(n => {
-        const count = feedbackData.summary?.ratingDist?.[n] || 0;
-        const pct   = feedbackData.summary?.total > 0 ? Math.round((count / feedbackData.summary.total) * 100) : 0;
+    </div>
+ 
+    {/* ── ANNOUNCEMENTS LIST ── */}
+    <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+      {announcements.length === 0 ? (
+        <div style={{
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+          gap:'14px',padding:'60px 20px',
+          border:'1px dashed #1a1c23',borderRadius:'16px',color:'#2a2c30'
+        }}>
+          <Megaphone size={32} color="#1a1c23"/>
+          <span style={{fontSize:'0.78rem',fontWeight:'700',color:'#333'}}>No announcements yet</span>
+          <span style={{fontSize:'0.64rem',color:'#252932',maxWidth:'260px',textAlign:'center',lineHeight:1.6}}>
+            Compose one on the left — it goes live on every customer's QR menu instantly.
+          </span>
+        </div>
+      ) : announcements.map(a => {
+        const isLive = a.isActive && new Date(a.expiresAt) > new Date();
+        const timeLeft = isLive ? getTimeRemaining(a.expiresAt) : null;
         return (
-          <div key={n} style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'8px'}}>
-            <span style={{color:'#C9A84C',fontFamily:'monospace',fontSize:'0.75rem',width:'18px',textAlign:'right'}}>{n}★</span>
-            <div style={{flex:1,height:'6px',background:'#1a1c23',borderRadius:'3px',overflow:'hidden'}}>
+          <motion.div key={a._id}
+            initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+            style={{
+              background: isLive ? 'rgba(211,191,162,0.025)' : '#0d0d0d',
+              border:`1px solid ${isLive?'rgba(211,191,162,0.16)':'#1a1c23'}`,
+              borderRadius:'13px',padding:'18px 20px',
+              opacity:isLive?1:0.45,position:'relative',overflow:'hidden'
+            }}
+          >
+            {isLive&&<div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.4),transparent)'}}/>}
+            <div style={{display:'flex',alignItems:'flex-start',gap:'14px'}}>
               <div style={{
-                height:'100%', width:`${pct}%`,
-                background: n >= 4 ? '#8a9a7e' : n === 3 ? '#8a704d' : '#BA7517',
-                borderRadius:'3px', transition:'width 0.5s'
-              }}/>
+                width:'38px',height:'38px',borderRadius:'9px',flexShrink:0,
+                background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.18)',
+                display:'flex',alignItems:'center',justifyContent:'center'
+              }}>
+                {a.type==='offer'?<Tag size={16} color="#C9A84C"/>
+                  :a.type==='discount'?<Percent size={16} color="#C9A84C"/>
+                  :a.type==='wish'?<Sparkles size={16} color="#C9A84C"/>
+                  :<Megaphone size={16} color="#C9A84C"/>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
+                  <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.85rem'}}>{a.title}</span>
+                  <span style={{
+                    fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
+                    letterSpacing:'1.5px',
+                    background:isLive?'rgba(211,191,162,0.1)':'rgba(255,255,255,0.04)',
+                    color:isLive?'#d3bfa2':'#3a3c40',
+                    border:`1px solid ${isLive?'rgba(211,191,162,0.22)':'rgba(255,255,255,0.05)'}`
+                  }}>
+                    {isLive?'● LIVE':'ENDED'}
+                  </span>
+                </div>
+                <div style={{fontSize:'0.71rem',color:'#666',lineHeight:1.5,marginBottom:'9px'}}>{a.message}</div>
+                <div style={{display:'flex',gap:'16px',flexWrap:'wrap',fontSize:'0.58rem',color:'#444',alignItems:'center'}}>
+                  {a.discountValue && (
+                    <span style={{
+                      padding:'2px 9px',borderRadius:'5px',
+                      background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.15)',
+                      color:'#C9A84C',fontWeight:'900',fontFamily:'monospace'
+                    }}>
+                      {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
+                    </span>
+                  )}
+                  {isLive && timeLeft && (
+                    <span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'4px'}}>
+                      <Clock size={9}/> ends in {timeLeft}
+                    </span>
+                  )}
+                  {!isLive && (
+                    <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                      <Clock size={9}/> ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                    </span>
+                  )}
+                  <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                    <Eye size={9}/> {a.viewCount||0} views
+                  </span>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:'7px',flexShrink:0}}>
+                {isLive && (
+                  <button
+                    onClick={() => setConfirmModal({
+                      show:true,title:'End this announcement?',
+                      subtitle:'Removed from customer menu immediately.',
+                      onConfirm:async()=>{
+                        try { await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false}); fetchAnnouncements(); showNotif('Announcement ended'); }
+                        catch { showNotif('Failed','error'); }
+                      }
+                    })}
+                    style={{
+                      padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
+                      border:'1px solid rgba(186,117,23,0.25)',
+                      background:'rgba(186,117,23,0.07)',color:'#BA7517',
+                      fontSize:'0.58rem',fontWeight:'900',
+                      display:'flex',alignItems:'center',gap:'5px'
+                    }}
+                  >
+                    <Zap size={9}/> END
+                  </button>
+                )}
+                <button
+                  onClick={() => setConfirmModal({
+                    show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',
+                    onConfirm:async()=>{ try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{} }
+                  })}
+                  style={{
+                    padding:'6px 9px',borderRadius:'7px',cursor:'pointer',
+                    background:'transparent',border:'1px solid #252932',color:'#444'
+                  }}
+                ><X size={12}/></button>
+              </div>
             </div>
-            <span style={{fontSize:'0.62rem',color:'#555',fontFamily:'monospace',width:'36px',textAlign:'right'}}>{count}</span>
-          </div>
+          </motion.div>
         );
       })}
     </div>
-
-    {/* ── FEEDBACK LIST ── */}
-    {feedbackLoading ? (
-      <div style={{textAlign:'center',padding:'40px',color:'#333',fontSize:'0.78rem'}}>Loading...</div>
-    ) : (feedbackData.feedback || []).length === 0 ? (
-      <div style={{
-        textAlign:'center', padding:'48px',
-        color:'#333', border:'1px dashed #1a1c23', borderRadius:'14px',
-        display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'
-      }}>
-        <Star size={28} color="#1a1c23"/>
-        <span style={{fontSize:'0.78rem'}}>No feedback this month</span>
+  </div>
+ 
+ 
+  {/* ══════════════════════════════════════════════════════════════════════
+      SECTION B — OFFERS & DISCOUNTS
+  ══════════════════════════════════════════════════════════════════════ */}
+  <div style={{
+    display:'flex',alignItems:'center',gap:'14px',
+    padding:'28px 0 18px',
+    borderBottom:'1px solid rgba(211,191,162,0.07)'
+  }}>
+    <div style={{
+      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
+      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.14)',
+      display:'flex',alignItems:'center',justifyContent:'center'
+    }}>
+      <Tag size={16} color="#d3bfa2"/>
+    </div>
+    <div>
+      <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'3px',textTransform:'uppercase'}}>
+        Offers & Discounts
       </div>
-    ) : (
-      <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-        {(feedbackData.feedback || []).map(f => (
-          <motion.div key={f._id}
-            initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
-            style={{
-              background: f.isRead ? '#0d0d0d' : 'rgba(211,191,162,0.03)',
-              border:`1px solid ${f.rating <= 2 ? 'rgba(186,117,23,0.25)' : '#1c1f26'}`,
-              borderLeft:`3px solid ${f.rating >= 4 ? '#8a9a7e' : f.rating === 3 ? '#8a704d' : '#BA7517'}`,
-              borderRadius:'12px', padding:'14px 16px'
-            }}
-          >
-            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px'}}>
-              <div style={{flex:1}}>
-                {/* Top row */}
-                <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px',flexWrap:'wrap'}}>
-                  {/* Star icons */}
-                  <div style={{display:'flex',gap:'2px'}}>
-                    {[1,2,3,4,5].map(n => (
-                      <Star key={n} size={12} color={n <= f.rating ? '#C9A84C' : '#252932'} fill={n <= f.rating ? '#C9A84C' : 'transparent'}/>
-                    ))}
-                  </div>
-                  <span style={{fontSize:'0.68rem',fontWeight:'800',color:'#d3bfa2'}}>{f.customerName}</span>
-                  {f.tableNumber && (
-                    <span style={{
-                      fontSize:'0.58rem', color:'#555',
-                      background:'#13151a', border:'1px solid #252932',
-                      padding:'2px 7px', borderRadius:'4px'
-                    }}>T{f.tableNumber}</span>
-                  )}
-                  {!f.isRead && (
-                    <span style={{
-                      fontSize:'0.48rem', fontWeight:'900', color:'#BA7517',
-                      background:'rgba(186,117,23,0.1)', border:'1px solid rgba(186,117,23,0.2)',
-                      padding:'2px 7px', borderRadius:'4px', letterSpacing:'1px'
-                    }}>UNREAD</span>
-                  )}
-                  {f.grandTotal > 0 && (
-                    <span style={{fontSize:'0.6rem',color:'#8a704d',fontFamily:'monospace',marginLeft:'auto'}}>
-                      ₹{f.grandTotal.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                {/* Comment */}
-                {f.comment && (
-                  <div style={{fontSize:'0.78rem',color:'#8a8f9f',lineHeight:1.5,marginBottom:'6px',fontStyle:'italic'}}>
-                    "{f.comment}"
-                  </div>
-                )}
-                {/* Dish feedback */}
-                <div style={{display:'flex',gap:'16px',flexWrap:'wrap'}}>
-                  {f.favDish && (
-                    <span style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.6rem',color:'#555'}}>
-                      <ThumbsUp size={10} color="#8a9a7e"/>
-                      <span style={{color:'#8a9a7e'}}>{f.favDish}</span>
-                    </span>
-                  )}
-                  {f.leastDish && (
-                    <span style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.6rem',color:'#555'}}>
-                      <ThumbsDown size={10} color="#BA7517"/>
-                      <span style={{color:'#BA7517'}}>{f.leastDish}</span>
-                    </span>
-                  )}
-                </div>
-                {/* Operator note */}
-                {f.operatorNote && (
-                  <div style={{
-                    marginTop:'8px', padding:'7px 10px',
-                    background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)',
-                    borderRadius:'6px', fontSize:'0.65rem', color:'#555',
-                    display:'flex', alignItems:'flex-start', gap:'6px'
-                  }}>
-                    <MessageSquare size={10} color="#555" style={{flexShrink:0,marginTop:'1px'}}/>
-                    {f.operatorNote}
-                  </div>
-                )}
-              </div>
-              {/* Right side */}
-              <div style={{display:'flex',flexDirection:'column',gap:'6px',alignItems:'flex-end',flexShrink:0}}>
-                <span style={{fontSize:'0.55rem',color:'#333'}}>
-                  {new Date(f.createdAt).toLocaleDateString('en-IN')}
-                </span>
-                <button
-                  onClick={() => { setFeedbackNoteModal(f); setFeedbackNoteText(f.operatorNote || ''); }}
-                  style={{
-                    background:'#13151a', border:'1px solid #252932',
-                    color:'#d3bfa2', padding:'5px 10px', borderRadius:'6px',
-                    cursor:'pointer', fontSize:'0.58rem', fontWeight:'900',
-                    display:'flex', alignItems:'center', gap:'4px'
-                  }}
-                >
-                  <MessageSquare size={10}/> NOTE
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        ))}
+      <div style={{fontSize:'0.62rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>
+        Structured promotions — percentage off, fixed amount, free items, happy hours
       </div>
-    )}
-
-    {/* ── NOTE MODAL ── */}
-    <AnimatePresence>
-      {feedbackNoteModal && (
-        <>
-          <motion.div initial={{opacity:0}} animate={{opacity:0.6}} exit={{opacity:0}}
-            onClick={() => setFeedbackNoteModal(null)}
-            style={{position:'fixed',inset:0,background:'#000',zIndex:4000}}/>
-          <motion.div
-            initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}}
-            style={{
-              position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
-              background:'#13151a', border:'1px solid rgba(211,191,162,0.2)',
-              borderRadius:'16px', padding:'24px', width:'380px', zIndex:4001
-            }}
-          >
-            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
-              <MessageSquare size={15} color="#d3bfa2"/>
-              <span style={{fontWeight:'900',color:'#d3bfa2',fontSize:'0.85rem'}}>
-                Internal Note — {feedbackNoteModal.customerName}
-              </span>
-            </div>
-            <div style={{display:'flex',gap:'2px',marginBottom:'12px'}}>
-              {[1,2,3,4,5].map(n => (
-                <Star key={n} size={16} color={n <= feedbackNoteModal.rating ? '#C9A84C' : '#252932'} fill={n <= feedbackNoteModal.rating ? '#C9A84C' : 'transparent'}/>
-              ))}
-            </div>
-            <textarea
-              value={feedbackNoteText}
-              onChange={e => setFeedbackNoteText(e.target.value)}
-              placeholder="Add your internal note about this feedback..."
-              rows={4}
-              style={{
-                width:'100%', background:'#0d0e11', border:'1px solid #252932',
-                color:'#fff', borderRadius:'8px', padding:'10px 12px',
-                fontSize:'0.82rem', resize:'vertical', outline:'none',
-                fontFamily:'inherit', marginBottom:'14px'
-              }}
-            />
-            <div style={{display:'flex',gap:'10px'}}>
-              <button onClick={() => setFeedbackNoteModal(null)} style={{
-                flex:1, padding:'10px', background:'transparent',
-                border:'1px solid #252932', color:'#555',
-                borderRadius:'8px', cursor:'pointer', fontWeight:'700'
-              }}>Cancel</button>
-              <button
-                onClick={async () => {
-                  try {
-                    await axios.patch(`${BASE_URL}/api/feedback/${feedbackNoteModal._id}/note`, { operatorNote: feedbackNoteText });
-                    showNotif('Note saved');
-                    setFeedbackNoteModal(null);
-                    setFeedbackNoteText('');
-                    fetchFeedback();
-                  } catch { showNotif('Failed to save note'); }
-                }}
+    </div>
+    <div style={{
+      marginLeft:'auto',padding:'6px 14px',borderRadius:'8px',
+      background:'rgba(211,191,162,0.04)',border:'1px solid #1c1f26',
+      fontSize:'0.58rem',color:'#555',fontWeight:'900',letterSpacing:'1px'
+    }}>
+      {offers.filter(o=>o.isActive).length} ACTIVE
+    </div>
+  </div>
+ 
+  <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',padding:'20px 0 32px',borderBottom:'1px solid rgba(211,191,162,0.06)'}}>
+ 
+    {/* Offer create form */}
+    <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',padding:'22px',position:'sticky',top:'20px'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+ 
+        {/* Type pills */}
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>OFFER TYPE</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'7px'}}>
+            {[
+              {id:'percent_off', label:'% Discount',   icon:<Percent size={13}/>},
+              {id:'fixed_off',   label:'₹ Fixed Off',  icon:<Tag size={13}/>    },
+              {id:'free_item',   label:'Free Item',    icon:<Gift size={13}/>   },
+              {id:'happy_hour',  label:'Happy Hours',  icon:<Clock size={13}/>  },
+            ].map(opt=>(
+              <button key={opt.id}
+                onClick={()=>setNewOffer(p=>({...p,type:opt.id}))}
                 style={{
-                  flex:2, padding:'10px',
-                  background:'linear-gradient(135deg,#bda88a,#d3bfa2)',
-                  border:'none', color:'#0d0d0d',
-                  borderRadius:'8px', cursor:'pointer', fontWeight:'900',
-                  display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'
+                  display:'flex',alignItems:'center',gap:'7px',
+                  padding:'10px 11px',borderRadius:'9px',cursor:'pointer',
+                  border:newOffer.type===opt.id?'1px solid rgba(211,191,162,0.3)':'1px solid #1c1f26',
+                  background:newOffer.type===opt.id?'rgba(211,191,162,0.06)':'#0d0e11',
+                  color:newOffer.type===opt.id?'#d3bfa2':'#555',
+                  fontSize:'0.68rem',fontWeight:'800',transition:'all 0.15s'
                 }}
               >
-                <CheckCircle2 size={14} color="#0d0d0d"/> SAVE NOTE
+                {opt.icon}{opt.label}
               </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  </motion.div>
-)}
-
-{activeTab === 'marketing' && (
-  <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-
-    {/* ── SUB-TABS ── */}
-    <div style={{
-      display:'flex', background:'#0d0d0d', borderRadius:'10px',
-      padding:'4px', border:'1px solid #1c1f26', width:'fit-content'
-    }}>
-      {[
-        { id:'offers',       label:'OFFERS & DISCOUNTS',  icon:<Tag size={13}/> },
-        { id:'announcements', label:'LIVE MENU ANNOUNCEMENTS', icon:<Megaphone size={13}/> },
-      ].map(t => (
-        <button key={t.id} onClick={() => setMarketingSubTab(t.id)} style={{
-          display:'flex', alignItems:'center', gap:'6px',
-          padding:'9px 20px', borderRadius:'8px', border:'none',
-          cursor:'pointer', fontSize:'0.65rem', fontWeight:'900', letterSpacing:'1px',
-          transition:'all 0.15s',
-          background:    marketingSubTab === t.id ? 'rgba(211,191,162,0.1)' : 'transparent',
-          color:         marketingSubTab === t.id ? '#d3bfa2' : '#444',
-          borderBottom:  marketingSubTab === t.id ? '2px solid #d3bfa2' : '2px solid transparent',
-        }}>
-          {t.icon}{t.label}
-        </button>
-      ))}
-    </div>
-
-    {/* ════════════ OFFERS SUB-TAB (unchanged from before) ════════════ */}
-    {marketingSubTab === 'offers' && (
-      <div style={{display:'grid',gridTemplateColumns:'380px 1fr',gap:'24px',alignItems:'start'}}>
-        {/* ... keep your existing offers form + list exactly as-is ... */}
-      </div>
-    )}
-
-    {/* ════════════ LIVE MENU ANNOUNCEMENTS SUB-TAB — NEW ════════════ */}
-    {marketingSubTab === 'announcements' && (
-      <div style={{display:'grid',gridTemplateColumns:'420px 1fr',gap:'24px',alignItems:'start'}}>
-
-        {/* ── COMPOSE ANNOUNCEMENT ── */}
-        <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',padding:'22px',position:'sticky',top:'20px'}}>
-
-          <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'4px'}}>
-            <div style={{
-              width:'30px',height:'30px',borderRadius:'9px',
-              background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.18)',
-              display:'flex',alignItems:'center',justifyContent:'center'
-            }}>
-              <Megaphone size={14} color="#d3bfa2"/>
-            </div>
-            <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>NEW MENU ANNOUNCEMENT</span>
+            ))}
           </div>
-          <p style={{fontSize:'0.66rem',color:'#444',margin:'4px 0 18px',lineHeight:1.6,fontWeight:'600'}}>
-            This banner appears on every customer's menu the moment they scan the QR — and disappears automatically at the time you set below.
-          </p>
-
-          <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
-
-            {/* Type selector — visual pills */}
-            <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'8px'}}>ANNOUNCEMENT TYPE</label>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
-                {[
-                  { id:'offer',        label:'Offer',        icon:<Tag size={14}/>,       color:'#C9A84C' },
-                  { id:'discount',     label:'Discount',     icon:<Percent size={14}/>,   color:'#8a9a7e' },
-                  { id:'wish',         label:'Festive Wish',  icon:<Sparkles size={14}/>,  color:'#bda88a' },
-                  { id:'announcement', label:'General Notice', icon:<Megaphone size={14}/>, color:'#8a704d' },
-                ].map(opt => (
-                  <button key={opt.id}
-                    onClick={() => setNewAnnouncement(p => ({...p, type:opt.id, accentColor: opt.id === 'offer' ? 'gold' : opt.id === 'discount' ? 'green' : opt.id === 'wish' ? 'rose' : 'gold', icon: opt.id === 'offer' ? 'tag' : opt.id === 'discount' ? 'percent' : opt.id === 'wish' ? 'sparkles' : 'megaphone' }))}
-                    style={{
-                      display:'flex', alignItems:'center', gap:'8px',
-                      padding:'11px 12px', borderRadius:'10px', cursor:'pointer',
-                      border: newAnnouncement.type === opt.id ? `1px solid ${opt.color}55` : '1px solid #1c1f26',
-                      background: newAnnouncement.type === opt.id ? `${opt.color}14` : '#0d0e11',
-                      color: newAnnouncement.type === opt.id ? opt.color : '#666',
-                      fontSize:'0.7rem', fontWeight:'800', transition:'all 0.15s'
-                    }}
-                  >
-                    {opt.icon}{opt.label}
-                  </button>
-                ))}
-              </div>
+        </div>
+ 
+        {/* Title */}
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>OFFER TITLE</div>
+          <input value={newOffer.title}
+            onChange={e=>setNewOffer(p=>({...p,title:e.target.value}))}
+            placeholder="e.g. Weekend Thali Special"
+            style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',fontWeight:'700'}}
+          />
+        </div>
+ 
+        {/* Conditional fields */}
+        {(newOffer.type==='percent_off'||newOffer.type==='fixed_off') && (
+          <div>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>
+              {newOffer.type==='percent_off'?'DISCOUNT %':'DISCOUNT ₹'}
             </div>
-
-            {/* Title */}
+            <input type="number" value={newOffer.value}
+              onChange={e=>setNewOffer(p=>({...p,value:e.target.value}))}
+              placeholder={newOffer.type==='percent_off'?'e.g. 20':'e.g. 50'}
+              style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
+            />
+          </div>
+        )}
+        {newOffer.type==='free_item' && (
+          <div>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>FREE ITEM</div>
+            <input value={newOffer.freeItem}
+              onChange={e=>setNewOffer(p=>({...p,freeItem:e.target.value}))}
+              placeholder="e.g. Gulab Jamun, Masala Papad"
+              style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
+            />
+          </div>
+        )}
+        {newOffer.type==='happy_hour' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
             <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>HEADLINE</label>
-              <input
-                value={newAnnouncement.title}
-                onChange={e => setNewAnnouncement(p => ({...p, title:e.target.value}))}
-                placeholder="e.g. Weekend Special — 20% Off"
-                maxLength={60}
-                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.84rem',outline:'none',fontWeight:'700'}}
+              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>START</div>
+              <input type="time" value={newOffer.happyStart||''}
+                onChange={e=>setNewOffer(p=>({...p,happyStart:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark'}}
               />
-              <div style={{fontSize:'0.5rem',color:'#333',marginTop:'4px',textAlign:'right'}}>{newAnnouncement.title.length}/60</div>
             </div>
-
-            {/* Message */}
             <div>
-              <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>MESSAGE</label>
-              <textarea
-                value={newAnnouncement.message}
-                onChange={e => setNewAnnouncement(p => ({...p, message:e.target.value}))}
-                placeholder="e.g. Enjoy 20% off on all main course dishes this weekend only!"
-                rows={3}
-                maxLength={140}
-                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5}}
+              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>END</div>
+              <input type="time" value={newOffer.happyEnd||''}
+                onChange={e=>setNewOffer(p=>({...p,happyEnd:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark'}}
               />
-              <div style={{fontSize:'0.5rem',color:'#333',marginTop:'4px',textAlign:'right'}}>{newAnnouncement.message.length}/140</div>
             </div>
-
-            {/* Discount value — only for offer/discount types */}
-            {(newAnnouncement.type === 'offer' || newAnnouncement.type === 'discount') && (
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-                <div>
-                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>VALUE (OPTIONAL)</label>
-                  <input
-                    type="number" value={newAnnouncement.discountValue}
-                    onChange={e => setNewAnnouncement(p => ({...p, discountValue:e.target.value}))}
-                    placeholder="e.g. 20"
-                    style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
-                  />
-                </div>
-                <div>
-                  <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'6px'}}>UNIT</label>
-                  <select
-                    value={newAnnouncement.discountType}
-                    onChange={e => setNewAnnouncement(p => ({...p, discountType:e.target.value}))}
-                    style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
-                  >
-                    <option value="percent">% Off</option>
-                    <option value="fixed">₹ Off</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Expiry — mandatory date + time */}
-            <div style={{
-              background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.15)',
-              borderRadius:'12px', padding:'14px'
-            }}>
-              <label style={{fontSize:'0.52rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
-                <Clock size={11}/> VISIBLE UNTIL <span style={{color:'#8a704d'}}>(REQUIRED)</span>
-              </label>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-                <input
-                  type="date" value={newAnnouncement.expiryDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={e => setNewAnnouncement(p => ({...p, expiryDate:e.target.value}))}
-                  style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',colorScheme:'dark'}}
-                />
-                <input
-                  type="time" value={newAnnouncement.expiryTime}
-                  onChange={e => setNewAnnouncement(p => ({...p, expiryTime:e.target.value}))}
-                  style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.8rem',outline:'none',colorScheme:'dark'}}
-                />
-              </div>
-              {/* Quick presets */}
-              <div style={{display:'flex',gap:'6px',marginTop:'10px',flexWrap:'wrap'}}>
-                {[
-                  { label:'Today, 11 PM', hrs: null, endOfDay: true },
-                  { label:'+ 24 hours',   hrs: 24 },
-                  { label:'+ 3 days',     hrs: 72 },
-                  { label:'+ 7 days',     hrs: 168 },
-                ].map(p => (
-                  <button key={p.label} onClick={() => {
-                    const d = new Date();
-                    if (p.endOfDay) { d.setHours(23,59,0,0); }
-                    else { d.setTime(d.getTime() + p.hrs*60*60*1000); }
-                    setNewAnnouncement(prev => ({
-                      ...prev,
-                      expiryDate: d.toISOString().split('T')[0],
-                      expiryTime: d.toTimeString().slice(0,5)
-                    }));
-                  }} style={{
-                    padding:'5px 10px', borderRadius:'7px', border:'1px solid #252932',
-                    background:'#0d0e11', color:'#8a704d', fontSize:'0.6rem', fontWeight:'800',
-                    cursor:'pointer'
-                  }}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+          </div>
+        )}
+ 
+        {/* Min order + expiry */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+          <div>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>MIN ORDER ₹</div>
+            <input type="number" value={newOffer.minOrder}
+              onChange={e=>setNewOffer(p=>({...p,minOrder:e.target.value}))}
+              placeholder="0 = no minimum"
+              style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
+            />
+          </div>
+          <div>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>EXPIRES ON</div>
+            <input type="date" value={newOffer.expiresAt}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={e=>setNewOffer(p=>({...p,expiresAt:e.target.value}))}
+              style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark'}}
+            />
+          </div>
+        </div>
+ 
+        <button
+          onClick={async()=>{
+            if(!newOffer.title)return;
+            try{
+              await axios.post(`${BASE_URL}/offers/${tenantId}`,{
+                ...newOffer,
+                value:Number(newOffer.value)||0,
+                minOrder:Number(newOffer.minOrder)||0,
+                expiresAt:newOffer.expiresAt||null,
+              });
+              showNotif('Offer created ✓','success');
+              setNewOffer({title:'',type:'percent_off',value:'',freeItem:'',minOrder:'',expiresAt:'',happyStart:'',happyEnd:''});
+              fetchOffers();
+            }catch{showNotif('Failed to create offer','error');}
+          }}
+          disabled={!newOffer.title}
+          style={{
+            padding:'13px',borderRadius:'10px',border:'none',
+            background:newOffer.title?'linear-gradient(135deg,#bda88a,#d3bfa2)':'#13151a',
+            color:newOffer.title?'#0d0d0d':'#333',
+            fontWeight:'900',fontSize:'0.76rem',letterSpacing:'0.5px',
+            cursor:newOffer.title?'pointer':'not-allowed',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'
+          }}
+        >
+          <Tag size={13}/> CREATE OFFER
+        </button>
+      </div>
+    </div>
+ 
+    {/* Offers list */}
+    <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
+      {offers.length===0 ? (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'12px',padding:'56px 20px',border:'1px dashed #1a1c23',borderRadius:'16px'}}>
+          <Tag size={28} color="#1a1c23"/>
+          <span style={{fontSize:'0.76rem',fontWeight:'700',color:'#333'}}>No offers yet</span>
+        </div>
+      ) : offers.map(o=>(
+        <motion.div key={o._id}
+          initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+          style={{
+            background:o.isActive?'rgba(211,191,162,0.025)':'#0d0d0d',
+            border:`1px solid ${o.isActive?'rgba(211,191,162,0.14)':'#1a1c23'}`,
+            borderRadius:'12px',padding:'15px 18px',
+            opacity:o.isActive?1:0.45,
+            display:'flex',alignItems:'center',gap:'14px'
+          }}
+        >
+          <div style={{
+            width:'38px',height:'38px',borderRadius:'9px',flexShrink:0,
+            background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.16)',
+            display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.1rem'
+          }}>
+            {o.type==='percent_off'?'🏷':o.type==='fixed_off'?'💰':o.type==='free_item'?'🎁':'⏰'}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.84rem',marginBottom:'4px'}}>{o.title}</div>
+            <div style={{display:'flex',gap:'10px',flexWrap:'wrap',fontSize:'0.6rem',color:'#555',alignItems:'center'}}>
+              {o.value>0&&<span style={{color:'#8a704d',fontWeight:'700',fontFamily:'monospace'}}>{o.type==='percent_off'?`${o.value}% off`:`₹${o.value} off`}</span>}
+              {o.freeItem&&<span style={{color:'#8a704d'}}>Free: {o.freeItem}</span>}
+              {o.minOrder>0&&<span>Min ₹{o.minOrder}</span>}
+              {o.happyStart&&<span>{o.happyStart}–{o.happyEnd}</span>}
+              {o.expiresAt&&<span>Expires {new Date(o.expiresAt).toLocaleDateString('en-IN')}</span>}
+              <span style={{marginLeft:'auto',color:'#3a3c40',fontFamily:'monospace'}}>
+                {o.usageCount}× used · ₹{(o.totalDiscount||0).toLocaleString()} given
+              </span>
             </div>
-
-            {/* Live preview — exactly how customer will see it */}
-            {(newAnnouncement.title || newAnnouncement.message) && (
-              <div>
-                <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',display:'block',marginBottom:'8px'}}>CUSTOMER MENU PREVIEW</label>
-                <AnnouncementPreviewCard data={newAnnouncement} />
-              </div>
-            )}
-
-            {/* Submit */}
+          </div>
+          <div style={{display:'flex',gap:'7px',flexShrink:0}}>
             <button
-              onClick={async () => {
-                if (!newAnnouncement.title || !newAnnouncement.message || !newAnnouncement.expiryDate || !newAnnouncement.expiryTime) {
-                  showNotif('Headline, message, and expiry are all required', 'error');
-                  return;
-                }
-                const expiresAt = new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
-                if (expiresAt <= new Date()) {
-                  showNotif('Expiry must be in the future', 'error');
-                  return;
-                }
-                try {
-                  await axios.post(`${BASE_URL}/announcements/${tenantId}`, {
-                    title: newAnnouncement.title,
-                    message: newAnnouncement.message,
-                    type: newAnnouncement.type,
-                    accentColor: newAnnouncement.accentColor,
-                    icon: newAnnouncement.icon,
-                    discountValue: newAnnouncement.discountValue || null,
-                    discountType: newAnnouncement.discountType || null,
-                    expiresAt: expiresAt.toISOString(),
-                  });
-                  showNotif('Live on customer menu now');
-                  setNewAnnouncement({
-                    title:'', message:'', type:'offer', accentColor:'gold', icon:'tag',
-                    discountValue:'', discountType:'percent', expiryDate:'', expiryTime:''
-                  });
-                  fetchAnnouncements();
-                } catch (err) {
-                  showNotif(err.response?.data?.error || 'Failed to publish', 'error');
-                }
+              onClick={async()=>{
+                try{await axios.patch(`${BASE_URL}/offers/${o._id}`,{isActive:!o.isActive});fetchOffers();}catch{}
               }}
-              disabled={!newAnnouncement.title || !newAnnouncement.message}
               style={{
-                padding:'14px', borderRadius:'11px', border:'none',
-                background: (newAnnouncement.title && newAnnouncement.message) ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : '#13151a',
-                color: (newAnnouncement.title && newAnnouncement.message) ? '#0d0d0d' : '#333',
-                fontWeight:'900', fontSize:'0.78rem', letterSpacing:'0.5px',
-                cursor: (newAnnouncement.title && newAnnouncement.message) ? 'pointer' : 'not-allowed',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
+                padding:'6px 13px',borderRadius:'7px',border:'none',cursor:'pointer',
+                background:o.isActive?'rgba(211,191,162,0.08)':'rgba(138,112,77,0.12)',
+                color:o.isActive?'#d3bfa2':'#8a704d',
+                fontSize:'0.58rem',fontWeight:'900',letterSpacing:'0.5px'
               }}
             >
-              <Send size={14}/> PUBLISH TO CUSTOMER MENU
+              {o.isActive?'PAUSE':'ACTIVATE'}
             </button>
+            <button
+              onClick={async()=>{
+                try{await axios.delete(`${BASE_URL}/offers/${o._id}`);fetchOffers();showNotif('Deleted','info');}catch{}
+              }}
+              style={{padding:'6px 9px',borderRadius:'7px',background:'transparent',border:'1px solid #252932',color:'#444',cursor:'pointer'}}
+            ><X size={12}/></button>
           </div>
+        </motion.div>
+      ))}
+    </div>
+  </div>
+ 
+ 
+  {/* ══════════════════════════════════════════════════════════════════════
+      SECTION C — PUSH CAMPAIGNS
+  ══════════════════════════════════════════════════════════════════════ */}
+  <div style={{
+    display:'flex',alignItems:'center',gap:'14px',
+    padding:'28px 0 18px'
+  }}>
+    <div style={{
+      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
+      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.14)',
+      display:'flex',alignItems:'center',justifyContent:'center'
+    }}>
+      <SendHorizontal size={16} color="#d3bfa2"/>
+    </div>
+    <div>
+      <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'3px',textTransform:'uppercase'}}>
+        Push Campaigns
+      </div>
+      <div style={{fontSize:'0.62rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>
+        Send push notifications to segmented customers — loyal, at-risk, new, or custom list
+      </div>
+    </div>
+    <div style={{
+      marginLeft:'auto',padding:'6px 14px',borderRadius:'8px',
+      background:'rgba(211,191,162,0.04)',border:'1px solid #1c1f26',
+      fontSize:'0.58rem',color:'#555',fontWeight:'900',letterSpacing:'1px'
+    }}>
+      {campaigns.length} SENT
+    </div>
+  </div>
+ 
+  <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',padding:'0 0 32px'}}>
+ 
+    {/* Compose */}
+    <div style={{background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',padding:'22px',position:'sticky',top:'20px'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+ 
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>NOTIFICATION TITLE</div>
+          <input value={newCampaign.title}
+            onChange={e=>setNewCampaign(p=>({...p,title:e.target.value}))}
+            placeholder="e.g. Weekend Special at Our Restaurant"
+            style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',fontWeight:'700'}}
+          />
         </div>
-
-        {/* ── ANNOUNCEMENT LIST ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
-
-          {/* Live status strip */}
-          {announcements.some(a => a.isActive && new Date(a.expiresAt) > new Date()) && (
-            <div style={{
-              display:'flex', alignItems:'center', gap:'10px',
-              padding:'12px 16px', borderRadius:'11px',
-              background:'rgba(74,154,98,0.06)', border:'1px solid rgba(74,154,98,0.2)'
-            }}>
-              <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 8px #4ade80'}}/>
-              <span style={{fontSize:'0.7rem',color:'#4ade80',fontWeight:'800'}}>
-                Live on customer menu right now
-              </span>
-            </div>
-          )}
-
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px'}}>
-            <Megaphone size={13} color="#555"/>
-            <span style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px'}}>ALL ANNOUNCEMENTS</span>
-          </div>
-
-          {announcements.length === 0 ? (
-            <div style={{
-              textAlign:'center', padding:'56px', color:'#333',
-              border:'1px dashed #1a1c23', borderRadius:'16px',
-              display:'flex', flexDirection:'column', alignItems:'center', gap:'14px'
-            }}>
-              <Megaphone size={30} color="#1a1c23"/>
-              <span style={{fontSize:'0.8rem',fontWeight:'700'}}>No announcements published yet</span>
-              <span style={{fontSize:'0.66rem',color:'#252932',maxWidth:'280px',lineHeight:1.6}}>
-                Create your first one to greet every customer who scans your menu QR code.
-              </span>
-            </div>
-          ) : announcements.map(a => {
-            const isLive = a.isActive && new Date(a.expiresAt) > new Date();
-            const isExpired = !isLive;
-            const timeLeft = isLive ? getTimeRemaining(a.expiresAt) : null;
-
-            return (
-              <motion.div key={a._id}
-                initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+ 
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>MESSAGE</div>
+          <textarea value={newCampaign.body}
+            onChange={e=>setNewCampaign(p=>({...p,body:e.target.value}))}
+            placeholder="Today we have a special thali for ₹199 — come visit us!"
+            rows={3}
+            style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5}}
+          />
+        </div>
+ 
+        <div>
+          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>TARGET SEGMENT</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'7px'}}>
+            {[
+              {id:'all',      label:'All Customers'},
+              {id:'loyal',    label:'Loyal (10+ visits)'},
+              {id:'at-risk',  label:'At-Risk (21d+ away)'},
+              {id:'new',      label:'New (1 visit)'},
+              {id:'custom',   label:'Custom Phone List'},
+            ].map(seg=>(
+              <button key={seg.id}
+                onClick={()=>setNewCampaign(p=>({...p,segment:seg.id}))}
                 style={{
-                  background: isLive ? 'rgba(211,191,162,0.03)' : '#0d0d0d',
-                  border:`1px solid ${isLive ? 'rgba(211,191,162,0.18)' : '#1c1f26'}`,
-                  borderRadius:'14px', padding:'18px 20px',
-                  opacity: isExpired ? 0.5 : 1,
-                  position:'relative', overflow:'hidden'
+                  padding:'9px 10px',borderRadius:'8px',cursor:'pointer',
+                  border:newCampaign.segment===seg.id?'1px solid rgba(211,191,162,0.3)':'1px solid #1c1f26',
+                  background:newCampaign.segment===seg.id?'rgba(211,191,162,0.06)':'#0d0e11',
+                  color:newCampaign.segment===seg.id?'#d3bfa2':'#555',
+                  fontSize:'0.65rem',fontWeight:'800',transition:'all 0.15s',textAlign:'left'
                 }}
               >
-                {isLive && (
-                  <div style={{
-                    position:'absolute', top:0, left:0, right:0, height:'2px',
-                    background:'linear-gradient(90deg,transparent,#d3bfa2,transparent)'
-                  }}/>
-                )}
-
-                <div style={{display:'flex',alignItems:'flex-start',gap:'14px'}}>
-                  <div style={{
-                    width:'40px', height:'40px', borderRadius:'10px', flexShrink:0,
-                    background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.2)',
-                    display:'flex', alignItems:'center', justifyContent:'center'
-                  }}>
-                    {a.type === 'offer' ? <Tag size={17} color="#C9A84C"/>
-                      : a.type === 'discount' ? <Percent size={17} color="#C9A84C"/>
-                      : a.type === 'wish' ? <Sparkles size={17} color="#C9A84C"/>
-                      : <Megaphone size={17} color="#C9A84C"/>}
-                  </div>
-
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-                      <span style={{fontWeight:'800',color:'#fff',fontSize:'0.86rem'}}>{a.title}</span>
-                      <span style={{
-                        fontSize:'0.5rem', fontWeight:'900', padding:'2px 8px', borderRadius:'10px',
-                        background: isLive ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.04)',
-                        color: isLive ? '#4ade80' : '#444', letterSpacing:'1px'
-                      }}>
-                        {isLive ? 'LIVE' : 'ENDED'}
-                      </span>
-                    </div>
-                    <div style={{fontSize:'0.72rem',color:'#888',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
-                    <div style={{display:'flex',gap:'14px',flexWrap:'wrap',fontSize:'0.6rem',color:'#444'}}>
-                      <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                        <Eye size={10}/> {a.viewCount || 0} views
-                      </span>
-                      {isLive && timeLeft && (
-                        <span style={{display:'flex',alignItems:'center',gap:'4px',color:'#8a704d',fontWeight:'700'}}>
-                          <Clock size={10}/> ends in {timeLeft}
-                        </span>
-                      )}
-                      {isExpired && (
-                        <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                          <Clock size={10}/> ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{display:'flex',gap:'8px',flexShrink:0}}>
-                    {isLive && (
-                      <button
-                        onClick={() => setConfirmModal({
-                          show:true, title:'End this announcement now?',
-                          subtitle:'It will be removed from the customer menu immediately.',
-                          onConfirm: async () => {
-                            try {
-                              await axios.patch(`${BASE_URL}/announcements/${a._id}`, { isActive:false });
-                              fetchAnnouncements();
-                              showNotif('Announcement ended');
-                            } catch { showNotif('Failed to end announcement', 'error'); }
-                          }
-                        })}
-                        style={{
-                          padding:'6px 14px', borderRadius:'7px', border:'1px solid rgba(186,117,23,0.3)',
-                          background:'rgba(186,117,23,0.1)', color:'#BA7517', cursor:'pointer',
-                          fontSize:'0.6rem', fontWeight:'900', display:'flex', alignItems:'center', gap:'5px'
-                        }}
-                      >
-                        <Zap size={10}/> END NOW
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        setConfirmModal({
-                          show:true, title:'Delete this announcement?',
-                          subtitle:'This cannot be undone.',
-                          onConfirm: async () => {
-                            try { await axios.delete(`${BASE_URL}/announcements/${a._id}`); fetchAnnouncements(); }
-                            catch {}
-                          }
-                        });
-                      }}
-                      style={{
-                        padding:'6px 10px', borderRadius:'7px',
-                        background:'transparent', border:'1px solid #252932',
-                        color:'#444', cursor:'pointer',
-                        display:'flex', alignItems:'center', justifyContent:'center'
-                      }}
-                    >
-                      <X size={13}/>
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+                {seg.label}
+              </button>
+            ))}
+          </div>
         </div>
+ 
+        {newCampaign.segment==='custom' && (
+          <div>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>PHONE NUMBERS (ONE PER LINE)</div>
+            <textarea value={newCampaign.customPhones}
+              onChange={e=>setNewCampaign(p=>({...p,customPhones:e.target.value}))}
+              placeholder={'9876543210\n9123456789'}
+              rows={4}
+              style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.76rem',outline:'none',resize:'vertical',fontFamily:'monospace',lineHeight:1.6}}
+            />
+          </div>
+        )}
+ 
+        {/* Preview card */}
+        {(newCampaign.title||newCampaign.body) && (
+          <div style={{background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.1)',borderRadius:'11px',padding:'14px'}}>
+            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'10px'}}>PUSH NOTIFICATION PREVIEW</div>
+            <div style={{background:'#13151a',borderRadius:'10px',padding:'12px 14px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
+              <div style={{
+                width:'30px',height:'30px',borderRadius:'7px',flexShrink:0,
+                background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.15)',
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.9rem'
+              }}>🍽</div>
+              <div>
+                <div style={{fontSize:'0.75rem',fontWeight:'800',color:'#e8e4de',marginBottom:'3px'}}>{newCampaign.title||'Notification title'}</div>
+                <div style={{fontSize:'0.68rem',color:'#666',lineHeight:1.4}}>{newCampaign.body||'Message body...'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+ 
+        <button
+          onClick={async()=>{
+            if(!newCampaign.title||!newCampaign.body)return;
+            setCampaignSending(true);
+            try{
+              await axios.post(`${BASE_URL}/campaigns/${tenantId}`,{
+                ...newCampaign,
+                customPhones: newCampaign.segment==='custom'
+                  ? newCampaign.customPhones.split('\n').map(s=>s.trim()).filter(Boolean)
+                  : [],
+                sendNow:true,
+              });
+              showNotif('Campaign sent ✓','success');
+              setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
+              fetchCampaigns();
+            }catch{showNotif('Failed to send campaign','error');}
+            finally{setCampaignSending(false);}
+          }}
+          disabled={!newCampaign.title||!newCampaign.body||campaignSending}
+          style={{
+            padding:'13px',borderRadius:'10px',border:'none',
+            background:(!newCampaign.title||!newCampaign.body||campaignSending)?'#13151a':'linear-gradient(135deg,#bda88a,#d3bfa2)',
+            color:(!newCampaign.title||!newCampaign.body||campaignSending)?'#333':'#0d0d0d',
+            fontWeight:'900',fontSize:'0.76rem',letterSpacing:'0.5px',
+            cursor:(!newCampaign.title||!newCampaign.body)?'not-allowed':'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'
+          }}
+        >
+          {campaignSending
+            ? <><RefreshCw size={13} style={{animation:'spin 0.8s linear infinite'}}/> SENDING...</>
+            : <><SendHorizontal size={13}/> SEND CAMPAIGN NOW</>
+          }
+        </button>
       </div>
-    )}
-  </motion.div>
+    </div>
+ 
+    {/* Campaign history */}
+    <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
+      <div style={{fontSize:'0.52rem',color:'#3a3c40',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>CAMPAIGN HISTORY</div>
+      {campaigns.length===0 ? (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'12px',padding:'56px 20px',border:'1px dashed #1a1c23',borderRadius:'16px'}}>
+          <SendHorizontal size={28} color="#1a1c23"/>
+          <span style={{fontSize:'0.76rem',fontWeight:'700',color:'#333'}}>No campaigns sent yet</span>
+        </div>
+      ) : campaigns.map(c=>(
+        <motion.div key={c._id}
+          initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+          style={{
+            background:'#0d0d0d',
+            border:'1px solid #1a1c23',
+            borderLeft:`3px solid ${c.status==='sent'?'#8a704d':'#252932'}`,
+            borderRadius:'12px',padding:'16px 18px'
+          }}
+        >
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.85rem',marginBottom:'4px'}}>{c.title}</div>
+              <div style={{fontSize:'0.7rem',color:'#666',lineHeight:1.5,marginBottom:'9px'}}>{c.body}</div>
+              <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{
+                  fontSize:'0.52rem',fontWeight:'900',padding:'3px 9px',borderRadius:'10px',
+                  background:'rgba(138,112,77,0.1)',color:'#8a704d',
+                  border:'1px solid rgba(138,112,77,0.2)'
+                }}>
+                  {{all:'All Customers',loyal:'Loyal',['at-risk']:'At-Risk',new:'New',custom:'Custom'}[c.segment]||c.segment}
+                </span>
+                <span style={{fontSize:'0.6rem',color:'#444',fontFamily:'monospace'}}>{c.sentCount} sent</span>
+                <span style={{fontSize:'0.6rem',color:'#333'}}>
+                  {c.sentAt ? new Date(c.sentAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}
+                </span>
+              </div>
+            </div>
+            <span style={{
+              fontSize:'0.48rem',fontWeight:'900',padding:'3px 9px',borderRadius:'10px',flexShrink:0,
+              background:c.status==='sent'?'rgba(138,112,77,0.1)':'rgba(255,255,255,0.04)',
+              color:c.status==='sent'?'#8a704d':'#444',
+              border:`1px solid ${c.status==='sent'?'rgba(138,112,77,0.2)':'rgba(255,255,255,0.06)'}`,
+              textTransform:'uppercase',letterSpacing:'1px',alignSelf:'flex-start'
+            }}>
+              {c.status}
+            </span>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  </div>
+ 
+</motion.div>
 )}
 
           {/* ── BILLING ── */}
