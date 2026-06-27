@@ -279,7 +279,9 @@ const [marketingSubTab, setMarketingSubTab] = useState('offers');
 const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
   title: '', message: '', type: 'offer', accentColor: 'gold', icon: 'tag',
-  discountValue: '', discountType: 'percent', expiryDate: '', expiryTime: ''
+  discountValue: '', discountType: 'percent',
+  startDate: '', startTime: '',       // ← NEW: scheduled start
+  expiryDate: '', expiryTime: ''
 });
 const [newOffer, setNewOffer]                 = useState({
   title: '', type: 'percent_off', value: '', freeItem: '',
@@ -5704,10 +5706,8 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
 {activeTab === 'marketing' && (
 <motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
   style={{display:'flex',flexDirection:'column',gap:'0px'}}>
- 
-  {/* ══════════════════════════════════════════════════════════════════════
-      SECTION A — LIVE MENU ANNOUNCEMENTS
-  ══════════════════════════════════════════════════════════════════════ */}
+
+  {/* ══ SECTION HEADER ══ */}
   <div style={{
     display:'flex',alignItems:'center',gap:'14px',
     padding:'28px 0 18px',
@@ -5725,10 +5725,9 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         Live Menu Announcements
       </div>
       <div style={{fontSize:'0.62rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>
-        Banners that appear on every customer's QR menu in real time — auto-expire at the time you set
+        Banners on every customer's QR menu — scheduled or instant, auto-expire at the time you set
       </div>
     </div>
-    {/* Live pill */}
     {announcements.some(a => a.isActive && new Date(a.expiresAt) > new Date()) && (
       <div style={{
         marginLeft:'auto',display:'flex',alignItems:'center',gap:'7px',
@@ -5745,17 +5744,30 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         </span>
       </div>
     )}
+    {/* Scheduled-but-not-yet-live count */}
+    {announcements.filter(a => !a.isActive && new Date(a.startsAt) > new Date()).length > 0 && (
+      <div style={{
+        display:'flex',alignItems:'center',gap:'7px',
+        padding:'6px 14px',borderRadius:'20px',
+        background:'rgba(186,117,23,0.07)',border:'1px solid rgba(186,117,23,0.18)'
+      }}>
+        <Clock size={10} color="#BA7517"/>
+        <span style={{fontSize:'0.58rem',color:'#BA7517',fontWeight:'900',letterSpacing:'1.5px'}}>
+          {announcements.filter(a => !a.isActive && new Date(a.startsAt) > new Date()).length} SCHEDULED
+        </span>
+      </div>
+    )}
   </div>
- 
+
   <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',padding:'20px 0 32px',borderBottom:'1px solid rgba(211,191,162,0.06)'}}>
- 
+
     {/* ── COMPOSE FORM ── */}
     <div style={{
       background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',
       padding:'22px',position:'sticky',top:'20px'
     }}>
       <div style={{display:'flex',flexDirection:'column',gap:'15px'}}>
- 
+
         {/* Type picker */}
         <div>
           <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>TYPE</div>
@@ -5786,7 +5798,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             ))}
           </div>
         </div>
- 
+
         {/* Headline */}
         <div>
           <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
@@ -5806,7 +5818,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             }}
           />
         </div>
- 
+
         {/* Message */}
         <div>
           <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
@@ -5826,7 +5838,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             }}
           />
         </div>
- 
+
         {/* Discount value — only for offer/discount */}
         {(newAnnouncement.type === 'offer' || newAnnouncement.type === 'discount') && (
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
@@ -5852,7 +5864,87 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             </div>
           </div>
         )}
- 
+
+        {/* ══ SCHEDULED START (NEW) ══ */}
+        <div style={{
+          background:'rgba(186,117,23,0.04)',
+          border:'1px solid rgba(186,117,23,0.12)',
+          borderRadius:'11px',padding:'14px'
+        }}>
+          <div style={{
+            display:'flex',alignItems:'center',justifyContent:'space-between',
+            marginBottom:'10px'
+          }}>
+            <div style={{fontSize:'0.5rem',color:'#BA7517',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px'}}>
+              <Clock size={10}/> GOES LIVE AT <span style={{color:'#555',marginLeft:'4px'}}>(optional — blank = now)</span>
+            </div>
+            {(newAnnouncement.startDate || newAnnouncement.startTime) && (
+              <button
+                onClick={() => setNewAnnouncement(p=>({...p, startDate:'', startTime:''}))}
+                style={{fontSize:'0.52rem',color:'#555',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}
+              >
+                CLEAR (publish now)
+              </button>
+            )}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
+            <input
+              type="date" value={newAnnouncement.startDate}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={e => setNewAnnouncement(p=>({...p,startDate:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
+            />
+            <input
+              type="time" value={newAnnouncement.startTime}
+              onChange={e => setNewAnnouncement(p=>({...p,startTime:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
+            />
+          </div>
+          {/* Quick-schedule presets */}
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            {[
+              {label:'Tonight 7 PM', fn:()=>{ const d=new Date(); d.setHours(19,0,0,0); return d; }},
+              {label:'Tomorrow 12 PM', fn:()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(12,0,0,0); return d; }},
+              {label:'This Fri 7 PM', fn:()=>{
+                const d=new Date();
+                const daysUntilFri = (5 - d.getDay() + 7) % 7 || 7;
+                d.setDate(d.getDate()+daysUntilFri); d.setHours(19,0,0,0); return d;
+              }},
+              {label:'This Sat 12 PM', fn:()=>{
+                const d=new Date();
+                const daysUntilSat = (6 - d.getDay() + 7) % 7 || 7;
+                d.setDate(d.getDate()+daysUntilSat); d.setHours(12,0,0,0); return d;
+              }},
+            ].map(p=>(
+              <button key={p.label} onClick={()=>{
+                const d=p.fn();
+                setNewAnnouncement(prev=>({
+                  ...prev,
+                  startDate:d.toISOString().split('T')[0],
+                  startTime:d.toTimeString().slice(0,5)
+                }));
+              }} style={{
+                padding:'4px 10px',borderRadius:'6px',
+                border:'1px solid rgba(186,117,23,0.2)',background:'rgba(186,117,23,0.06)',
+                color:'#BA7517',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
+              }}>{p.label}</button>
+            ))}
+          </div>
+          {/* Scheduled preview label */}
+          {newAnnouncement.startDate && newAnnouncement.startTime && (
+            <div style={{
+              marginTop:'10px',display:'flex',alignItems:'center',gap:'6px',
+              padding:'6px 10px',borderRadius:'7px',
+              background:'rgba(186,117,23,0.08)',border:'1px solid rgba(186,117,23,0.18)'
+            }}>
+              <Clock size={10} color="#BA7517"/>
+              <span style={{fontSize:'0.6rem',color:'#BA7517',fontWeight:'800'}}>
+                Will go live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Expiry */}
         <div style={{
           background:'rgba(211,191,162,0.03)',
@@ -5897,7 +5989,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             ))}
           </div>
         </div>
- 
+
         {/* Live preview */}
         {(newAnnouncement.title || newAnnouncement.message) && (
           <div style={{
@@ -5934,7 +6026,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             </div>
           </div>
         )}
- 
+
         {/* Publish button */}
         <button
           onClick={async () => {
@@ -5943,17 +6035,37 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
             }
             const expiresAt = new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
             if (expiresAt <= new Date()) { showNotif('Expiry must be in the future', 'error'); return; }
+
+            // Compute startsAt — null means publish immediately
+            let startsAt = null;
+            if (newAnnouncement.startDate && newAnnouncement.startTime) {
+              startsAt = new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`);
+              if (startsAt >= expiresAt) {
+                showNotif('Start time must be before expiry time', 'error'); return;
+              }
+            }
+
+            const isScheduled = startsAt && startsAt > new Date();
+
             try {
               await axios.post(`${BASE_URL}/announcements/${tenantId}`, {
-                title: newAnnouncement.title, message: newAnnouncement.message,
-                type: newAnnouncement.type, accentColor: newAnnouncement.accentColor,
+                title: newAnnouncement.title,
+                message: newAnnouncement.message,
+                type: newAnnouncement.type,
+                accentColor: newAnnouncement.accentColor,
                 icon: newAnnouncement.icon,
                 discountValue: newAnnouncement.discountValue || null,
                 discountType: newAnnouncement.discountType || null,
                 expiresAt: expiresAt.toISOString(),
+                startsAt: startsAt ? startsAt.toISOString() : new Date().toISOString(),
+                // If scheduled for the future, create as inactive — cron will activate it
+                isActive: !isScheduled,
               });
-              showNotif('Live on customer menu now ✓');
-              setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',expiryDate:'',expiryTime:''});
+              showNotif(isScheduled
+                ? `Scheduled for ${startsAt.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
+                : 'Live on customer menu now ✓'
+              );
+              setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
               fetchAnnouncements();
             } catch(err) { showNotif(err.response?.data?.error||'Failed to publish','error'); }
           }}
@@ -5961,18 +6073,24 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
           style={{
             padding:'13px',borderRadius:'10px',border:'none',
             background:(newAnnouncement.title&&newAnnouncement.message)
-              ?'linear-gradient(135deg,#bda88a,#d3bfa2)':'#13151a',
+              ? (newAnnouncement.startDate
+                  ? 'linear-gradient(135deg,#8a5c0a,#BA7517)'   // amber = scheduled
+                  : 'linear-gradient(135deg,#bda88a,#d3bfa2)')  // gold = publish now
+              : '#13151a',
             color:(newAnnouncement.title&&newAnnouncement.message)?'#0d0d0d':'#333',
             fontWeight:'900',fontSize:'0.76rem',letterSpacing:'0.5px',
             cursor:(newAnnouncement.title&&newAnnouncement.message)?'pointer':'not-allowed',
             display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'
           }}
         >
-          <Send size={13}/> PUBLISH TO CUSTOMER MENU
+          {newAnnouncement.startDate
+            ? <><Clock size={13}/> SCHEDULE ANNOUNCEMENT</>
+            : <><Send size={13}/> PUBLISH TO CUSTOMER MENU</>
+          }
         </button>
       </div>
     </div>
- 
+
     {/* ── ANNOUNCEMENTS LIST ── */}
     <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
       {announcements.length === 0 ? (
@@ -5984,23 +6102,30 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
           <Megaphone size={32} color="#1a1c23"/>
           <span style={{fontSize:'0.78rem',fontWeight:'700',color:'#333'}}>No announcements yet</span>
           <span style={{fontSize:'0.64rem',color:'#252932',maxWidth:'260px',textAlign:'center',lineHeight:1.6}}>
-            Compose one on the left — it goes live on every customer's QR menu instantly.
+            Compose one on the left — publish instantly or schedule for later.
           </span>
         </div>
       ) : announcements.map(a => {
-        const isLive = a.isActive && new Date(a.expiresAt) > new Date();
-        const timeLeft = isLive ? getTimeRemaining(a.expiresAt) : null;
+        const now = new Date();
+        const isScheduled = !a.isActive && a.startsAt && new Date(a.startsAt) > now;
+        const isLive      = a.isActive && new Date(a.expiresAt) > now;
+        const isEnded     = !isLive && !isScheduled;
+        const timeLeft    = isLive ? getTimeRemaining(a.expiresAt) : null;
+        const timeUntil   = isScheduled ? getTimeRemaining(a.startsAt) : null;
+
         return (
           <motion.div key={a._id}
             initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
             style={{
-              background: isLive ? 'rgba(211,191,162,0.025)' : '#0d0d0d',
-              border:`1px solid ${isLive?'rgba(211,191,162,0.16)':'#1a1c23'}`,
+              background: isLive ? 'rgba(211,191,162,0.025)' : isScheduled ? 'rgba(186,117,23,0.03)' : '#0d0d0d',
+              border:`1px solid ${isLive?'rgba(211,191,162,0.16)':isScheduled?'rgba(186,117,23,0.18)':'#1a1c23'}`,
               borderRadius:'13px',padding:'18px 20px',
-              opacity:isLive?1:0.45,position:'relative',overflow:'hidden'
+              opacity:isEnded?0.45:1,position:'relative',overflow:'hidden'
             }}
           >
-            {isLive&&<div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.4),transparent)'}}/>}
+            {isLive && <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.4),transparent)'}}/>}
+            {isScheduled && <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(186,117,23,0.4),transparent)'}}/>}
+
             <div style={{display:'flex',alignItems:'flex-start',gap:'14px'}}>
               <div style={{
                 width:'38px',height:'38px',borderRadius:'9px',flexShrink:0,
@@ -6015,15 +6140,31 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
                   <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.85rem'}}>{a.title}</span>
-                  <span style={{
-                    fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
-                    letterSpacing:'1.5px',
-                    background:isLive?'rgba(211,191,162,0.1)':'rgba(255,255,255,0.04)',
-                    color:isLive?'#d3bfa2':'#3a3c40',
-                    border:`1px solid ${isLive?'rgba(211,191,162,0.22)':'rgba(255,255,255,0.05)'}`
-                  }}>
-                    {isLive?'● LIVE':'ENDED'}
-                  </span>
+                  {/* Status badge */}
+                  {isLive && (
+                    <span style={{
+                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
+                      letterSpacing:'1.5px',
+                      background:'rgba(211,191,162,0.1)',color:'#d3bfa2',
+                      border:'1px solid rgba(211,191,162,0.22)'
+                    }}>● LIVE</span>
+                  )}
+                  {isScheduled && (
+                    <span style={{
+                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
+                      letterSpacing:'1.5px',
+                      background:'rgba(186,117,23,0.1)',color:'#BA7517',
+                      border:'1px solid rgba(186,117,23,0.25)'
+                    }}>◷ SCHEDULED</span>
+                  )}
+                  {isEnded && (
+                    <span style={{
+                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
+                      letterSpacing:'1.5px',
+                      background:'rgba(255,255,255,0.04)',color:'#3a3c40',
+                      border:'1px solid rgba(255,255,255,0.05)'
+                    }}>ENDED</span>
+                  )}
                 </div>
                 <div style={{fontSize:'0.71rem',color:'#666',lineHeight:1.5,marginBottom:'9px'}}>{a.message}</div>
                 <div style={{display:'flex',gap:'16px',flexWrap:'wrap',fontSize:'0.58rem',color:'#444',alignItems:'center'}}>
@@ -6036,12 +6177,18 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
                       {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
                     </span>
                   )}
+                  {isScheduled && timeUntil && (
+                    <span style={{color:'#BA7517',fontWeight:'700',display:'flex',alignItems:'center',gap:'4px'}}>
+                      <Clock size={9}/>
+                      starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
+                    </span>
+                  )}
                   {isLive && timeLeft && (
                     <span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'4px'}}>
                       <Clock size={9}/> ends in {timeLeft}
                     </span>
                   )}
-                  {!isLive && (
+                  {isEnded && (
                     <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
                       <Clock size={9}/> ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
                     </span>
@@ -6051,38 +6198,105 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
                   </span>
                 </div>
               </div>
-              <div style={{display:'flex',gap:'7px',flexShrink:0}}>
-                {isLive && (
+
+              {/* Action buttons */}
+              <div style={{display:'flex',gap:'7px',flexShrink:0,flexDirection:'column',alignItems:'flex-end'}}>
+                <div style={{display:'flex',gap:'7px'}}>
+                  {/* END button — only for live */}
+                  {isLive && (
+                    <button
+                      onClick={() => setConfirmModal({
+                        show:true,title:'End this announcement?',
+                        subtitle:'Removed from customer menu immediately.',
+                        onConfirm:async()=>{
+                          try { await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false}); fetchAnnouncements(); showNotif('Announcement ended'); }
+                          catch { showNotif('Failed','error'); }
+                        }
+                      })}
+                      style={{
+                        padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
+                        border:'1px solid rgba(186,117,23,0.25)',
+                        background:'rgba(186,117,23,0.07)',color:'#BA7517',
+                        fontSize:'0.58rem',fontWeight:'900',
+                        display:'flex',alignItems:'center',gap:'5px'
+                      }}
+                    >
+                      <Zap size={9}/> END
+                    </button>
+                  )}
+                  {/* CANCEL SCHEDULE — only for scheduled */}
+                  {isScheduled && (
+                    <button
+                      onClick={() => setConfirmModal({
+                        show:true,title:'Cancel this scheduled announcement?',
+                        subtitle:'It will be removed and will not go live.',
+                        onConfirm:async()=>{
+                          try { await axios.delete(`${BASE_URL}/announcements/${a._id}`); fetchAnnouncements(); showNotif('Schedule cancelled'); }
+                          catch { showNotif('Failed','error'); }
+                        }
+                      })}
+                      style={{
+                        padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
+                        border:'1px solid #252932',background:'transparent',color:'#555',
+                        fontSize:'0.58rem',fontWeight:'900',
+                        display:'flex',alignItems:'center',gap:'5px'
+                      }}
+                    >
+                      <X size={9}/> CANCEL
+                    </button>
+                  )}
+                  {/* DELETE — for ended ones */}
+                  {isEnded && (
+                    <button
+                      onClick={() => setConfirmModal({
+                        show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',
+                        onConfirm:async()=>{ try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{} }
+                      })}
+                      style={{
+                        padding:'6px 9px',borderRadius:'7px',cursor:'pointer',
+                        background:'transparent',border:'1px solid #252932',color:'#444'
+                      }}
+                    ><X size={12}/></button>
+                  )}
+                </div>
+
+                {/* ══ RELAUNCH BUTTON (feature 2) — shown on any ended announcement ══ */}
+                {isEnded && (
                   <button
-                    onClick={() => setConfirmModal({
-                      show:true,title:'End this announcement?',
-                      subtitle:'Removed from customer menu immediately.',
-                      onConfirm:async()=>{
-                        try { await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false}); fetchAnnouncements(); showNotif('Announcement ended'); }
-                        catch { showNotif('Failed','error'); }
-                      }
-                    })}
+                    onClick={() => {
+                      // Pre-fill the compose form with this announcement's content
+                      // Leave expiry blank so operator must consciously set a new end time
+                      setNewAnnouncement({
+                        title:         a.title,
+                        message:       a.message,
+                        type:          a.type,
+                        accentColor:   a.accentColor || 'gold',
+                        icon:          a.icon || 'tag',
+                        discountValue: a.discountValue ? String(a.discountValue) : '',
+                        discountType:  a.discountType || 'percent',
+                        startDate:     '',
+                        startTime:     '',
+                        expiryDate:    '',
+                        expiryTime:    '',
+                      });
+                      // Scroll compose form into view
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      showNotif('Pre-filled from last announcement — set a new expiry and publish');
+                    }}
                     style={{
                       padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
-                      border:'1px solid rgba(186,117,23,0.25)',
-                      background:'rgba(186,117,23,0.07)',color:'#BA7517',
+                      border:'1px solid rgba(211,191,162,0.2)',
+                      background:'rgba(211,191,162,0.05)',color:'#d3bfa2',
                       fontSize:'0.58rem',fontWeight:'900',
-                      display:'flex',alignItems:'center',gap:'5px'
+                      display:'flex',alignItems:'center',gap:'5px',
+                      transition:'all 0.15s'
                     }}
+                    onMouseEnter={e => { e.currentTarget.style.background='rgba(211,191,162,0.1)'; e.currentTarget.style.borderColor='rgba(211,191,162,0.35)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background='rgba(211,191,162,0.05)'; e.currentTarget.style.borderColor='rgba(211,191,162,0.2)'; }}
                   >
-                    <Zap size={9}/> END
+                    <RefreshCw size={9}/> RELAUNCH
                   </button>
                 )}
-                <button
-                  onClick={() => setConfirmModal({
-                    show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',
-                    onConfirm:async()=>{ try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{} }
-                  })}
-                  style={{
-                    padding:'6px 9px',borderRadius:'7px',cursor:'pointer',
-                    background:'transparent',border:'1px solid #252932',color:'#444'
-                  }}
-                ><X size={12}/></button>
               </div>
             </div>
           </motion.div>
@@ -6090,8 +6304,6 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
       })}
     </div>
   </div>
- 
- 
 </motion.div>
 )}
 
