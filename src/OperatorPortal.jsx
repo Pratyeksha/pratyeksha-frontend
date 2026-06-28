@@ -13,7 +13,8 @@ import {
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
-  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye
+  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye,
+  ShoppingCart, Copy
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -265,12 +266,7 @@ const [customerSegFilter, setCustomerSegFilter] = useState('all');
 const [customerSearch, setCustomerSearch]     = useState('');
 const [customerLoading, setCustomerLoading]   = useState(false);
 const [customerProfile, setCustomerProfile]   = useState(null); // drawer
- 
-// ── Feedback ──
-const [feedbackData, setFeedbackData]         = useState({ feedback: [], summary: {} });
-const [feedbackLoading, setFeedbackLoading]   = useState(false);
-const [feedbackNoteModal, setFeedbackNoteModal] = useState(null);
-const [feedbackNoteText, setFeedbackNoteText] = useState('');
+  const [purchaseOrderModal, setPurchaseOrderModal] = useState(null);
  
 // ── Marketing ──
 const [offers, setOffers]                     = useState([]);
@@ -10871,11 +10867,67 @@ setNewStaff({
             </td>
  
             {/* STATUS */}
-            <td style={{ paddingRight: '16px' }}>
-              <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900', background: isLow ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', color: isLow ? '#BA7517' : '#444', border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}` }}>
-                {isLow ? 'LOW STOCK' : 'OK'}
-              </span>
-            </td>
+<td style={{ paddingRight: '10px' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+    {/* Existing status badge — unchanged logic */}
+    <span style={{
+      fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
+      background: isLow ? 'rgba(186,117,23,0.12)' : 'rgba(211,191,162,0.04)',
+      color: isLow ? '#BA7517' : '#444',
+      border: `1px solid ${isLow ? 'rgba(186,117,23,0.25)' : '#1a1a1a'}`
+    }}>
+      {isLow ? 'LOW STOCK' : 'OK'}
+    </span>
+
+    {/* ── PURCHASE ORDER BUTTON — only shows when low stock ── */}
+    {isLow && (
+      <button
+        onClick={() => {
+          // Pull procurement data for this item if available
+          const proc = procurementData.find(p => p._id?.toString() === item._id?.toString());
+
+          // Calculate suggested reorder quantity:
+          // avgDailyUsage × 30 days − current stock, rounded up to nearest 100/10
+          const avgDaily = proc?.avgDailyUsage || 0;
+          const targetDays = 30;
+          const needed = Math.max(0, Math.ceil((avgDaily * targetDays) - item.currentStock));
+          // Round to a sensible quantity based on unit
+          const roundTo = ['kg','l'].includes(item.unit) ? 1 : item.unit === 'gm' || item.unit === 'ml' ? 100 : 10;
+          const suggestedQty = needed > 0 ? Math.ceil(needed / roundTo) * roundTo : Math.ceil(item.minThreshold * 2 / roundTo) * roundTo;
+
+          // Last vendor from purchase history
+          const lastVendor = item.purchaseHistory?.[0]?.vendor || '';
+          const lastPrice  = item.lastPurchasePrice || item.costPrice || 0;
+          const daysLeft   = proc?.daysRemaining;
+
+          setPurchaseOrderModal({
+            item,
+            proc,
+            suggestedQty,
+            lastVendor,
+            lastPrice,
+            daysLeft,
+            customQty: String(suggestedQty),
+            customVendor: lastVendor,
+            copySuccess: false,
+          });
+        }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '4px 8px', borderRadius: '5px',
+          background: 'rgba(186,117,23,0.12)',
+          border: '1px solid rgba(186,117,23,0.35)',
+          color: '#BA7517', cursor: 'pointer',
+          fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.5px',
+          whiteSpace: 'nowrap'
+        }}
+        title="Generate purchase order for this ingredient"
+      >
+        <ShoppingCart size={9}/> PURCHASE ORDER
+      </button>
+    )}
+  </div>
+</td>
  
 {/* ACTION */}
 <td>
@@ -11035,35 +11087,141 @@ setNewStaff({
               </div>
 
               {/* PROCUREMENT PREDICTOR */}
-              {procurementData.length>0 && (
-                <div style={{...styles.biCard,borderLeft:'4px solid #8a704d'}}>
-                  <h4 style={styles.biTitle}><Truck size={16}/> PROCUREMENT PREDICTOR</h4>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'12px'}}>
-                    {procurementData.slice(0,9).map(item=>{
-                      const isUrg=item.daysRemaining!==null&&item.daysRemaining<=3;
-                      const isWrn=item.daysRemaining!==null&&item.daysRemaining<=7;
-                      return (
-                        <div key={item._id} style={{background:'#050505',border:`1px solid ${isUrg?'rgba(138,112,77,0.35)':'#111'}`,padding:'14px',borderRadius:'12px'}}>
-                          <div style={{fontWeight:'900',color:'#fff',fontSize:'0.8rem',marginBottom:'8px'}}>{item.itemName}</div>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
-                            <span style={{fontSize:'0.62rem',color:'#444'}}>{item.currentStock} {item.unit} left</span>
-                            {item.daysRemaining!==null ? (
-                              <span style={{fontSize:'0.65rem',fontWeight:'900',padding:'2px 8px',borderRadius:'4px',
-                                background:isUrg?'rgba(138,112,77,0.15)':'rgba(211,191,162,0.04)',
-                                color:isUrg?'#BA7517':isWrn?'#d3bfa2':'#555'}}>
-                                {item.daysRemaining}d left
-                              </span>
-                            ) : <span style={{fontSize:'0.6rem',color:'#333'}}>No usage data</span>}
-                          </div>
-                          <div style={{height:'3px',background:'#111',borderRadius:'2px',overflow:'hidden'}}>
-                            <div style={{height:'100%',width:`${Math.min(100,item.daysRemaining!==null?Math.round((item.daysRemaining/30)*100):100)}%`,background:isUrg?'#8a704d':'#2a2a2a',borderRadius:'2px'}}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+{procurementData.length > 0 && (
+  <div style={{ ...styles.biCard, borderLeft: '4px solid #8a704d' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <h4 style={{ ...styles.biTitle, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Truck size={16}/> PROCUREMENT PREDICTOR
+      </h4>
+      {/* Summary pill */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <span style={{
+          fontSize: '0.58rem', fontWeight: '900', padding: '4px 12px', borderRadius: '20px',
+          background: 'rgba(186,117,23,0.1)', border: '1px solid rgba(186,117,23,0.25)', color: '#BA7517'
+        }}>
+          {procurementData.filter(i => i.isLow || (i.daysRemaining !== null && i.daysRemaining <= 7)).length} items need reorder
+        </span>
+      </div>
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '12px' }}>
+      {procurementData.slice(0, 12).map(item => {
+        const isUrg = item.daysRemaining !== null && item.daysRemaining <= 3;
+        const isWrn = item.daysRemaining !== null && item.daysRemaining <= 7;
+        const needsOrder = isUrg || isWrn || item.isLow;
+
+        // Find full inventory item for vendor/price lookup
+        const fullItem = inventory.find(i => i._id?.toString() === item._id?.toString()) || {};
+        const lastVendor = fullItem.purchaseHistory?.[0]?.vendor || '';
+        const lastPrice  = fullItem.lastPurchasePrice || fullItem.costPrice || 0;
+
+        // Suggested qty
+        const avgDaily = item.avgDailyUsage || 0;
+        const needed   = Math.max(0, Math.ceil((avgDaily * 30) - item.currentStock));
+        const roundTo  = ['kg','l'].includes(item.unit) ? 1 : item.unit === 'gm' || item.unit === 'ml' ? 100 : 10;
+        const suggestedQty = needed > 0 ? Math.ceil(needed / roundTo) * roundTo
+          : Math.ceil(item.minThreshold * 2 / roundTo) * roundTo;
+
+        return (
+          <div key={item._id} style={{
+            background: '#050505',
+            border: `1px solid ${isUrg ? 'rgba(186,117,23,0.4)' : needsOrder ? 'rgba(186,117,23,0.2)' : '#111'}`,
+            padding: '14px', borderRadius: '12px', position: 'relative',
+            boxShadow: isUrg ? '0 0 12px rgba(186,117,23,0.08)' : 'none'
+          }}>
+            {/* Urgency indicator strip */}
+            {needsOrder && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, height: '2px', borderRadius: '12px 12px 0 0',
+                background: isUrg ? '#BA7517' : 'rgba(186,117,23,0.4)'
+              }}/>
+            )}
+
+            {/* Item name + days left */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+              <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.8rem', flex: 1, marginRight: '6px' }}>{item.itemName}</div>
+              {item.daysRemaining !== null ? (
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
+                  background: isUrg ? 'rgba(186,117,23,0.18)' : isWrn ? 'rgba(186,117,23,0.08)' : 'rgba(211,191,162,0.04)',
+                  color: isUrg ? '#BA7517' : isWrn ? '#d3bfa2' : '#555'
+                }}>
+                  {item.daysRemaining}d left
+                </span>
+              ) : (
+                <span style={{ fontSize: '0.58rem', color: '#333' }}>No usage data</span>
               )}
+            </div>
+
+            {/* Stock bar */}
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.6rem', color: '#444' }}>{item.currentStock} {item.unit} remaining</span>
+                <span style={{ fontSize: '0.6rem', color: '#333' }}>min: {item.minThreshold} {item.unit}</span>
+              </div>
+              <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min(100, item.minThreshold > 0 ? Math.round((item.currentStock / (item.minThreshold * 3)) * 100) : 50)}%`,
+                  background: isUrg ? '#BA7517' : isWrn ? '#8a704d' : '#2a2a2a',
+                  borderRadius: '2px', transition: 'width 0.5s'
+                }}/>
+              </div>
+            </div>
+
+            {/* Usage rate */}
+            {item.avgDailyUsage > 0 && (
+              <div style={{ fontSize: '0.58rem', color: '#555', marginBottom: '8px' }}>
+                Avg usage: {item.avgDailyUsage} {item.unit}/day
+                {suggestedQty > 0 && <span style={{ color: '#8a704d', marginLeft: '6px' }}>· Reorder: ~{suggestedQty} {item.unit}</span>}
+              </div>
+            )}
+
+            {/* Last vendor */}
+            {lastVendor && (
+              <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Truck size={8} color="#555"/> {lastVendor}
+                {lastPrice > 0 && <span style={{ color: '#555' }}>· ₹{lastPrice.toFixed(2)}/{item.unit}</span>}
+              </div>
+            )}
+
+            {/* 1-TAP PURCHASE ORDER BUTTON */}
+            {needsOrder && (
+              <button
+                onClick={() => {
+                  setPurchaseOrderModal({
+                    item: { ...item, ...fullItem },
+                    proc: item,
+                    suggestedQty,
+                    lastVendor,
+                    lastPrice,
+                    daysLeft: item.daysRemaining,
+                    customQty: String(suggestedQty),
+                    customVendor: lastVendor,
+                    copySuccess: false,
+                  });
+                }}
+                style={{
+                  width: '100%', padding: '8px', borderRadius: '7px',
+                  background: isUrg ? 'rgba(186,117,23,0.15)' : 'rgba(186,117,23,0.08)',
+                  border: `1px solid ${isUrg ? 'rgba(186,117,23,0.45)' : 'rgba(186,117,23,0.25)'}`,
+                  color: '#BA7517', cursor: 'pointer',
+                  fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.5px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(186,117,23,0.22)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = isUrg ? 'rgba(186,117,23,0.15)' : 'rgba(186,117,23,0.08)'; }}
+              >
+                <ShoppingCart size={11}/> GENERATE PURCHASE ORDER
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
 
               
             </motion.div>
@@ -13165,7 +13323,351 @@ onClick={async () => {
     </div>
   )}
 </AnimatePresence>
+<AnimatePresence>
+  {purchaseOrderModal && (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+        onClick={() => setPurchaseOrderModal(null)}
+        style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9200 }}
+      />
 
+      {/* Modal */}
+      <motion.div
+        initial={{ scale: 0.93, opacity: 0, y: 12 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.93, opacity: 0, y: 12 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          width: '520px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
+          background: '#0a0b0e', border: '1px solid rgba(186,117,23,0.3)',
+          borderRadius: '18px', zIndex: 9201,
+          boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(186,117,23,0.1)'
+        }}
+      >
+        {/* Modal header */}
+        <div style={{
+          padding: '22px 24px 18px',
+          borderBottom: '1px solid #111',
+          background: '#080808',
+          borderRadius: '18px 18px 0 0',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <ShoppingCart size={16} color="#BA7517"/>
+              <span style={{ fontSize: '0.58rem', color: '#BA7517', fontWeight: '900', letterSpacing: '2px' }}>
+                PURCHASE ORDER GENERATOR
+              </span>
+            </div>
+            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>
+              {purchaseOrderModal.item?.itemName}
+            </div>
+            <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px' }}>
+              Current stock: {purchaseOrderModal.item?.currentStock} {purchaseOrderModal.item?.unit}
+              {purchaseOrderModal.daysLeft !== null && purchaseOrderModal.daysLeft !== undefined && (
+                <span style={{ color: '#BA7517', marginLeft: '8px' }}>
+                  · {purchaseOrderModal.daysLeft}d remaining
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={() => setPurchaseOrderModal(null)} style={{
+            background: '#111', border: '1px solid #1a1a1a',
+            color: '#555', padding: '7px', borderRadius: '8px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <X size={15}/>
+          </button>
+        </div>
+
+        <div style={{ padding: '20px 24px' }}>
+
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '20px' }}>
+            {[
+              { l: 'AVG DAILY USAGE', v: purchaseOrderModal.proc?.avgDailyUsage > 0 ? `${purchaseOrderModal.proc.avgDailyUsage} ${purchaseOrderModal.item?.unit}/day` : 'No data' },
+              { l: 'LAST BUY PRICE', v: purchaseOrderModal.lastPrice > 0 ? `₹${purchaseOrderModal.lastPrice.toFixed(2)}/${purchaseOrderModal.item?.unit}` : 'Not recorded' },
+              { l: 'ESTIMATED COST', v: (purchaseOrderModal.lastPrice > 0 && Number(purchaseOrderModal.customQty) > 0) ? `₹${(purchaseOrderModal.lastPrice * Number(purchaseOrderModal.customQty)).toFixed(0)}` : '—' },
+            ].map(s => (
+              <div key={s.l} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '4px' }}>{s.l}</div>
+                <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#d3bfa2' }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Editable fields */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+
+            {/* Quantity */}
+            <div>
+              <label style={{
+                fontSize: '0.52rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px',
+                textTransform: 'uppercase', display: 'block', marginBottom: '6px'
+              }}>
+                ORDER QUANTITY ({purchaseOrderModal.item?.unit})
+                <span style={{ color: '#BA7517', marginLeft: '6px', fontWeight: '700' }}>
+                  — Suggested based on 30-day usage
+                </span>
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  value={purchaseOrderModal.customQty}
+                  onChange={e => setPurchaseOrderModal(p => ({ ...p, customQty: e.target.value, copySuccess: false }))}
+                  style={{
+                    flex: 1, padding: '10px 14px',
+                    background: '#0d0e11', border: '1px solid rgba(186,117,23,0.35)',
+                    color: '#fff', borderRadius: '9px', fontSize: '0.9rem',
+                    fontWeight: '900', outline: 'none', fontFamily: 'monospace'
+                  }}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#555', fontWeight: '700' }}>{purchaseOrderModal.item?.unit}</span>
+              </div>
+              {/* Quick quantity buttons */}
+              <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                {(() => {
+                  const base = purchaseOrderModal.suggestedQty || 100;
+                  return [Math.round(base * 0.5), base, Math.round(base * 1.5), Math.round(base * 2)].map(qty => (
+                    <button
+                      key={qty}
+                      onClick={() => setPurchaseOrderModal(p => ({ ...p, customQty: String(qty), copySuccess: false }))}
+                      style={{
+                        padding: '4px 10px', borderRadius: '5px', cursor: 'pointer',
+                        background: purchaseOrderModal.customQty === String(qty) ? 'rgba(186,117,23,0.2)' : '#111',
+                        border: `1px solid ${purchaseOrderModal.customQty === String(qty) ? 'rgba(186,117,23,0.5)' : '#1a1a1a'}`,
+                        color: purchaseOrderModal.customQty === String(qty) ? '#BA7517' : '#555',
+                        fontSize: '0.62rem', fontWeight: '800', fontFamily: 'monospace'
+                      }}
+                    >
+                      {qty} {purchaseOrderModal.item?.unit}
+                    </button>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Vendor */}
+            <div>
+              <label style={{
+                fontSize: '0.52rem', color: '#555', fontWeight: '900', letterSpacing: '1.5px',
+                textTransform: 'uppercase', display: 'block', marginBottom: '6px'
+              }}>
+                VENDOR / SUPPLIER
+                {purchaseOrderModal.lastVendor && (
+                  <span style={{ color: '#8a704d', marginLeft: '6px', fontWeight: '700' }}>
+                    — last used: {purchaseOrderModal.lastVendor}
+                  </span>
+                )}
+              </label>
+              <input
+                type="text"
+                value={purchaseOrderModal.customVendor}
+                onChange={e => setPurchaseOrderModal(p => ({ ...p, customVendor: e.target.value, copySuccess: false }))}
+                placeholder="e.g. Rajesh Traders, Mumbai Market, etc."
+                style={{
+                  width: '100%', padding: '10px 14px',
+                  background: '#0d0e11', border: '1px solid #252932',
+                  color: '#fff', borderRadius: '9px', fontSize: '0.82rem',
+                  outline: 'none', fontFamily: 'inherit'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* ── PURCHASE ORDER PREVIEW ── */}
+          <div style={{
+            background: '#060608', border: '1px solid rgba(186,117,23,0.2)',
+            borderRadius: '12px', padding: '18px', marginBottom: '16px',
+            fontFamily: 'monospace'
+          }}>
+            <div style={{ fontSize: '0.52rem', color: '#555', fontWeight: '900', letterSpacing: '2px', marginBottom: '14px' }}>
+              PURCHASE ORDER PREVIEW
+            </div>
+
+            {/* PO content — this is what gets copied */}
+            <div id="po-preview-content" style={{ fontSize: '0.78rem', color: '#d3bfa2', lineHeight: 2 }}>
+              {(() => {
+                const item     = purchaseOrderModal.item;
+                const qty      = Number(purchaseOrderModal.customQty) || 0;
+                const vendor   = purchaseOrderModal.customVendor || '—';
+                const price    = purchaseOrderModal.lastPrice || 0;
+                const total    = price > 0 ? (price * qty).toFixed(0) : '—';
+                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const deadline = (() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + Math.max(1, Math.min(purchaseOrderModal.daysLeft || 3, 3)));
+                  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                })();
+
+                const lines = [
+                  `PURCHASE ORDER`,
+                  `Date: ${today}`,
+                  `─────────────────────────────`,
+                  `From: Jay Ambe Multi Fusion`,
+                  `To:   ${vendor}`,
+                  `─────────────────────────────`,
+                  `Item:     ${item?.itemName}`,
+                  `Quantity: ${qty} ${item?.unit}`,
+                  price > 0 ? `Rate:     ₹${price.toFixed(2)} / ${item?.unit}` : null,
+                  price > 0 && qty > 0 ? `Total:    ₹${total}` : null,
+                  `─────────────────────────────`,
+                  `Current Stock: ${item?.currentStock} ${item?.unit}`,
+                  purchaseOrderModal.proc?.avgDailyUsage > 0 ? `Daily Usage:   ${purchaseOrderModal.proc.avgDailyUsage} ${item?.unit}/day` : null,
+                  purchaseOrderModal.daysLeft !== null && purchaseOrderModal.daysLeft !== undefined ? `Runs out in:   ~${purchaseOrderModal.daysLeft} day${purchaseOrderModal.daysLeft !== 1 ? 's' : ''}` : null,
+                  `Needed by:     ${deadline}`,
+                  `─────────────────────────────`,
+                  `Generated via Pratyeksha POS`,
+                ].filter(Boolean);
+
+                return lines.map((line, i) => (
+                  <div key={i} style={{
+                    color: line.startsWith('PURCHASE ORDER') ? '#BA7517'
+                      : line.startsWith('─') ? '#222'
+                      : line.startsWith('Item:') || line.startsWith('Quantity:') || line.startsWith('Total:') ? '#fff'
+                      : '#8a8f9f'
+                  }}>
+                    {line}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* COPY button */}
+            <button
+              onClick={() => {
+                const item     = purchaseOrderModal.item;
+                const qty      = Number(purchaseOrderModal.customQty) || 0;
+                const vendor   = purchaseOrderModal.customVendor || '—';
+                const price    = purchaseOrderModal.lastPrice || 0;
+                const total    = price > 0 ? (price * qty).toFixed(0) : '—';
+                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const deadline = (() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + Math.max(1, Math.min(purchaseOrderModal.daysLeft || 3, 3)));
+                  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                })();
+
+                const text = [
+                  `PURCHASE ORDER`,
+                  `Date: ${today}`,
+                  `─────────────────────────────`,
+                  `From: Jay Ambe Multi Fusion`,
+                  `To:   ${vendor}`,
+                  `─────────────────────────────`,
+                  `Item:     ${item?.itemName}`,
+                  `Quantity: ${qty} ${item?.unit}`,
+                  price > 0 ? `Rate:     ₹${price.toFixed(2)} / ${item?.unit}` : null,
+                  price > 0 && qty > 0 ? `Total:    ₹${total}` : null,
+                  `─────────────────────────────`,
+                  `Current Stock: ${item?.currentStock} ${item?.unit}`,
+                  purchaseOrderModal.proc?.avgDailyUsage > 0 ? `Daily Usage:   ${purchaseOrderModal.proc.avgDailyUsage} ${item?.unit}/day` : null,
+                  purchaseOrderModal.daysLeft !== null && purchaseOrderModal.daysLeft !== undefined ? `Runs out in:   ~${purchaseOrderModal.daysLeft} day${purchaseOrderModal.daysLeft !== 1 ? 's' : ''}` : null,
+                  `Needed by:     ${deadline}`,
+                  `─────────────────────────────`,
+                  `Generated via Pratyeksha POS`,
+                ].filter(Boolean).join('\n');
+
+                navigator.clipboard.writeText(text).then(() => {
+                  setPurchaseOrderModal(p => ({ ...p, copySuccess: true }));
+                  setTimeout(() => setPurchaseOrderModal(p => p ? { ...p, copySuccess: false } : null), 3000);
+                }).catch(() => {
+                  // Fallback for browsers without clipboard API
+                  const el = document.createElement('textarea');
+                  el.value = text;
+                  document.body.appendChild(el);
+                  el.select();
+                  document.execCommand('copy');
+                  document.body.removeChild(el);
+                  setPurchaseOrderModal(p => ({ ...p, copySuccess: true }));
+                  setTimeout(() => setPurchaseOrderModal(p => p ? { ...p, copySuccess: false } : null), 3000);
+                });
+              }}
+              style={{
+                flex: 2, padding: '13px', borderRadius: '10px', border: 'none',
+                background: purchaseOrderModal.copySuccess
+                  ? 'linear-gradient(135deg,#4a7a4a,#5a9a5a)'
+                  : 'linear-gradient(135deg,#8a704d,#BA7517)',
+                color: '#fff', fontWeight: '900', fontSize: '0.78rem',
+                cursor: 'pointer', letterSpacing: '0.5px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                transition: 'all 0.2s'
+              }}
+            >
+              {purchaseOrderModal.copySuccess
+                ? <><CheckCircle2 size={15}/> COPIED TO CLIPBOARD!</>
+                : <><Copy size={15}/> COPY PURCHASE ORDER</>
+              }
+            </button>
+
+            {/* WhatsApp share button */}
+            <button
+              onClick={() => {
+                const item     = purchaseOrderModal.item;
+                const qty      = Number(purchaseOrderModal.customQty) || 0;
+                const vendor   = purchaseOrderModal.customVendor || '';
+                const price    = purchaseOrderModal.lastPrice || 0;
+                const total    = price > 0 ? `₹${(price * qty).toFixed(0)}` : '';
+                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                const waText = encodeURIComponent(
+                  `*PURCHASE ORDER* — ${today}\n` +
+                  `*From:* Jay Ambe Multi Fusion\n` +
+                  (vendor ? `*To:* ${vendor}\n` : '') +
+                  `\n` +
+                  `*Item:* ${item?.itemName}\n` +
+                  `*Qty:* ${qty} ${item?.unit}\n` +
+                  (price > 0 ? `*Rate:* ₹${price.toFixed(2)}/${item?.unit}\n` : '') +
+                  (total ? `*Total:* ${total}\n` : '') +
+                  `\n` +
+                  `_Stock runs out in ~${purchaseOrderModal.daysLeft ?? '?'} days_\n` +
+                  `_Please deliver before stock runs out_\n` +
+                  `\n_Sent via Pratyeksha POS_`
+                );
+
+                window.open(`https://wa.me/?text=${waText}`, '_blank');
+              }}
+              style={{
+                flex: 1, padding: '13px', borderRadius: '10px',
+                background: 'rgba(37,211,102,0.12)',
+                border: '1px solid rgba(37,211,102,0.3)',
+                color: '#25d366', cursor: 'pointer',
+                fontSize: '0.72rem', fontWeight: '900',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+              }}
+              title="Share via WhatsApp"
+            >
+              <MessageSquare size={14}/> WHATSAPP
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={() => setPurchaseOrderModal(null)}
+              style={{
+                padding: '13px 16px', borderRadius: '10px',
+                background: 'transparent', border: '1px solid #252932',
+                color: '#555', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '800'
+              }}
+            >
+              <X size={14}/>
+            </button>
+          </div>
+
+          {/* Tip */}
+          <div style={{ marginTop: '10px', fontSize: '0.6rem', color: '#333', lineHeight: 1.5 }}>
+            💡 Copy and paste into WhatsApp, SMS, or email to your supplier. Edit quantity and vendor above before copying.
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )}
+</AnimatePresence>
 
 <style>{`
  
