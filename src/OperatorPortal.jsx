@@ -200,7 +200,7 @@ const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subt
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
   const [wipingStaffId, setWipingStaffId] = useState(null); 
 
-
+const [ingredientAlerts, setIngredientAlerts] = useState([]);
   const [isDownloadingAllBills, setIsDownloadingAllBills] = useState(false);
 
   // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
@@ -706,6 +706,29 @@ useEffect(() => {
         });
         fetchManagementData(); // refresh inventory numbers
       });
+      socket.on('ingredient_out_of_stock', (data) => {
+    setIngredientAlerts(prev => {
+        // Deduplicate: if same ingredient already has an active alert, replace it
+        const filtered = prev.filter(a => a.ingredientName !== data.ingredientName);
+        return [
+            {
+                id:             `${data.ingredientName}-${Date.now()}`,
+                ingredientName: data.ingredientName,
+                affectedDishes: data.affectedDishes || [],
+                dishCount:      data.dishCount || 0,
+                autoHidden:     data.autoHidden || false,
+                alertAt:        data.alertAt || new Date().toISOString(),
+                dismissed:      false,
+            },
+            ...filtered,
+        ].slice(0, 10); // keep at most 10 active alerts
+    });
+ 
+    // Auto-dismiss after 60 seconds so the screen doesn't fill up
+    setTimeout(() => {
+        setIngredientAlerts(prev => prev.filter(a => a.ingredientName !== data.ingredientName));
+    }, 60000);
+});
       socket.on("new_waiter_request", (request) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
@@ -3728,6 +3751,143 @@ const renderMonthHeatmap = () => {
       </div>
     )}
   </header>
+  
+{ingredientAlerts.filter(a => !a.dismissed).length > 0 && (
+    <div style={{
+        display: 'flex', flexDirection: 'column', gap: '8px',
+        marginBottom: '20px', position: 'relative', zIndex: 50
+    }}>
+        {ingredientAlerts.filter(a => !a.dismissed).map(alert => (
+            <motion.div
+                key={alert.id}
+                initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                style={{
+                    background: '#0d0a07',
+                    border: '1px solid rgba(186,117,23,0.5)',
+                    borderLeft: '4px solid #BA7517',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '14px',
+                    boxShadow: '0 4px 24px rgba(186,117,23,0.12)',
+                }}
+            >
+                {/* Icon */}
+                <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+                    background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <AlertTriangle size={17} color="#BA7517"/>
+                </div>
+ 
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Headline */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.88rem' }}>
+                            {alert.ingredientName} ran out
+                        </span>
+                        <span style={{
+                            fontSize: '0.52rem', fontWeight: '900', padding: '2px 8px', borderRadius: '20px',
+                            background: 'rgba(186,117,23,0.15)', color: '#BA7517',
+                            border: '1px solid rgba(186,117,23,0.3)', letterSpacing: '0.8px'
+                        }}>
+                            {alert.dishCount} {alert.dishCount === 1 ? 'DISH' : 'DISHES'} {alert.autoHidden ? 'AUTO-HIDDEN' : 'AFFECTED'}
+                        </span>
+                    </div>
+ 
+                    {/* Summary line */}
+                    <div style={{ fontSize: '0.78rem', color: '#8a8f9f', marginBottom: '8px', lineHeight: 1.4 }}>
+                        {alert.autoHidden ? (
+                            <>
+                                <span style={{ color: '#d3bfa2' }}>{alert.affectedDishes.join(', ')}</span>
+                                {' '}— removed from customer menu automatically.
+                            </>
+                        ) : (
+                            <>
+                                Linked to{' '}
+                                <span style={{ color: '#d3bfa2' }}>{alert.affectedDishes.join(', ')}</span>
+                                {' '}— still visible on menu (auto-hide is off).
+                            </>
+                        )}
+                    </div>
+ 
+                    {/* Dish chips */}
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                        {alert.affectedDishes.map((dish, i) => (
+                            <span key={i} style={{
+                                fontSize: '0.62rem', fontWeight: '700',
+                                padding: '3px 9px', borderRadius: '5px',
+                                background: 'rgba(186,117,23,0.08)',
+                                border: '1px solid rgba(186,117,23,0.2)',
+                                color: '#8a704d'
+                            }}>
+                                {dish}
+                            </span>
+                        ))}
+                    </div>
+ 
+                    {/* Action hints */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {/* Restock shortcut */}
+                        <button
+                            onClick={() => {
+                                // Jump to inventory tab and pre-fill the item name
+                                setActiveTab('inventory');
+                                setNewInventoryItem(p => ({ ...p, itemName: alert.ingredientName }));
+                                // Pre-select the existing item for restock
+                                const existing = inventory.find(i =>
+                                    i.itemName.toLowerCase() === alert.ingredientName.toLowerCase()
+                                );
+                                if (existing) setSelectedExistingItem(existing);
+                                setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a));
+                            }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                padding: '5px 12px', borderRadius: '6px',
+                                background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)',
+                                color: '#d3bfa2', cursor: 'pointer',
+                                fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.5px'
+                            }}
+                        >
+                            <Package size={10}/> RESTOCK NOW
+                        </button>
+ 
+                        {/* Re-enable dishes if not auto-hidden */}
+                        {!alert.autoHidden && (
+                            <span style={{ fontSize: '0.6rem', color: '#444', fontStyle: 'italic' }}>
+                                Dishes still showing — turn on auto-hide in Settings to hide them automatically
+                            </span>
+                        )}
+ 
+                        {/* Time */}
+                        <span style={{ fontSize: '0.58rem', color: '#333', marginLeft: 'auto' }}>
+                            {new Date(alert.alertAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    </div>
+                </div>
+ 
+                {/* Dismiss */}
+                <button
+                    onClick={() => setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a))}
+                    style={{
+                        background: 'transparent', border: 'none', color: '#444',
+                        cursor: 'pointer', padding: '2px', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                    title="Dismiss alert"
+                >
+                    <X size={14}/>
+                </button>
+            </motion.div>
+        ))}
+    </div>
+)}
 
         {/* ════════════════════════════════════════════════
             SCROLL AREA — all tab content lives here, 
