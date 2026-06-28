@@ -746,7 +746,13 @@ socket.on("menu_updated", (updatedItem) => {
       return [...prev, updatedItem];
     }
   });
-});      socket.on("table_occupied_live", (data) => {
+});    
+socket.on('menu_item_restored', ({ itemId, item }) => {
+  setMenuItems(prev =>
+    prev.map(i => i._id === itemId ? { ...i, ...item } : i)
+  );
+});
+  socket.on("table_occupied_live", (data) => {
         setOrders(prevOrders => {
           const exists = prevOrders.some(o => o.tableNumber === data.tableNumber && o.status === 'pending');
           if (!exists) {
