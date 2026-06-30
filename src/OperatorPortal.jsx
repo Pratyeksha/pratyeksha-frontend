@@ -752,21 +752,34 @@ socket.on('menu_item_restored', ({ itemId, item }) => {
     prev.map(i => i._id === itemId ? { ...i, ...item } : i)
   );
 });
-  socket.on("table_occupied_live", (data) => {
-        setOrders(prevOrders => {
-          const exists = prevOrders.some(o => o.tableNumber === data.tableNumber && o.status === 'pending');
-          if (!exists) {
-            return [{ _id: `live-stub-${Date.now()}`, tenantId, tableNumber: data.tableNumber, status: 'pending', items: [], createdAt: new Date() }, ...prevOrders];
-          }
-          return prevOrders;
-        });
+socket.on("table_occupied_live", (data) => {
+    setOrders(prevOrders => {
+        const exists = prevOrders.some(
+            o => o.tableNumber === data.tableNumber && o.status === 'pending'
+        );
+        if (!exists) {
+            return [{
+                _id: `live-stub-${Date.now()}`,
+                tenantId,
+                tableNumber: data.tableNumber,
+                status: 'pending',
+                items: [],
+                createdAt: new Date()
+            }, ...prevOrders];
+        }
+        return prevOrders;
+    });
+    new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
+});
 
-          socket.on('low_rating_alert', (data) => {
-    new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
-    showNotif(`⚠ Low rating (${data.rating}★) from Table ${data.tableNumber} — check Feedback tab`, 'error');
-  });
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
-      });
+// ← FIXED: moved OUT of table_occupied_live, now a separate top-level listener:
+socket.on('low_rating_alert', (data) => {
+    new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+    showNotif(
+        `⚠ Low rating (${data.rating}★) from Table ${data.tableNumber} — check Feedback tab`,
+        'error'
+    );
+});
 
       socket.on("menu_item_deleted", ({ itemId }) => {
   setMenuItems(prev => prev.filter(m => m._id !== itemId));
@@ -1329,16 +1342,30 @@ const settleBill = () => {
 
 
 useEffect(() => {
-  if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
-  if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
-  if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
-  if (activeTab === 'feedback')  fetchFeedback();
-  if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); } 
-   if (activeTab === 'extras') fetchExtraItems();
-  if (activeTab === 'insights') {
-    fetchAnalytics();
-  }
-}, [activeTab, fetchManagementData, fetchExtraItems, fetchCounterQueue, fetchAnalytics]);
+    if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
+    if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+    if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
+    if (activeTab === 'feedback') fetchFeedback();
+    if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); }
+    if (activeTab === 'extras') fetchExtraItems();
+    if (activeTab === 'insights') fetchAnalytics();
+    if (activeTab === 'recipes') fetchRecipes();
+}, [
+    activeTab,
+    fetchManagementData,
+    fetchExtraItems,
+    fetchCounterQueue,
+    fetchAnalytics,
+    // ← FIXED: added missing deps
+    fetchCustomerDir,
+    fetchFeedback,
+    fetchOffers,
+    fetchCampaigns,
+    fetchAnnouncements,
+    fetchRecipes,
+    customerSegFilter,
+    customerSearch,
+]);
  
  // ── EXTRA ITEMS: realtime stock sync, low-stock sound alert, auto-hide on zero ──
 useEffect(() => {
@@ -11374,16 +11401,22 @@ setNewStaff({
                     <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>SELECT MENU ITEM</label>
                     <select style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',cursor:'pointer'}}
                       value={activeRecipeItemId}
-onChange={e=>{
-  setActiveRecipeItemId(e.target.value);
-  if(e.target.value){
-    const ex = recipes.find(r => r.menuItemId?.toString() === e.target.value);
-    setRecipeIngredientRows(
-      ex?.ingredients?.length
-        ? ex.ingredients.map(i => ({ inventoryId: i.inventoryId?._id || i.inventoryId, quantityUsed: i.quantityUsed }))
-        : [{ inventoryId: '', quantityUsed: '' }]
-    );
-  }
+onChange={e => {
+    setActiveRecipeItemId(e.target.value);
+    if (e.target.value) {
+        const ex = recipes.find(r => r.menuItemId?.toString() === e.target.value);
+        setRecipeIngredientRows(
+            ex?.ingredients?.length
+                ? ex.ingredients.map(i => ({
+                    // ← FIXED: same populated-object guard
+                    inventoryId: i.inventoryId?._id
+                        ? i.inventoryId._id.toString()
+                        : (i.inventoryId?.toString() || ''),
+                    quantityUsed: i.quantityUsed
+                  }))
+                : [{ inventoryId: '', quantityUsed: '' }]
+        );
+    }
 }}>
                       <option value="">-- Select a dish --</option>
                       {menuItems.map(m=><option key={m._id} value={m._id}>{m.name}</option>)}
@@ -11442,20 +11475,31 @@ onChange={e=>{
   if(!valid.length) return showNotif("Add at least one ingredient","error");
 // Find the SAVE RECIPE button onClick in document 5, replace the try block:
 try {
-  await axios.post(`${BASE_URL}/recipes/save`, {
-    tenantId,
-    menuItemId: activeRecipeItemId,
-    ingredients: valid.map(r => ({ inventoryId: r.inventoryId, quantityUsed: Number(r.quantityUsed) }))
-  });
-  
-  // ← ADD THIS: refresh recipes state so card badges update immediately
-  const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-  setRecipes(recipesRes.data || []);
-  
-  showNotif("Recipe saved ✓");
-  fetchAnalytics();
-  fetchManagementData();
-} catch { showNotif("Failed to save recipe", "error"); }
+    await axios.post(`${BASE_URL}/recipes/save`, {
+        tenantId,
+        menuItemId: activeRecipeItemId,
+        ingredients: valid.map(r => ({
+            inventoryId: r.inventoryId,
+            quantityUsed: Number(r.quantityUsed)
+        }))
+    });
+
+    // ← FIXED: always refetch from server so populated data is fresh
+    const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+    setRecipes(recipesRes.data || []);
+
+    showNotif('Recipe saved ✓');
+
+    // Reset form so it's clear the save worked
+    setActiveRecipeItemId('');
+    setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
+
+    fetchAnalytics();      // refresh profitability
+    fetchManagementData(); // refresh inventory
+} catch {
+    showNotif('Failed to save recipe', 'error');
+}
+
 }}style={{...styles.mainBtn,flex:2,background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>SAVE RECIPE</button>
                     </div>
                   </div>
@@ -11536,15 +11580,21 @@ try {
         }`,
           padding:'16px',borderRadius:'12px',cursor:'pointer',
           transition:'border-color 0.2s',position:'relative'}}
-onClick={()=>{
-  setActiveRecipeItemId(dish._id);
-  const ex = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
-  setRecipeIngredientRows(
-    ex?.ingredients?.length
-      ? ex.ingredients.map(i => ({ inventoryId: i.inventoryId?._id || i.inventoryId, quantityUsed: i.quantityUsed }))
-      : [{ inventoryId: '', quantityUsed: '' }]
-  );
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+onClick={() => {
+    setActiveRecipeItemId(dish._id);
+    const ex = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
+    setRecipeIngredientRows(
+        ex?.ingredients?.length
+            ? ex.ingredients.map(i => ({
+                // ← FIXED: handle both populated object and raw ObjectId
+                inventoryId: i.inventoryId?._id
+                    ? i.inventoryId._id.toString()
+                    : (i.inventoryId?.toString() || ''),
+                quantityUsed: i.quantityUsed
+              }))
+            : [{ inventoryId: '', quantityUsed: '' }]
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }}>
         
         {/* Status badge top-right */}
