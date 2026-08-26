@@ -64,12 +64,8 @@ const [sessionToken] = useState(() => {
 
 
   const [activeModel, setActiveModel] = useState(null);
-const [cart, setCart] = useState(() => {
-  try {
-    const saved = localStorage.getItem(`pratyeksha_cart_${urlTenantId}`);
-    return saved ? JSON.parse(saved) : {};
-  } catch { return {}; }
-});  const [suggestions, setSuggestions] = useState({}); 
+const [cart, setCart] = useState({});
+ const [suggestions, setSuggestions] = useState({}); 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
@@ -700,15 +696,16 @@ const fetchMenuContent = async () => {
     // Join the unique restaurant multi-tenant data stream room footprint
     socket.emit("join_restaurant", tenantId);
 
-    // Watch for immediate operator modifications (Visibility / Pricing shifts)
-    socket.on("menu_updated", (updatedItem) => {
-      if (updatedItem && updatedItem.tenantId === tenantId) {
-        setAllMenuItems((prevItems) =>
-          prevItems.map((item) =>
-            item._id === updatedItem._id ? { ...item, ...updatedItem } : item
-          )
-        );
-      }
+socket.on("menu_updated", (updatedItem) => {
+  if (updatedItem && updatedItem.tenantId === tenantId) {
+    setAllMenuItems((prevItems) =>
+      prevItems.map((item) =>
+        item._id === updatedItem._id ? { ...item, ...updatedItem } : item
+      )
+    );
+  }
+});                                          // ← close menu_updated HERE
+
 // ── Live extra item stock/availability updates ──
 socket.on('extra_item_updated', (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -726,16 +723,12 @@ socket.on('extra_item_out_of_stock', ({ itemId }) => {
         : item
     )
   );
-  // Remove from cart if customer had it selected
   setExtraItemCart(prev => {
     const next = { ...prev };
     delete next[itemId];
     return next;
   });
 });
-
-  
-    });
 
     // ── Live order status updates for customer ──
 socket.on("order_status_updated", (data) => {
@@ -804,22 +797,38 @@ const sendExtraItemsRequest = async () => {
     };
   });
 
-  try {
-    await axios.post(`${BASE_URL}/waiter-requests`, {
-      tenantId,
-      tableNumber,
-      serviceRequest: `EXTRA ITEMS: ${requestText}`
-    });
+try {
+  // 1. Notify waiter (existing — keep)
+  await axios.post(`${BASE_URL}/waiter-requests`, {
+    tenantId,
+    tableNumber,
+    serviceRequest: `EXTRA ITEMS: ${requestText}`
+  });
 
-    // ── ADD TO placedOrders so it appears in bill ──
-    setPlacedOrders(prev => [...prev, ...extraLineItems]);
+  // 2. Persist to Orders so operator bill includes them
+  await axios.post(`${BASE_URL}/orders`, {
+    tenantId,
+    tableNumber,
+    items: extraLineItems,
+    status: 'served',        // bypass kitchen
+    paymentStatus: 'unpaid',
+    billDetails: {
+      itemsTotal: extraLineItems.reduce((s, i) => s + i.subtotal, 0),
+      taxAmount: 0,
+      grandTotal: extraLineItems.reduce((s, i) => s + i.subtotal, 0)
+    },
+    createdAt: new Date().toISOString()
+  });
 
-    triggerAlert('waiterSuccess');
-    setExtraItemCart({});
-    setIsExtraItemsOpen(false);
-  } catch {
-    triggerAlert('orderError', 'error');
-  }
+  // 3. Local state update (existing — keep)
+  setPlacedOrders(prev => [...prev, ...extraLineItems]);
+
+  triggerAlert('waiterSuccess');
+  setExtraItemCart({});
+  setIsExtraItemsOpen(false);
+} catch {
+  triggerAlert('orderError', 'error');
+}
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -1662,6 +1671,22 @@ const sendBatchToKitchen = async () => {
       summary[summaryKey].subtotal  = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
     });
  
+    // ── Validate items are still available before sending ──
+const unavailableItems = Object.entries(summary)
+  .filter(([, item]) => {
+    const menuItem = allMenuItems.find(m => m._id === item.menuItemId);
+    return menuItem && menuItem.isAvailable === false;
+  })
+  .map(([, item]) => item.name);
+
+if (unavailableItems.length > 0) {
+  triggerAlert(
+    `${unavailableItems.join(', ')} ${unavailableItems.length > 1 ? 'are' : 'is'} no longer available. Please remove from cart.`,
+    'error'
+  );
+  setIsPlacingOrder(false);
+  return;
+}
     const orderItems = Object.values(summary);
     const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
  
@@ -2274,14 +2299,14 @@ const requestFinalBill = async () => {
 
     // ── CLEAR everything after checkout ──
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     setBillRequested(true);
     // placedOrders intentionally NOT cleared here — still needed for the bill summary display
     // They clear when modal closes (see isBillOpen X handler below)
 
   } catch (error) {
     localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     setBillRequested(true);
   }
 };
@@ -2330,12 +2355,14 @@ useEffect(() => {
 
 // ── Persist cart to localStorage so it survives browser close ──
 useEffect(() => {
+  if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
+  const cartKey = `pratyeksha_cart_${tenantId}_${tableNumber}`;
   if (Object.keys(cart).length > 0) {
-    localStorage.setItem(`pratyeksha_cart_${tenantId}`, JSON.stringify(cart));
+    localStorage.setItem(cartKey, JSON.stringify(cart));
   } else {
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+    localStorage.removeItem(cartKey);
   }
-}, [cart, tenantId]);
+}, [cart, tenantId, tableNumber, isCounterScan]);
 
 // ── Persist placedOrders to localStorage on every change ──
 useEffect(() => {
@@ -2352,17 +2379,18 @@ useEffect(() => {
 useEffect(() => {
   // tableNumber is set from URL params — wait until it's a real table (not empty string)
   if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
-  const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setPlacedOrders(parsed);
-        setHasPlacedInitialOrder(true);
-      }
+// ADD at the top of the useEffect that reads the placed orders key (~line 2349):
+const cartKey = `pratyeksha_cart_${tenantId}_${tableNumber}`;
+try {
+  const savedCart = localStorage.getItem(cartKey);
+  if (savedCart) {
+    const parsedCart = JSON.parse(savedCart);
+    if (parsedCart && Object.keys(parsedCart).length > 0) {
+      setCart(parsedCart);
     }
-  } catch { /* ignore */ }
+  }
+} catch { /* ignore */ }
+
 }, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
 
 
@@ -5852,7 +5880,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
   setSuggestions({});
   setCustomerInfo({ name: '', phone: '' });
   localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-  localStorage.removeItem(`pratyeksha_cart_${tenantId}`);
+  localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
 }} />            </div>
             
             <div style={styles.modalScrollBody}>
