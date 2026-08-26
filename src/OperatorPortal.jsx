@@ -737,16 +737,13 @@ useEffect(() => {
 socket.on("menu_updated", (updatedItem) => {
   if (!updatedItem) return;
   setMenuItems(prev => {
-    const exists = prev.find(i => i._id === updatedItem._id);
+    const exists = prev.some(i => i._id === updatedItem._id);
     if (exists) {
-        setMenuItems(prev => prev.map(item => item._id === updatedItem._id ? updatedItem : item));
- return prev.map(item => item._id === updatedItem._id ? updatedItem : item);
-    } else {
-      // New dish added — append to list
-      return [...prev, updatedItem];
+      return prev.map(item => item._id === updatedItem._id ? updatedItem : item);
     }
+    return [...prev, updatedItem];
   });
-});    
+}); 
 socket.on('menu_item_restored', ({ itemId, item }) => {
   setMenuItems(prev =>
     prev.map(i => i._id === itemId ? { ...i, ...item } : i)
@@ -843,13 +840,16 @@ socket.on('pickup_ready', (data) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
-      socket.on("order_status_updated", (data) => {
-        if (data && data.status === 'settled') {
-          setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
-        }
-        fetchInitialData();
-        fetchAnalytics();
-      });
+socket.on("order_status_updated", (data) => {
+  if (data && data.status === 'settled') {
+    setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
+    fetchInitialData();      // refresh orders + table grid
+    fetchAnalytics();        // refresh analytics only on settlement
+  } else {
+    // For pending→ready, ready→served: lightweight order list refresh only
+    fetchInitialData();
+  }
+});
 // ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
       socket.on('aggregator_order_incoming', (data) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
@@ -1328,8 +1328,13 @@ const generateOnlineBill = async () => {
 
 const settleBill = () => {
     if (isSettling) return; // Guard here too
-    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-    if (activePaymentType === 'split') {
+const discountFactor = 1 - (discount / 100);
+const discountedSub  = Math.round(tableBill.subtotal * discountFactor * 100) / 100;
+const cgstPct        = parseFloat(tableBill.cgstPct) / 100;
+const sgstPct        = parseFloat(tableBill.sgstPct) / 100;
+const finalAmt       = Math.round(discountedSub + discountedSub * cgstPct + discountedSub * sgstPct);
+
+if (activePaymentType === 'split') {
         const total = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
         if (Math.abs(total - finalAmt) > 1) { showNotif(`Mismatch: ₹${total} vs ₹${finalAmt}`, "error"); return; }
     }
@@ -1340,6 +1345,12 @@ const settleBill = () => {
     });
 };
 
+const fetchRecipes = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+    setRecipes(res.data || []);
+  } catch { setRecipes([]); }
+}, [tenantId]);
 
 useEffect(() => {
     if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
@@ -1499,12 +1510,7 @@ const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
   </div>
 );
 // ── ADD with your other fetch functions ──
-const fetchRecipes = useCallback(async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-    setRecipes(res.data || []);
-  } catch { setRecipes([]); }
-}, [tenantId]);
+
 
 // ── ADD in your useEffect that responds to tab changes ──
 useEffect(() => {
@@ -1518,8 +1524,15 @@ const handleFinalSettle = async () => {
     if (isSettling) return;
     setIsSettling(true);
     
-    const finalAmt = Math.round(tableBill.total - (tableBill.total * (discount / 100)));
-    const paymentMethodDetails = activePaymentType === 'split'
+const discountFactor  = 1 - (discount / 100);
+const discountedSub   = Math.round(tableBill.subtotal * discountFactor * 100) / 100;
+const cgstPct         = parseFloat(tableBill.cgstPct) / 100;  // e.g. 2.5% → 0.025
+const sgstPct         = parseFloat(tableBill.sgstPct) / 100;
+const discountedCgst  = Math.round(discountedSub * cgstPct * 100) / 100;
+const discountedSgst  = Math.round(discountedSub * sgstPct * 100) / 100;
+const finalAmt        = Math.round(discountedSub + discountedCgst + discountedSgst);
+
+const paymentMethodDetails = activePaymentType === 'split'
         ? { type: 'split', breakdown: { cash: Number(paymentModes.cash || 0), upi: Number(paymentModes.upi || 0), card: Number(paymentModes.card || 0) } }
         : { type: 'full', method: selectedSingleMode };
     
@@ -1529,23 +1542,16 @@ const handleFinalSettle = async () => {
     try {
 const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
     discount,
-    finalAmount:  finalAmt,
+    finalAmount:    finalAmt,
     paymentMethods: paymentMethodDetails,
-    customerPhone: "",
-    subtotal:     tableBill.subtotal,   // ← dishes only, before tax
-    cgst:         tableBill.cgst,       // ← CGST amount
-    sgst:         tableBill.sgst,       // ← SGST amount
+    customerPhone:  "",
+    subtotal:       discountedSub,      // ← discounted subtotal
+    cgst:           discountedCgst,     // ← CGST on discounted amount
+    sgst:           discountedSgst,     // ← SGST on discounted amount
 });
         
         // ── Deduct extra items from stock on settlement ──
-if (extraItemsInBill.length > 0) {
-  await Promise.allSettled(
-    extraItemsInBill.map(ei => 
-      deductExtraItemStock(ei._id, ei.quantity)
-    )
-  );
-  setExtraItemsInBill([]);
-}
+
 
         if (res.data?.duplicate) {
             showNotif(`Already settled — Invoice #${res.data.billNo}`, "info");
@@ -1686,6 +1692,10 @@ const SEG_ICONS_COMPONENT = {
   'at-risk': <AlertCircle size={12}/>,
   champion:  <Crown      size={12}/>,
 };
+
+const _cgstPct = (tenantConfig?.config?.cgstPercentage ?? 2.5) / 100;   // e.g. 0.025
+const _sgstPct = (tenantConfig?.config?.sgstPercentage ?? 2.5) / 100;
+const _totalGstPct = _cgstPct + _sgstPct;                                 // e.g. 0.05
 
 const exportToExcel = useCallback((type = 'daily') => {
   import('xlsx').then(XLSX => {
@@ -2637,9 +2647,9 @@ const exportToExcel = useCallback((type = 'daily') => {
 
       // KPIs
       const gstTotalRev   = filteredData.reduce((a, b) => a + (b.revenue || 0), 0);
-      const gstTaxable    = gstTotalRev / 1.05;
-      const gstCGST       = gstTaxable * 0.025;
-      const gstSGST       = gstTaxable * 0.025;
+const gstTaxable    = gstTotalRev / (1 + _totalGstPct);
+const gstCGST       = gstTaxable * _cgstPct;
+const gstSGST       = gstTaxable * _sgstPct;
       const gstTotalTax   = gstCGST + gstSGST;
 
       const kpiLabels = ['TAXABLE VALUE', 'CGST @ 2.5%', 'SGST @ 2.5%', 'TOTAL GST'];
@@ -2672,9 +2682,9 @@ const exportToExcel = useCallback((type = 'daily') => {
       headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 9, c: ci }), hdrStyle()));
 
       filteredData.forEach((d, ri) => {
-        const taxable  = (d.revenue || 0) / 1.05;
-        const cgst     = taxable * 0.025;
-        const sgst     = taxable * 0.025;
+const taxable  = (d.revenue || 0) / (1 + _totalGstPct);
+const cgst     = taxable * _cgstPct;
+const sgst     = taxable * _sgstPct;
         const altBg    = ri % 2 === 0 ? '0D0D0D' : '111111';
         const row = [
           d._id,
@@ -2863,9 +2873,10 @@ const exportToExcel = useCallback((type = 'daily') => {
 const invTotal    = ordersData.filter(o => o.billDetails?.isSettlementAnchor === true).length;
 const invRevTotal = ordersData
   .filter(o => o.billDetails?.isSettlementAnchor === true)
-  .reduce((a, b) => a + (b.billDetails?.grandTotal || 0), 0);    const invTaxable  = invRevTotal / 1.05;
-    const invCGST     = invTaxable * 0.025;
-    const invSGST     = invTaxable * 0.025;
+  .reduce((a, b) => a + (b.billDetails?.grandTotal || 0), 0);    
+const invTaxable  = invRevTotal / (1 + _totalGstPct);
+const invCGST     = invTaxable * _cgstPct;
+const invSGST     = invTaxable * _sgstPct;
 
     const kpiLabels = ['TOTAL INVOICES', 'GROSS REVENUE', 'TOTAL CGST', 'TOTAL SGST'];
     const kpiValues = [
@@ -2918,9 +2929,9 @@ const periodOrders = ordersData.filter(order => {
       const dateStr    = createdAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
       const timeStr    = createdAt.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
       const gross      = order.billDetails?.grandTotal || order.billDetails?.itemsTotal || 0;
-      const taxable    = gross / 1.05;
-      const cgst       = taxable * 0.025;
-      const sgst       = taxable * 0.025;
+const taxable    = gross / (1 + _totalGstPct);
+const cgst       = taxable * _cgstPct;
+const sgst       = taxable * _sgstPct;
       const itemSummary = (order.items || [])
         .slice(0, 3)
         .map(i => `${i.name}×${i.quantity}`)

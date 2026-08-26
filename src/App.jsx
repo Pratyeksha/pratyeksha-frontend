@@ -82,7 +82,7 @@ const [cart, setCart] = useState(() => {
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
   const [orderTrackingPanelOpen, setOrderTrackingPanelOpen] = useState(false);
   const [orderPlacedScreen, setOrderPlacedScreen] = useState(false);
-
+const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 // { orderId: 'pending' | 'ready' | 'served' }
 
   const [alert, setAlert] = useState({ show: false, msg: '', type: 'success' });
@@ -739,22 +739,37 @@ socket.on('extra_item_out_of_stock', ({ itemId }) => {
 
     // ── Live order status updates for customer ──
 socket.on("order_status_updated", (data) => {
-  if (data.tableNumber?.toString() === tableNumber?.toString()) {
-    setLiveOrderStatuses(prev => ({ ...prev, [data.orderId]: data.status }));
+  if (data.tableNumber?.toString() !== tableNumber?.toString()) return;
+
+  // Server emits the full Order document (._id) OR the settlement stub ({ tableNumber, status })
+  const orderId = data._id || data.orderId;
+
+  if (orderId) {
+    // Normal status update from KDS (pending → ready → served)
+    setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
     if (data.status === 'ready') {
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
       triggerAlert('🍽️ Your order is ready! Please collect.', 'success');
     }
+  } else if (data.status === 'settled') {
+    // Settlement stub has no id — mark ALL tracked orders as served (bill settled)
+    setLiveOrderStatuses(prev => {
+      const updated = {};
+      Object.keys(prev).forEach(k => { updated[k] = 'served'; });
+      return updated;
+    });
   }
 });
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
-    return () => {
-      socket.off("menu_updated");
-      socket.off("extra_item_updated");   // ← ADD
-      socket.off("extra_item_out_of_stock"); // ← ADD
-      socket.disconnect();
-    };
+return () => {
+  socket.off("menu_updated");
+  socket.off("extra_item_updated");
+  socket.off("extra_item_out_of_stock");
+  socket.off("order_status_updated");   // ← ADD THIS LINE
+  socket.disconnect();
+};
+
   }, [tenantId, language]);
 
   const handleSwipe = (direction) => {
@@ -1617,6 +1632,8 @@ useEffect(() => {
 
 
 const sendBatchToKitchen = async () => {
+  if (isPlacingOrder) return;           // ← ADD: block re-entry
+  setIsPlacingOrder(true);      
   try {
     const summary = {};
     Object.entries(cart).forEach(([key, qty]) => {
@@ -1695,6 +1712,9 @@ const sendBatchToKitchen = async () => {
   } catch (error) {
     console.error(error);
     triggerAlert("orderError", "error");
+  }
+  finally{
+     setIsPlacingOrder(false);    
   }
 };
  
@@ -6407,14 +6427,20 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
       <div style={styles.drawerFooter}>
         {totalItemsInCart > 0 && (
-          <button
-            style={{ ...styles.kitchenBtn, background: primaryColor }}
-            onClick={
-              isCounterScan
-                ? counterMode === 'reservation' ? placeReservation : placeWaitlistOrder
-                : sendBatchToKitchen
-            }
-          >
+<button
+  style={{
+    ...styles.kitchenBtn,
+    background: isPlacingOrder ? '#555' : primaryColor,
+    opacity: isPlacingOrder ? 0.6 : 1,
+    pointerEvents: isPlacingOrder ? 'none' : 'auto'
+  }}
+  disabled={isPlacingOrder}
+  onClick={
+    isCounterScan
+      ? counterMode === 'reservation' ? placeReservation : placeWaitlistOrder
+      : sendBatchToKitchen
+  }
+>
             {isCounterScan
               ? counterMode === 'dine-in'
                 ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
