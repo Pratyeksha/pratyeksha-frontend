@@ -100,7 +100,7 @@ const [wastageLog,          setWastageLog]           = useState([]);   // today'
 const [wastageAnalytics,    setWastageAnalytics]     = useState(null); // monthly analytics
 const [wastageSaving,       setWastageSaving]        = useState(false);
 const [wastageLoading,      setWastageLoading]       = useState(false);
-
+const [kitchenHealth, setKitchenHealth] = useState(null);
 const [itemFinalTimes, setItemFinalTimes] = useState({}); // { idx: seconds }
 
   const audioPlayer   = useRef(null);
@@ -167,6 +167,7 @@ const speakOrder = (order) => {
       ]);
       const incoming = ordersRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(incoming);
+      fetchHealth();
       setCategories(categoriesRes.data || []);
       setMenuItems(menuRes.data || []);
       if (tenantRes.data?.config?.onlyVeg !== undefined) setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
@@ -175,6 +176,10 @@ const speakOrder = (order) => {
         if (item.isCrossedLocal) hydrationMap[`${o._id}-${idx}`] = true;
       }));
       setCheckedItemsGlobal(hydrationMap);
+          // Fetch kitchen health alongside orders
+    axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`)
+      .then(r => setKitchenHealth(r.data))
+      .catch(() => {});
     } catch (err) { console.error("KDS fetch error"); }
   };
 
@@ -951,6 +956,141 @@ const masterPrepMarqueeList = useMemo(() => {
         {/* Main workspace */}
         <main style={rs.workspace} className="no-scrollbar">
 
+{/* ── KITCHEN HEALTH PANEL ── */}
+{kitchenHealth?.stations?.length > 0 && !showMetricsDashboard && (
+  <div style={{
+    background: '#0d0d0d',
+    border: '1px solid rgba(211,191,162,0.1)',
+    borderRadius: '12px',
+    padding: '13px 15px',
+    marginBottom: '12px',
+    fontFamily: 'Poppins, sans-serif'
+  }}>
+
+    {/* Header */}
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: '10px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+        <Activity size={13} color="#d3bfa2" strokeWidth={1.8} />
+        <span style={{
+          color: '#d3bfa2', fontSize: '0.6rem',
+          fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase'
+        }}>
+          KITCHEN HEALTH
+        </span>
+      </div>
+      {kitchenHealth.bottleneck ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          background: 'rgba(248,113,113,0.08)',
+          border: '1px solid rgba(248,113,113,0.2)',
+          borderRadius: '5px', padding: '2px 8px'
+        }}>
+          <AlertTriangle size={9} color="#f87171" strokeWidth={2} />
+          <span style={{
+            color: '#f87171', fontSize: '0.58rem', fontWeight: '800'
+          }}>
+            BOTTLENECK
+          </span>
+        </div>
+      ) : (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          background: 'rgba(74,222,128,0.06)',
+          border: '1px solid rgba(74,222,128,0.15)',
+          borderRadius: '5px', padding: '2px 8px'
+        }}>
+          <CheckSquare size={9} color="#4ade80" strokeWidth={2} />
+          <span style={{
+            color: '#4ade80', fontSize: '0.58rem', fontWeight: '800'
+          }}>
+            NORMAL
+          </span>
+        </div>
+      )}
+    </div>
+
+    {/* Station bars */}
+    {kitchenHealth.stations.slice(0, 5).map(s => (
+      <div key={s.name} style={{ marginBottom: '8px' }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', marginBottom: '3px'
+        }}>
+          <span style={{
+            color: s.isBottleneck
+              ? '#f87171'
+              : 'rgba(255,255,255,0.55)',
+            fontSize: '0.67rem',
+            fontWeight: s.isBottleneck ? '700' : '500'
+          }}>
+            {s.name}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              color: s.isBottleneck
+                ? '#f87171'
+                : 'rgba(255,255,255,0.25)',
+              fontSize: '0.6rem',
+              fontFamily: 'monospace'
+            }}>
+              {s.avgToday}m avg
+            </span>
+            {s.isBottleneck && (
+              <AlertTriangle size={9} color="#f87171" strokeWidth={2} />
+            )}
+          </div>
+        </div>
+        {/* Bar track */}
+        <div style={{
+          height: '3px', borderRadius: '2px',
+          background: 'rgba(255,255,255,0.05)', overflow: 'hidden'
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.min(s.loadPct, 100)}%`,
+            borderRadius: '2px',
+            background:
+              s.loadPct >= 85 ? '#f87171' :
+              s.loadPct >= 70 ? '#f0a500' :
+              '#4ade80',
+            transition: 'width 0.6s ease'
+          }} />
+        </div>
+        {/* Load label */}
+        <div style={{
+          fontSize: '0.52rem',
+          color: 'rgba(255,255,255,0.15)',
+          marginTop: '2px', textAlign: 'right'
+        }}>
+          {s.loadPct}% load · {s.orderCount} tickets
+        </div>
+      </div>
+    ))}
+
+    {/* Recommendation */}
+    {kitchenHealth.recommendation && (
+      <div style={{
+        marginTop: '10px', padding: '8px 10px',
+        background: 'rgba(211,191,162,0.04)',
+        border: '1px solid rgba(211,191,162,0.08)',
+        borderRadius: '8px',
+        display: 'flex', alignItems: 'flex-start', gap: '7px'
+      }}>
+        <Zap size={11} color="rgba(211,191,162,0.5)"
+          strokeWidth={1.8} style={{ marginTop: '1px', flexShrink: 0 }} />
+        <span style={{
+          color: 'rgba(255,255,255,0.3)',
+          fontSize: '0.63rem', lineHeight: 1.55
+        }}>
+          {kitchenHealth.recommendation}
+        </span>
+      </div>
+    )}
+  </div>
+)}
           {/* ── METRICS PANEL ── */}
           {showMetricsDashboard ? (
             <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} style={rs.metricsPanel}>

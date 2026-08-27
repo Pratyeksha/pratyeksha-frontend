@@ -70,7 +70,7 @@ const [cart, setCart] = useState({});
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, tissue: 0 });
-
+const [orderEta, setOrderEta] = useState(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
   const [showReviewPage, setShowReviewPage] = useState(false);
@@ -264,12 +264,14 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
   // =========================================================================
 
 const filteredMenuItems = useMemo(() => {
+  const isSearching = searchQuery.length >= 2;
   return allMenuItems.filter(i => {
     const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
     const nameEn = i.name?.toLowerCase() || '';
     const nameMr = i.name_mr || '';
     const matchesSearch = nameEn.includes(searchQuery.toLowerCase()) || nameMr.includes(searchQuery);
-    const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
+    // When actively searching by name, skip veg filter — show what they asked for
+    const matchesVeg = isSearching ? true : (filterVegOnly ? i.isVeg === true : i.isVeg !== true);
     return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
   });
 }, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
@@ -752,6 +754,17 @@ socket.on("order_status_updated", (data) => {
       return updated;
     });
   }
+// ── Dynamic ETA polling ──
+useEffect(() => {
+  if (!hasPlacedInitialOrder || !tenantId || !tableNumber || isCounterScan) return;
+  const load = () => {
+    axios.get(`${BASE_URL}/orders/eta/${tenantId}/${tableNumber}`)
+      .then(r => setOrderEta(r.data)).catch(() => {});
+  };
+  load();
+  const iv = setInterval(load, 90000);
+  return () => clearInterval(iv);
+}, [hasPlacedInitialOrder, tenantId, tableNumber, isCounterScan]);
 });
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
@@ -764,6 +777,18 @@ return () => {
 };
 
   }, [tenantId, language]);
+
+  // ── QR Session Validation — prevents URL injection ──
+useEffect(() => {
+  if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
+  axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken })
+    .then(r => {
+      if (!r.data.valid) {
+        setRestaurantData(null); // triggers "not found" UI — blocks ordering
+      }
+    })
+    .catch(() => {}); // non-fatal — menu still loads on network error
+}, [tenantId, tableNumber, isCounterScan, sessionToken]);
 
   const handleSwipe = (direction) => {
     const categories = ['all', ...categoryList.map(c => c.categoryId)];
@@ -798,29 +823,14 @@ const sendExtraItemsRequest = async () => {
   });
 
 try {
-  // 1. Notify waiter (existing — keep)
+  // Server handles Order creation + stock deduction on the waiter-request "EXTRA ITEMS:" prefix
   await axios.post(`${BASE_URL}/waiter-requests`, {
     tenantId,
     tableNumber,
     serviceRequest: `EXTRA ITEMS: ${requestText}`
   });
 
-  // 2. Persist to Orders so operator bill includes them
-  await axios.post(`${BASE_URL}/orders`, {
-    tenantId,
-    tableNumber,
-    items: extraLineItems,
-    status: 'served',        // bypass kitchen
-    paymentStatus: 'unpaid',
-    billDetails: {
-      itemsTotal: extraLineItems.reduce((s, i) => s + i.subtotal, 0),
-      taxAmount: 0,
-      grandTotal: extraLineItems.reduce((s, i) => s + i.subtotal, 0)
-    },
-    createdAt: new Date().toISOString()
-  });
-
-  // 3. Local state update (existing — keep)
+  // Local state: add to placedOrders for customer's own bill summary view
   setPlacedOrders(prev => [...prev, ...extraLineItems]);
 
   triggerAlert('waiterSuccess');
@@ -5203,21 +5213,44 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                 </div>
 
                 {/* EST TIME note */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '9px',
-                  padding: '10px 13px',
-                  background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)',
-                  borderRadius: '11px'
-                }}>
-                  <Timer size={13} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
-                  <p style={{ margin: 0, fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6, fontWeight: '500' }}>
-                    {activeStatus === 'ready'
-                      ? (language === 'mr' ? 'तुमची ऑर्डर टेबलवर येत आहे.' : 'Your order is on its way to your table.')
-                      : activeStatus === 'served'
-                      ? (language === 'mr' ? 'आनंद घ्या!' : 'Enjoy your meal!')
-                      : (language === 'mr' ? 'सामान्यत: १५–२५ मिनिटे लागतात.' : 'Typically ready in 15–25 minutes.')}
-                  </p>
-                </div>
+{/* DYNAMIC ETA */}
+{orderEta && Object.values(liveOrderStatuses).some(s => s === 'pending') ? (
+  <div style={{
+    padding:'12px 14px',
+    background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)',
+    borderRadius:'11px', textAlign:'center'
+  }}>
+    <div style={{ color:'rgba(211,191,162,0.35)', fontSize:'0.5rem',
+      letterSpacing:'2px', fontWeight:'900', marginBottom:'5px' }}>ESTIMATED ARRIVAL</div>
+    <div style={{ color:'#d3bfa2', fontSize:'1.5rem', fontWeight:'900', letterSpacing:'-0.5px' }}>
+      {orderEta.etaTime}
+    </div>
+    <div style={{ color:'rgba(255,255,255,0.2)', fontSize:'0.62rem', marginTop:'3px' }}>
+      ~{orderEta.etaMinutes} min · {orderEta.queueLength} order{orderEta.queueLength!==1?'s':''} in kitchen
+    </div>
+    {orderEta.currentItems?.length > 0 && (
+      <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'0.6rem', marginTop:'7px' }}>
+        Chef is preparing: {orderEta.currentItems.join(', ')}
+      </div>
+    )}
+  </div>
+) : (
+  <div style={{
+    display:'flex', alignItems:'center', gap:'9px',
+    padding:'10px 13px',
+    background:'rgba(211,191,162,0.03)', border:'1px solid rgba(211,191,162,0.07)',
+    borderRadius:'11px'
+  }}>
+    <Timer size={13} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+    <p style={{ margin:0, fontSize:'0.65rem', color:'rgba(255,255,255,0.2)', lineHeight:1.6, fontWeight:'500' }}>
+      {activeStatus === 'ready'
+        ? (language==='mr' ? 'तुमची ऑर्डर टेबलवर येत आहे.' : 'Your order is on its way to your table.')
+        : activeStatus === 'served'
+        ? (language==='mr' ? 'आनंद घ्या!' : 'Enjoy your meal!')
+        : (language==='mr' ? 'सामान्यत: १५–२५ मिनिटे लागतात.' : 'Typically ready in 15–25 minutes.')}
+    </p>
+  </div>
+)}
               </div>
             </motion.div>
           </motion.div>
@@ -6807,6 +6840,45 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             </div>
           )}
 
+{/* ── YOU MIGHT LIKE — smart suggestions ── */}
+{Array.isArray(suggestions) && suggestions.length > 0 && (
+  <div style={{ marginBottom:'10px' }}>
+    <div style={{
+      fontSize:'0.44rem', color:'rgba(211,191,162,0.3)', fontWeight:'900',
+      letterSpacing:'2.5px', textTransform:'uppercase',
+      marginBottom:'8px', display:'flex', alignItems:'center', gap:'5px'
+    }}>
+      <Sparkles size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+      {language==='mr' ? 'तुम्हाला आवडेल' : 'YOU MIGHT LIKE'}
+    </div>
+    {suggestions.slice(0,3).map(s => (
+      <div key={s._id} style={{
+        display:'flex', justifyContent:'space-between', alignItems:'center',
+        padding:'8px 10px', marginBottom:'5px',
+        background:'rgba(211,191,162,0.03)',
+        border:'1px solid rgba(211,191,162,0.08)',
+        borderRadius:'11px'
+      }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{
+            fontSize:'0.72rem', fontWeight:'700', color:'rgba(255,255,255,0.7)',
+            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
+          }}>{s.name}</div>
+          <div style={{ fontSize:'0.52rem', color:'rgba(211,191,162,0.25)', marginTop:'1px' }}>
+            {s.matchReason || 'Based on your last visit'}
+          </div>
+        </div>
+        <button
+          onClick={() => setCart(prev => ({ ...prev, [s._id]: (prev[s._id]||0) + 1 }))}
+          style={{
+            background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.2)',
+            color:'#d3bfa2', borderRadius:'8px', padding:'5px 11px',
+            fontSize:'0.65rem', fontWeight:'700', cursor:'pointer', flexShrink:0, marginLeft:'8px'
+          }}>+ ADD</button>
+      </div>
+    ))}
+  </div>
+)}
           {/* ── CTA ── */}
           <button
             onClick={() => { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
@@ -6827,6 +6899,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </motion.div>
     </motion.div>
   )}
+
+
 </AnimatePresence>
 
 

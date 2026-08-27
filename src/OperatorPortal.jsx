@@ -354,9 +354,25 @@ const [newDish, setNewDish] = useState({
 });
 const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
-
+const [auditLogs, setAuditLogs] = useState([]);
 const [waitlistAnalytics, setWaitlistAnalytics] = useState(null);
 const [aggregatorAnalytics, setAggregatorAnalytics] = useState(null);
+
+const [aiBrain, setAiBrain] = useState(null);
+
+const fetchAiBrain = useCallback(async () => {
+  try {
+    const r = await axios.get(`${BASE_URL}/admin/analytics/ai-brain/${tenantId}`);
+    setAiBrain(r.data);
+  } catch { /* non-fatal */ }
+}, [tenantId]);
+
+const fetchAuditLogs = useCallback(async () => {
+  try {
+    const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=50`);
+    setAuditLogs(r.data);
+  } catch {}
+}, [tenantId]);
 
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
@@ -675,6 +691,8 @@ useEffect(() => {
   if (isAuthenticated) {
     fetchAnalytics();
     fetchExtraAnalytics();   // ← ADD THIS LINE
+        fetchAiBrain();
+fetchAuditLogs();
     const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
     if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
   }
@@ -843,10 +861,10 @@ socket.on('pickup_ready', (data) => {
 socket.on("order_status_updated", (data) => {
   if (data && data.status === 'settled') {
     setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
-    fetchInitialData();      // refresh orders + table grid
-    fetchAnalytics();        // refresh analytics only on settlement
-  } else {
-    // For pending→ready, ready→served: lightweight order list refresh only
+    fetchInitialData();
+    fetchAnalytics();
+  } else if (['pending', 'ready', 'served'].includes(data?.status)) {
+    // Only refresh orders list — skip analytics
     fetchInitialData();
   }
 });
@@ -993,6 +1011,24 @@ const currentMonthAnalytics = useMemo(() => {
   const yearStr = viewDate.getFullYear().toString();
   return analytics.filter(d => d._id && d._id.startsWith(`${yearStr}-${monthStr}`));
 }, [analytics, viewDate]);
+
+const purchaseRecommendations = useMemo(() => {
+  if (!procurementData?.length) return [];
+  return procurementData
+    .filter(item => item.daysRemaining !== null && item.daysRemaining <= 4)
+    .map(item => {
+      const targetDays = 14;
+      const recommended = Math.ceil((item.avgDailyUsage || 0) * targetDays);
+      const wac = item.weightedAvgCost || item.costPrice || 0;
+      return {
+        ...item,
+        recommendedQty: recommended,
+        estimatedCost:  Math.round(recommended * wac),
+        urgency: item.daysRemaining <= 1 ? 'critical' : item.daysRemaining <= 2 ? 'high' : 'medium'
+      };
+    })
+    .sort((a, b) => (a.daysRemaining||99) - (b.daysRemaining||99));
+}, [procurementData]);
 
   const stats = useMemo(() => {
     const revenue = currentMonthAnalytics.reduce((a,b) => a+(b.revenue||0), 0);
@@ -1218,15 +1254,20 @@ const generateBill = async (id) => {
         ex.quantity += Number(item.quantity || 1);
         ex.subtotal += Number(item.subtotal || 0);
       } else {
-        acc.push({
-          ...item,
-          quantity: Number(item.quantity || 1),
-          subtotal: Number(item.subtotal || 0),
-          pricePerUnit: item.pricePerUnit || (item.subtotal / (item.quantity || 1))
-        });
+acc.push({
+  ...item,
+  quantity: Number(item.quantity || 1),
+  subtotal: Number(item.subtotal || 0),
+});
       }
       return acc;
     }, []);
+
+    aggregated.forEach(item => {
+  item.pricePerUnit = item.quantity > 0
+    ? Math.round((item.subtotal / item.quantity) * 100) / 100
+    : 0;
+});
 
     // Use tenant-stored cgst/sgst percentages
     const cgstPct  = (freshTenant?.config?.cgstPercentage ?? 2.5) / 100;
@@ -1360,6 +1401,7 @@ useEffect(() => {
     if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); }
     if (activeTab === 'extras') fetchExtraItems();
     if (activeTab === 'insights') fetchAnalytics();
+    if (activeTab === 'audit') fetchAuditLogs();
     if (activeTab === 'recipes') fetchRecipes();
 }, [
     activeTab,
@@ -3554,6 +3596,7 @@ const renderMonthHeatmap = () => {
   {id:'billing',      label:'BILLING HUB',    icon:<ReceiptIndianRupee size={18}/>},
   {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
   {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
+  {id:'audit', label:'AUDIT', icon:<ShieldCheck size={18}/>},
   {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
   {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
   {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
@@ -3700,6 +3743,212 @@ const renderMonthHeatmap = () => {
       </div>
     )}
  
+ {/* ── AUDIT TRAIL TAB ── */}
+{activeTab === 'audit' && (
+  <motion.div
+    key="audit"
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    style={{
+      padding: '16px',
+      paddingBottom: '100px',
+      maxWidth: '900px',
+      margin: '0 auto',
+      width: '100%'
+    }}
+  >
+
+    {/* Header */}
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: '20px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '9px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <ShieldCheck size={15} color="#d3bfa2" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div style={{
+            fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2',
+            letterSpacing: '2.5px', textTransform: 'uppercase'
+          }}>
+            AUDIT TRAIL
+          </div>
+          <div style={{
+            fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px'
+          }}>
+            Complete action history for this restaurant
+          </div>
+        </div>
+      </div>
+      <div style={{
+        background: 'rgba(211,191,162,0.06)',
+        border: '1px solid rgba(211,191,162,0.12)',
+        borderRadius: '7px', padding: '4px 10px',
+        display: 'flex', alignItems: 'center', gap: '5px'
+      }}>
+        <ClipboardCheck size={10} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
+        <span style={{
+          color: 'rgba(211,191,162,0.6)', fontSize: '0.6rem', fontWeight: '700'
+        }}>
+          {auditLogs.length} entries
+        </span>
+      </div>
+    </div>
+
+    {/* Empty state */}
+    {auditLogs.length === 0 && (
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        paddingTop: '80px', gap: '12px'
+      }}>
+        <div style={{
+          width: '48px', height: '48px', borderRadius: '14px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <FileText size={20} color="rgba(255,255,255,0.1)" strokeWidth={1.5} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem',
+            fontWeight: '700', marginBottom: '4px'
+          }}>
+            No logs yet
+          </div>
+          <div style={{
+            color: 'rgba(255,255,255,0.1)', fontSize: '0.65rem'
+          }}>
+            Settlements, price changes and restocks will appear here
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Log entries */}
+    {auditLogs.map((log, idx) => {
+
+      const actionColors = {
+        BILL_SETTLED:         { color: '#4ade80', bg: 'rgba(74,222,128,0.06)',  border: 'rgba(74,222,128,0.15)',  icon: <CheckCircle2 size={12} color="#4ade80" strokeWidth={2} /> },
+        MENU_ITEM_UPDATED:    { color: '#d3bfa2', bg: 'rgba(211,191,162,0.04)', border: 'rgba(211,191,162,0.12)', icon: <FileText size={12} color="#d3bfa2" strokeWidth={1.8} /> },
+        INVENTORY_RESTOCKED:  { color: '#60a5fa', bg: 'rgba(96,165,250,0.05)',  border: 'rgba(96,165,250,0.15)',  icon: <PackageCheck size={12} color="#60a5fa" strokeWidth={1.8} /> },
+        DEFAULT:              { color: 'rgba(211,191,162,0.6)', bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.06)', icon: <ClipboardCheck size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} /> }
+      };
+      const ac = actionColors[log.action] || actionColors.DEFAULT;
+
+      return (
+        <div key={log._id || idx} style={{
+          padding: '12px 14px', marginBottom: '7px',
+          background: ac.bg,
+          border: `1px solid ${ac.border}`,
+          borderRadius: '10px'
+        }}>
+
+          {/* Top row: action label + timestamp */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'flex-start', marginBottom: '7px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+              {ac.icon}
+              <span style={{
+                color: ac.color, fontSize: '0.7rem', fontWeight: '800'
+              }}>
+                {log.action?.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <span style={{
+              color: 'rgba(255,255,255,0.18)', fontSize: '0.6rem',
+              fontFamily: 'monospace', flexShrink: 0, marginLeft: '8px'
+            }}>
+              {new Date(log.createdAt).toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit', month: 'short',
+                hour: '2-digit', minute: '2-digit'
+              })}
+            </span>
+          </div>
+
+          {/* Actor + entity */}
+          <div style={{
+            display: 'flex', gap: '12px', flexWrap: 'wrap',
+            marginBottom: (log.before || log.after) ? '8px' : 0
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <User size={9} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
+                By:&nbsp;
+                <strong style={{
+                  color: 'rgba(255,255,255,0.55)', fontWeight: '700'
+                }}>
+                  {log.actorName}
+                </strong>
+              </span>
+            </div>
+            {log.entity && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <AlertOctagon size={9} color="rgba(255,255,255,0.12)" strokeWidth={1.8} />
+                <span style={{
+                  color: 'rgba(255,255,255,0.18)', fontSize: '0.65rem'
+                }}>
+                  {log.entity}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Before / After diff */}
+          {(log.before || log.after) && (
+            <div style={{
+              display: 'flex', gap: '8px', flexWrap: 'wrap'
+            }}>
+              {log.before && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(248,113,113,0.05)',
+                  border: '1px solid rgba(248,113,113,0.12)',
+                  borderRadius: '5px', padding: '3px 8px'
+                }}>
+                  <ArrowDown size={9} color="#f87171" strokeWidth={2} />
+                  <span style={{
+                    color: '#f87171', fontSize: '0.6rem'
+                  }}>
+                    {JSON.stringify(log.before)
+                      .replace(/[{}"]/g, '').slice(0, 60)}
+                  </span>
+                </div>
+              )}
+              {log.after && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(74,222,128,0.04)',
+                  border: '1px solid rgba(74,222,128,0.12)',
+                  borderRadius: '5px', padding: '3px 8px'
+                }}>
+                  <CheckCircle2 size={9} color="#4ade80" strokeWidth={2} />
+                  <span style={{
+                    color: '#4ade80', fontSize: '0.6rem'
+                  }}>
+                    {JSON.stringify(log.after)
+                      .replace(/[{}"]/g, '').slice(0, 60)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </motion.div>
+)}
+
     {activeTab==='extras' && (
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'24px',borderBottom:'1px solid #151515'}}>
         <div style={{display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
@@ -3940,8 +4189,10 @@ const renderMonthHeatmap = () => {
         <section style={styles.scrollArea} className="custom-scroll">
 
 {activeTab === 'pending' && (
+  
   <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+      
  
 {/* ══════════════════════════════════════════════
     ROW 1: Kitchen Tickets + Service Calls
@@ -8146,6 +8397,196 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
 {activeTab==='insights' && (
   <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
 
+{/* ── 🧠 AI BRAIN PANEL ── */}
+{/* ── 🧠 AI BRAIN PANEL ── */}
+{aiBrain && (
+  <div style={{
+    background: 'linear-gradient(135deg, #0a0a0a 0%, #0d0b00 100%)',
+    border: '1px solid rgba(211,191,162,0.15)',
+    borderRadius: '16px',
+    padding: '20px',
+    marginBottom: '20px'
+  }}>
+
+    {/* Header */}
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', marginBottom: '16px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{
+          width: '28px', height: '28px', borderRadius: '8px',
+          background: 'rgba(211,191,162,0.08)',
+          border: '1px solid rgba(211,191,162,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div style={{
+            fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2',
+            letterSpacing: '2.5px', textTransform: 'uppercase'
+          }}>
+            PRATYEKSHA INTELLIGENCE
+          </div>
+          <div style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.35)', fontWeight: '500' }}>
+            {aiBrain.dayOfWeek} · AI-powered forecast
+          </div>
+        </div>
+      </div>
+      <div style={{
+        fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)',
+        fontWeight: '600', letterSpacing: '0.5px'
+      }}>
+        {new Date().toLocaleTimeString('en-IN', {
+          hour: '2-digit', minute: '2-digit',
+          hour12: true, timeZone: 'Asia/Kolkata'
+        })}
+      </div>
+    </div>
+
+    {/* KPI row */}
+    <div style={{
+      display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+      gap: '10px', marginBottom: '16px'
+    }}>
+      {[
+        {
+          icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />,
+          label: 'Expected Orders',
+          value: aiBrain.predictedOrders ?? '—'
+        },
+        {
+          icon: <ReceiptIndianRupee size={14} color="#d3bfa2" strokeWidth={1.5} />,
+          label: 'Est. Revenue',
+          value: `₹${(aiBrain.predictedRevenue || 0).toLocaleString()}`
+        },
+        {
+          icon: <Clock size={14} color="#d3bfa2" strokeWidth={1.5} />,
+          label: 'Peak Window',
+          value: aiBrain.peakWindow ?? '—'
+        },
+      ].map(({ icon, label, value }) => (
+        <div key={label} style={{
+          background: 'rgba(211,191,162,0.04)',
+          border: '1px solid rgba(211,191,162,0.09)',
+          borderRadius: '10px', padding: '12px 10px', textAlign: 'center'
+        }}>
+          <div style={{
+            display: 'flex', justifyContent: 'center',
+            marginBottom: '6px'
+          }}>
+            {icon}
+          </div>
+          <div style={{
+            color: '#d3bfa2', fontWeight: '900',
+            fontSize: '0.88rem', letterSpacing: '-0.3px'
+          }}>
+            {value}
+          </div>
+          <div style={{
+            color: 'rgba(255,255,255,0.22)', fontSize: '0.52rem',
+            marginTop: '3px', letterSpacing: '0.5px', fontWeight: '600'
+          }}>
+            {label}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Risk alerts */}
+    {aiBrain.risks?.length > 0 && (
+      <div style={{ marginBottom: '14px' }}>
+        <div style={{
+          fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)',
+          fontWeight: '900', letterSpacing: '2px',
+          textTransform: 'uppercase', marginBottom: '7px',
+          display: 'flex', alignItems: 'center', gap: '5px'
+        }}>
+          <AlertTriangle size={9} color="rgba(248,113,113,0.6)" strokeWidth={2} />
+          STOCK RISKS
+        </div>
+        {aiBrain.risks.slice(0, 3).map(r => (
+          <div key={r.itemName} style={{
+            background: 'rgba(248,113,113,0.05)',
+            border: '1px solid rgba(248,113,113,0.15)',
+            borderRadius: '8px', padding: '9px 12px', marginBottom: '5px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+              <AlertTriangle size={11} color="#f87171" strokeWidth={2} />
+              <span style={{
+                color: '#f87171', fontSize: '0.7rem', fontWeight: '700'
+              }}>
+                {r.itemName} may run short
+              </span>
+            </div>
+            <span style={{
+              color: 'rgba(255,255,255,0.25)', fontSize: '0.62rem',
+              fontFamily: 'monospace'
+            }}>
+              {r.required}{r.unit} needed · {r.currentStock}{r.unit} left
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* Ingredient prep estimates */}
+    {aiBrain.ingredientRequirements?.length > 0 && (
+      <div style={{
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        paddingTop: '12px'
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '5px',
+          color: 'rgba(255,255,255,0.2)', fontSize: '0.52rem',
+          fontWeight: '900', letterSpacing: '2px',
+          textTransform: 'uppercase', marginBottom: '9px'
+        }}>
+          <Package size={9} color="rgba(255,255,255,0.2)" strokeWidth={2} />
+          TODAY'S PREP ESTIMATES
+        </div>
+        {aiBrain.ingredientRequirements.slice(0, 5).map(ing => (
+          <div key={ing.itemName} style={{
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '5px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.03)'
+          }}>
+            <span style={{
+              color: 'rgba(255,255,255,0.45)', fontSize: '0.72rem'
+            }}>
+              {ing.itemName}
+            </span>
+            <span style={{
+              color: '#d3bfa2', fontSize: '0.72rem',
+              fontWeight: '800', fontFamily: 'monospace'
+            }}>
+              {ing.required?.toFixed(1)} {ing.unit}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* No data fallback */}
+    {!aiBrain.risks?.length && !aiBrain.ingredientRequirements?.length && (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '7px',
+        padding: '10px 12px',
+        background: 'rgba(211,191,162,0.03)',
+        border: '1px solid rgba(211,191,162,0.07)',
+        borderRadius: '8px'
+      }}>
+        <CheckCircle2 size={12} color="rgba(74,222,128,0.5)" strokeWidth={2} />
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>
+          All ingredients sufficient for today's predicted volume.
+        </span>
+      </div>
+    )}
+  </div>
+)}
     {/* KPI STRIP */}
     <div style={styles.statsRow}>
       <div style={styles.glassStat}>
@@ -8311,6 +8752,7 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
           ))}
         </div>
       </div>
+      
  
       {/* ── OVERALL PROFIT AFTER GST + COSTS ── */}
       {profitabilityData.length > 0 && (
@@ -10630,6 +11072,179 @@ setNewStaff({
             <motion.div key="inventory" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
               style={{display:'flex',flexDirection:'column',gap:'25px',paddingBottom:'100px',width:'100%',maxWidth:'1100px',margin:'0 auto'}}>
 
+{/* ── SMART PURCHASE ASSISTANT ── */}
+{purchaseRecommendations.length > 0 && (
+  <div style={{
+    background: '#080808',
+    border: '1px solid rgba(211,191,162,0.18)',
+    borderRadius: '14px',
+    padding: '17px 18px'
+  }}>
+
+    {/* Header */}
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: '14px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{
+          width: '28px', height: '28px', borderRadius: '8px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Truck size={13} color="#d3bfa2" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div style={{
+            fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2',
+            letterSpacing: '2px', textTransform: 'uppercase'
+          }}>
+            SMART PURCHASE ASSISTANT
+          </div>
+          <div style={{
+            fontSize: '0.53rem', color: 'rgba(255,255,255,0.2)',
+            marginTop: '1px'
+          }}>
+            Based on daily consumption · 2-week supply target
+          </div>
+        </div>
+      </div>
+      <div style={{
+        background: 'rgba(248,113,113,0.08)',
+        border: '1px solid rgba(248,113,113,0.18)',
+        borderRadius: '6px', padding: '3px 9px',
+        display: 'flex', alignItems: 'center', gap: '5px'
+      }}>
+        <TrendingDown size={10} color="#f87171" strokeWidth={2} />
+        <span style={{
+          color: '#f87171', fontSize: '0.6rem', fontWeight: '900'
+        }}>
+          {purchaseRecommendations.length} LOW
+        </span>
+      </div>
+    </div>
+
+    {/* Item rows */}
+    {purchaseRecommendations.map(item => (
+      <div key={item._id} style={{
+        padding: '12px 13px', marginBottom: '7px',
+        background: item.urgency === 'critical'
+          ? 'rgba(248,113,113,0.04)'
+          : 'rgba(255,255,255,0.02)',
+        border: `1px solid ${
+          item.urgency === 'critical'
+            ? 'rgba(248,113,113,0.16)'
+            : 'rgba(255,255,255,0.05)'
+        }`,
+        borderRadius: '10px'
+      }}>
+
+        {/* Item name + urgency badge */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', marginBottom: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+            {item.urgency === 'critical'
+              ? <AlertTriangle size={12} color="#f87171" strokeWidth={2} />
+              : <Package2 size={12} color="rgba(240,165,0,0.7)" strokeWidth={1.8} />
+            }
+            <span style={{
+              color: '#fff', fontSize: '0.78rem', fontWeight: '700'
+            }}>
+              {item.itemName}
+            </span>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            fontSize: '0.6rem', padding: '2px 9px',
+            borderRadius: '20px', fontWeight: '900',
+            background: item.urgency === 'critical'
+              ? 'rgba(248,113,113,0.1)'
+              : 'rgba(240,165,0,0.08)',
+            color: item.urgency === 'critical' ? '#f87171' : '#f0a500',
+            border: `1px solid ${
+              item.urgency === 'critical'
+                ? 'rgba(248,113,113,0.2)'
+                : 'rgba(240,165,0,0.15)'
+            }`
+          }}>
+            {item.daysRemaining === 0 ? 'OUT TODAY' : `${item.daysRemaining}d left`}
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3,1fr)',
+          gap: '8px', marginBottom: '8px'
+        }}>
+          {[
+            {
+              label: 'Current Stock',
+              value: `${item.currentStock || 0} ${item.unit}`,
+              dim: true
+            },
+            {
+              label: 'Daily Usage',
+              value: `${(item.avgDailyUsage || 0).toFixed(1)} ${item.unit}`,
+              dim: true
+            },
+            {
+              label: 'Buy Now',
+              value: `${item.recommendedQty} ${item.unit}`,
+              dim: false
+            },
+          ].map(({ label, value, dim }) => (
+            <div key={label} style={{
+              textAlign: 'center', padding: '8px 6px',
+              background: dim ? 'transparent' : 'rgba(211,191,162,0.05)',
+              border: dim
+                ? '1px solid rgba(255,255,255,0.04)'
+                : '1px solid rgba(211,191,162,0.12)',
+              borderRadius: '7px'
+            }}>
+              <div style={{
+                color: dim ? 'rgba(255,255,255,0.45)' : '#d3bfa2',
+                fontSize: '0.78rem', fontWeight: '800',
+                fontFamily: 'monospace'
+              }}>
+                {value}
+              </div>
+              <div style={{
+                color: 'rgba(255,255,255,0.2)',
+                fontSize: '0.52rem', marginTop: '2px'
+              }}>
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Estimated cost */}
+        {item.estimatedCost > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            padding: '6px 8px',
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: '6px'
+          }}>
+            <PackageCheck size={10} color="rgba(211,191,162,0.35)" strokeWidth={1.8} />
+            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.62rem' }}>
+              Estimated purchase cost:
+            </span>
+            <span style={{
+              color: 'rgba(211,191,162,0.6)', fontSize: '0.62rem',
+              fontWeight: '700', fontFamily: 'monospace'
+            }}>
+              ₹{item.estimatedCost.toLocaleString()}
+            </span>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+)}
 
 {/* ADD FORM */}
 <div style={{...styles.biCard, padding:'20px 25px'}}>
