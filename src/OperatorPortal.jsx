@@ -14,7 +14,7 @@ import {
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
   MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye,
-  ShoppingCart, Copy
+  ShoppingCart, Copy,Flame 
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -3743,211 +3743,6 @@ const renderMonthHeatmap = () => {
       </div>
     )}
  
- {/* ── AUDIT TRAIL TAB ── */}
-{activeTab === 'audit' && (
-  <motion.div
-    key="audit"
-    initial={{ opacity: 0, y: 12 }}
-    animate={{ opacity: 1, y: 0 }}
-    style={{
-      padding: '16px',
-      paddingBottom: '100px',
-      maxWidth: '900px',
-      margin: '0 auto',
-      width: '100%'
-    }}
-  >
-
-    {/* Header */}
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center', marginBottom: '20px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{
-          width: '32px', height: '32px', borderRadius: '9px',
-          background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.18)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <ShieldCheck size={15} color="#d3bfa2" strokeWidth={1.5} />
-        </div>
-        <div>
-          <div style={{
-            fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2',
-            letterSpacing: '2.5px', textTransform: 'uppercase'
-          }}>
-            AUDIT TRAIL
-          </div>
-          <div style={{
-            fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px'
-          }}>
-            Complete action history for this restaurant
-          </div>
-        </div>
-      </div>
-      <div style={{
-        background: 'rgba(211,191,162,0.06)',
-        border: '1px solid rgba(211,191,162,0.12)',
-        borderRadius: '7px', padding: '4px 10px',
-        display: 'flex', alignItems: 'center', gap: '5px'
-      }}>
-        <ClipboardCheck size={10} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
-        <span style={{
-          color: 'rgba(211,191,162,0.6)', fontSize: '0.6rem', fontWeight: '700'
-        }}>
-          {auditLogs.length} entries
-        </span>
-      </div>
-    </div>
-
-    {/* Empty state */}
-    {auditLogs.length === 0 && (
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        paddingTop: '80px', gap: '12px'
-      }}>
-        <div style={{
-          width: '48px', height: '48px', borderRadius: '14px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <FileText size={20} color="rgba(255,255,255,0.1)" strokeWidth={1.5} />
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem',
-            fontWeight: '700', marginBottom: '4px'
-          }}>
-            No logs yet
-          </div>
-          <div style={{
-            color: 'rgba(255,255,255,0.1)', fontSize: '0.65rem'
-          }}>
-            Settlements, price changes and restocks will appear here
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Log entries */}
-    {auditLogs.map((log, idx) => {
-
-      const actionColors = {
-        BILL_SETTLED:         { color: '#4ade80', bg: 'rgba(74,222,128,0.06)',  border: 'rgba(74,222,128,0.15)',  icon: <CheckCircle2 size={12} color="#4ade80" strokeWidth={2} /> },
-        MENU_ITEM_UPDATED:    { color: '#d3bfa2', bg: 'rgba(211,191,162,0.04)', border: 'rgba(211,191,162,0.12)', icon: <FileText size={12} color="#d3bfa2" strokeWidth={1.8} /> },
-        INVENTORY_RESTOCKED:  { color: '#60a5fa', bg: 'rgba(96,165,250,0.05)',  border: 'rgba(96,165,250,0.15)',  icon: <PackageCheck size={12} color="#60a5fa" strokeWidth={1.8} /> },
-        DEFAULT:              { color: 'rgba(211,191,162,0.6)', bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.06)', icon: <ClipboardCheck size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} /> }
-      };
-      const ac = actionColors[log.action] || actionColors.DEFAULT;
-
-      return (
-        <div key={log._id || idx} style={{
-          padding: '12px 14px', marginBottom: '7px',
-          background: ac.bg,
-          border: `1px solid ${ac.border}`,
-          borderRadius: '10px'
-        }}>
-
-          {/* Top row: action label + timestamp */}
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            alignItems: 'flex-start', marginBottom: '7px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-              {ac.icon}
-              <span style={{
-                color: ac.color, fontSize: '0.7rem', fontWeight: '800'
-              }}>
-                {log.action?.replace(/_/g, ' ')}
-              </span>
-            </div>
-            <span style={{
-              color: 'rgba(255,255,255,0.18)', fontSize: '0.6rem',
-              fontFamily: 'monospace', flexShrink: 0, marginLeft: '8px'
-            }}>
-              {new Date(log.createdAt).toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                day: '2-digit', month: 'short',
-                hour: '2-digit', minute: '2-digit'
-              })}
-            </span>
-          </div>
-
-          {/* Actor + entity */}
-          <div style={{
-            display: 'flex', gap: '12px', flexWrap: 'wrap',
-            marginBottom: (log.before || log.after) ? '8px' : 0
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <User size={9} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
-                By:&nbsp;
-                <strong style={{
-                  color: 'rgba(255,255,255,0.55)', fontWeight: '700'
-                }}>
-                  {log.actorName}
-                </strong>
-              </span>
-            </div>
-            {log.entity && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <AlertOctagon size={9} color="rgba(255,255,255,0.12)" strokeWidth={1.8} />
-                <span style={{
-                  color: 'rgba(255,255,255,0.18)', fontSize: '0.65rem'
-                }}>
-                  {log.entity}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Before / After diff */}
-          {(log.before || log.after) && (
-            <div style={{
-              display: 'flex', gap: '8px', flexWrap: 'wrap'
-            }}>
-              {log.before && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                  background: 'rgba(248,113,113,0.05)',
-                  border: '1px solid rgba(248,113,113,0.12)',
-                  borderRadius: '5px', padding: '3px 8px'
-                }}>
-                  <ArrowDown size={9} color="#f87171" strokeWidth={2} />
-                  <span style={{
-                    color: '#f87171', fontSize: '0.6rem'
-                  }}>
-                    {JSON.stringify(log.before)
-                      .replace(/[{}"]/g, '').slice(0, 60)}
-                  </span>
-                </div>
-              )}
-              {log.after && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                  background: 'rgba(74,222,128,0.04)',
-                  border: '1px solid rgba(74,222,128,0.12)',
-                  borderRadius: '5px', padding: '3px 8px'
-                }}>
-                  <CheckCircle2 size={9} color="#4ade80" strokeWidth={2} />
-                  <span style={{
-                    color: '#4ade80', fontSize: '0.6rem'
-                  }}>
-                    {JSON.stringify(log.after)
-                      .replace(/[{}"]/g, '').slice(0, 60)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </motion.div>
-)}
 
     {activeTab==='extras' && (
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'24px',borderBottom:'1px solid #151515'}}>
@@ -10462,6 +10257,213 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
 
   </motion.div>
 )}
+
+ {/* ── AUDIT TRAIL TAB ── */}
+{activeTab === 'audit' && (
+  <motion.div
+    key="audit"
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    style={{
+      padding: '16px',
+      paddingBottom: '100px',
+      maxWidth: '900px',
+      margin: '0 auto',
+      width: '100%'
+    }}
+  >
+
+    {/* Header */}
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: '20px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '9px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <ShieldCheck size={15} color="#d3bfa2" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div style={{
+            fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2',
+            letterSpacing: '2.5px', textTransform: 'uppercase'
+          }}>
+            AUDIT TRAIL
+          </div>
+          <div style={{
+            fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px'
+          }}>
+            Complete action history for this restaurant
+          </div>
+        </div>
+      </div>
+      <div style={{
+        background: 'rgba(211,191,162,0.06)',
+        border: '1px solid rgba(211,191,162,0.12)',
+        borderRadius: '7px', padding: '4px 10px',
+        display: 'flex', alignItems: 'center', gap: '5px'
+      }}>
+        <ClipboardCheck size={10} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
+        <span style={{
+          color: 'rgba(211,191,162,0.6)', fontSize: '0.6rem', fontWeight: '700'
+        }}>
+          {auditLogs.length} entries
+        </span>
+      </div>
+    </div>
+
+    {/* Empty state */}
+    {auditLogs.length === 0 && (
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        paddingTop: '80px', gap: '12px'
+      }}>
+        <div style={{
+          width: '48px', height: '48px', borderRadius: '14px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <FileText size={20} color="rgba(255,255,255,0.1)" strokeWidth={1.5} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem',
+            fontWeight: '700', marginBottom: '4px'
+          }}>
+            No logs yet
+          </div>
+          <div style={{
+            color: 'rgba(255,255,255,0.1)', fontSize: '0.65rem'
+          }}>
+            Settlements, price changes and restocks will appear here
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Log entries */}
+    {auditLogs.map((log, idx) => {
+
+      const actionColors = {
+        BILL_SETTLED:         { color: '#4ade80', bg: 'rgba(74,222,128,0.06)',  border: 'rgba(74,222,128,0.15)',  icon: <CheckCircle2 size={12} color="#4ade80" strokeWidth={2} /> },
+        MENU_ITEM_UPDATED:    { color: '#d3bfa2', bg: 'rgba(211,191,162,0.04)', border: 'rgba(211,191,162,0.12)', icon: <FileText size={12} color="#d3bfa2" strokeWidth={1.8} /> },
+        INVENTORY_RESTOCKED:  { color: '#60a5fa', bg: 'rgba(96,165,250,0.05)',  border: 'rgba(96,165,250,0.15)',  icon: <PackageCheck size={12} color="#60a5fa" strokeWidth={1.8} /> },
+        DEFAULT:              { color: 'rgba(211,191,162,0.6)', bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.06)', icon: <ClipboardCheck size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} /> }
+      };
+      const ac = actionColors[log.action] || actionColors.DEFAULT;
+
+      return (
+        <div key={log._id || idx} style={{
+          padding: '12px 14px', marginBottom: '7px',
+          background: ac.bg,
+          border: `1px solid ${ac.border}`,
+          borderRadius: '10px'
+        }}>
+
+          {/* Top row: action label + timestamp */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'flex-start', marginBottom: '7px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+              {ac.icon}
+              <span style={{
+                color: ac.color, fontSize: '0.7rem', fontWeight: '800'
+              }}>
+                {log.action?.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <span style={{
+              color: 'rgba(255,255,255,0.18)', fontSize: '0.6rem',
+              fontFamily: 'monospace', flexShrink: 0, marginLeft: '8px'
+            }}>
+              {new Date(log.createdAt).toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit', month: 'short',
+                hour: '2-digit', minute: '2-digit'
+              })}
+            </span>
+          </div>
+
+          {/* Actor + entity */}
+          <div style={{
+            display: 'flex', gap: '12px', flexWrap: 'wrap',
+            marginBottom: (log.before || log.after) ? '8px' : 0
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <User size={9} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
+                By:&nbsp;
+                <strong style={{
+                  color: 'rgba(255,255,255,0.55)', fontWeight: '700'
+                }}>
+                  {log.actorName}
+                </strong>
+              </span>
+            </div>
+            {log.entity && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <AlertOctagon size={9} color="rgba(255,255,255,0.12)" strokeWidth={1.8} />
+                <span style={{
+                  color: 'rgba(255,255,255,0.18)', fontSize: '0.65rem'
+                }}>
+                  {log.entity}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Before / After diff */}
+          {(log.before || log.after) && (
+            <div style={{
+              display: 'flex', gap: '8px', flexWrap: 'wrap'
+            }}>
+              {log.before && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(248,113,113,0.05)',
+                  border: '1px solid rgba(248,113,113,0.12)',
+                  borderRadius: '5px', padding: '3px 8px'
+                }}>
+                  <ArrowDown size={9} color="#f87171" strokeWidth={2} />
+                  <span style={{
+                    color: '#f87171', fontSize: '0.6rem'
+                  }}>
+                    {JSON.stringify(log.before)
+                      .replace(/[{}"]/g, '').slice(0, 60)}
+                  </span>
+                </div>
+              )}
+              {log.after && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(74,222,128,0.04)',
+                  border: '1px solid rgba(74,222,128,0.12)',
+                  borderRadius: '5px', padding: '3px 8px'
+                }}>
+                  <CheckCircle2 size={9} color="#4ade80" strokeWidth={2} />
+                  <span style={{
+                    color: '#4ade80', fontSize: '0.6rem'
+                  }}>
+                    {JSON.stringify(log.after)
+                      .replace(/[{}"]/g, '').slice(0, 60)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </motion.div>
+)}
+
           {/* ── MANAGEMENT ── */}
           {activeTab==='management' && (
             <motion.div key="management" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{duration:0.4}}
