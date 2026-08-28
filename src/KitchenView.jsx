@@ -149,10 +149,15 @@ const speakOrder = (order) => {
       return d;
     }).join(". ");
     const utt = new SpeechSynthesisUtterance(text);
-    const voice = synthVoicesRef.current.find(v => v.lang.includes('IN')) || synthVoicesRef.current[0];
-    if (voice) utt.voice = voice;
-    utt.rate = 0.82; utt.pitch = 1.0;
-    speechQueueRef.current.push(utt);
+const voices = synthVoicesRef.current;
+const kitchenVoice =
+  voices.find(v => v.lang === 'en-IN') ||
+  voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india')) ||
+  voices.find(v => /^[a-z]{2}-IN$/i.test(v.lang)) ||   // any proper xx-IN locale
+  voices[0];
+if (kitchenVoice) utt.voice = kitchenVoice;
+utt.rate  = 0.88;   // slightly faster than menu — kitchen needs quick announcements
+utt.pitch = 1.02;   // slightly higher for clarity over kitchen noise    speechQueueRef.current.push(utt);
     if (!isSpeakingRef.current) processSpeechQueue();
   };
 

@@ -36,7 +36,9 @@ const PratyekshaPremiumMenu = () => {
   const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
   if (!num || num === 0) return 'Zero Only';
   if (num.toString().length > 9) return 'Overflow';
-  const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  const rounded = Math.round(num);
+  const n = ('000000000' + rounded).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  
   if (!n) return '';
   let str = '';
   str += n[1] != 0 ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + ' Crore ' : '';
@@ -660,26 +662,25 @@ const stopSpeech = () => {
   speechRef.current = null;
 };
 
+// ── Sync voiceLang whenever the user changes the UI language ──
+useEffect(() => {
+  setVoiceLang(language === 'mr' ? 'mr-IN' : language === 'hi' ? 'hi-IN' : 'en-IN');
+}, [language]);
+
 const speakDish = (item) => {
-  if (!window.speechSynthesis) return; // browser unsupported — silent fail
+  if (!window.speechSynthesis) return;
 
-  // If same dish is already speaking — stop it (toggle off)
-  if (speakingItemId === item._id) {
-    stopSpeech();
-    return;
-  }
-
-  // Stop anything currently playing
+  if (speakingItemId === item._id) { stopSpeech(); return; }
   stopSpeech();
 
-  // Build recommended dish: pick an available, same-category dish (not this one)
   const recommended = allMenuItems.find(
-    m => m._id !== item._id &&
-         m.categoryId === item.categoryId &&
-         m.isAvailable !== false
+    m => m._id !== item._id && m.categoryId === item.categoryId && m.isAvailable !== false
   ) || allMenuItems.find(m => m._id !== item._id && m.isAvailable !== false);
 
-  // Build the speech script per language
+  // ── Spice level maps for each language ──
+  const spiceMapMr = { high: 'जास्त तिखट', medium: 'मध्यम तिखट', low: 'कमी तिखट' };
+  const spiceMapHi = { high: 'ज्यादा तीखा', medium: 'मध्यम तीखा', low: 'कम तीखा' };
+
   const scripts = {
     'en-IN': () => {
       const status = item._eng?.quadrant === 'star' ? 'a Bestseller' :
@@ -687,59 +688,81 @@ const speakDish = (item) => {
       const serves = item.servingSize ? `Serves ${item.servingSize}.` : '';
       const spice  = item.spiceLevel  ? `Spice level: ${item.spiceLevel}.` : '';
       const ings   = item.ingredients?.en?.length
-        ? `Main ingredients: ${item.ingredients.en.slice(0,4).join(', ')}.` : '';
+        ? `Main ingredients: ${item.ingredients.en.slice(0, 4).join(', ')}.` : '';
       const desc   = item.description ? `${item.description}.` : '';
       const rec    = recommended ? `You might also enjoy ${recommended.name}.` : '';
-      return [item.name, status, serves, spice, ings, desc, rec]
-        .filter(Boolean).join(' ');
+      return [item.name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
     },
+
     'hi-IN': () => {
-      const name   = item.name_mr || item.name;
-      const status = item._eng?.quadrant === 'star' ? 'यह बेस्टसेलर है।' :
-                     item.isChefSpecial ? 'यह शेफ स्पेशल है।' : '';
-      const serves = item.servingSize ? `${item.servingSize} व्यक्तियों के लिए।` : '';
-      const spice  = item.spiceLevel  ? `मसाले का स्तर: ${item.spiceLevel}.` : '';
-      const ings   = item.ingredients?.en?.length
-        ? `मुख्य सामग्री: ${item.ingredients.en.slice(0,4).join(', ')}.` : '';
+      // For Hindi: use English dish name pronounced with Hindi voice for clarity
+      // (Indian TTS engines handle English names well in Hindi voice)
+      const name   = item.name;   // keep English name — pronounced naturally
+      const status = item._eng?.quadrant === 'star' ? 'yeh bestseller hai.' :
+                     item.isChefSpecial ? 'yeh chef special hai.' : '';
+      const serves = item.servingSize ? `${item.servingSize} logon ke liye.` : '';
+      const rawSpice = (item.spiceLevel || '').toLowerCase();
+      const spice  = rawSpice ? `Masale ka star: ${spiceMapHi[rawSpice] || item.spiceLevel}.` : '';
+      // Use Marathi/Hindi ingredients if available, else English
+      const ingList = item.ingredients?.hi?.length ? item.ingredients.hi
+                    : item.ingredients?.en?.length ? item.ingredients.en : [];
+      const ings   = ingList.length ? `Mukhya samagri: ${ingList.slice(0, 4).join(', ')}.` : '';
       const desc   = item.description || '';
-      const rec    = recommended ? `आप ${recommended.name || ''} भी आज़मा सकते हैं।` : '';
-      return [name, status, serves, spice, ings, desc, rec]
-        .filter(Boolean).join(' ');
+      const recName = recommended ? (recommended.name) : '';
+      const rec    = recName ? `Aap ${recName} bhi try kar sakte hain.` : '';
+      return [name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
     },
+
     'mr-IN': () => {
       const name   = item.name_mr || item.name;
-      const status = item._eng?.quadrant === 'star' ? 'हे बेस्टसेलर आहे.' :
-                     item.isChefSpecial ? 'हे शेफ स्पेशल आहे.' : '';
-      const serves = item.servingSize ? `${item.servingSize} जणांसाठी.` : '';
-      const spice  = item.spiceLevel  ? `तिखटपणा: ${item.spiceLevel}.` : '';
-      const ings   = item.ingredients?.mr?.length
-        ? `मुख्य घटक: ${item.ingredients.mr.slice(0,4).join(', ')}.` : '';
+      const status = item._eng?.quadrant === 'star' ? 'he bestseller aahe.' :
+                     item.isChefSpecial ? 'he chef special aahe.' : '';
+      const serves = item.servingSize ? `${item.servingSize} jananasaathi.` : '';
+      const rawSpice = (item.spiceLevel || '').toLowerCase();
+      const spice  = rawSpice ? `Tikhatpana: ${spiceMapMr[rawSpice] || item.spiceLevel}.` : '';
+      // Prefer Marathi ingredient list; fallback to English
+      const ingList = item.ingredients?.mr?.length ? item.ingredients.mr
+                    : item.ingredients?.en?.length ? item.ingredients.en : [];
+      const ings   = ingList.length ? `Mukhya ghatak: ${ingList.slice(0, 4).join(', ')}.` : '';
       const desc   = item.description || '';
-      const rec    = recommended ? `तुम्हाला ${recommended.name_mr || recommended.name} देखील आवडेल.` : '';
-      return [name, status, serves, spice, ings, desc, rec]
-        .filter(Boolean).join(' ');
-    }
+      const recName = recommended ? (recommended.name_mr || recommended.name) : '';
+      const rec    = recName ? `Tumhala ${recName} pan avadel.` : '';
+      return [name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
+    },
   };
 
   const text = (scripts[voiceLang] || scripts['en-IN'])();
   if (!text.trim()) return;
 
-  const utter = new SpeechSynthesisUtterance(text);
+  const utter  = new SpeechSynthesisUtterance(text);
   utter.lang   = voiceLang;
-  utter.rate   = 0.92;
-  utter.pitch  = 1.0;
   utter.volume = 1.0;
 
-  // Pick the best available voice for the language
+  // Rate and pitch tuned per language for natural Indian delivery
+  if (voiceLang === 'en-IN') { utter.rate = 0.90; utter.pitch = 1.05; }
+  if (voiceLang === 'hi-IN') { utter.rate = 0.85; utter.pitch = 1.0;  }
+  if (voiceLang === 'mr-IN') { utter.rate = 0.82; utter.pitch = 1.0;  }
+
+  // ── Best-effort Indian voice selection ──
   const voices = window.speechSynthesis.getVoices();
-  const match  = voices.find(v => v.lang === voiceLang) ||
-                 voices.find(v => v.lang.startsWith(voiceLang.split('-')[0])) ||
-                 voices[0];
-  if (match) utter.voice = match;
+  const langCode = voiceLang.split('-')[0]; // 'en' | 'hi' | 'mr'
+
+  const voice =
+    // 1. Exact locale match (e.g. hi-IN, mr-IN, en-IN)
+    voices.find(v => v.lang === voiceLang) ||
+    // 2. Same language, any locale (e.g. hi-IN vs hi)
+    voices.find(v => v.lang.startsWith(langCode)) ||
+    // 3. Any Indian English voice as last resort
+    voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india')) ||
+    // 4. Any Indian-tagged voice
+    voices.find(v => v.lang.includes('IN')) ||
+    voices[0];
+
+  if (voice) utter.voice = voice;
 
   utter.onstart = () => { setSpeakingItemId(item._id); setVoicePaused(false); };
-  utter.onend   = () => { setSpeakingItemId(null);     setVoicePaused(false); speechRef.current = null; };
-  utter.onerror = () => { setSpeakingItemId(null);     setVoicePaused(false); speechRef.current = null; };
+  utter.onend   = () => { setSpeakingItemId(null); setVoicePaused(false); speechRef.current = null; };
+  utter.onerror = () => { setSpeakingItemId(null); setVoicePaused(false); speechRef.current = null; };
 
   speechRef.current = utter;
   window.speechSynthesis.speak(utter);
@@ -846,37 +869,21 @@ socket.on('extra_item_out_of_stock', ({ itemId }) => {
     // ── Live order status updates for customer ──
 socket.on("order_status_updated", (data) => {
   if (data.tableNumber?.toString() !== tableNumber?.toString()) return;
-
-  // Server emits the full Order document (._id) OR the settlement stub ({ tableNumber, status })
   const orderId = data._id || data.orderId;
-
   if (orderId) {
-    // Normal status update from KDS (pending → ready → served)
     setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
     if (data.status === 'ready') {
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
       triggerAlert('🍽️ Your order is ready! Please collect.', 'success');
     }
   } else if (data.status === 'settled') {
-    // Settlement stub has no id — mark ALL tracked orders as served (bill settled)
     setLiveOrderStatuses(prev => {
       const updated = {};
       Object.keys(prev).forEach(k => { updated[k] = 'served'; });
       return updated;
     });
   }
-// ── Dynamic ETA polling ──
-useEffect(() => {
-  if (!hasPlacedInitialOrder || !tenantId || !tableNumber || isCounterScan) return;
-  const load = () => {
-    axios.get(`${BASE_URL}/orders/eta/${tenantId}/${tableNumber}`)
-      .then(r => setOrderEta(r.data)).catch(() => {});
-  };
-  load();
-  const iv = setInterval(load, 90000);
-  return () => clearInterval(iv);
-}, [hasPlacedInitialOrder, tenantId, tableNumber, isCounterScan]);
-});
+});   // ← close socket.on callback HERE
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
@@ -888,6 +895,19 @@ return () => {
   socket.disconnect();
 };
   }, [tenantId, language]);
+
+  // ── Dynamic ETA polling — now correctly at top level ──
+useEffect(() => {
+  if (!hasPlacedInitialOrder || !tenantId || !tableNumber || isCounterScan) return;
+  const load = () => {
+    axios.get(`${BASE_URL}/orders/eta/${tenantId}/${tableNumber}`)
+      .then(r => setOrderEta(r.data)).catch(() => {});
+  };
+  load();
+  const iv = setInterval(load, 90000);
+  return () => clearInterval(iv);
+}, [hasPlacedInitialOrder, tenantId, tableNumber, isCounterScan]);
+
 
   // ── QR Session Validation — prevents URL injection ──
 useEffect(() => {
@@ -5863,103 +5883,6 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                               )}
                             </div>
 
-                            {/* Description + Voice button row */}
-<div style={{ marginTop: '6px' }}>
-  {item.description && (
-    <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.5, marginBottom: '4px' }}>
-      {item.description}
-    </div>
-  )}
-
-  {/* ── SMART VOICE BUTTON ── */}
-  {typeof window !== 'undefined' && window.speechSynthesis && (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px', flexWrap: 'wrap' }}>
-
-      {/* Speaker / Pause / Stop controls */}
-      <button
-        aria-label={speakingItemId === item._id ? 'Stop reading dish description' : 'Hear dish description'}
-        onClick={(e) => { e.stopPropagation(); speakDish(item); }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '5px',
-          padding: '4px 9px',
-          background: speakingItemId === item._id
-            ? 'rgba(211,191,162,0.12)'
-            : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${speakingItemId === item._id
-            ? 'rgba(211,191,162,0.35)'
-            : 'rgba(255,255,255,0.08)'}`,
-          borderRadius: '6px',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          outline: 'none',
-          fontFamily: 'Poppins, sans-serif'
-        }}
-      >
-        {speakingItemId === item._id ? (
-          <Volume2 size={11} color="#d3bfa2" strokeWidth={1.8}
-            style={{ animation: 'pulse 1s ease-in-out infinite' }} />
-        ) : (
-          <Volume1 size={11} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />
-        )}
-        <span style={{
-          fontSize: '0.52rem', fontWeight: '700', letterSpacing: '0.5px',
-          color: speakingItemId === item._id ? '#d3bfa2' : 'rgba(211,191,162,0.35)'
-        }}>
-          {speakingItemId === item._id
-            ? (language === 'mr' ? 'थांब' : 'STOP')
-            : (language === 'mr' ? 'ऐका' : 'HEAR')}
-        </span>
-      </button>
-
-      {/* Pause/Resume — only when this dish is speaking */}
-      {speakingItemId === item._id && (
-        <button
-          aria-label={voicePaused ? 'Resume' : 'Pause'}
-          onClick={toggleVoicePause}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '24px', height: '24px',
-            background: 'rgba(211,191,162,0.06)',
-            border: '1px solid rgba(211,191,162,0.2)',
-            borderRadius: '5px', cursor: 'pointer', outline: 'none'
-          }}
-        >
-          {voicePaused
-            ? <Play size={10} color="#d3bfa2" strokeWidth={2} />
-            : <Pause size={10} color="#d3bfa2" strokeWidth={2} />
-          }
-        </button>
-      )}
-
-      {/* Voice language selector */}
-      {speakingItemId !== item._id && (
-        <div style={{ display: 'flex', gap: '3px' }}>
-          {[
-            { code: 'en-IN', label: 'EN' },
-            { code: 'hi-IN', label: 'HI' },
-            { code: 'mr-IN', label: 'MR' },
-          ].map(({ code, label }) => (
-            <button
-              key={code}
-              aria-label={`Speak in ${label}`}
-              onClick={(e) => { e.stopPropagation(); setVoiceLang(code); }}
-              style={{
-                padding: '3px 6px',
-                fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
-                border: `1px solid ${voiceLang === code ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.06)'}`,
-                borderRadius: '4px',
-                background: voiceLang === code ? 'rgba(211,191,162,0.08)' : 'transparent',
-                color: voiceLang === code ? '#d3bfa2' : 'rgba(255,255,255,0.2)',
-                cursor: 'pointer', outline: 'none',
-                fontFamily: 'Poppins, sans-serif'
-              }}
-            >{label}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  )}
-</div>
                           </div>
 
                           {/* Controls */}

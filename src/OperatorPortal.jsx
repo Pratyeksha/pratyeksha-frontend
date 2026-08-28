@@ -390,275 +390,7 @@ const fetchAuditLogs = useCallback(async () => {
   } catch {}
 }, [tenantId]);
 
-// ── OPERATOR ASSISTANT: answer from real data ──
-const handleAssistQuery = useCallback(async (question) => {
-  const q = (question || assistInput).trim();
-  if (!q) return;
 
-  setAssistMessages(prev => [...prev, { role: 'user', text: q, ts: new Date() }]);
-  setAssistInput('');
-  setAssistLoading(true);
-
-  try {
-    const nowIST    = new Date(new Date().getTime() + 330 * 60000);
-    const todayKey  = nowIST.toISOString().split('T')[0];
-    const monthStr  = todayKey.slice(0, 7);
-
-    // ── Pre-compute all context values ──
-    const todayData    = analytics.filter(d => d._id === todayKey);
-    const todayRev     = todayData.reduce((a, b) => a + (b.revenue || 0), 0);
-    const todayCount   = todayData.reduce((a, b) => a + (b.count   || 0), 0);
-
-    const monthData    = analytics.filter(d => d._id?.startsWith(monthStr));
-    const monthRev     = monthData.reduce((a, b) => a + (b.revenue || 0), 0);
-    const monthOrders  = monthData.reduce((a, b) => a + (b.count   || 0), 0);
-    const avgOrder     = monthOrders > 0 ? Math.round(monthRev / monthOrders) : 0;
-
-    // Week revenue (last 7 days)
-    const weekRev = analytics
-      .filter(d => {
-        if (!d._id) return false;
-        const diff = (new Date(todayKey) - new Date(d._id)) / 86400000;
-        return diff >= 0 && diff < 7;
-      })
-      .reduce((a, b) => a + (b.revenue || 0), 0);
-
-    const pendingOrders = orders.filter(o => o.status === 'pending');
-    const readyOrders   = orders.filter(o => o.status === 'ready');
-    const servedOrders  = orders.filter(o => o.status === 'served');
-
-    const lowStockItems    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 3);
-    const criticalStock    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 1);
-    const outOfStockItems  = (procurementData || []).filter(p => p.daysRemaining === 0);
-
-    const sortedByQty     = [...(profitabilityData || [])].sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0));
-    const sortedByMargin  = [...(profitabilityData || [])].sort((a, b) => (b.marginPct    || 0) - (a.marginPct    || 0));
-    const sortedByRev     = [...(profitabilityData || [])].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
-    const topDish         = sortedByQty[0];
-    const bestMarginDish  = sortedByMargin[0];
-    const topRevDish      = sortedByRev[0];
-    const avgMarginAll    = profitabilityData?.length
-      ? (profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length).toFixed(1)
-      : null;
-
-    const hiddenDishes    = menuItems.filter(m => m.isAvailable === false);
-    const totalDishes     = menuItems.length;
-
-    const pendingRequests = (waiterRequests || []).filter(w => w.status === 'pending');
-    const occ             = occupiedTables?.length || 0;
-
-    const extraLow        = (extraItems || []).filter(e => e.currentStock <= (e.lowStockThreshold || 5));
-    const extraOos        = (extraItems || []).filter(e => e.currentStock <= 0);
-
-    const payToday        = dailySettlementBreakdown;
-
-    const qL = q.toLowerCase();
-    let answer = '';
-
-    // ── 25 intent handlers ──
-
-    // 1. Today's revenue
-    if ((qL.includes('revenue') || qL.includes('earning') || qL.includes('sale')) && qL.includes('today')) {
-      answer = todayRev > 0
-        ? `Today's revenue is ₹${todayRev.toLocaleString()} from ${todayCount} settled order${todayCount !== 1 ? 's' : ''}.\nPayment split — Cash: ₹${payToday.cash.toLocaleString()}, UPI: ₹${payToday.upi.toLocaleString()}, Card: ₹${payToday.card.toLocaleString()}.`
-        : 'No settled orders recorded for today yet.';
-
-    // 2. Monthly revenue
-    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('month') || qL.includes('monthly'))) {
-      answer = `This month (${monthStr}): ₹${monthRev.toLocaleString()} across ${monthOrders} orders.\nAverage order value: ₹${avgOrder.toLocaleString()}.`;
-
-    // 3. Weekly revenue
-    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('week') || qL.includes('weekly'))) {
-      answer = `Revenue over the last 7 days: ₹${weekRev.toLocaleString()}.`;
-
-    // 4. Pending / live orders
-    } else if (qL.includes('pending') || (qL.includes('live') && qL.includes('order')) || qL.includes('kitchen now')) {
-      const tableList = [...new Set(pendingOrders.map(o => `Table ${o.tableNumber}`))].slice(0, 5).join(', ');
-      answer = `Right now: ${pendingOrders.length} pending, ${readyOrders.length} ready to serve, ${servedOrders.length} served.\n${tableList ? `Active tables: ${tableList}${pendingOrders.length > 5 ? ' and more.' : '.'}` : ''}`;
-
-    // 5. Occupied tables
-    } else if (qL.includes('table') || qL.includes('occupied') || qL.includes('how many table')) {
-      answer = `${occ} table${occ !== 1 ? 's' : ''} currently occupied out of your floor map total.`;
-
-    // 6. Low stock
-    } else if (qL.includes('low stock') || qL.includes('running out') || qL.includes('stock alert')) {
-      if (lowStockItems.length === 0) {
-        answer = 'All inventory items have sufficient stock for the next 3+ days.';
-      } else {
-        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — ${i.daysRemaining}d left`).join('\n');
-        answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} running low:\n${list}`;
-      }
-
-    // 7. Out of stock / critical
-    } else if (qL.includes('out of stock') || qL.includes('critical stock') || qL.includes('zero stock')) {
-      if (outOfStockItems.length === 0) {
-        answer = 'No ingredients are out of stock.';
-      } else {
-        answer = `${outOfStockItems.length} item${outOfStockItems.length > 1 ? 's' : ''} out of stock: ${outOfStockItems.map(i => i.itemName).join(', ')}.`;
-      }
-
-    // 8. Best selling dish
-    } else if (qL.includes('best sell') || qL.includes('top dish') || qL.includes('most order') || qL.includes('popular')) {
-      if (!topDish) {
-        answer = 'No sales data yet. Map recipes to see profitability and sales rankings.';
-      } else {
-        answer = `Best-selling: "${topDish.name}" with ${topDish.totalQtySold} units sold.\nTop by revenue: "${topRevDish?.name}" generating ₹${(topRevDish?.totalRevenue || 0).toLocaleString()}.`;
-      }
-
-    // 9. Profit margin
-    } else if (qL.includes('margin') || qL.includes('profit') || qL.includes('most profit')) {
-      if (!bestMarginDish) {
-        answer = 'Recipe data not mapped yet. Add ingredient recipes to see dish profitability.';
-      } else {
-        answer = `Highest-margin dish: "${bestMarginDish.name}" at ${bestMarginDish.marginPct}% margin.\nOverall average food margin: ${avgMarginAll}%.`;
-      }
-
-    // 10. Average order value
-    } else if (qL.includes('average') || qL.includes('avg order') || qL.includes('order value')) {
-      answer = monthOrders > 0
-        ? `Average order value this month: ₹${avgOrder}.\nBased on ${monthOrders} orders totalling ₹${monthRev.toLocaleString()}.`
-        : 'No order data this month yet.';
-
-    // 11. Staff attendance
-    } else if ((qL.includes('staff') || qL.includes('attendance')) && !qL.includes('salary')) {
-      const presentToday = (staff || []).filter(s => {
-        const log = (attendanceLogs || []).find(l => l.staffId === s._id && l.date === todayKey);
-        return log?.status === 'present';
-      });
-      answer = `Staff today: ${presentToday.length} present out of ${staff?.length || 0} total.\n${
-        presentToday.length > 0 ? `Present: ${presentToday.slice(0, 5).map(s => s.name).join(', ')}${presentToday.length > 5 ? ' and more.' : '.'}` : 'No staff marked present yet.'
-      }`;
-
-    // 12. Salary query
-    } else if (qL.includes('salary') || qL.includes('payroll') || qL.includes('pay')) {
-      const thisMonthSalary = (staff || []).reduce((a, s) => a + (s.salary || 0), 0);
-      answer = `Total monthly payroll across ${staff?.length || 0} staff members: ₹${thisMonthSalary.toLocaleString()}.`;
-
-    // 13. Service / waiter requests
-    } else if (qL.includes('waiter') || qL.includes('service request') || qL.includes('request') || qL.includes('call')) {
-      answer = pendingRequests.length > 0
-        ? `${pendingRequests.length} pending service request${pendingRequests.length > 1 ? 's' : ''}: ${pendingRequests.slice(0, 3).map(w => `Table ${w.tableNumber} — ${w.serviceRequest?.slice(0, 30)}`).join('; ')}.`
-        : 'No pending service requests right now.';
-
-    // 14. Invoice / bills today
-    } else if (qL.includes('invoice') || qL.includes('bill') || qL.includes('settled today')) {
-      answer = todayCount > 0
-        ? `${todayCount} bill${todayCount !== 1 ? 's' : ''} settled today totalling ₹${todayRev.toLocaleString()}.\nCash: ₹${payToday.cash.toLocaleString()} · UPI: ₹${payToday.upi.toLocaleString()} · Card: ₹${payToday.card.toLocaleString()}.`
-        : 'No bills settled today yet.';
-
-    // 15. Payment split
-    } else if (qL.includes('payment') || qL.includes('cash') || qL.includes('upi') || qL.includes('card')) {
-      answer = `Today's payment split:\nCash: ₹${payToday.cash.toLocaleString()}\nUPI: ₹${payToday.upi.toLocaleString()}\nCard: ₹${payToday.card.toLocaleString()}\nTotal: ₹${payToday.gross.toLocaleString()}.`;
-
-    // 16. Hidden menu items
-    } else if ((qL.includes('hidden') || qL.includes('unavailable') || qL.includes('disabled')) && qL.includes('dish') || qL.includes('hidden menu')) {
-      answer = hiddenDishes.length > 0
-        ? `${hiddenDishes.length} of ${totalDishes} dishes currently hidden: ${hiddenDishes.slice(0, 5).map(d => d.name).join(', ')}${hiddenDishes.length > 5 ? ' and more.' : '.'}`
-        : `All ${totalDishes} menu items are currently visible and active.`;
-
-    // 17. Wastage
-    } else if (qL.includes('wastage') || qL.includes('waste') || qL.includes('spoil')) {
-      try {
-        const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
-        const wArr   = Array.isArray(wData.data) ? wData.data : [];
-        const wCost  = wArr.reduce((a, w) => a + (w.cost || 0), 0);
-        answer = wArr.length > 0
-          ? `${wArr.length} wastage entries today with a total cost of ₹${wCost.toLocaleString()}.`
-          : 'No wastage recorded today.';
-      } catch {
-        answer = 'Unable to fetch wastage data right now.';
-      }
-
-    // 18. Extra items / beverages stock
-    } else if (qL.includes('extra item') || qL.includes('beverage') || qL.includes('cold drink') || qL.includes('bottle')) {
-      answer = `Extra items: ${extraItems?.length || 0} total.\n${
-        extraOos.length > 0 ? `Out of stock: ${extraOos.map(e => e.name).join(', ')}.\n` : ''
-      }${
-        extraLow.length > 0 ? `Low stock: ${extraLow.filter(e => e.currentStock > 0).map(e => `${e.name} (${e.currentStock} left)`).join(', ')}.` : 'All extra items sufficiently stocked.'
-      }`;
-
-    // 19. Slow / dead dishes
-    } else if (qL.includes('slow') || qL.includes('dead dish') || qL.includes('not selling') || qL.includes('remove dish')) {
-      const slowDishes = sortedByQty.slice(-4).filter(d => (d.totalQtySold || 0) < 5);
-      answer = slowDishes.length > 0
-        ? `Slow-moving dishes (low sales): ${slowDishes.map(d => `${d.name} — ${d.totalQtySold || 0} sold`).join(', ')}.`
-        : 'All dishes have reasonable sales volume.';
-
-    // 20. Procurement / what to buy
-    } else if (qL.includes('procure') || qL.includes('purchase') || qL.includes('buy') || qL.includes('restock')) {
-      if (lowStockItems.length === 0) {
-        answer = 'No procurement needed in the next 3 days based on current stock and usage.';
-      } else {
-        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — buy ~${Math.ceil((i.avgDailyUsage || 1) * 14)} ${i.unit}`).join('\n');
-        answer = `Recommended purchases (14-day supply):\n${list}`;
-      }
-
-    // 21. Peak hour / busy time
-    } else if (qL.includes('peak') || qL.includes('busy') || qL.includes('rush') || qL.includes('when is')) {
-      const hourMap = {};
-      orders.forEach(o => {
-        if (!o.createdAt) return;
-        const h = new Date(new Date(o.createdAt).getTime() + 330 * 60000).getHours();
-        hourMap[h] = (hourMap[h] || 0) + 1;
-      });
-      const peak = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
-      answer = peak
-        ? `Today's busiest hour so far: ${Number(peak[0]) % 12 || 12}:00 ${Number(peak[0]) < 12 ? 'AM' : 'PM'} with ${peak[1]} order${peak[1] > 1 ? 's' : ''}.`
-        : 'Insufficient order data to calculate peak hour today.';
-
-    // 22. Inventory total value
-    } else if (qL.includes('inventory value') || qL.includes('stock value') || qL.includes('total stock worth')) {
-      const invTotal = (procurementData || []).reduce((a, p) => a + ((p.currentStock || 0) * (p.weightedAvgCost || p.costPrice || 0)), 0);
-      answer = `Estimated current inventory value: ₹${Math.round(invTotal).toLocaleString()} based on weighted average cost.`;
-
-    // 23. Menu count / items
-    } else if (qL.includes('how many dish') || qL.includes('menu item') || qL.includes('total dish') || qL.includes('menu count')) {
-      const vegCount    = menuItems.filter(m => m.isVeg !== false && m.isAvailable !== false).length;
-      const nonVegCount = menuItems.filter(m => m.isVeg === false && m.isAvailable !== false).length;
-      answer = `Menu has ${totalDishes} items total.\nActive: ${menuItems.filter(m => m.isAvailable !== false).length} · Hidden: ${hiddenDishes.length}.\nVeg: ${vegCount} · Non-veg: ${nonVegCount}.`;
-
-    // 24. Extra items revenue
-    } else if (qL.includes('extra revenue') || qL.includes('beverage revenue') || qL.includes('extra item revenue')) {
-      const extraRev = extraAnalytics?.totalRevenue || 0;
-      answer = extraRev > 0
-        ? `Extra items (beverages/snacks) have generated ₹${extraRev.toLocaleString()} in revenue with ${extraAnalytics?.totalSold || 0} units sold this period.`
-        : 'No extra item revenue data available for this period.';
-
-    // 25. How is the restaurant doing / summary
-    } else if (qL.includes('summary') || qL.includes('how is') || qL.includes('overview') || qL.includes('status')) {
-      answer = [
-        `Restaurant at a glance:`,
-        `Revenue today: ₹${todayRev.toLocaleString()} · Month: ₹${monthRev.toLocaleString()}`,
-        `Orders: ${pendingOrders.length} pending · ${occ} tables occupied`,
-        `Stock alerts: ${lowStockItems.length} items low`,
-        `Service requests: ${pendingRequests.length} pending`,
-        `Menu: ${totalDishes - hiddenDishes.length} active dishes`,
-      ].join('\n');
-
-    } else {
-      answer = [
-        'I can help with:',
-        'Revenue — today / weekly / monthly / payment split',
-        'Orders — pending, ready, served, live tables',
-        'Inventory — low stock, out of stock, total value, procurement',
-        'Menu — best sellers, margins, slow items, hidden dishes',
-        'Staff — attendance, payroll',
-        'Extras — beverages stock, revenue',
-        'Wastage — today\'s entries and cost',
-        'Try: "today\'s revenue", "low stock items", "best selling dish", "staff attendance today"'
-      ].join('\n');
-    }
-
-    setAssistMessages(prev => [...prev, { role: 'assistant', text: answer, ts: new Date() }]);
-  } catch {
-    setAssistMessages(prev => [...prev, { role: 'assistant', text: 'Unable to fetch data right now. Please try again in a moment.', ts: new Date() }]);
-  } finally {
-    setAssistLoading(false);
-    setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 120);
-  }
-}, [assistInput, analytics, orders, procurementData, profitabilityData, staff, attendanceLogs,
-    occupiedTables, waiterRequests, menuItems, extraItems, extraAnalytics, extraAnalytics,
-    dailySettlementBreakdown, tenantId, viewDate]);
 
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
@@ -796,12 +528,12 @@ const fetchWastageAnalytics = useCallback(async () => {
   }
 }, [tenantId, viewDate]);
 
-// Add this right after your existing waitlistEntries state
-useEffect(() => {
-  setWaitlistEntries(prev => 
-    prev.filter(e => e.status === 'waiting' || e.status === 'pending')
-  );
-}, [waitlistEntries.length]);
+// // Add this right after your existing waitlistEntries state
+// useEffect(() => {
+//   setWaitlistEntries(prev => 
+//     prev.filter(e => e.status === 'waiting' || e.status === 'pending')
+//   );
+// }, [waitlistEntries.length]);
 
 
 const fetchExtraAnalytics = useCallback(async () => {
@@ -1385,6 +1117,277 @@ const dailySettlementBreakdown = useMemo(() => {
   return { cash: cashSum, upi: upiSum, card: cardSum, gross: cashSum+upiSum+cardSum };
 }, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
+// ── OPERATOR ASSISTANT: answer from real data ──
+const handleAssistQuery = useCallback(async (question) => {
+  const q = (question || assistInput).trim();
+  if (!q) return;
+
+  setAssistMessages(prev => [...prev, { role: 'user', text: q, ts: new Date() }]);
+  setAssistInput('');
+  setAssistLoading(true);
+
+  try {
+    const nowIST    = new Date(new Date().getTime() + 330 * 60000);
+    const todayKey  = nowIST.toISOString().split('T')[0];
+    const monthStr  = todayKey.slice(0, 7);
+
+    // ── Pre-compute all context values ──
+    const todayData    = analytics.filter(d => d._id === todayKey);
+    const todayRev     = todayData.reduce((a, b) => a + (b.revenue || 0), 0);
+    const todayCount   = todayData.reduce((a, b) => a + (b.count   || 0), 0);
+
+    const monthData    = analytics.filter(d => d._id?.startsWith(monthStr));
+    const monthRev     = monthData.reduce((a, b) => a + (b.revenue || 0), 0);
+    const monthOrders  = monthData.reduce((a, b) => a + (b.count   || 0), 0);
+    const avgOrder     = monthOrders > 0 ? Math.round(monthRev / monthOrders) : 0;
+
+    // Week revenue (last 7 days)
+    const weekRev = analytics
+      .filter(d => {
+        if (!d._id) return false;
+        const diff = (new Date(todayKey) - new Date(d._id)) / 86400000;
+        return diff >= 0 && diff < 7;
+      })
+      .reduce((a, b) => a + (b.revenue || 0), 0);
+
+    const pendingOrders = orders.filter(o => o.status === 'pending');
+    const readyOrders   = orders.filter(o => o.status === 'ready');
+    const servedOrders  = orders.filter(o => o.status === 'served');
+
+    const lowStockItems    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 3);
+    const criticalStock    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 1);
+    const outOfStockItems  = (procurementData || []).filter(p => p.daysRemaining === 0);
+
+    const sortedByQty     = [...(profitabilityData || [])].sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0));
+    const sortedByMargin  = [...(profitabilityData || [])].sort((a, b) => (b.marginPct    || 0) - (a.marginPct    || 0));
+    const sortedByRev     = [...(profitabilityData || [])].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
+    const topDish         = sortedByQty[0];
+    const bestMarginDish  = sortedByMargin[0];
+    const topRevDish      = sortedByRev[0];
+    const avgMarginAll    = profitabilityData?.length
+      ? (profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length).toFixed(1)
+      : null;
+
+    const hiddenDishes    = menuItems.filter(m => m.isAvailable === false);
+    const totalDishes     = menuItems.length;
+
+    const pendingRequests = (waiterRequests || []).filter(w => w.status === 'pending');
+    const occ             = occupiedTables?.length || 0;
+
+    const extraLow        = (extraItems || []).filter(e => e.currentStock <= (e.lowStockThreshold || 5));
+    const extraOos        = (extraItems || []).filter(e => e.currentStock <= 0);
+
+    const payToday        = dailySettlementBreakdown;
+
+    const qL = q.toLowerCase();
+    let answer = '';
+
+    // ── 25 intent handlers ──
+
+    // 1. Today's revenue
+    if ((qL.includes('revenue') || qL.includes('earning') || qL.includes('sale')) && qL.includes('today')) {
+      answer = todayRev > 0
+        ? `Today's revenue is ₹${todayRev.toLocaleString()} from ${todayCount} settled order${todayCount !== 1 ? 's' : ''}.\nPayment split — Cash: ₹${payToday.cash.toLocaleString()}, UPI: ₹${payToday.upi.toLocaleString()}, Card: ₹${payToday.card.toLocaleString()}.`
+        : 'No settled orders recorded for today yet.';
+
+    // 2. Monthly revenue
+    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('month') || qL.includes('monthly'))) {
+      answer = `This month (${monthStr}): ₹${monthRev.toLocaleString()} across ${monthOrders} orders.\nAverage order value: ₹${avgOrder.toLocaleString()}.`;
+
+    // 3. Weekly revenue
+    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('week') || qL.includes('weekly'))) {
+      answer = `Revenue over the last 7 days: ₹${weekRev.toLocaleString()}.`;
+
+    // 4. Pending / live orders
+    } else if (qL.includes('pending') || (qL.includes('live') && qL.includes('order')) || qL.includes('kitchen now')) {
+      const tableList = [...new Set(pendingOrders.map(o => `Table ${o.tableNumber}`))].slice(0, 5).join(', ');
+      answer = `Right now: ${pendingOrders.length} pending, ${readyOrders.length} ready to serve, ${servedOrders.length} served.\n${tableList ? `Active tables: ${tableList}${pendingOrders.length > 5 ? ' and more.' : '.'}` : ''}`;
+
+    // 5. Occupied tables
+    } else if (qL.includes('table') || qL.includes('occupied') || qL.includes('how many table')) {
+      answer = `${occ} table${occ !== 1 ? 's' : ''} currently occupied out of your floor map total.`;
+
+    // 6. Low stock
+    } else if (qL.includes('low stock') || qL.includes('running out') || qL.includes('stock alert')) {
+      if (lowStockItems.length === 0) {
+        answer = 'All inventory items have sufficient stock for the next 3+ days.';
+      } else {
+        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — ${i.daysRemaining}d left`).join('\n');
+        answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} running low:\n${list}`;
+      }
+
+    // 7. Out of stock / critical
+    } else if (qL.includes('out of stock') || qL.includes('critical stock') || qL.includes('zero stock')) {
+      if (outOfStockItems.length === 0) {
+        answer = 'No ingredients are out of stock.';
+      } else {
+        answer = `${outOfStockItems.length} item${outOfStockItems.length > 1 ? 's' : ''} out of stock: ${outOfStockItems.map(i => i.itemName).join(', ')}.`;
+      }
+
+    // 8. Best selling dish
+    } else if (qL.includes('best sell') || qL.includes('top dish') || qL.includes('most order') || qL.includes('popular')) {
+      if (!topDish) {
+        answer = 'No sales data yet. Map recipes to see profitability and sales rankings.';
+      } else {
+        answer = `Best-selling: "${topDish.name}" with ${topDish.totalQtySold} units sold.\nTop by revenue: "${topRevDish?.name}" generating ₹${(topRevDish?.totalRevenue || 0).toLocaleString()}.`;
+      }
+
+    // 9. Profit margin
+    } else if (qL.includes('margin') || qL.includes('profit') || qL.includes('most profit')) {
+      if (!bestMarginDish) {
+        answer = 'Recipe data not mapped yet. Add ingredient recipes to see dish profitability.';
+      } else {
+        answer = `Highest-margin dish: "${bestMarginDish.name}" at ${bestMarginDish.marginPct}% margin.\nOverall average food margin: ${avgMarginAll}%.`;
+      }
+
+    // 10. Average order value
+    } else if (qL.includes('average') || qL.includes('avg order') || qL.includes('order value')) {
+      answer = monthOrders > 0
+        ? `Average order value this month: ₹${avgOrder}.\nBased on ${monthOrders} orders totalling ₹${monthRev.toLocaleString()}.`
+        : 'No order data this month yet.';
+
+    // 11. Staff attendance
+    } else if ((qL.includes('staff') || qL.includes('attendance')) && !qL.includes('salary')) {
+      const presentToday = (staff || []).filter(s => {
+        const log = (attendanceLogs || []).find(l => l.staffId === s._id && l.date === todayKey);
+        return log?.status === 'present';
+      });
+      answer = `Staff today: ${presentToday.length} present out of ${staff?.length || 0} total.\n${
+        presentToday.length > 0 ? `Present: ${presentToday.slice(0, 5).map(s => s.name).join(', ')}${presentToday.length > 5 ? ' and more.' : '.'}` : 'No staff marked present yet.'
+      }`;
+
+    // 12. Salary query
+    } else if (qL.includes('salary') || qL.includes('payroll') || qL.includes('pay')) {
+      const thisMonthSalary = (staff || []).reduce((a, s) => a + (s.salary || 0), 0);
+      answer = `Total monthly payroll across ${staff?.length || 0} staff members: ₹${thisMonthSalary.toLocaleString()}.`;
+
+    // 13. Service / waiter requests
+    } else if (qL.includes('waiter') || qL.includes('service request') || qL.includes('request') || qL.includes('call')) {
+      answer = pendingRequests.length > 0
+        ? `${pendingRequests.length} pending service request${pendingRequests.length > 1 ? 's' : ''}: ${pendingRequests.slice(0, 3).map(w => `Table ${w.tableNumber} — ${w.serviceRequest?.slice(0, 30)}`).join('; ')}.`
+        : 'No pending service requests right now.';
+
+    // 14. Invoice / bills today
+    } else if (qL.includes('invoice') || qL.includes('bill') || qL.includes('settled today')) {
+      answer = todayCount > 0
+        ? `${todayCount} bill${todayCount !== 1 ? 's' : ''} settled today totalling ₹${todayRev.toLocaleString()}.\nCash: ₹${payToday.cash.toLocaleString()} · UPI: ₹${payToday.upi.toLocaleString()} · Card: ₹${payToday.card.toLocaleString()}.`
+        : 'No bills settled today yet.';
+
+    // 15. Payment split
+    } else if (qL.includes('payment') || qL.includes('cash') || qL.includes('upi') || qL.includes('card')) {
+      answer = `Today's payment split:\nCash: ₹${payToday.cash.toLocaleString()}\nUPI: ₹${payToday.upi.toLocaleString()}\nCard: ₹${payToday.card.toLocaleString()}\nTotal: ₹${payToday.gross.toLocaleString()}.`;
+
+    // 16. Hidden menu items
+    } else if ((qL.includes('hidden') || qL.includes('unavailable') || qL.includes('disabled')) && qL.includes('dish') || qL.includes('hidden menu')) {
+      answer = hiddenDishes.length > 0
+        ? `${hiddenDishes.length} of ${totalDishes} dishes currently hidden: ${hiddenDishes.slice(0, 5).map(d => d.name).join(', ')}${hiddenDishes.length > 5 ? ' and more.' : '.'}`
+        : `All ${totalDishes} menu items are currently visible and active.`;
+
+    // 17. Wastage
+    } else if (qL.includes('wastage') || qL.includes('waste') || qL.includes('spoil')) {
+      try {
+        const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
+        const wArr   = Array.isArray(wData.data) ? wData.data : [];
+        const wCost  = wArr.reduce((a, w) => a + (w.cost || 0), 0);
+        answer = wArr.length > 0
+          ? `${wArr.length} wastage entries today with a total cost of ₹${wCost.toLocaleString()}.`
+          : 'No wastage recorded today.';
+      } catch {
+        answer = 'Unable to fetch wastage data right now.';
+      }
+
+    // 18. Extra items / beverages stock
+    } else if (qL.includes('extra item') || qL.includes('beverage') || qL.includes('cold drink') || qL.includes('bottle')) {
+      answer = `Extra items: ${extraItems?.length || 0} total.\n${
+        extraOos.length > 0 ? `Out of stock: ${extraOos.map(e => e.name).join(', ')}.\n` : ''
+      }${
+        extraLow.length > 0 ? `Low stock: ${extraLow.filter(e => e.currentStock > 0).map(e => `${e.name} (${e.currentStock} left)`).join(', ')}.` : 'All extra items sufficiently stocked.'
+      }`;
+
+    // 19. Slow / dead dishes
+    } else if (qL.includes('slow') || qL.includes('dead dish') || qL.includes('not selling') || qL.includes('remove dish')) {
+      const slowDishes = sortedByQty.slice(-4).filter(d => (d.totalQtySold || 0) < 5);
+      answer = slowDishes.length > 0
+        ? `Slow-moving dishes (low sales): ${slowDishes.map(d => `${d.name} — ${d.totalQtySold || 0} sold`).join(', ')}.`
+        : 'All dishes have reasonable sales volume.';
+
+    // 20. Procurement / what to buy
+    } else if (qL.includes('procure') || qL.includes('purchase') || qL.includes('buy') || qL.includes('restock')) {
+      if (lowStockItems.length === 0) {
+        answer = 'No procurement needed in the next 3 days based on current stock and usage.';
+      } else {
+        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — buy ~${Math.ceil((i.avgDailyUsage || 1) * 14)} ${i.unit}`).join('\n');
+        answer = `Recommended purchases (14-day supply):\n${list}`;
+      }
+
+    // 21. Peak hour / busy time
+    } else if (qL.includes('peak') || qL.includes('busy') || qL.includes('rush') || qL.includes('when is')) {
+      const hourMap = {};
+      orders.forEach(o => {
+        if (!o.createdAt) return;
+        const h = new Date(new Date(o.createdAt).getTime() + 330 * 60000).getHours();
+        hourMap[h] = (hourMap[h] || 0) + 1;
+      });
+      const peak = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
+      answer = peak
+        ? `Today's busiest hour so far: ${Number(peak[0]) % 12 || 12}:00 ${Number(peak[0]) < 12 ? 'AM' : 'PM'} with ${peak[1]} order${peak[1] > 1 ? 's' : ''}.`
+        : 'Insufficient order data to calculate peak hour today.';
+
+    // 22. Inventory total value
+    } else if (qL.includes('inventory value') || qL.includes('stock value') || qL.includes('total stock worth')) {
+      const invTotal = (procurementData || []).reduce((a, p) => a + ((p.currentStock || 0) * (p.weightedAvgCost || p.costPrice || 0)), 0);
+      answer = `Estimated current inventory value: ₹${Math.round(invTotal).toLocaleString()} based on weighted average cost.`;
+
+    // 23. Menu count / items
+    } else if (qL.includes('how many dish') || qL.includes('menu item') || qL.includes('total dish') || qL.includes('menu count')) {
+      const vegCount    = menuItems.filter(m => m.isVeg !== false && m.isAvailable !== false).length;
+      const nonVegCount = menuItems.filter(m => m.isVeg === false && m.isAvailable !== false).length;
+      answer = `Menu has ${totalDishes} items total.\nActive: ${menuItems.filter(m => m.isAvailable !== false).length} · Hidden: ${hiddenDishes.length}.\nVeg: ${vegCount} · Non-veg: ${nonVegCount}.`;
+
+    // 24. Extra items revenue
+    } else if (qL.includes('extra revenue') || qL.includes('beverage revenue') || qL.includes('extra item revenue')) {
+      const extraRev = extraAnalytics?.totalRevenue || 0;
+      answer = extraRev > 0
+        ? `Extra items (beverages/snacks) have generated ₹${extraRev.toLocaleString()} in revenue with ${extraAnalytics?.totalSold || 0} units sold this period.`
+        : 'No extra item revenue data available for this period.';
+
+    // 25. How is the restaurant doing / summary
+    } else if (qL.includes('summary') || qL.includes('how is') || qL.includes('overview') || qL.includes('status')) {
+      answer = [
+        `Restaurant at a glance:`,
+        `Revenue today: ₹${todayRev.toLocaleString()} · Month: ₹${monthRev.toLocaleString()}`,
+        `Orders: ${pendingOrders.length} pending · ${occ} tables occupied`,
+        `Stock alerts: ${lowStockItems.length} items low`,
+        `Service requests: ${pendingRequests.length} pending`,
+        `Menu: ${totalDishes - hiddenDishes.length} active dishes`,
+      ].join('\n');
+
+    } else {
+      answer = [
+        'I can help with:',
+        'Revenue — today / weekly / monthly / payment split',
+        'Orders — pending, ready, served, live tables',
+        'Inventory — low stock, out of stock, total value, procurement',
+        'Menu — best sellers, margins, slow items, hidden dishes',
+        'Staff — attendance, payroll',
+        'Extras — beverages stock, revenue',
+        'Wastage — today\'s entries and cost',
+        'Try: "today\'s revenue", "low stock items", "best selling dish", "staff attendance today"'
+      ].join('\n');
+    }
+
+    setAssistMessages(prev => [...prev, { role: 'assistant', text: answer, ts: new Date() }]);
+  } catch {
+    setAssistMessages(prev => [...prev, { role: 'assistant', text: 'Unable to fetch data right now. Please try again in a moment.', ts: new Date() }]);
+  } finally {
+    setAssistLoading(false);
+    setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 120);
+  }
+}, [assistInput, analytics, orders, procurementData, profitabilityData, staff, attendanceLogs,
+    occupiedTables, waiterRequests, menuItems, extraItems, extraAnalytics, extraAnalytics,
+    dailySettlementBreakdown, tenantId, viewDate]);
+
+
   const advancedStats = useMemo(() => {
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
     currentMonthAnalytics.forEach(day => {
@@ -1451,10 +1454,16 @@ const liveFloorIntelligence = useMemo(() => {
 }, [staff, attendanceLogs, attendanceDate]);
 
   const insightsData = useMemo(() => {
-    const margins = menuItems.map(m => ({
-      name: m.name,
-      margin: m.price ? (((m.price-(m.costPrice||m.price*0.5))/m.price)*100).toFixed(0) : 0
-    })).sort((a,b)=>b.margin-a.margin).slice(0,3);
+const margins = menuItems.map(m => {
+  // Try to get real margin from profitabilityData first
+  const profRow = profitabilityData.find(p => p.name === m.name || p.menuItemId === m._id);
+  if (profRow?.marginPct != null) return { name: m.name, margin: profRow.marginPct.toFixed(0) };
+  // Fall back to costPrice only if explicitly set — never fabricate 50%
+  if (m.costPrice && m.price) {
+    return { name: m.name, margin: (((m.price - m.costPrice) / m.price) * 100).toFixed(0) };
+  }
+  return { name: m.name, margin: 0 };
+}).sort((a, b) => b.margin - a.margin).slice(0, 3);
     const peakHour = hourlyAnalytics.hourly.length
       ? hourlyAnalytics.hourly.reduce((a,b)=>b.orderCount>a.orderCount?b:a, hourlyAnalytics.hourly[0])?.hour || 0
       : 0;
