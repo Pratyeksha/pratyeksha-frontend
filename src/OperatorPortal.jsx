@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback,useRef  } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
-import { QRCodeSVG } from 'qrcode.react'; 
+ 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  UtensilsCrossed, ReceiptIndianRupee, BarChart3,
+  UtensilsCrossed, ReceiptIndianRupee, BarChart3,ClipboardList, FileClock, SquarePen, Boxes, ClipboardPenLine,
+FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus, ArrowUpRight,UserRound ,EyeOff ,
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
@@ -346,6 +347,10 @@ const tableCount = parseInt(localStorage.getItem('table_count')) || 12;
 const [extraAnalytics, setExtraAnalytics] = useState(null);
 const [extraAnalyticsLoading, setExtraAnalyticsLoading] = useState(false);
 
+  // ── attendanceLogs holds MONTHLY logs (for ledger count) + today (for clock-in UI)
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [ledgerSortConfig, setLedgerSortConfig] = useState({ key: 'name', direction: 'asc' });
+  
 const [showAddDishModal, setShowAddDishModal] = useState(false);
 const [newDish, setNewDish] = useState({
   name: '', name_mr: '', categoryId: '', price: '', priceHalf: '', priceFull: '',
@@ -355,6 +360,16 @@ const [newDish, setNewDish] = useState({
 const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 const [auditLogs, setAuditLogs] = useState([]);
+  const occupiedTables = useMemo(() => [
+    ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
+  ], [orders]);
+// ── OPERATOR ASSISTANT ──
+const [assistMessages, setAssistMessages] = useState([
+  { role: 'system', text: 'Hello. Ask me anything about your restaurant — orders, revenue, stock, staff, or menu performance.', ts: new Date() }
+]);
+const [assistInput,    setAssistInput]    = useState('');
+const [assistLoading,  setAssistLoading]  = useState(false);
+const assistEndRef = useRef(null);
 const [waitlistAnalytics, setWaitlistAnalytics] = useState(null);
 const [aggregatorAnalytics, setAggregatorAnalytics] = useState(null);
 
@@ -374,6 +389,123 @@ const fetchAuditLogs = useCallback(async () => {
   } catch {}
 }, [tenantId]);
 
+// ── OPERATOR ASSISTANT: answer from real data ──
+const handleAssistQuery = useCallback(async (question) => {
+  const q = (question || assistInput).trim();
+  if (!q) return;
+
+  setAssistMessages(prev => [...prev, { role: 'user', text: q, ts: new Date() }]);
+  setAssistInput('');
+  setAssistLoading(true);
+
+  try {
+    // Gather context from already-loaded state (no extra API calls needed for most questions)
+    const todayRevenue = analytics
+      .filter(d => d._id === new Date().toISOString().split('T')[0])
+      .reduce((a, b) => a + (b.revenue || 0), 0);
+
+    const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+    const monthRevenue = analytics
+      .filter(d => d._id?.startsWith(monthStr))
+      .reduce((a, b) => a + (b.revenue || 0), 0);
+
+    const monthOrders = analytics
+      .filter(d => d._id?.startsWith(monthStr))
+      .reduce((a, b) => a + (b.count || 0), 0);
+
+    const pendingCount = orders.filter(o => o.status === 'pending').length;
+    const readyCount   = orders.filter(o => o.status === 'ready').length;
+
+    const lowStockItems = procurementData?.filter(p => p.daysRemaining !== null && p.daysRemaining <= 3) || [];
+
+    const topDish = profitabilityData?.sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0))[0];
+    const bestMargin = profitabilityData?.sort((a, b) => (b.marginPct || 0) - (a.marginPct || 0))[0];
+
+    const qL = q.toLowerCase();
+
+    let answer = '';
+
+    if (qL.includes('revenue') && qL.includes('today')) {
+      answer = todayRevenue > 0
+        ? `Today's revenue so far is ₹${todayRevenue.toLocaleString()}.`
+        : `No settled orders recorded for today yet.`;
+
+    } else if (qL.includes('revenue') && (qL.includes('month') || qL.includes('monthly'))) {
+      answer = `Revenue this month (${monthStr}) is ₹${monthRevenue.toLocaleString()} across ${monthOrders} orders.`;
+
+    } else if (qL.includes('pending') || qL.includes('live') || qL.includes('kitchen')) {
+      answer = `There are ${pendingCount} pending order${pendingCount !== 1 ? 's' : ''} and ${readyCount} ready to serve right now.`;
+
+    } else if (qL.includes('low stock') || qL.includes('out of stock') || qL.includes('running out')) {
+      if (lowStockItems.length === 0) {
+        answer = 'All inventory items have sufficient stock for the next few days.';
+      } else {
+        answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} need restocking soon: ${lowStockItems.slice(0, 4).map(i => `${i.itemName} (${i.daysRemaining}d left)`).join(', ')}.`;
+      }
+
+    } else if (qL.includes('best sell') || qL.includes('top dish') || qL.includes('most ordered')) {
+      answer = topDish
+        ? `Your best-selling dish this period is "${topDish.name}" with ${topDish.totalQtySold} units sold.`
+        : 'No sales data available yet for this period.';
+
+    } else if (qL.includes('margin') || qL.includes('profit')) {
+      answer = bestMargin
+        ? `"${bestMargin.name}" has your highest margin at ${bestMargin.marginPct}%. Overall food cost averages ${(profitabilityData?.reduce((a,b)=>a+(b.marginPct||0),0)/Math.max(1,profitabilityData?.length)).toFixed(1)}% margin.`
+        : 'Recipe data not mapped yet — add recipes to see profitability.';
+
+    } else if (qL.includes('staff') || qL.includes('attendance')) {
+      const presentToday = staff?.filter(s => {
+        const todayLog = attendanceLogs?.find(l => l.staffId === s._id && l.date === new Date().toISOString().split('T')[0]);
+        return todayLog?.status === 'present';
+      }).length || 0;
+      answer = `${presentToday} of ${staff?.length || 0} staff marked present today.`;
+
+    } else if (qL.includes('table') || qL.includes('occupied')) {
+      const occ = occupiedTables?.length || 0;
+      answer = `${occ} table${occ !== 1 ? 's' : ''} currently occupied.`;
+
+    } else if (qL.includes('waiter') || qL.includes('request') || qL.includes('service')) {
+      const wCount = waiterRequests?.filter(w => w.status === 'pending').length || 0;
+      answer = `${wCount} pending service request${wCount !== 1 ? 's' : ''} from customers right now.`;
+
+    } else if (qL.includes('wastage') || qL.includes('waste')) {
+      const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
+      const wastageCount = Array.isArray(wData.data) ? wData.data.length : 0;
+      answer = wastageCount > 0
+        ? `${wastageCount} wastage entries recorded today.`
+        : 'No wastage recorded today.';
+
+    } else if (qL.includes('invoice') || qL.includes('bill')) {
+      const todayBills = analytics.filter(d => d._id === new Date().toISOString().split('T')[0]);
+      const billCount  = todayBills.reduce((a, b) => a + (b.count || 0), 0);
+      answer = `${billCount} bill${billCount !== 1 ? 's' : ''} settled today, totalling ₹${todayRevenue.toLocaleString()}.`;
+
+    } else if (qL.includes('avg') || qL.includes('average')) {
+      const avg = monthOrders > 0 ? Math.round(monthRevenue / monthOrders) : 0;
+      answer = `Average order value this month is ₹${avg}.`;
+
+    } else if (qL.includes('menu') && qL.includes('hidden')) {
+      const hiddenCount = menuItems.filter(m => m.isAvailable === false).length;
+      answer = `${hiddenCount} dish${hiddenCount !== 1 ? 'es are' : ' is'} currently hidden from the menu.`;
+
+    } else if (qL.includes('extra item') || qL.includes('cold drink') || qL.includes('beverage')) {
+      const extraLow = extraItems?.filter(e => e.currentStock <= (e.lowStockThreshold || 5)).length || 0;
+      answer = `You have ${extraItems?.length || 0} extra items. ${extraLow > 0 ? `${extraLow} are running low on stock.` : 'All are sufficiently stocked.'}`;
+
+    } else {
+      answer = `I can answer questions about: today's revenue, monthly revenue, pending orders, low stock, best-selling dish, profit margins, staff attendance, occupied tables, service requests, wastage, invoices, average order value, and hidden menu items. Try asking one of those.`;
+    }
+
+    setAssistMessages(prev => [...prev, { role: 'assistant', text: answer, ts: new Date() }]);
+  } catch {
+    setAssistMessages(prev => [...prev, { role: 'assistant', text: 'Unable to fetch data right now. Please try again.', ts: new Date() }]);
+  } finally {
+    setAssistLoading(false);
+    setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }
+}, [assistInput, analytics, orders, procurementData, profitabilityData, staff, attendanceLogs,
+    occupiedTables, waiterRequests, menuItems, extraItems, tenantId, viewDate]);
+
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
     name: '', role: 'Waiter', age: '', contact: '', address: '',
@@ -389,9 +521,7 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
     const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   });
-  // ── attendanceLogs holds MONTHLY logs (for ledger count) + today (for clock-in UI)
-  const [attendanceLogs, setAttendanceLogs] = useState([]);
-  const [ledgerSortConfig, setLedgerSortConfig] = useState({ key: 'name', direction: 'asc' });
+
 
   const [inventoryLoading, setInventoryLoading] = useState(false);
   // ─────────────────────────────────────────────────────
@@ -1066,9 +1196,7 @@ const hudLiveCounterBreakdown = useMemo(() => {
   return { total: direct + takeaway + online, direct, takeaway, online };
 }, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
-  const occupiedTables = useMemo(() => [
-    ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
-  ], [orders]);
+
 
 const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -3597,6 +3725,7 @@ const renderMonthHeatmap = () => {
   {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
   {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
   {id:'audit', label:'AUDIT', icon:<ShieldCheck size={18}/>},
+  {id:'assist', label:'ASSIST', icon:<MessageSquare size={18}/>},
   {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
   {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
   {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
@@ -10258,209 +10387,231 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
   </motion.div>
 )}
 
- {/* ── AUDIT TRAIL TAB ── */}
+{/* ── PREMIUM AUDIT TRAIL TAB ── */}
+{/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
 {activeTab === 'audit' && (
-  <motion.div
-    key="audit"
-    initial={{ opacity: 0, y: 12 }}
-    animate={{ opacity: 1, y: 0 }}
-    style={{
-      padding: '16px',
-      paddingBottom: '100px',
-      maxWidth: '900px',
-      margin: '0 auto',
-      width: '100%'
-    }}
-  >
+  <motion.div key="audit" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+    style={{ padding: '16px', paddingBottom: '100px', maxWidth: '960px', margin: '0 auto', width: '100%' }}>
 
     {/* Header */}
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center', marginBottom: '20px'
-    }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{
-          width: '32px', height: '32px', borderRadius: '9px',
-          background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.18)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <ShieldCheck size={15} color="#d3bfa2" strokeWidth={1.5} />
+        <div style={{ width: '30px', height: '30px', borderRadius: '8px',
+          background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ShieldCheck size={14} color="#d3bfa2" strokeWidth={1.5} />
         </div>
         <div>
-          <div style={{
-            fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2',
-            letterSpacing: '2.5px', textTransform: 'uppercase'
-          }}>
-            AUDIT TRAIL
-          </div>
-          <div style={{
-            fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px'
-          }}>
-            Complete action history for this restaurant
-          </div>
+          <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>AUDIT TRAIL</div>
+          <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px' }}>Complete action history</div>
         </div>
-      </div>
-      <div style={{
-        background: 'rgba(211,191,162,0.06)',
-        border: '1px solid rgba(211,191,162,0.12)',
-        borderRadius: '7px', padding: '4px 10px',
-        display: 'flex', alignItems: 'center', gap: '5px'
-      }}>
-        <ClipboardCheck size={10} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
-        <span style={{
-          color: 'rgba(211,191,162,0.6)', fontSize: '0.6rem', fontWeight: '700'
-        }}>
-          {auditLogs.length} entries
-        </span>
       </div>
     </div>
 
-    {/* Empty state */}
-    {auditLogs.length === 0 && (
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        paddingTop: '80px', gap: '12px'
-      }}>
-        <div style={{
-          width: '48px', height: '48px', borderRadius: '14px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <FileText size={20} color="rgba(255,255,255,0.1)" strokeWidth={1.5} />
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem',
-            fontWeight: '700', marginBottom: '4px'
-          }}>
-            No logs yet
-          </div>
-          <div style={{
-            color: 'rgba(255,255,255,0.1)', fontSize: '0.65rem'
-          }}>
-            Settlements, price changes and restocks will appear here
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Log entries */}
-    {auditLogs.map((log, idx) => {
-
-      const actionColors = {
-        BILL_SETTLED:         { color: '#4ade80', bg: 'rgba(74,222,128,0.06)',  border: 'rgba(74,222,128,0.15)',  icon: <CheckCircle2 size={12} color="#4ade80" strokeWidth={2} /> },
-        MENU_ITEM_UPDATED:    { color: '#d3bfa2', bg: 'rgba(211,191,162,0.04)', border: 'rgba(211,191,162,0.12)', icon: <FileText size={12} color="#d3bfa2" strokeWidth={1.8} /> },
-        INVENTORY_RESTOCKED:  { color: '#60a5fa', bg: 'rgba(96,165,250,0.05)',  border: 'rgba(96,165,250,0.15)',  icon: <PackageCheck size={12} color="#60a5fa" strokeWidth={1.8} /> },
-        DEFAULT:              { color: 'rgba(211,191,162,0.6)', bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.06)', icon: <ClipboardCheck size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} /> }
-      };
-      const ac = actionColors[log.action] || actionColors.DEFAULT;
-
+    {/* Category blocks */}
+    {[
+      { key: 'BILLING',            label: 'BILLING',              icon: <ReceiptIndianRupee size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'MENU_UPDATES',       label: 'MENU UPDATES',         icon: <UtensilsCrossed size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'MENU_VISIBILITY',    label: 'MENU VISIBILITY',      icon: <EyeOff size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'INVENTORY',          label: 'INVENTORY CHANGES',    icon: <Package size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'RECIPE_INGREDIENTS', label: 'RECIPES & INGREDIENTS',icon: <ChefHat size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'SALARY_STAFF',       label: 'SALARY & STAFF',       icon: <Users size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+      { key: 'SECURITY_SYSTEM',    label: 'SECURITY & SYSTEM',    icon: <ShieldCheck size={13} color="#d3bfa2" strokeWidth={1.5} /> },
+    ].map(({ key, label, icon }) => {
+      const sectionLogs = auditLogs.filter(l => l.category === key);
+      if (sectionLogs.length === 0) return null;
       return (
-        <div key={log._id || idx} style={{
-          padding: '12px 14px', marginBottom: '7px',
-          background: ac.bg,
-          border: `1px solid ${ac.border}`,
-          borderRadius: '10px'
-        }}>
-
-          {/* Top row: action label + timestamp */}
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            alignItems: 'flex-start', marginBottom: '7px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-              {ac.icon}
-              <span style={{
-                color: ac.color, fontSize: '0.7rem', fontWeight: '800'
-              }}>
-                {log.action?.replace(/_/g, ' ')}
-              </span>
-            </div>
-            <span style={{
-              color: 'rgba(255,255,255,0.18)', fontSize: '0.6rem',
-              fontFamily: 'monospace', flexShrink: 0, marginLeft: '8px'
-            }}>
-              {new Date(log.createdAt).toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                day: '2-digit', month: 'short',
-                hour: '2-digit', minute: '2-digit'
-              })}
+        <div key={key} style={{ marginBottom: '18px' }}>
+          {/* Section header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 12px', marginBottom: '8px',
+            background: 'rgba(211,191,162,0.04)',
+            border: '1px solid rgba(211,191,162,0.1)',
+            borderRadius: '8px' }}>
+            {icon}
+            <span style={{ color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '2px' }}>{label}</span>
+            <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.2)', fontSize: '0.58rem' }}>
+              {sectionLogs.length} record{sectionLogs.length > 1 ? 's' : ''}
             </span>
           </div>
 
-          {/* Actor + entity */}
-          <div style={{
-            display: 'flex', gap: '12px', flexWrap: 'wrap',
-            marginBottom: (log.before || log.after) ? '8px' : 0
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <User size={9} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
-                By:&nbsp;
-                <strong style={{
-                  color: 'rgba(255,255,255,0.55)', fontWeight: '700'
-                }}>
-                  {log.actorName}
-                </strong>
-              </span>
-            </div>
-            {log.entity && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <AlertOctagon size={9} color="rgba(255,255,255,0.12)" strokeWidth={1.8} />
-                <span style={{
-                  color: 'rgba(255,255,255,0.18)', fontSize: '0.65rem'
-                }}>
-                  {log.entity}
+          {/* Log rows */}
+          {sectionLogs.slice(0, 8).map((log, idx) => (
+            <div key={log._id || idx} style={{ padding: '10px 13px', marginBottom: '5px',
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ClipboardCheck size={10} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />
+                  <span style={{ color: '#d3bfa2', fontSize: '0.67rem', fontWeight: '800' }}>
+                    {log.action?.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: '0.58rem', fontFamily: 'monospace' }}>
+                  {new Date(log.createdAt).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short',
+                    hour: '2-digit', minute: '2-digit'
+                  })}
                 </span>
               </div>
-            )}
-          </div>
-
-          {/* Before / After diff */}
-          {(log.before || log.after) && (
-            <div style={{
-              display: 'flex', gap: '8px', flexWrap: 'wrap'
-            }}>
-              {log.before && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                  background: 'rgba(248,113,113,0.05)',
-                  border: '1px solid rgba(248,113,113,0.12)',
-                  borderRadius: '5px', padding: '3px 8px'
-                }}>
-                  <ArrowDown size={9} color="#f87171" strokeWidth={2} />
-                  <span style={{
-                    color: '#f87171', fontSize: '0.6rem'
-                  }}>
-                    {JSON.stringify(log.before)
-                      .replace(/[{}"]/g, '').slice(0, 60)}
-                  </span>
-                </div>
-              )}
-              {log.after && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                  background: 'rgba(74,222,128,0.04)',
-                  border: '1px solid rgba(74,222,128,0.12)',
-                  borderRadius: '5px', padding: '3px 8px'
-                }}>
-                  <CheckCircle2 size={9} color="#4ade80" strokeWidth={2} />
-                  <span style={{
-                    color: '#4ade80', fontSize: '0.6rem'
-                  }}>
-                    {JSON.stringify(log.after)
-                      .replace(/[{}"]/g, '').slice(0, 60)}
-                  </span>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: (log.before || log.after) ? '6px' : 0 }}>
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.63rem' }}>
+                  By: <strong style={{ color: 'rgba(255,255,255,0.55)' }}>{log.actorName}</strong>
+                </span>
+                {log.entity && <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.63rem' }}>{log.entity}</span>}
+                {log.note  && <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.63rem', fontStyle: 'italic' }}>"{log.note}"</span>}
+              </div>
+              {(log.before || log.after) && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {log.before && (
+                    <span style={{ color: 'rgba(211,191,162,0.5)', fontSize: '0.58rem',
+                      background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
+                      padding: '2px 7px', borderRadius: '4px' }}>
+                      Before: {JSON.stringify(log.before).replace(/[{}"]/g,'').slice(0,55)}
+                    </span>
+                  )}
+                  {log.after && (
+                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.58rem',
+                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
+                      padding: '2px 7px', borderRadius: '4px' }}>
+                      After: {JSON.stringify(log.after).replace(/[{}"]/g,'').slice(0,55)}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
       );
     })}
+
+    {auditLogs.length === 0 && (
+      <div style={{ textAlign: 'center', paddingTop: '80px' }}>
+        <FileText size={32} color="rgba(255,255,255,0.06)" strokeWidth={1} style={{ marginBottom: '12px' }} />
+        <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.72rem' }}>No audit records yet.</div>
+        <div style={{ color: 'rgba(255,255,255,0.1)', fontSize: '0.62rem', marginTop: '4px' }}>
+          Actions will appear here after settlements, menu edits, stock changes and more.
+        </div>
+      </div>
+    )}
+  </motion.div>
+)}
+
+{/* ── PRATYEKSHA OPERATOR ASSISTANT ── */}
+{activeTab === 'assist' && (
+  <motion.div key="assist" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+    style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)',
+      maxWidth: '760px', margin: '0 auto', width: '100%', padding: '16px', boxSizing: 'border-box' }}>
+
+    {/* Header */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+      <div style={{ width: '30px', height: '30px', borderRadius: '8px',
+        background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <MessageSquare size={14} color="#d3bfa2" strokeWidth={1.5} />
+      </div>
+      <div>
+        <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>PRATYEKSHA ASSIST</div>
+        <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)' }}>Ask about your restaurant — real data, instant answers</div>
+      </div>
+    </div>
+
+    {/* Quick questions */}
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+      {[
+        "Today's revenue?", "Pending orders?", "Low stock items?",
+        "Best selling dish?", "Monthly revenue?", "Staff attendance today?",
+        "Occupied tables?", "Average order value?", "Hidden menu items?",
+        "Service requests?", "Best margin dish?", "Wastage today?"
+      ].map(q => (
+        <button key={q} onClick={() => handleAssistQuery(q)}
+          style={{
+            fontSize: '0.58rem', padding: '5px 10px', borderRadius: '6px',
+            background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.15)',
+            color: 'rgba(211,191,162,0.6)', cursor: 'pointer', fontFamily: 'Poppins, sans-serif',
+            fontWeight: '600', transition: 'all 0.15s', outline: 'none'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.1)'; e.currentTarget.style.color = '#d3bfa2'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.05)'; e.currentTarget.style.color = 'rgba(211,191,162,0.6)'; }}
+        >{q}</button>
+      ))}
+    </div>
+
+    {/* Messages */}
+    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
+      gap: '10px', paddingRight: '4px', marginBottom: '12px' }}
+      className="no-scrollbar">
+      {assistMessages.map((msg, i) => (
+        <div key={i} style={{
+          display: 'flex',
+          justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
+        }}>
+          {msg.role !== 'user' && (
+            <div style={{ width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
+              background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '8px', marginTop: '2px' }}>
+              <Sparkles size={11} color="#d3bfa2" strokeWidth={1.5} />
+            </div>
+          )}
+          <div style={{
+            maxWidth: '78%', padding: '10px 13px', borderRadius: '11px',
+            background: msg.role === 'user'
+              ? 'rgba(211,191,162,0.08)'
+              : msg.role === 'system'
+              ? 'rgba(255,255,255,0.02)'
+              : '#0e0e0e',
+            border: `1px solid ${msg.role === 'user' ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.05)'}`,
+            borderBottomRightRadius: msg.role === 'user' ? '3px' : '11px',
+            borderBottomLeftRadius:  msg.role !== 'user' ? '3px' : '11px',
+          }}>
+            <div style={{ fontSize: '0.72rem', color: msg.role === 'user' ? '#d3bfa2' : 'rgba(255,255,255,0.7)',
+              lineHeight: 1.55, fontWeight: msg.role === 'user' ? '600' : '400' }}>
+              {msg.text}
+            </div>
+            <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.15)', marginTop: '5px', textAlign: 'right' }}>
+              {new Date(msg.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+            </div>
+          </div>
+        </div>
+      ))}
+      {assistLoading && (
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center', paddingLeft: '32px' }}>
+          {[0,1,2].map(i => (
+            <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%',
+              background: 'rgba(211,191,162,0.3)',
+              animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+          ))}
+        </div>
+      )}
+      <div ref={assistEndRef} />
+    </div>
+
+    {/* Input */}
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <input
+        value={assistInput}
+        onChange={e => setAssistInput(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && !assistLoading) handleAssistQuery(); }}
+        placeholder="Ask anything about your restaurant..."
+        style={{
+          flex: 1, padding: '11px 14px', borderRadius: '10px',
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211,191,162,0.18)',
+          color: '#fff', fontSize: '0.72rem', outline: 'none',
+          fontFamily: 'Poppins, sans-serif', caretColor: '#d3bfa2'
+        }}
+      />
+      <button onClick={() => handleAssistQuery()}
+        disabled={assistLoading || !assistInput.trim()}
+        style={{
+          width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
+          background: assistInput.trim() ? 'rgba(211,191,162,0.12)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${assistInput.trim() ? 'rgba(211,191,162,0.3)' : 'rgba(255,255,255,0.06)'}`,
+          cursor: assistInput.trim() ? 'pointer' : 'default',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
+        }}>
+        <Send size={15} color={assistInput.trim() ? '#d3bfa2' : 'rgba(255,255,255,0.15)'} strokeWidth={1.8} />
+      </button>
+    </div>
   </motion.div>
 )}
 

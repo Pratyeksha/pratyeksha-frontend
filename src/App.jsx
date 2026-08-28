@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import { io } from "socket.io-client";
 import { 
-  CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, 
+  CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
@@ -95,6 +95,11 @@ const [extraItemsLoading, setExtraItemsLoading] = useState(false);
 const [extraItemCart, setExtraItemCart] = useState({}); // { itemId: qty }
 const [activeExtraCategory, setActiveExtraCategory] = useState('All');
 const [extraItemSearchQuery, setExtraItemSearchQuery] = useState('');
+// ── SMART VOICE ──
+const [speakingItemId, setSpeakingItemId]   = useState(null);  // which dish is speaking
+const [voicePaused,   setVoicePaused]       = useState(false);
+const [voiceLang,     setVoiceLang]         = useState('en-IN'); // en-IN | hi-IN | mr-IN
+const speechRef = useRef(null); // holds current SpeechSynthesisUtterance
 
 const [reservationDate, setReservationDate] = useState('');
 const [reservationTime, setReservationTime] = useState('');
@@ -644,7 +649,112 @@ onClick={() => {
     setAlert({ show: true, msg: t[language][msgKey] || msgKey, type });
     setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
   };
+// ── SMART VOICE: speak dish details ──
+const stopSpeech = () => {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  setSpeakingItemId(null);
+  setVoicePaused(false);
+  speechRef.current = null;
+};
 
+const speakDish = (item) => {
+  if (!window.speechSynthesis) return; // browser unsupported — silent fail
+
+  // If same dish is already speaking — stop it (toggle off)
+  if (speakingItemId === item._id) {
+    stopSpeech();
+    return;
+  }
+
+  // Stop anything currently playing
+  stopSpeech();
+
+  // Build recommended dish: pick an available, same-category dish (not this one)
+  const recommended = allMenuItems.find(
+    m => m._id !== item._id &&
+         m.categoryId === item.categoryId &&
+         m.isAvailable !== false
+  ) || allMenuItems.find(m => m._id !== item._id && m.isAvailable !== false);
+
+  // Build the speech script per language
+  const scripts = {
+    'en-IN': () => {
+      const status = item._eng?.quadrant === 'star' ? 'a Bestseller' :
+                     item.isChefSpecial ? 'a Chef Special' : '';
+      const serves = item.servingSize ? `Serves ${item.servingSize}.` : '';
+      const spice  = item.spiceLevel  ? `Spice level: ${item.spiceLevel}.` : '';
+      const ings   = item.ingredients?.en?.length
+        ? `Main ingredients: ${item.ingredients.en.slice(0,4).join(', ')}.` : '';
+      const desc   = item.description ? `${item.description}.` : '';
+      const rec    = recommended ? `You might also enjoy ${recommended.name}.` : '';
+      return [item.name, status, serves, spice, ings, desc, rec]
+        .filter(Boolean).join(' ');
+    },
+    'hi-IN': () => {
+      const name   = item.name_mr || item.name;
+      const status = item._eng?.quadrant === 'star' ? 'यह बेस्टसेलर है।' :
+                     item.isChefSpecial ? 'यह शेफ स्पेशल है।' : '';
+      const serves = item.servingSize ? `${item.servingSize} व्यक्तियों के लिए।` : '';
+      const spice  = item.spiceLevel  ? `मसाले का स्तर: ${item.spiceLevel}.` : '';
+      const ings   = item.ingredients?.en?.length
+        ? `मुख्य सामग्री: ${item.ingredients.en.slice(0,4).join(', ')}.` : '';
+      const desc   = item.description || '';
+      const rec    = recommended ? `आप ${recommended.name || ''} भी आज़मा सकते हैं।` : '';
+      return [name, status, serves, spice, ings, desc, rec]
+        .filter(Boolean).join(' ');
+    },
+    'mr-IN': () => {
+      const name   = item.name_mr || item.name;
+      const status = item._eng?.quadrant === 'star' ? 'हे बेस्टसेलर आहे.' :
+                     item.isChefSpecial ? 'हे शेफ स्पेशल आहे.' : '';
+      const serves = item.servingSize ? `${item.servingSize} जणांसाठी.` : '';
+      const spice  = item.spiceLevel  ? `तिखटपणा: ${item.spiceLevel}.` : '';
+      const ings   = item.ingredients?.mr?.length
+        ? `मुख्य घटक: ${item.ingredients.mr.slice(0,4).join(', ')}.` : '';
+      const desc   = item.description || '';
+      const rec    = recommended ? `तुम्हाला ${recommended.name_mr || recommended.name} देखील आवडेल.` : '';
+      return [name, status, serves, spice, ings, desc, rec]
+        .filter(Boolean).join(' ');
+    }
+  };
+
+  const text = (scripts[voiceLang] || scripts['en-IN'])();
+  if (!text.trim()) return;
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang   = voiceLang;
+  utter.rate   = 0.92;
+  utter.pitch  = 1.0;
+  utter.volume = 1.0;
+
+  // Pick the best available voice for the language
+  const voices = window.speechSynthesis.getVoices();
+  const match  = voices.find(v => v.lang === voiceLang) ||
+                 voices.find(v => v.lang.startsWith(voiceLang.split('-')[0])) ||
+                 voices[0];
+  if (match) utter.voice = match;
+
+  utter.onstart = () => { setSpeakingItemId(item._id); setVoicePaused(false); };
+  utter.onend   = () => { setSpeakingItemId(null);     setVoicePaused(false); speechRef.current = null; };
+  utter.onerror = () => { setSpeakingItemId(null);     setVoicePaused(false); speechRef.current = null; };
+
+  speechRef.current = utter;
+  window.speechSynthesis.speak(utter);
+};
+
+const toggleVoicePause = (e) => {
+  e.stopPropagation();
+  if (!window.speechSynthesis) return;
+  if (voicePaused) {
+    window.speechSynthesis.resume();
+    setVoicePaused(false);
+  } else {
+    window.speechSynthesis.pause();
+    setVoicePaused(true);
+  }
+};
   const isOnlyVegTenant = restaurantData?.config?.onlyVeg === true;
 
 useEffect(() => {
@@ -772,10 +882,10 @@ return () => {
   socket.off("menu_updated");
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
-  socket.off("order_status_updated");   // ← ADD THIS LINE
+  socket.off("order_status_updated");
+  if (window.speechSynthesis) window.speechSynthesis.cancel(); // ← ADD
   socket.disconnect();
 };
-
   }, [tenantId, language]);
 
   // ── QR Session Validation — prevents URL injection ──
@@ -1665,17 +1775,18 @@ const sendBatchToKitchen = async () => {
       const summaryKey = `${id}-${portion}`;
       if (!summary[summaryKey]) {
         const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
-        summary[summaryKey] = {
-          menuItemId:   item._id,
-          name:         item.name,
-          name_mr:      item.name_mr,
-          quantity:     0,
-          portion:      portion,
-          pricePerUnit: unitPrice,
-          subtotal:     0,
-          suggestion:   suggestions[key] || "",
-          isVeg:        item.isVeg !== false
-        };
+summary[summaryKey] = {
+  menuItemId:   item._id,
+  name:         item.name,
+  name_mr:      item.name_mr,
+  categoryId:   item.categoryId,      // ← ADD THIS LINE
+  quantity:     0,
+  portion:      portion,
+  pricePerUnit: unitPrice,
+  subtotal:     0,
+  suggestion:   suggestions[key] || "",
+  isVeg:        item.isVeg !== false
+};
       }
       summary[summaryKey].quantity += qty;
       summary[summaryKey].subtotal  = summary[summaryKey].quantity * summary[summaryKey].pricePerUnit;
@@ -5696,14 +5807,103 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                               )}
                             </div>
 
-                            {item.description && (
-                              <div style={{
-                                fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)',
-                                marginTop: '4px', lineHeight: 1.4
-                              }}>
-                                {item.description}
-                              </div>
-                            )}
+                            {/* Description + Voice button row */}
+<div style={{ marginTop: '6px' }}>
+  {item.description && (
+    <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.5, marginBottom: '4px' }}>
+      {item.description}
+    </div>
+  )}
+
+  {/* ── SMART VOICE BUTTON ── */}
+  {typeof window !== 'undefined' && window.speechSynthesis && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px', flexWrap: 'wrap' }}>
+
+      {/* Speaker / Pause / Stop controls */}
+      <button
+        aria-label={speakingItemId === item._id ? 'Stop reading dish description' : 'Hear dish description'}
+        onClick={(e) => { e.stopPropagation(); speakDish(item); }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '5px',
+          padding: '4px 9px',
+          background: speakingItemId === item._id
+            ? 'rgba(211,191,162,0.12)'
+            : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${speakingItemId === item._id
+            ? 'rgba(211,191,162,0.35)'
+            : 'rgba(255,255,255,0.08)'}`,
+          borderRadius: '6px',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          outline: 'none',
+          fontFamily: 'Poppins, sans-serif'
+        }}
+      >
+        {speakingItemId === item._id ? (
+          <Volume2 size={11} color="#d3bfa2" strokeWidth={1.8}
+            style={{ animation: 'pulse 1s ease-in-out infinite' }} />
+        ) : (
+          <Volume1 size={11} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />
+        )}
+        <span style={{
+          fontSize: '0.52rem', fontWeight: '700', letterSpacing: '0.5px',
+          color: speakingItemId === item._id ? '#d3bfa2' : 'rgba(211,191,162,0.35)'
+        }}>
+          {speakingItemId === item._id
+            ? (language === 'mr' ? 'थांब' : 'STOP')
+            : (language === 'mr' ? 'ऐका' : 'HEAR')}
+        </span>
+      </button>
+
+      {/* Pause/Resume — only when this dish is speaking */}
+      {speakingItemId === item._id && (
+        <button
+          aria-label={voicePaused ? 'Resume' : 'Pause'}
+          onClick={toggleVoicePause}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '24px', height: '24px',
+            background: 'rgba(211,191,162,0.06)',
+            border: '1px solid rgba(211,191,162,0.2)',
+            borderRadius: '5px', cursor: 'pointer', outline: 'none'
+          }}
+        >
+          {voicePaused
+            ? <Play size={10} color="#d3bfa2" strokeWidth={2} />
+            : <Pause size={10} color="#d3bfa2" strokeWidth={2} />
+          }
+        </button>
+      )}
+
+      {/* Voice language selector */}
+      {speakingItemId !== item._id && (
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {[
+            { code: 'en-IN', label: 'EN' },
+            { code: 'hi-IN', label: 'HI' },
+            { code: 'mr-IN', label: 'MR' },
+          ].map(({ code, label }) => (
+            <button
+              key={code}
+              aria-label={`Speak in ${label}`}
+              onClick={(e) => { e.stopPropagation(); setVoiceLang(code); }}
+              style={{
+                padding: '3px 6px',
+                fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
+                border: `1px solid ${voiceLang === code ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: '4px',
+                background: voiceLang === code ? 'rgba(211,191,162,0.08)' : 'transparent',
+                color: voiceLang === code ? '#d3bfa2' : 'rgba(255,255,255,0.2)',
+                cursor: 'pointer', outline: 'none',
+                fontFamily: 'Poppins, sans-serif'
+              }}
+            >{label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+</div>
                           </div>
 
                           {/* Controls */}
@@ -5779,10 +5979,21 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                                 lineHeight: '34px', height: '34px', padding: '0 4px'
                               }}>
                                 {qty}
+                                {item.currentStock - qty <= 3 && item.currentStock - qty > 0 && (
+  <span style={{
+    fontSize: '0.52rem', color: 'rgba(211,191,162,0.4)',
+    fontWeight: '700', letterSpacing: '0.5px', marginLeft: '2px'
+  }}>
+    {item.currentStock - qty} left
+  </span>
+)}
                               </div>
                               <button
-                                onClick={() => setExtraItemCart(prev => ({ ...prev, [item._id]: (prev[item._id] || 0) + 1 }))}
-                                style={{
+onClick={() => {
+  const current = extraItemCart[item._id] || 0;
+  if (current >= item.currentStock) return; // cap at available stock
+  setExtraItemCart(prev => ({ ...prev, [item._id]: current + 1 }));
+}}                                style={{
                                   width: '34px', height: '34px', background: 'transparent',
                                   border: 'none', color: '#c9a84c', cursor: 'pointer',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -7394,7 +7605,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
   html, body, #root { 
     height: 100%; 
     overflow-x: hidden; 
-  }
+  },
+
+  @keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
 `}</style>
 </div>
   );
