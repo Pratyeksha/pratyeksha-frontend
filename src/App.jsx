@@ -129,6 +129,7 @@ const [sessionId, setSessionId] = useState(() => {
 
 
 const [welcomeCard, setWelcomeCard]         = useState(null);
+const [recommendedDishes, setRecommendedDishes] = useState([]); // smart dish suggestions for welcome card
 // null | { name, lastVisit, lastOrderItems, favDish, visitCount }
 const [welcomePhone, setWelcomePhone]       = useState('');
 const [welcomePhoneInput, setWelcomePhoneInput] = useState('');
@@ -1738,6 +1739,35 @@ useEffect(() => {
       .then(r => {
         if (r.data?.found) {
           setWelcomeCard(r.data);
+          // ── Compute smart dish recommendations from last order history ──
+if (r.data?.lastOrderItems?.length > 0) {
+  const lastNames = r.data.lastOrderItems.map(i => i.name?.toLowerCase().trim());
+  const lastCategoryIds = allMenuItems
+    .filter(m => lastNames.includes(m.name?.toLowerCase().trim()))
+    .map(m => m.categoryId);
+
+  const recs = allMenuItems
+    .filter(m =>
+      m.isAvailable !== false &&
+      !lastNames.includes(m.name?.toLowerCase().trim()) &&
+      (
+        lastCategoryIds.includes(m.categoryId) ||
+        m.isBestSeller === true ||
+        m.isChefSpecial === true
+      )
+    )
+    .slice(0, 3)
+    .map(m => ({
+      ...m,
+      matchReason: lastCategoryIds.includes(m.categoryId)
+        ? (language === 'mr' ? 'तुमच्या मागील ऑर्डरनुसार' : 'Based on your last order')
+        : m.isChefSpecial
+        ? (language === 'mr' ? 'शेफ स्पेशल' : "Chef's pick")
+        : (language === 'mr' ? 'बेस्टसेलर' : 'Bestseller')
+    }));
+
+  setRecommendedDishes(recs);
+}
           setWelcomePhone(savedPhone);
         } else {
           // Phone saved locally but not in DB — show phone prompt
@@ -1851,6 +1881,7 @@ if (unavailableItems.length > 0) {
     setHasPlacedInitialOrder(true);
     setCart({});
     setSuggestions({});
+    setRecommendedDishes([]);
     setIsDrawerOpen(false);
     setOrderPlacedScreen(true);
     setTimeout(() => setOrderPlacedScreen(false), 60000);
@@ -1897,7 +1928,7 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
       specialRequests: specialRequests || ''
     });
     setWaitlistEntry(res.data.entry);
-    setCart({}); setSuggestions({});
+    setCart({}); setSuggestions({});setRecommendedDishes([]);
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
@@ -2031,7 +2062,7 @@ const placeReservation = async () => {
     });
 
 setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
-    setCart({}); setSuggestions({});
+    setCart({}); setSuggestions({});setRecommendedDishes([]);
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
@@ -2413,7 +2444,32 @@ const requestFinalBill = async () => {
     if (phoneDigits.length === 10) {
       setTimeout(() => {
         axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
-          .then(r => { if (r.data?.found) setWelcomeCard(r.data); })
+          .then(r => {
+  if (r.data?.found) {
+    setWelcomeCard(r.data);
+    // ── Compute recommendations ──
+    if (r.data?.lastOrderItems?.length > 0) {
+      const lastNames = r.data.lastOrderItems.map(i => i.name?.toLowerCase().trim());
+      const lastCategoryIds = allMenuItems
+        .filter(m => lastNames.includes(m.name?.toLowerCase().trim()))
+        .map(m => m.categoryId);
+      const recs = allMenuItems
+        .filter(m =>
+          m.isAvailable !== false &&
+          !lastNames.includes(m.name?.toLowerCase().trim()) &&
+          (lastCategoryIds.includes(m.categoryId) || m.isBestSeller || m.isChefSpecial)
+        )
+        .slice(0, 3)
+        .map(m => ({
+          ...m,
+          matchReason: lastCategoryIds.includes(m.categoryId)
+            ? 'Based on your last order'
+            : m.isChefSpecial ? "Chef's pick" : 'Bestseller'
+        }));
+      setRecommendedDishes(recs);
+    }
+  }
+})
           .catch(() => {});
       }, 800);
     }
@@ -2806,7 +2862,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
             setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
             setReservationDate(''); setReservationTime(''); setSpecialRequests(''); setTablePreference('');
-            setCart({}); setSuggestions({});
+            setCart({}); setSuggestions({});setRecommendedDishes([]);
           }} style={{
             width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.05)',
             color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem', cursor: 'pointer',
@@ -3011,7 +3067,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
           setScheduledPickupTime(''); setReservationDate(''); setReservationTime('');
           setSpecialRequests(''); setTablePreference('');
-          setCart({}); setSuggestions({});
+          setCart({}); setSuggestions({});setRecommendedDishes([]);
         }} style={{
           width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.05)',
           color: 'rgba(255,255,255,0.18)', fontSize: '0.7rem', cursor: 'pointer',
@@ -6121,7 +6177,7 @@ onClick={() => {
   setPlacedOrders([]);
   setHasPlacedInitialOrder(false);
   setCart({});
-  setSuggestions({});
+  setSuggestions({});setRecommendedDishes([]);
   setCustomerInfo({ name: '', phone: '' });
   localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
   localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
@@ -6740,17 +6796,236 @@ onClick={() => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.modalOverlay}>
             <div style={styles.modalNav}>
               <div style={{textAlign: 'left'}}><h2 style={{...styles.modalTitle, color: primaryColor}}>{language === 'mr' ? activeModel.name_mr : activeModel.name}</h2><small style={{color: '#777'}}>{t[language].zoomRotate}</small></div>
-              <X size={30} color={primaryColor} onClick={() => setActiveModel(null)} />
-            </div>
-            <div style={styles.modelContainer}>
-              <div style={styles.dishModelWrapper}><model-viewer src={activeModel.modelUrl} ar ar-modes="webxr scene-viewer quick-look" camera-controls auto-rotate shadow-intensity="1" style={{ width: '100%', height: '100%' }} /></div>
-              {activeModel.isChefSpecial === true && (
-                <div style={styles.chefContainerAR}>
-                   <div style={styles.chefFlexWrapper}><div style={styles.chefModelBox}><model-viewer src={activeModel.chefurl} autoplay style={{ width: '130px', height: '220px' }} camera-orbit="10deg 80deg 3m" camera-target="0m 0.8m 0m" interaction-prompt="none" shadow-intensity="0" /></div><div style={styles.chefBubbleRight}><MessageSquare size={12} style={{position: 'absolute', top: '15px', left: '-8px', color: '#fff'}} />"{activeModel.chefMessage || "My personal favorite! You'll love the flavors."}"</div></div>
-                </div>
-              )}
-              <div style={styles.fixedArButtonWrapper}><button onClick={() => document.querySelector('model-viewer')?.activateAR()} style={{...styles.arCustomBtn, background: primaryColor}}>{t[language].viewInSpace}</button></div>
-            </div>
+<X size={30} color={primaryColor} onClick={() => { stopSpeech(); setActiveModel(null); }} />
+  
+              </div>
+<div style={styles.modelContainer}>
+
+  {/* 3D Model viewer */}
+  <div style={styles.dishModelWrapper}>
+    <model-viewer
+      src={activeModel.modelUrl}
+      ar ar-modes="webxr scene-viewer quick-look"
+      camera-controls auto-rotate
+      shadow-intensity="1"
+      style={{ width: '100%', height: '100%' }}
+    />
+  </div>
+
+  {/* ── HEAR THIS DISH — voice panel ── */}
+  {typeof window !== 'undefined' && window.speechSynthesis && (
+    <div style={{
+      margin: '0 16px 12px 16px',
+      padding: '12px 14px',
+      background: 'rgba(0,0,0,0.55)',
+      border: '1px solid rgba(211,191,162,0.12)',
+      borderRadius: '14px',
+      backdropFilter: 'blur(8px)'
+    }}>
+
+      {/* Top row: label + lang selector */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', marginBottom: '10px'
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px'
+        }}>
+          <Volume1 size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
+          <span style={{
+            fontSize: '0.52rem', fontWeight: '900',
+            color: 'rgba(211,191,162,0.45)', letterSpacing: '2px',
+            textTransform: 'uppercase'
+          }}>
+            HEAR THIS DISH
+          </span>
+        </div>
+
+        {/* Language tabs */}
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {[
+            { code: 'en-IN', label: 'EN' },
+            { code: 'hi-IN', label: 'HI' },
+            { code: 'mr-IN', label: 'MR' },
+          ].map(({ code, label }) => (
+            <button
+              key={code}
+              aria-label={`Speak in ${label}`}
+              onClick={() => setVoiceLang(code)}
+              style={{
+                padding: '3px 8px', borderRadius: '5px',
+                fontSize: '0.5rem', fontWeight: '900',
+                letterSpacing: '0.5px', cursor: 'pointer',
+                outline: 'none', fontFamily: 'Poppins, sans-serif',
+                border: `1px solid ${voiceLang === code
+                  ? 'rgba(211,191,162,0.4)'
+                  : 'rgba(255,255,255,0.08)'}`,
+                background: voiceLang === code
+                  ? 'rgba(211,191,162,0.1)'
+                  : 'rgba(255,255,255,0.03)',
+                color: voiceLang === code
+                  ? '#d3bfa2'
+                  : 'rgba(255,255,255,0.25)',
+                transition: 'all 0.15s'
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Dish name + status line */}
+      <div style={{
+        fontSize: '0.78rem', fontWeight: '800',
+        color: 'rgba(255,255,255,0.7)', marginBottom: '2px',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+      }}>
+        {language === 'mr'
+          ? (activeModel.name_mr || activeModel.name)
+          : activeModel.name}
+      </div>
+      {activeModel.description && (
+        <div style={{
+          fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)',
+          lineHeight: 1.5, marginBottom: '10px',
+          display: '-webkit-box', WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical', overflow: 'hidden'
+        }}>
+          {activeModel.description}
+        </div>
+      )}
+
+      {/* Controls row */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+        {/* Main play/stop button */}
+        <button
+          aria-label={speakingItemId === activeModel._id ? 'Stop' : 'Play dish description'}
+          onClick={() => speakDish(activeModel)}
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: '7px',
+            padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+            outline: 'none', fontFamily: 'Poppins, sans-serif',
+            border: `1px solid ${speakingItemId === activeModel._id
+              ? 'rgba(211,191,162,0.4)'
+              : 'rgba(211,191,162,0.18)'}`,
+            background: speakingItemId === activeModel._id
+              ? 'rgba(211,191,162,0.12)'
+              : 'rgba(211,191,162,0.06)',
+            transition: 'all 0.2s'
+          }}
+        >
+          {speakingItemId === activeModel._id ? (
+            <>
+              {/* Animated waveform bars while speaking */}
+              <div style={{ display: 'flex', gap: '2px', alignItems: 'center', height: '14px' }}>
+                {[0.6, 1, 0.7, 0.9, 0.5].map((h, i) => (
+                  <div key={i} style={{
+                    width: '2px', borderRadius: '1px',
+                    background: '#d3bfa2',
+                    height: `${Math.round(h * 14)}px`,
+                    animation: `pulse 0.8s ease-in-out ${i * 0.12}s infinite`
+                  }} />
+                ))}
+              </div>
+              <span style={{
+                fontSize: '0.62rem', fontWeight: '800',
+                color: '#d3bfa2', letterSpacing: '1px'
+              }}>
+                PLAYING · TAP TO STOP
+              </span>
+            </>
+          ) : (
+            <>
+              <Volume2 size={14} color="#d3bfa2" strokeWidth={1.8} />
+              <span style={{
+                fontSize: '0.62rem', fontWeight: '800',
+                color: '#d3bfa2', letterSpacing: '1px'
+              }}>
+                {language === 'mr' ? 'ऐका' : 'HEAR DESCRIPTION'}
+              </span>
+            </>
+          )}
+        </button>
+
+        {/* Pause / Resume — only visible while speaking */}
+        {speakingItemId === activeModel._id && (
+          <button
+            aria-label={voicePaused ? 'Resume' : 'Pause'}
+            onClick={toggleVoicePause}
+            style={{
+              width: '40px', height: '40px', borderRadius: '10px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(211,191,162,0.06)',
+              border: '1px solid rgba(211,191,162,0.2)',
+              cursor: 'pointer', outline: 'none', flexShrink: 0
+            }}
+          >
+            {voicePaused
+              ? <Play size={14} color="#d3bfa2" strokeWidth={2} />
+              : <Pause size={14} color="#d3bfa2" strokeWidth={2} />
+            }
+          </button>
+        )}
+      </div>
+
+      {/* Speaking status caption */}
+      {speakingItemId === activeModel._id && (
+        <div style={{
+          marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px'
+        }}>
+          <div style={{
+            width: '5px', height: '5px', borderRadius: '50%',
+            background: 'rgba(211,191,162,0.5)',
+            animation: 'pulse 1s ease-in-out infinite'
+          }} />
+          <span style={{
+            fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)',
+            fontWeight: '600'
+          }}>
+            {voicePaused
+              ? 'Paused'
+              : `Speaking in ${voiceLang === 'mr-IN' ? 'Marathi' : voiceLang === 'hi-IN' ? 'Hindi' : 'English'}...`}
+          </span>
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* Chef bubble (existing — unchanged) */}
+  {activeModel.isChefSpecial === true && (
+    <div style={styles.chefContainerAR}>
+      <div style={styles.chefFlexWrapper}>
+        <div style={styles.chefModelBox}>
+          <model-viewer
+            src={activeModel.chefurl} autoplay
+            style={{ width: '130px', height: '220px' }}
+            camera-orbit="10deg 80deg 3m"
+            camera-target="0m 0.8m 0m"
+            interaction-prompt="none"
+            shadow-intensity="0"
+          />
+        </div>
+        <div style={styles.chefBubbleRight}>
+          <MessageSquare size={12} style={{ position: 'absolute', top: '15px', left: '-8px', color: '#fff' }} />
+          "{activeModel.chefMessage || "My personal favorite! You'll love the flavors."}"
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* AR button (existing — unchanged) */}
+  <div style={styles.fixedArButtonWrapper}>
+    <button
+      onClick={() => document.querySelector('model-viewer')?.activateAR()}
+      style={{ ...styles.arCustomBtn, background: primaryColor }}
+    >
+      {t[language].viewInSpace}
+    </button>
+  </div>
+</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -7051,41 +7326,92 @@ onClick={() => {
             </div>
           )}
 
-{/* ── YOU MIGHT LIKE — smart suggestions ── */}
-{Array.isArray(suggestions) && suggestions.length > 0 && (
-  <div style={{ marginBottom:'10px' }}>
+{/* ── YOU MIGHT LIKE — smart dish recommendations ── */}
+{recommendedDishes.length > 0 && (
+  <div style={{ marginBottom: '10px' }}>
+
+    {/* Section header */}
     <div style={{
-      fontSize:'0.44rem', color:'rgba(211,191,162,0.3)', fontWeight:'900',
-      letterSpacing:'2.5px', textTransform:'uppercase',
-      marginBottom:'8px', display:'flex', alignItems:'center', gap:'5px'
+      display: 'flex', alignItems: 'center', gap: '6px',
+      marginBottom: '8px'
     }}>
-      <Sparkles size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-      {language==='mr' ? 'तुम्हाला आवडेल' : 'YOU MIGHT LIKE'}
-    </div>
-    {suggestions.slice(0,3).map(s => (
-      <div key={s._id} style={{
-        display:'flex', justifyContent:'space-between', alignItems:'center',
-        padding:'8px 10px', marginBottom:'5px',
-        background:'rgba(211,191,162,0.03)',
-        border:'1px solid rgba(211,191,162,0.08)',
-        borderRadius:'11px'
+      <Sparkles size={9} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
+      <span style={{
+        fontSize: '0.44rem', color: 'rgba(211,191,162,0.3)',
+        fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase'
       }}>
-        <div style={{ flex:1, minWidth:0 }}>
+        {language === 'mr' ? 'तुम्हाला आवडेल' : 'YOU MIGHT LIKE'}
+      </span>
+    </div>
+
+    {/* Dish chips */}
+    {recommendedDishes.map(dish => (
+      <div
+        key={dish._id}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '9px 11px', marginBottom: '6px',
+          background: 'rgba(211,191,162,0.03)',
+          border: '1px solid rgba(211,191,162,0.09)',
+          borderRadius: '12px'
+        }}
+      >
+        {/* Veg / non-veg indicator dot */}
+        <div style={{
+          width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+          background: dish.isVeg !== false
+            ? 'rgba(211,191,162,0.5)'
+            : 'rgba(180,160,140,0.4)',
+          border: '1px solid rgba(211,191,162,0.25)'
+        }} />
+
+        {/* Dish info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize:'0.72rem', fontWeight:'700', color:'rgba(255,255,255,0.7)',
-            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
-          }}>{s.name}</div>
-          <div style={{ fontSize:'0.52rem', color:'rgba(211,191,162,0.25)', marginTop:'1px' }}>
-            {s.matchReason || 'Based on your last visit'}
+            fontSize: '0.72rem', fontWeight: '700',
+            color: 'rgba(255,255,255,0.72)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+          }}>
+            {language === 'mr' ? (dish.name_mr || dish.name) : dish.name}
+          </div>
+          <div style={{
+            fontSize: '0.5rem', color: 'rgba(211,191,162,0.28)',
+            marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
+          }}>
+            <Star size={7} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
+            {dish.matchReason}
           </div>
         </div>
+
+        {/* Price */}
+        {dish.price > 0 && (
+          <span style={{
+            fontSize: '0.6rem', color: 'rgba(211,191,162,0.45)',
+            fontFamily: 'monospace', fontWeight: '700', flexShrink: 0
+          }}>
+            ₹{dish.price}
+          </span>
+        )}
+
+        {/* Add button */}
         <button
-          onClick={() => setCart(prev => ({ ...prev, [s._id]: (prev[s._id]||0) + 1 }))}
+          onClick={() => {
+            setCart(prev => ({ ...prev, [dish._id]: (prev[dish._id] || 0) + 1 }));
+          }}
           style={{
-            background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.2)',
-            color:'#d3bfa2', borderRadius:'8px', padding:'5px 11px',
-            fontSize:'0.65rem', fontWeight:'700', cursor:'pointer', flexShrink:0, marginLeft:'8px'
-          }}>+ ADD</button>
+            padding: '5px 12px', borderRadius: '8px', flexShrink: 0,
+            background: 'rgba(211,191,162,0.09)',
+            border: '1px solid rgba(211,191,162,0.22)',
+            color: '#d3bfa2', fontSize: '0.62rem',
+            fontWeight: '800', cursor: 'pointer', outline: 'none',
+            fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px',
+            transition: 'all 0.15s'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.15)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.09)'; }}
+        >
+          + ADD
+        </button>
       </div>
     ))}
   </div>
@@ -7610,6 +7936,10 @@ onClick={() => {
   @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
+  @keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 }
 `}</style>
 </div>

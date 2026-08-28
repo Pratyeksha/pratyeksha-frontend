@@ -370,6 +370,7 @@ const [assistMessages, setAssistMessages] = useState([
 const [assistInput,    setAssistInput]    = useState('');
 const [assistLoading,  setAssistLoading]  = useState(false);
 const assistEndRef = useRef(null);
+const [assistFilterCat, setAssistFilterCat] = useState('ALL');
 const [waitlistAnalytics, setWaitlistAnalytics] = useState(null);
 const [aggregatorAnalytics, setAggregatorAnalytics] = useState(null);
 
@@ -399,112 +400,265 @@ const handleAssistQuery = useCallback(async (question) => {
   setAssistLoading(true);
 
   try {
-    // Gather context from already-loaded state (no extra API calls needed for most questions)
-    const todayRevenue = analytics
-      .filter(d => d._id === new Date().toISOString().split('T')[0])
+    const nowIST    = new Date(new Date().getTime() + 330 * 60000);
+    const todayKey  = nowIST.toISOString().split('T')[0];
+    const monthStr  = todayKey.slice(0, 7);
+
+    // ── Pre-compute all context values ──
+    const todayData    = analytics.filter(d => d._id === todayKey);
+    const todayRev     = todayData.reduce((a, b) => a + (b.revenue || 0), 0);
+    const todayCount   = todayData.reduce((a, b) => a + (b.count   || 0), 0);
+
+    const monthData    = analytics.filter(d => d._id?.startsWith(monthStr));
+    const monthRev     = monthData.reduce((a, b) => a + (b.revenue || 0), 0);
+    const monthOrders  = monthData.reduce((a, b) => a + (b.count   || 0), 0);
+    const avgOrder     = monthOrders > 0 ? Math.round(monthRev / monthOrders) : 0;
+
+    // Week revenue (last 7 days)
+    const weekRev = analytics
+      .filter(d => {
+        if (!d._id) return false;
+        const diff = (new Date(todayKey) - new Date(d._id)) / 86400000;
+        return diff >= 0 && diff < 7;
+      })
       .reduce((a, b) => a + (b.revenue || 0), 0);
 
-    const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-    const monthRevenue = analytics
-      .filter(d => d._id?.startsWith(monthStr))
-      .reduce((a, b) => a + (b.revenue || 0), 0);
+    const pendingOrders = orders.filter(o => o.status === 'pending');
+    const readyOrders   = orders.filter(o => o.status === 'ready');
+    const servedOrders  = orders.filter(o => o.status === 'served');
 
-    const monthOrders = analytics
-      .filter(d => d._id?.startsWith(monthStr))
-      .reduce((a, b) => a + (b.count || 0), 0);
+    const lowStockItems    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 3);
+    const criticalStock    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 1);
+    const outOfStockItems  = (procurementData || []).filter(p => p.daysRemaining === 0);
 
-    const pendingCount = orders.filter(o => o.status === 'pending').length;
-    const readyCount   = orders.filter(o => o.status === 'ready').length;
+    const sortedByQty     = [...(profitabilityData || [])].sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0));
+    const sortedByMargin  = [...(profitabilityData || [])].sort((a, b) => (b.marginPct    || 0) - (a.marginPct    || 0));
+    const sortedByRev     = [...(profitabilityData || [])].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
+    const topDish         = sortedByQty[0];
+    const bestMarginDish  = sortedByMargin[0];
+    const topRevDish      = sortedByRev[0];
+    const avgMarginAll    = profitabilityData?.length
+      ? (profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length).toFixed(1)
+      : null;
 
-    const lowStockItems = procurementData?.filter(p => p.daysRemaining !== null && p.daysRemaining <= 3) || [];
+    const hiddenDishes    = menuItems.filter(m => m.isAvailable === false);
+    const totalDishes     = menuItems.length;
 
-    const topDish = profitabilityData?.sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0))[0];
-    const bestMargin = profitabilityData?.sort((a, b) => (b.marginPct || 0) - (a.marginPct || 0))[0];
+    const pendingRequests = (waiterRequests || []).filter(w => w.status === 'pending');
+    const occ             = occupiedTables?.length || 0;
+
+    const extraLow        = (extraItems || []).filter(e => e.currentStock <= (e.lowStockThreshold || 5));
+    const extraOos        = (extraItems || []).filter(e => e.currentStock <= 0);
+
+    const payToday        = dailySettlementBreakdown;
 
     const qL = q.toLowerCase();
-
     let answer = '';
 
-    if (qL.includes('revenue') && qL.includes('today')) {
-      answer = todayRevenue > 0
-        ? `Today's revenue so far is ₹${todayRevenue.toLocaleString()}.`
-        : `No settled orders recorded for today yet.`;
+    // ── 25 intent handlers ──
 
-    } else if (qL.includes('revenue') && (qL.includes('month') || qL.includes('monthly'))) {
-      answer = `Revenue this month (${monthStr}) is ₹${monthRevenue.toLocaleString()} across ${monthOrders} orders.`;
+    // 1. Today's revenue
+    if ((qL.includes('revenue') || qL.includes('earning') || qL.includes('sale')) && qL.includes('today')) {
+      answer = todayRev > 0
+        ? `Today's revenue is ₹${todayRev.toLocaleString()} from ${todayCount} settled order${todayCount !== 1 ? 's' : ''}.\nPayment split — Cash: ₹${payToday.cash.toLocaleString()}, UPI: ₹${payToday.upi.toLocaleString()}, Card: ₹${payToday.card.toLocaleString()}.`
+        : 'No settled orders recorded for today yet.';
 
-    } else if (qL.includes('pending') || qL.includes('live') || qL.includes('kitchen')) {
-      answer = `There are ${pendingCount} pending order${pendingCount !== 1 ? 's' : ''} and ${readyCount} ready to serve right now.`;
+    // 2. Monthly revenue
+    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('month') || qL.includes('monthly'))) {
+      answer = `This month (${monthStr}): ₹${monthRev.toLocaleString()} across ${monthOrders} orders.\nAverage order value: ₹${avgOrder.toLocaleString()}.`;
 
-    } else if (qL.includes('low stock') || qL.includes('out of stock') || qL.includes('running out')) {
+    // 3. Weekly revenue
+    } else if ((qL.includes('revenue') || qL.includes('earning')) && (qL.includes('week') || qL.includes('weekly'))) {
+      answer = `Revenue over the last 7 days: ₹${weekRev.toLocaleString()}.`;
+
+    // 4. Pending / live orders
+    } else if (qL.includes('pending') || (qL.includes('live') && qL.includes('order')) || qL.includes('kitchen now')) {
+      const tableList = [...new Set(pendingOrders.map(o => `Table ${o.tableNumber}`))].slice(0, 5).join(', ');
+      answer = `Right now: ${pendingOrders.length} pending, ${readyOrders.length} ready to serve, ${servedOrders.length} served.\n${tableList ? `Active tables: ${tableList}${pendingOrders.length > 5 ? ' and more.' : '.'}` : ''}`;
+
+    // 5. Occupied tables
+    } else if (qL.includes('table') || qL.includes('occupied') || qL.includes('how many table')) {
+      answer = `${occ} table${occ !== 1 ? 's' : ''} currently occupied out of your floor map total.`;
+
+    // 6. Low stock
+    } else if (qL.includes('low stock') || qL.includes('running out') || qL.includes('stock alert')) {
       if (lowStockItems.length === 0) {
-        answer = 'All inventory items have sufficient stock for the next few days.';
+        answer = 'All inventory items have sufficient stock for the next 3+ days.';
       } else {
-        answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} need restocking soon: ${lowStockItems.slice(0, 4).map(i => `${i.itemName} (${i.daysRemaining}d left)`).join(', ')}.`;
+        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — ${i.daysRemaining}d left`).join('\n');
+        answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} running low:\n${list}`;
       }
 
-    } else if (qL.includes('best sell') || qL.includes('top dish') || qL.includes('most ordered')) {
-      answer = topDish
-        ? `Your best-selling dish this period is "${topDish.name}" with ${topDish.totalQtySold} units sold.`
-        : 'No sales data available yet for this period.';
+    // 7. Out of stock / critical
+    } else if (qL.includes('out of stock') || qL.includes('critical stock') || qL.includes('zero stock')) {
+      if (outOfStockItems.length === 0) {
+        answer = 'No ingredients are out of stock.';
+      } else {
+        answer = `${outOfStockItems.length} item${outOfStockItems.length > 1 ? 's' : ''} out of stock: ${outOfStockItems.map(i => i.itemName).join(', ')}.`;
+      }
 
-    } else if (qL.includes('margin') || qL.includes('profit')) {
-      answer = bestMargin
-        ? `"${bestMargin.name}" has your highest margin at ${bestMargin.marginPct}%. Overall food cost averages ${(profitabilityData?.reduce((a,b)=>a+(b.marginPct||0),0)/Math.max(1,profitabilityData?.length)).toFixed(1)}% margin.`
-        : 'Recipe data not mapped yet — add recipes to see profitability.';
+    // 8. Best selling dish
+    } else if (qL.includes('best sell') || qL.includes('top dish') || qL.includes('most order') || qL.includes('popular')) {
+      if (!topDish) {
+        answer = 'No sales data yet. Map recipes to see profitability and sales rankings.';
+      } else {
+        answer = `Best-selling: "${topDish.name}" with ${topDish.totalQtySold} units sold.\nTop by revenue: "${topRevDish?.name}" generating ₹${(topRevDish?.totalRevenue || 0).toLocaleString()}.`;
+      }
 
-    } else if (qL.includes('staff') || qL.includes('attendance')) {
-      const presentToday = staff?.filter(s => {
-        const todayLog = attendanceLogs?.find(l => l.staffId === s._id && l.date === new Date().toISOString().split('T')[0]);
-        return todayLog?.status === 'present';
-      }).length || 0;
-      answer = `${presentToday} of ${staff?.length || 0} staff marked present today.`;
+    // 9. Profit margin
+    } else if (qL.includes('margin') || qL.includes('profit') || qL.includes('most profit')) {
+      if (!bestMarginDish) {
+        answer = 'Recipe data not mapped yet. Add ingredient recipes to see dish profitability.';
+      } else {
+        answer = `Highest-margin dish: "${bestMarginDish.name}" at ${bestMarginDish.marginPct}% margin.\nOverall average food margin: ${avgMarginAll}%.`;
+      }
 
-    } else if (qL.includes('table') || qL.includes('occupied')) {
-      const occ = occupiedTables?.length || 0;
-      answer = `${occ} table${occ !== 1 ? 's' : ''} currently occupied.`;
+    // 10. Average order value
+    } else if (qL.includes('average') || qL.includes('avg order') || qL.includes('order value')) {
+      answer = monthOrders > 0
+        ? `Average order value this month: ₹${avgOrder}.\nBased on ${monthOrders} orders totalling ₹${monthRev.toLocaleString()}.`
+        : 'No order data this month yet.';
 
-    } else if (qL.includes('waiter') || qL.includes('request') || qL.includes('service')) {
-      const wCount = waiterRequests?.filter(w => w.status === 'pending').length || 0;
-      answer = `${wCount} pending service request${wCount !== 1 ? 's' : ''} from customers right now.`;
+    // 11. Staff attendance
+    } else if ((qL.includes('staff') || qL.includes('attendance')) && !qL.includes('salary')) {
+      const presentToday = (staff || []).filter(s => {
+        const log = (attendanceLogs || []).find(l => l.staffId === s._id && l.date === todayKey);
+        return log?.status === 'present';
+      });
+      answer = `Staff today: ${presentToday.length} present out of ${staff?.length || 0} total.\n${
+        presentToday.length > 0 ? `Present: ${presentToday.slice(0, 5).map(s => s.name).join(', ')}${presentToday.length > 5 ? ' and more.' : '.'}` : 'No staff marked present yet.'
+      }`;
 
-    } else if (qL.includes('wastage') || qL.includes('waste')) {
-      const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
-      const wastageCount = Array.isArray(wData.data) ? wData.data.length : 0;
-      answer = wastageCount > 0
-        ? `${wastageCount} wastage entries recorded today.`
-        : 'No wastage recorded today.';
+    // 12. Salary query
+    } else if (qL.includes('salary') || qL.includes('payroll') || qL.includes('pay')) {
+      const thisMonthSalary = (staff || []).reduce((a, s) => a + (s.salary || 0), 0);
+      answer = `Total monthly payroll across ${staff?.length || 0} staff members: ₹${thisMonthSalary.toLocaleString()}.`;
 
-    } else if (qL.includes('invoice') || qL.includes('bill')) {
-      const todayBills = analytics.filter(d => d._id === new Date().toISOString().split('T')[0]);
-      const billCount  = todayBills.reduce((a, b) => a + (b.count || 0), 0);
-      answer = `${billCount} bill${billCount !== 1 ? 's' : ''} settled today, totalling ₹${todayRevenue.toLocaleString()}.`;
+    // 13. Service / waiter requests
+    } else if (qL.includes('waiter') || qL.includes('service request') || qL.includes('request') || qL.includes('call')) {
+      answer = pendingRequests.length > 0
+        ? `${pendingRequests.length} pending service request${pendingRequests.length > 1 ? 's' : ''}: ${pendingRequests.slice(0, 3).map(w => `Table ${w.tableNumber} — ${w.serviceRequest?.slice(0, 30)}`).join('; ')}.`
+        : 'No pending service requests right now.';
 
-    } else if (qL.includes('avg') || qL.includes('average')) {
-      const avg = monthOrders > 0 ? Math.round(monthRevenue / monthOrders) : 0;
-      answer = `Average order value this month is ₹${avg}.`;
+    // 14. Invoice / bills today
+    } else if (qL.includes('invoice') || qL.includes('bill') || qL.includes('settled today')) {
+      answer = todayCount > 0
+        ? `${todayCount} bill${todayCount !== 1 ? 's' : ''} settled today totalling ₹${todayRev.toLocaleString()}.\nCash: ₹${payToday.cash.toLocaleString()} · UPI: ₹${payToday.upi.toLocaleString()} · Card: ₹${payToday.card.toLocaleString()}.`
+        : 'No bills settled today yet.';
 
-    } else if (qL.includes('menu') && qL.includes('hidden')) {
-      const hiddenCount = menuItems.filter(m => m.isAvailable === false).length;
-      answer = `${hiddenCount} dish${hiddenCount !== 1 ? 'es are' : ' is'} currently hidden from the menu.`;
+    // 15. Payment split
+    } else if (qL.includes('payment') || qL.includes('cash') || qL.includes('upi') || qL.includes('card')) {
+      answer = `Today's payment split:\nCash: ₹${payToday.cash.toLocaleString()}\nUPI: ₹${payToday.upi.toLocaleString()}\nCard: ₹${payToday.card.toLocaleString()}\nTotal: ₹${payToday.gross.toLocaleString()}.`;
 
-    } else if (qL.includes('extra item') || qL.includes('cold drink') || qL.includes('beverage')) {
-      const extraLow = extraItems?.filter(e => e.currentStock <= (e.lowStockThreshold || 5)).length || 0;
-      answer = `You have ${extraItems?.length || 0} extra items. ${extraLow > 0 ? `${extraLow} are running low on stock.` : 'All are sufficiently stocked.'}`;
+    // 16. Hidden menu items
+    } else if ((qL.includes('hidden') || qL.includes('unavailable') || qL.includes('disabled')) && qL.includes('dish') || qL.includes('hidden menu')) {
+      answer = hiddenDishes.length > 0
+        ? `${hiddenDishes.length} of ${totalDishes} dishes currently hidden: ${hiddenDishes.slice(0, 5).map(d => d.name).join(', ')}${hiddenDishes.length > 5 ? ' and more.' : '.'}`
+        : `All ${totalDishes} menu items are currently visible and active.`;
+
+    // 17. Wastage
+    } else if (qL.includes('wastage') || qL.includes('waste') || qL.includes('spoil')) {
+      try {
+        const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
+        const wArr   = Array.isArray(wData.data) ? wData.data : [];
+        const wCost  = wArr.reduce((a, w) => a + (w.cost || 0), 0);
+        answer = wArr.length > 0
+          ? `${wArr.length} wastage entries today with a total cost of ₹${wCost.toLocaleString()}.`
+          : 'No wastage recorded today.';
+      } catch {
+        answer = 'Unable to fetch wastage data right now.';
+      }
+
+    // 18. Extra items / beverages stock
+    } else if (qL.includes('extra item') || qL.includes('beverage') || qL.includes('cold drink') || qL.includes('bottle')) {
+      answer = `Extra items: ${extraItems?.length || 0} total.\n${
+        extraOos.length > 0 ? `Out of stock: ${extraOos.map(e => e.name).join(', ')}.\n` : ''
+      }${
+        extraLow.length > 0 ? `Low stock: ${extraLow.filter(e => e.currentStock > 0).map(e => `${e.name} (${e.currentStock} left)`).join(', ')}.` : 'All extra items sufficiently stocked.'
+      }`;
+
+    // 19. Slow / dead dishes
+    } else if (qL.includes('slow') || qL.includes('dead dish') || qL.includes('not selling') || qL.includes('remove dish')) {
+      const slowDishes = sortedByQty.slice(-4).filter(d => (d.totalQtySold || 0) < 5);
+      answer = slowDishes.length > 0
+        ? `Slow-moving dishes (low sales): ${slowDishes.map(d => `${d.name} — ${d.totalQtySold || 0} sold`).join(', ')}.`
+        : 'All dishes have reasonable sales volume.';
+
+    // 20. Procurement / what to buy
+    } else if (qL.includes('procure') || qL.includes('purchase') || qL.includes('buy') || qL.includes('restock')) {
+      if (lowStockItems.length === 0) {
+        answer = 'No procurement needed in the next 3 days based on current stock and usage.';
+      } else {
+        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — buy ~${Math.ceil((i.avgDailyUsage || 1) * 14)} ${i.unit}`).join('\n');
+        answer = `Recommended purchases (14-day supply):\n${list}`;
+      }
+
+    // 21. Peak hour / busy time
+    } else if (qL.includes('peak') || qL.includes('busy') || qL.includes('rush') || qL.includes('when is')) {
+      const hourMap = {};
+      orders.forEach(o => {
+        if (!o.createdAt) return;
+        const h = new Date(new Date(o.createdAt).getTime() + 330 * 60000).getHours();
+        hourMap[h] = (hourMap[h] || 0) + 1;
+      });
+      const peak = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
+      answer = peak
+        ? `Today's busiest hour so far: ${Number(peak[0]) % 12 || 12}:00 ${Number(peak[0]) < 12 ? 'AM' : 'PM'} with ${peak[1]} order${peak[1] > 1 ? 's' : ''}.`
+        : 'Insufficient order data to calculate peak hour today.';
+
+    // 22. Inventory total value
+    } else if (qL.includes('inventory value') || qL.includes('stock value') || qL.includes('total stock worth')) {
+      const invTotal = (procurementData || []).reduce((a, p) => a + ((p.currentStock || 0) * (p.weightedAvgCost || p.costPrice || 0)), 0);
+      answer = `Estimated current inventory value: ₹${Math.round(invTotal).toLocaleString()} based on weighted average cost.`;
+
+    // 23. Menu count / items
+    } else if (qL.includes('how many dish') || qL.includes('menu item') || qL.includes('total dish') || qL.includes('menu count')) {
+      const vegCount    = menuItems.filter(m => m.isVeg !== false && m.isAvailable !== false).length;
+      const nonVegCount = menuItems.filter(m => m.isVeg === false && m.isAvailable !== false).length;
+      answer = `Menu has ${totalDishes} items total.\nActive: ${menuItems.filter(m => m.isAvailable !== false).length} · Hidden: ${hiddenDishes.length}.\nVeg: ${vegCount} · Non-veg: ${nonVegCount}.`;
+
+    // 24. Extra items revenue
+    } else if (qL.includes('extra revenue') || qL.includes('beverage revenue') || qL.includes('extra item revenue')) {
+      const extraRev = extraAnalytics?.totalRevenue || 0;
+      answer = extraRev > 0
+        ? `Extra items (beverages/snacks) have generated ₹${extraRev.toLocaleString()} in revenue with ${extraAnalytics?.totalSold || 0} units sold this period.`
+        : 'No extra item revenue data available for this period.';
+
+    // 25. How is the restaurant doing / summary
+    } else if (qL.includes('summary') || qL.includes('how is') || qL.includes('overview') || qL.includes('status')) {
+      answer = [
+        `Restaurant at a glance:`,
+        `Revenue today: ₹${todayRev.toLocaleString()} · Month: ₹${monthRev.toLocaleString()}`,
+        `Orders: ${pendingOrders.length} pending · ${occ} tables occupied`,
+        `Stock alerts: ${lowStockItems.length} items low`,
+        `Service requests: ${pendingRequests.length} pending`,
+        `Menu: ${totalDishes - hiddenDishes.length} active dishes`,
+      ].join('\n');
 
     } else {
-      answer = `I can answer questions about: today's revenue, monthly revenue, pending orders, low stock, best-selling dish, profit margins, staff attendance, occupied tables, service requests, wastage, invoices, average order value, and hidden menu items. Try asking one of those.`;
+      answer = [
+        'I can help with:',
+        'Revenue — today / weekly / monthly / payment split',
+        'Orders — pending, ready, served, live tables',
+        'Inventory — low stock, out of stock, total value, procurement',
+        'Menu — best sellers, margins, slow items, hidden dishes',
+        'Staff — attendance, payroll',
+        'Extras — beverages stock, revenue',
+        'Wastage — today\'s entries and cost',
+        'Try: "today\'s revenue", "low stock items", "best selling dish", "staff attendance today"'
+      ].join('\n');
     }
 
     setAssistMessages(prev => [...prev, { role: 'assistant', text: answer, ts: new Date() }]);
   } catch {
-    setAssistMessages(prev => [...prev, { role: 'assistant', text: 'Unable to fetch data right now. Please try again.', ts: new Date() }]);
+    setAssistMessages(prev => [...prev, { role: 'assistant', text: 'Unable to fetch data right now. Please try again in a moment.', ts: new Date() }]);
   } finally {
     setAssistLoading(false);
-    setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 120);
   }
 }, [assistInput, analytics, orders, procurementData, profitabilityData, staff, attendanceLogs,
-    occupiedTables, waiterRequests, menuItems, extraItems, tenantId, viewDate]);
+    occupiedTables, waiterRequests, menuItems, extraItems, extraAnalytics, extraAnalytics,
+    dailySettlementBreakdown, tenantId, viewDate]);
 
 const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'nonveg'
   const [newStaff, setNewStaff] = useState({
@@ -3725,7 +3879,7 @@ const renderMonthHeatmap = () => {
   {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
   {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
   {id:'audit', label:'AUDIT', icon:<ShieldCheck size={18}/>},
-  {id:'assist', label:'ASSIST', icon:<MessageSquare size={18}/>},
+  {id:'assist', label:'ASSIST', icon:<Sparkles size={18}/>},
   {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
   {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
   {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
@@ -10499,119 +10653,376 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
 
 {/* ── PRATYEKSHA OPERATOR ASSISTANT ── */}
 {activeTab === 'assist' && (
-  <motion.div key="assist" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-    style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)',
-      maxWidth: '760px', margin: '0 auto', width: '100%', padding: '16px', boxSizing: 'border-box' }}>
+  <motion.div
+    key="assist"
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    style={{
+      display: 'flex', flexDirection: 'column',
+      height: 'calc(100vh - 120px)',
+      maxWidth: '820px', margin: '0 auto',
+      width: '100%', padding: '16px 16px 0 16px',
+      boxSizing: 'border-box', fontFamily: 'Poppins, sans-serif'
+    }}
+  >
 
-    {/* Header */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-      <div style={{ width: '30px', height: '30px', borderRadius: '8px',
-        background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <MessageSquare size={14} color="#d3bfa2" strokeWidth={1.5} />
-      </div>
-      <div>
-        <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>PRATYEKSHA ASSIST</div>
-        <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)' }}>Ask about your restaurant — real data, instant answers</div>
-      </div>
-    </div>
-
-    {/* Quick questions */}
-    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-      {[
-        "Today's revenue?", "Pending orders?", "Low stock items?",
-        "Best selling dish?", "Monthly revenue?", "Staff attendance today?",
-        "Occupied tables?", "Average order value?", "Hidden menu items?",
-        "Service requests?", "Best margin dish?", "Wastage today?"
-      ].map(q => (
-        <button key={q} onClick={() => handleAssistQuery(q)}
-          style={{
-            fontSize: '0.58rem', padding: '5px 10px', borderRadius: '6px',
-            background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.15)',
-            color: 'rgba(211,191,162,0.6)', cursor: 'pointer', fontFamily: 'Poppins, sans-serif',
-            fontWeight: '600', transition: 'all 0.15s', outline: 'none'
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.1)'; e.currentTarget.style.color = '#d3bfa2'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.05)'; e.currentTarget.style.color = 'rgba(211,191,162,0.6)'; }}
-        >{q}</button>
-      ))}
-    </div>
-
-    {/* Messages */}
-    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
-      gap: '10px', paddingRight: '4px', marginBottom: '12px' }}
-      className="no-scrollbar">
-      {assistMessages.map((msg, i) => (
-        <div key={i} style={{
-          display: 'flex',
-          justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
+    {/* ── HEADER ── */}
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', marginBottom: '16px', flexShrink: 0
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+        <div style={{
+          width: '36px', height: '36px', borderRadius: '10px',
+          background: 'rgba(211,191,162,0.07)',
+          border: '1px solid rgba(211,191,162,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0
         }}>
-          {msg.role !== 'user' && (
-            <div style={{ width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
-              background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '8px', marginTop: '2px' }}>
-              <Sparkles size={11} color="#d3bfa2" strokeWidth={1.5} />
-            </div>
-          )}
+          <Sparkles size={16} color="#d3bfa2" strokeWidth={1.4} />
+        </div>
+        <div>
           <div style={{
-            maxWidth: '78%', padding: '10px 13px', borderRadius: '11px',
-            background: msg.role === 'user'
-              ? 'rgba(211,191,162,0.08)'
-              : msg.role === 'system'
-              ? 'rgba(255,255,255,0.02)'
-              : '#0e0e0e',
-            border: `1px solid ${msg.role === 'user' ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.05)'}`,
-            borderBottomRightRadius: msg.role === 'user' ? '3px' : '11px',
-            borderBottomLeftRadius:  msg.role !== 'user' ? '3px' : '11px',
+            fontSize: '0.65rem', fontWeight: '900',
+            color: '#d3bfa2', letterSpacing: '2.5px'
           }}>
-            <div style={{ fontSize: '0.72rem', color: msg.role === 'user' ? '#d3bfa2' : 'rgba(255,255,255,0.7)',
-              lineHeight: 1.55, fontWeight: msg.role === 'user' ? '600' : '400' }}>
-              {msg.text}
-            </div>
-            <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.15)', marginTop: '5px', textAlign: 'right' }}>
-              {new Date(msg.ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-            </div>
+            PRATYEKSHA ASSIST
+          </div>
+          <div style={{
+            fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)',
+            marginTop: '2px', fontWeight: '500'
+          }}>
+            Real-time answers from your restaurant data
           </div>
         </div>
+      </div>
+      {/* Clear chat */}
+      <button
+        onClick={() => setAssistMessages([{ role: 'system', text: 'Hello. Ask me anything about your restaurant — orders, revenue, stock, staff, or menu performance.', ts: new Date() }])}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '5px',
+          padding: '5px 10px', borderRadius: '7px',
+          background: 'transparent',
+          border: '1px solid rgba(255,255,255,0.07)',
+          color: 'rgba(255,255,255,0.2)', cursor: 'pointer',
+          fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.5px',
+          outline: 'none', transition: 'all 0.2s'
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = 'rgba(211,191,162,0.5)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; }}
+      >
+        <RefreshCw size={10} strokeWidth={2} />
+        CLEAR
+      </button>
+    </div>
+
+    {/* ── CATEGORY FILTER TABS ── */}
+    {(() => {
+      const cats = [
+        { key: 'ALL',       label: 'All',         icon: <AlignJustify size={11} strokeWidth={2} /> },
+        { key: 'REVENUE',   label: 'Revenue',      icon: <ReceiptIndianRupee size={11} strokeWidth={1.8} /> },
+        { key: 'ORDERS',    label: 'Orders',       icon: <ClipboardList size={11} strokeWidth={1.8} /> },
+        { key: 'INVENTORY', label: 'Inventory',    icon: <Package size={11} strokeWidth={1.8} /> },
+        { key: 'MENU',      label: 'Menu',         icon: <UtensilsCrossed size={11} strokeWidth={1.8} /> },
+        { key: 'STAFF',     label: 'Staff',        icon: <Users size={11} strokeWidth={1.8} /> },
+        { key: 'EXTRAS',    label: 'Extras',       icon: <ShoppingBag size={11} strokeWidth={1.8} /> },
+      ];
+
+      const questions = {
+        ALL: [
+          { label: 'Restaurant overview',    q: 'Give me a summary of the restaurant status' },
+          { label: "Today's revenue",        q: "What is today's revenue?" },
+          { label: 'Pending orders',         q: 'Show me pending orders' },
+          { label: 'Low stock items',        q: 'Which items are low on stock?' },
+          { label: 'Best selling dish',      q: 'What is the best selling dish?' },
+          { label: 'Staff attendance',       q: 'How many staff are present today?' },
+        ],
+        REVENUE: [
+          { label: "Today's revenue",       q: "What is today's revenue?" },
+          { label: 'Monthly revenue',       q: 'What is the monthly revenue?' },
+          { label: 'Weekly revenue',        q: 'What is this week revenue?' },
+          { label: 'Average order value',   q: 'What is the average order value?' },
+          { label: 'Bills settled today',   q: 'How many bills settled today?' },
+          { label: 'Payment split',         q: 'Show me today payment split cash UPI card' },
+        ],
+        ORDERS: [
+          { label: 'Pending orders',        q: 'Show me pending orders' },
+          { label: 'Occupied tables',       q: 'How many tables are occupied?' },
+          { label: 'Service requests',      q: 'Any service requests from customers?' },
+          { label: 'Peak hour today',       q: 'What is the peak hour today?' },
+          { label: 'Kitchen status',        q: 'What is the live kitchen order status?' },
+          { label: 'Bills today',           q: 'How many invoices settled today?' },
+        ],
+        INVENTORY: [
+          { label: 'Low stock alerts',      q: 'Which items are low on stock?' },
+          { label: 'Out of stock',          q: 'What is out of stock?' },
+          { label: 'What to purchase',      q: 'What should I procure today?' },
+          { label: 'Inventory value',       q: 'What is the total inventory value?' },
+          { label: 'Wastage today',         q: 'How much wastage was recorded today?' },
+          { label: 'Critical stock',        q: 'Show critical stock items zero stock' },
+        ],
+        MENU: [
+          { label: 'Best selling dish',     q: 'What is the best selling dish?' },
+          { label: 'Best profit margin',    q: 'Which dish has the best margin?' },
+          { label: 'Slow moving dishes',    q: 'Which dishes are slow or not selling?' },
+          { label: 'Hidden dishes',         q: 'Which menu items are hidden?' },
+          { label: 'Menu item count',       q: 'How many dishes are on the menu?' },
+          { label: 'Top revenue dish',      q: 'Which dish generates most revenue?' },
+        ],
+        STAFF: [
+          { label: 'Attendance today',      q: 'How many staff are present today?' },
+          { label: 'Monthly payroll',       q: 'What is the total salary payroll?' },
+          { label: 'Staff count',           q: 'How many staff members do we have?' },
+        ],
+        EXTRAS: [
+          { label: 'Extra items stock',     q: 'What is the extra items beverage stock?' },
+          { label: 'Extra item revenue',    q: 'What is the extra item revenue?' },
+          { label: 'Low beverage stock',    q: 'Which cold drinks are running low?' },
+        ],
+      };
+
+      const activeQs = questions[assistFilterCat] || questions.ALL;
+
+      return (
+        <div style={{ marginBottom: '12px', flexShrink: 0 }}>
+          {/* Category pill tabs */}
+          <div style={{
+            display: 'flex', gap: '5px', overflowX: 'auto',
+            paddingBottom: '8px', marginBottom: '10px'
+          }} className="no-scrollbar">
+            {cats.map(c => {
+              const active = assistFilterCat === c.key;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setAssistFilterCat(c.key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '5px 11px', borderRadius: '7px', flexShrink: 0,
+                    background: active ? 'rgba(211,191,162,0.1)' : 'transparent',
+                    border: `1px solid ${active ? 'rgba(211,191,162,0.3)' : 'rgba(255,255,255,0.07)'}`,
+                    color: active ? '#d3bfa2' : 'rgba(255,255,255,0.25)',
+                    cursor: 'pointer', outline: 'none',
+                    fontSize: '0.57rem', fontWeight: '700',
+                    letterSpacing: '0.3px', transition: 'all 0.15s',
+                    fontFamily: 'Poppins, sans-serif'
+                  }}
+                >
+                  {c.icon}
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Question chips for active category */}
+          <div style={{
+            display: 'flex', gap: '5px', flexWrap: 'wrap'
+          }}>
+            {activeQs.map(({ label, q: qText }) => (
+              <button
+                key={label}
+                onClick={() => handleAssistQuery(qText)}
+                style={{
+                  padding: '5px 11px', borderRadius: '6px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  color: 'rgba(211,191,162,0.5)', cursor: 'pointer',
+                  fontSize: '0.58rem', fontWeight: '600',
+                  letterSpacing: '0.2px', transition: 'all 0.15s',
+                  outline: 'none', fontFamily: 'Poppins, sans-serif'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(211,191,162,0.07)';
+                  e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)';
+                  e.currentTarget.style.color = '#d3bfa2';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+                  e.currentTarget.style.color = 'rgba(211,191,162,0.5)';
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* ── MESSAGES ── */}
+    <div
+      className="no-scrollbar"
+      style={{
+        flex: 1, overflowY: 'auto',
+        display: 'flex', flexDirection: 'column',
+        gap: '12px', paddingBottom: '8px'
+      }}
+    >
+      {assistMessages.map((msg, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            alignItems: 'flex-start', gap: '8px'
+          }}
+        >
+          {/* Assistant avatar */}
+          {msg.role !== 'user' && (
+            <div style={{
+              width: '26px', height: '26px', borderRadius: '7px',
+              background: 'rgba(211,191,162,0.07)',
+              border: '1px solid rgba(211,191,162,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, marginTop: '2px'
+            }}>
+              <Sparkles size={12} color="#d3bfa2" strokeWidth={1.4} />
+            </div>
+          )}
+
+          {/* Bubble */}
+          <div style={{
+            maxWidth: '76%',
+            padding: '10px 14px',
+            borderRadius: msg.role === 'user' ? '12px 12px 3px 12px' : '3px 12px 12px 12px',
+            background: msg.role === 'user'
+              ? 'rgba(211,191,162,0.09)'
+              : msg.role === 'system'
+              ? 'rgba(255,255,255,0.02)'
+              : '#0d0d0d',
+            border: `1px solid ${msg.role === 'user'
+              ? 'rgba(211,191,162,0.2)'
+              : 'rgba(255,255,255,0.06)'}`,
+          }}>
+            {/* Message text — handle multi-line with \n */}
+            <div style={{
+              fontSize: '0.72rem',
+              color: msg.role === 'user' ? '#d3bfa2' : 'rgba(255,255,255,0.72)',
+              lineHeight: 1.65,
+              fontWeight: msg.role === 'user' ? '600' : '400',
+              whiteSpace: 'pre-line'
+            }}>
+              {msg.text}
+            </div>
+            {/* Timestamp */}
+            <div style={{
+              fontSize: '0.48rem', color: 'rgba(255,255,255,0.15)',
+              marginTop: '6px', textAlign: 'right', fontFamily: 'monospace'
+            }}>
+              {new Date(msg.ts).toLocaleTimeString('en-IN', {
+                hour: '2-digit', minute: '2-digit', hour12: true
+              })}
+            </div>
+          </div>
+
+          {/* User avatar placeholder — keeps alignment */}
+          {msg.role === 'user' && (
+            <div style={{
+              width: '26px', height: '26px', borderRadius: '7px',
+              background: 'rgba(211,191,162,0.06)',
+              border: '1px solid rgba(211,191,162,0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, marginTop: '2px'
+            }}>
+              <User size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
+            </div>
+          )}
+        </div>
       ))}
+
+      {/* Typing indicator */}
       {assistLoading && (
-        <div style={{ display: 'flex', gap: '5px', alignItems: 'center', paddingLeft: '32px' }}>
-          {[0,1,2].map(i => (
-            <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%',
-              background: 'rgba(211,191,162,0.3)',
-              animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-          ))}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '34px'
+        }}>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: 'rgba(211,191,162,0.35)',
+                animation: `pulse 1.3s ease-in-out ${i * 0.18}s infinite`
+              }} />
+            ))}
+          </div>
+          <span style={{
+            fontSize: '0.55rem', color: 'rgba(255,255,255,0.15)',
+            fontStyle: 'italic'
+          }}>
+            Fetching from your data...
+          </span>
         </div>
       )}
+
       <div ref={assistEndRef} />
     </div>
 
-    {/* Input */}
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-      <input
-        value={assistInput}
-        onChange={e => setAssistInput(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && !assistLoading) handleAssistQuery(); }}
-        placeholder="Ask anything about your restaurant..."
-        style={{
-          flex: 1, padding: '11px 14px', borderRadius: '10px',
-          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211,191,162,0.18)',
-          color: '#fff', fontSize: '0.72rem', outline: 'none',
-          fontFamily: 'Poppins, sans-serif', caretColor: '#d3bfa2'
-        }}
-      />
-      <button onClick={() => handleAssistQuery()}
+    {/* ── INPUT BAR ── */}
+    <div style={{
+      display: 'flex', gap: '8px', alignItems: 'center',
+      padding: '12px 0 16px 0', flexShrink: 0,
+      borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '8px'
+    }}>
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center',
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(211,191,162,0.18)',
+        borderRadius: '11px', padding: '0 14px',
+        transition: 'border-color 0.2s'
+      }}>
+        <input
+          value={assistInput}
+          onChange={e => setAssistInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !assistLoading) handleAssistQuery(); }}
+          placeholder="Ask anything — revenue, orders, stock, staff..."
+          style={{
+            flex: 1, padding: '11px 0',
+            background: 'transparent', border: 'none',
+            color: '#fff', fontSize: '0.72rem', outline: 'none',
+            fontFamily: 'Poppins, sans-serif', caretColor: '#d3bfa2'
+          }}
+        />
+        {assistInput && (
+          <button
+            onClick={() => setAssistInput('')}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '4px', color: 'rgba(255,255,255,0.2)', outline: 'none'
+            }}
+          >
+            <X size={12} strokeWidth={2} />
+          </button>
+        )}
+      </div>
+
+      <button
+        onClick={() => handleAssistQuery()}
         disabled={assistLoading || !assistInput.trim()}
         style={{
-          width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
-          background: assistInput.trim() ? 'rgba(211,191,162,0.12)' : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${assistInput.trim() ? 'rgba(211,191,162,0.3)' : 'rgba(255,255,255,0.06)'}`,
-          cursor: assistInput.trim() ? 'pointer' : 'default',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none'
-        }}>
-        <Send size={15} color={assistInput.trim() ? '#d3bfa2' : 'rgba(255,255,255,0.15)'} strokeWidth={1.8} />
+          width: '42px', height: '42px', borderRadius: '11px', flexShrink: 0,
+          background: assistInput.trim()
+            ? 'rgba(211,191,162,0.12)'
+            : 'rgba(255,255,255,0.02)',
+          border: `1px solid ${assistInput.trim()
+            ? 'rgba(211,191,162,0.3)'
+            : 'rgba(255,255,255,0.06)'}`,
+          cursor: assistInput.trim() && !assistLoading ? 'pointer' : 'default',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          outline: 'none', transition: 'all 0.2s'
+        }}
+      >
+        {assistLoading
+          ? <RefreshCw size={14} color="rgba(211,191,162,0.4)" strokeWidth={1.8}
+              style={{ animation: 'spin 1s linear infinite' }} />
+          : <Send size={14}
+              color={assistInput.trim() ? '#d3bfa2' : 'rgba(255,255,255,0.15)'}
+              strokeWidth={1.8} />
+        }
       </button>
     </div>
+
   </motion.div>
 )}
 
