@@ -385,8 +385,9 @@ const fetchAiBrain = useCallback(async () => {
 
 const fetchAuditLogs = useCallback(async () => {
   try {
-    const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=50`);
-    setAuditLogs(r.data);
+const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=200`);
+
+setAuditLogs(r.data);
   } catch {}
 }, [tenantId]);
 

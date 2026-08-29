@@ -102,7 +102,7 @@ const [speakingItemId, setSpeakingItemId]   = useState(null);  // which dish is 
 const [voicePaused,   setVoicePaused]       = useState(false);
 const [voiceLang,     setVoiceLang]         = useState('en-IN'); // en-IN | hi-IN | mr-IN
 const speechRef = useRef(null); // holds current SpeechSynthesisUtterance
-
+const [spokenText, setSpokenText] = useState(''); // text currently being spoken — shown in UI
 const [reservationDate, setReservationDate] = useState('');
 const [reservationTime, setReservationTime] = useState('');
 const [specialRequests, setSpecialRequests] = useState('');
@@ -670,91 +670,199 @@ useEffect(() => {
 const speakDish = (item) => {
   if (!window.speechSynthesis) return;
 
-  if (speakingItemId === item._id) { stopSpeech(); return; }
+  // Toggle off if already speaking this item
+  if (speakingItemId === item._id) {
+    stopSpeech();
+    setSpokenText('');
+    return;
+  }
   stopSpeech();
+  setSpokenText('');
 
-  const recommended = allMenuItems.find(
-    m => m._id !== item._id && m.categoryId === item.categoryId && m.isAvailable !== false
-  ) || allMenuItems.find(m => m._id !== item._id && m.isAvailable !== false);
+  // Find a recommended dish: same category, available, not this dish
+  const recommended =
+    allMenuItems.find(
+      m => m._id !== item._id &&
+           m.categoryId === item.categoryId &&
+           m.isAvailable !== false &&
+           (m.isBestSeller || m.isChefSpecial)
+    ) ||
+    allMenuItems.find(
+      m => m._id !== item._id &&
+           m.categoryId === item.categoryId &&
+           m.isAvailable !== false
+    ) ||
+    allMenuItems.find(m => m._id !== item._id && m.isAvailable !== false);
 
-  // ── Spice level maps for each language ──
-  const spiceMapMr = { high: 'जास्त तिखट', medium: 'मध्यम तिखट', low: 'कमी तिखट' };
-  const spiceMapHi = { high: 'ज्यादा तीखा', medium: 'मध्यम तीखा', low: 'कम तीखा' };
+  // ── Spice level maps ──
+  const spiceEn = { high: 'spicy',        medium: 'mildly spicy', low: 'mild' };
+  const spiceHi = { high: 'zyada tikha',  medium: 'medium tikha', low: 'halka' };
+  const spiceMr = { high: 'jast tikhat',  medium: 'madhyam tikhat', low: 'kam tikhat' };
 
+  // ── Hour-based greeting ──
+  const hour = new Date(new Date().getTime() + 330 * 60000).getHours();
+  const greetEn = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetHi = hour < 12 ? 'Suprabhat'    : hour < 17 ? 'Namaskar'       : 'Shubh sandhya';
+  const greetMr = hour < 12 ? 'Shubh sakal'  : hour < 17 ? 'Namaskar'       : 'Shubh sandhya';
+
+  // ── Build full natural sentence per language ──
   const scripts = {
+
     'en-IN': () => {
-      const status = item._eng?.quadrant === 'star' ? 'a Bestseller' :
-                     item.isChefSpecial ? 'a Chef Special' : '';
-      const serves = item.servingSize ? `Serves ${item.servingSize}.` : '';
-      const spice  = item.spiceLevel  ? `Spice level: ${item.spiceLevel}.` : '';
-      const ings   = item.ingredients?.en?.length
-        ? `Main ingredients: ${item.ingredients.en.slice(0, 4).join(', ')}.` : '';
-      const desc   = item.description ? `${item.description}.` : '';
-      const rec    = recommended ? `You might also enjoy ${recommended.name}.` : '';
-      return [item.name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
+      const dishName = item.name;
+      const status = item._eng?.quadrant === 'star'
+        ? `${dishName} is one of our bestsellers.`
+        : item.isChefSpecial
+        ? `${dishName} is a Chef Special, personally recommended by our chef.`
+        : '';
+      const veg    = item.isVeg !== false
+        ? 'It is a vegetarian dish.'
+        : 'It is a non-vegetarian dish.';
+      const serves = item.servingSize
+        ? `This dish serves ${item.servingSize}.`
+        : '';
+      const rawSpice = (item.spiceLevel || '').toLowerCase();
+      const spice  = rawSpice
+        ? `The spice level is ${spiceEn[rawSpice] || item.spiceLevel}.`
+        : '';
+      const ingList = item.ingredients?.en?.length
+        ? item.ingredients.en.slice(0, 4)
+        : [];
+      const ings   = ingList.length
+        ? `The main ingredients include ${ingList.join(', ')}.`
+        : '';
+      const desc   = item.description
+        ? item.description.trim().replace(/\.$/, '') + '.'
+        : '';
+      const price  = item.price
+        ? `It is priced at ${item.price} rupees.`
+        : '';
+      const recName = recommended
+        ? (recommended.name)
+        : '';
+      const rec    = recName
+        ? `You might also enjoy ${recName}, which pairs wonderfully with this.`
+        : '';
+
+      const full = [
+        `${greetEn}.`,
+        `Welcome to ${restaurantData?.name || 'our restaurant'}.`,
+        `Allow us to tell you about ${dishName}.`,
+        status, veg, serves, spice, ings, desc, price, rec
+      ].filter(Boolean).join(' ');
+
+      return full;
     },
 
     'hi-IN': () => {
-      // For Hindi: use English dish name pronounced with Hindi voice for clarity
-      // (Indian TTS engines handle English names well in Hindi voice)
-      const name   = item.name;   // keep English name — pronounced naturally
-      const status = item._eng?.quadrant === 'star' ? 'yeh bestseller hai.' :
-                     item.isChefSpecial ? 'yeh chef special hai.' : '';
-      const serves = item.servingSize ? `${item.servingSize} logon ke liye.` : '';
+      const dishName = item.name; // keep English name — Indian TTS handles it well
+      const status = item._eng?.quadrant === 'star'
+        ? `${dishName} hamare bestseller dishes mein se ek hai.`
+        : item.isChefSpecial
+        ? `${dishName} ek Chef Special dish hai, hamare chef ki khaas pasand.`
+        : '';
+      const veg    = item.isVeg !== false
+        ? 'Yeh ek vegetarian dish hai.'
+        : 'Yeh ek non-vegetarian dish hai.';
+      const serves = item.servingSize
+        ? `Yeh dish ${item.servingSize} logon ke liye serve ki jaati hai.`
+        : '';
       const rawSpice = (item.spiceLevel || '').toLowerCase();
-      const spice  = rawSpice ? `Masale ka star: ${spiceMapHi[rawSpice] || item.spiceLevel}.` : '';
-      // Use Marathi/Hindi ingredients if available, else English
-      const ingList = item.ingredients?.hi?.length ? item.ingredients.hi
-                    : item.ingredients?.en?.length ? item.ingredients.en : [];
-      const ings   = ingList.length ? `Mukhya samagri: ${ingList.slice(0, 4).join(', ')}.` : '';
-      const desc   = item.description || '';
-      const recName = recommended ? (recommended.name) : '';
-      const rec    = recName ? `Aap ${recName} bhi try kar sakte hain.` : '';
-      return [name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
+      const spice  = rawSpice
+        ? `Iska masala level ${spiceHi[rawSpice] || item.spiceLevel} hai.`
+        : '';
+      const ingList = item.ingredients?.hi?.length
+        ? item.ingredients.hi.slice(0, 4)
+        : item.ingredients?.en?.slice(0, 4) || [];
+      const ings   = ingList.length
+        ? `Iske mukhya ingredients hain: ${ingList.join(', ')}.`
+        : '';
+      const desc   = item.description
+        ? item.description.trim().replace(/\.$/, '') + '.'
+        : '';
+      const price  = item.price
+        ? `Iska daam sirf ${item.price} rupaye hai.`
+        : '';
+      const recName = recommended ? recommended.name : '';
+      const rec    = recName
+        ? `Aap ${recName} bhi zaroor try karein, yeh iske saath bahut acha lagta hai.`
+        : '';
+
+      return [
+        `${greetHi}.`,
+        `Aapka swagat hai ${restaurantData?.name || 'hamare restaurant'} mein.`,
+        `Aiye hum aapko ${dishName} ke baare mein batate hain.`,
+        status, veg, serves, spice, ings, desc, price, rec
+      ].filter(Boolean).join(' ');
     },
 
     'mr-IN': () => {
-      const name   = item.name_mr || item.name;
-      const status = item._eng?.quadrant === 'star' ? 'he bestseller aahe.' :
-                     item.isChefSpecial ? 'he chef special aahe.' : '';
-      const serves = item.servingSize ? `${item.servingSize} jananasaathi.` : '';
+      const dishName = item.name_mr || item.name;
+      const status = item._eng?.quadrant === 'star'
+        ? `${dishName} aamnha bestseller padarth aahe.`
+        : item.isChefSpecial
+        ? `${dishName} he chef special aahe, aamachya chefchi khas shifaarish.`
+        : '';
+      const veg    = item.isVeg !== false
+        ? 'Ha ek shakahari padarth aahe.'
+        : 'Ha ek mansahari padarth aahe.';
+      const serves = item.servingSize
+        ? `He ${item.servingSize} jananasaathi aahe.`
+        : '';
       const rawSpice = (item.spiceLevel || '').toLowerCase();
-      const spice  = rawSpice ? `Tikhatpana: ${spiceMapMr[rawSpice] || item.spiceLevel}.` : '';
-      // Prefer Marathi ingredient list; fallback to English
-      const ingList = item.ingredients?.mr?.length ? item.ingredients.mr
-                    : item.ingredients?.en?.length ? item.ingredients.en : [];
-      const ings   = ingList.length ? `Mukhya ghatak: ${ingList.slice(0, 4).join(', ')}.` : '';
-      const desc   = item.description || '';
+      const spice  = rawSpice
+        ? `Yancha tikhatpana ${spiceMr[rawSpice] || item.spiceLevel} aahe.`
+        : '';
+      const ingList = item.ingredients?.mr?.length
+        ? item.ingredients.mr.slice(0, 4)
+        : item.ingredients?.en?.slice(0, 4) || [];
+      const ings   = ingList.length
+        ? `Mukhya ghatak aahet: ${ingList.join(', ')}.`
+        : '';
+      const desc   = item.description
+        ? item.description.trim().replace(/\.$/, '') + '.'
+        : '';
+      const price  = item.price
+        ? `Yaachi kimat fakt ${item.price} rupaye aahe.`
+        : '';
       const recName = recommended ? (recommended.name_mr || recommended.name) : '';
-      const rec    = recName ? `Tumhala ${recName} pan avadel.` : '';
-      return [name, status, serves, spice, ings, desc, rec].filter(Boolean).join(' ');
+      const rec    = recName
+        ? `Tumhala ${recName} pan nakki avadel, he yanchyashi uttam jadte.`
+        : '';
+
+      return [
+        `${greetMr}.`,
+        `${restaurantData?.name || 'Aamachya restaurant'} madhe aapale swagat aahe.`,
+        `Chala, aamhi tumhala ${dishName} vishayi sangato.`,
+        status, veg, serves, spice, ings, desc, price, rec
+      ].filter(Boolean).join(' ');
     },
   };
 
   const text = (scripts[voiceLang] || scripts['en-IN'])();
   if (!text.trim()) return;
 
+  // Store the spoken text for display
+  setSpokenText(text);
+
   const utter  = new SpeechSynthesisUtterance(text);
   utter.lang   = voiceLang;
   utter.volume = 1.0;
 
-  // Rate and pitch tuned per language for natural Indian delivery
-  if (voiceLang === 'en-IN') { utter.rate = 0.90; utter.pitch = 1.05; }
-  if (voiceLang === 'hi-IN') { utter.rate = 0.85; utter.pitch = 1.0;  }
-  if (voiceLang === 'mr-IN') { utter.rate = 0.82; utter.pitch = 1.0;  }
+  // Rate and pitch tuned for natural Indian delivery
+  if (voiceLang === 'en-IN') { utter.rate = 0.88; utter.pitch = 1.05; }
+  if (voiceLang === 'hi-IN') { utter.rate = 0.83; utter.pitch = 1.0;  }
+  if (voiceLang === 'mr-IN') { utter.rate = 0.80; utter.pitch = 1.0;  }
 
   // ── Best-effort Indian voice selection ──
-  const voices = window.speechSynthesis.getVoices();
-  const langCode = voiceLang.split('-')[0]; // 'en' | 'hi' | 'mr'
+  const voices   = window.speechSynthesis.getVoices();
+  const langCode = voiceLang.split('-')[0];
 
   const voice =
-    // 1. Exact locale match (e.g. hi-IN, mr-IN, en-IN)
+    voices.find(v => v.lang === voiceLang && v.name.toLowerCase().includes('india')) ||
     voices.find(v => v.lang === voiceLang) ||
-    // 2. Same language, any locale (e.g. hi-IN vs hi)
+    voices.find(v => v.lang.startsWith(langCode) && v.name.toLowerCase().includes('india')) ||
     voices.find(v => v.lang.startsWith(langCode)) ||
-    // 3. Any Indian English voice as last resort
-    voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india')) ||
-    // 4. Any Indian-tagged voice
     voices.find(v => v.lang.includes('IN')) ||
     voices[0];
 
@@ -765,7 +873,22 @@ const speakDish = (item) => {
   utter.onerror = () => { setSpeakingItemId(null); setVoicePaused(false); speechRef.current = null; };
 
   speechRef.current = utter;
-  window.speechSynthesis.speak(utter);
+
+  // Chrome bug: voices may not load immediately — retry after 100ms if list is empty
+  if (voices.length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      const v2 = window.speechSynthesis.getVoices();
+      const bestVoice =
+        v2.find(v => v.lang === voiceLang && v.name.toLowerCase().includes('india')) ||
+        v2.find(v => v.lang === voiceLang) ||
+        v2.find(v => v.lang.startsWith(langCode)) ||
+        v2[0];
+      if (bestVoice) utter.voice = bestVoice;
+      window.speechSynthesis.speak(utter);
+    };
+  } else {
+    window.speechSynthesis.speak(utter);
+  }
 };
 
 const toggleVoicePause = (e) => {
@@ -6735,187 +6858,234 @@ onClick={() => {
     />
   </div>
 
-  {/* ── HEAR THIS DISH — voice panel ── */}
-  {typeof window !== 'undefined' && window.speechSynthesis && (
+{/* ── HEAR THIS DISH — voice panel ── */}
+{typeof window !== 'undefined' && window.speechSynthesis && (
+  <div style={{
+    margin: '0 14px 12px 14px',
+    background: 'rgba(6,6,6,0.82)',
+    border: '1px solid rgba(211,191,162,0.13)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(12px)',
+    overflow: 'hidden'
+  }}>
+
+    {/* ── HEADER ROW ── */}
     <div style={{
-      margin: '0 16px 12px 16px',
-      padding: '12px 14px',
-      background: 'rgba(0,0,0,0.55)',
-      border: '1px solid rgba(211,191,162,0.12)',
-      borderRadius: '14px',
-      backdropFilter: 'blur(8px)'
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '11px 14px 0 14px'
     }}>
-
-      {/* Top row: label + lang selector */}
-      <div style={{
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', marginBottom: '10px'
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '6px'
+      {/* Label */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+        <Volume1 size={12} color="rgba(211,191,162,0.45)" strokeWidth={1.8} />
+        <span style={{
+          fontSize: '0.5rem', fontWeight: '900',
+          color: 'rgba(211,191,162,0.4)', letterSpacing: '2.5px',
+          textTransform: 'uppercase'
         }}>
-          <Volume1 size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.8} />
-          <span style={{
-            fontSize: '0.52rem', fontWeight: '900',
-            color: 'rgba(211,191,162,0.45)', letterSpacing: '2px',
-            textTransform: 'uppercase'
-          }}>
-            HEAR THIS DISH
-          </span>
-        </div>
+          HEAR THIS DISH
+        </span>
+      </div>
 
-        {/* Language tabs */}
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {[
-            { code: 'en-IN', label: 'EN' },
-            { code: 'hi-IN', label: 'HI' },
-            { code: 'mr-IN', label: 'MR' },
-          ].map(({ code, label }) => (
+      {/* Language selector */}
+      <div style={{ display: 'flex', gap: '3px' }}>
+        {[
+          { code: 'en-IN', label: 'EN',  full: 'English'  },
+          { code: 'hi-IN', label: 'HI',  full: 'Hindi'    },
+          { code: 'mr-IN', label: 'MR',  full: 'Marathi'  },
+        ].map(({ code, label }) => {
+          const active = voiceLang === code;
+          return (
             <button
               key={code}
               aria-label={`Speak in ${label}`}
-              onClick={() => setVoiceLang(code)}
+              onClick={() => {
+                setVoiceLang(code);
+                if (speakingItemId === activeModel._id) {
+                  stopSpeech();
+                  setSpokenText('');
+                }
+              }}
               style={{
-                padding: '3px 8px', borderRadius: '5px',
+                padding: '4px 9px', borderRadius: '6px',
                 fontSize: '0.5rem', fontWeight: '900',
-                letterSpacing: '0.5px', cursor: 'pointer',
+                letterSpacing: '0.8px', cursor: 'pointer',
                 outline: 'none', fontFamily: 'Poppins, sans-serif',
-                border: `1px solid ${voiceLang === code
-                  ? 'rgba(211,191,162,0.4)'
-                  : 'rgba(255,255,255,0.08)'}`,
-                background: voiceLang === code
-                  ? 'rgba(211,191,162,0.1)'
-                  : 'rgba(255,255,255,0.03)',
-                color: voiceLang === code
-                  ? '#d3bfa2'
-                  : 'rgba(255,255,255,0.25)',
+                border: `1px solid ${active ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.07)'}`,
+                background: active ? 'rgba(211,191,162,0.1)' : 'transparent',
+                color: active ? '#d3bfa2' : 'rgba(255,255,255,0.22)',
                 transition: 'all 0.15s'
               }}
             >
               {label}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
+    </div>
 
-      {/* Dish name + status line */}
+    {/* ── DISH NAME + DESCRIPTION ── */}
+    <div style={{ padding: '9px 14px 0 14px' }}>
       <div style={{
-        fontSize: '0.78rem', fontWeight: '800',
-        color: 'rgba(255,255,255,0.7)', marginBottom: '2px',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+        fontSize: '0.82rem', fontWeight: '800',
+        color: 'rgba(255,255,255,0.78)', lineHeight: 1.3,
+        marginBottom: '3px'
       }}>
-        {language === 'mr'
+        {voiceLang === 'mr-IN'
           ? (activeModel.name_mr || activeModel.name)
           : activeModel.name}
       </div>
       {activeModel.description && (
         <div style={{
-          fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)',
-          lineHeight: 1.5, marginBottom: '10px',
-          display: '-webkit-box', WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical', overflow: 'hidden'
+          fontSize: '0.58rem', color: 'rgba(255,255,255,0.22)',
+          lineHeight: 1.55, marginBottom: '0'
         }}>
           {activeModel.description}
         </div>
       )}
+    </div>
 
-      {/* Controls row */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+    {/* ── SPOKEN TEXT DISPLAY — scrolling transcript ── */}
+    {speakingItemId === activeModel._id && spokenText && (
+      <div style={{
+        margin: '9px 14px 0 14px',
+        padding: '9px 11px',
+        background: 'rgba(211,191,162,0.04)',
+        border: '1px solid rgba(211,191,162,0.1)',
+        borderRadius: '10px',
+        maxHeight: '72px', overflowY: 'auto'
+      }}
+      className="no-scrollbar"
+      >
+        <div style={{
+          fontSize: '0.6rem', color: 'rgba(211,191,162,0.5)',
+          lineHeight: 1.65, fontStyle: 'italic'
+        }}>
+          {spokenText}
+        </div>
+      </div>
+    )}
 
-        {/* Main play/stop button */}
+    {/* ── CONTROLS ── */}
+    <div style={{
+      display: 'flex', gap: '8px', alignItems: 'center',
+      padding: '10px 14px 13px 14px'
+    }}>
+
+      {/* Main PLAY / STOP button */}
+      <button
+        aria-label={speakingItemId === activeModel._id ? 'Stop description' : 'Play dish description'}
+        onClick={() => speakDish(activeModel)}
+        style={{
+          flex: 1, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', gap: '8px',
+          padding: '11px 14px', borderRadius: '11px',
+          cursor: 'pointer', outline: 'none',
+          fontFamily: 'Poppins, sans-serif',
+          border: `1px solid ${speakingItemId === activeModel._id
+            ? 'rgba(211,191,162,0.45)'
+            : 'rgba(211,191,162,0.2)'}`,
+          background: speakingItemId === activeModel._id
+            ? 'rgba(211,191,162,0.13)'
+            : 'rgba(211,191,162,0.07)',
+          transition: 'all 0.2s'
+        }}
+      >
+        {speakingItemId === activeModel._id ? (
+          <>
+            {/* Live waveform bars */}
+            <div style={{
+              display: 'flex', gap: '2.5px',
+              alignItems: 'center', height: '16px'
+            }}>
+              {[5, 10, 7, 13, 6, 11, 4].map((h, i) => (
+                <div key={i} style={{
+                  width: '2px', borderRadius: '1px',
+                  background: '#d3bfa2',
+                  height: `${h}px`,
+                  opacity: 0.8,
+                  animation: `pulse ${0.6 + i * 0.08}s ease-in-out ${i * 0.1}s infinite`
+                }} />
+              ))}
+            </div>
+            <span style={{
+              fontSize: '0.6rem', fontWeight: '800',
+              color: '#d3bfa2', letterSpacing: '1.2px'
+            }}>
+              {voicePaused ? 'PAUSED' : 'PLAYING · TAP TO STOP'}
+            </span>
+          </>
+        ) : (
+          <>
+            <Volume2 size={15} color="#d3bfa2" strokeWidth={1.8} />
+            <span style={{
+              fontSize: '0.6rem', fontWeight: '800',
+              color: '#d3bfa2', letterSpacing: '1px'
+            }}>
+              {voiceLang === 'mr-IN'
+                ? 'वर्णन ऐका'
+                : voiceLang === 'hi-IN'
+                ? 'विवरण सुनें'
+                : 'HEAR DESCRIPTION'}
+            </span>
+          </>
+        )}
+      </button>
+
+      {/* Pause / Resume — only when speaking */}
+      {speakingItemId === activeModel._id && (
         <button
-          aria-label={speakingItemId === activeModel._id ? 'Stop' : 'Play dish description'}
-          onClick={() => speakDish(activeModel)}
+          aria-label={voicePaused ? 'Resume' : 'Pause'}
+          onClick={toggleVoicePause}
           style={{
-            flex: 1, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', gap: '7px',
-            padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
-            outline: 'none', fontFamily: 'Poppins, sans-serif',
-            border: `1px solid ${speakingItemId === activeModel._id
-              ? 'rgba(211,191,162,0.4)'
-              : 'rgba(211,191,162,0.18)'}`,
-            background: speakingItemId === activeModel._id
-              ? 'rgba(211,191,162,0.12)'
-              : 'rgba(211,191,162,0.06)',
-            transition: 'all 0.2s'
+            width: '42px', height: '42px',
+            borderRadius: '11px', flexShrink: 0,
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(211,191,162,0.07)',
+            border: '1px solid rgba(211,191,162,0.22)',
+            cursor: 'pointer', outline: 'none',
+            transition: 'all 0.15s'
           }}
         >
-          {speakingItemId === activeModel._id ? (
-            <>
-              {/* Animated waveform bars while speaking */}
-              <div style={{ display: 'flex', gap: '2px', alignItems: 'center', height: '14px' }}>
-                {[0.6, 1, 0.7, 0.9, 0.5].map((h, i) => (
-                  <div key={i} style={{
-                    width: '2px', borderRadius: '1px',
-                    background: '#d3bfa2',
-                    height: `${Math.round(h * 14)}px`,
-                    animation: `pulse 0.8s ease-in-out ${i * 0.12}s infinite`
-                  }} />
-                ))}
-              </div>
-              <span style={{
-                fontSize: '0.62rem', fontWeight: '800',
-                color: '#d3bfa2', letterSpacing: '1px'
-              }}>
-                PLAYING · TAP TO STOP
-              </span>
-            </>
-          ) : (
-            <>
-              <Volume2 size={14} color="#d3bfa2" strokeWidth={1.8} />
-              <span style={{
-                fontSize: '0.62rem', fontWeight: '800',
-                color: '#d3bfa2', letterSpacing: '1px'
-              }}>
-                {language === 'mr' ? 'ऐका' : 'HEAR DESCRIPTION'}
-              </span>
-            </>
-          )}
+          {voicePaused
+            ? <Play  size={15} color="#d3bfa2" strokeWidth={2} />
+            : <Pause size={15} color="#d3bfa2" strokeWidth={2} />
+          }
         </button>
-
-        {/* Pause / Resume — only visible while speaking */}
-        {speakingItemId === activeModel._id && (
-          <button
-            aria-label={voicePaused ? 'Resume' : 'Pause'}
-            onClick={toggleVoicePause}
-            style={{
-              width: '40px', height: '40px', borderRadius: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(211,191,162,0.06)',
-              border: '1px solid rgba(211,191,162,0.2)',
-              cursor: 'pointer', outline: 'none', flexShrink: 0
-            }}
-          >
-            {voicePaused
-              ? <Play size={14} color="#d3bfa2" strokeWidth={2} />
-              : <Pause size={14} color="#d3bfa2" strokeWidth={2} />
-            }
-          </button>
-        )}
-      </div>
-
-      {/* Speaking status caption */}
-      {speakingItemId === activeModel._id && (
-        <div style={{
-          marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px'
-        }}>
-          <div style={{
-            width: '5px', height: '5px', borderRadius: '50%',
-            background: 'rgba(211,191,162,0.5)',
-            animation: 'pulse 1s ease-in-out infinite'
-          }} />
-          <span style={{
-            fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)',
-            fontWeight: '600'
-          }}>
-            {voicePaused
-              ? 'Paused'
-              : `Speaking in ${voiceLang === 'mr-IN' ? 'Marathi' : voiceLang === 'hi-IN' ? 'Hindi' : 'English'}...`}
-          </span>
-        </div>
       )}
     </div>
-  )}
+
+    {/* ── STATUS LINE ── */}
+    {speakingItemId === activeModel._id && (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        paddingBottom: '10px', paddingLeft: '14px'
+      }}>
+        <div style={{
+          width: '5px', height: '5px', borderRadius: '50%',
+          background: 'rgba(211,191,162,0.6)',
+          flexShrink: 0,
+          animation: 'pulse 0.9s ease-in-out infinite'
+        }} />
+        <span style={{
+          fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)',
+          fontWeight: '600', letterSpacing: '0.3px'
+        }}>
+          {voicePaused
+            ? 'Paused — tap play to continue'
+            : `Speaking in ${
+                voiceLang === 'mr-IN' ? 'Marathi'
+                : voiceLang === 'hi-IN' ? 'Hindi'
+                : 'English (India)'
+              }...`
+          }
+        </span>
+      </div>
+    )}
+
+  </div>
+)}
 
   {/* Chef bubble (existing — unchanged) */}
   {activeModel.isChefSpecial === true && (
