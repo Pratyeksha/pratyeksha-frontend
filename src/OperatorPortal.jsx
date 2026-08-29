@@ -1086,16 +1086,23 @@ const hudLiveCounterBreakdown = useMemo(() => {
 
 
 const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      if (order.status === 'served' || order.status === 'settled') return false;
-      // Counter-pickup orders settle via pickup queue, not kitchen tickets
-      if (order.source === 'counter-pickup') return false;
-      const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
-      if (orderZone === 'delayed') return minutes >= 15;
-      if (orderZone === 'fresh')   return minutes < 15;
-      return true;
-    });
-  }, [orders, orderZone]);
+  return orders.filter(order => {
+    // 'served' and 'settled' never appear in the live orders panel
+    if (order.status === 'served' || order.status === 'settled') return false;
+    // 'ready' orders: show in a separate "READY" section — exclude from pending list
+    if (order.status === 'ready') return false;
+    if (order.source === 'counter-pickup') return false;
+    const minutes = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
+    if (orderZone === 'delayed') return minutes >= 15;
+    if (orderZone === 'fresh')   return minutes < 15;
+    return true;
+  });
+}, [orders, orderZone]);
+
+// Separate list: orders marked READY by kitchen — awaiting waiter to serve
+const readyOrders = useMemo(() => (
+  orders.filter(o => o.status === 'ready')
+), [orders]);
 
 const dailySettlementBreakdown = useMemo(() => {
   let cashSum=0, upiSum=0, cardSum=0;
