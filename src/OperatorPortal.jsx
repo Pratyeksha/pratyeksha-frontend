@@ -12659,17 +12659,21 @@ onChange={e => {
                           style={{background:'transparent',border:'1px solid #222',color:'#444',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem'}}>✕</button>
                       </div>
                     ))}
-                    {recipeIngredientRows.some(row => {
+{recipeIngredientRows.some(row => {
   const inv = inventory.find(i => i._id === row.inventoryId);
   return inv && inv.currentStock <= 0;
 }) && (
   <div style={{
-    display: 'flex', alignItems: 'center', gap: '8px',
-    padding: '10px 12px', borderRadius: '8px', marginBottom: '10px',
-    background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)'
+    display: 'flex', alignItems: 'flex-start', gap: '8px',
+    padding: '10px 13px', borderRadius: '8px', marginBottom: '10px',
+    background: 'rgba(211,191,162,0.05)',
+    border: '1px solid rgba(211,191,162,0.18)'
   }}>
-    <span style={{ fontSize: '0.7rem', color: '#f87171', fontWeight: '700' }}>
-      ⚠ One or more selected ingredients are currently out of stock. Recipe will save but auto-deduction won't fire until stock is replenished.
+    <Info size={13} color="rgba(211,191,162,0.6)" strokeWidth={1.8} style={{ marginTop: '1px', flexShrink: 0 }} />
+    <span style={{ fontSize: '0.65rem', color: 'rgba(211,191,162,0.6)', fontWeight: '600', lineHeight: 1.5 }}>
+      One or more ingredients currently have zero stock. The recipe will save normally.
+      The dish will only be hidden automatically when stock hits zero <strong>during a settlement</strong>, 
+      and only if Auto-Hide is enabled in settings. Saving this recipe does not affect dish visibility.
     </span>
   </div>
 )}

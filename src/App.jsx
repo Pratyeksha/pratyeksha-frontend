@@ -273,14 +273,24 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
 
 const filteredMenuItems = useMemo(() => {
   const isSearching = searchQuery.length >= 2;
-  return allMenuItems.filter(i => {
+
+return allMenuItems
+  .filter(i => {
+    const isSearching = searchQuery.length >= 2;
     const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
     const nameEn = i.name?.toLowerCase() || '';
     const nameMr = i.name_mr || '';
-    const matchesSearch = nameEn.includes(searchQuery.toLowerCase()) || nameMr.includes(searchQuery);
-    // When actively searching by name, skip veg filter — show what they asked for
+    const matchesSearch = !searchQuery || nameEn.includes(searchQuery.toLowerCase()) || nameMr.includes(searchQuery);
     const matchesVeg = isSearching ? true : (filterVegOnly ? i.isVeg === true : i.isVeg !== true);
     return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
+  })
+  .sort((a, b) => {
+    // Bestsellers with a rank come first within each category
+    const aRank = a.bestsellerRank ?? 999;
+    const bRank = b.bestsellerRank ?? 999;
+    if (aRank !== bRank) return aRank - bRank;
+    // Then by name alphabetically
+    return (a.name || '').localeCompare(b.name || '');
   });
 }, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
 
@@ -1296,7 +1306,19 @@ socket.on("menu_updated", (updatedItem) => {
       )
     );
   }
-});                                          // ← close menu_updated HERE
+});  
+
+// ← close menu_updated HERE
+
+// Bulk menu update — fired after bestseller recalculation
+socket.on('menu_bulk_updated', (updatedItems) => {
+  if (!Array.isArray(updatedItems)) return;
+  setAllMenuItems(prev => {
+    const map = {};
+    updatedItems.forEach(i => { map[i._id] = i; });
+    return prev.map(item => map[item._id] ? { ...item, ...map[item._id] } : item);
+  });
+});
 
 // ── Live extra item stock/availability updates ──
 socket.on('extra_item_updated', (updatedItem) => {
@@ -1344,6 +1366,7 @@ socket.on("order_status_updated", (data) => {
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
   socket.off("menu_updated");
+  socket.off('menu_bulk_updated');
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
   socket.off("order_status_updated");
