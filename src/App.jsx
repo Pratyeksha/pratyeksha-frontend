@@ -109,7 +109,7 @@ const [specialRequests, setSpecialRequests] = useState('');
 const [tablePreference, setTablePreference] = useState('');
 const [reservationAskOrder, setReservationAskOrder] = useState(false);
 
-
+const [currentSpeechWordIndex, setCurrentSpeechWordIndex] = useState(-1);
 const [customerPhone, setCustomerPhone] = useState('');
 const [activeAnnouncement, setActiveAnnouncement] = useState(null);
 const [announcementDismissed, setAnnouncementDismissed] = useState(false);
@@ -666,12 +666,16 @@ useEffect(() => {
 // ═══════════════════════════════════════════════════════════════
 
 const stopSpeech = () => {
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
+  if (
+    typeof window !== 'undefined' &&
+    window.speechSynthesis
+  ) {
     window.speechSynthesis.cancel();
   }
 
   setSpeakingItemId(null);
   setVoicePaused(false);
+  setCurrentSpeechWordIndex(-1);
   speechRef.current = null;
 };
 
@@ -1095,6 +1099,28 @@ const speakDish = (item) => {
   setSpokenText(text);
 
   const utterance = new SpeechSynthesisUtterance(text);
+  // Reset word highlighting whenever a new speech starts.
+setCurrentSpeechWordIndex(0);
+
+// Speech boundary event.
+// Chrome/Edge generally provide this for word-level synchronization.
+utterance.onboundary = (event) => {
+  if (event.name !== 'word') return;
+
+  const beforeCurrentWord = text.slice(
+    0,
+    event.charIndex
+  );
+
+  const wordIndex =
+    beforeCurrentWord
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .length;
+
+  setCurrentSpeechWordIndex(wordIndex);
+};
 
   utterance.lang = lang;
   utterance.volume = 1;
@@ -1155,11 +1181,12 @@ const speakDish = (item) => {
     setVoicePaused(false);
   };
 
-  utterance.onend = () => {
-    setSpeakingItemId(null);
-    setVoicePaused(false);
-    speechRef.current = null;
-  };
+utterance.onend = () => {
+  setSpeakingItemId(null);
+  setVoicePaused(false);
+  setCurrentSpeechWordIndex(-1);
+  speechRef.current = null;
+};
 
   utterance.onerror = (event) => {
     console.warn('PRATYEKSHA voice error:', event?.error);
@@ -7144,590 +7171,556 @@ onClick={() => {
 </AnimatePresence>
 
       <AnimatePresence>
-        {activeModel && ( 
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.modalOverlay}>
-<div
-  style={{
-    ...styles.modalNav,
-    gap: '14px',
-    alignItems: 'center'
-  }}
->
-  <div
-    style={{
-      minWidth: 0,
-      flex: 1,
-      textAlign: 'left'
-    }}
-  >
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '9px',
-        flexWrap: 'wrap'
-      }}
-    >
-      <h2
-        style={{
-          ...styles.modalTitle,
-          color: primaryColor,
-          margin: 0
-        }}
-      >
-        {language === 'mr'
-          ? activeModel.name_mr || activeModel.name
-          : activeModel.name}
-      </h2>
-
-      {/* CLEAR HEAR INDICATOR */}
-      {typeof window !== 'undefined' &&
-        window.speechSynthesis && (
-          <button
-            type="button"
-            aria-label="Hear this dish"
-            onClick={() => speakDish(activeModel)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              height: '30px',
-              padding: '0 10px',
-              borderRadius: '9px',
-              border:
-                '1px solid rgba(211,191,162,0.30)',
-              background:
-                'rgba(211,191,162,0.09)',
-              color: '#d3bfa2',
-              cursor: 'pointer',
-              fontSize: '0.52rem',
-              fontWeight: '900',
-              letterSpacing: '0.7px',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            <Volume2 size={13} />
-            {voiceLang === 'hi-IN'
-              ? 'सुनें'
-              : voiceLang === 'mr-IN'
-                ? 'ऐका'
-                : 'HEAR'}
-          </button>
-        )}
-    </div>
-
-    <small
-      style={{
-        display: 'block',
-        marginTop: '5px',
-        color: 'rgba(255,255,255,0.32)'
-      }}
-    >
-      {t[language].zoomRotate}
-    </small>
-  </div>
-
-  <button
-    type="button"
-    aria-label="Close 3D dish view"
-    onClick={() => {
-      stopSpeech();
-      setActiveModel(null);
-    }}
-    style={{
-      border: 'none',
-      background: 'transparent',
-      padding: '5px',
-      cursor: 'pointer',
-      flexShrink: 0
-    }}
-  >
-    <X
-      size={26}
-      color={primaryColor}
-      strokeWidth={1.7}
-    />
-  </button>
-</div>
-<div style={styles.modelContainer}>
-
-  {/* 3D Model viewer */}
-  <div style={styles.dishModelWrapper}>
-    <model-viewer
-      src={activeModel.modelUrl}
-      ar ar-modes="webxr scene-viewer quick-look"
-      camera-controls auto-rotate
-      shadow-intensity="1"
-      style={{ width: '100%', height: '100%' }}
-    />
-  </div>
-
-{/* ── HEAR THIS DISH — voice panel ── */}
-{/* ═══════════════════════════════════════════════════════════
-    PRATYEKSHA SMART DISH VOICE PANEL
-    ═══════════════════════════════════════════════════════════ */}
-{typeof window !== 'undefined' && window.speechSynthesis && (
-  <div
-    className="pratyeksha-hear-panel"
-    style={{
-      margin: '12px 14px 16px',
-      padding: '0',
-      borderRadius: '18px',
-      overflow: 'hidden',
-      background:
-        'linear-gradient(145deg, rgba(22,22,22,0.96), rgba(8,8,8,0.96))',
-      border: '1px solid rgba(211,191,162,0.20)',
-      boxShadow:
-        '0 12px 40px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.025)',
-      backdropFilter: 'blur(18px)',
-    }}
+{activeModel && (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.22 }}
+    style={styles.modalOverlay}
   >
 
-    {/* ───────────── HEADER ───────────── */}
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        padding: '14px 16px',
-        borderBottom: '1px solid rgba(211,191,162,0.08)',
-        flexWrap: 'wrap'
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '11px',
-          minWidth: 0
-        }}
-      >
-        <div
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '11px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            background: 'rgba(211,191,162,0.09)',
-            border: '1px solid rgba(211,191,162,0.20)'
-          }}
-        >
-          <Volume2
-            size={17}
-            color="#d3bfa2"
-            strokeWidth={1.8}
-          />
-        </div>
+    {/* ══════════ NAV BAR ══════════ */}
+    <div style={styles.modalNav}>
+      <div style={{ minWidth: 0, flex: 1 }}>
 
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: '900',
-              color: '#f4efe7',
-              letterSpacing: '0.8px',
-              lineHeight: 1.2
-            }}
-          >
-            HEAR ABOUT THIS DISH
-          </div>
+        {/* Dish name */}
+        <h2 style={{ ...styles.modalTitle, color: primaryColor }}>
+          {language === 'mr'
+            ? (activeModel.name_mr || activeModel.name)
+            : activeModel.name}
+        </h2>
 
-          <div
-            style={{
-              marginTop: '4px',
-              fontSize: '0.52rem',
-              fontWeight: '600',
-              color: 'rgba(255,255,255,0.34)',
-              letterSpacing: '0.3px'
-            }}
-          >
-            Listen in your preferred language
-          </div>
-        </div>
-      </div>
-
-      {/* ───────────── LANGUAGE ───────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '3px',
-          borderRadius: '9px',
-          background: 'rgba(255,255,255,0.025)',
-          border: '1px solid rgba(255,255,255,0.06)'
-        }}
-      >
-        {[
-          {
-            code: 'en-IN',
-            label: 'EN',
-            title: 'English'
-          },
-          {
-            code: 'hi-IN',
-            label: 'हिं',
-            title: 'Hindi'
-          },
-          {
-            code: 'mr-IN',
-            label: 'मर',
-            title: 'Marathi'
-          }
-        ].map(({ code, label, title }) => {
-          const active = voiceLang === code;
-
-          return (
-            <button
-              key={code}
-              type="button"
-              title={title}
-              aria-label={`Hear dish in ${title}`}
-              onClick={() => {
-                if (voiceLang === code) return;
-
-                stopSpeech();
-                setSpokenText('');
-                setVoiceLang(code);
-              }}
-              style={{
-                minWidth: '42px',
-                height: '30px',
-                padding: '0 8px',
-                borderRadius: '7px',
-                border: active
-                  ? '1px solid rgba(211,191,162,0.42)'
-                  : '1px solid transparent',
-                background: active
-                  ? 'rgba(211,191,162,0.13)'
-                  : 'transparent',
-                color: active
-                  ? '#d3bfa2'
-                  : 'rgba(255,255,255,0.38)',
-                fontSize: '0.56rem',
-                fontWeight: '900',
-                letterSpacing: '0.5px',
-                cursor: 'pointer',
-                fontFamily: 'Poppins, sans-serif',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-
-    {/* ───────────── DISH INFORMATION ───────────── */}
-    <div
-      style={{
-        padding: '15px 16px 10px'
-      }}
-    >
-      <div
-        style={{
-          fontSize: '1rem',
-          fontWeight: '900',
-          color: '#ffffff',
-          letterSpacing: '-0.2px',
-          lineHeight: 1.3,
-          marginBottom: '8px'
-        }}
-      >
-        {voiceLang === 'mr-IN'
-          ? activeModel.name_mr || activeModel.name
-          : activeModel.name}
-      </div>
-
- 
-
-      {/* Actual description */}
-      {activeModel.description && (
-        <div
-          style={{
-            padding: '11px 12px',
-            borderRadius: '11px',
-            background: 'rgba(211,191,162,0.035)',
-            borderLeft: '2px solid rgba(211,191,162,0.32)',
-            color: 'rgba(255,255,255,0.55)',
-            fontSize: '0.64rem',
-            lineHeight: 1.7,
-            letterSpacing: '0.05px'
-          }}
-        >
-          {getDescription(activeModel, voiceLang)}
-        </div>
-      )}
-    </div>
-
-    {/* ───────────── LIVE TRANSCRIPT ───────────── */}
-    {speakingItemId === activeModel._id &&
-      spokenText && (
-        <div
-          style={{
-            margin: '0 16px 10px',
-            padding: '11px 12px',
-            borderRadius: '11px',
-            background: 'rgba(211,191,162,0.055)',
-            border: '1px solid rgba(211,191,162,0.13)',
-            maxHeight: '120px',
-            overflowY: 'auto'
-          }}
-          className="no-scrollbar"
-          aria-live="polite"
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '7px',
-              marginBottom: '6px'
-            }}
-          >
-            <div
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: '#d3bfa2',
-                boxShadow: '0 0 10px rgba(211,191,162,0.35)'
-              }}
-            />
-
-            <span
-              style={{
-                fontSize: '0.48rem',
-                fontWeight: '900',
-                color: 'rgba(211,191,162,0.6)',
-                letterSpacing: '1.2px',
-                textTransform: 'uppercase'
-              }}
-            >
-              {voicePaused
-                ? 'Paused'
-                : 'Now speaking'}
+        {/* Badges row */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          gap: '6px', marginTop: '5px', flexWrap: 'wrap'
+        }}>
+          {/* Veg / Non-veg */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '2px 8px', borderRadius: '5px',
+            border: '1px solid rgba(211,191,162,0.15)',
+            background: 'rgba(211,191,162,0.05)'
+          }}>
+            <Leaf size={9} color="rgba(211,191,162,0.5)" strokeWidth={2} />
+            <span style={{
+              fontSize: '0.48rem', fontWeight: '800',
+              color: 'rgba(211,191,162,0.5)', letterSpacing: '0.5px'
+            }}>
+              {activeModel.isVeg !== false ? 'VEG' : 'NON-VEG'}
             </span>
           </div>
 
-          <div
-            style={{
-              fontSize: '0.61rem',
-              lineHeight: 1.7,
-              color: 'rgba(255,255,255,0.58)'
-            }}
-          >
-            {spokenText}
-          </div>
-        </div>
-      )}
+          {/* Bestseller */}
+          {(activeModel.isBestSeller || activeModel._eng?.quadrant === 'star') && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '2px 8px', borderRadius: '5px',
+              border: '1px solid rgba(211,191,162,0.2)',
+              background: 'rgba(211,191,162,0.07)'
+            }}>
+              <Tag size={9} color="#d3bfa2" strokeWidth={2} />
+              <span style={{
+                fontSize: '0.48rem', fontWeight: '900',
+                color: '#d3bfa2', letterSpacing: '0.5px'
+              }}>
+                BESTSELLER
+              </span>
+            </div>
+          )}
 
-    {/* ───────────── CONTROLS ───────────── */}
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '7px',
-        padding: '4px 16px 15px'
-      }}
-    >
-      {/* MAIN HEAR / REPLAY */}
+          {/* Chef Special */}
+          {activeModel.isChefSpecial && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '2px 8px', borderRadius: '5px',
+              border: '1px solid rgba(211,191,162,0.18)',
+              background: 'rgba(211,191,162,0.06)'
+            }}>
+              <Utensils size={9} color="#d3bfa2" strokeWidth={2} />
+              <span style={{
+                fontSize: '0.48rem', fontWeight: '900',
+                color: '#d3bfa2', letterSpacing: '0.5px'
+              }}>
+                CHEF SPECIAL
+              </span>
+            </div>
+          )}
+
+          {/* Spice */}
+          {activeModel.spiceLevel && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '3px',
+              padding: '2px 7px', borderRadius: '5px',
+              border: '1px solid rgba(255,255,255,0.07)',
+              background: 'rgba(255,255,255,0.03)'
+            }}>
+              <Flame size={9} color="rgba(255,255,255,0.3)" strokeWidth={2} />
+              <span style={{
+                fontSize: '0.48rem', fontWeight: '700',
+                color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize'
+              }}>
+                {activeModel.spiceLevel}
+              </span>
+            </div>
+          )}
+
+          {/* Price */}
+          {activeModel.price > 0 && (
+            <span style={{
+              fontSize: '0.72rem', fontWeight: '900',
+              color: 'rgba(211,191,162,0.7)',
+              fontFamily: 'monospace', letterSpacing: '-0.5px',
+              marginLeft: '2px'
+            }}>
+              ₹{activeModel.priceFull || activeModel.price}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Close button */}
       <button
         type="button"
-        aria-label={
-          speakingItemId === activeModel._id
-            ? 'Stop hearing dish description'
-            : 'Hear dish description'
-        }
-        onClick={() => speakDish(activeModel)}
+        aria-label="Close 3D dish view"
+        onClick={() => { stopSpeech(); setSpokenText(''); setActiveModel(null); }}
         style={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: '46px',
-          borderRadius: '12px',
-          border:
-            '1px solid rgba(211,191,162,0.35)',
-          background:
-            'linear-gradient(135deg, rgba(211,191,162,0.16), rgba(211,191,162,0.07))',
-          color: '#d3bfa2',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '9px',
-          cursor: 'pointer',
-          fontFamily: 'Poppins, sans-serif',
-          fontSize: '0.62rem',
-          fontWeight: '900',
-          letterSpacing: '1px',
-          transition: 'all 0.2s ease',
-          boxShadow:
-            '0 5px 20px rgba(211,191,162,0.06)'
+          width: '36px', height: '36px', borderRadius: '10px',
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.04)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', flexShrink: 0, marginLeft: '12px'
         }}
       >
-        {speakingItemId === activeModel._id ? (
-          <>
-            <Volume2
-              size={16}
-              strokeWidth={2}
-            />
-
-            <span>
-              {voicePaused
-                ? 'PAUSED'
-                : 'PLAYING'}
-            </span>
-          </>
-        ) : (
-          <>
-            <Volume2
-              size={17}
-              strokeWidth={2}
-            />
-
-            <span>
-              {voiceLang === 'hi-IN'
-                ? 'व्यंजन के बारे में सुनें'
-                : voiceLang === 'mr-IN'
-                  ? 'पदार्थाबद्दल ऐका'
-                  : 'HEAR THIS DISH'}
-            </span>
-          </>
-        )}
+        <X size={18} color="rgba(255,255,255,0.55)" strokeWidth={2} />
       </button>
-
-      {/* PAUSE / RESUME */}
-      {speakingItemId === activeModel._id && (
-        <button
-          type="button"
-          aria-label={
-            voicePaused
-              ? 'Resume dish description'
-              : 'Pause dish description'
-          }
-          onClick={toggleVoicePause}
-          style={{
-            width: '46px',
-            height: '46px',
-            flexShrink: 0,
-            borderRadius: '12px',
-            border:
-              '1px solid rgba(211,191,162,0.20)',
-            background:
-              'rgba(255,255,255,0.035)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          {voicePaused ? (
-            <Play
-              size={16}
-              color="#d3bfa2"
-              strokeWidth={2}
-            />
-          ) : (
-            <Pause
-              size={16}
-              color="#d3bfa2"
-              strokeWidth={2}
-            />
-          )}
-        </button>
-      )}
-
-      {/* STOP */}
-      {speakingItemId === activeModel._id && (
-        <button
-          type="button"
-          aria-label="Stop dish description"
-          onClick={(e) => {
-            e.stopPropagation();
-            stopSpeech();
-          }}
-          style={{
-            width: '46px',
-            height: '46px',
-            flexShrink: 0,
-            borderRadius: '12px',
-            border:
-              '1px solid rgba(255,255,255,0.08)',
-            background:
-              'rgba(255,255,255,0.025)',
-            color: 'rgba(255,255,255,0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          <X
-            size={16}
-            strokeWidth={2}
-          />
-        </button>
-      )}
     </div>
 
-    {/* ───────────── LANGUAGE STATUS ───────────── */}
-    <div
-      style={{
-        padding: '0 16px 12px',
-        textAlign: 'center',
-        fontSize: '0.48rem',
-        color: 'rgba(255,255,255,0.25)',
-        fontWeight: '600',
-        letterSpacing: '0.4px'
-      }}
-    >
-      {voiceLang === 'en-IN'
-        ? 'Indian English'
-        : voiceLang === 'hi-IN'
-          ? 'हिन्दी • Hindi'
-          : 'मराठी • Marathi'}
-    </div>
-  </div>
-)}
+    {/* ══════════ MODEL CONTAINER ══════════ */}
+    <div style={styles.modelContainer}>
 
-  {/* Chef bubble (existing — unchanged) */}
-  {activeModel.isChefSpecial === true && (
-    <div style={styles.chefContainerAR}>
-      <div style={styles.chefFlexWrapper}>
-        <div style={styles.chefModelBox}>
-          <model-viewer
-            src={activeModel.chefurl} autoplay
-            style={{ width: '130px', height: '220px' }}
-            camera-orbit="10deg 80deg 3m"
-            camera-target="0m 0.8m 0m"
-            interaction-prompt="none"
-            shadow-intensity="0"
-          />
+      {/* ── 3D VIEWER ── */}
+      <div style={styles.dishModelWrapper}>
+        {/* Gradient overlays for depth */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: '80px', zIndex: 2, pointerEvents: 'none',
+          background: 'linear-gradient(to top, #080808 0%, transparent 100%)'
+        }} />
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          height: '40px', zIndex: 2, pointerEvents: 'none',
+          background: 'linear-gradient(to bottom, rgba(5,5,5,0.4) 0%, transparent 100%)'
+        }} />
+
+        <model-viewer
+          src={activeModel.modelUrl}
+          ar ar-modes="webxr scene-viewer quick-look"
+          camera-controls auto-rotate
+          shadow-intensity="1.2"
+          exposure="0.9"
+          style={{ width: '100%', height: '100%' }}
+        />
+
+        {/* Hint label */}
+        <div style={{
+          position: 'absolute', bottom: '14px',
+          left: '50%', transform: 'translateX(-50%)',
+          zIndex: 5, pointerEvents: 'none',
+          display: 'flex', alignItems: 'center', gap: '5px',
+          padding: '4px 11px', borderRadius: '20px',
+          background: 'rgba(0,0,0,0.55)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <CircleDot size={9} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
+          <span style={{
+            fontSize: '0.46rem', color: 'rgba(255,255,255,0.25)',
+            fontWeight: '700', letterSpacing: '0.5px', whiteSpace: 'nowrap'
+          }}>
+            {t[language].zoomRotate || 'Drag to rotate · Pinch to zoom'}
+          </span>
         </div>
-        <div style={styles.chefBubbleRight}>
-          <MessageSquare size={12} style={{ position: 'absolute', top: '15px', left: '-8px', color: '#fff' }} />
-          "{activeModel.chefMessage || "My personal favorite! You'll love the flavors."}"
-        </div>
-      </div>
-    </div>
-  )}
 
-  {/* AR button (existing — unchanged) */}
-  {/* <div style={styles.fixedArButtonWrapper}>
-    <button
-      onClick={() => document.querySelector('model-viewer')?.activateAR()}
-      style={{ ...styles.arCustomBtn, background: primaryColor }}
-    >
-      {t[language].viewInSpace}
-    </button>
-  </div> */}
-</div>
-          </motion.div>
+        {/* Chef bubble */}
+        {activeModel.isChefSpecial === true && (
+          <div style={styles.chefContainerAR}>
+            <div style={styles.chefFlexWrapper}>
+              <div style={styles.chefModelBox}>
+                <model-viewer
+                  src={activeModel.chefurl} autoplay
+                  style={{ width: '130px', height: '220px' }}
+                  camera-orbit="10deg 80deg 3m"
+                  camera-target="0m 0.8m 0m"
+                  interaction-prompt="none"
+                  shadow-intensity="0"
+                />
+              </div>
+              <div style={styles.chefBubbleRight}>
+                <MessageSquare size={10} style={{
+                  position: 'absolute', top: '12px', left: '-7px',
+                  color: 'rgba(211,191,162,0.4)'
+                }} />
+                "{activeModel.chefMessage || "My personal favourite — you'll love the flavours."}"
+              </div>
+            </div>
+          </div>
         )}
+      </div>
+
+      {/* ══════════ DISH INFO CARD ══════════ */}
+      <div style={{
+        margin: '0 13px 13px 13px',
+        background: 'rgba(13,13,13,0.98)',
+        border: '1px solid rgba(211,191,162,0.1)',
+        borderRadius: '18px',
+        overflow: 'hidden'
+      }}>
+
+        {/* Description */}
+        {activeModel.description && (
+          <div style={{
+            padding: '14px 16px 12px 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.05)'
+          }}>
+            <div style={{
+              fontSize: '0.55rem', fontWeight: '700',
+              color: 'rgba(211,191,162,0.3)', letterSpacing: '2px',
+              textTransform: 'uppercase', marginBottom: '6px'
+            }}>
+              ABOUT THIS DISH
+            </div>
+            <p style={{
+              margin: 0, fontSize: '0.72rem',
+              color: 'rgba(255,255,255,0.55)',
+              lineHeight: 1.65, fontWeight: '400'
+            }}>
+              {activeModel.description}
+            </p>
+          </div>
+        )}
+
+        {/* Quick stats row */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
+          borderBottom: '1px solid rgba(255,255,255,0.05)'
+        }}>
+          {[
+            activeModel.servingSize && {
+              icon: <Users size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
+              label: 'Serves',
+              value: activeModel.servingSize
+            },
+            activeModel.spiceLevel && {
+              icon: <Flame size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
+              label: 'Spice',
+              value: activeModel.spiceLevel.charAt(0).toUpperCase() + activeModel.spiceLevel.slice(1)
+            },
+            activeModel.priceHalf > 0 && {
+              icon: <Tag size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
+              label: 'Half',
+              value: `₹${activeModel.priceHalf}`
+            },
+            activeModel.priceFull > 0 && {
+              icon: <Tag size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
+              label: 'Full',
+              value: `₹${activeModel.priceFull}`
+            },
+          ].filter(Boolean).map((stat, i) => (
+            <div key={i} style={{
+              padding: '12px 14px',
+              borderRight: '1px solid rgba(255,255,255,0.04)',
+              textAlign: 'center'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>
+                {stat.icon}
+              </div>
+              <div style={{
+                fontSize: '0.78rem', fontWeight: '800',
+                color: 'rgba(255,255,255,0.7)', marginBottom: '2px'
+              }}>
+                {stat.value}
+              </div>
+              <div style={{
+                fontSize: '0.48rem', fontWeight: '700',
+                color: 'rgba(255,255,255,0.2)', letterSpacing: '0.5px',
+                textTransform: 'uppercase'
+              }}>
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Ingredients */}
+        {activeModel.ingredients?.en?.length > 0 && (
+          <div style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.05)'
+          }}>
+            <div style={{
+              fontSize: '0.5rem', fontWeight: '700',
+              color: 'rgba(211,191,162,0.3)', letterSpacing: '2px',
+              textTransform: 'uppercase', marginBottom: '8px'
+            }}>
+              KEY INGREDIENTS
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {(voiceLang === 'mr-IN' && activeModel.ingredients?.mr?.length > 0
+                ? activeModel.ingredients.mr
+                : activeModel.ingredients.en
+              ).slice(0, 6).map((ing, i) => (
+                <span key={i} style={{
+                  padding: '3px 9px', borderRadius: '5px',
+                  fontSize: '0.6rem', fontWeight: '600',
+                  color: 'rgba(211,191,162,0.5)',
+                  background: 'rgba(211,191,162,0.05)',
+                  border: '1px solid rgba(211,191,162,0.1)'
+                }}>
+                  {ing}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════ VOICE PANEL ══════════ */}
+        {typeof window !== 'undefined' && window.speechSynthesis && (
+          <div style={{ padding: '14px 16px 16px 16px' }}>
+
+            {/* Header row */}
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', marginBottom: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '8px',
+                  background: 'rgba(211,191,162,0.07)',
+                  border: '1px solid rgba(211,191,162,0.18)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Volume2 size={13} color="#d3bfa2" strokeWidth={1.8} />
+                </div>
+                <div>
+                  <div style={{
+                    fontSize: '0.58rem', fontWeight: '900',
+                    color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase'
+                  }}>
+                    HEAR THIS DISH
+                  </div>
+                  <div style={{
+                    fontSize: '0.46rem', color: 'rgba(255,255,255,0.2)',
+                    marginTop: '1px', fontWeight: '500'
+                  }}>
+                    Listen in your preferred language
+                  </div>
+                </div>
+              </div>
+
+              {/* Language selector pill group */}
+              <div style={{
+                display: 'flex', gap: '2px',
+                padding: '2px', borderRadius: '8px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)'
+              }}>
+                {[
+                  { code: 'en-IN', label: 'EN' },
+                  { code: 'hi-IN', label: 'HI' },
+                  { code: 'mr-IN', label: 'MR' },
+                ].map(({ code, label }) => {
+                  const active = voiceLang === code;
+                  return (
+                    <button key={code} type="button"
+                      aria-label={`Speak in ${label}`}
+                      onClick={() => {
+                        if (voiceLang !== code) {
+                          stopSpeech(); setSpokenText(''); setVoiceLang(code);
+                        }
+                      }}
+                      style={{
+                        height: '26px', minWidth: '32px', padding: '0 7px',
+                        borderRadius: '6px', cursor: 'pointer',
+                        outline: 'none', fontFamily: 'Poppins, sans-serif',
+                        fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
+                        border: active ? '1px solid rgba(211,191,162,0.35)' : '1px solid transparent',
+                        background: active ? 'rgba(211,191,162,0.12)' : 'transparent',
+                        color: active ? '#d3bfa2' : 'rgba(255,255,255,0.28)',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Transcript display */}
+            <div style={{
+              minHeight: '60px', marginBottom: '12px',
+              padding: '10px 12px',
+              background: 'rgba(211,191,162,0.03)',
+              border: '1px solid rgba(211,191,162,0.09)',
+              borderRadius: '10px'
+            }}>
+              {speakingItemId === activeModel._id && spokenText ? (
+                <p aria-live="polite" style={{
+                  margin: 0, fontSize: '0.62rem',
+                  color: 'rgba(211,191,162,0.55)',
+                  lineHeight: 1.7, fontWeight: '400',
+                  fontStyle: 'italic', whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>
+                  {spokenText}
+                </p>
+              ) : (
+                <p style={{
+                  margin: 0, fontSize: '0.58rem',
+                  color: 'rgba(255,255,255,0.15)',
+                  lineHeight: 1.6, fontStyle: 'italic'
+                }}>
+                  {voiceLang === 'mr-IN'
+                    ? 'या पदार्थाबद्दल ऐकण्यासाठी खाली दाबा...'
+                    : voiceLang === 'hi-IN'
+                    ? 'इस व्यंजन के बारे में सुनने के लिए नीचे दबाएं...'
+                    : 'Tap below to hear a full description of this dish...'}
+                </p>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
+
+              {/* Main play / stop */}
+              <button
+                type="button"
+                aria-label={speakingItemId === activeModel._id ? 'Stop' : 'Hear description'}
+                onClick={() => speakDish(activeModel)}
+                style={{
+                  flex: 1, height: '44px', borderRadius: '12px',
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: '8px',
+                  cursor: 'pointer', outline: 'none',
+                  fontFamily: 'Poppins, sans-serif',
+                  border: `1px solid ${speakingItemId === activeModel._id
+                    ? 'rgba(211,191,162,0.45)'
+                    : 'rgba(211,191,162,0.22)'}`,
+                  background: speakingItemId === activeModel._id
+                    ? 'rgba(211,191,162,0.14)'
+                    : 'rgba(211,191,162,0.08)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {speakingItemId === activeModel._id ? (
+                  <>
+                    <div style={{ display: 'flex', gap: '2.5px', alignItems: 'center', height: '16px' }}>
+                      {[5, 10, 7, 13, 6, 11, 4].map((h, i) => (
+                        <div key={i} style={{
+                          width: '2px', borderRadius: '1px',
+                          background: '#d3bfa2', height: `${h}px`,
+                          animation: `pulse ${0.6 + i * 0.08}s ease-in-out ${i * 0.1}s infinite`
+                        }} />
+                      ))}
+                    </div>
+                    <span style={{
+                      fontSize: '0.58rem', fontWeight: '900',
+                      color: '#d3bfa2', letterSpacing: '1px'
+                    }}>
+                      {voicePaused ? 'PAUSED · TAP TO STOP' : 'PLAYING · TAP TO STOP'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 size={15} color="#d3bfa2" strokeWidth={1.8} />
+                    <span style={{
+                      fontSize: '0.58rem', fontWeight: '900',
+                      color: '#d3bfa2', letterSpacing: '0.8px'
+                    }}>
+                      {voiceLang === 'mr-IN' ? 'वर्णन ऐका'
+                        : voiceLang === 'hi-IN' ? 'विवरण सुनें'
+                        : 'HEAR DESCRIPTION'}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {/* Pause / resume */}
+              {speakingItemId === activeModel._id && (
+                <button type="button"
+                  aria-label={voicePaused ? 'Resume' : 'Pause'}
+                  onClick={toggleVoicePause}
+                  style={{
+                    width: '44px', height: '44px', borderRadius: '12px',
+                    flexShrink: 0, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(211,191,162,0.06)',
+                    border: '1px solid rgba(211,191,162,0.2)',
+                    cursor: 'pointer', outline: 'none'
+                  }}
+                >
+                  {voicePaused
+                    ? <Play  size={15} color="#d3bfa2" strokeWidth={2} />
+                    : <Pause size={15} color="#d3bfa2" strokeWidth={2} />
+                  }
+                </button>
+              )}
+
+              {/* Stop */}
+              {speakingItemId === activeModel._id && (
+                <button type="button" aria-label="Stop"
+                  onClick={() => { stopSpeech(); setSpokenText(''); }}
+                  style={{
+                    width: '44px', height: '44px', borderRadius: '12px',
+                    flexShrink: 0, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    cursor: 'pointer', outline: 'none'
+                  }}
+                >
+                  <X size={15} color="rgba(255,255,255,0.4)" strokeWidth={2} />
+                </button>
+              )}
+            </div>
+
+            {/* Status line */}
+            {speakingItemId === activeModel._id && (
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                gap: '6px', marginTop: '9px'
+              }}>
+                <div style={{
+                  width: '5px', height: '5px', borderRadius: '50%',
+                  background: 'rgba(211,191,162,0.6)', flexShrink: 0,
+                  animation: 'pulse 0.9s ease-in-out infinite'
+                }} />
+                <span style={{
+                  fontSize: '0.48rem', fontWeight: '600',
+                  color: 'rgba(211,191,162,0.3)', letterSpacing: '0.2px'
+                }}>
+                  {voicePaused
+                    ? 'Paused — tap play to continue'
+                    : `Speaking in ${
+                        voiceLang === 'mr-IN' ? 'Marathi (मराठी)'
+                        : voiceLang === 'hi-IN' ? 'Hindi (हिन्दी)'
+                        : 'English (India)'
+                      }...`
+                  }
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>{/* end dish info card */}
+
+    </div>{/* end modelContainer */}
+  </motion.div>
+)}
       </AnimatePresence>
 <AnimatePresence>
   {welcomeCard && !welcomeDismissed && (
@@ -8726,19 +8719,69 @@ contentWrapper: {
   drawerRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
   drawerFooter: { padding: '20px', paddingBottom: '40px' },
   billLinkBtn: { background: 'none', border: 'none', color: '#888', marginTop: '15px', width: '100%', fontSize: '0.8rem', textDecoration: 'underline' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 7000, display: 'flex', flexDirection: 'column', background: '#000' },
-  modalNav: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211, 191, 162, 0.1)' },
-  modalTitle: { margin: 0, fontSize: '1rem', fontWeight: '800' },
-  modelContainer: { flex: 1, background: '#111', display: 'flex', flexDirection: 'column', position: 'relative' },
-  dishModelWrapper: { width: '100%', height: '50vh', position: 'relative' },
-  chefContainerAR: { position: 'absolute', bottom: '110px', left: '0', zIndex: 50, width: '100%', pointerEvents: 'none' },
-  chefFlexWrapper: { display: 'flex', alignItems: 'flex-end' },
-  chefModelBox: { flexShrink: 0 },
-  chefBubbleRight: { background: '#fff', color: '#1a1a1a', padding: '10px 14px', borderRadius: '2px 15px 15px 15px', fontSize: '0.6rem', fontWeight: '700', maxWidth: '130px', marginLeft: '-20px', marginBottom: '70px', pointerEvents: 'auto' },
-  fixedArButtonWrapper: { position: 'absolute', bottom: '40px', width: '100%', display: 'flex', justifyContent: 'center' },
-  arCustomBtn: { border: 'none', padding: '16px 28px', borderRadius: '50px', fontWeight: '900', fontSize: '0.75rem', color: '#1a1a1a' },
-  formContainer: { padding: '20px', display: 'flex', flexDirection: 'column' },
-  suggestionInputWrapper: { display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', marginTop: '10px' },
+modalOverlay: {
+  position: 'fixed', top: 0, left: 0,
+  width: '100vw', height: '100vh',
+  zIndex: 7000, display: 'flex',
+  flexDirection: 'column',
+  background: '#050505',
+  overflowY: 'auto'
+},
+modalNav: {
+  padding: '14px 18px 12px 18px',
+  display: 'flex', justifyContent: 'space-between',
+  alignItems: 'center',
+  background: 'rgba(5,5,5,0.96)',
+  borderBottom: '1px solid rgba(211,191,162,0.09)',
+  position: 'sticky', top: 0, zIndex: 10,
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)'
+},
+modalTitle: {
+  margin: 0, fontSize: '1.05rem',
+  fontWeight: '900', lineHeight: 1.2,
+  letterSpacing: '-0.3px'
+},
+modelContainer: {
+  flex: 1, background: '#080808',
+  display: 'flex', flexDirection: 'column',
+  position: 'relative', overflowY: 'auto'
+},
+dishModelWrapper: {
+  width: '100%', height: '52vmax',
+  maxHeight: '62vh', minHeight: '260px',
+  position: 'relative',
+  background: 'radial-gradient(ellipse at 50% 60%, #1a1510 0%, #070707 100%)'
+},
+chefContainerAR: {
+  position: 'absolute', bottom: '110px',
+  left: '0', zIndex: 50,
+  width: '100%', pointerEvents: 'none'
+},
+chefFlexWrapper: { display: 'flex', alignItems: 'flex-end' },
+chefModelBox:   { flexShrink: 0 },
+chefBubbleRight: {
+  background: '#1a1a1a',
+  color: 'rgba(255,255,255,0.78)',
+  padding: '10px 14px',
+  borderRadius: '2px 15px 15px 15px',
+  fontSize: '0.6rem', fontWeight: '600',
+  maxWidth: '130px',
+  marginLeft: '-20px', marginBottom: '70px',
+  pointerEvents: 'auto',
+  border: '1px solid rgba(211,191,162,0.15)',
+  lineHeight: 1.5
+},
+fixedArButtonWrapper: {
+  position: 'absolute', bottom: '40px',
+  width: '100%', display: 'flex',
+  justifyContent: 'center'
+},
+arCustomBtn: {
+  border: 'none', padding: '16px 28px',
+  borderRadius: '50px', fontWeight: '900',
+  fontSize: '0.75rem', color: '#1a1a1a'
+},  suggestionInputWrapper: { display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', marginTop: '10px' },
   suggestionInput: { background: 'none', border: 'none', color: '#fff', fontSize: '0.75rem', width: '100%', outline: 'none' }
 };
 
