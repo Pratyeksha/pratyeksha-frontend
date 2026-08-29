@@ -7445,121 +7445,7 @@ onClick={() => {
           : activeModel.name}
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(105px, 1fr))',
-          gap: '7px',
-          marginBottom: '10px'
-        }}
-      >
-        {activeModel.servingSize && (
-          <div
-            style={{
-              padding: '8px 9px',
-              borderRadius: '10px',
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.055)'
-            }}
-          >
-            <div
-              style={{
-                fontSize: '0.45rem',
-                fontWeight: '900',
-                color: 'rgba(211,191,162,0.48)',
-                letterSpacing: '1.2px',
-                textTransform: 'uppercase'
-              }}
-            >
-              SERVES
-            </div>
-
-            <div
-              style={{
-                marginTop: '4px',
-                fontSize: '0.62rem',
-                fontWeight: '700',
-                color: 'rgba(255,255,255,0.72)'
-              }}
-            >
-              {activeModel.servingSize} people
-            </div>
-          </div>
-        )}
-
-        {activeModel.spiceLevel && (
-          <div
-            style={{
-              padding: '8px 9px',
-              borderRadius: '10px',
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.055)'
-            }}
-          >
-            <div
-              style={{
-                fontSize: '0.45rem',
-                fontWeight: '900',
-                color: 'rgba(211,191,162,0.48)',
-                letterSpacing: '1.2px',
-                textTransform: 'uppercase'
-              }}
-            >
-              SPICE
-            </div>
-
-            <div
-              style={{
-                marginTop: '4px',
-                fontSize: '0.62rem',
-                fontWeight: '700',
-                color: 'rgba(255,255,255,0.72)'
-              }}
-            >
-              {getSpiceLevel(activeModel, voiceLang)}
-            </div>
-          </div>
-        )}
-
-        {(activeModel.isChefSpecial ||
-          activeModel.isBestSeller ||
-          activeModel._eng?.quadrant === 'star') && (
-          <div
-            style={{
-              padding: '8px 9px',
-              borderRadius: '10px',
-              background: 'rgba(211,191,162,0.055)',
-              border: '1px solid rgba(211,191,162,0.12)'
-            }}
-          >
-            <div
-              style={{
-                fontSize: '0.45rem',
-                fontWeight: '900',
-                color: 'rgba(211,191,162,0.62)',
-                letterSpacing: '1.2px',
-                textTransform: 'uppercase'
-              }}
-            >
-              {activeModel.isChefSpecial
-                ? 'CHEF SPECIAL'
-                : 'BESTSELLER'}
-            </div>
-
-            <div
-              style={{
-                marginTop: '4px',
-                fontSize: '0.62rem',
-                fontWeight: '700',
-                color: '#d3bfa2'
-              }}
-            >
-              Recommended
-            </div>
-          </div>
-        )}
-      </div>
+ 
 
       {/* Actual description */}
       {activeModel.description && (
@@ -7831,14 +7717,14 @@ onClick={() => {
   )}
 
   {/* AR button (existing — unchanged) */}
-  <div style={styles.fixedArButtonWrapper}>
+  {/* <div style={styles.fixedArButtonWrapper}>
     <button
       onClick={() => document.querySelector('model-viewer')?.activateAR()}
       style={{ ...styles.arCustomBtn, background: primaryColor }}
     >
       {t[language].viewInSpace}
     </button>
-  </div>
+  </div> */}
 </div>
           </motion.div>
         )}
