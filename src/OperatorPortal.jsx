@@ -4107,6 +4107,30 @@ const renderMonthHeatmap = () => {
             </button>
           ))}
         </div>
+
+        <button
+  onClick={async () => {
+    try {
+      await axios.post(`${BASE_URL}/admin/recalculate-bestsellers/${tenantId}`);
+      await fetchInitialData();
+      showNotif('Bestsellers recalculated — top 3 per category updated');
+    } catch {
+      showNotif('Recalculation failed', 'error');
+    }
+  }}
+  style={{
+    display: 'flex', alignItems: 'center', gap: '6px',
+    padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
+    background: 'rgba(211,191,162,0.07)',
+    border: '1px solid rgba(211,191,162,0.2)',
+    color: '#d3bfa2', fontSize: '0.6rem',
+    fontWeight: '800', letterSpacing: '0.5px',
+    outline: 'none', fontFamily: 'Poppins, sans-serif'
+  }}
+>
+  <Tag size={12} color="#d3bfa2" strokeWidth={1.8} />
+  REFRESH BESTSELLERS
+</button>
  
         {tenantConfig && (
           <div style={{
