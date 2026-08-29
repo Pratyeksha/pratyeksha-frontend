@@ -653,247 +653,552 @@ onClick={() => {
     setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
   };
 // ── SMART VOICE: speak dish details ──
-const stopSpeech = () => {
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
-  setSpeakingItemId(null);
-  setVoicePaused(false);
-  speechRef.current = null;
-};
 
 // ── Sync voiceLang whenever the user changes the UI language ──
 useEffect(() => {
   setVoiceLang(language === 'mr' ? 'mr-IN' : language === 'hi' ? 'hi-IN' : 'en-IN');
 }, [language]);
 
-const speakDish = (item) => {
-  if (!window.speechSynthesis) return;
+// ═══════════════════════════════════════════════════════════════
+// PRATYEKSHA SMART DISH VOICE
+// Indian English • Hindi • Marathi
+// Uses only real menu data — never speaks price.
+// ═══════════════════════════════════════════════════════════════
 
-  // Toggle off if already speaking this item
-  if (speakingItemId === item._id) {
-    stopSpeech();
-    setSpokenText('');
+const stopSpeech = () => {
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+
+  setSpeakingItemId(null);
+  setVoicePaused(false);
+  speechRef.current = null;
+};
+
+// Keep voice language synchronized with the selected menu language.
+useEffect(() => {
+  setVoiceLang(
+    language === 'mr'
+      ? 'mr-IN'
+      : language === 'hi'
+        ? 'hi-IN'
+        : 'en-IN'
+  );
+}, [language]);
+
+const cleanSentence = (value = '') =>
+  String(value)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.]+$/, '');
+
+const getDishName = (item, lang) => {
+  if (lang === 'mr-IN') {
+    return item.name_mr || item.name;
+  }
+
+  // Keep English dish names in Hindi because Indian TTS
+  // generally pronounces restaurant dish names more naturally.
+  return item.name;
+};
+
+const getIngredients = (item, lang) => {
+  if (lang === 'mr-IN') {
+    return item.ingredients?.mr?.length
+      ? item.ingredients.mr.slice(0, 5)
+      : item.ingredients?.en?.slice(0, 5) || [];
+  }
+
+  if (lang === 'hi-IN') {
+    return item.ingredients?.hi?.length
+      ? item.ingredients.hi.slice(0, 5)
+      : item.ingredients?.en?.slice(0, 5) || [];
+  }
+
+  return item.ingredients?.en?.slice(0, 5) || [];
+};
+
+// Prefer translated descriptions when the database provides them.
+// Falls back safely to the existing English description.
+const getDescription = (item, lang) => {
+  if (lang === 'mr-IN') {
+    return cleanSentence(
+      item.description_mr ||
+      item.descriptionMarathi ||
+      item.description?.mr ||
+      item.description
+    );
+  }
+
+  if (lang === 'hi-IN') {
+    return cleanSentence(
+      item.description_hi ||
+      item.descriptionHindi ||
+      item.description?.hi ||
+      item.description
+    );
+  }
+
+  return cleanSentence(item.description);
+};
+
+const getSpiceLevel = (item, lang) => {
+  const raw = String(item.spiceLevel || '').toLowerCase();
+
+  if (lang === 'hi-IN') {
+    return {
+      high: 'बहुत तीखा',
+      medium: 'मध्यम तीखा',
+      low: 'हल्का तीखा',
+      mild: 'हल्का',
+      none: 'बिल्कुल तीखा नहीं'
+    }[raw] || item.spiceLevel;
+  }
+
+  if (lang === 'mr-IN') {
+    return {
+      high: 'जास्त तिखट',
+      medium: 'मध्यम तिखट',
+      low: 'कमी तिखट',
+      mild: 'सौम्य',
+      none: 'अजिबात तिखट नाही'
+    }[raw] || item.spiceLevel;
+  }
+
+  return {
+    high: 'high',
+    medium: 'medium',
+    low: 'low',
+    mild: 'mild',
+    none: 'not spicy'
+  }[raw] || item.spiceLevel;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Find a REAL complementary dish.
+//
+// Only dishes already present in allMenuItems are considered.
+// Menu visibility is respected.
+// The current dish itself is excluded.
+// ─────────────────────────────────────────────────────────────
+const getRecommendedDish = (item) => {
+  const available = allMenuItems.filter(m =>
+    m &&
+    m._id !== item._id &&
+    m.isAvailable !== false
+  );
+
+  if (!available.length) return null;
+
+  const currentCategory = String(item.categoryId || '');
+
+  // Category-aware combinations.
+  // We don't create fake recommendations.
+  const currentCategoryName = String(
+    categoryList.find(c => String(c._id) === currentCategory)?.name ||
+    categoryList.find(c => String(c.id) === currentCategory)?.name ||
+    ''
+  ).toLowerCase();
+
+  const categoryText = currentCategoryName;
+
+  let preferredCategoryWords = [];
+
+  if (
+    categoryText.includes('starter') ||
+    categoryText.includes('appetizer')
+  ) {
+    preferredCategoryWords = ['main course', 'main', 'beverage', 'drink'];
+  } else if (
+    categoryText.includes('main course') ||
+    categoryText.includes('main')
+  ) {
+    preferredCategoryWords = ['beverage', 'drink', 'dessert'];
+  } else if (
+    categoryText.includes('dessert')
+  ) {
+    preferredCategoryWords = ['beverage', 'drink'];
+  } else if (
+    categoryText.includes('beverage') ||
+    categoryText.includes('drink')
+  ) {
+    preferredCategoryWords = ['dessert', 'starter'];
+  }
+
+  const categoryMatch = available.find(m => {
+    const cat = String(
+      categoryList.find(c => String(c._id) === String(m.categoryId))?.name ||
+      categoryList.find(c => String(c.id) === String(m.categoryId))?.name ||
+      ''
+    ).toLowerCase();
+
+    return preferredCategoryWords.some(word => cat.includes(word));
+  });
+
+  if (categoryMatch) return categoryMatch;
+
+  // Strong fallback: bestseller / chef special.
+  return (
+    available.find(m =>
+      m.isChefSpecial === true ||
+      m.isBestSeller === true ||
+      m._eng?.quadrant === 'star'
+    ) ||
+    available[0]
+  );
+};
+
+const speakDish = (item) => {
+  if (
+    typeof window === 'undefined' ||
+    !window.speechSynthesis ||
+    typeof SpeechSynthesisUtterance === 'undefined'
+  ) {
+    setSpokenText(
+      'Voice description is not supported in this browser.'
+    );
     return;
   }
+
+  // If this exact dish is already speaking → stop.
+  if (speakingItemId === item._id) {
+    stopSpeech();
+    return;
+  }
+
+  // Only ONE dish can speak at a time.
   stopSpeech();
   setSpokenText('');
 
-  // Find a recommended dish: same category, available, not this dish
-  const recommended =
-    allMenuItems.find(
-      m => m._id !== item._id &&
-           m.categoryId === item.categoryId &&
-           m.isAvailable !== false &&
-           (m.isBestSeller || m.isChefSpecial)
-    ) ||
-    allMenuItems.find(
-      m => m._id !== item._id &&
-           m.categoryId === item.categoryId &&
-           m.isAvailable !== false
-    ) ||
-    allMenuItems.find(m => m._id !== item._id && m.isAvailable !== false);
+  const recommended = getRecommendedDish(item);
+  const lang = voiceLang;
 
-  // ── Spice level maps ──
-  const spiceEn = { high: 'spicy',        medium: 'mildly spicy', low: 'mild' };
-  const spiceHi = { high: 'zyada tikha',  medium: 'medium tikha', low: 'halka' };
-  const spiceMr = { high: 'jast tikhat',  medium: 'madhyam tikhat', low: 'kam tikhat' };
+  const dishName = getDishName(item, lang);
+  const ingredients = getIngredients(item, lang);
+  const description = getDescription(item, lang);
+  const spice = getSpiceLevel(item, lang);
 
-  // ── Hour-based greeting ──
-  const hour = new Date(new Date().getTime() + 330 * 60000).getHours();
-  const greetEn = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const greetHi = hour < 12 ? 'Suprabhat'    : hour < 17 ? 'Namaskar'       : 'Shubh sandhya';
-  const greetMr = hour < 12 ? 'Shubh sakal'  : hour < 17 ? 'Namaskar'       : 'Shubh sandhya';
+  const isBestSeller =
+    item._eng?.quadrant === 'star' ||
+    item.isBestSeller === true;
 
-  // ── Build full natural sentence per language ──
+  const isChefSpecial =
+    item.isChefSpecial === true;
+
+  const serves = item.servingSize
+    ? String(item.servingSize)
+    : '';
+
+  const recName = recommended
+    ? getDishName(recommended, lang)
+    : '';
+
+  // ───────────────────────────────────────────────────────────
+  // NATURAL INDIAN LANGUAGE SCRIPTS
+  // ───────────────────────────────────────────────────────────
+
   const scripts = {
 
+    // ───────────── ENGLISH INDIA ─────────────
     'en-IN': () => {
-      const dishName = item.name;
-      const status = item._eng?.quadrant === 'star'
-        ? `${dishName} is one of our bestsellers.`
-        : item.isChefSpecial
-        ? `${dishName} is a Chef Special, personally recommended by our chef.`
-        : '';
-      const veg    = item.isVeg !== false
-        ? 'It is a vegetarian dish.'
-        : 'It is a non-vegetarian dish.';
-      const serves = item.servingSize
-        ? `This dish serves ${item.servingSize}.`
-        : '';
-      const rawSpice = (item.spiceLevel || '').toLowerCase();
-      const spice  = rawSpice
-        ? `The spice level is ${spiceEn[rawSpice] || item.spiceLevel}.`
-        : '';
-      const ingList = item.ingredients?.en?.length
-        ? item.ingredients.en.slice(0, 4)
-        : [];
-      const ings   = ingList.length
-        ? `The main ingredients include ${ingList.join(', ')}.`
-        : '';
-      const desc   = item.description
-        ? item.description.trim().replace(/\.$/, '') + '.'
-        : '';
-      const price  = item.price
-        ? `It is priced at ${item.price} rupees.`
-        : '';
-      const recName = recommended
-        ? (recommended.name)
-        : '';
-      const rec    = recName
-        ? `You might also enjoy ${recName}, which pairs wonderfully with this.`
-        : '';
+      const parts = [];
 
-      const full = [
-        `${greetEn}.`,
-        `Welcome to ${restaurantData?.name || 'our restaurant'}.`,
-        `Allow us to tell you about ${dishName}.`,
-        status, veg, serves, spice, ings, desc, price, rec
-      ].filter(Boolean).join(' ');
+      parts.push(
+        `Welcome to ${restaurantData?.name || 'our restaurant'}.`
+      );
 
-      return full;
+      parts.push(
+        `Let me tell you about ${dishName}.`
+      );
+
+      if (isBestSeller) {
+        parts.push(
+          `${dishName} is one of our bestsellers.`
+        );
+      } else if (isChefSpecial) {
+        parts.push(
+          `${dishName} is a Chef Special, specially recommended by our chef.`
+        );
+      }
+
+      if (item.isVeg !== undefined) {
+        parts.push(
+          item.isVeg !== false
+            ? 'It is a vegetarian dish.'
+            : 'It is a non-vegetarian dish.'
+        );
+      }
+
+      if (serves) {
+        parts.push(
+          `It is suitable for ${serves} people.`
+        );
+      }
+
+      if (spice) {
+        parts.push(
+          `The spice level is ${spice}.`
+        );
+      }
+
+      if (ingredients.length) {
+        parts.push(
+          `The main ingredients are ${ingredients.join(', ')}.`
+        );
+      }
+
+      if (description) {
+        parts.push(description);
+      }
+
+      if (recName) {
+        parts.push(
+          `For a great combination, you can also try ${recName} with this dish.`
+        );
+      }
+
+      return parts.join(' ');
     },
 
+    // ───────────── HINDI ─────────────
     'hi-IN': () => {
-      const dishName = item.name; // keep English name — Indian TTS handles it well
-      const status = item._eng?.quadrant === 'star'
-        ? `${dishName} hamare bestseller dishes mein se ek hai.`
-        : item.isChefSpecial
-        ? `${dishName} ek Chef Special dish hai, hamare chef ki khaas pasand.`
-        : '';
-      const veg    = item.isVeg !== false
-        ? 'Yeh ek vegetarian dish hai.'
-        : 'Yeh ek non-vegetarian dish hai.';
-      const serves = item.servingSize
-        ? `Yeh dish ${item.servingSize} logon ke liye serve ki jaati hai.`
-        : '';
-      const rawSpice = (item.spiceLevel || '').toLowerCase();
-      const spice  = rawSpice
-        ? `Iska masala level ${spiceHi[rawSpice] || item.spiceLevel} hai.`
-        : '';
-      const ingList = item.ingredients?.hi?.length
-        ? item.ingredients.hi.slice(0, 4)
-        : item.ingredients?.en?.slice(0, 4) || [];
-      const ings   = ingList.length
-        ? `Iske mukhya ingredients hain: ${ingList.join(', ')}.`
-        : '';
-      const desc   = item.description
-        ? item.description.trim().replace(/\.$/, '') + '.'
-        : '';
-      const price  = item.price
-        ? `Iska daam sirf ${item.price} rupaye hai.`
-        : '';
-      const recName = recommended ? recommended.name : '';
-      const rec    = recName
-        ? `Aap ${recName} bhi zaroor try karein, yeh iske saath bahut acha lagta hai.`
-        : '';
+      const parts = [];
 
-      return [
-        `${greetHi}.`,
-        `Aapka swagat hai ${restaurantData?.name || 'hamare restaurant'} mein.`,
-        `Aiye hum aapko ${dishName} ke baare mein batate hain.`,
-        status, veg, serves, spice, ings, desc, price, rec
-      ].filter(Boolean).join(' ');
+      parts.push(
+        `हमारे रेस्तरां में आपका स्वागत है।`
+      );
+
+      parts.push(
+        `आइए, मैं आपको ${dishName} के बारे में बताता हूँ।`
+      );
+
+      if (isBestSeller) {
+        parts.push(
+          `${dishName} हमारे सबसे पसंदीदा और लोकप्रिय व्यंजनों में से एक है।`
+        );
+      } else if (isChefSpecial) {
+        parts.push(
+          `${dishName} हमारे शेफ की खास पसंद और विशेष व्यंजन है।`
+        );
+      }
+
+      if (item.isVeg !== undefined) {
+        parts.push(
+          item.isVeg !== false
+            ? `यह एक शाकाहारी व्यंजन है।`
+            : `यह एक मांसाहारी व्यंजन है।`
+        );
+      }
+
+      if (serves) {
+        parts.push(
+          `यह ${serves} लोगों के लिए उपयुक्त है।`
+        );
+      }
+
+      if (spice) {
+        parts.push(
+          `इसका तीखापन ${spice} है।`
+        );
+      }
+
+      if (ingredients.length) {
+        parts.push(
+          `इसके मुख्य ingredients हैं: ${ingredients.join(', ')}।`
+        );
+      }
+
+      if (description) {
+        // Use database Hindi description when available.
+        // Otherwise preserve the restaurant's actual description.
+        parts.push(description);
+      }
+
+      if (recName) {
+        parts.push(
+          `इसके साथ आप ${recName} भी आज़मा सकते हैं। यह एक बेहतरीन combination रहेगा।`
+        );
+      }
+
+      return parts.join(' ');
     },
 
+    // ───────────── MARATHI INDIA ─────────────
     'mr-IN': () => {
-      const dishName = item.name_mr || item.name;
-      const status = item._eng?.quadrant === 'star'
-        ? `${dishName} aamnha bestseller padarth aahe.`
-        : item.isChefSpecial
-        ? `${dishName} he chef special aahe, aamachya chefchi khas shifaarish.`
-        : '';
-      const veg    = item.isVeg !== false
-        ? 'Ha ek shakahari padarth aahe.'
-        : 'Ha ek mansahari padarth aahe.';
-      const serves = item.servingSize
-        ? `He ${item.servingSize} jananasaathi aahe.`
-        : '';
-      const rawSpice = (item.spiceLevel || '').toLowerCase();
-      const spice  = rawSpice
-        ? `Yancha tikhatpana ${spiceMr[rawSpice] || item.spiceLevel} aahe.`
-        : '';
-      const ingList = item.ingredients?.mr?.length
-        ? item.ingredients.mr.slice(0, 4)
-        : item.ingredients?.en?.slice(0, 4) || [];
-      const ings   = ingList.length
-        ? `Mukhya ghatak aahet: ${ingList.join(', ')}.`
-        : '';
-      const desc   = item.description
-        ? item.description.trim().replace(/\.$/, '') + '.'
-        : '';
-      const price  = item.price
-        ? `Yaachi kimat fakt ${item.price} rupaye aahe.`
-        : '';
-      const recName = recommended ? (recommended.name_mr || recommended.name) : '';
-      const rec    = recName
-        ? `Tumhala ${recName} pan nakki avadel, he yanchyashi uttam jadte.`
-        : '';
+      const parts = [];
 
-      return [
-        `${greetMr}.`,
-        `${restaurantData?.name || 'Aamachya restaurant'} madhe aapale swagat aahe.`,
-        `Chala, aamhi tumhala ${dishName} vishayi sangato.`,
-        status, veg, serves, spice, ings, desc, price, rec
-      ].filter(Boolean).join(' ');
-    },
+      parts.push(
+        `आमच्या रेस्टॉरंटमध्ये आपले मनःपूर्वक स्वागत आहे।`
+      );
+
+      parts.push(
+        `चला, मी तुम्हाला ${dishName} बद्दल सांगतो।`
+      );
+
+      if (isBestSeller) {
+        parts.push(
+          `${dishName} हा आमच्या सर्वाधिक पसंतीच्या पदार्थांपैकी एक आहे।`
+        );
+      } else if (isChefSpecial) {
+        parts.push(
+          `${dishName} हा आमच्या शेफची खास शिफारस असलेला विशेष पदार्थ आहे।`
+        );
+      }
+
+      if (item.isVeg !== undefined) {
+        parts.push(
+          item.isVeg !== false
+            ? `हा शाकाहारी पदार्थ आहे।`
+            : `हा मांसाहारी पदार्थ आहे।`
+        );
+      }
+
+      if (serves) {
+        parts.push(
+          `हा ${serves} व्यक्तींसाठी योग्य आहे।`
+        );
+      }
+
+      if (spice) {
+        parts.push(
+          `या पदार्थाचा तिखटपणा ${spice} आहे।`
+        );
+      }
+
+      if (ingredients.length) {
+        parts.push(
+          `यामधील मुख्य घटक आहेत: ${ingredients.join(', ')}।`
+        );
+      }
+
+      if (description) {
+        parts.push(description);
+      }
+
+      if (recName) {
+        parts.push(
+          `यासोबत तुम्ही ${recName} देखील नक्की करून पाहू शकता। ही एक उत्तम जोडी ठरेल।`
+        );
+      }
+
+      return parts.join(' ');
+    }
   };
 
-  const text = (scripts[voiceLang] || scripts['en-IN'])();
-  if (!text.trim()) return;
+  const text =
+    (scripts[lang] || scripts['en-IN'])()
+      .replace(/\s+/g, ' ')
+      .trim();
 
-  // Store the spoken text for display
+  if (!text) return;
+
   setSpokenText(text);
 
-  const utter  = new SpeechSynthesisUtterance(text);
-  utter.lang   = voiceLang;
-  utter.volume = 1.0;
+  const utterance = new SpeechSynthesisUtterance(text);
 
-  // Rate and pitch tuned for natural Indian delivery
-  if (voiceLang === 'en-IN') { utter.rate = 0.88; utter.pitch = 1.05; }
-  if (voiceLang === 'hi-IN') { utter.rate = 0.83; utter.pitch = 1.0;  }
-  if (voiceLang === 'mr-IN') { utter.rate = 0.80; utter.pitch = 1.0;  }
+  utterance.lang = lang;
+  utterance.volume = 1;
 
-  // ── Best-effort Indian voice selection ──
-  const voices   = window.speechSynthesis.getVoices();
-  const langCode = voiceLang.split('-')[0];
+  // Natural Indian restaurant-style pacing.
+  if (lang === 'en-IN') {
+    utterance.rate = 0.88;
+    utterance.pitch = 1.02;
+  } else if (lang === 'hi-IN') {
+    utterance.rate = 0.84;
+    utterance.pitch = 1.0;
+  } else {
+    utterance.rate = 0.82;
+    utterance.pitch = 1.0;
+  }
 
-  const voice =
-    voices.find(v => v.lang === voiceLang && v.name.toLowerCase().includes('india')) ||
-    voices.find(v => v.lang === voiceLang) ||
-    voices.find(v => v.lang.startsWith(langCode) && v.name.toLowerCase().includes('india')) ||
-    voices.find(v => v.lang.startsWith(langCode)) ||
-    voices.find(v => v.lang.includes('IN')) ||
-    voices[0];
+  // ───────────────────────────────────────────────────────────
+  // BEST AVAILABLE INDIAN VOICE
+  // ───────────────────────────────────────────────────────────
 
-  if (voice) utter.voice = voice;
+  const selectVoice = (voices) => {
+    if (!voices?.length) return null;
 
-  utter.onstart = () => { setSpeakingItemId(item._id); setVoicePaused(false); };
-  utter.onend   = () => { setSpeakingItemId(null); setVoicePaused(false); speechRef.current = null; };
-  utter.onerror = () => { setSpeakingItemId(null); setVoicePaused(false); speechRef.current = null; };
+    const langCode = lang.split('-')[0];
 
-  speechRef.current = utter;
+    return (
+      voices.find(v =>
+        v.lang === lang &&
+        /india|indian/i.test(v.name)
+      ) ||
 
-  // Chrome bug: voices may not load immediately — retry after 100ms if list is empty
-  if (voices.length === 0) {
+      voices.find(v =>
+        v.lang === lang
+      ) ||
+
+      voices.find(v =>
+        v.lang?.startsWith(langCode) &&
+        /india|indian/i.test(v.name)
+      ) ||
+
+      voices.find(v =>
+        v.lang?.startsWith(langCode)
+      ) ||
+
+      null
+    );
+  };
+
+  const voices = window.speechSynthesis.getVoices();
+  const selectedVoice = selectVoice(voices);
+
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
+  }
+
+  utterance.onstart = () => {
+    setSpeakingItemId(item._id);
+    setVoicePaused(false);
+  };
+
+  utterance.onend = () => {
+    setSpeakingItemId(null);
+    setVoicePaused(false);
+    speechRef.current = null;
+  };
+
+  utterance.onerror = (event) => {
+    console.warn('PRATYEKSHA voice error:', event?.error);
+
+    setSpeakingItemId(null);
+    setVoicePaused(false);
+    speechRef.current = null;
+  };
+
+  speechRef.current = utterance;
+
+  // Some Chrome installations load voices asynchronously.
+  if (!voices.length) {
     window.speechSynthesis.onvoiceschanged = () => {
-      const v2 = window.speechSynthesis.getVoices();
-      const bestVoice =
-        v2.find(v => v.lang === voiceLang && v.name.toLowerCase().includes('india')) ||
-        v2.find(v => v.lang === voiceLang) ||
-        v2.find(v => v.lang.startsWith(langCode)) ||
-        v2[0];
-      if (bestVoice) utter.voice = bestVoice;
-      window.speechSynthesis.speak(utter);
+      const loadedVoices = window.speechSynthesis.getVoices();
+      const voice = selectVoice(loadedVoices);
+
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
     };
   } else {
-    window.speechSynthesis.speak(utter);
+    window.speechSynthesis.speak(utterance);
   }
 };
 
 const toggleVoicePause = (e) => {
-  e.stopPropagation();
-  if (!window.speechSynthesis) return;
+  e?.stopPropagation();
+
+  if (
+    typeof window === 'undefined' ||
+    !window.speechSynthesis
+  ) return;
+
+  if (!speakingItemId) return;
+
   if (voicePaused) {
     window.speechSynthesis.resume();
     setVoicePaused(false);
@@ -902,6 +1207,7 @@ const toggleVoicePause = (e) => {
     setVoicePaused(true);
   }
 };
+
   const isOnlyVegTenant = restaurantData?.config?.onlyVeg === true;
 
 useEffect(() => {
@@ -6840,11 +7146,110 @@ onClick={() => {
       <AnimatePresence>
         {activeModel && ( 
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.modalOverlay}>
-            <div style={styles.modalNav}>
-              <div style={{textAlign: 'left'}}><h2 style={{...styles.modalTitle, color: primaryColor}}>{language === 'mr' ? activeModel.name_mr : activeModel.name}</h2><small style={{color: '#777'}}>{t[language].zoomRotate}</small></div>
-<X size={30} color={primaryColor} onClick={() => { stopSpeech(); setActiveModel(null); }} />
-  
-              </div>
+<div
+  style={{
+    ...styles.modalNav,
+    gap: '14px',
+    alignItems: 'center'
+  }}
+>
+  <div
+    style={{
+      minWidth: 0,
+      flex: 1,
+      textAlign: 'left'
+    }}
+  >
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '9px',
+        flexWrap: 'wrap'
+      }}
+    >
+      <h2
+        style={{
+          ...styles.modalTitle,
+          color: primaryColor,
+          margin: 0
+        }}
+      >
+        {language === 'mr'
+          ? activeModel.name_mr || activeModel.name
+          : activeModel.name}
+      </h2>
+
+      {/* CLEAR HEAR INDICATOR */}
+      {typeof window !== 'undefined' &&
+        window.speechSynthesis && (
+          <button
+            type="button"
+            aria-label="Hear this dish"
+            onClick={() => speakDish(activeModel)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              height: '30px',
+              padding: '0 10px',
+              borderRadius: '9px',
+              border:
+                '1px solid rgba(211,191,162,0.30)',
+              background:
+                'rgba(211,191,162,0.09)',
+              color: '#d3bfa2',
+              cursor: 'pointer',
+              fontSize: '0.52rem',
+              fontWeight: '900',
+              letterSpacing: '0.7px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Volume2 size={13} />
+            {voiceLang === 'hi-IN'
+              ? 'सुनें'
+              : voiceLang === 'mr-IN'
+                ? 'ऐका'
+                : 'HEAR'}
+          </button>
+        )}
+    </div>
+
+    <small
+      style={{
+        display: 'block',
+        marginTop: '5px',
+        color: 'rgba(255,255,255,0.32)'
+      }}
+    >
+      {t[language].zoomRotate}
+    </small>
+  </div>
+
+  <button
+    type="button"
+    aria-label="Close 3D dish view"
+    onClick={() => {
+      stopSpeech();
+      setActiveModel(null);
+    }}
+    style={{
+      border: 'none',
+      background: 'transparent',
+      padding: '5px',
+      cursor: 'pointer',
+      flexShrink: 0
+    }}
+  >
+    <X
+      size={26}
+      color={primaryColor}
+      strokeWidth={1.7}
+    />
+  </button>
+</div>
 <div style={styles.modelContainer}>
 
   {/* 3D Model viewer */}
@@ -6859,62 +7264,157 @@ onClick={() => {
   </div>
 
 {/* ── HEAR THIS DISH — voice panel ── */}
+{/* ═══════════════════════════════════════════════════════════
+    PRATYEKSHA SMART DISH VOICE PANEL
+    ═══════════════════════════════════════════════════════════ */}
 {typeof window !== 'undefined' && window.speechSynthesis && (
-  <div style={{
-    margin: '0 14px 12px 14px',
-    background: 'rgba(6,6,6,0.82)',
-    border: '1px solid rgba(211,191,162,0.13)',
-    borderRadius: '16px',
-    backdropFilter: 'blur(12px)',
-    overflow: 'hidden'
-  }}>
+  <div
+    className="pratyeksha-hear-panel"
+    style={{
+      margin: '12px 14px 16px',
+      padding: '0',
+      borderRadius: '18px',
+      overflow: 'hidden',
+      background:
+        'linear-gradient(145deg, rgba(22,22,22,0.96), rgba(8,8,8,0.96))',
+      border: '1px solid rgba(211,191,162,0.20)',
+      boxShadow:
+        '0 12px 40px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.025)',
+      backdropFilter: 'blur(18px)',
+    }}
+  >
 
-    {/* ── HEADER ROW ── */}
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '11px 14px 0 14px'
-    }}>
-      {/* Label */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-        <Volume1 size={12} color="rgba(211,191,162,0.45)" strokeWidth={1.8} />
-        <span style={{
-          fontSize: '0.5rem', fontWeight: '900',
-          color: 'rgba(211,191,162,0.4)', letterSpacing: '2.5px',
-          textTransform: 'uppercase'
-        }}>
-          HEAR THIS DISH
-        </span>
+    {/* ───────────── HEADER ───────────── */}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        padding: '14px 16px',
+        borderBottom: '1px solid rgba(211,191,162,0.08)',
+        flexWrap: 'wrap'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '11px',
+          minWidth: 0
+        }}
+      >
+        <div
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            background: 'rgba(211,191,162,0.09)',
+            border: '1px solid rgba(211,191,162,0.20)'
+          }}
+        >
+          <Volume2
+            size={17}
+            color="#d3bfa2"
+            strokeWidth={1.8}
+          />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: '900',
+              color: '#f4efe7',
+              letterSpacing: '0.8px',
+              lineHeight: 1.2
+            }}
+          >
+            HEAR ABOUT THIS DISH
+          </div>
+
+          <div
+            style={{
+              marginTop: '4px',
+              fontSize: '0.52rem',
+              fontWeight: '600',
+              color: 'rgba(255,255,255,0.34)',
+              letterSpacing: '0.3px'
+            }}
+          >
+            Listen in your preferred language
+          </div>
+        </div>
       </div>
 
-      {/* Language selector */}
-      <div style={{ display: 'flex', gap: '3px' }}>
+      {/* ───────────── LANGUAGE ───────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '3px',
+          borderRadius: '9px',
+          background: 'rgba(255,255,255,0.025)',
+          border: '1px solid rgba(255,255,255,0.06)'
+        }}
+      >
         {[
-          { code: 'en-IN', label: 'EN',  full: 'English'  },
-          { code: 'hi-IN', label: 'HI',  full: 'Hindi'    },
-          { code: 'mr-IN', label: 'MR',  full: 'Marathi'  },
-        ].map(({ code, label }) => {
+          {
+            code: 'en-IN',
+            label: 'EN',
+            title: 'English'
+          },
+          {
+            code: 'hi-IN',
+            label: 'हिं',
+            title: 'Hindi'
+          },
+          {
+            code: 'mr-IN',
+            label: 'मर',
+            title: 'Marathi'
+          }
+        ].map(({ code, label, title }) => {
           const active = voiceLang === code;
+
           return (
             <button
               key={code}
-              aria-label={`Speak in ${label}`}
+              type="button"
+              title={title}
+              aria-label={`Hear dish in ${title}`}
               onClick={() => {
+                if (voiceLang === code) return;
+
+                stopSpeech();
+                setSpokenText('');
                 setVoiceLang(code);
-                if (speakingItemId === activeModel._id) {
-                  stopSpeech();
-                  setSpokenText('');
-                }
               }}
               style={{
-                padding: '4px 9px', borderRadius: '6px',
-                fontSize: '0.5rem', fontWeight: '900',
-                letterSpacing: '0.8px', cursor: 'pointer',
-                outline: 'none', fontFamily: 'Poppins, sans-serif',
-                border: `1px solid ${active ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.07)'}`,
-                background: active ? 'rgba(211,191,162,0.1)' : 'transparent',
-                color: active ? '#d3bfa2' : 'rgba(255,255,255,0.22)',
-                transition: 'all 0.15s'
+                minWidth: '42px',
+                height: '30px',
+                padding: '0 8px',
+                borderRadius: '7px',
+                border: active
+                  ? '1px solid rgba(211,191,162,0.42)'
+                  : '1px solid transparent',
+                background: active
+                  ? 'rgba(211,191,162,0.13)'
+                  : 'transparent',
+                color: active
+                  ? '#d3bfa2'
+                  : 'rgba(255,255,255,0.38)',
+                fontSize: '0.56rem',
+                fontWeight: '900',
+                letterSpacing: '0.5px',
+                cursor: 'pointer',
+                fontFamily: 'Poppins, sans-serif',
+                transition: 'all 0.2s ease'
               }}
             >
               {label}
@@ -6924,166 +7424,387 @@ onClick={() => {
       </div>
     </div>
 
-    {/* ── DISH NAME + DESCRIPTION ── */}
-    <div style={{ padding: '9px 14px 0 14px' }}>
-      <div style={{
-        fontSize: '0.82rem', fontWeight: '800',
-        color: 'rgba(255,255,255,0.78)', lineHeight: 1.3,
-        marginBottom: '3px'
-      }}>
+    {/* ───────────── DISH INFORMATION ───────────── */}
+    <div
+      style={{
+        padding: '15px 16px 10px'
+      }}
+    >
+      <div
+        style={{
+          fontSize: '1rem',
+          fontWeight: '900',
+          color: '#ffffff',
+          letterSpacing: '-0.2px',
+          lineHeight: 1.3,
+          marginBottom: '8px'
+        }}
+      >
         {voiceLang === 'mr-IN'
-          ? (activeModel.name_mr || activeModel.name)
+          ? activeModel.name_mr || activeModel.name
           : activeModel.name}
       </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns:
+            'repeat(auto-fit, minmax(105px, 1fr))',
+          gap: '7px',
+          marginBottom: '10px'
+        }}
+      >
+        {activeModel.servingSize && (
+          <div
+            style={{
+              padding: '8px 9px',
+              borderRadius: '10px',
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.055)'
+            }}
+          >
+            <div
+              style={{
+                fontSize: '0.45rem',
+                fontWeight: '900',
+                color: 'rgba(211,191,162,0.48)',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              SERVES
+            </div>
+
+            <div
+              style={{
+                marginTop: '4px',
+                fontSize: '0.62rem',
+                fontWeight: '700',
+                color: 'rgba(255,255,255,0.72)'
+              }}
+            >
+              {activeModel.servingSize} people
+            </div>
+          </div>
+        )}
+
+        {activeModel.spiceLevel && (
+          <div
+            style={{
+              padding: '8px 9px',
+              borderRadius: '10px',
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.055)'
+            }}
+          >
+            <div
+              style={{
+                fontSize: '0.45rem',
+                fontWeight: '900',
+                color: 'rgba(211,191,162,0.48)',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              SPICE
+            </div>
+
+            <div
+              style={{
+                marginTop: '4px',
+                fontSize: '0.62rem',
+                fontWeight: '700',
+                color: 'rgba(255,255,255,0.72)'
+              }}
+            >
+              {getSpiceLevel(activeModel, voiceLang)}
+            </div>
+          </div>
+        )}
+
+        {(activeModel.isChefSpecial ||
+          activeModel.isBestSeller ||
+          activeModel._eng?.quadrant === 'star') && (
+          <div
+            style={{
+              padding: '8px 9px',
+              borderRadius: '10px',
+              background: 'rgba(211,191,162,0.055)',
+              border: '1px solid rgba(211,191,162,0.12)'
+            }}
+          >
+            <div
+              style={{
+                fontSize: '0.45rem',
+                fontWeight: '900',
+                color: 'rgba(211,191,162,0.62)',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              {activeModel.isChefSpecial
+                ? 'CHEF SPECIAL'
+                : 'BESTSELLER'}
+            </div>
+
+            <div
+              style={{
+                marginTop: '4px',
+                fontSize: '0.62rem',
+                fontWeight: '700',
+                color: '#d3bfa2'
+              }}
+            >
+              Recommended
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Actual description */}
       {activeModel.description && (
-        <div style={{
-          fontSize: '0.58rem', color: 'rgba(255,255,255,0.22)',
-          lineHeight: 1.55, marginBottom: '0'
-        }}>
-          {activeModel.description}
+        <div
+          style={{
+            padding: '11px 12px',
+            borderRadius: '11px',
+            background: 'rgba(211,191,162,0.035)',
+            borderLeft: '2px solid rgba(211,191,162,0.32)',
+            color: 'rgba(255,255,255,0.55)',
+            fontSize: '0.64rem',
+            lineHeight: 1.7,
+            letterSpacing: '0.05px'
+          }}
+        >
+          {getDescription(activeModel, voiceLang)}
         </div>
       )}
     </div>
 
-    {/* ── SPOKEN TEXT DISPLAY — scrolling transcript ── */}
-    {speakingItemId === activeModel._id && spokenText && (
-      <div style={{
-        margin: '9px 14px 0 14px',
-        padding: '9px 11px',
-        background: 'rgba(211,191,162,0.04)',
-        border: '1px solid rgba(211,191,162,0.1)',
-        borderRadius: '10px',
-        maxHeight: '72px', overflowY: 'auto'
-      }}
-      className="no-scrollbar"
-      >
-        <div style={{
-          fontSize: '0.6rem', color: 'rgba(211,191,162,0.5)',
-          lineHeight: 1.65, fontStyle: 'italic'
-        }}>
-          {spokenText}
+    {/* ───────────── LIVE TRANSCRIPT ───────────── */}
+    {speakingItemId === activeModel._id &&
+      spokenText && (
+        <div
+          style={{
+            margin: '0 16px 10px',
+            padding: '11px 12px',
+            borderRadius: '11px',
+            background: 'rgba(211,191,162,0.055)',
+            border: '1px solid rgba(211,191,162,0.13)',
+            maxHeight: '120px',
+            overflowY: 'auto'
+          }}
+          className="no-scrollbar"
+          aria-live="polite"
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              marginBottom: '6px'
+            }}
+          >
+            <div
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#d3bfa2',
+                boxShadow: '0 0 10px rgba(211,191,162,0.35)'
+              }}
+            />
+
+            <span
+              style={{
+                fontSize: '0.48rem',
+                fontWeight: '900',
+                color: 'rgba(211,191,162,0.6)',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              {voicePaused
+                ? 'Paused'
+                : 'Now speaking'}
+            </span>
+          </div>
+
+          <div
+            style={{
+              fontSize: '0.61rem',
+              lineHeight: 1.7,
+              color: 'rgba(255,255,255,0.58)'
+            }}
+          >
+            {spokenText}
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
-    {/* ── CONTROLS ── */}
-    <div style={{
-      display: 'flex', gap: '8px', alignItems: 'center',
-      padding: '10px 14px 13px 14px'
-    }}>
-
-      {/* Main PLAY / STOP button */}
+    {/* ───────────── CONTROLS ───────────── */}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '7px',
+        padding: '4px 16px 15px'
+      }}
+    >
+      {/* MAIN HEAR / REPLAY */}
       <button
-        aria-label={speakingItemId === activeModel._id ? 'Stop description' : 'Play dish description'}
+        type="button"
+        aria-label={
+          speakingItemId === activeModel._id
+            ? 'Stop hearing dish description'
+            : 'Hear dish description'
+        }
         onClick={() => speakDish(activeModel)}
         style={{
-          flex: 1, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', gap: '8px',
-          padding: '11px 14px', borderRadius: '11px',
-          cursor: 'pointer', outline: 'none',
+          flex: 1,
+          minWidth: 0,
+          minHeight: '46px',
+          borderRadius: '12px',
+          border:
+            '1px solid rgba(211,191,162,0.35)',
+          background:
+            'linear-gradient(135deg, rgba(211,191,162,0.16), rgba(211,191,162,0.07))',
+          color: '#d3bfa2',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '9px',
+          cursor: 'pointer',
           fontFamily: 'Poppins, sans-serif',
-          border: `1px solid ${speakingItemId === activeModel._id
-            ? 'rgba(211,191,162,0.45)'
-            : 'rgba(211,191,162,0.2)'}`,
-          background: speakingItemId === activeModel._id
-            ? 'rgba(211,191,162,0.13)'
-            : 'rgba(211,191,162,0.07)',
-          transition: 'all 0.2s'
+          fontSize: '0.62rem',
+          fontWeight: '900',
+          letterSpacing: '1px',
+          transition: 'all 0.2s ease',
+          boxShadow:
+            '0 5px 20px rgba(211,191,162,0.06)'
         }}
       >
         {speakingItemId === activeModel._id ? (
           <>
-            {/* Live waveform bars */}
-            <div style={{
-              display: 'flex', gap: '2.5px',
-              alignItems: 'center', height: '16px'
-            }}>
-              {[5, 10, 7, 13, 6, 11, 4].map((h, i) => (
-                <div key={i} style={{
-                  width: '2px', borderRadius: '1px',
-                  background: '#d3bfa2',
-                  height: `${h}px`,
-                  opacity: 0.8,
-                  animation: `pulse ${0.6 + i * 0.08}s ease-in-out ${i * 0.1}s infinite`
-                }} />
-              ))}
-            </div>
-            <span style={{
-              fontSize: '0.6rem', fontWeight: '800',
-              color: '#d3bfa2', letterSpacing: '1.2px'
-            }}>
-              {voicePaused ? 'PAUSED' : 'PLAYING · TAP TO STOP'}
+            <Volume2
+              size={16}
+              strokeWidth={2}
+            />
+
+            <span>
+              {voicePaused
+                ? 'PAUSED'
+                : 'PLAYING'}
             </span>
           </>
         ) : (
           <>
-            <Volume2 size={15} color="#d3bfa2" strokeWidth={1.8} />
-            <span style={{
-              fontSize: '0.6rem', fontWeight: '800',
-              color: '#d3bfa2', letterSpacing: '1px'
-            }}>
-              {voiceLang === 'mr-IN'
-                ? 'वर्णन ऐका'
-                : voiceLang === 'hi-IN'
-                ? 'विवरण सुनें'
-                : 'HEAR DESCRIPTION'}
+            <Volume2
+              size={17}
+              strokeWidth={2}
+            />
+
+            <span>
+              {voiceLang === 'hi-IN'
+                ? 'व्यंजन के बारे में सुनें'
+                : voiceLang === 'mr-IN'
+                  ? 'पदार्थाबद्दल ऐका'
+                  : 'HEAR THIS DISH'}
             </span>
           </>
         )}
       </button>
 
-      {/* Pause / Resume — only when speaking */}
+      {/* PAUSE / RESUME */}
       {speakingItemId === activeModel._id && (
         <button
-          aria-label={voicePaused ? 'Resume' : 'Pause'}
+          type="button"
+          aria-label={
+            voicePaused
+              ? 'Resume dish description'
+              : 'Pause dish description'
+          }
           onClick={toggleVoicePause}
           style={{
-            width: '42px', height: '42px',
-            borderRadius: '11px', flexShrink: 0,
-            display: 'flex', alignItems: 'center',
+            width: '46px',
+            height: '46px',
+            flexShrink: 0,
+            borderRadius: '12px',
+            border:
+              '1px solid rgba(211,191,162,0.20)',
+            background:
+              'rgba(255,255,255,0.035)',
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(211,191,162,0.07)',
-            border: '1px solid rgba(211,191,162,0.22)',
-            cursor: 'pointer', outline: 'none',
-            transition: 'all 0.15s'
+            cursor: 'pointer'
           }}
         >
-          {voicePaused
-            ? <Play  size={15} color="#d3bfa2" strokeWidth={2} />
-            : <Pause size={15} color="#d3bfa2" strokeWidth={2} />
-          }
+          {voicePaused ? (
+            <Play
+              size={16}
+              color="#d3bfa2"
+              strokeWidth={2}
+            />
+          ) : (
+            <Pause
+              size={16}
+              color="#d3bfa2"
+              strokeWidth={2}
+            />
+          )}
+        </button>
+      )}
+
+      {/* STOP */}
+      {speakingItemId === activeModel._id && (
+        <button
+          type="button"
+          aria-label="Stop dish description"
+          onClick={(e) => {
+            e.stopPropagation();
+            stopSpeech();
+          }}
+          style={{
+            width: '46px',
+            height: '46px',
+            flexShrink: 0,
+            borderRadius: '12px',
+            border:
+              '1px solid rgba(255,255,255,0.08)',
+            background:
+              'rgba(255,255,255,0.025)',
+            color: 'rgba(255,255,255,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <X
+            size={16}
+            strokeWidth={2}
+          />
         </button>
       )}
     </div>
 
-    {/* ── STATUS LINE ── */}
-    {speakingItemId === activeModel._id && (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '6px',
-        paddingBottom: '10px', paddingLeft: '14px'
-      }}>
-        <div style={{
-          width: '5px', height: '5px', borderRadius: '50%',
-          background: 'rgba(211,191,162,0.6)',
-          flexShrink: 0,
-          animation: 'pulse 0.9s ease-in-out infinite'
-        }} />
-        <span style={{
-          fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)',
-          fontWeight: '600', letterSpacing: '0.3px'
-        }}>
-          {voicePaused
-            ? 'Paused — tap play to continue'
-            : `Speaking in ${
-                voiceLang === 'mr-IN' ? 'Marathi'
-                : voiceLang === 'hi-IN' ? 'Hindi'
-                : 'English (India)'
-              }...`
-          }
-        </span>
-      </div>
-    )}
-
+    {/* ───────────── LANGUAGE STATUS ───────────── */}
+    <div
+      style={{
+        padding: '0 16px 12px',
+        textAlign: 'center',
+        fontSize: '0.48rem',
+        color: 'rgba(255,255,255,0.25)',
+        fontWeight: '600',
+        letterSpacing: '0.4px'
+      }}
+    >
+      {voiceLang === 'en-IN'
+        ? 'Indian English'
+        : voiceLang === 'hi-IN'
+          ? 'हिन्दी • Hindi'
+          : 'मराठी • Marathi'}
+    </div>
   </div>
 )}
 
