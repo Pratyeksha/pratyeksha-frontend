@@ -12613,319 +12613,499 @@ setNewStaff({
           {/* ════════════════════════════════════════════
               RECIPES — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
-          {activeTab==='recipes' && (
-            <motion.div key="recipes" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
-              style={{display:'flex',flexDirection:'column',gap:'25px',paddingBottom:'100px',width:'100%',maxWidth:'1100px',margin:'0 auto'}}>
+{activeTab === 'recipes' && (
+  <motion.div key="recipes" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+    style={{ display: 'flex', flexDirection: 'column', gap: '22px', paddingBottom: '100px', width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
 
-              {/* <div style={{paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
-                <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>RECIPE ENGINE</h2>
-                <p style={{margin:'4px 0 0',fontSize:'0.7rem',color:'#555'}}>
-                  Link each dish to ingredients + quantities per serving. Powers auto stock deduction and profitability.
-                </p>
-              </div> */}
+    {/* ══════════ HEADER ══════════ */}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ChefHat size={17} color="#d3bfa2" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>RECIPE ENGINE</div>
+          <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.35)', marginTop: '3px', fontWeight: '500' }}>
+            Link ingredients · Auto stock deduction · Live costing
+          </div>
+        </div>
+      </div>
 
-              {/* BUILDER */}
-              <div style={{...styles.biCard,borderTop:'3px solid #d3bfa2'}}>
-                <h4 style={{...styles.biTitle,color:'#fff'}}><ChefHat size={18} color="#d3bfa2"/> RECIPE BUILDER — LINK DISH → INGREDIENTS</h4>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:'30px'}}>
-                  <div>
-                    <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>SELECT MENU ITEM</label>
-                    <select style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',cursor:'pointer'}}
-                      value={activeRecipeItemId}
-onChange={e => {
-    setActiveRecipeItemId(e.target.value);
-    if (e.target.value) {
-        const ex = recipes.find(r => r.menuItemId?.toString() === e.target.value);
-        setRecipeIngredientRows(
-            ex?.ingredients?.length
-                ? ex.ingredients.map(i => ({
-                    // ← FIXED: same populated-object guard
-                    inventoryId: i.inventoryId?._id
-                        ? i.inventoryId._id.toString()
-                        : (i.inventoryId?.toString() || ''),
-                    quantityUsed: i.quantityUsed
-                  }))
-                : [{ inventoryId: '', quantityUsed: '' }]
+      {/* Coverage ring */}
+      {(() => {
+        const mapped = recipes.filter(r => r.ingredients?.length > 0).length;
+        const total  = menuItems.length;
+        const pct    = total > 0 ? Math.round((mapped / total) * 100) : 0;
+        const circum = 2 * Math.PI * 15.9;
+        const dash   = (pct / 100) * circum;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '12px' }}>
+            <div>
+              <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.3)', fontWeight: '800', letterSpacing: '1.5px', marginBottom: '2px' }}>RECIPE COVERAGE</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>{pct}<span style={{ fontSize: '0.6rem', marginLeft: '1px' }}>%</span></div>
+              <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.25)', marginTop: '2px' }}>{mapped} of {total} dishes</div>
+            </div>
+            <div style={{ width: '44px', height: '44px', position: 'relative', flexShrink: 0 }}>
+              <svg viewBox="0 0 36 36" style={{ width: '44px', height: '44px', transform: 'rotate(-90deg)' }}>
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3.2" />
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#d3bfa2" strokeWidth="3.2"
+                  strokeDasharray={`${dash.toFixed(1)} ${(circum - dash).toFixed(1)}`}
+                  strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.7s ease' }} />
+              </svg>
+            </div>
+          </div>
         );
-    }
-}}>
-                      <option value="">-- Select a dish --</option>
-                      {menuItems.map(m=><option key={m._id} value={m._id}>{m.name}</option>)}
-                    </select>
-                    {activeRecipeItemId && (
-                      <div style={{marginTop:'12px',padding:'12px',background:'#050505',border:'1px solid #111',borderRadius:'8px'}}>
-                        <small style={{fontSize:'0.6rem',color:'#555',fontWeight:'800',display:'block',marginBottom:'6px'}}>SELECTED DISH INFO</small>
-                        {(()=>{const m=menuItems.find(x=>x._id===activeRecipeItemId); return m?(<>
-                          <div style={{fontSize:'0.85rem',fontWeight:'900',color:'#fff'}}>{m.name}</div>
-                          <div style={{fontSize:'0.75rem',color:'#d3bfa2',marginTop:'4px'}}>₹{m.price}</div>
-                          <div style={{fontSize:'0.65rem',color:'#555',marginTop:'2px'}}>{m.categoryId||'General'}</div>
-                        </>):null;})()}
-                      </div>
+      })()}
+    </div>
+
+    {/* ══════════ RECIPE BUILDER ══════════ */}
+    <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '18px', overflow: 'hidden' }}>
+
+      {/* Builder title bar */}
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '9px', background: 'rgba(211,191,162,0.04)' }}>
+        <CookingPot size={14} color="#d3bfa2" strokeWidth={1.5} />
+        <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px' }}>
+          {activeRecipeItemId
+            ? `EDITING — ${menuItems.find(m => m._id === activeRecipeItemId)?.name || ''}`
+            : 'RECIPE BUILDER'}
+        </span>
+        {activeRecipeItemId && (
+          <button
+            onClick={() => { setActiveRecipeItemId(''); setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]); }}
+            style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', borderRadius: '7px', padding: '4px 10px', fontSize: '0.55rem', fontWeight: '700', cursor: 'pointer', letterSpacing: '0.5px' }}>
+            CLEAR
+          </button>
+        )}
+      </div>
+
+      <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '28px' }}>
+
+        {/* ── LEFT: Dish selector + costing panel ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(255,255,255,0.3)', letterSpacing: '2px', display: 'block', marginBottom: '8px' }}>SELECT DISH</label>
+            <select
+              value={activeRecipeItemId}
+              onChange={e => {
+                setActiveRecipeItemId(e.target.value);
+                if (e.target.value) {
+                  const ex = recipes.find(r => r.menuItemId?.toString() === e.target.value);
+                  setRecipeIngredientRows(ex?.ingredients?.length
+                    ? ex.ingredients.map(i => ({
+                        inventoryId: i.inventoryId?._id ? i.inventoryId._id.toString() : (i.inventoryId?.toString() || ''),
+                        quantityUsed: i.quantityUsed
+                      }))
+                    : [{ inventoryId: '', quantityUsed: '' }]);
+                }
+              }}
+              style={{ width: '100%', padding: '11px 14px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
+              <option value="">— Select a dish —</option>
+              {menuItems.map(m => (
+                <option key={m._id} value={m._id}>
+                  {m.name} {recipes.some(r => r.menuItemId?.toString() === m._id && r.ingredients?.length > 0) ? '✓' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Costing summary — appears when dish selected */}
+          {activeRecipeItemId && (() => {
+            const dish = menuItems.find(m => m._id === activeRecipeItemId);
+            if (!dish) return null;
+            const totalCost = recipeIngredientRows.reduce((sum, row) => {
+              if (!row.inventoryId || !row.quantityUsed) return sum;
+              const inv = inventory.find(i => i._id === row.inventoryId);
+              if (!inv) return sum;
+              return sum + ((inv.weightedAvgCost || inv.costPrice || 0) * Number(row.quantityUsed));
+            }, 0);
+            const price     = dish.price || 0;
+            const profit    = price - totalCost;
+            const marginPct = price > 0 ? Math.round((profit / price) * 100) : 0;
+            const fcPct     = price > 0 ? Math.round((totalCost / price) * 100) : 0;
+            const profRow   = profitabilityData.find(p => p._id?.toString() === dish._id);
+            const marginColor = marginPct >= 55 ? '#d3bfa2' : marginPct >= 35 ? '#c8a84b' : '#c87272';
+
+            return (
+              <div style={{ background: '#080808', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', overflow: 'hidden' }}>
+
+                {/* Dish name bar */}
+                <div style={{ padding: '13px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(211,191,162,0.04)' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#ffffff', marginBottom: '6px' }}>{dish.name}</div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.58rem', padding: '3px 9px', borderRadius: '5px', background: 'rgba(211,191,162,0.12)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.25)', fontFamily: 'monospace', fontWeight: '800' }}>
+                      ₹{price} MENU PRICE
+                    </span>
+                    {dish.priceHalf > 0 && (
+                      <span style={{ fontSize: '0.58rem', padding: '3px 9px', borderRadius: '5px', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace' }}>
+                        HALF ₹{dish.priceHalf}
+                      </span>
                     )}
+                    <span style={{ fontSize: '0.58rem', padding: '3px 9px', borderRadius: '5px', background: dish.isAvailable !== false ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)', color: dish.isAvailable !== false ? 'rgba(211,191,162,0.6)' : 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      {dish.isAvailable !== false ? 'VISIBLE' : 'HIDDEN'}
+                    </span>
                   </div>
-                  <div>
-                    <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>INGREDIENTS PER SERVING</label>
-                    {recipeIngredientRows.map((row,idx)=>(
-                      <div key={idx} style={{display:'flex',gap:'10px',marginBottom:'10px',alignItems:'center'}}>
-<select style={{flex:2,...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem',cursor:'pointer'}}
-  value={row.inventoryId}
-  onChange={e=>{const u=[...recipeIngredientRows];u[idx].inventoryId=e.target.value;setRecipeIngredientRows(u);}}>
-  <option value="">-- Select ingredient --</option>
-  {inventory.map(i=>(
-    <option key={i._id} value={i._id}>
-      {i.itemName} ({i.unit}){i.currentStock <= 0 ? ' ⚠ OUT OF STOCK' : i.currentStock <= i.minThreshold ? ' ⚠ LOW' : ''}
-    </option>
-  ))}
-</select>
-                        <input type="number" placeholder="Qty" style={{flex:1,...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem'}}
-                          value={row.quantityUsed} onChange={e=>{const u=[...recipeIngredientRows];u[idx].quantityUsed=e.target.value;setRecipeIngredientRows(u);}}/>
-                        <button onClick={()=>setRecipeIngredientRows(p=>p.filter((_,i)=>i!==idx))}
-                          style={{background:'transparent',border:'1px solid #222',color:'#444',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem'}}>✕</button>
+                </div>
+
+                {/* Live cost rows */}
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ fontSize: '0.48rem', fontWeight: '900', color: 'rgba(211,191,162,0.4)', letterSpacing: '2.5px', marginBottom: '12px' }}>LIVE COSTING</div>
+
+                  {[
+                    { label: 'Ingredient Cost / Serving', value: `₹${totalCost.toFixed(2)}`, color: totalCost > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)' },
+                    { label: 'Menu Price',                 value: `₹${price}`,               color: '#d3bfa2' },
+                    { label: 'Profit per Serving',         value: `₹${profit.toFixed(2)}`,   color: profit > 0 ? '#d3bfa2' : '#c87272' },
+                    { label: 'Food Cost %',                value: `${fcPct}%`,                color: fcPct > 40 ? '#c8a84b' : 'rgba(255,255,255,0.6)' },
+                    { label: 'Gross Margin %',             value: `${marginPct}%`,            color: marginColor },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)', fontWeight: '600' }}>{label}</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '900', fontFamily: 'monospace', color }}>{value}</span>
+                    </div>
+                  ))}
+
+                  {/* Margin bar */}
+                  {price > 0 && (
+                    <div style={{ marginTop: '13px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                        <span style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>MARGIN HEALTH</span>
+                        <span style={{ fontSize: '0.52rem', fontWeight: '900', color: marginColor, fontFamily: 'monospace' }}>{marginPct}%</span>
                       </div>
-                    ))}
-{recipeIngredientRows.some(row => {
-  const inv = inventory.find(i => i._id === row.inventoryId);
-  return inv && inv.currentStock <= 0;
-}) && (
-  <div style={{
-    display: 'flex', alignItems: 'flex-start', gap: '8px',
-    padding: '10px 13px', borderRadius: '8px', marginBottom: '10px',
-    background: 'rgba(211,191,162,0.05)',
-    border: '1px solid rgba(211,191,162,0.18)'
-  }}>
-    <Info size={13} color="rgba(211,191,162,0.6)" strokeWidth={1.8} style={{ marginTop: '1px', flexShrink: 0 }} />
-    <span style={{ fontSize: '0.65rem', color: 'rgba(211,191,162,0.6)', fontWeight: '600', lineHeight: 1.5 }}>
-      One or more ingredients currently have zero stock. The recipe will save normally.
-      The dish will only be hidden automatically when stock hits zero <strong>during a settlement</strong>, 
-      and only if Auto-Hide is enabled in settings. Saving this recipe does not affect dish visibility.
-    </span>
-  </div>
-)}
-                    <div style={{display:'flex',gap:'12px',marginTop:'10px'}}>
-                      <button onClick={()=>setRecipeIngredientRows(p=>[...p,{inventoryId:'',quantityUsed:''}])}
-                        style={{...styles.ghostBtn,flex:1}}>+ ADD INGREDIENT</button>
-                      <button onClick={async()=>{
-  if(!activeRecipeItemId) return showNotif("Select a menu item first","error");
-  const valid=recipeIngredientRows.filter(r=>r.inventoryId&&r.quantityUsed);
-  if(!valid.length) return showNotif("Add at least one ingredient","error");
-// Find the SAVE RECIPE button onClick in document 5, replace the try block:
-try {
-    await axios.post(`${BASE_URL}/recipes/save`, {
-        tenantId,
-        menuItemId: activeRecipeItemId,
-        ingredients: valid.map(r => ({
-            inventoryId: r.inventoryId,
-            quantityUsed: Number(r.quantityUsed)
-        }))
-    });
+                      <div style={{ height: '5px', background: 'rgba(255,255,255,0.07)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(Math.max(marginPct, 0), 100)}%`, background: marginColor, borderRadius: '3px', transition: 'width 0.45s ease' }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                        <span style={{ fontSize: '0.44rem', color: '#c87272', fontWeight: '700' }}>LOW &lt;35%</span>
+                        <span style={{ fontSize: '0.44rem', color: '#c8a84b', fontWeight: '700' }}>FAIR 35–55%</span>
+                        <span style={{ fontSize: '0.44rem', color: '#d3bfa2', fontWeight: '700' }}>GOOD &gt;55%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-    // ← FIXED: always refetch from server so populated data is fresh
-    const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-    setRecipes(recipesRes.data || []);
-
-    showNotif('Recipe saved ✓');
-
-    // Reset form so it's clear the save worked
-    setActiveRecipeItemId('');
-    setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
-
-    fetchAnalytics();      // refresh profitability
-    fetchManagementData(); // refresh inventory
-} catch {
-    showNotif('Failed to save recipe', 'error');
-}
-
-}}style={{...styles.mainBtn,flex:2,background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>SAVE RECIPE</button>
+                {/* Historical data */}
+                {profRow?.totalQtySold > 0 && (
+                  <div style={{ margin: '0 14px 14px', padding: '10px 12px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '9px' }}>
+                    <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.4)', fontWeight: '900', letterSpacing: '2px', marginBottom: '8px' }}>HISTORICAL PERFORMANCE</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+                      {[
+                        { label: 'Units Sold',   value: profRow.totalQtySold },
+                        { label: 'Revenue',      value: `₹${(profRow.totalRevenue || 0).toLocaleString()}` },
+                        { label: 'Gross Profit', value: `₹${Math.round(profRow.grossProfit || 0).toLocaleString()}` },
+                      ].map(({ label, value }) => (
+                        <div key={label} style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>{value}</div>
+                          <div style={{ fontSize: '0.44rem', color: 'rgba(255,255,255,0.3)', marginTop: '2px', fontWeight: '600' }}>{label}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              </div>
+                )}
 
-{/* RECIPE COVERAGE PROGRESS BAR */}
-{(() => {
-  const mappedCount = recipes.filter(r => r.ingredients?.length > 0).length;
-  const totalCount = menuItems.length;
-  const pct = totalCount > 0 ? Math.round((mappedCount / totalCount) * 100) : 0;
-  return (
-    <div style={{
-      background: '#050505', border: '1px solid #111',
-      borderRadius: '12px', padding: '16px 20px',
-      display: 'flex', alignItems: 'center', gap: '20px'
-    }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '800', letterSpacing: '1px' }}>
-            RECIPE COVERAGE
-          </span>
-          <span style={{ fontSize: '0.65rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>
-            {mappedCount} / {totalCount} dishes
-          </span>
+                {/* Zero stock warning */}
+                {recipeIngredientRows.some(row => { const inv = inventory.find(i => i._id === row.inventoryId); return inv && inv.currentStock <= 0; }) && (
+                  <div style={{ margin: '0 14px 14px', display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '9px 11px', background: 'rgba(200,168,75,0.07)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: '8px' }}>
+                    <AlertTriangle size={12} color="#c8a84b" strokeWidth={2} style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <span style={{ fontSize: '0.6rem', color: 'rgba(200,168,75,0.8)', lineHeight: 1.55, fontWeight: '500' }}>
+                      Some ingredients are at zero stock. Recipe saves normally — dish only hides during settlement if Auto-Hide is enabled.
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
-        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', width: `${pct}%`,
-            background: 'linear-gradient(90deg,#d3bfa2,#bda88a)',
-            borderRadius: '2px', transition: 'width 0.6s ease'
-          }} />
-        </div>
-      </div>
-      <div style={{
-        fontSize: '1.4rem', fontWeight: '900',
-        color: pct === 100 ? '#d3bfa2' : '#333',
-        fontFamily: 'monospace', flexShrink: 0, minWidth: '48px', textAlign: 'right'
-      }}>
-        {pct}%
-      </div>
-      {pct < 100 && (
-        <div style={{ fontSize: '0.58rem', color: '#444', maxWidth: '140px', lineHeight: 1.5, flexShrink: 0 }}>
-          {totalCount - mappedCount} dishes without recipes — profitability data incomplete
-        </div>
-      )}
-    </div>
-  );
-})()}
-              {/* RECIPE CARDS */}
-              <div style={styles.biCard}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
-<h4 style={{...styles.biTitle,margin:0,color:'#fff'}}>
-  CONFIGURED RECIPES ({recipes.filter(r => r.ingredients?.length > 0).length} / {menuItems.length} dishes mapped)
-</h4>                  {/* ── Recipe search ── */}
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#000',border:'1px solid #121212',borderRadius:'8px',padding:'8px 14px'}}>
-                    <Search size={13} color="#444"/>
-                    <input type="text" placeholder="Search dish..." value={recipeSearchQuery}
-                      onChange={e=>setRecipeSearchQuery(e.target.value)}
-                      style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'130px'}}/>
+
+        {/* ── RIGHT: Ingredient rows ── */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(255,255,255,0.3)', letterSpacing: '2px', display: 'block', marginBottom: '10px' }}>INGREDIENTS PER SERVING</label>
+
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 88px 36px', gap: '8px', marginBottom: '8px', padding: '0 2px' }}>
+            {['INGREDIENT', 'QTY', 'LINE COST', ''].map(h => (
+              <span key={h} style={{ fontSize: '0.46rem', fontWeight: '900', color: 'rgba(255,255,255,0.2)', letterSpacing: '1.5px' }}>{h}</span>
+            ))}
+          </div>
+
+          {/* Rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            {recipeIngredientRows.map((row, idx) => {
+              const inv        = inventory.find(i => i._id === row.inventoryId);
+              const unitCost   = inv ? (inv.weightedAvgCost || inv.costPrice || 0) : 0;
+              const lineCost   = unitCost * (Number(row.quantityUsed) || 0);
+              const isZero     = inv && inv.currentStock <= 0;
+              const isLow      = inv && inv.currentStock > 0 && inv.currentStock <= inv.minThreshold;
+
+              return (
+                <div key={idx}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 88px 36px', gap: '8px', alignItems: 'center' }}>
+
+                    {/* Ingredient select */}
+                    <div>
+                      <select
+                        value={row.inventoryId}
+                        onChange={e => { const u = [...recipeIngredientRows]; u[idx].inventoryId = e.target.value; setRecipeIngredientRows(u); }}
+                        style={{ width: '100%', padding: '9px 11px', background: '#0a0a0a', border: `1px solid ${isZero ? 'rgba(200,168,75,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#c8a84b' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
+                        <option value="">— Select —</option>
+                        {inventory.map(i => (
+                          <option key={i._id} value={i._id}>
+                            {i.itemName} ({i.unit}){i.currentStock <= 0 ? ' · OUT' : i.currentStock <= i.minThreshold ? ' · LOW' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {inv && (
+                        <div style={{ marginTop: '3px', paddingLeft: '3px', fontSize: '0.48rem', color: isZero ? '#c8a84b' : 'rgba(255,255,255,0.28)', fontWeight: '600' }}>
+                          Stock: <span style={{ fontFamily: 'monospace' }}>{inv.currentStock} {inv.unit}</span>
+                          &nbsp;·&nbsp;WAC: <span style={{ fontFamily: 'monospace' }}>₹{(inv.weightedAvgCost || inv.costPrice || 0).toFixed(2)}/{inv.unit}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Qty */}
+                    <input
+                      type="number" placeholder="Qty" min="0" step="0.01"
+                      value={row.quantityUsed}
+                      onChange={e => { const u = [...recipeIngredientRows]; u[idx].quantityUsed = e.target.value; setRecipeIngredientRows(u); }}
+                      style={{ padding: '9px 10px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace' }} />
+
+                    {/* Line cost */}
+                    <div style={{ height: '37px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: lineCost > 0 ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${lineCost > 0 ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.06)'}`, borderRadius: '9px' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: lineCost > 0 ? '#d3bfa2' : 'rgba(255,255,255,0.15)', fontFamily: 'monospace' }}>
+                        {lineCost > 0 ? `₹${lineCost.toFixed(2)}` : '—'}
+                      </span>
+                    </div>
+
+                    {/* Remove */}
+                    <button
+                      onClick={() => setRecipeIngredientRows(p => p.filter((_, i) => i !== idx))}
+                      style={{ width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', transition: 'all 0.15s', flexShrink: 0 }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,114,114,0.4)'; e.currentTarget.style.color = '#c87272'; e.currentTarget.style.background = 'rgba(200,114,114,0.07)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}>
+                      <X size={13} strokeWidth={2.2} />
+                    </button>
                   </div>
                 </div>
-<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'15px'}}>
-  {menuItems.filter(m=>m.name.toLowerCase().includes(recipeSearchQuery.toLowerCase())).map(dish=>{
-    // Check if this dish has a recipe configured
-    const hasRecipe = recipes.some(r => r.menuItemId?.toString() === dish._id.toString() && r.ingredients?.length > 0);
-    const recipeForDish = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
-    const ingredientCount = recipeForDish?.ingredients?.length || 0;
-    
-    return (
-      <div key={dish._id}
-        style={{background:'#050505',border:`1px solid ${
-          activeRecipeItemId===dish._id 
-            ? 'rgba(211,191,162,0.4)' 
-            : hasRecipe 
-            ? 'rgba(211,191,162,0.15)' 
-            : '#111'
-        }`,
-          padding:'16px',borderRadius:'12px',cursor:'pointer',
-          transition:'border-color 0.2s',position:'relative'}}
-onClick={() => {
-    setActiveRecipeItemId(dish._id);
-    const ex = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
-    setRecipeIngredientRows(
-        ex?.ingredients?.length
-            ? ex.ingredients.map(i => ({
-                // ← FIXED: handle both populated object and raw ObjectId
-                inventoryId: i.inventoryId?._id
-                    ? i.inventoryId._id.toString()
-                    : (i.inventoryId?.toString() || ''),
-                quantityUsed: i.quantityUsed
-              }))
-            : [{ inventoryId: '', quantityUsed: '' }]
-    );
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}}>
-        
-        {/* Status badge top-right */}
-        <div style={{
-          position:'absolute',top:'10px',right:'10px',
-          fontSize:'0.5rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',
-          background: hasRecipe ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)',
-          border: `1px solid ${hasRecipe ? 'rgba(211,191,162,0.2)' : '#1a1a1a'}`,
-          color: hasRecipe ? '#d3bfa2' : '#333',
-          letterSpacing:'0.5px'
-        }}>
-          {hasRecipe ? `${ingredientCount} INGREDIENTS` : 'NOT MAPPED'}
-        </div>
-
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',paddingRight:'90px'}}>
-          <span style={{fontWeight:'900',color:'#fff',fontSize:'0.85rem'}}>{dish.name}</span>
-        </div>
-
-        {/* Price + profitability hint */}
-        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
-          <span style={{fontSize:'0.6rem',padding:'2px 8px',borderRadius:'4px',background:'rgba(211,191,162,0.05)',color:'#555',border:'1px solid #111'}}>
-            ₹{dish.price}
-          </span>
-          {dish._eng?.marginPct > 0 && (
-            <span style={{
-              fontSize:'0.58rem',padding:'2px 7px',borderRadius:'4px',
-              background: dish._eng.marginPct >= 55 ? 'rgba(211,191,162,0.06)' : 'rgba(255,100,100,0.06)',
-              color: dish._eng.marginPct >= 55 ? '#d3bfa2' : '#f87171',
-              border:`1px solid ${dish._eng.marginPct >= 55 ? 'rgba(211,191,162,0.15)' : 'rgba(248,113,113,0.15)'}`
-            }}>
-              {dish._eng.marginPct}% margin
-            </span>
-          )}
-        </div>
-
-        {/* Ingredient preview if mapped */}
-        {hasRecipe && recipeForDish?.ingredients?.length > 0 && (
-          <div style={{display:'flex',flexWrap:'wrap',gap:'4px',marginTop:'6px'}}>
-            {recipeForDish.ingredients.slice(0,3).map((ing,i) => (
-              <span key={i} style={{
-                fontSize:'0.55rem',padding:'1px 6px',borderRadius:'3px',
-                background:'#0a0a0a',border:'1px solid #151515',color:'#555'
-              }}>
-                {ing.inventoryId?.itemName || 'Unknown'} · {ing.quantityUsed} {ing.inventoryId?.unit || ''}
-              </span>
-            ))}
-            {recipeForDish.ingredients.length > 3 && (
-              <span style={{fontSize:'0.55rem',color:'#333',padding:'1px 4px'}}>
-                +{recipeForDish.ingredients.length - 3} more
-              </span>
-            )}
+              );
+            })}
           </div>
-        )}
 
-        {hasRecipe && (
-  <button
-    onClick={async (e) => {
-      e.stopPropagation();
-      if (!window.confirm(`Remove recipe for "${dish.name}"?`)) return;
-      try {
-        await axios.delete(`${BASE_URL}/recipes/${tenantId}/${dish._id}`);
-        // Refresh recipes state
-        const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
-        setRecipes(recipesRes.data || []);
-        if (activeRecipeItemId === dish._id) {
-          setActiveRecipeItemId('');
-          setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
-        }
-        showNotif('Recipe removed');
-      } catch { showNotif('Failed to remove', 'error'); }
-    }}
-    style={{
-      marginTop: '8px', background: 'transparent',
-      border: '1px solid #1a1a1a', color: '#333',
-      padding: '5px 10px', borderRadius: '6px',
-      fontSize: '0.58rem', fontWeight: '800', cursor: 'pointer',
-      width: '100%', transition: 'all 0.15s'
-    }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; e.currentTarget.style.color = '#f87171'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-  >
-    REMOVE RECIPE
-  </button>
-)}
+          {/* Total cost strip */}
+          {recipeIngredientRows.some(r => r.inventoryId && r.quantityUsed) && (() => {
+            const dish = menuItems.find(m => m._id === activeRecipeItemId);
+            const total = recipeIngredientRows.reduce((sum, row) => {
+              const inv = inventory.find(i => i._id === row.inventoryId);
+              return sum + ((inv ? (inv.weightedAvgCost || inv.costPrice || 0) : 0) * (Number(row.quantityUsed) || 0));
+            }, 0);
+            const price = dish?.price || 0;
+            const margin = price > 0 ? Math.round(((price - total) / price) * 100) : null;
+            return (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', padding: '11px 15px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px' }}>
+                <span style={{ fontSize: '0.6rem', fontWeight: '800', color: 'rgba(211,191,162,0.7)', letterSpacing: '0.5px' }}>TOTAL INGREDIENT COST</span>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{total.toFixed(2)}</span>
+                  {price > 0 && margin !== null && (
+                    <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
+                      {margin}% margin on ₹{price}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
-        <div style={{fontSize:'0.65rem',color:'#333',fontStyle:'italic',marginTop:'8px'}}>
-          {activeRecipeItemId===dish._id ? '✓ Currently editing' : hasRecipe ? 'Click to edit →' : 'Click to add recipe →'}
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+            <button
+              onClick={() => setRecipeIngredientRows(p => [...p, { inventoryId: '', quantityUsed: '' }])}
+              style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', fontSize: '0.6rem', fontWeight: '800', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; }}>
+              <Package size={13} strokeWidth={2} />
+              ADD INGREDIENT
+            </button>
+            <button
+              disabled={!activeRecipeItemId}
+              onClick={async () => {
+                if (!activeRecipeItemId) return showNotif('Select a menu item first', 'error');
+                const valid = recipeIngredientRows.filter(r => r.inventoryId && r.quantityUsed);
+                if (!valid.length) return showNotif('Add at least one ingredient', 'error');
+                try {
+                  await axios.post(`${BASE_URL}/recipes/save`, { tenantId, menuItemId: activeRecipeItemId, ingredients: valid.map(r => ({ inventoryId: r.inventoryId, quantityUsed: Number(r.quantityUsed) })) });
+                  const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+                  setRecipes(recipesRes.data || []);
+                  showNotif('Recipe saved');
+                  setActiveRecipeItemId('');
+                  setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
+                  fetchAnalytics();
+                  fetchManagementData();
+                } catch { showNotif('Failed to save recipe', 'error'); }
+              }}
+              style={{ flex: 2, padding: '11px', borderRadius: '10px', border: 'none', background: activeRecipeItemId ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : 'rgba(255,255,255,0.04)', color: activeRecipeItemId ? '#0a0a0a' : 'rgba(255,255,255,0.2)', fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px', cursor: activeRecipeItemId ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.2s' }}>
+              <PackageCheck size={14} strokeWidth={2} />
+              SAVE RECIPE
+            </button>
+          </div>
         </div>
       </div>
-    );
-  })}
+    </div>
 
-</div>
+    {/* ══════════ RECIPE CARDS LIST ══════════ */}
+    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '18px', overflow: 'hidden' }}>
+
+      {/* List header */}
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(211,191,162,0.03)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Boxes size={14} color="#d3bfa2" strokeWidth={1.5} />
+          <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px' }}>
+            DISH RECIPES
+          </span>
+          <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
+            · {recipes.filter(r => r.ingredients?.length > 0).length} / {menuItems.length} mapped
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px' }}>
+          <Search size={12} color="rgba(255,255,255,0.3)" strokeWidth={1.8} />
+          <input type="text" placeholder="Search dish..." value={recipeSearchQuery || ''}
+            onChange={e => setRecipeSearchQuery(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.72rem', width: '130px' }} />
+        </div>
+      </div>
+
+      {/* Cards grid */}
+      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+        {menuItems
+          .filter(m => m.name.toLowerCase().includes((recipeSearchQuery || '').toLowerCase()))
+          .map(dish => {
+            const recipeForDish = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
+            const hasRecipe     = recipeForDish?.ingredients?.length > 0;
+            const isActive      = activeRecipeItemId === dish._id;
+            const profRow       = profitabilityData.find(p => p._id?.toString() === dish._id.toString());
+
+            const recipeCost = hasRecipe
+              ? recipeForDish.ingredients.reduce((sum, ing) => {
+                  const inv = ing.inventoryId;
+                  if (!inv) return sum;
+                  return sum + ((inv.weightedAvgCost || inv.costPrice || 0) * ing.quantityUsed);
+                }, 0)
+              : null;
+
+            const margin = recipeCost !== null && dish.price > 0
+              ? Math.round(((dish.price - recipeCost) / dish.price) * 100)
+              : null;
+
+            const marginColor = margin === null ? null : margin >= 55 ? '#d3bfa2' : margin >= 35 ? '#c8a84b' : '#c87272';
+            const hasOutIngredient = hasRecipe && recipeForDish.ingredients.some(ing => ing.inventoryId?.currentStock <= 0);
+
+            return (
+              <div
+                key={dish._id}
+                onClick={() => {
+                  setActiveRecipeItemId(dish._id);
+                  const ex = recipes.find(r => r.menuItemId?.toString() === dish._id.toString());
+                  setRecipeIngredientRows(ex?.ingredients?.length
+                    ? ex.ingredients.map(i => ({ inventoryId: i.inventoryId?._id ? i.inventoryId._id.toString() : (i.inventoryId?.toString() || ''), quantityUsed: i.quantityUsed }))
+                    : [{ inventoryId: '', quantityUsed: '' }]);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                style={{
+                  background: isActive ? 'rgba(211,191,162,0.07)' : hasRecipe ? 'rgba(255,255,255,0.03)' : '#050505',
+                  border: `1px solid ${isActive ? 'rgba(211,191,162,0.4)' : hasRecipe ? 'rgba(211,191,162,0.15)' : 'rgba(255,255,255,0.07)'}`,
+                  borderRadius: '13px', padding: '15px', cursor: 'pointer',
+                  transition: 'all 0.2s', position: 'relative'
+                }}
+              >
+                {/* Top badges */}
+                <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  {isActive && (
+                    <span style={{ fontSize: '0.46rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px', background: 'rgba(211,191,162,0.15)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.3)', letterSpacing: '0.5px' }}>EDITING</span>
+                  )}
+                  {hasOutIngredient && (
+                    <AlertTriangle size={11} color="#c8a84b" strokeWidth={2} />
+                  )}
+                  <span style={{ fontSize: '0.46rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px', background: hasRecipe ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.03)', color: hasRecipe ? '#d3bfa2' : 'rgba(255,255,255,0.25)', border: `1px solid ${hasRecipe ? 'rgba(211,191,162,0.18)' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.5px' }}>
+                    {hasRecipe ? `${recipeForDish.ingredients.length} ING` : 'NOT MAPPED'}
+                  </span>
+                </div>
+
+                {/* Dish name */}
+                <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#ffffff', marginBottom: '8px', paddingRight: '90px', lineHeight: 1.3 }}>
+                  {dish.name}
+                </div>
+
+                {/* Price · cost · margin row */}
+                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '5px', background: 'rgba(211,191,162,0.08)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.18)', fontFamily: 'monospace', fontWeight: '800' }}>
+                    ₹{dish.price}
+                  </span>
+                  {recipeCost !== null && (
+                    <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '5px', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace', fontWeight: '700' }}>
+                      Cost ₹{recipeCost.toFixed(2)}
+                    </span>
+                  )}
+                  {margin !== null && (
+                    <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '5px', fontWeight: '900', fontFamily: 'monospace', background: `${marginColor}18`, color: marginColor, border: `1px solid ${marginColor}40` }}>
+                      {margin}% margin
+                    </span>
+                  )}
+                </div>
+
+                {/* Ingredient chips */}
+                {hasRecipe && recipeForDish.ingredients.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '9px' }}>
+                    {recipeForDish.ingredients.slice(0, 4).map((ing, i) => {
+                      const invItem = ing.inventoryId;
+                      const isOut   = invItem?.currentStock <= 0;
+                      return (
+                        <span key={i} style={{ fontSize: '0.52rem', padding: '3px 7px', borderRadius: '4px', background: isOut ? 'rgba(200,168,75,0.08)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isOut ? 'rgba(200,168,75,0.25)' : 'rgba(255,255,255,0.1)'}`, color: isOut ? '#c8a84b' : 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
+                          {invItem?.itemName || 'Unknown'} · {ing.quantityUsed}{invItem?.unit || ''}
+                          {isOut ? ' OUT' : ''}
+                        </span>
+                      );
+                    })}
+                    {recipeForDish.ingredients.length > 4 && (
+                      <span style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.25)', padding: '3px 5px', fontWeight: '600' }}>+{recipeForDish.ingredients.length - 4} more</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Sales line */}
+                {profRow?.totalQtySold > 0 && (
+                  <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.35)', marginBottom: '8px', fontWeight: '600' }}>
+                    {profRow.totalQtySold} sold · ₹{Math.round(profRow.grossProfit || 0).toLocaleString()} gross profit
+                  </div>
+                )}
+
+                {/* Remove */}
+                {hasRecipe && (
+                  <button
+                    onClick={async e => {
+                      e.stopPropagation();
+                      if (!window.confirm(`Remove recipe for "${dish.name}"?`)) return;
+                      try {
+                        await axios.delete(`${BASE_URL}/recipes/${tenantId}/${dish._id}`);
+                        const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
+                        setRecipes(recipesRes.data || []);
+                        if (activeRecipeItemId === dish._id) { setActiveRecipeItemId(''); setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]); }
+                        showNotif('Recipe removed');
+                      } catch { showNotif('Failed to remove', 'error'); }
+                    }}
+                    style={{ width: '100%', padding: '7px', borderRadius: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', fontSize: '0.56rem', fontWeight: '800', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,114,114,0.35)'; e.currentTarget.style.color = '#c87272'; e.currentTarget.style.background = 'rgba(200,114,114,0.06)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'transparent'; }}>
+                    REMOVE RECIPE
+                  </button>
+                )}
+
+                {/* Edit hint */}
+                <div style={{ fontSize: '0.5rem', color: isActive ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.18)', fontStyle: 'italic', marginTop: '7px', fontWeight: '500' }}>
+                  {isActive ? 'Currently editing above' : hasRecipe ? 'Click to edit' : 'Click to add recipe'}
+                </div>
               </div>
-            </motion.div>
-          )}
+            );
+          })}
+      </div>
+    </div>
+  </motion.div>
+)}
 
 {/* ── RESERVATIONS TAB (FULL PAGE) ── */}
 {activeTab === 'reservations' && (

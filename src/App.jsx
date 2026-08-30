@@ -5248,24 +5248,35 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                       </>
                     )}
                     {/* Engineering badge inline */}
-                    {isStar && (
-                      <span style={{
-                        fontSize: '0.48rem', fontWeight: '900', padding: '1px 5px',
-                        borderRadius: '3px',
-                        background: 'rgba(201,168,76,0.1)',
-                        color: '#c9a84c',
-                        border: '1px solid rgba(201,168,76,0.25)'
-                      }}>★ BESTSELLER</span>
-                    )}
-                    {isPuzzle && !isStar && (
-                      <span style={{
-                        fontSize: '0.48rem', fontWeight: '900', padding: '1px 5px',
-                        borderRadius: '3px',
-                        background: 'rgba(189,168,138,0.1)',
-                        color: '#bda88a',
-                        border: '1px solid rgba(189,168,138,0.22)'
-                      }}>✦ CHEF PICK</span>
-                    )}
+{/* ── BESTSELLER — isBestSeller field or star quadrant ── */}
+{(isStar || item.isBestSeller === true) && (
+  <span style={{
+    fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px',
+    borderRadius: '3px',
+    background: 'rgba(211,191,162,0.08)',
+    color: '#d3bfa2',
+    border: '1px solid rgba(211,191,162,0.22)',
+    display: 'inline-flex', alignItems: 'center', gap: '2px'
+  }}>
+    <Tag size={7} strokeWidth={2.5} />
+    {item.bestsellerRank ? `#${item.bestsellerRank}` : ''} {language === 'mr' ? 'बेस्टसेलर' : 'BESTSELLER'}
+  </span>
+)}
+
+{/* ── MUST TRY — puzzle quadrant, only when NOT chef special ── */}
+{isPuzzle && !isStar && !item.isBestSeller && item.isChefSpecial !== true && (
+  <span style={{
+    fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px',
+    borderRadius: '3px',
+    background: 'rgba(189,168,138,0.08)',
+    color: '#bda88a',
+    border: '1px solid rgba(189,168,138,0.2)',
+    display: 'inline-flex', alignItems: 'center', gap: '2px'
+  }}>
+    <Sparkles size={7} strokeWidth={2.5} />
+    {language === 'mr' ? 'नक्की ट्राय करा' : 'MUST TRY'}
+  </span>
+)}
                   </div>
                 </div>
  
@@ -5423,13 +5434,15 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
 {filteredMenuItems.map((item) => (
               <div key={item._id} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
-    <div style={styles.tagContainer}>
-      {item.isChefSpecial === true && (
-        <div style={styles.chefTag}>
-          <Sparkles size={10} style={{marginRight: '4px'}} /> {t[language].chefChoice}
-        </div>
-      )}
+<div style={styles.tagContainer}>
+  {/* Chef Pick — ONLY when isChefSpecial is explicitly true */}
+  {item.isChefSpecial === true && (
+    <div style={styles.chefTag}>
+      <Sparkles size={10} style={{ marginRight: '4px' }} />
+      {language === 'mr' ? 'शेफ पसंती' : 'CHEF PICK'}
     </div>
+  )}
+</div>
 <div style={styles.itemContentLeft}>
 <div style={{
   fontSize: '1.05rem', fontWeight: '700', color: '#fff',
@@ -5470,33 +5483,37 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
   {language === 'mr' ? item.name_mr : item.name}
  
   {/* ── ENGINEERING BADGE: BESTSELLER (gold) ── */}
-  {item._eng?.quadrant === 'star' && (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '3px',
-      fontSize: '0.5rem', fontWeight: '900', letterSpacing: '0.5px',
-      padding: '2px 7px', borderRadius: '4px',
-      background: 'rgba(201,168,76,0.12)',
-      color: '#c9a84c',
-      border: '1px solid rgba(201,168,76,0.3)'
-    }}>
-      ★ {language === 'mr' ? 'बेस्टसेलर' : 'BESTSELLER'}
-    </span>
-  )}
- 
-  {/* ── ENGINEERING BADGE: CHEF RECOMMENDS (warm amber — NO green) ── */}
-  {item._eng?.quadrant === 'puzzle' && (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '3px',
-      fontSize: '0.5rem', fontWeight: '900', letterSpacing: '0.5px',
-      padding: '2px 7px', borderRadius: '4px',
-      background: 'rgba(189,168,138,0.12)',
-      color: '#bda88a',
-      border: '1px solid rgba(189,168,138,0.28)'
-    }}>
-      ✦ {language === 'mr' ? 'शेफ पसंती' : 'CHEF PICK'}
-    </span>
-  )}
- 
+{/* ── BESTSELLER badge: isBestSeller field (auto-computed) OR star quadrant ── */}
+{(item.isBestSeller === true || item._eng?.quadrant === 'star') && (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: '3px',
+    fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
+    padding: '2px 7px', borderRadius: '4px',
+    background: 'rgba(211,191,162,0.1)',
+    color: '#d3bfa2',
+    border: '1px solid rgba(211,191,162,0.28)'
+  }}>
+    <Tag size={8} strokeWidth={2.5} />
+    {item.bestsellerRank
+      ? (language === 'mr' ? `#${item.bestsellerRank} बेस्टसेलर` : `#${item.bestsellerRank} BESTSELLER`)
+      : (language === 'mr' ? 'बेस्टसेलर' : 'BESTSELLER')}
+  </span>
+)}
+
+{/* ── MUST TRY: puzzle quadrant AND isChefSpecial is NOT true ── */}
+{item._eng?.quadrant === 'puzzle' && item.isChefSpecial !== true && (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: '3px',
+    fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
+    padding: '2px 7px', borderRadius: '4px',
+    background: 'rgba(189,168,138,0.09)',
+    color: '#bda88a',
+    border: '1px solid rgba(189,168,138,0.22)'
+  }}>
+    <Sparkles size={8} strokeWidth={2.5} />
+    {language === 'mr' ? 'नक्की ट्राय करा' : 'MUST TRY'}
+  </span>
+)}
   {/* ── SPICE BADGE ── */}
   {item.spicylevel && (
     <span style={{
@@ -8742,34 +8759,10 @@ contentWrapper: {
   drawerRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
   drawerFooter: { padding: '20px', paddingBottom: '40px' },
   billLinkBtn: { background: 'none', border: 'none', color: '#888', marginTop: '15px', width: '100%', fontSize: '0.8rem', textDecoration: 'underline' },
-modalOverlay: {
-  position: 'fixed', top: 0, left: 0,
-  width: '100vw', height: '100vh',
-  zIndex: 7000, display: 'flex',
-  flexDirection: 'column',
-  background: '#050505',
-  overflowY: 'auto'
-},
-modalNav: {
-  padding: '14px 18px 12px 18px',
-  display: 'flex', justifyContent: 'space-between',
-  alignItems: 'center',
-  background: 'rgba(5,5,5,0.96)',
-  borderBottom: '1px solid rgba(211,191,162,0.09)',
-  position: 'sticky', top: 0, zIndex: 10,
-  backdropFilter: 'blur(16px)',
-  WebkitBackdropFilter: 'blur(16px)'
-},
-modalTitle: {
-  margin: 0, fontSize: '1.05rem',
-  fontWeight: '900', lineHeight: 1.2,
-  letterSpacing: '-0.3px'
-},
-modelContainer: {
-  flex: 1, background: '#080808',
-  display: 'flex', flexDirection: 'column',
-  position: 'relative', overflowY: 'auto'
-},
+modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 7000, display: 'flex', flexDirection: 'column', background: '#050505', overflow: 'hidden' },
+modalNav: { padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211,191,162,0.09)', flexShrink: 0, position: 'sticky', top: 0, zIndex: 10, background: 'rgba(5,5,5,0.97)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' },
+modalTitle: { margin: 0, fontSize: '1rem', fontWeight: '800' },
+modelContainer: { flex: 1, background: '#080808', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' },
 dishModelWrapper: {
   width: '100%', height: '52vmax',
   maxHeight: '62vh', minHeight: '260px',

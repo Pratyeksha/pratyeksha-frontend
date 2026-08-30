@@ -404,22 +404,43 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
     return p;
   }, [menuItems]);
 
-  const categoryPendingCounts = useMemo(() => {
-    const counts = {};
-    orders.forEach(order => {
-      const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-      if (stationFilter === 'DINEIN' && isTakeaway) return;
-      if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return;
-      order.items.forEach((item, idx) => {
-        if (checkedItemsGlobal[`${order._id}-${idx}`]) return;
-        let fId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
-        const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-        const matches = isNonVegMode ? !isVeg : isVeg;
-        if (fId && matches) counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 0);
-      });
+const categoryPendingCounts = useMemo(() => {
+  const counts = {};
+  orders.forEach(order => {
+    // Only count active orders (pending + ready — not served/settled)
+    if (!['pending', 'ready'].includes(order.status)) return;
+
+    const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
+    if (stationFilter === 'DINEIN' && isTakeaway) return;
+    if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return;
+
+    order.items.forEach((item, idx) => {
+      if (item.isExtraItem || item.extraItemId != null) return;
+
+      // Use categoryId from item first, fallback to dishToCategoryMap
+      let fId = item.categoryId?.toLowerCase().trim()
+             || dishToCategoryMap[item.name?.toLowerCase().trim()]
+             || null;
+
+      if (!fId) return;
+
+      const isVeg = item.isVeg !== undefined
+        ? item.isVeg !== false
+        : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+      const matches = isNonVegMode ? !isVeg : isVeg;
+
+      if (matches) {
+        // Count unchecked items as active tickets
+        const isChecked = checkedItemsGlobal[`${order._id}-${idx}`];
+        if (!isChecked) {
+          counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 1);
+        }
+      }
     });
-    return counts;
-  }, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
+  });
+  return counts;
+}, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
+
 
 const filteredOrders = useMemo(() => {
   return orders.filter(order => {
@@ -444,14 +465,19 @@ const filteredOrders = useMemo(() => {
     // their item names won't reliably map to internal categoryIds,
     // and the chef must never lose visibility of an accepted online order ──
     const isAggregator = order.source === 'swiggy' || order.source === 'zomato';
-    if (selectedCategory !== 'ALL' && !isAggregator) {
-      return order.items.some(item => {
-        if (item.isExtraItem || item.extraItemId != null) return false;
-        let cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
-        return cId === selectedCategory.toLowerCase().trim();
-      });
-    }
-    return true;
+if (selectedCategory !== 'ALL' && !isAggregator) {
+  // Order passes if ANY non-extra item belongs to the selected category
+  const sel = selectedCategory.toLowerCase().trim();
+  const hasMatch = order.items?.some(item => {
+    if (item.isExtraItem || item.extraItemId != null) return false;
+    const cId = (item.categoryId?.toLowerCase().trim())
+             || (dishToCategoryMap[item.name?.toLowerCase().trim()])
+             || '';
+    return cId === sel;
+  });
+  if (!hasMatch) return false;
+}
+return true;
   });
 }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode]);
 
@@ -575,13 +601,21 @@ const masterPrepMarqueeList = useMemo(() => {
   );
 
   /* ── visible category list ── */
-  const visibleCategories = categories.filter(cat => {
+const visibleCategories = useMemo(() => {
+  return categories.filter(cat => {
     const k = cat.categoryId?.toLowerCase().trim() || '';
-    const p = categoryVegProfile[k];
-    if (!p) return false;
-    if (tenantOnlyVeg) return p.hasVeg;
-    return isNonVegMode ? p.hasNonVeg : p.hasVeg;
+    if (!k) return false;
+
+    // Always show a category if it has PENDING tickets right now
+    if (categoryPendingCounts[k] > 0) return true;
+
+    // Also show if menuItems confirms dishes exist in this category
+    const profile = categoryVegProfile[k];
+    if (!profile) return false;
+    if (tenantOnlyVeg) return profile.hasVeg;
+    return isNonVegMode ? profile.hasNonVeg : profile.hasVeg;
   });
+}, [categories, categoryPendingCounts, categoryVegProfile, tenantOnlyVeg, isNonVegMode]);
 
   /* ─────────────────────────────────────
      DERIVED LAYOUT FLAGS
@@ -647,13 +681,26 @@ const masterPrepMarqueeList = useMemo(() => {
             <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
             <span>ALL SECTIONS</span>
           </div>
-          <span style={{
-            ...rs.countBadge,
-            background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129',
-            color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f'
-          }}>
-            {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
-          </span>
+{/* Count badge — number of active orders in this category */}
+<span style={{
+  ...rs.countBadge,
+  background: sel ? '#0f1013' : '#1a1c23',
+  color: sel ? '#d3bfa2' : '#8e94a4',
+  border: sel ? '1px solid #d3bfa2' : '1px solid #232730'
+}}>
+  {(() => {
+    // Count distinct orders that have items in this category
+    const activeInCat = orders.filter(o =>
+      ['pending', 'ready'].includes(o.status) &&
+      o.items?.some(item => {
+        const cId = item.categoryId?.toLowerCase().trim()
+                 || dishToCategoryMap[item.name?.toLowerCase().trim()];
+        return cId === k && !item.isExtraItem;
+      })
+    ).length;
+    return activeInCat < 10 ? `0${activeInCat}` : activeInCat;
+  })()}
+</span>
         </button>
 
         {visibleCategories.map(cat => {
