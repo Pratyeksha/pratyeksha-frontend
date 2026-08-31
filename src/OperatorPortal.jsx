@@ -1057,6 +1057,28 @@ const purchaseRecommendations = useMemo(() => {
     return { revenue, avg: count > 0 ? (revenue/count).toFixed(0) : 0, loyaltyRate };
   }, [currentMonthAnalytics, trendsData]);
 
+
+  const canonicalMonthRevenue = stats.revenue;
+
+
+  // ── SINGLE CANONICAL REVENUE SOURCE for all insights sections ──
+// Always reads from settled invoices in analytics (same as stats.revenue)
+const insightsRevenue = useMemo(() => {
+  const rev   = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
+  const count = currentMonthAnalytics.reduce((a, b) => a + (b.count  || 0), 0);
+  const gst   = rev > 0 ? rev / (1 + ((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) : 0;
+  const taxable = rev - gst;
+  return {
+    gross:    Math.round(rev),
+    count,
+    taxable:  Math.round(taxable),
+    gst:      Math.round(rev - taxable),
+    avg:      count > 0 ? Math.round(rev / count) : 0,
+    period:   `${viewDate.toLocaleString('en-IN', { month: 'long' })} ${viewDate.getFullYear()}`
+  };
+}, [currentMonthAnalytics, tenantConfig, viewDate]);
+
+
 const hudLiveCounterBreakdown = useMemo(() => {
   const fallback = { total: 0, direct: 0, takeaway: 0, online: 0 };
   if (!analytics?.length) return fallback;
@@ -1073,14 +1095,17 @@ const hudLiveCounterBreakdown = useMemo(() => {
     : currentMonthAnalytics;
  
   if (!entriesToSum.length) return fallback;
-  let direct = 0, takeaway = 0, online = 0;
-  entriesToSum.forEach(entry => {
-    const src = (entry.source || 'direct').toLowerCase();
-    if (src === 'takeaway') takeaway += (entry.count || 1);
-    else if (src === 'zomato' || src === 'swiggy' || src === 'online') online += (entry.count || 1);
-    else direct += (entry.count || 1);
-  });
-  return { total: direct + takeaway + online, direct, takeaway, online };
+let direct = 0, takeaway = 0, online = 0, pickup = 0, reservation = 0, waitlist = 0;
+entriesToSum.forEach(entry => {
+  const src = (entry.source || 'direct').toLowerCase();
+  if      (src === 'takeaway')                      takeaway    += (entry.count || 1);
+  else if (src === 'zomato' || src === 'swiggy')    online      += (entry.count || 1);
+  else if (src === 'counter-pickup')                pickup      += (entry.count || 1);
+  else if (src === 'reservation')                   reservation += (entry.count || 1);
+  else if (src === 'waitlist')                      waitlist    += (entry.count || 1);
+  else                                              direct      += (entry.count || 1);
+});
+return { total: direct + takeaway + online + pickup + reservation + waitlist, direct, takeaway, online, pickup, reservation, waitlist };
 }, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
 
@@ -2407,7 +2432,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       },0);
       const extraRev    = extraAnalytics?.totalRevenue||0;
       const extraCost   = extraAnalytics?.totalCost||0;
-      const totalRevPL  = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0)+extraRev;
+const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
       const ingCostPL   = totalIngredientCost+extraCost;
       const grossPL     = totalRevPL-ingCostPL;
       const netPL       = grossPL-monthlyPayroll;
@@ -3734,7 +3759,7 @@ const renderMonthHeatmap = () => {
   const maxRev=Math.max(...currentMonthAnalytics.map(a=>a.revenue||0),1);
 
   // ── Breakeven: estimate daily ingredient cost from profitabilityData
-  const totalRevenueAllTime = profitabilityData.reduce((a,b) => a+(b.totalRevenue||0), 0);
+const totalRevenueAllTime = canonicalMonthRevenue;
   const totalCostAllTime = profitabilityData.reduce((a,b) => a+(b.totalIngredientCost||0), 0);
   const costRatio = totalRevenueAllTime > 0 ? totalCostAllTime / totalRevenueAllTime : 0.4;
 
@@ -4309,1171 +4334,699 @@ const renderMonthHeatmap = () => {
 
 {activeTab === 'pending' && (
   
-  <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-    style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
-      
- 
-{/* ══════════════════════════════════════════════
-    ROW 1: Kitchen Tickets + Service Calls
-══════════════════════════════════════════════ */}
-<div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1px 1fr', gap: '0', width: '100%', background: '#080808', borderRadius: '20px', border: '1px solid rgba(211,191,162,0.08)', overflow: 'hidden' }} className="p-kds-row">
+// ═══════════════════════════════════════════════════════════════════════
+// PENDING TAB — COMPLETE UI ENHANCEMENT
+// Replace the entire block from:
+//   <motion.div key="pending" ...>
+// to the closing:
+//   </motion.div>  (before {/* ── MENU ── */})
+//
+// ALL logic, state, handlers, API calls unchanged.
+// Only JSX and style improvements.
+// ═══════════════════════════════════════════════════════════════════════
 
-  {/* ── KITCHEN TICKETS ── */}
-  <div style={{ display: 'flex', flexDirection: 'column', padding: '20px' }}>
+<motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+  style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
 
-    {/* Header */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexShrink: 0 }}>
-      <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <ChefHat size={14} color="#d3bfa2" />
+  {/* ══════════════════════════════════════════════════
+      ROW 1 — KITCHEN TICKETS + SERVICE CALLS
+  ══════════════════════════════════════════════════ */}
+  <div style={{
+    display: 'grid', gridTemplateColumns: '1.4fr 1px 1fr',
+    background: '#080809', borderRadius: '18px',
+    border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden'
+  }} className="p-kds-row">
+
+    {/* ── KITCHEN TICKETS ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', padding: '18px 20px' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexShrink: 0 }}>
+        <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ChefHat size={13} color="#d3bfa2" />
+        </div>
+        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#666', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Kitchen Tickets</span>
+        <div style={{
+          fontSize: '0.6rem', fontWeight: '900', minWidth: '24px', height: '24px',
+          borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#0d0d0d',
+          color: filteredOrders.length > 0 ? '#d3bfa2' : '#222',
+          border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #141414',
+          fontFamily: 'monospace'
+        }}>
+          {filteredOrders.length}
+        </div>
       </div>
-      <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#888', letterSpacing: '2px', textTransform: 'uppercase' }}>Kitchen Tickets</span>
-      <span style={{
-        fontSize: '0.52rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '900',
-        background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#0d0d0d',
-        color: filteredOrders.length > 0 ? '#d3bfa2' : '#2a2a2a',
-        border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #1a1a1a'
-      }}>
-        {filteredOrders.length}
-      </span>
-      {filteredOrders.length > 4 && (
-        <span style={{ marginLeft: 'auto', fontSize: '0.48rem', color: '#5a4a30', fontWeight: '900', letterSpacing: '1px' }}>SCROLL ↓</span>
-      )}
-    </div>
 
-    {/* Scrollable list — 4 tickets max visible */}
-    <div style={{
-      overflowY: 'auto', maxHeight: '320px',
-      display: 'flex', flexDirection: 'column', gap: '7px',
-      paddingRight: '4px',
-    }} className="custom-scroll kds-scroll">
+      {/* Ticket list */}
+      <div style={{ overflowY: 'auto', maxHeight: '340px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '2px' }} className="custom-scroll kds-scroll">
+        {filteredOrders.length > 0 ? filteredOrders.map(order => {
+          const mins = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
+          const tier = mins >= 20 ? 'over' : mins >= 10 ? 'warn' : 'ok';
+          const accentColor = tier === 'over' ? 'rgba(211,191,162,0.7)' : tier === 'warn' ? 'rgba(138,112,77,0.5)' : 'rgba(211,191,162,0.12)';
 
-      {filteredOrders.length > 0 ? filteredOrders.map(order => {
-        const mins = Math.floor((new Date() - new Date(order.createdAt)) / 60000);
-        const tier = mins >= 20 ? 'over' : mins >= 10 ? 'warn' : 'ok';
-        const leftBar = tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : 'rgba(211,191,162,0.2)';
-        const cardBg  = tier === 'over' ? 'rgba(211,191,162,0.03)' : '#0a0a0a';
-        const cardBorder = tier === 'over' ? 'rgba(211,191,162,0.18)' : '#141414';
+          // Source label
+          const SRC = {
+            swiggy: { label: 'SWIGGY', color: '#fc8019', bg: 'rgba(252,128,25,0.1)', border: 'rgba(252,128,25,0.25)' },
+            zomato: { label: 'ZOMATO', color: '#cb202d', bg: 'rgba(203,32,45,0.1)', border: 'rgba(203,32,45,0.25)' },
+            waitlist: { label: 'WAITLIST', color: '#8a704d', bg: 'rgba(138,112,77,0.08)', border: 'rgba(138,112,77,0.2)' },
+            reservation: { label: 'RESV', color: '#8a704d', bg: 'rgba(138,112,77,0.08)', border: 'rgba(138,112,77,0.2)' },
+            'counter-pickup': { label: 'PICKUP', color: '#bda88a', bg: 'rgba(189,168,138,0.08)', border: 'rgba(189,168,138,0.2)' },
+            takeaway: { label: 'PARCEL', color: '#bda88a', bg: 'rgba(189,168,138,0.08)', border: 'rgba(189,168,138,0.2)' },
+          };
+          const srcMeta = SRC[order.source];
 
-        return (
-          <div key={order._id} style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            background: cardBg, padding: '12px 14px', borderRadius: '11px',
-            border: `1px solid ${cardBorder}`,
-            borderLeft: `3px solid ${leftBar}`,
-            flexShrink: 0, transition: 'all 0.2s'
-          }}>
-{/* Table badge */}
-            <div style={{
-              width: '36px', height: '36px', borderRadius: '9px',
-              background: tier === 'over' ? 'rgba(211,191,162,0.1)' : '#111',
-              border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.25)' : '#1e1e1e'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: '900', fontSize: order.source === 'swiggy' || order.source === 'zomato' ? '0.6rem' : '0.85rem',
-              color: '#d3bfa2', flexShrink: 0, fontFamily: 'monospace'
+          const isParcel = order.source === 'counter-pickup' || order.source === 'takeaway' || order.tableNumber?.toLowerCase() === 'takeaway';
+          const tableLabel = isParcel ? 'PRCEL' : (order.source === 'swiggy' || order.source === 'zomato') ? order.source.slice(0,3).toUpperCase() : `T${order.tableNumber}`;
+
+          const items = (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
+
+          return (
+            <div key={order._id} style={{
+              display: 'flex', alignItems: 'stretch', gap: '0',
+              background: tier === 'over' ? 'rgba(211,191,162,0.025)' : '#0a0a0a',
+              borderRadius: '11px',
+              border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.14)' : '#111'}`,
+              overflow: 'hidden', flexShrink: 0,
+              transition: 'border-color 0.2s'
             }}>
-              {order.tableNumber}
-            </div>
+              {/* Left accent bar */}
+              <div style={{ width: '3px', background: accentColor, flexShrink: 0 }} />
 
-            {/* Info */}
-{/* Info */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                <span style={{ fontWeight: '900', fontSize: '0.78rem', color: '#fff' }}>T{order.tableNumber}</span>
-                {(order.source === 'swiggy' || order.source === 'zomato') && (
-                  <span style={{
-                    fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px', borderRadius: '4px', letterSpacing: '0.5px',
-                    background: order.source === 'zomato' ? 'rgba(203,32,45,0.15)' : 'rgba(252,128,25,0.15)',
-                    color: order.source === 'zomato' ? '#cb202d' : '#fc8019',
-                    border: `1px solid ${order.source === 'zomato' ? 'rgba(203,32,45,0.3)' : 'rgba(252,128,25,0.3)'}`
-                  }}>
-                    {order.source.toUpperCase()}
+              {/* Table badge */}
+              <div style={{
+                width: '44px', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#070709', borderRight: '1px solid #111',
+                fontFamily: 'monospace', fontWeight: '900',
+                fontSize: tableLabel.length > 3 ? '0.52rem' : '0.78rem',
+                color: tier === 'over' ? '#d3bfa2' : '#666',
+                padding: '10px 4px'
+              }}>
+                {tableLabel}
+              </div>
+
+              {/* Info */}
+              <div style={{ flex: 1, padding: '10px 12px', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {srcMeta && (
+                    <span style={{ fontSize: '0.44rem', fontWeight: '900', padding: '1px 5px', borderRadius: '4px', letterSpacing: '0.5px', background: srcMeta.bg, color: srcMeta.color, border: `1px solid ${srcMeta.border}`, textTransform: 'uppercase' }}>
+                      {srcMeta.label}
+                    </span>
+                  )}
+                  <span style={{ fontSize: '0.58rem', color: '#333', fontFamily: 'monospace' }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div style={{ fontSize: '0.64rem', color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                  {items.map(it => `${it.quantity}× ${it.name}`).join(' · ')}
+                </div>
+                {items.some(it => it.suggestion?.trim()) && (
+                  <div style={{ fontSize: '0.54rem', color: '#5a4a30', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {items.find(it => it.suggestion?.trim())?.suggestion}
+                  </div>
+                )}
+              </div>
+
+              {/* Timer */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', gap: '3px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Timer size={11} color={tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#333'} />
+                  <span style={{ fontSize: '0.72rem', fontWeight: '900', color: tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#333', fontFamily: 'monospace' }}>{mins}m</span>
+                </div>
+                {tier !== 'ok' && (
+                  <span style={{ fontSize: '0.42rem', fontWeight: '900', letterSpacing: '0.8px', color: tier === 'over' ? 'rgba(211,191,162,0.5)' : 'rgba(138,112,77,0.5)', textTransform: 'uppercase' }}>
+                    {tier === 'over' ? 'OVERDUE' : 'DELAYED'}
                   </span>
                 )}
-                <span style={{ fontSize: '0.52rem', color: '#333' }}>·</span>
-                <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>{(order.items || []).length} item{(order.items || []).length !== 1 ? 's' : ''}</span>
-              </div>
-              <div style={{ fontSize: '0.62rem', color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600' }}>
-                {(order.items || []).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
               </div>
             </div>
-
-            {/* Timer */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
-              <OperatorLiveTimer createdAt={order.createdAt} />
-              {tier !== 'ok' && (
-                <span style={{
-                  fontSize: '0.44rem', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase',
-                  color: tier === 'over' ? '#d3bfa2' : '#5a4a30'
-                }}>
-                  {tier === 'over' ? '⚠ OVERDUE' : 'DELAYED'}
-                </span>
-              )}
-            </div>
+          );
+        }) : (
+          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#050506', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
+            <ChefHat size={22} color="#1a1a1a" style={{ marginBottom: '10px' }} />
+            <div style={{ fontSize: '0.62rem', color: '#222', fontWeight: '700', letterSpacing: '0.5px' }}>Kitchen is clear</div>
           </div>
-        );
-      }) : (
-        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#050505', borderRadius: '12px', border: '1px dashed #141414' }}>
-          <ChefHat size={20} color="#1a1a1a" style={{ marginBottom: '10px' }} />
-          <div style={{ fontSize: '0.65rem', color: '#222', fontWeight: '700' }}>Kitchen is clear</div>
+        )}
+      </div>
+    </div>
+
+    {/* ── DIVIDER ── */}
+    <div style={{ background: 'linear-gradient(180deg,transparent,rgba(211,191,162,0.07) 20%,rgba(211,191,162,0.07) 80%,transparent)', width: '1px' }} className="p-service-divider" />
+
+    {/* ── SERVICE CALLS ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', padding: '18px 20px' }} className="p-service-col">
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexShrink: 0 }}>
+        <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: waiterRequests.length > 0 ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.02)', border: waiterRequests.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #151515', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BellRing size={13} color={waiterRequests.length > 0 ? '#d3bfa2' : '#1e1e1e'} />
         </div>
-      )}
+        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: waiterRequests.length > 0 ? '#666' : '#1e1e1e', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Service Calls</span>
+        {waiterRequests.length > 0 && (
+          <div style={{ fontSize: '0.6rem', fontWeight: '900', minWidth: '24px', height: '24px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.2)', fontFamily: 'monospace' }}>
+            {waiterRequests.length}
+          </div>
+        )}
+      </div>
+
+      <div style={{ overflowY: 'auto', maxHeight: '340px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '2px' }} className="custom-scroll">
+        {waiterRequests.length > 0 ? [...waiterRequests].reverse().map(req => (
+          <motion.div initial={{ x: 10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#0a0a0a', padding: '11px 13px', borderRadius: '11px', border: '1px solid rgba(211,191,162,0.08)', borderLeft: '3px solid rgba(211,191,162,0.25)', flexShrink: 0 }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <BellRing size={11} color="#8a704d" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: '900', color: '#d3bfa2', fontSize: '0.7rem', marginBottom: '2px', fontFamily: 'monospace' }}>T-{req.tableNumber}</div>
+              <div style={{ fontSize: '0.6rem', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
+            </div>
+            <button onClick={() => completeWaiterRequest(req._id)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.15)', color: '#8a704d', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0, transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; }}>
+              DONE
+            </button>
+          </motion.div>
+        )) : (
+          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#050506', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
+            <BellRing size={20} color="#1a1a1a" style={{ marginBottom: '8px' }} />
+            <div style={{ fontSize: '0.6rem', color: '#1e1e1e', fontWeight: '700', letterSpacing: '0.5px' }}>No pending calls</div>
+          </div>
+        )}
+      </div>
     </div>
   </div>
 
-  {/* ── VERTICAL DIVIDER ── */}
-  <div style={{ background: 'linear-gradient(180deg, transparent 0%, rgba(211,191,162,0.08) 15%, rgba(211,191,162,0.08) 85%, transparent 100%)', width: '1px', alignSelf: 'stretch' }} className="p-service-divider" />
 
-  {/* ── SERVICE CALLS ── */}
-  <div style={{ display: 'flex', flexDirection: 'column', padding: '20px' }} className="p-service-col">
+  {/* ══════════════════════════════════════════════════
+      ROW 2 — COUNTER QUEUE PANEL
+  ══════════════════════════════════════════════════ */}
+  <div style={{ background: '#080809', borderRadius: '18px', border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden' }}>
 
-    {/* Header */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexShrink: 0 }}>
-      <div style={{
-        width: '30px', height: '30px', borderRadius: '8px',
-        background: waiterRequests.length > 0 ? 'rgba(211,191,162,0.07)' : 'rgba(255,255,255,0.02)',
-        border: waiterRequests.length > 0 ? '1px solid rgba(211,191,162,0.18)' : '1px solid #1a1a1a',
-        display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <BellRing size={14} color={waiterRequests.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
-      </div>
-      <span style={{ fontSize: '0.6rem', fontWeight: '900', color: waiterRequests.length > 0 ? '#888' : '#2a2a2a', letterSpacing: '2px', textTransform: 'uppercase' }}>
-        Service Calls
-      </span>
-      {waiterRequests.length > 0 && (
-        <span style={{
-          fontSize: '0.52rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '900',
-          background: 'rgba(211,191,162,0.1)', color: '#d3bfa2',
-          border: '1px solid rgba(211,191,162,0.2)'
-        }}>
-          {waiterRequests.length}
-        </span>
-      )}
-      {waiterRequests.length > 4 && (
-        <span style={{ marginLeft: 'auto', fontSize: '0.48rem', color: '#5a4a30', fontWeight: '900', letterSpacing: '1px' }}>SCROLL ↓</span>
-      )}
-    </div>
-
-    {/* Scrollable list — 4 max visible */}
-    <div style={{
-      overflowY: 'auto', maxHeight: '320px',
-      display: 'flex', flexDirection: 'column', gap: '7px',
-      paddingRight: '4px',
-    }} className="custom-scroll kds-scroll">
-
-      {waiterRequests.length > 0 ? [...waiterRequests].reverse().map(req => (
-        <motion.div
-          initial={{ x: 12, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-          key={req._id}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '11px',
-            background: '#0a0a0a', padding: '12px 13px', borderRadius: '11px',
-            border: '1px solid rgba(211,191,162,0.1)',
-            borderLeft: '3px solid rgba(211,191,162,0.3)',
-            flexShrink: 0
-          }}>
-          <div style={{
-            width: '30px', height: '30px', borderRadius: '8px',
-            background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-          }}>
-            <BellRing size={12} color="#8a704d" />
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: '900', color: '#d3bfa2', fontSize: '0.74rem', marginBottom: '2px' }}>
-              Table {req.tableNumber}
-            </div>
-            <div style={{ fontSize: '0.62rem', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {req.serviceRequest}
-            </div>
-          </div>
-
-          <button
-            onClick={() => completeWaiterRequest(req._id)}
-            style={{
-              padding: '5px 11px', background: 'transparent',
-              border: '1px solid rgba(211,191,162,0.18)', color: '#8a704d',
-              borderRadius: '7px', fontSize: '0.55rem', fontWeight: '900',
-              cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0,
-              transition: 'all 0.15s'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(211,191,162,0.1)';
-              e.currentTarget.style.color = '#d3bfa2';
-              e.currentTarget.style.borderColor = 'rgba(211,191,162,0.35)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = '#8a704d';
-              e.currentTarget.style.borderColor = 'rgba(211,191,162,0.18)';
-            }}
-          >
-            DONE
-          </button>
-        </motion.div>
-      )) : (
-        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#050505', borderRadius: '12px', border: '1px dashed #141414' }}>
-          <BellRing size={18} color="#1a1a1a" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '0.62rem', color: '#1e1e1e', fontWeight: '700' }}>No pending calls</div>
+    {/* Panel header */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid rgba(211,191,162,0.05)', background: '#0a0a0c' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '30px', height: '30px', borderRadius: '9px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Users size={14} color="#d3bfa2" />
         </div>
-      )}
-    </div>
-  </div>
-</div>
-
-{/* ══════════════════════════════════════════════
-    ROW 2: COUNTER QUEUE PANEL
-══════════════════════════════════════════════ */}
-<div style={{ background: '#080808', borderRadius: '20px', border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden' }}>
-
-  {/* Panel header */}
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #0d0d0d', background: '#0a0a0a' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Users size={15} color="#d3bfa2" />
-      </div>
-      <div>
-        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', letterSpacing: '0.5px' }}>COUNTER QUEUE</div>
-        <div style={{ fontSize: '0.54rem', color: '#333', fontWeight: '700', marginTop: '2px' }}>Waitlist · Pickup · Pre-orders</div>
-      </div>
-      <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', background: waitlistEntries.length > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d', border: waitlistEntries.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616', borderRadius: '20px' }}>
-          <UserCheck size={9} color={waitlistEntries.length > 0 ? '#d3bfa2' : '#2a2a2a'} />
-          <span style={{ fontSize: '0.56rem', fontWeight: '900', color: waitlistEntries.length > 0 ? '#d3bfa2' : '#2a2a2a' }}>{waitlistEntries.length} waiting</span>
+        <div>
+          <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1px' }}>COUNTER QUEUE</div>
+          <div style={{ fontSize: '0.52rem', color: '#2a2a2a', fontWeight: '700', marginTop: '2px', letterSpacing: '0.5px' }}>Waitlist · Pickup · Reservations</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px', background: pickupEntries.length > 0 ? 'rgba(138,112,77,0.08)' : '#0d0d0d', border: pickupEntries.length > 0 ? '1px solid rgba(138,112,77,0.2)' : '1px solid #161616', borderRadius: '20px' }}>
-          <ShoppingBag size={9} color={pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a'} />
-          <span style={{ fontSize: '0.56rem', fontWeight: '900', color: pickupEntries.length > 0 ? '#8a704d' : '#2a2a2a' }}>{pickupEntries.length} pickup</span>
-        </div>
-{(() => {
-  const pendingReservationCount = reservationEntries.filter(r => r.status === 'pending').length;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 10px',
-      background: pendingReservationCount > 0 ? 'rgba(211,191,162,0.06)' : '#0d0d0d',
-      border: pendingReservationCount > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #161616',
-      borderRadius: '20px' }}>
-      <CalendarClock size={9} color={pendingReservationCount > 0 ? '#d3bfa2' : '#2a2a2a'} />
-      <span style={{ fontSize: '0.56rem', fontWeight: '900',
-        color: pendingReservationCount > 0 ? '#d3bfa2' : '#2a2a2a' }}>
-        {pendingReservationCount} pending
-      </span>
-    </div>
-  );
-})()}
-      </div>
-    </div>
-
-    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-      {avgWaitData && (
-        <div style={{ display: 'flex', gap: '18px' }}>
+        {/* Queue count chips */}
+        <div style={{ display: 'flex', gap: '5px', marginLeft: '4px' }}>
           {[
-            { label: 'AVG WAIT', val: `~${avgWaitData.avgWait || 0} min`, icon: <Clock3 size={9} color="#333" /> },
-            { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={9} color="#333" /> },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'right' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', marginBottom: '1px' }}>
-                {s.icon}
-                <span style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
-              </div>
-              <div style={{ fontSize: '0.74rem', fontWeight: '900', color: '#666' }}>{s.val}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      <button onClick={fetchCounterQueue}
-        style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-      >
-        <RefreshCw size={12} />
-      </button>
-    </div>
-  </div>
-
-  {/* Tab switcher + Search */}
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 22px', background: '#080808', borderBottom: '1px solid #0a0a0a' }}>
-    <div style={{ display: 'flex' }}>
-{[
-  { id: 'waitlist',     label: 'DINE-IN WAITLIST', icon: <UserCheck size={12} />,    count: waitlistEntries.length },
-  { id: 'pickup',       label: 'PICKUP QUEUE',      icon: <ShoppingBag size={12} />,  count: pickupEntries.length },
-{ id: 'reservations', label: 'RESERVATIONS', icon: <CalendarClock size={12} />, count: reservationEntries.filter(r => r.status === 'pending').length },].map(tab => (
-        <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '11px 14px', background: 'transparent', border: 'none',
-          cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.8px',
-          color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a',
-          borderBottom: `2px solid ${queueTab === tab.id ? 'rgba(211,191,162,0.6)' : 'transparent'}`,
-          transition: 'all 0.15s', marginBottom: '-1px'
-        }}>
-          <span style={{ color: queueTab === tab.id ? '#8a704d' : '#1e1e1e' }}>{tab.icon}</span>
-          {tab.label}
-          <span style={{
-            fontSize: '0.5rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '900',
-            background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.04)') : '#0d0d0d',
-            color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#444') : '#1e1e1e',
-            border: tab.count > 0 ? '1px solid rgba(211,191,162,0.1)' : '1px solid #141414'
-          }}>{tab.count}</span>
-        </button>
-      ))}
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#000', border: '1px solid #1a1a1a', borderRadius: '7px', padding: '6px 11px', margin: '7px 0' }}>
-      <Search size={11} color="#333" />
-      <input
-        type="text"
-        placeholder={`Search by name...`}
-        value={queueSearch}
-        onChange={e => setQueueSearch(e.target.value)}
-        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.68rem', width: '150px' }}
-      />
-      {queueSearch && (
-        <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', padding: '0', display: 'flex' }}>
-          <X size={11} />
-        </button>
-      )}
-    </div>
-  </div>
-
-  {/* Queue content */}
-  <div style={{ padding: '18px 22px 22px' }}>
-
-    {/* ── DINE-IN WAITLIST ── */}
-    {queueTab === 'waitlist' && (() => {
-      const filtered = waitlistEntries.filter(e =>
-        !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase())
-      );
-      return filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#0a0a0a', border: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-            <UserCheck size={18} color="#1a1a1a" />
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#1e1e1e', fontWeight: '700' }}>
-            {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#161616', marginTop: '5px' }}>
-            {!queueSearch && 'Customers joining from the counter page appear here'}
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '12px' }} className="p-queue-grid">
-          {filtered.map((entry) => {
-            const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
-const urgency  = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
-            const urgencyColor = {
-              critical: '#d3bfa2',
-              high:     '#8a704d',
-              medium:   '#6a5a3a',
-              low:      '#3a3228'
-            }[urgency];
-            const borderTopColor = {
-              critical: 'rgba(211,191,162,0.6)',
-              high:     'rgba(138,112,77,0.5)',
-              medium:   'rgba(106,90,58,0.35)',
-              low:      'rgba(211,191,162,0.08)'
-            }[urgency];
-            const cardBorder = urgency === 'critical' ? 'rgba(211,191,162,0.15)' : '#141414';
-
-            return (
-              <div key={entry._id} style={{
-                background: '#0a0a0a', borderRadius: '14px',
-                border: `1px solid ${cardBorder}`,
-                borderTop: `2px solid ${borderTopColor}`,
-                overflow: 'hidden'
-              }}>
-                {/* Card header */}
-                <div style={{ padding: '14px 16px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: '30px', height: '30px', borderRadius: '7px',
-                      background: 'rgba(211,191,162,0.05)',
-                      border: `1px solid ${borderTopColor}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                    }}>
-                      <span style={{ fontSize: '0.68rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#fff' }}>{entry.customerName}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                        <Users size={9} color="#444" />
-                        <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700' }}>{entry.partySize} pax</span>
-                        {entry.customerPhone && (
-                          <span style={{ fontSize: '0.58rem', color: '#2a2a2a', fontWeight: '600' }}>{entry.customerPhone}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Wait timer */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '4px',
-                    padding: '4px 9px', borderRadius: '7px',
-                    background: urgency === 'critical' ? 'rgba(211,191,162,0.07)' : '#0d0d0d',
-                    border: `1px solid ${urgency !== 'low' ? borderTopColor : '#141414'}`
-                  }}>
-                    <Hourglass size={10} color={urgencyColor} />
-                    <span style={{ fontSize: '0.7rem', fontWeight: '900', color: urgencyColor, fontFamily: 'monospace' }}>{formatDuration(waitMins)}</span>
-                  </div>
-                </div>
-
-                {/* Pre-order items */}
-                {entry.items?.length > 0 && (
-                  <div style={{ margin: '0 16px 10px', padding: '9px 11px', background: '#050505', borderRadius: '9px', border: '1px solid #0d0d0d' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
-                      <UtensilsCrossed size={9} color="#333" />
-                      <span style={{ fontSize: '0.5rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order</span>
-                    </div>
-                    <div style={{ fontSize: '0.63rem', color: '#555', lineHeight: 1.6 }}>
-                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
-                      {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3} more</span>}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                      <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-<div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-
-  {/* Row 1: Assign + No-show */}
-  <div style={{ display: 'flex', gap: '7px' }}>
-    <button onClick={() => setAssignTableModal(entry)} style={{
-      flex: 1, padding: '10px', borderRadius: '9px', border: 'none',
-      background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
-      color: '#000', fontWeight: '900', fontSize: '0.62rem',
-      cursor: 'pointer', letterSpacing: '0.5px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-      transition: 'opacity 0.15s'
-    }}
-      onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-    >
-      <TableProperties size={12} />
-      ASSIGN TABLE
-      <ChevronRight size={12} />
-    </button>
-    <button onClick={() => setConfirmModal({
-      show: true, title: 'Mark as No-Show?',
-      subtitle: `${entry.customerName} will be removed from the waitlist.`,
-      onConfirm: async () => {
-        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
-        fetchCounterQueue();
-        showNotif(`${entry.customerName} — marked no-show`);
-      }
-    })} style={{
-      padding: '10px 12px', background: 'transparent',
-      border: '1px solid #1a1a1a', color: '#2a2a2a',
-      borderRadius: '9px', fontSize: '0.58rem', fontWeight: '900',
-      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
-      transition: 'all 0.15s'
-    }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
-    >
-      <AlertOctagon size={11} />
-      NO SHOW
-    </button>
-  </div>
-
-  {/* Row 2: Notify customer — waitlist alert */}
-  <button onClick={async () => {
-    try {
-      await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, {
-        title: 'Your table is almost ready!',
-        body: `Hi ${entry.customerName}! Your table at ${restaurantData?.name || 'the restaurant'} will be ready very soon. Please stay nearby.`,
-        tag: 'waitlist-alert'
-      });
-      showNotif(`${entry.customerName} — notified to stay nearby`, 'success');
-    } catch (err) {
-      showNotif(err.response?.data?.error || 'Notification failed', 'error');
-    }
-  }} style={{
-    width: '100%', padding: '9px',
-    background: 'rgba(211,191,162,0.04)',
-    border: '1px solid rgba(211,191,162,0.12)',
-    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
-    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
-    letterSpacing: '0.5px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    transition: 'all 0.15s'
-  }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
-  >
-    <BellRing size={11} /> NOTIFY — TABLE ALMOST READY
-  </button>
-
-</div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    })()}
-
-    {/* ── PICKUP QUEUE ── */}
-    {queueTab === 'pickup' && (() => {
-      const filtered = pickupEntries.filter(e =>
-        !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase())
-      );
-      return filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#0a0a0a', border: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-            <ShoppingBag size={18} color="#1a1a1a" />
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#1e1e1e', fontWeight: '700' }}>
-            {queueSearch ? `No results for "${queueSearch}"` : 'No pickup orders'}
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#161616', marginTop: '5px' }}>
-            {!queueSearch && 'Takeaway / scheduled pickups appear here'}
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '12px' }} className="p-queue-grid">
-          {filtered.map(entry => {
-            const isKitchenFired = entry.kitchenFired;
-            const isReady        = entry.status === 'pickup-ready';
-            const pickupMinsLeft = entry.scheduledPickupTime
-              ? Math.round((new Date(entry.scheduledPickupTime) - Date.now()) / 60000) : null;
-            const pickupDue  = pickupMinsLeft !== null && pickupMinsLeft <= 0;
-const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLeft <= 20;
-            const step = isReady ? 3 : isKitchenFired ? 2 : 1;
-
-            const topBorder = isReady
-              ? 'rgba(211,191,162,0.6)'
-              : isKitchenFired
-              ? 'rgba(138,112,77,0.4)'
-              : pickupDue
-              ? 'rgba(138,112,77,0.5)'
-              : 'rgba(211,191,162,0.08)';
-
-            return (
-              <div key={entry._id} style={{
-                background: '#0a0a0a', borderRadius: '14px',
-                border: `1px solid ${isReady ? 'rgba(211,191,162,0.14)' : '#141414'}`,
-                borderTop: `2px solid ${topBorder}`,
-                overflow: 'hidden'
-              }}>
-                {/* Header */}
-                <div style={{ padding: '14px 16px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: '900', fontSize: '0.88rem', color: '#fff', marginBottom: '3px' }}>{entry.customerName}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      {entry.scheduledPickupTime && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          <Clock3 size={9} color="#444" />
-                          <span style={{ fontSize: '0.6rem', color: '#444', fontWeight: '700' }}>
-                            {new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                          </span>
-                        </div>
-                      )}
-{pickupMinsLeft !== null && (
-                        <span style={{
-                          fontSize: '0.54rem', padding: '2px 6px', borderRadius: '5px', fontWeight: '900',
-                          background: pickupDue ? 'rgba(138,112,77,0.12)' : pickupSoon ? 'rgba(138,112,77,0.06)' : '#0d0d0d',
-                          color: pickupDue ? '#8a704d' : pickupSoon ? '#6a5a3a' : '#2a2a2a',
-                          border: (pickupDue || pickupSoon) ? '1px solid rgba(138,112,77,0.25)' : '1px solid #141414'
-                        }}>
-                          {pickupDue ? 'DUE NOW' : `${formatDuration(pickupMinsLeft)} left`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status badge */}
-                  {isReady ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '7px' }}>
-                      <PackageCheck size={11} color="#d3bfa2" />
-                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#d3bfa2' }}>READY</span>
-                    </div>
-                  ) : isKitchenFired ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: 'rgba(138,112,77,0.07)', border: '1px solid rgba(138,112,77,0.2)', borderRadius: '7px' }}>
-                      <ChefHat size={11} color="#8a704d" />
-                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#8a704d' }}>IN KITCHEN</span>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: '7px' }}>
-                      <Timer size={11} color="#333" />
-                      <span style={{ fontSize: '0.55rem', fontWeight: '900', color: '#333' }}>PENDING</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Step progress strip — all gold shades */}
-                <div style={{ margin: '0 16px 10px', display: 'flex', gap: '3px' }}>
-                  {[
-                    { n: 1, label: 'Kitchen', icon: <ChefHat size={9} /> },
-                    { n: 2, label: 'Ready',   icon: <PackageCheck size={9} /> },
-                    { n: 3, label: 'Settled', icon: <Store size={9} /> },
-                  ].map(s => {
-                    const done    = step > s.n;
-                    const current = step === s.n;
-                    return (
-                      <div key={s.n} style={{
-                        flex: 1, display: 'flex', alignItems: 'center', gap: '3px',
-                        padding: '5px 7px', borderRadius: '6px',
-                        background: done ? 'rgba(211,191,162,0.07)' : current ? 'rgba(138,112,77,0.1)' : '#050505',
-                        border: `1px solid ${done ? 'rgba(211,191,162,0.15)' : current ? 'rgba(138,112,77,0.25)' : '#0d0d0d'}`
-                      }}>
-                        <span style={{ color: done ? '#d3bfa2' : current ? '#8a704d' : '#1e1e1e' }}>{s.icon}</span>
-                        <span style={{
-                          fontSize: '0.46rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.3px',
-                          color: done ? '#d3bfa2' : current ? '#8a704d' : '#1a1a1a'
-                        }}>{s.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Items */}
-                {entry.items?.length > 0 && (
-                  <div style={{ margin: '0 16px 10px', padding: '9px 11px', background: '#050505', borderRadius: '9px', border: '1px solid #0d0d0d' }}>
-                    <div style={{ fontSize: '0.63rem', color: '#555', lineHeight: 1.7 }}>
-                      {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
-                      {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3}</span>}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.56rem', color: '#2a2a2a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Truck size={9} color="#2a2a2a" /> Takeaway
-                      </span>
-                      <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#8a704d' }}>₹{entry.totalAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                )}
-
-{/* Actions */}
-<div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-
-  {/* STEP 1 — Send to kitchen */}
-  {!isKitchenFired && !isReady && (
-    <button onClick={async () => {
-      try {
-        const orderItems = (entry.items || []).map(i => ({
-          menuItemId: i.menuItemId || null, name: i.name,
-          quantity: Number(i.quantity) || 1, portion: i.portion || 'Single',
-          pricePerUnit: Number(i.price || i.pricePerUnit) || 0,
-          subtotal: Number(i.subtotal) || 0, suggestion: ''
-        }));
-        const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
-        await axios.post(`${BASE_URL}/orders`, {
-          tenantId, tableNumber: 'Counter', items: orderItems,
-          source: 'counter-pickup', sessionId: entry.sessionId,
-          waitlistId: entry._id, status: 'pending',
-          billDetails: { itemsTotal, grandTotal: itemsTotal }
-        });
-        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
-        fetchCounterQueue(); fetchInitialData();
-        showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
-      } catch (err) {
-        showNotif(err.response?.data?.error || 'Failed to send to kitchen', 'error');
-      }
-    }} style={{
-      width: '100%', padding: '10px', borderRadius: '9px',
-      background: 'rgba(138,112,77,0.08)',
-      border: '1px solid rgba(138,112,77,0.25)',
-      color: '#8a704d', fontWeight: '900', fontSize: '0.64rem',
-      cursor: 'pointer', letterSpacing: '0.5px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-      transition: 'all 0.15s'
-    }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.15)'; e.currentTarget.style.color = '#d3bfa2'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.08)'; e.currentTarget.style.color = '#8a704d'; }}
-    >
-      <ChefHat size={13} /> SEND TO KITCHEN <ChevronRight size={12} />
-    </button>
-  )}
-
-  {/* STEP 2 — Mark ready */}
-  {isKitchenFired && !isReady && (
-    <button onClick={async () => {
-      await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`);
-      fetchCounterQueue();
-      showNotif(`${entry.customerName} — customer notified, pickup ready`);
-    }} style={{
-      width: '100%', padding: '10px',
-      background: 'rgba(211,191,162,0.07)',
-      border: '1px solid rgba(211,191,162,0.2)',
-      color: '#d3bfa2', borderRadius: '9px',
-      fontSize: '0.64rem', fontWeight: '900',
-      cursor: 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-      transition: 'all 0.15s'
-    }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.13)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
-    >
-      <PackageCheck size={13} /> MARK READY — NOTIFY CUSTOMER <ChevronRight size={12} />
-    </button>
-  )}
-
-  {/* STEP 3 — Settle */}
-  <button onClick={() => setConfirmModal({
-    show: true,
-    title: `Settle Pickup — ${entry.customerName}?`,
-    subtitle: `Collect ₹${entry.totalAmount.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`,
-    onConfirm: async () => {
-      try {
-        await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, {
-          paymentMethod: 'cash', finalAmount: entry.totalAmount
-        });
-        fetchCounterQueue(); fetchAnalytics();
-        showNotif(`${entry.customerName} — pickup settled as takeaway`);
-      } catch (err) {
-        showNotif(err.response?.data?.error || 'Settlement failed', 'error');
-      }
-    }
-  })} style={{
-    width: '100%', padding: '10px',
-    background: isReady ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : '#0d0d0d',
-    border: isReady ? 'none' : '1px solid #1a1a1a',
-    color: isReady ? '#000' : '#333',
-    borderRadius: '9px', fontSize: '0.64rem', fontWeight: '900',
-    cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-    transition: 'all 0.15s'
-  }}
-    onMouseEnter={e => { if (!isReady) { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}}
-    onMouseLeave={e => { if (!isReady) { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}}
-  >
-    <Store size={13} />
-    SETTLE ₹{entry.totalAmount.toLocaleString()}
-    {isReady && <span style={{ fontSize: '0.52rem', opacity: 0.6 }}>· TAKEAWAY</span>}
-  </button>
-
-  {/* ── CANCEL PICKUP — always shown unless already settled ── */}
-  {!['served', 'settled', 'cancelled'].includes(entry.status) && (
-    <button onClick={() => setConfirmModal({
-      show: true,
-      title: `Cancel Pickup — ${entry.customerName}?`,
-      subtitle: `This will remove the pickup order${entry.totalAmount > 0 ? ` (₹${entry.totalAmount.toLocaleString()})` : ''} and notify the customer.`,
-      onConfirm: async () => {
-        try {
-          await axios.delete(`${BASE_URL}/waitlist/${entry._id}`);
-          fetchCounterQueue();
-          showNotif(`${entry.customerName} — pickup cancelled`);
-        } catch (err) {
-          showNotif(err.response?.data?.error || 'Cancel failed', 'error');
-        }
-      }
-    })} style={{
-      width: '100%', padding: '9px',
-      background: 'transparent',
-      border: '1px solid #1a1a1a',
-      color: '#2a2a2a', borderRadius: '9px',
-      fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
-      letterSpacing: '0.5px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-      transition: 'all 0.15s'
-    }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
-    >
-      <X size={11} /> CANCEL PICKUP
-    </button>
-
-    
-  )}
-  {/* ── RE-NOTIFY CUSTOMER — shown when pickup-ready ── */}
-{isReady && (
-  <button onClick={async () => {
-    try {
-      await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, {
-        title: 'Your pickup order is ready!',
-        body: `Hi ${entry.customerName}! Your order at ${restaurantData?.name || 'the restaurant'} is ready. Please collect it from the counter now.`,
-        tag: 'pickup-ready-reminder'
-      });
-      showNotif(`${entry.customerName} — re-notified for pickup`, 'success');
-    } catch (err) {
-      showNotif(err.response?.data?.error || 'Notification failed', 'error');
-    }
-  }} style={{
-    width: '100%', padding: '9px',
-    background: 'rgba(211,191,162,0.04)',
-    border: '1px solid rgba(211,191,162,0.12)',
-    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
-    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
-    letterSpacing: '0.5px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    transition: 'all 0.15s'
-  }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
-  >
-    <BellRing size={11} /> RE-NOTIFY — ORDER READY
-  </button>
-)}
-
-</div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    })()}
-
-    {/* ── RESERVATIONS TAB ── */}
-{queueTab === 'reservations' && (() => {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-      {/* Date navigator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button onClick={() => {
-            const d = new Date(reservationViewDate);
-            d.setDate(d.getDate() - 1);
-            setReservationViewDate(d.toISOString().split('T')[0]);
-          }} style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
-            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
-            <ChevronLeft size={14} />
-          </button>
-          <div style={{ padding:'7px 16px', background:'#000', border:'1px solid #1a1a1a', borderRadius:'8px', fontSize:'0.72rem', fontWeight:'900', color:'#d3bfa2', minWidth:'140px', textAlign:'center' }}>
-            {new Date(reservationViewDate).toLocaleDateString('en-IN',{ weekday:'short', day:'numeric', month:'short' })}
-          </div>
-          <button onClick={() => {
-            const d = new Date(reservationViewDate);
-            d.setDate(d.getDate() + 1);
-            setReservationViewDate(d.toISOString().split('T')[0]);
-          }} style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
-            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
-            <ChevronRight size={14} />
-          </button>
-          <button onClick={() => {
-            const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-            setReservationViewDate(d.toISOString().split('T')[0]);
-          }} style={{ padding:'7px 12px', background:'transparent', border:'1px solid rgba(211,191,162,0.15)', color:'#8a704d', borderRadius:'7px', fontSize:'0.6rem', fontWeight:'900', cursor:'pointer' }}>
-            TODAY
-          </button>
-          <button onClick={() => fetchCounterQueue()}
-            style={{ width:'30px', height:'30px', background:'transparent', border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
-            onMouseEnter={e=>{ e.currentTarget.style.borderColor='rgba(211,191,162,0.3)'; e.currentTarget.style.color='#d3bfa2'; }}
-            onMouseLeave={e=>{ e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
-            <RefreshCw size={12} />
-          </button>
-        </div>
-
-        {/* Summary chips */}
-        <div style={{ display:'flex', gap:'8px' }}>
-          {[
-            { label:'TOTAL', val: reservationEntries.length, color:'#d3bfa2' },
-            { label:'CONFIRMED', val: reservationEntries.filter(r=>r.status==='confirmed').length, color:'#8a704d' },
-            { label:'PENDING', val: reservationEntries.filter(r=>r.status==='pending').length, color:'#555' },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign:'center', padding:'8px 12px', background:'#0d0d0d', border:'1px solid #1a1a1a', borderRadius:'10px' }}>
-              <div style={{ fontSize:'1.1rem', fontWeight:'900', color:s.color }}>{s.val}</div>
-              <div style={{ fontSize:'0.48rem', color:'#333', fontWeight:'900', marginTop:'2px', letterSpacing:'0.5px' }}>{s.label}</div>
+            { icon: <UserCheck size={9} />, count: waitlistEntries.length, label: 'waiting' },
+            { icon: <ShoppingBag size={9} />, count: pickupEntries.length, label: 'pickup' },
+            { icon: <CalendarClock size={9} />, count: reservationEntries.filter(r => r.status === 'pending').length, label: 'pending' },
+          ].map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 9px', background: s.count > 0 ? 'rgba(211,191,162,0.05)' : '#0d0d0d', border: s.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #141414', borderRadius: '20px' }}>
+              <span style={{ color: s.count > 0 ? '#8a704d' : '#1e1e1e' }}>{s.icon}</span>
+              <span style={{ fontSize: '0.52rem', fontWeight: '900', color: s.count > 0 ? '#8a704d' : '#1e1e1e', fontFamily: 'monospace' }}>{s.count} {s.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Timeline view */}
-      {reservationEntries.length === 0 ? (
-        <div style={{ textAlign:'center', padding:'48px 20px' }}>
-          <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#0a0a0a', border:'1px solid #141414', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}>
-            <CalendarClock size={18} color="#1a1a1a" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {avgWaitData && (
+          <div style={{ display: 'flex', gap: '16px' }}>
+            {[
+              { label: 'AVG WAIT', val: `${avgWaitData.avgWait || 0}m`, icon: <Clock3 size={9} color="#2a2a2a" /> },
+              { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={9} color="#2a2a2a" /> },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                  {s.icon}
+                  <span style={{ fontSize: '0.44rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
+                </div>
+                <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#555', fontFamily: 'monospace' }}>{s.val}</div>
+              </div>
+            ))}
           </div>
-          <div style={{ fontSize:'0.72rem', color:'#1e1e1e', fontWeight:'700' }}>No reservations for this date</div>
-        </div>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-          {/* Sort by time */}
-          {[...reservationEntries]
-            .sort((a, b) => new Date(a.reservationTime) - new Date(b.reservationTime))
-            .map(entry => {
-              const resTime = new Date(entry.reservationTime);
-              const now     = new Date();
-              const minsUntil = Math.round((resTime - now) / 60000);
-              const isUpcoming = minsUntil > 0 && minsUntil <= 60;
-              const isOverdue  = minsUntil < -15 && entry.status !== 'seated' && entry.status !== 'cancelled';
-              const isPast     = minsUntil < 0;
-              const statusColors = {
-                pending:   { bg:'rgba(211,191,162,0.04)', border:'rgba(211,191,162,0.1)', text:'#8a704d', label:'PENDING' },
-                confirmed: { bg:'rgba(211,191,162,0.07)', border:'rgba(211,191,162,0.2)', text:'#d3bfa2', label:'CONFIRMED' },
-                seated:    { bg:'rgba(211,191,162,0.03)', border:'#1a1a1a',               text:'#444',    label:'SEATED' },
-                cancelled: { bg:'#080808',                border:'#1a1a1a',               text:'#2a2a2a', label:'CANCELLED' },
-                'no-show': { bg:'#080808',                border:'#1a1a1a',               text:'#2a2a2a', label:'NO-SHOW' },
-              };
-              const sc = statusColors[entry.status] || statusColors.pending;
+        )}
+        <button onClick={fetchCounterQueue} style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}>
+          <RefreshCw size={12} />
+        </button>
+      </div>
+    </div>
+
+    {/* Tab bar + Search */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', background: '#080809', borderBottom: '1px solid rgba(211,191,162,0.04)' }}>
+      <div style={{ display: 'flex' }}>
+        {[
+          { id: 'waitlist',     label: 'DINE-IN',      icon: <UserCheck size={11} />,    count: waitlistEntries.length },
+          { id: 'pickup',       label: 'PICKUP',        icon: <ShoppingBag size={11} />,  count: pickupEntries.length },
+          { id: 'reservations', label: 'RESERVATIONS',  icon: <CalendarClock size={11} />, count: reservationEntries.filter(r => r.status === 'pending').length },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '12px 14px', background: 'transparent', border: 'none',
+            cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '1px',
+            color: queueTab === tab.id ? '#d3bfa2' : '#2a2a2a',
+            borderBottom: `2px solid ${queueTab === tab.id ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
+            transition: 'all 0.15s', marginBottom: '-1px'
+          }}>
+            <span style={{ color: queueTab === tab.id ? '#8a704d' : '#1a1a1a' }}>{tab.icon}</span>
+            {tab.label}
+            <span style={{ fontSize: '0.48rem', padding: '1px 5px', borderRadius: '8px', fontWeight: '900', fontFamily: 'monospace', background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.03)') : '#0d0d0d', color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#333') : '#1a1a1a', border: tab.count > 0 ? '1px solid rgba(211,191,162,0.08)' : '1px solid #111' }}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#040405', border: '1px solid #141414', borderRadius: '8px', padding: '6px 11px', margin: '7px 0' }}>
+        <Search size={10} color="#2a2a2a" />
+        <input type="text" placeholder="Search name..." value={queueSearch} onChange={e => setQueueSearch(e.target.value)}
+          style={{ background: 'transparent', border: 'none', color: '#c8c0b0', outline: 'none', fontSize: '0.64rem', width: '130px' }} />
+        {queueSearch && (
+          <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#2a2a2a', cursor: 'pointer', padding: 0, display: 'flex' }}>
+            <X size={10} />
+          </button>
+        )}
+      </div>
+    </div>
+
+    {/* Queue content */}
+    <div style={{ padding: '16px 20px 20px' }}>
+
+      {/* ══ DINE-IN WAITLIST ══ */}
+      {queueTab === 'waitlist' && (() => {
+        const filtered = waitlistEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
+        return filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '52px 20px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#0a0a0a', border: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <UserCheck size={18} color="#1a1a1a" />
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#1e1e1e', fontWeight: '700', letterSpacing: '0.3px' }}>
+              {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
+            </div>
+            <div style={{ fontSize: '0.56rem', color: '#141414', marginTop: '5px' }}>
+              {!queueSearch && 'Customers joining from the counter page appear here'}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }} className="p-queue-grid">
+            {filtered.map(entry => {
+              const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
+              const urgency = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
+              const accentTop = { critical: 'rgba(211,191,162,0.55)', high: 'rgba(138,112,77,0.45)', medium: 'rgba(106,90,58,0.3)', low: 'rgba(211,191,162,0.08)' }[urgency];
+              const accentText = { critical: '#d3bfa2', high: '#8a704d', medium: '#6a5a3a', low: '#3a3228' }[urgency];
 
               return (
-                <div key={entry._id} style={{
-                  background: isOverdue ? 'rgba(211,191,162,0.04)' : sc.bg,
-                  border: `1px solid ${isOverdue ? 'rgba(211,191,162,0.2)' : sc.border}`,
-                  borderLeft: `3px solid ${isUpcoming ? '#d3bfa2' : isOverdue ? '#8a704d' : entry.status==='confirmed' ? 'rgba(211,191,162,0.4)' : '#1a1a1a'}`,
-                  borderRadius:'14px', overflow:'hidden',
-                  opacity: ['cancelled','no-show','seated'].includes(entry.status) ? 0.5 : 1
-                }}>
-                  <div style={{ padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                    {/* Left info */}
-                    <div style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
-                      {/* Time block */}
-                      <div style={{ textAlign:'center', padding:'8px 12px', background:'rgba(211,191,162,0.05)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:'10px', flexShrink:0 }}>
-                        <div style={{ fontSize:'1.1rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace', lineHeight:1 }}>
-                          {resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}
-                        </div>
-                        {isUpcoming && (
-                          <div style={{ fontSize:'0.48rem', color:'#8a704d', fontWeight:'900', marginTop:'3px', letterSpacing:'0.5px' }}>
-                            in {minsUntil}m
-                          </div>
-                        )}
-                        {isOverdue && (
-                          <div style={{ fontSize:'0.48rem', color:'#8a704d', fontWeight:'900', marginTop:'3px', letterSpacing:'0.5px' }}>
-                            ⚠ {Math.abs(minsUntil)}m ago
-                          </div>
-                        )}
-                      </div>
+                <div key={entry._id} style={{ background: '#0a0a0c', borderRadius: '14px', border: `1px solid ${urgency === 'critical' ? 'rgba(211,191,162,0.12)' : '#101010'}`, borderTop: `2px solid ${accentTop}`, overflow: 'hidden' }}>
 
-                      {/* Guest info */}
+                  {/* Card header */}
+                  <div style={{ padding: '13px 15px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Position badge */}
+                      <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(211,191,162,0.04)', border: `1px solid ${accentTop}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: '0.6rem', fontWeight: '900', color: accentText, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
+                      </div>
                       <div>
-                        <div style={{ fontWeight:'900', fontSize:'0.88rem', color:'#fff', marginBottom:'3px' }}>
-                          {entry.customerName}
+                        <div style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0', letterSpacing: '0.2px' }}>{entry.customerName}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                          <Users size={9} color="#333" />
+                          <span style={{ fontSize: '0.56rem', color: '#444', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
+                          {entry.customerPhone && <span style={{ fontSize: '0.54rem', color: '#2a2a2a', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-                            <Users size={9} color="#444" />
-                            <span style={{ fontSize:'0.6rem', color:'#444', fontWeight:'700' }}>{entry.partySize} pax</span>
-                          </div>
-                          {entry.customerPhone && (
-                            <span style={{ fontSize:'0.6rem', color:'#333', fontWeight:'600' }}>{entry.customerPhone}</span>
-                          )}
-                          {entry.tablePreference && (
-                            <span style={{ fontSize:'0.58rem', padding:'1px 7px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'4px', color:'#8a704d', fontWeight:'800' }}>
-                              Pref: T{entry.tablePreference}
-                            </span>
-                          )}
-                        </div>
-                        {/* Inline table chip — visible once assigned */}
-{entry.assignedTable && (
-  <div style={{ marginTop:'4px', display:'inline-flex', alignItems:'center', gap:'4px', padding:'2px 8px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.15)', borderRadius:'5px' }}>
-    <TableProperties size={9} color="#8a704d" />
-    <span style={{ fontSize:'0.58rem', color:'#8a704d', fontWeight:'900', letterSpacing:'0.5px' }}>
-      TABLE {entry.assignedTable}
-    </span>
-  </div>
-)}
-                        {entry.specialRequests && (
-                          <div style={{ marginTop:'5px', fontSize:'0.62rem', color:'#555', display:'flex', alignItems:'center', gap:'5px' }}>
-                            <StickyNote size={9} color="#555" />
-                            {entry.specialRequests}
-                          </div>
-                        )}
-                        {entry.items?.length > 0 && (
-                          <div style={{ marginTop:'5px', fontSize:'0.62rem', color:'#555' }}>
-                            Pre-order: {entry.items.slice(0,2).map(i=>`${i.quantity}× ${i.name}`).join(' · ')}
-                            {entry.items.length > 2 && ` +${entry.items.length-2} more`}
-                          </div>
-                        )}
                       </div>
                     </div>
+                    {/* Wait timer pill */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', borderRadius: '7px', background: urgency === 'critical' ? 'rgba(211,191,162,0.06)' : '#0d0d0d', border: `1px solid ${urgency !== 'low' ? accentTop : '#111'}`, flexShrink: 0 }}>
+                      <Hourglass size={9} color={accentText} />
+                      <span style={{ fontSize: '0.66rem', fontWeight: '900', color: accentText, fontFamily: 'monospace' }}>{formatDuration(waitMins)}</span>
+                    </div>
+                  </div>
 
-   {/* Status + actions */}
-<div style={{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-end', flexShrink:0 }}>
+                  {/* Pre-order items */}
+                  {entry.items?.length > 0 && (
+                    <div style={{ margin: '0 15px 10px', padding: '8px 10px', background: '#060608', borderRadius: '9px', border: '1px solid rgba(211,191,162,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
+                        <UtensilsCrossed size={8} color="#2a2a2a" />
+                        <span style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '1.2px', textTransform: 'uppercase' }}>Pre-order</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '0.62rem', fontWeight: '900', color: '#8a704d', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</span>
+                      </div>
+                      <div style={{ fontSize: '0.61rem', color: '#555', lineHeight: 1.55 }}>
+                        {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
+                        {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3}</span>}
+                      </div>
+                    </div>
+                  )}
 
-  {/* ── Status badge — shows table pill when seated ── */}
-  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px' }}>
-    <span style={{
-      fontSize:'0.52rem', padding:'3px 9px', borderRadius:'20px', fontWeight:'900',
-      background: sc.bg, border:`1px solid ${sc.border}`, color: sc.text, letterSpacing:'0.5px'
-    }}>
-      {sc.label}
-    </span>
-
-    {/* Table assigned pill — visible for all statuses once assigned */}
-    {entry.assignedTable && (
-      <div style={{
-        display:'flex', alignItems:'center', gap:'5px',
-        padding:'5px 12px',
-        background:'rgba(211,191,162,0.08)',
-        border:'1px solid rgba(211,191,162,0.25)',
-        borderRadius:'8px'
-      }}>
-        <TableProperties size={11} color="#d3bfa2" />
-        <span style={{
-          fontSize:'0.72rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace', letterSpacing:'1px'
-        }}>
-          T{entry.assignedTable}
-        </span>
-      </div>
-    )}
-  </div>
-
-  {/* ── Action buttons ── */}
-  <div style={{ display:'flex', gap:'5px', marginTop:'2px' }}>
-    {/* Confirm */}
-    {entry.status === 'pending' && (
-      <button onClick={async () => {
-        await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'confirmed' });
-        fetchCounterQueue();
-        showNotif(`${entry.customerName} reservation confirmed`);
-      }} style={{
-        padding:'5px 10px',
-        background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
-        border:'none', color:'#000', borderRadius:'7px',
-        fontSize:'0.58rem', fontWeight:'900', cursor:'pointer'
-      }}>
-        CONFIRM
-      </button>
-    )}
-
-    {/* Seat / Assign table — show for pending + confirmed, hide once seated */}
-    {['pending','confirmed'].includes(entry.status) && (
-      <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-        style={{
-          padding:'5px 10px',
-          background: entry.status === 'confirmed'
-            ? 'linear-gradient(135deg,rgba(211,191,162,0.15),rgba(211,191,162,0.08))'
-            : 'rgba(211,191,162,0.06)',
-          border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2',
-          borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer',
-          display:'flex', alignItems:'center', gap:'4px'
-        }}>
-        <TableProperties size={10} />
-        SEAT
-      </button>
-    )}
-
-    {/* Re-assign table — show when already seated (change table) */}
-    {entry.status === 'seated' && (
-      <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-        style={{
-          padding:'5px 10px',
-          background:'transparent',
-          border:'1px solid #1a1a1a', color:'#444',
-          borderRadius:'7px', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer',
-          display:'flex', alignItems:'center', gap:'4px'
-        }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}
-        title="Change assigned table"
-      >
-        <TableProperties size={10} />
-        CHANGE T
-      </button>
-    )}
-
-    {/* Edit */}
-    <button onClick={() => setReservationEditModal(entry)}
-      style={{
-        width:'28px', height:'28px', background:'transparent',
-        border:'1px solid #1a1a1a', color:'#444', borderRadius:'7px',
-        fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#444'; }}>
-      ✎
-    </button>
-
-{/* No-show — only for pending/confirmed */}
-    {['pending','confirmed'].includes(entry.status) && (
-      <button onClick={() => setConfirmModal({
-        show:true,
-        title:`No-Show — ${entry.customerName}?`,
-        subtitle:'Mark this reservation as no-show and free the slot.',
-        onConfirm: async () => {
-          await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status:'no-show' });
-          fetchCounterQueue();
-          showNotif(`${entry.customerName} — marked no-show`);
-        }
-      })} style={{
-        width:'28px', height:'28px', background:'transparent',
-        border:'1px solid #1a1a1a', color:'#333',
-        borderRadius:'7px', fontSize:'0.7rem', cursor:'pointer',
-        display:'flex', alignItems:'center', justifyContent:'center'
-      }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#8a704d'; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.color='#333'; }}>
-        ✕
-      </button>
-    )}
-  </div>
-
-  {/* ── CANCEL RESERVATION — full width, shown for pending + confirmed ── */}
-  {['pending', 'confirmed'].includes(entry.status) && (
-    <button onClick={() => setConfirmModal({
-      show: true,
-      title: `Cancel Reservation — ${entry.customerName}?`,
-      subtitle: `${entry.partySize} pax · ${new Date(entry.reservationTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})} · This action cannot be undone.`,
-      onConfirm: async () => {
-        try {
-          await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled' });
-          fetchCounterQueue();
-          showNotif(`${entry.customerName} — reservation cancelled`);
-        } catch (err) {
-          showNotif(err.response?.data?.error || 'Cancel failed', 'error');
-        }
-      }
-    })} style={{
-      width: '100%', marginTop: '10px', padding: '9px',
-      background: 'transparent',
-      border: '1px solid #1a1a1a',
-      color: '#2a2a2a', borderRadius: '9px',
-      fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
-      letterSpacing: '0.5px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-      transition: 'all 0.15s'
-    }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}
-    >
-      <X size={11} /> CANCEL RESERVATION
-    </button>
-  )}
-
-  {/* ── NOTIFY CUSTOMER — send confirmation push ── */}
-{['pending', 'confirmed'].includes(entry.status) && (
-  <button onClick={async () => {
-    try {
-      const resTime = new Date(entry.reservationTime);
-      const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-      const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-      await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, {
-        title: entry.status === 'confirmed'
-          ? 'Reservation Confirmed!'
-          : 'Reservation Update',
-        body: entry.status === 'confirmed'
-          ? `Hi ${entry.customerName}! Your table for ${entry.partySize} at ${restaurantData?.name || 'the restaurant'} is confirmed for ${fmtDate} at ${fmtTime}. See you soon!`
-          : `Hi ${entry.customerName}! Your reservation at ${restaurantData?.name || 'the restaurant'} for ${fmtDate} at ${fmtTime} is being processed. We'll confirm shortly.`,
-        tag: 'reservation-notify'
-      });
-      showNotif(`${entry.customerName} — reservation notification sent`, 'success');
-    } catch (err) {
-      showNotif(err.response?.data?.error || 'Notification failed', 'error');
-    }
-  }} style={{
-    width: '100%', marginTop: '6px', padding: '9px',
-    background: 'rgba(211,191,162,0.04)',
-    border: '1px solid rgba(211,191,162,0.12)',
-    color: 'rgba(211,191,162,0.55)', borderRadius: '9px',
-    fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer',
-    letterSpacing: '0.5px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    transition: 'all 0.15s'
-  }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.55)'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
-  >
-    <BellRing size={11} />
-    {entry.status === 'confirmed' ? 'NOTIFY — BOOKING CONFIRMED' : 'NOTIFY — RESERVATION UPDATE'}
-  </button>
-)}
-</div>
+                  {/* Actions */}
+                  <div style={{ padding: '0 15px 14px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button onClick={() => setAssignTableModal(entry)} style={{ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', fontWeight: '900', fontSize: '0.58rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'opacity 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '0.85'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                        <TableProperties size={11} /> ASSIGN TABLE
+                      </button>
+                      <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: `Mark as no-show and remove from queue.`, onConfirm: async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}`, { status: 'no-show' }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
+                        style={{ width: '36px', height: '36px', borderRadius: '9px', background: 'transparent', border: '1px solid #1a1a1a', color: '#2a2a2a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}>
+                        <UserX size={12} />
+                      </button>
+                    </div>
+                    {/* Re-notify */}
+                    <button onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Almost ready!', body: `Hi ${entry.customerName}! Your table will be ready soon. Please stay nearby.` }); showNotif(`${entry.customerName} — notified`); } catch { showNotif('Notification failed', 'error'); } }}
+                      style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#2a2a2a', borderRadius: '8px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; e.currentTarget.style.color = '#2a2a2a'; }}>
+                      <BellRing size={10} /> NOTIFY CUSTOMER
+                    </button>
                   </div>
                 </div>
               );
             })}
-        </div>
-      )}
+          </div>
+        );
+      })()}
+
+      {/* ══ PICKUP QUEUE ══ */}
+      {queueTab === 'pickup' && (() => {
+        const filtered = pickupEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
+        return filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '52px 20px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#0a0a0a', border: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <ShoppingBag size={18} color="#1a1a1a" />
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#1e1e1e', fontWeight: '700' }}>
+              {queueSearch ? `No results for "${queueSearch}"` : 'No pickup orders'}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {filtered.map(entry => {
+              const isKitchenFired = entry.kitchenFired;
+              const isReady = entry.status === 'pickup-ready';
+
+              // Step indicator
+              const step = !isKitchenFired ? 0 : !isReady ? 1 : 2;
+              const stepLabels = ['Awaiting Kitchen', 'Preparing', 'Ready for Pickup'];
+              const stepColors = ['rgba(211,191,162,0.2)', 'rgba(138,112,77,0.5)', 'rgba(211,191,162,0.8)'];
+
+              return (
+                <div key={entry._id} style={{ background: '#0a0a0c', borderRadius: '14px', border: `1px solid ${isReady ? 'rgba(211,191,162,0.2)' : '#101010'}`, borderLeft: `3px solid ${stepColors[step]}`, overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                    {/* Customer info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <div style={{ width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <ShoppingBag size={11} color="#8a704d" />
+                        </div>
+                        <span style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0' }}>{entry.customerName}</span>
+                        {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#333', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                      </div>
+
+                      {/* Items */}
+                      {entry.items?.length > 0 && (
+                        <div style={{ fontSize: '0.6rem', color: '#555', lineHeight: 1.55, marginBottom: '8px', paddingLeft: '34px' }}>
+                          {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
+                          {entry.items.length > 3 && <span style={{ color: '#2a2a2a' }}> +{entry.items.length - 3}</span>}
+                        </div>
+                      )}
+
+                      {/* Step progress */}
+                      <div style={{ display: 'flex', gap: '4px', paddingLeft: '34px', marginBottom: '10px' }}>
+                        {stepLabels.map((s, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i <= step ? stepColors[step] : '#1a1a1a', transition: 'background 0.3s', flexShrink: 0 }} />
+                            <span style={{ fontSize: '0.44rem', fontWeight: '900', color: i === step ? '#8a704d' : i < step ? '#333' : '#1a1a1a', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{s}</span>
+                            {i < 2 && <div style={{ width: '12px', height: '1px', background: i < step ? 'rgba(211,191,162,0.2)' : '#111', marginLeft: '2px' }} />}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', paddingLeft: '34px' }}>
+                        {/* Step 1 — Send to Kitchen */}
+                        {!isKitchenFired && (
+                          <button onClick={async () => {
+                            try {
+                              const orderItems = (entry.items || []).map(i => ({ menuItemId: i.menuItemId || null, name: i.name, quantity: Number(i.quantity) || 1, portion: i.portion || 'Single', pricePerUnit: Number(i.price || i.pricePerUnit) || 0, subtotal: Number(i.subtotal) || 0, suggestion: '' }));
+                              const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
+                              await axios.post(`${BASE_URL}/orders`, { tenantId, tableNumber: 'Counter', items: orderItems, source: 'counter-pickup', sessionId: entry.sessionId, waitlistId: entry._id, status: 'pending', billDetails: { itemsTotal, grandTotal: itemsTotal } });
+                              await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
+                              fetchCounterQueue(); fetchInitialData();
+                              showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
+                            } catch (err) { showNotif(err.response?.data?.error || 'Failed', 'error'); }
+                          }} style={{ padding: '9px 14px', borderRadius: '9px', background: 'rgba(138,112,77,0.07)', border: '1px solid rgba(138,112,77,0.22)', color: '#8a704d', fontWeight: '900', fontSize: '0.6rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.14)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.07)'; e.currentTarget.style.color = '#8a704d'; }}>
+                            <ChefHat size={12} /> SEND TO KITCHEN
+                          </button>
+                        )}
+                        {/* Step 2 — Mark ready */}
+                        {isKitchenFired && !isReady && (
+                          <button onClick={async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`); fetchCounterQueue(); showNotif(`${entry.customerName} — customer notified, pickup ready`); }}
+                            style={{ padding: '9px 14px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: '#d3bfa2', fontWeight: '900', fontSize: '0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; }}>
+                            <PackageCheck size={12} /> MARK READY — NOTIFY CUSTOMER
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: Amount + settle */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
+                      </div>
+                      <button onClick={() => setConfirmModal({ show: true, title: `Settle Pickup — ${entry.customerName}?`, subtitle: `Collect ₹${entry.totalAmount?.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount }); fetchCounterQueue(); fetchAnalytics(); showNotif(`${entry.customerName} — pickup settled`); } catch (err) { showNotif(err.response?.data?.error || 'Settlement failed', 'error'); } } })}
+                        disabled={!isKitchenFired}
+                        style={{ padding: '8px 14px', borderRadius: '9px', background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isKitchenFired ? 'rgba(211,191,162,0.05)' : '#0d0d0d', border: isReady ? 'none' : isKitchenFired ? '1px solid rgba(211,191,162,0.15)' : '1px solid #111', color: isReady ? '#000' : isKitchenFired ? '#8a704d' : '#1e1e1e', fontWeight: '900', fontSize: '0.58rem', cursor: isKitchenFired ? 'pointer' : 'not-allowed', opacity: !isKitchenFired ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}>
+                        <Store size={11} /> SETTLE
+                      </button>
+                      {/* Cancel */}
+                      {!['served','settled','cancelled'].includes(entry.status) && (
+                        <button onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } })}
+                          style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
+                          <X size={9} /> CANCEL
+                        </button>
+                      )}
+                      {isReady && (
+                        <button onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Your pickup order is ready!', body: `Hi ${entry.customerName}! Please collect your order from the counter.`, tag: 'pickup-ready-reminder' }); showNotif(`${entry.customerName} — re-notified`); } catch { showNotif('Notification failed', 'error'); } }}
+                          style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.1)', color: 'rgba(211,191,162,0.4)', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.1)'; e.currentTarget.style.color = 'rgba(211,191,162,0.4)'; }}>
+                          <BellRing size={9} /> RE-NOTIFY
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* ══ RESERVATIONS ══ */}
+      {queueTab === 'reservations' && (() => {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+            {/* Date nav + stats */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                {[
+                  { onClick: () => { const d = new Date(reservationViewDate); d.setDate(d.getDate() - 1); setReservationViewDate(d.toISOString().split('T')[0]); }, icon: <ChevronLeft size={13} /> },
+                ].map((btn, i) => (
+                  <button key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
+                    {btn.icon}
+                  </button>
+                ))}
+                <div style={{ padding: '7px 16px', background: '#040405', border: '1px solid #161616', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
+                  {new Date(reservationViewDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </div>
+                <button onClick={() => { const d = new Date(reservationViewDate); d.setDate(d.getDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
+                  <ChevronRight size={13} />
+                </button>
+                <button onClick={() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}>
+                  TODAY
+                </button>
+                <button onClick={() => fetchCounterQueue()} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}>
+                  <RefreshCw size={11} />
+                </button>
+              </div>
+
+              {/* Stats pills */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {[
+                  { label: 'TOTAL', val: reservationEntries.length, c: '#d3bfa2' },
+                  { label: 'CONFIRMED', val: reservationEntries.filter(r => r.status === 'confirmed').length, c: '#8a704d' },
+                  { label: 'PENDING', val: reservationEntries.filter(r => r.status === 'pending').length, c: '#555' },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: 'center', padding: '7px 12px', background: '#0a0a0c', border: '1px solid rgba(211,191,162,0.06)', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c, fontFamily: 'monospace', lineHeight: 1 }}>{s.val}</div>
+                    <div style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', marginTop: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Reservation list */}
+            {reservationEntries.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '52px 20px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#0a0a0a', border: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <CalendarClock size={18} color="#1a1a1a" />
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#1e1e1e', fontWeight: '700' }}>No reservations for this date</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[...reservationEntries].sort((a, b) => new Date(a.reservationTime) - new Date(b.reservationTime)).map(entry => {
+                  const resTime = new Date(entry.reservationTime);
+                  const now = new Date();
+                  const minsUntil = Math.round((resTime - now) / 60000);
+                  const isUpcoming = minsUntil > 0 && minsUntil <= 60;
+                  const isOverdue = minsUntil < -15 && entry.status !== 'seated' && entry.status !== 'cancelled';
+                  const isDone = ['seated', 'cancelled', 'no-show'].includes(entry.status);
+
+                  const statusMeta = {
+                    pending:   { color: '#8a704d', label: 'PENDING',   accent: 'rgba(138,112,77,0.35)' },
+                    confirmed: { color: '#d3bfa2', label: 'CONFIRMED', accent: 'rgba(211,191,162,0.5)' },
+                    seated:    { color: '#444',    label: 'SEATED',    accent: '#1a1a1a' },
+                    cancelled: { color: '#2a2a2a', label: 'CANCELLED', accent: '#111' },
+                    'no-show': { color: '#2a2a2a', label: 'NO-SHOW',   accent: '#111' },
+                  };
+                  const sm = statusMeta[entry.status] || statusMeta.pending;
+
+                  return (
+                    <div key={entry._id} style={{ background: isDone ? '#080809' : isOverdue ? 'rgba(211,191,162,0.02)' : '#0a0a0c', border: `1px solid ${isOverdue ? 'rgba(211,191,162,0.15)' : isDone ? '#0d0d0d' : 'rgba(211,191,162,0.07)'}`, borderLeft: `3px solid ${isUpcoming ? 'rgba(211,191,162,0.6)' : sm.accent}`, borderRadius: '13px', overflow: 'hidden', opacity: isDone ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+                      <div style={{ padding: '13px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+
+                        {/* Time + info */}
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flex: 1 }}>
+                          {/* Time block */}
+                          <div style={{ textAlign: 'center', padding: '8px 12px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '10px', flexShrink: 0, minWidth: '64px' }}>
+                            <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>
+                              {resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </div>
+                            {isUpcoming && <div style={{ fontSize: '0.44rem', color: '#8a704d', fontWeight: '900', marginTop: '4px', letterSpacing: '0.5px' }}>in {minsUntil}m</div>}
+                            {isOverdue && <div style={{ fontSize: '0.44rem', color: '#8a704d', fontWeight: '900', marginTop: '4px', letterSpacing: '0.5px' }}>{Math.abs(minsUntil)}m ago</div>}
+                          </div>
+
+                          {/* Guest details */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#e8e0d0', marginBottom: '4px' }}>{entry.customerName}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Users size={9} color="#333" />
+                                <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
+                              </div>
+                              {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#2a2a2a', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                              {entry.tablePreference && (
+                                <span style={{ fontSize: '0.52rem', padding: '1px 6px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '4px', color: '#8a704d', fontWeight: '800' }}>T-{entry.tablePreference}</span>
+                              )}
+                            </div>
+                            {entry.specialRequests && (
+                              <div style={{ fontSize: '0.56rem', color: '#444', fontStyle: 'italic', background: '#060608', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(211,191,162,0.04)', marginBottom: '6px' }}>
+                                "{entry.specialRequests}"
+                              </div>
+                            )}
+                            {entry.items?.length > 0 && (
+                              <div style={{ fontSize: '0.56rem', color: '#555' }}>
+                                Pre-order: {entry.items.slice(0, 2).map(it => `${it.quantity}× ${it.name}`).join(' · ')}{entry.items.length > 2 ? ` +${entry.items.length - 2}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: status + actions */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '7px', flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.5rem', fontWeight: '900', padding: '3px 8px', borderRadius: '6px', background: `${sm.color}15`, color: sm.color, border: `1px solid ${sm.color}30`, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                            {sm.label}
+                          </span>
+
+                          {/* Action row */}
+                          <div style={{ display: 'flex', gap: '5px' }}>
+                            {/* Confirm */}
+                            {entry.status === 'pending' && (
+                              <button onClick={async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed' }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); }}
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
+                                CONFIRM
+                              </button>
+                            )}
+                            {/* Seat */}
+                            {entry.status === 'confirmed' && (
+                              <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <TableProperties size={10} /> SEAT
+                              </button>
+                            )}
+                            {/* Change table */}
+                            {entry.status === 'seated' && (
+                              <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+                                style={{ padding: '5px 9px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
+                                <TableProperties size={9} /> CHANGE T
+                              </button>
+                            )}
+                            {/* Edit */}
+                            <button onClick={() => setReservationEditModal(entry)}
+                              style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
+                              <SquarePen size={11} />
+                            </button>
+                            {/* No-show */}
+                            {['pending', 'confirmed'].includes(entry.status) && (
+                              <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show' }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
+                                style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#2a2a2a', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}>
+                                <UserX size={11} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Cancel + Notify — stacked */}
+                          {['pending', 'confirmed'].includes(entry.status) && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                              <button onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled' }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
+                                style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
+                                <X size={9} /> CANCEL
+                              </button>
+                              <button onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify' }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
+                                style={{ padding: '5px 10px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.08)', color: 'rgba(211,191,162,0.35)', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.22)'; e.currentTarget.style.color = '#d3bfa2'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}>
+                                <BellRing size={9} /> {entry.status === 'confirmed' ? 'NOTIFY CONFIRMED' : 'NOTIFY UPDATE'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     </div>
-  );
-})()}
-
   </div>
-</div>
 
-
-  </motion.div>
+</motion.div>
 )}
  
 
@@ -8513,860 +8066,669 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
 )}
 
          {/* ── INSIGHTS ── */}
-{activeTab==='insights' && (
-  <motion.div key="insights" initial={{opacity:0}} animate={{opacity:1}} style={styles.insightsWrapper}>
+{/* ── INSIGHTS TAB ── */}
+{activeTab === 'insights' && (
+<motion.div
+  key="insights"
+  initial={{ opacity: 0, y: 14 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3 }}
+  style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '100px', width: '100%' }}
+>
 
-{/* ── 🧠 AI BRAIN PANEL ── */}
-{/* ── 🧠 AI BRAIN PANEL ── */}
-{aiBrain && (
-  <div style={{
-    background: 'linear-gradient(135deg, #0a0a0a 0%, #0d0b00 100%)',
-    border: '1px solid rgba(211,191,162,0.15)',
-    borderRadius: '16px',
-    padding: '20px',
-    marginBottom: '20px'
-  }}>
-
-    {/* Header */}
+{/* ════════════════════════════════════════
+    SECTION HEADER COMPONENT (inline helper)
+════════════════════════════════════════ */}
+{(() => {
+  // Reusable premium section header used throughout this tab
+  const SH = ({ icon, title, sub }) => (
     <div style={{
-      display: 'flex', alignItems: 'center',
-      justifyContent: 'space-between', marginBottom: '16px'
+      display: 'flex', alignItems: 'center', gap: '12px',
+      margin: '36px 0 18px', paddingBottom: '14px',
+      borderBottom: '1px solid rgba(211,191,162,0.1)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div style={{
-          width: '28px', height: '28px', borderRadius: '8px',
-          background: 'rgba(211,191,162,0.08)',
-          border: '1px solid rgba(211,191,162,0.18)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />
-        </div>
-        <div>
-          <div style={{
-            fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2',
-            letterSpacing: '2.5px', textTransform: 'uppercase'
-          }}>
-            PRATYEKSHA INTELLIGENCE
-          </div>
-          <div style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.35)', fontWeight: '500' }}>
-            {aiBrain.dayOfWeek} · AI-powered forecast
-          </div>
-        </div>
-      </div>
       <div style={{
-        fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)',
-        fontWeight: '600', letterSpacing: '0.5px'
-      }}>
-        {new Date().toLocaleTimeString('en-IN', {
-          hour: '2-digit', minute: '2-digit',
-          hour12: true, timeZone: 'Asia/Kolkata'
-        })}
-      </div>
-    </div>
-
-    {/* KPI row */}
-    <div style={{
-      display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-      gap: '10px', marginBottom: '16px'
-    }}>
-      {[
-        {
-          icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />,
-          label: 'Expected Orders',
-          value: aiBrain.predictedOrders ?? '—'
-        },
-        {
-          icon: <ReceiptIndianRupee size={14} color="#d3bfa2" strokeWidth={1.5} />,
-          label: 'Est. Revenue',
-          value: `₹${(aiBrain.predictedRevenue || 0).toLocaleString()}`
-        },
-        {
-          icon: <Clock size={14} color="#d3bfa2" strokeWidth={1.5} />,
-          label: 'Peak Window',
-          value: aiBrain.peakWindow ?? '—'
-        },
-      ].map(({ icon, label, value }) => (
-        <div key={label} style={{
-          background: 'rgba(211,191,162,0.04)',
-          border: '1px solid rgba(211,191,162,0.09)',
-          borderRadius: '10px', padding: '12px 10px', textAlign: 'center'
-        }}>
-          <div style={{
-            display: 'flex', justifyContent: 'center',
-            marginBottom: '6px'
-          }}>
-            {icon}
-          </div>
-          <div style={{
-            color: '#d3bfa2', fontWeight: '900',
-            fontSize: '0.88rem', letterSpacing: '-0.3px'
-          }}>
-            {value}
-          </div>
-          <div style={{
-            color: 'rgba(255,255,255,0.22)', fontSize: '0.52rem',
-            marginTop: '3px', letterSpacing: '0.5px', fontWeight: '600'
-          }}>
-            {label}
-          </div>
-        </div>
-      ))}
-    </div>
-
-    {/* Risk alerts */}
-    {aiBrain.risks?.length > 0 && (
-      <div style={{ marginBottom: '14px' }}>
-        <div style={{
-          fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)',
-          fontWeight: '900', letterSpacing: '2px',
-          textTransform: 'uppercase', marginBottom: '7px',
-          display: 'flex', alignItems: 'center', gap: '5px'
-        }}>
-          <AlertTriangle size={9} color="rgba(248,113,113,0.6)" strokeWidth={2} />
-          STOCK RISKS
-        </div>
-        {aiBrain.risks.slice(0, 3).map(r => (
-          <div key={r.itemName} style={{
-            background: 'rgba(248,113,113,0.05)',
-            border: '1px solid rgba(248,113,113,0.15)',
-            borderRadius: '8px', padding: '9px 12px', marginBottom: '5px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-              <AlertTriangle size={11} color="#f87171" strokeWidth={2} />
-              <span style={{
-                color: '#f87171', fontSize: '0.7rem', fontWeight: '700'
-              }}>
-                {r.itemName} may run short
-              </span>
-            </div>
-            <span style={{
-              color: 'rgba(255,255,255,0.25)', fontSize: '0.62rem',
-              fontFamily: 'monospace'
-            }}>
-              {r.required}{r.unit} needed · {r.currentStock}{r.unit} left
-            </span>
-          </div>
-        ))}
-      </div>
-    )}
-
-    {/* Ingredient prep estimates */}
-    {aiBrain.ingredientRequirements?.length > 0 && (
-      <div style={{
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        paddingTop: '12px'
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '5px',
-          color: 'rgba(255,255,255,0.2)', fontSize: '0.52rem',
-          fontWeight: '900', letterSpacing: '2px',
-          textTransform: 'uppercase', marginBottom: '9px'
-        }}>
-          <Package size={9} color="rgba(255,255,255,0.2)" strokeWidth={2} />
-          TODAY'S PREP ESTIMATES
-        </div>
-        {aiBrain.ingredientRequirements.slice(0, 5).map(ing => (
-          <div key={ing.itemName} style={{
-            display: 'flex', justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '5px 0',
-            borderBottom: '1px solid rgba(255,255,255,0.03)'
-          }}>
-            <span style={{
-              color: 'rgba(255,255,255,0.45)', fontSize: '0.72rem'
-            }}>
-              {ing.itemName}
-            </span>
-            <span style={{
-              color: '#d3bfa2', fontSize: '0.72rem',
-              fontWeight: '800', fontFamily: 'monospace'
-            }}>
-              {ing.required?.toFixed(1)} {ing.unit}
-            </span>
-          </div>
-        ))}
-      </div>
-    )}
-
-    {/* No data fallback */}
-    {!aiBrain.risks?.length && !aiBrain.ingredientRequirements?.length && (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '7px',
-        padding: '10px 12px',
-        background: 'rgba(211,191,162,0.03)',
-        border: '1px solid rgba(211,191,162,0.07)',
-        borderRadius: '8px'
-      }}>
-        <CheckCircle2 size={12} color="rgba(74,222,128,0.5)" strokeWidth={2} />
-        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>
-          All ingredients sufficient for today's predicted volume.
-        </span>
-      </div>
-    )}
-  </div>
-)}
-    {/* KPI STRIP */}
-    <div style={styles.statsRow}>
-      <div style={styles.glassStat}>
-        <small style={styles.statLabel}>MONTHLY REVENUE</small>
-        <h2 style={styles.statVal}>₹{stats.revenue.toLocaleString()}</h2>
-        <div style={{color:'#4ade80',fontSize:'0.7rem'}}>
-          {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}
-        </div>
-      </div>
-      <div style={styles.glassStat}>
-        <small style={styles.statLabel}>LOYALTY SCORE</small>
-        <h2 style={styles.statVal}>{stats.loyaltyRate}%</h2>
-        <div style={{color:'#d3bfa2',fontSize:'0.7rem'}}>
-          {trendsData?.customers?.repeat||0} repeat / {trendsData?.customers?.total||0} total
-        </div>
-      </div>
-      <div style={styles.glassStat}>
-        <small style={styles.statLabel}>AVG ORDER VALUE</small>
-        <h2 style={styles.statVal}>₹{stats.avg}</h2>
-        <div style={{color:'#888',fontSize:'0.7rem'}}>per order</div>
-      </div>
-    </div>
-
-    {/* SMART DIGEST */}
-    <div style={{...styles.biCard,marginBottom:'20px',borderLeft:'4px solid #d3bfa2'}}>
-      <h4 style={styles.biTitle}><Sparkles size={16}/> SMART DIGEST</h4>
-      <p style={{fontSize:'0.9rem',color:'#fff',fontWeight:'500'}}>{insightsData.digest}</p>
-    </div>
-
-    {/* ═══ GST LIABILITY & FILING INTELLIGENCE ═══ */}
-{stats.revenue > 0 && (() => {
-  // GST rates for restaurant (as per Indian GST law)
-  // Non-AC / small restaurants: 5% GST (no ITC) → 2.5% CGST + 2.5% SGST
-  // AC restaurants / hotel restaurants: 18% GST (with ITC) — not computed here
-  // Composition scheme threshold: ₹1.5 Cr annual turnover
- 
-  const monthlyRevenue = stats.revenue;
- 
-  // 5% GST split (most common for restaurants)
-  const gstRate5 = 0.05;
-  const cgst5 = monthlyRevenue * 0.025;
-  const sgst5 = monthlyRevenue * 0.025;
-  const totalGst5 = cgst5 + sgst5;
- 
-  // 18% GST split (AC / premium restaurants)
-  const gstRate18 = 0.18;
-  const cgst18 = monthlyRevenue * 0.09;
-  const sgst18 = monthlyRevenue * 0.09;
-  const totalGst18 = cgst18 + sgst18;
- 
-  // Estimated annual turnover
-  const estimatedAnnual = monthlyRevenue * 12;
-  const compositionLimit = 15000000; // ₹1.5 Cr
-  const isCompositionEligible = estimatedAnnual < compositionLimit;
- 
-  // Revenue AFTER GST (GST-exclusive base — assuming prices are GST-inclusive)
-  const revenueExGst5 = monthlyRevenue / 1.05;
-  const netRevenueAfterGst5 = monthlyRevenue - totalGst5;
- 
-  // Cost & Profit (from profitabilityData if available)
-  const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0)
-    + (extraAnalytics?.totalCost || 0);
-  const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-  const payrollCost = staffEfficiency.reduce((a, s) => {
-    const rec = monthlySalaryRecords.find(r =>
-      r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
-    );
-    return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
-  }, 0);
- 
-  // Overall profit after GST, ingredient cost, and payroll
-  const grossAfterGst = netRevenueAfterGst5 - ingredientCost;
-  const netAfterAll = grossAfterGst - payrollCost;
- 
-  // GSTR-1 / GSTR-3B filing dates
-  const now = new Date();
-  const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + 1, 11); // 11th of next month
-  const nextGstr3B = new Date(now.getFullYear(), now.getMonth() + 1, 20); // 20th of next month
-  const daysToGstr1 = Math.ceil((nextGstr1 - now) / (1000 * 60 * 60 * 24));
-  const daysToGstr3B = Math.ceil((nextGstr3B - now) / (1000 * 60 * 60 * 24));
- 
-  return (
-    <div style={{
-      background: '#0f0f0f',
-      border: '1px solid rgba(211,191,162,0.12)',
-      borderLeft: '4px solid #c9a84c',
-      borderRadius: '16px',
-      padding: '20px',
-      marginBottom: '20px'
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '0.72rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          <ReceiptText size={15} color="#c9a84c" />
-          GST LIABILITY & FILING INTELLIGENCE
-        </h4>
-        <span style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>
-          {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase()}
-        </span>
-      </div>
-      <p style={{ fontSize: '0.68rem', color: '#444', marginBottom: '18px', marginTop: '6px' }}>
-        Based on ₹{monthlyRevenue.toLocaleString()} revenue this month · 5% GST (2.5% CGST + 2.5% SGST)
-      </p>
- 
-      {/* ── MAIN GST SPLIT ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '18px' }}>
-        {[
-          { l: 'TOTAL REVENUE', v: `₹${monthlyRevenue.toLocaleString()}`, c: '#fff', sub: 'GST-inclusive' },
-          { l: 'CGST @ 2.5%', v: `₹${Math.round(cgst5).toLocaleString()}`, c: '#c9a84c', sub: 'Central GST' },
-          { l: 'SGST @ 2.5%', v: `₹${Math.round(sgst5).toLocaleString()}`, c: '#bda88a', sub: 'State GST' },
-          { l: 'TOTAL GST DUE', v: `₹${Math.round(totalGst5).toLocaleString()}`, c: '#f87171', sub: '5% of revenue' },
-        ].map(s => (
-          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-            <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', marginBottom: '5px', letterSpacing: '0.8px' }}>{s.l}</div>
-            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-            <div style={{ fontSize: '0.54rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
- 
-      {/* ── VISUAL GST BAR ── */}
-      <div style={{ marginBottom: '18px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-          <span style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900' }}>REVENUE BREAKDOWN</span>
-          <span style={{ fontSize: '0.58rem', color: '#444' }}>
-            GST = {Math.round((totalGst5 / monthlyRevenue) * 100)}% of revenue
-          </span>
-        </div>
-        <div style={{ display: 'flex', height: '10px', borderRadius: '5px', overflow: 'hidden', gap: '2px' }}>
-          {/* Net revenue bar */}
-          <div style={{
-            flex: 1,
-            background: 'rgba(211,191,162,0.4)',
-            borderRadius: '5px 0 0 5px',
-            position: 'relative'
-          }}
-            title={`Net Revenue: ₹${Math.round(netRevenueAfterGst5).toLocaleString()}`}
-          />
-          {/* CGST */}
-          <div style={{
-            width: '2.5%',
-            background: '#c9a84c',
-            title: `CGST: ₹${Math.round(cgst5).toLocaleString()}`
-          }} />
-          {/* SGST */}
-          <div style={{
-            width: '2.5%',
-            background: '#bda88a',
-            borderRadius: '0 5px 5px 0',
-            title: `SGST: ₹${Math.round(sgst5).toLocaleString()}`
-          }} />
-        </div>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '7px' }}>
-          {[
-            { c: 'rgba(211,191,162,0.4)', l: `Net Revenue ₹${Math.round(netRevenueAfterGst5).toLocaleString()}` },
-            { c: '#c9a84c', l: `CGST ₹${Math.round(cgst5).toLocaleString()}` },
-            { c: '#bda88a', l: `SGST ₹${Math.round(sgst5).toLocaleString()}` },
-          ].map(s => (
-            <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: s.c, flexShrink: 0 }} />
-              <span style={{ fontSize: '0.55rem', color: '#444', fontWeight: '700' }}>{s.l}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      
- 
-      {/* ── OVERALL PROFIT AFTER GST + COSTS ── */}
-      {profitabilityData.length > 0 && (
-        <>
-          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: '16px', marginBottom: '16px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>
-              OVERALL PROFIT BREAKDOWN
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-              {[
-                { l: 'TOTAL REVENUE',          v: monthlyRevenue,      c: '#fff',    sign: '',   bold: false },
-                { l: '— GST PAID (5%)',        v: -totalGst5,          c: '#f87171', sign: '-',  bold: false },
-                { l: 'NET REVENUE (after GST)', v: netRevenueAfterGst5, c: '#d3bfa2', sign: '',  bold: true  },
-                { l: '— INGREDIENT COST',      v: -ingredientCost,     c: '#BA7517', sign: '-',  bold: false },
-                { l: 'GROSS PROFIT',           v: netRevenueAfterGst5 - ingredientCost, c: '#d3bfa2', sign: '', bold: true },
-                ...(payrollCost > 0 ? [
-                  { l: '— STAFF PAYROLL',      v: -payrollCost,        c: '#BA7517', sign: '-',  bold: false },
-                  { l: 'NET PROFIT',           v: netAfterAll,         c: netAfterAll >= 0 ? '#4ade80' : '#f87171', sign: '', bold: true },
-                ] : []),
-              ].map((s, i) => (
-                <div key={i} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: s.bold ? '10px 10px' : '7px 10px',
-                  background: s.bold ? 'rgba(255,255,255,0.03)' : 'transparent',
-                  borderBottom: '1px solid #111',
-                  borderRadius: s.bold ? '6px' : '0',
-                  marginBottom: s.bold ? '4px' : '0'
-                }}>
-                  <span style={{
-                    fontSize: s.bold ? '0.66rem' : '0.62rem',
-                    color: s.bold ? '#888' : '#444',
-                    fontWeight: '900',
-                    letterSpacing: '0.5px'
-                  }}>
-                    {s.l}
-                  </span>
-                  <span style={{
-                    fontSize: s.bold ? '0.9rem' : '0.78rem',
-                    fontWeight: '900',
-                    color: s.c
-                  }}>
-                    {s.sign}₹{Math.abs(Math.round(s.v)).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
- 
-      {/* ── FILING DEADLINES ── */}
-      <div style={{
-        background: '#050505',
-        border: '1px solid #111',
-        borderRadius: '10px',
-        padding: '14px',
-        marginBottom: '14px'
-      }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>
-          UPCOMING GST FILING DEADLINES
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          {[
-            {
-              label: 'GSTR-1',
-              desc: 'Outward supplies',
-              date: nextGstr1.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-              days: daysToGstr1,
-              urgent: daysToGstr1 <= 5
-            },
-            {
-              label: 'GSTR-3B',
-              desc: 'Monthly summary + payment',
-              date: nextGstr3B.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-              days: daysToGstr3B,
-              urgent: daysToGstr3B <= 5
-            },
-          ].map(s => (
-            <div key={s.label} style={{
-              padding: '12px',
-              background: s.urgent ? 'rgba(248,113,113,0.06)' : '#0a0a0a',
-              border: `1px solid ${s.urgent ? 'rgba(248,113,113,0.25)' : '#151515'}`,
-              borderRadius: '8px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: '900', color: s.urgent ? '#f87171' : '#d3bfa2' }}>
-                  {s.label}
-                </span>
-                <span style={{
-                  fontSize: '0.52rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px',
-                  background: s.urgent ? 'rgba(248,113,113,0.12)' : 'rgba(211,191,162,0.06)',
-                  color: s.urgent ? '#f87171' : '#555',
-                  border: `1px solid ${s.urgent ? 'rgba(248,113,113,0.3)' : '#1a1a1a'}`
-                }}>
-                  {s.days}d left
-                </span>
-              </div>
-              <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '4px' }}>{s.desc}</div>
-              <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#666' }}>Due: {s.date}</div>
-            </div>
-          ))}
-        </div>
-      </div>
- 
-      {/* ── COMPOSITION SCHEME ELIGIBILITY ── */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: '10px',
-        padding: '12px 14px',
-        background: isCompositionEligible ? 'rgba(74,222,128,0.04)' : 'rgba(201,168,76,0.04)',
-        border: `1px solid ${isCompositionEligible ? 'rgba(74,222,128,0.15)' : 'rgba(201,168,76,0.15)'}`,
-        borderRadius: '8px'
-      }}>
-        <span style={{ fontSize: '14px', flexShrink: 0 }}>💡</span>
-        <div>
-          <div style={{ fontSize: '0.6rem', color: isCompositionEligible ? '#4ade80' : '#c9a84c', fontWeight: '900', marginBottom: '4px' }}>
-            {isCompositionEligible
-              ? 'COMPOSITION SCHEME ELIGIBLE'
-              : 'BEYOND COMPOSITION THRESHOLD'}
-          </div>
-          <div style={{ fontSize: '0.62rem', color: '#444', lineHeight: 1.6 }}>
-            Estimated annual turnover: <b style={{ color: '#d3bfa2' }}>₹{Math.round(estimatedAnnual / 100000).toLocaleString()}L</b>
-            {isCompositionEligible
-              ? ' — You qualify for the Composition Scheme (pay 5% flat, simpler filing). Consult your CA.'
-              : ' — Annual turnover exceeds ₹1.5 Cr composition limit. Regular GST filing required.'}
-          </div>
-          <div style={{ fontSize: '0.58rem', color: '#2a2a2a', marginTop: '5px' }}>
-            GST to keep aside this month: <b style={{ color: '#f87171' }}>₹{Math.round(totalGst5).toLocaleString()}</b>
-            {' '}(transfer to dedicated account before filing)
-          </div>
-        </div>
+        width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+        background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d3bfa2'
+      }}>{icon}</div>
+      <div>
+        <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px' }}>{title}</div>
+        {sub && <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.25)', marginTop: '2px', fontWeight: '500' }}>{sub}</div>}
       </div>
     </div>
   );
-})()}
- 
 
-    {/* ═══════════ SECTION 1 — TODAY'S PULSE ═══════════ */}
+  // Reusable stat card
+  const SC = ({ label, value, sub, c = '#fff', accent = false }) => (
+    <div style={{
+      background: accent ? 'rgba(211,191,162,0.07)' : '#070707',
+      border: `1px solid ${accent ? 'rgba(211,191,162,0.25)' : 'rgba(255,255,255,0.07)'}`,
+      borderRadius: '13px', padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: '4px'
+    }}>
+      <div style={{ fontSize: '0.46rem', fontWeight: '900', color: 'rgba(255,255,255,0.22)', letterSpacing: '2px', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: '1.25rem', fontWeight: '900', color: c, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1.05 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '500' }}>{sub}</div>}
+    </div>
+  );
+
+  // Reusable biCard container
+  const BC = ({ children, style = {} }) => (
+    <div style={{
+      background: '#080808', border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: '16px', padding: '20px', ...style
+    }}>{children}</div>
+  );
+
+  // Reusable biTitle
+  const BT = ({ icon, children, right }) => (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      marginBottom: '18px', paddingBottom: '13px',
+      borderBottom: '1px solid rgba(255,255,255,0.06)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#d3bfa2' }}>
+        {icon}
+        <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px', textTransform: 'uppercase' }}>{children}</span>
+      </div>
+      {right && <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>{right}</div>}
+    </div>
+  );
+
+  const todayRev = currentMonthAnalytics.find(d => d._id === istTodayStr)?.revenue || 0;
+  const monthOrders = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
+
+  return (
+    <>
+
+    {/* ════ AI BRAIN PANEL ════ */}
+    {aiBrain && (
+      <div style={{
+        background: 'linear-gradient(135deg, #08080a 0%, #0d0b00 100%)',
+        border: '1px solid rgba(211,191,162,0.2)', borderRadius: '18px',
+        padding: '20px', marginBottom: '24px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={15} color="#d3bfa2" strokeWidth={1.4} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>PRATYEKSHA INTELLIGENCE</div>
+              <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)', marginTop: '2px' }}>{aiBrain.dayOfWeek} · AI-powered daily forecast</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.18)', fontFamily: 'monospace' }}>
+            {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '14px' }}>
+          {[
+            { icon: <Flame size={13} color="#d3bfa2" strokeWidth={1.5} />, label: 'Expected Orders', value: aiBrain.predictedOrders ?? '—' },
+            { icon: <ReceiptIndianRupee size={13} color="#d3bfa2" strokeWidth={1.5} />, label: 'Est. Revenue', value: `₹${(aiBrain.predictedRevenue || 0).toLocaleString()}` },
+            { icon: <Clock3 size={13} color="#d3bfa2" strokeWidth={1.5} />, label: 'Peak Window', value: aiBrain.peakWindow ?? '—' },
+          ].map(({ icon, label, value }) => (
+            <div key={label} style={{
+              background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
+              borderRadius: '11px', padding: '13px', textAlign: 'center'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{icon}</div>
+              <div style={{ color: '#d3bfa2', fontWeight: '900', fontSize: '0.92rem', letterSpacing: '-0.3px' }}>{value}</div>
+              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.48rem', marginTop: '3px', letterSpacing: '0.3px' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {aiBrain.risks?.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '0.48rem', fontWeight: '900', color: 'rgba(255,255,255,0.2)', letterSpacing: '2px', marginBottom: '7px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <AlertTriangle size={9} color="rgba(248,113,113,0.6)" strokeWidth={2} />
+              STOCK RISKS
+            </div>
+            {aiBrain.risks.slice(0, 3).map(r => (
+              <div key={r.itemName} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 12px', marginBottom: '5px',
+                background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <AlertTriangle size={11} color="#f87171" strokeWidth={2} />
+                  <span style={{ color: '#f87171', fontSize: '0.68rem', fontWeight: '700' }}>{r.itemName} may run short</span>
+                </div>
+                <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.6rem', fontFamily: 'monospace' }}>
+                  {r.required}{r.unit} needed · {r.currentStock}{r.unit} left
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {aiBrain.ingredientRequirements?.length > 0 && (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+            <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '900', letterSpacing: '2px', marginBottom: '9px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Package size={9} color="rgba(255,255,255,0.2)" strokeWidth={2} />
+              TODAY'S PREP ESTIMATES
+            </div>
+            {aiBrain.ingredientRequirements.slice(0, 5).map(ing => (
+              <div key={ing.itemName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem' }}>{ing.itemName}</span>
+                <span style={{ color: '#d3bfa2', fontSize: '0.7rem', fontWeight: '800', fontFamily: 'monospace' }}>{ing.required?.toFixed(1)} {ing.unit}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!aiBrain.risks?.length && !aiBrain.ingredientRequirements?.length && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '10px 12px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '8px' }}>
+            <CheckCircle2 size={12} color="rgba(211,191,162,0.4)" strokeWidth={2} />
+            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.66rem' }}>All ingredients sufficient for today's predicted volume.</span>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ════ KPI STRIP ════ */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px,1fr))', gap: '10px', marginBottom: '24px' }}>
+      <SC label="Monthly Revenue"  value={`₹${stats.revenue.toLocaleString()}`}   sub={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})} accent c="#d3bfa2" />
+      <SC label="Today Revenue"    value={`₹${todayRev.toLocaleString()}`}         sub="Live settlements" />
+      <SC label="Total Orders"     value={monthOrders.toLocaleString()}             sub="Settled bills this month" />
+      <SC label="Avg Order Value"  value={`₹${stats.avg}`}                         sub="Per settled bill" />
+      <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
+    </div>
+
+    {/* ════ SMART DIGEST ════ */}
+    <div style={{
+      background: '#080808', border: '1px solid rgba(211,191,162,0.15)',
+      borderLeft: '3px solid #d3bfa2', borderRadius: '14px',
+      padding: '18px 20px', marginBottom: '24px',
+      display: 'flex', gap: '14px', alignItems: 'flex-start'
+    }}>
+      <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />
+      </div>
+      <div>
+        <div style={{ fontSize: '0.48rem', fontWeight: '900', color: 'rgba(211,191,162,0.4)', letterSpacing: '2px', marginBottom: '7px' }}>SMART DIGEST</div>
+        <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', fontWeight: '400', lineHeight: 1.65 }}>{insightsData.digest}</p>
+      </div>
+    </div>
+
+    {/* ════ GST + P&L ════ */}
+    {stats.revenue > 0 && (() => {
+      const monthlyRevenue      = stats.revenue;
+      const cgst5               = monthlyRevenue * 0.025;
+      const sgst5               = monthlyRevenue * 0.025;
+      const totalGst5           = cgst5 + sgst5;
+      const netRevenueAfterGst5 = monthlyRevenue - totalGst5;
+      const ingredientCost      = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0) + (extraAnalytics?.totalCost||0);
+      const monthStr            = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+      const payrollCost         = staffEfficiency.reduce((a,s)=>{
+        const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+        return a + (Number(rec?.baseSalary||s.baseSalary)||0);
+      },0);
+      const grossAfterGst = netRevenueAfterGst5 - ingredientCost;
+      const netAfterAll   = grossAfterGst - payrollCost;
+      const estimatedAnnual = monthlyRevenue * 12;
+      const isCompositionEligible = estimatedAnnual < 15000000;
+      const now = new Date();
+      const nextGstr1  = new Date(now.getFullYear(), now.getMonth()+1, 11);
+      const nextGstr3B = new Date(now.getFullYear(), now.getMonth()+1, 20);
+      const daysToGstr1  = Math.ceil((nextGstr1 - now)/86400000);
+      const daysToGstr3B = Math.ceil((nextGstr3B - now)/86400000);
+
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '24px' }}>
+
+          {/* GST Card */}
+          <BC>
+            <BT icon={<ReceiptText size={14} strokeWidth={1.5}/>} right={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'}).toUpperCase()}>
+              GST LIABILITY
+            </BT>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+              {[
+                { l:'CGST @ 2.5%',  v:Math.round(cgst5),              c:'rgba(255,255,255,0.8)' },
+                { l:'SGST @ 2.5%',  v:Math.round(sgst5),              c:'rgba(255,255,255,0.8)' },
+                { l:'TOTAL GST DUE',v:Math.round(totalGst5),          c:'#fff', bold:true },
+                { l:'NET REVENUE',  v:Math.round(netRevenueAfterGst5), c:'rgba(211,191,162,0.7)' },
+              ].map(s=>(
+                <div key={s.l} style={{ padding:'12px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                  <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'6px' }}>{s.l}</div>
+                  <div style={{ fontSize: s.bold?'1rem':'0.9rem', fontWeight:'900', color:s.c, fontFamily:'monospace' }}>₹{s.v.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Revenue bar */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display:'flex', height:'7px', borderRadius:'4px', overflow:'hidden', gap:'1px' }}>
+                <div style={{ flex:1, background:'rgba(211,191,162,0.35)', borderRadius:'4px 0 0 4px' }} title={`Net: ₹${Math.round(netRevenueAfterGst5).toLocaleString()}`} />
+                <div style={{ width:'2.5%', background:'#c9a84c' }} />
+                <div style={{ width:'2.5%', background:'#bda88a', borderRadius:'0 4px 4px 0' }} />
+              </div>
+              <div style={{ display:'flex', gap:'14px', marginTop:'6px' }}>
+                {[{c:'rgba(211,191,162,0.35)',l:'Net Revenue'},{c:'#c9a84c',l:'CGST'},{c:'#bda88a',l:'SGST'}].map(s=>(
+                  <div key={s.l} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                    <div style={{ width:'7px', height:'7px', borderRadius:'2px', background:s.c, flexShrink:0 }} />
+                    <span style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.25)', fontWeight:'600' }}>{s.l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Filing deadlines */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+              {[
+                { label:'GSTR-1', desc:'Outward supplies', date:nextGstr1.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), days:daysToGstr1 },
+                { label:'GSTR-3B', desc:'Summary + payment', date:nextGstr3B.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), days:daysToGstr3B },
+              ].map(s=>(
+                <div key={s.label} style={{ padding:'11px 13px', background: s.days<=5?'rgba(248,113,113,0.05)':'rgba(255,255,255,0.02)', border:`1px solid ${s.days<=5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                    <span style={{ fontSize:'0.65rem', fontWeight:'900', color: s.days<=5?'#f87171':'#d3bfa2' }}>{s.label}</span>
+                    <span style={{ fontSize:'0.48rem', fontWeight:'900', padding:'2px 7px', borderRadius:'4px', background: s.days<=5?'rgba(248,113,113,0.1)':'rgba(211,191,162,0.06)', color: s.days<=5?'#f87171':'rgba(211,191,162,0.5)' }}>{s.days}d</span>
+                  </div>
+                  <div style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)' }}>{s.desc}</div>
+                  <div style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.35)', fontWeight:'700', marginTop:'3px' }}>Due {s.date}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Composition eligibility */}
+            <div style={{ padding:'10px 12px', background: isCompositionEligible?'rgba(211,191,162,0.04)':'rgba(211,191,162,0.03)', border:`1px solid ${isCompositionEligible?'rgba(211,191,162,0.15)':'rgba(211,191,162,0.08)'}`, borderRadius:'8px', display:'flex', gap:'8px', alignItems:'flex-start' }}>
+              <Lightbulb size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.8} style={{ marginTop:'1px', flexShrink:0 }} />
+              <div>
+                <div style={{ fontSize:'0.5rem', color: isCompositionEligible?'#d3bfa2':'rgba(211,191,162,0.5)', fontWeight:'900', marginBottom:'3px' }}>
+                  {isCompositionEligible ? 'COMPOSITION SCHEME ELIGIBLE' : 'REGULAR GST REGIME'}
+                </div>
+                <div style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.3)', lineHeight:1.5 }}>
+                  Est. annual ₹{Math.round(estimatedAnnual/100000).toLocaleString()}L ·{' '}
+                  {isCompositionEligible ? 'Consult your CA about simplified filing.' : 'Annual turnover exceeds ₹1.5Cr threshold.'}
+                </div>
+              </div>
+            </div>
+          </BC>
+
+          {/* P&L Card */}
+          <BC>
+            <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>}>P&L SUMMARY</BT>
+            {[
+              { l:'TOTAL REVENUE',            v:monthlyRevenue,           sign:'',  bold:false },
+              { l:'— GST PAID (5%)',           v:-totalGst5,               sign:'-', bold:false },
+              { l:'NET REVENUE',              v:netRevenueAfterGst5,      sign:'',  bold:true  },
+              { l:'— INGREDIENT COST',         v:-ingredientCost,          sign:'-', bold:false },
+              { l:'GROSS PROFIT',             v:grossAfterGst,            sign:'',  bold:true  },
+              ...(payrollCost>0?[
+                { l:'— STAFF PAYROLL',         v:-payrollCost,             sign:'-', bold:false },
+                { l:'NET PROFIT',             v:netAfterAll,              sign:'',  bold:true, net:true },
+              ]:[])
+            ].map((s,i)=>(
+              <div key={i} style={{
+                display:'flex', justifyContent:'space-between', alignItems:'center',
+                padding: s.bold?'9px 11px':'6px 11px', marginBottom: s.bold?'4px':'0',
+                background: s.bold?'rgba(255,255,255,0.025)':'transparent',
+                border: s.bold?'1px solid rgba(255,255,255,0.05)':'none',
+                borderRadius: s.bold?'8px':'0',
+                borderBottom: !s.bold?'1px solid rgba(255,255,255,0.04)':undefined,
+              }}>
+                <span style={{ fontSize: s.bold?'0.62rem':'0.6rem', color: s.bold?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.25)', fontWeight:'800', letterSpacing:'0.3px' }}>{s.l}</span>
+                <span style={{ fontSize: s.bold?'0.88rem':'0.75rem', fontWeight:'900', fontFamily:'monospace', color: s.net ? (netAfterAll>=0?'#d3bfa2':'rgba(248,113,113,0.8)') : s.bold?'#d3bfa2':'rgba(255,255,255,0.6)' }}>
+                  {s.sign&&s.v<0?'-':''}₹{Math.abs(Math.round(s.v)).toLocaleString()}
+                </span>
+              </div>
+            ))}
+
+            {/* Profit & Loss bar */}
+            {profitabilityData.length > 0 && (() => {
+              const totalRev2 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0);
+              const totalCost2 = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
+              const fcPct = totalRev2>0 ? Math.round((totalCost2/totalRev2)*100) : 0;
+              return (
+                <div style={{ marginTop:'14px', padding:'12px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                    <span style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px' }}>FOOD COST RATIO</span>
+                    <span style={{ fontSize:'0.55rem', fontWeight:'900', color: fcPct>40?'rgba(240,165,0,0.8)':'rgba(211,191,162,0.7)', fontFamily:'monospace' }}>{fcPct}%</span>
+                  </div>
+                  <div style={{ height:'5px', background:'rgba(255,255,255,0.06)', borderRadius:'3px', overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${Math.min(fcPct,100)}%`, background: fcPct>40?'rgba(240,165,0,0.6)':'rgba(211,191,162,0.5)', borderRadius:'3px', transition:'width 0.4s ease' }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'4px' }}>
+                    <span style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.15)' }}>IDEAL &lt;35%</span>
+                    <span style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.15)' }}>HIGH &gt;40%</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </BC>
+        </div>
+      );
+    })()}
+
+    {/* ════════════════════════════════
+        SECTION 1 — TODAY'S PULSE
+    ════════════════════════════════ */}
     <SectionHeader
       icon={<Activity size={16}/>}
       title={(() => {
         const istNow = new Date(new Date().getTime() + 330*60*1000);
-        const isCurrentMonth =
-          viewDate.getFullYear() === istNow.getFullYear() &&
-          viewDate.getMonth()    === istNow.getMonth();
-        return isCurrentMonth ? "Today's Pulse" : `${viewDate.toLocaleString('default',{month:'long'})} Pulse`;
+        const isCurr = viewDate.getFullYear()===istNow.getFullYear() && viewDate.getMonth()===istNow.getMonth();
+        return isCurr ? "Today's Pulse" : `${viewDate.toLocaleString('default',{month:'long'})} Pulse`;
       })()}
-      subtitle={(() => {
-        const istNow = new Date(new Date().getTime() + 330*60*1000);
-        const isCurrentMonth =
-          viewDate.getFullYear() === istNow.getFullYear() &&
-          viewDate.getMonth()    === istNow.getMonth();
-        return isCurrentMonth
-          ? "Live operational signals — act on these now"
-          : `Historical data for ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`;
-      })()}
+      subtitle="Live operational signals — act on these now"
     />
-    
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'4px'}}>
 
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Timer size={16}/> PEAK HOUR INTENSITY</h4>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px' }}>
+
+      {/* Peak Hour */}
+      <BC>
+        <BT icon={<Timer size={14} strokeWidth={1.5}/>}>PEAK HOUR INTENSITY</BT>
         {hourlyAnalytics.hourly.length > 0 ? (() => {
-          const maxO = Math.max(...hourlyAnalytics.hourly.map(d => d.orderCount), 1);
-          const peak = hourlyAnalytics.hourly.reduce((a, b) => b.orderCount > a.orderCount ? b : a, hourlyAnalytics.hourly[0]);
-          const total = hourlyAnalytics.hourly.reduce((a, b) => a + b.orderCount, 0);
-          const totalRev = hourlyAnalytics.hourly.reduce((a, b) => a + b.revenue, 0);
-          const fmt = h => h === 0 ? '12am' : h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`;
-          const col = c => { const r = c / maxO; return r === 0 ? '#111' : r < 0.25 ? '#2a1f0a' : r < 0.5 ? '#633806' : r < 0.75 ? '#BA7517' : '#d3bfa2'; };
-
-          const operatingHours = hourlyAnalytics.hourly.filter(h => h.hour >= 8 && h.hour <= 23);
-          const deadHours = operatingHours.filter(h => h.orderCount === 0);
-          const slowHours = operatingHours.filter(h => h.orderCount > 0 && h.orderCount < (maxO * 0.25));
-          const avgRevenuePerHour = total > 0 ? Math.round(totalRev / Math.max(1, operatingHours.filter(h => h.orderCount > 0).length)) : 0;
-          const peakRevenue = hourlyAnalytics.hourly.find(h => h.hour === peak?.hour)?.revenue || 0;
+          const maxO = Math.max(...hourlyAnalytics.hourly.map(d=>d.orderCount),1);
+          const peak = hourlyAnalytics.hourly.reduce((a,b)=>b.orderCount>a.orderCount?b:a, hourlyAnalytics.hourly[0]);
+          const total = hourlyAnalytics.hourly.reduce((a,b)=>a+b.orderCount,0);
+          const totalRev = hourlyAnalytics.hourly.reduce((a,b)=>a+b.revenue,0);
+          const fmt = h => h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+          const colBar = c => { const r=c/maxO; return r===0?'rgba(255,255,255,0.04)':r<0.25?'rgba(211,191,162,0.15)':r<0.5?'rgba(211,191,162,0.35)':r<0.75?'rgba(211,191,162,0.6)':'#d3bfa2'; };
+          const operatingHours = hourlyAnalytics.hourly.filter(h=>h.hour>=8&&h.hour<=23);
+          const deadHours = operatingHours.filter(h=>h.orderCount===0);
+          const avgRevPerHour = total>0 ? Math.round(totalRev/Math.max(1,operatingHours.filter(h=>h.orderCount>0).length)) : 0;
+          const peakRevenue = hourlyAnalytics.hourly.find(h=>h.hour===peak?.hour)?.revenue||0;
           const topHours = [...hourlyAnalytics.hourly].sort((a,b)=>b.revenue-a.revenue).slice(0,3);
+          const slowHours = operatingHours.filter(h=>h.orderCount>0&&h.orderCount<(maxO*0.25));
 
           return (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
+              {/* KPI mini strip */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'14px' }}>
                 {[
-                  { l: 'TOTAL TODAY', v: total + ' orders' },
-                  { l: 'PEAK HOUR', v: fmt(peak?.hour || 0) },
-                  { l: 'PEAK ORDERS', v: peak?.orderCount || 0 }
-                ].map(s => (
-                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2', marginTop: '3px' }}>{s.v}</div>
+                  { l:'TOTAL ORDERS', v:`${total}` },
+                  { l:'PEAK HOUR',    v:fmt(peak?.hour||0) },
+                  { l:'DEAD HOURS',   v:`${deadHours.length}h`, c: deadHours.length>4?'rgba(240,165,0,0.7)':'rgba(211,191,162,0.7)' }
+                ].map(s=>(
+                  <div key={s.l} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px', padding:'10px 11px' }}>
+                    <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'4px' }}>{s.l}</div>
+                    <div style={{ fontSize:'0.88rem', fontWeight:'900', color: s.c||'#d3bfa2', fontFamily:'monospace' }}>{s.v}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
-                {[
-                  { l: 'PEAK HR REVENUE', v: `₹${peakRevenue.toLocaleString()}` },
-                  { l: 'AVG REV/ACTIVE HR', v: `₹${avgRevenuePerHour.toLocaleString()}` },
-                  { l: 'DEAD HOURS (8a-11p)', v: deadHours.length + ' hrs', c: deadHours.length > 4 ? '#BA7517' : '#4ade80' }
-                ].map(s => (
-                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ position: 'relative', height: '70px', marginBottom: '4px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '70px' }}>
-                  {hourlyAnalytics.hourly.map(d => (
-                    <div key={d.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                      <div title={`${fmt(d.hour)}: ${d.orderCount} orders · ₹${d.revenue}`}
-                        style={{ width: '100%', height: `${Math.max(3, Math.round((d.orderCount / maxO) * 100))}%`, background: col(d.orderCount), borderRadius: '3px 3px 0 0', position: 'relative', minWidth: 0 }}>
-                        {d.hour === peak?.hour && (
-                          <div style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.5rem', color: '#d3bfa2', fontWeight: '900', whiteSpace: 'nowrap' }}>PEAK</div>
+              {/* Bar chart */}
+              <div style={{ position:'relative', height:'65px', marginBottom:'4px' }}>
+                <div style={{ display:'flex', alignItems:'flex-end', gap:'2px', height:'65px' }}>
+                  {hourlyAnalytics.hourly.map(d=>(
+                    <div key={d.hour} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', height:'100%', justifyContent:'flex-end' }}>
+                      <div
+                        title={`${fmt(d.hour)}: ${d.orderCount} orders · ₹${d.revenue}`}
+                        style={{ width:'100%', minWidth:0, height:`${Math.max(3,Math.round((d.orderCount/maxO)*100))}%`, background:colBar(d.orderCount), borderRadius:'3px 3px 0 0', position:'relative' }}>
+                        {d.hour===peak?.hour && (
+                          <div style={{ position:'absolute', top:'-14px', left:'50%', transform:'translateX(-50%)', fontSize:'0.44rem', color:'#d3bfa2', fontWeight:'900', whiteSpace:'nowrap' }}>PEAK</div>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div style={{ display: 'flex', gap: '3px', marginBottom: '14px' }}>
-                {hourlyAnalytics.hourly.map(d => (
-                  <div key={d.hour} style={{ flex: 1, textAlign: 'center', fontSize: '0.45rem', color: d.hour % 3 === 0 ? '#333' : 'transparent', minWidth: 0 }}>
+              <div style={{ display:'flex', gap:'2px', marginBottom:'14px' }}>
+                {hourlyAnalytics.hourly.map(d=>(
+                  <div key={d.hour} style={{ flex:1, textAlign:'center', fontSize:'0.42rem', color: d.hour%3===0?'rgba(255,255,255,0.2)':'transparent', minWidth:0 }}>
                     {fmt(d.hour)}
                   </div>
                 ))}
               </div>
 
-              <div style={{ borderTop: '1px solid #111', paddingTop: '12px' }}>
-                <div style={{ fontSize: '0.6rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Award size={12} color="#d3bfa2"/> TOP REVENUE HOURS
+              {/* Top revenue hours */}
+              <div style={{ borderTop:'1px solid rgba(255,255,255,0.05)', paddingTop:'13px', marginBottom:'12px' }}>
+                <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'9px', display:'flex', alignItems:'center', gap:'6px' }}>
+                  <Award size={10} color="#d3bfa2" />
+                  TOP REVENUE HOURS
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'7px' }}>
                   {topHours.map((h,i)=>(
-                    <div key={h.hour} style={{background:'#050505',padding:'10px',borderRadius:'10px',border:`1px solid ${i===0?'rgba(211,191,162,0.3)':'#111'}`,borderTop:`2px solid ${i===0?'#d3bfa2':i===1?'#8a704d':'#333'}`}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'0.55rem',color:'#444',fontWeight:'900',marginBottom:'4px'}}>
-                        <Award size={11} color={i===0?'#d3bfa2':i===1?'#8a704d':'#555'}/> {i===0?'1ST':i===1?'2ND':'3RD'}
-                      </div>
-                      <div style={{fontSize:'1.1rem',fontWeight:'900',color:i===0?'#d3bfa2':'#fff'}}>{fmt(h.hour)}</div>
-                      <div style={{fontSize:'0.68rem',color:'#4ade80',fontWeight:'800',marginTop:'2px'}}>₹{h.revenue.toLocaleString()}</div>
-                      <div style={{fontSize:'0.55rem',color:'#444'}}>{h.orderCount} orders</div>
+                    <div key={h.hour} style={{
+                      background:'rgba(255,255,255,0.02)',
+                      border:`1px solid ${i===0?'rgba(211,191,162,0.3)':'rgba(255,255,255,0.06)'}`,
+                      borderTop:`2px solid ${i===0?'#d3bfa2':i===1?'rgba(211,191,162,0.4)':'rgba(255,255,255,0.1)'}`,
+                      borderRadius:'9px', padding:'10px'
+                    }}>
+                      <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginBottom:'4px' }}>{i===0?'1ST':i===1?'2ND':'3RD'}</div>
+                      <div style={{ fontSize:'0.95rem', fontWeight:'900', color: i===0?'#d3bfa2':'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{fmt(h.hour)}</div>
+                      <div style={{ fontSize:'0.65rem', color:'rgba(211,191,162,0.6)', fontWeight:'800', marginTop:'2px' }}>₹{h.revenue.toLocaleString()}</div>
                     </div>
                   ))}
                 </div>
-
-                {slowHours.length > 0 && (
-                  <div style={{ background: 'rgba(186,117,23,0.05)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '8px', padding: '10px 12px' }}>
-                    <div style={{ fontSize: '0.6rem', color: '#BA7517', fontWeight: '900', marginBottom: '4px', display:'flex', alignItems:'center', gap:'6px' }}>
-                      <Zap size={11}/> SLOW HOUR OPPORTUNITIES
-                    </div>
-                    <div style={{ fontSize: '0.65rem', color: '#666' }}>
-                      {slowHours.slice(0, 3).map(h => fmt(h.hour)).join(', ')} — consider happy hour promos or staff reallocation
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {slowHours.length > 0 && (
+                <div style={{ padding:'9px 11px', background:'rgba(240,165,0,0.04)', border:'1px solid rgba(240,165,0,0.15)', borderRadius:'8px', display:'flex', gap:'7px', alignItems:'flex-start' }}>
+                  <Zap size={11} color="rgba(240,165,0,0.6)" strokeWidth={2} style={{ flexShrink:0, marginTop:'1px' }} />
+                  <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.3)', lineHeight:1.55 }}>
+                    Slow hours: {slowHours.slice(0,3).map(h=>fmt(h.hour)).join(', ')} — consider happy hour promos
+                  </span>
+                </div>
+              )}
             </>
           );
-        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO ORDERS TODAY</div>}
-      </div>
+        })() : (
+          <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'40px', paddingBottom:'20px' }}>No orders today</div>
+        )}
+      </BC>
 
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Users size={16}/> COUNTER & WAITLIST — TODAY</h4>
+      {/* Counter & Waitlist */}
+      <BC>
+        <BT icon={<Users size={14} strokeWidth={1.5}/>}>COUNTER & WAITLIST — TODAY</BT>
         {waitlistAnalytics ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
               {[
-                { l: 'GROUPS TODAY',     v: waitlistAnalytics.today.total,   c: '#d3bfa2', icon: <Users size={14}/> },
-                { l: 'SEATED TODAY',     v: waitlistAnalytics.today.seated,  c: '#4ade80', icon: <ClipboardCheck size={14}/> },
-                { l: 'PICKUP TODAY',     v: waitlistAnalytics.today.pickup,  c: '#60a5fa', icon: <ShoppingBag size={14}/> },
-                { l: 'STILL WAITING',    v: waitlistAnalytics.today.waiting, c: '#BA7517', icon: <Timer size={14}/> },
-              ].map(s => (
-                <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '14px' }}>
-                  <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'8px'}}>
-                    <span style={{color:s.c}}>{s.icon}</span>
-                    <span style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px' }}>{s.l}</span>
-                  </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
+                { l:'GROUPS TODAY',  v:waitlistAnalytics.today.total,   c:'#d3bfa2',  icon:<Users size={13}/> },
+                { l:'SEATED',        v:waitlistAnalytics.today.seated,  c:'rgba(211,191,162,0.7)', icon:<UserCheck size={13}/> },
+                { l:'PICKUP',        v:waitlistAnalytics.today.pickup,  c:'rgba(255,255,255,0.5)', icon:<ShoppingBag size={13}/> },
+                { l:'STILL WAITING', v:waitlistAnalytics.today.waiting, c:'rgba(240,165,0,0.7)',   icon:<Timer size={13}/> },
+              ].map(s=>(
+                <div key={s.l} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'11px', padding:'13px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'7px', color:s.c }}>{s.icon}<span style={{ fontSize:'0.44rem', fontWeight:'900', letterSpacing:'1.2px' }}>{s.l}</span></div>
+                  <div style={{ fontSize:'1.5rem', fontWeight:'900', color:s.c, lineHeight:1, fontFamily:'monospace' }}>{s.v}</div>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-              <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '10px', padding: '12px' }}>
-                <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>WALK-AWAYS / NO-SHOW</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: '900', color: waitlistAnalytics.today.walked > 0 ? '#E24B4A' : '#4ade80' }}>{waitlistAnalytics.today.walked}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+              <div style={{ padding:'11px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>WALK-AWAYS</div>
+                <div style={{ fontSize:'1.15rem', fontWeight:'900', color: waitlistAnalytics.today.walked>0?'rgba(248,113,113,0.7)':'rgba(211,191,162,0.5)', fontFamily:'monospace' }}>
+                  {waitlistAnalytics.today.walked}
+                </div>
               </div>
-              <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '10px', padding: '12px' }}>
-                <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '6px' }}>AVG WAIT (MONTH)</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: '900', color: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' }}>{waitlistAnalytics.month.avgWaitMin} min</div>
+              <div style={{ padding:'11px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>AVG WAIT (MONTH)</div>
+                <div style={{ fontSize:'1.15rem', fontWeight:'900', fontFamily:'monospace', color: waitlistAnalytics.month.avgWaitMin<15?'rgba(211,191,162,0.7)':waitlistAnalytics.month.avgWaitMin<25?'rgba(255,255,255,0.6)':'rgba(248,113,113,0.6)' }}>
+                  {waitlistAnalytics.month.avgWaitMin}m
+                </div>
               </div>
             </div>
 
             {waitlistAnalytics.month.peakHour && (
-              <div style={{ padding: '10px 12px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', fontSize: '0.65rem', color: '#888' }}>
-                Peak arrival hour this month: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
-                  {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
-                    : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
-                    : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
-                    : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
-                </span> ({waitlistAnalytics.month.peakHour.count} groups)
+              <div style={{ padding:'9px 12px', background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:'8px', fontSize:'0.62rem', color:'rgba(255,255,255,0.3)' }}>
+                Peak arrival this month:&nbsp;
+                <span style={{ color:'#d3bfa2', fontWeight:'900' }}>
+                  {waitlistAnalytics.month.peakHour.hour===0?'12am':waitlistAnalytics.month.peakHour.hour<12?`${waitlistAnalytics.month.peakHour.hour}am`:waitlistAnalytics.month.peakHour.hour===12?'12pm':`${waitlistAnalytics.month.peakHour.hour-12}pm`}
+                </span>
+                &nbsp;· {waitlistAnalytics.month.peakHour.count} groups
               </div>
             )}
           </>
-        ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO WAITLIST DATA</div>}
-      </div>
+        ) : (
+          <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'40px', paddingBottom:'20px' }}>No waitlist data</div>
+        )}
+      </BC>
     </div>
 
-    {/* ═══════════ SECTION 2 — REVENUE & GROWTH ═══════════ */}
+    {/* ════════════════════════════════
+        SECTION 2 — REVENUE & GROWTH
+    ════════════════════════════════ */}
     <SectionHeader icon={<TrendingUp size={16}/>} title="Revenue & Growth" subtitle="How money is moving — month over month" />
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px' }}>
 
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><TrendingUp size={16}/> REVENUE TREND</h4>
-        {trendsData?.revenue ? (()=>{
-          const {current,previous,growthPct}=trendsData.revenue;
-          const isPos=growthPct!==null&&Number(growthPct)>=0;
-          const totalRevToday = hourlyAnalytics.hourly.reduce((a,b)=>a+(b.revenue||0),0);
-          return (<>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-              <span style={{fontSize:'0.75rem',color:'#888'}}>This month</span><span style={{fontWeight:'900',color:'#fff'}}>₹{current.toLocaleString()}</span>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-              <span style={{fontSize:'0.75rem',color:'#888'}}>Last month</span><span style={{fontWeight:'900',color:'#555'}}>₹{previous.toLocaleString()}</span>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #111'}}>
-              <span style={{fontSize:'0.75rem',color:'#888'}}>Today so far</span><span style={{fontWeight:'900',color:'#d3bfa2'}}>₹{totalRevToday.toLocaleString()}</span>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',marginBottom:'14px'}}>
-              <span style={{fontSize:'0.75rem',color:'#888'}}>Growth (MoM)</span>
-              {growthPct!==null ? (
-                <span style={{fontSize:'0.85rem',fontWeight:'900',padding:'4px 10px',borderRadius:'6px',
-                  background:isPos?'rgba(29,158,117,0.1)':'rgba(226,75,74,0.1)',color:isPos?'#1D9E75':'#E24B4A',
-                  display:'inline-flex', alignItems:'center', gap:'5px'}}>
-                  {isPos ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} {isPos?'+':''}{growthPct}%
-                </span>
-              ) : <span style={{fontSize:'0.75rem',color:'#555'}}>No previous data</span>}
-            </div>
-
-            {analytics.length > 0 && (() => {
-              const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
-              const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
-              const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
-              const grand  = totalC + totalU + totalK;
-              if (grand === 0) return null;
-              const modes = [
-                { label:'Cash', icon:<Banknote size={13}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
-                { label:'UPI',  icon:<Smartphone size={13}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
-                { label:'Card', icon:<CreditCard size={13}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
-              ];
-              return (
-                <div style={{borderTop:'1px solid #111',paddingTop:'14px'}}>
-                  <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginBottom:'10px'}}>PAYMENT MODE SPLIT</div>
-                  <div style={{display:'flex',height:'8px',borderRadius:'4px',overflow:'hidden',marginBottom:'10px'}}>
-                    {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
-                  </div>
-                  {modes.map(m=>(
-                    <div key={m.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0'}}>
-                      <span style={{display:'flex',alignItems:'center',gap:'7px',fontSize:'0.7rem',color:'#888'}}>{m.icon} {m.label}</span>
-                      <span style={{fontSize:'0.75rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()} <small style={{color:'#444',fontWeight:'700'}}>({m.pct}%)</small></span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </>);
-        })() : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
-      </div>
-
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Calendar size={16}/> WEEKLY PERFORMANCE</h4>
-        {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
-          const maxR = Math.max(...hourlyAnalytics.dayOfWeek.map(d => d.revenue), 1);
-          const peak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue > a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
-          const weak = hourlyAnalytics.dayOfWeek.reduce((a, b) => b.revenue < a.revenue ? b : a, hourlyAnalytics.dayOfWeek[0]);
-          const totalWeekRev = hourlyAnalytics.dayOfWeek.reduce((a, b) => a + b.revenue, 0);
-          const activeDays = hourlyAnalytics.dayOfWeek.filter(d => d.orders > 0).length;
-          const avgPerActiveDay = activeDays > 0 ? Math.round(totalWeekRev / activeDays) : 0;
-          const weekendDays = hourlyAnalytics.dayOfWeek.filter(d => ['Sat', 'Sun'].includes(d.day));
-          const weekdayDays = hourlyAnalytics.dayOfWeek.filter(d => !['Sat', 'Sun'].includes(d.day));
-          const weekendRev = weekendDays.reduce((a, b) => a + b.revenue, 0);
-          const weekdayRev = weekdayDays.reduce((a, b) => a + b.revenue, 0);
-
+      {/* Revenue Trend */}
+      <BC>
+        <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>}>REVENUE TREND</BT>
+        {trendsData?.revenue ? (() => {
+          const { current, previous, growthPct } = trendsData.revenue;
+          const isPos = growthPct !== null && Number(growthPct) >= 0;
+          const todayRevCalc = hourlyAnalytics.hourly.reduce((a,b)=>a+(b.revenue||0),0);
           return (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+              {[
+                { l:'This month',   v:current,      c:'#fff' },
+                { l:'Last month',   v:previous,     c:'rgba(255,255,255,0.4)' },
+                { l:'Today so far', v:todayRevCalc, c:'#d3bfa2' },
+              ].map(s=>(
+                <div key={s.l} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                  <span style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.3)' }}>{s.l}</span>
+                  <span style={{ fontWeight:'900', color:s.c, fontFamily:'monospace' }}>₹{(s.v||0).toLocaleString()}</span>
+                </div>
+              ))}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 0', marginBottom:'14px' }}>
+                <span style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.3)' }}>Growth (MoM)</span>
+                {growthPct !== null ? (
+                  <span style={{ fontSize:'0.82rem', fontWeight:'900', padding:'4px 11px', borderRadius:'6px', display:'inline-flex', alignItems:'center', gap:'5px', background: isPos?'rgba(211,191,162,0.08)':'rgba(248,113,113,0.08)', color: isPos?'#d3bfa2':'rgba(248,113,113,0.8)' }}>
+                    {isPos ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} {isPos?'+':''}{growthPct}%
+                  </span>
+                ) : <span style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.2)' }}>No prior data</span>}
+              </div>
+
+              {/* Payment mode split */}
+              {(() => {
+                const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+                const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+                const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+                const grand = totalC + totalU + totalK;
+                if (grand === 0) return null;
+                const modes = [
+                  { label:'Cash', val:totalC, color:'rgba(211,191,162,0.8)', pct:Math.round((totalC/grand)*100) },
+                  { label:'UPI',  val:totalU, color:'rgba(211,191,162,0.5)', pct:Math.round((totalU/grand)*100) },
+                  { label:'Card', val:totalK, color:'rgba(211,191,162,0.3)', pct:Math.round((totalK/grand)*100) },
+                ];
+                return (
+                  <div style={{ borderTop:'1px solid rgba(255,255,255,0.05)', paddingTop:'13px' }}>
+                    <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'9px' }}>PAYMENT SPLIT</div>
+                    <div style={{ display:'flex', height:'7px', borderRadius:'4px', overflow:'hidden', marginBottom:'10px', gap:'1px' }}>
+                      {modes.map(m=><div key={m.label} style={{ width:`${m.pct}%`, background:m.color }}/>)}
+                    </div>
+                    {modes.map(m=>(
+                      <div key={m.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0' }}>
+                        <span style={{ display:'flex', alignItems:'center', gap:'7px', fontSize:'0.66rem', color:'rgba(255,255,255,0.35)' }}>
+                          <div style={{ width:'7px', height:'7px', borderRadius:'2px', background:m.color, flexShrink:0 }} /> {m.label}
+                        </span>
+                        <span style={{ fontSize:'0.7rem', fontWeight:'900', color:'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>₹{m.val.toLocaleString()} <small style={{ color:'rgba(255,255,255,0.2)' }}>({m.pct}%)</small></span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </>
+          );
+        })() : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'30px' }}>No data yet</div>}
+      </BC>
+
+      {/* Weekly Performance */}
+      <BC>
+        <BT icon={<Calendar size={14} strokeWidth={1.5}/>}>WEEKLY PERFORMANCE</BT>
+        {hourlyAnalytics.dayOfWeek.length > 0 ? (() => {
+          const maxR = Math.max(...hourlyAnalytics.dayOfWeek.map(d=>d.revenue),1);
+          const peak = hourlyAnalytics.dayOfWeek.reduce((a,b)=>b.revenue>a.revenue?b:a, hourlyAnalytics.dayOfWeek[0]);
+          const weak = hourlyAnalytics.dayOfWeek.reduce((a,b)=>b.revenue<a.revenue?b:a, hourlyAnalytics.dayOfWeek[0]);
+          const totalWeekRev = hourlyAnalytics.dayOfWeek.reduce((a,b)=>a+b.revenue,0);
+          const activeDays = hourlyAnalytics.dayOfWeek.filter(d=>d.orders>0).length;
+          const avgPerActiveDay = activeDays>0 ? Math.round(totalWeekRev/activeDays) : 0;
+          return (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'7px', marginBottom:'14px' }}>
                 {[
-                  { l: 'BEST DAY', v: peak.day, sub: `₹${peak.revenue.toLocaleString()}`, c: '#d3bfa2' },
-                  { l: 'AVG/ACTIVE DAY', v: `₹${avgPerActiveDay.toLocaleString()}`, sub: `${activeDays} active days` },
-                  { l: 'SLOWEST DAY', v: weak.day, sub: `₹${weak.revenue.toLocaleString()}`, c: '#633806' }
-                ].map(s => (
-                  <div key={s.l} style={{ background: '#050505', padding: '10px', borderRadius: '10px', border: '1px solid #111' }}>
-                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: s.c || '#fff', marginTop: '3px' }}>{s.v}</div>
-                    <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '2px' }}>{s.sub}</div>
+                  { l:'BEST DAY',        v:peak.day,                          c:'#d3bfa2' },
+                  { l:'AVG / ACTIVE DAY', v:`₹${avgPerActiveDay.toLocaleString()}`, c:'rgba(255,255,255,0.6)' },
+                  { l:'SLOWEST DAY',     v:weak.day,                          c:'rgba(255,255,255,0.3)' },
+                ].map(s=>(
+                  <div key={s.l} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px', padding:'10px' }}>
+                    <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'4px' }}>{s.l}</div>
+                    <div style={{ fontSize:'0.88rem', fontWeight:'900', color:s.c, fontFamily:'monospace' }}>{s.v}</div>
                   </div>
                 ))}
               </div>
-
-              {hourlyAnalytics.dayOfWeek.map(d => {
-                const isPk = d.day === peak.day, isWk = d.day === weak.day && d.revenue < peak.revenue;
-                const avgOrder = d.orders > 0 ? Math.round(d.revenue / d.orders) : 0;
+              {hourlyAnalytics.dayOfWeek.map(d=>{
+                const isPk = d.day===peak.day;
+                const isWk = d.day===weak.day && d.revenue<peak.revenue;
+                const avgOrd = d.orders>0 ? Math.round(d.revenue/d.orders) : 0;
                 return (
-                  <div key={d.day} style={{ marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                      <span style={{ width: '32px', fontSize: '0.7rem', color: isPk ? '#d3bfa2' : isWk ? '#633806' : '#555', fontWeight: '800' }}>{d.day}</span>
-                      <div style={{ flex: 1, height: '8px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.round((d.revenue / maxR) * 100)}%`, background: isPk ? '#d3bfa2' : isWk ? '#633806' : '#8a704d', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+                  <div key={d.day} style={{ marginBottom:'10px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'3px' }}>
+                      <span style={{ width:'30px', fontSize:'0.65rem', color: isPk?'#d3bfa2':isWk?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.35)', fontWeight:'800', flexShrink:0 }}>{d.day}</span>
+                      <div style={{ flex:1, height:'7px', background:'rgba(255,255,255,0.05)', borderRadius:'4px', overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${Math.round((d.revenue/maxR)*100)}%`, background: isPk?'#d3bfa2':'rgba(211,191,162,0.25)', borderRadius:'4px', transition:'width 0.5s ease' }} />
                       </div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#fff', minWidth: '70px', textAlign: 'right' }}>₹{d.revenue.toLocaleString()}</span>
+                      <span style={{ fontSize:'0.66rem', fontWeight:'900', color: isPk?'#d3bfa2':'rgba(255,255,255,0.5)', minWidth:'65px', textAlign:'right', fontFamily:'monospace' }}>₹{d.revenue.toLocaleString()}</span>
                     </div>
-                    <div style={{ display: 'flex', paddingLeft: '42px', gap: '16px', alignItems:'center' }}>
-                      <span style={{ fontSize: '0.58rem', color: '#333' }}>{d.orders || 0} orders</span>
-                      {avgOrder > 0 && <span style={{ fontSize: '0.58rem', color: '#333' }}>avg ₹{avgOrder}</span>}
-                      {isPk && <span style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900', display:'flex', alignItems:'center', gap:'3px' }}><ArrowUp size={9}/> BEST</span>}
-                      {isWk && d.revenue > 0 && <span style={{ fontSize: '0.58rem', color: '#633806', fontWeight: '900', display:'flex', alignItems:'center', gap:'3px' }}><ArrowDown size={9}/> LOWEST</span>}
+                    <div style={{ display:'flex', paddingLeft:'40px', gap:'12px' }}>
+                      <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.2)' }}>{d.orders||0} orders</span>
+                      {avgOrd>0 && <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.15)' }}>avg ₹{avgOrd}</span>}
                     </div>
                   </div>
                 );
               })}
-
-              <div style={{ borderTop: '1px solid #111', paddingTop: '12px', marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                {[
-                  { l: 'WEEKDAY TOTAL', v: `₹${weekdayRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekdayRev / totalWeekRev) * 100) : 0 },
-                  { l: 'WEEKEND TOTAL', v: `₹${weekendRev.toLocaleString()}`, pct: totalWeekRev > 0 ? Math.round((weekendRev / totalWeekRev) * 100) : 0 }
-                ].map(s => (
-                  <div key={s.l} style={{ background: '#050505', padding: '8px 10px', borderRadius: '8px', border: '1px solid #111' }}>
-                    <small style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                    <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fff', marginTop: '2px' }}>{s.v}</div>
-                    <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '1px' }}>{s.pct}% of week</div>
-                  </div>
-                ))}
-              </div>
             </>
           );
-        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '40px' }}>NO DATA YET</div>}
-      </div>
+        })() : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'40px' }}>No data yet</div>}
+      </BC>
     </div>
 
-    {/* REVENUE FORECAST — full width */}
+    {/* Month-end forecast */}
     {currentMonthAnalytics.length > 0 && (() => {
-      const today = new Date(new Date().getTime() + 330 * 60 * 1000);
+      const today = new Date(new Date().getTime() + 330*60*1000);
+      const isCurr = viewDate.getMonth()===today.getMonth() && viewDate.getFullYear()===today.getFullYear();
+      if (!isCurr) return null;
       const dayOfMonth = today.getDate();
-      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-      const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
-      if (!isCurrentMonth) return null;
-
-      const dailyRevenues = currentMonthAnalytics.map(d => d.revenue || 0).filter(v => v > 0);
-      if (dailyRevenues.length === 0) return null;
-      const avgDaily = dailyRevenues.reduce((a, b) => a + b, 0) / dailyRevenues.length;
-      const projectedMonthEnd = stats.revenue + (avgDaily * (daysInMonth - dayOfMonth));
+      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
+      const dailyRevenues = currentMonthAnalytics.map(d=>d.revenue||0).filter(v=>v>0);
+      if (!dailyRevenues.length) return null;
+      const avgDaily = dailyRevenues.reduce((a,b)=>a+b,0)/dailyRevenues.length;
+      const projected = stats.revenue + (avgDaily*(daysInMonth-dayOfMonth));
       const bestDay = Math.max(...dailyRevenues);
-      const bestCase = stats.revenue + (bestDay * (daysInMonth - dayOfMonth));
+      const bestCase = stats.revenue + (bestDay*(daysInMonth-dayOfMonth));
       const daysLeft = daysInMonth - dayOfMonth;
-
+      const progressPct = Math.round((dayOfMonth/daysInMonth)*100);
       return (
-        <div style={{ ...styles.biCard, marginTop: '20px', marginBottom: '20px', borderLeft: '4px solid #2980B9' }}>
-          <h4 style={styles.biTitle}><TrendingUp size={16} /> MONTH-END REVENUE FORECAST</h4>
-          <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
-            Based on {dailyRevenues.length} active days this month · {daysLeft} days remaining
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
+        <BC style={{ marginBottom:'14px', borderLeft:'3px solid rgba(211,191,162,0.4)' }}>
+          <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>} right={`${daysLeft}d remaining`}>MONTH-END FORECAST</BT>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'14px' }}>
             {[
-              { l: 'CURRENT REVENUE', v: `₹${stats.revenue.toLocaleString()}`, c: '#d3bfa2', sub: `${dayOfMonth}/${daysInMonth} days` },
-              { l: 'PROJECTED (BASE)', v: `₹${Math.round(projectedMonthEnd).toLocaleString()}`, c: '#4ade80', sub: `avg ₹${Math.round(avgDaily).toLocaleString()}/day` },
-              { l: 'BEST CASE', v: `₹${Math.round(bestCase).toLocaleString()}`, c: '#2980B9', sub: `if best day repeats` },
-            ].map(s => (
-              <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-                <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{s.sub}</div>
+              { l:'CURRENT', v:`₹${stats.revenue.toLocaleString()}`, sub:`Day ${dayOfMonth}/${daysInMonth}` },
+              { l:'PROJECTED', v:`₹${Math.round(projected).toLocaleString()}`, sub:`avg ₹${Math.round(avgDaily).toLocaleString()}/day`, accent:true },
+              { l:'BEST CASE', v:`₹${Math.round(bestCase).toLocaleString()}`, sub:'if best day repeats' },
+            ].map(s=>(
+              <div key={s.l} style={{ padding:'12px 13px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.18)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'5px' }}>{s.l}</div>
+                <div style={{ fontSize:'0.95rem', fontWeight:'900', color: s.accent?'#d3bfa2':'rgba(255,255,255,0.7)', fontFamily:'monospace' }}>{s.v}</div>
+                <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', marginTop:'3px' }}>{s.sub}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginBottom: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '0.6rem', color: '#555' }}>Month progress</span>
-              <span style={{ fontSize: '0.6rem', color: '#d3bfa2', fontWeight: '900' }}>{Math.round((dayOfMonth / daysInMonth) * 100)}% complete</span>
+          <div>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
+              <span style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)' }}>Month progress</span>
+              <span style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.6)', fontWeight:'900' }}>{progressPct}% complete</span>
             </div>
-            <div style={{ height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${(dayOfMonth / daysInMonth) * 100}%`, background: 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '3px' }} />
+            <div style={{ height:'5px', background:'rgba(255,255,255,0.06)', borderRadius:'3px', overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${progressPct}%`, background:'linear-gradient(90deg, rgba(211,191,162,0.3), rgba(211,191,162,0.7))', borderRadius:'3px' }} />
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#333', marginTop: '4px' }}>
-            <span>Day 1</span><span>Day {dayOfMonth} (today)</span><span>Day {daysInMonth}</span>
-          </div>
-        </div>
+        </BC>
       );
     })()}
 
-    {/* DAILY HEATMAP — full width */}
-    <div style={styles.heatmapCard}>
-      <h4 style={styles.biTitle}><Calendar size={16}/> DAILY REVENUE HEATMAP — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
+    {/* Daily Heatmap */}
+    <BC style={{ marginBottom:'14px' }}>
+      <BT icon={<CalendarClock size={14} strokeWidth={1.5}/>} right={viewDate.toLocaleString('en-IN',{month:'long',year:'numeric'}).toUpperCase()}>
+        DAILY REVENUE HEATMAP
+      </BT>
       <div style={styles.calendarGridHeader}>{['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={styles.dayHeader}>{d}</div>)}</div>
       <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
       <div style={styles.heatmapLegend}>
@@ -9374,1318 +8736,847 @@ const pickupSoon = pickupMinsLeft !== null && pickupMinsLeft > 0 && pickupMinsLe
         <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#111'}}/>
         <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
         <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
-        <span>More · </span>
-        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(138,112,77,0.2)',border:'1px solid rgba(138,112,77,0.4)'}}/>
-        <span style={{fontSize:'0.55rem',color:'#555'}}>≈ Break-even</span>
+        <span>More</span>
       </div>
-    </div>
+    </BC>
 
-    {/* ═══════════ SECTION 3 — MENU INTELLIGENCE ═══════════ */}
+    {/* ════════════════════════════════
+        SECTION 3 — MENU INTELLIGENCE
+    ════════════════════════════════ */}
     <SectionHeader icon={<Percent size={16}/>} title="Menu Intelligence" subtitle="Profitability, popularity, and pricing decisions" />
 
-    <div style={{...styles.biCard, marginBottom:'20px'}}>
-      <h4 style={styles.biTitle}><Percent size={16}/> DISH PROFITABILITY — RECIPE COSTING</h4>
-      {profitabilityData.length > 0 ? (
-        <>
-          {(() => {
-            const totalGrossProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
-            const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
-            const totalCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
-            const overallMargin = totalRevenue > 0 ? Math.round((totalGrossProfit / totalRevenue) * 100) : 0;
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '18px', padding: '14px', background: '#050505', borderRadius: '10px', border: '1px solid #111' }}>
-                {[
-                  { l: 'TOTAL REVENUE', v: `₹${totalRevenue.toLocaleString()}` },
-                  { l: 'INGREDIENT COST', v: `₹${totalCost.toLocaleString()}`, c: '#BA7517' },
-                  { l: 'GROSS PROFIT', v: `₹${totalGrossProfit.toLocaleString()}`, c: overallMargin > 50 ? '#4ade80' : '#d3bfa2' }
-                ].map(s => (
-                  <div key={s.l} style={{ textAlign: 'center' }}>
-                    <small style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', display: 'block' }}>{s.l}</small>
-                    <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c || '#fff', marginTop: '4px' }}>{s.v}</div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(380px,1fr))', gap: '0 32px' }}>
-            {profitabilityData.slice(0, 8).map((d, idx) => (
-              <div key={d._id} style={{ padding: '10px 0', borderBottom: '1px solid #111' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.6rem', color: '#333', fontWeight: '900', minWidth: '16px' }}>#{idx + 1}</span>
-                    <span style={{ color: '#fff', fontSize: '0.78rem', fontWeight: '700' }}>{d.name}</span>
-                    {!d.hasRecipe && <span style={{ fontSize: '0.5rem', padding: '1px 5px', background: 'rgba(138,112,77,0.1)', color: '#555', borderRadius: '3px', border: '1px solid #1a1a1a' }}>NO RECIPE</span>}
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#555' }}>{d.totalQtySold || 0} sold</span>
-                    <span style={{ fontWeight: '900', fontSize: '0.78rem', color: d.grossProfit > 0 ? '#d3bfa2' : '#BA7517' }}>
-                      {d.realizedMarginPct ?? d.marginPct}%
-                    </span>
-                  </div>
+    {/* Dish Profitability */}
+    <BC style={{ marginBottom:'14px' }}>
+      <BT icon={<Percent size={14} strokeWidth={1.5}/>}>DISH PROFITABILITY</BT>
+      {profitabilityData.length > 0 ? (() => {
+        const totalGP  = profitabilityData.reduce((a,b)=>a+(b.grossProfit||0),0);
+        const totalRev2 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0);
+        const totalCost2= profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
+        const ovMargin = totalRev2>0?Math.round((totalGP/totalRev2)*100):0;
+        return (
+          <>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'16px' }}>
+              {[
+                { l:'TOTAL REVENUE',   v:`₹${totalRev2.toLocaleString()}` },
+                { l:'INGREDIENT COST', v:`₹${totalCost2.toLocaleString()}`, dim:true },
+                { l:'GROSS PROFIT',    v:`₹${totalGP.toLocaleString()}`,    accent:true },
+              ].map(s=>(
+                <div key={s.l} style={{ padding:'12px 13px', background:'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.18)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px', textAlign:'center' }}>
+                  <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'5px' }}>{s.l}</div>
+                  <div style={{ fontSize:'0.95rem', fontWeight:'900', color: s.accent?'#d3bfa2':s.dim?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.7)', fontFamily:'monospace' }}>{s.v}</div>
                 </div>
-
-                <div style={{ height: '3px', background: '#111', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
-                  <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, d.marginPct))}%`, background: d.grossProfit < 0 ? '#633806' : d.marginPct > 60 ? '#4ade80' : '#8a704d' }} />
+              ))}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))', gap:'0 32px' }}>
+              {profitabilityData.slice(0,8).map((d,idx)=>(
+                <div key={d._id} style={{ padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', minWidth:'16px' }}>#{idx+1}</span>
+                      <span style={{ color:'#fff', fontSize:'0.75rem', fontWeight:'700' }}>{d.name}</span>
+                      {!d.hasRecipe && <span style={{ fontSize:'0.46rem', padding:'1px 5px', background:'rgba(255,255,255,0.03)', color:'rgba(255,255,255,0.2)', borderRadius:'3px', border:'1px solid rgba(255,255,255,0.06)' }}>NO RECIPE</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+                      <span style={{ fontSize:'0.62rem', color:'rgba(255,255,255,0.25)' }}>{d.totalQtySold||0} sold</span>
+                      <span style={{ fontWeight:'900', fontSize:'0.75rem', color: d.grossProfit>0?'#d3bfa2':'rgba(255,255,255,0.3)' }}>{d.realizedMarginPct??d.marginPct}%</span>
+                    </div>
+                  </div>
+                  <div style={{ height:'3px', background:'rgba(255,255,255,0.05)', borderRadius:'2px', overflow:'hidden', marginBottom:'5px' }}>
+                    <div style={{ height:'100%', width:`${Math.max(0,Math.min(100,d.marginPct))}%`, background: d.grossProfit<0?'rgba(255,255,255,0.1)':d.marginPct>60?'rgba(211,191,162,0.7)':'rgba(211,191,162,0.35)' }} />
+                  </div>
+                  {d.hasRecipe && (
+                    <div style={{ display:'flex', gap:'14px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.35)' }}>Sell ₹{d.sellingPrice}</span>
+                      <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.2)' }}>Cost ₹{d.ingredientCostPerServing}</span>
+                      <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.2)' }}>→ ₹{d.profit}/serving</span>
+                    </div>
+                  )}
                 </div>
+              ))}
+            </div>
+          </>
+        );
+      })() : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'30px', paddingBottom:'10px' }}>Link recipes to compute margins</div>}
+    </BC>
 
-                {d.hasRecipe && (
-                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.6rem', color: '#444' }}>Sell ₹{d.sellingPrice}</span>
-                    <span style={{ fontSize: '0.6rem', color: '#BA7517' }}>Cost ₹{d.ingredientCostPerServing}</span>
-                    <span style={{ fontSize: '0.6rem', color: '#555' }}>→ ₹{d.profit}/serving</span>
-                    {d.totalQtySold > 0 && (
-                      <span style={{ fontSize: '0.6rem', color: d.grossProfit > 0 ? '#4ade80' : '#BA7517', fontWeight: '900' }}>
-                        Total P&L: ₹{d.grossProfit?.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {d.ingredientBreakdown?.length > 0 && (
-                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '5px' }}>
-                    {d.ingredientBreakdown.slice(0, 3).map((ing, i) => (
-                      <span key={i} style={{ fontSize: '0.5rem', padding: '2px 6px', background: '#080808', border: '1px solid #151515', borderRadius: '4px', color: '#444' }}>
-                        {ing.name} {ing.qty}{ing.unit} = ₹{ing.lineCost}
-                      </span>
-                    ))}
-                    {d.ingredientBreakdown.length > 3 && (
-                      <span style={{ fontSize: '0.5rem', color: '#333' }}>+{d.ingredientBreakdown.length - 3} more</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </>
-      ) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.75rem', paddingTop: '30px' }}>LINK RECIPES TO COMPUTE MARGINS</div>}
-    </div>
-
-    {/* MENU ENGINEERING MATRIX */}
+    {/* Menu Engineering Matrix */}
     {profitabilityData.length > 0 && (() => {
-      const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
-      const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
-      const classify = (d) => {
-        const highSales = (d.totalQtySold || 0) >= avgSold;
-        const highMargin = (d.marginPct || 0) >= avgMargin;
-        if (highSales && highMargin) return { label: 'STAR', icon:<Star size={14}/>, color: '#4ade80', desc: 'High volume + High margin — protect & promote' };
-        if (highSales && !highMargin) return { label: 'PLOWHORSE', icon:<Repeat size={14}/>, color: '#2980B9', desc: 'High volume, low margin — consider price increase' };
-        if (!highSales && highMargin) return { label: 'PUZZLE', icon:<Puzzle size={14}/>, color: '#BA7517', desc: 'High margin, low volume — needs promotion push' };
-        return { label: 'DOG', icon:<XCircle size={14}/>, color: '#c0392b', desc: 'Low volume + Low margin — review or remove' };
-      };
-
-      const quadrants = { STAR: [], PLOWHORSE: [], PUZZLE: [], DOG: [] };
-      profitabilityData.forEach(d => {
-        const cls = classify(d);
-        quadrants[cls.label]?.push({ ...d, cls });
+      const avgSold = profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length;
+      const avgMargin = profitabilityData.reduce((a,b)=>a+(b.marginPct||0),0)/profitabilityData.length;
+      const quadrants = { STAR:[], PLOWHORSE:[], PUZZLE:[], DOG:[] };
+      profitabilityData.forEach(d=>{
+        const hs=(d.totalQtySold||0)>=avgSold, hm=(d.marginPct||0)>=avgMargin;
+        if(hs&&hm) quadrants.STAR.push(d);
+        else if(hs&&!hm) quadrants.PLOWHORSE.push(d);
+        else if(!hs&&hm) quadrants.PUZZLE.push(d);
+        else quadrants.DOG.push(d);
       });
-
-      const quadDefs = [
-        { key: 'STAR', label: 'STARS', icon:<Star size={15}/>, color: '#4ade80', desc: 'High popularity + High margin → Protect & Promote' },
-        { key: 'PLOWHORSE', label: 'PLOWHORSES', icon:<Repeat size={15}/>, color: '#2980B9', desc: 'High popularity + Low margin → Price increase opportunity' },
-        { key: 'PUZZLE', label: 'PUZZLES', icon:<Puzzle size={15}/>, color: '#BA7517', desc: 'Low popularity + High margin → Needs marketing push' },
-        { key: 'DOG', label: 'DOGS', icon:<XCircle size={15}/>, color: '#c0392b', desc: 'Low popularity + Low margin → Review or replace' },
-      ];
-
       return (
-        <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-          <h4 style={styles.biTitle}><Sparkles size={16} /> MENU ENGINEERING MATRIX</h4>
-          <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
-            Boston Matrix for your menu — classify dishes by profitability and popularity to make data-driven decisions.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            {quadDefs.map(({ key, label, icon, color, desc }) => (
-              <div key={key} style={{ background: '#050505', border: `1px solid ${color}22`, borderTop: `2px solid ${color}`, borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems:'center' }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: '900', color, display:'flex', alignItems:'center', gap:'7px' }}>{icon} {label}</span>
-                  <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '4px', background: `${color}15`, color, fontWeight: '900', border: `1px solid ${color}33` }}>
-                    {quadrants[key]?.length || 0} dishes
-                  </span>
+        <BC style={{ marginBottom:'14px' }}>
+          <BT icon={<Sparkles size={14} strokeWidth={1.5}/>}>MENU ENGINEERING MATRIX</BT>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            {[
+              { key:'STAR',      label:'STARS',      icon:<Star size={13}/>,    color:'rgba(211,191,162,0.9)', desc:'High popularity + High margin' },
+              { key:'PLOWHORSE', label:'PLOWHORSES', icon:<Repeat size={13}/>,  color:'rgba(255,255,255,0.5)', desc:'High popularity + Low margin'  },
+              { key:'PUZZLE',    label:'PUZZLES',    icon:<Puzzle size={13}/>,  color:'rgba(211,191,162,0.5)', desc:'Low popularity + High margin'  },
+              { key:'DOG',       label:'DOGS',       icon:<XCircle size={13}/>, color:'rgba(255,255,255,0.25)', desc:'Low popularity + Low margin'  },
+            ].map(({ key, label, icon, color, desc })=>(
+              <div key={key} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderTop:`2px solid ${color}`, borderRadius:'12px', padding:'14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                  <span style={{ fontSize:'0.65rem', fontWeight:'900', color, display:'flex', alignItems:'center', gap:'6px' }}>{icon} {label}</span>
+                  <span style={{ fontSize:'0.48rem', padding:'2px 7px', borderRadius:'4px', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.3)', fontWeight:'900', border:'1px solid rgba(255,255,255,0.06)' }}>{quadrants[key]?.length||0}</span>
                 </div>
-                <p style={{ fontSize: '0.6rem', color: '#444', marginBottom: '10px', lineHeight: '1.4' }}>{desc}</p>
-                {(quadrants[key] || []).slice(0, 4).map((d, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #0d0d0d', fontSize: '0.72rem' }}>
-                    <span style={{ color: '#ccc' }}>{d.name}</span>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <span style={{ color: '#555', fontSize: '0.65rem' }}>{d.totalQtySold || 0} sold</span>
-                      <span style={{ color, fontWeight: '800', fontSize: '0.65rem' }}>{d.marginPct || 0}%</span>
+                <div style={{ fontSize:'0.52rem', color:'rgba(255,255,255,0.2)', marginBottom:'9px', lineHeight:1.4 }}>{desc}</div>
+                {(quadrants[key]||[]).slice(0,4).map((d,i)=>(
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid rgba(255,255,255,0.04)', fontSize:'0.68rem' }}>
+                    <span style={{ color:'rgba(255,255,255,0.55)' }}>{d.name}</span>
+                    <div style={{ display:'flex', gap:'8px' }}>
+                      <span style={{ color:'rgba(255,255,255,0.2)', fontSize:'0.62rem' }}>{d.totalQtySold||0} sold</span>
+                      <span style={{ color, fontWeight:'800', fontSize:'0.62rem' }}>{d.marginPct||0}%</span>
                     </div>
                   </div>
                 ))}
-                {(quadrants[key]?.length || 0) > 4 && (
-                  <div style={{ fontSize: '0.6rem', color: '#333', marginTop: '6px' }}>+{quadrants[key].length - 4} more</div>
-                )}
+                {(quadrants[key]?.length||0)>4 && <div style={{ fontSize:'0.52rem', color:'rgba(255,255,255,0.15)', marginTop:'5px' }}>+{quadrants[key].length-4} more</div>}
               </div>
             ))}
           </div>
-        </div>
+        </BC>
       );
     })()}
 
-{/* DEAD MENU ITEMS — NEW */}
+    {/* Dead menu items */}
     {profitabilityData.length > 0 && (() => {
-      const dead = profitabilityData.filter(d => !d.totalQtySold || d.totalQtySold === 0);
-      if (dead.length === 0) return null;
+      const dead = profitabilityData.filter(d=>!d.totalQtySold||d.totalQtySold===0);
+      if (!dead.length) return null;
       return (
-        <div style={{...styles.biCard, marginBottom:'20px', borderLeft:'4px solid #c0392b'}}>
-          <h4 style={styles.biTitle}><XCircle size={16}/> DEAD MENU ITEMS — ZERO SALES</h4>
-          <p style={{fontSize:'0.72rem',color:'#555',marginTop:'-15px',marginBottom:'16px'}}>
-            {dead.length} item{dead.length>1?'s':''} sold 0 units this period. Consider removing, repricing, or repositioning on the menu.
+        <BC style={{ marginBottom:'14px', borderLeft:'3px solid rgba(255,255,255,0.15)' }}>
+          <BT icon={<XCircle size={14} strokeWidth={1.5}/>}>DEAD MENU ITEMS — ZERO SALES</BT>
+          <p style={{ fontSize:'0.62rem', color:'rgba(255,255,255,0.2)', marginTop:'-10px', marginBottom:'13px', lineHeight:1.55 }}>
+            {dead.length} item{dead.length>1?'s':''} sold 0 units this period. Review pricing or remove from menu.
           </p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
             {dead.map(d=>(
-              <div key={d._id} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #1a1a1a'}}>
-                <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{d.name}</div>
-                <div style={{fontSize:'0.6rem',color:'#555',marginTop:'3px'}}>
-                  {d.hasRecipe ? `Sell ₹${d.sellingPrice} · Cost ₹${d.ingredientCostPerServing}` : 'No recipe linked'}
-                </div>
-              </div>
+              <span key={d._id} style={{ fontSize:'0.62rem', padding:'4px 10px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:'6px', color:'rgba(255,255,255,0.4)', fontWeight:'700' }}>
+                {d.name} {d.sellingPrice?`· ₹${d.sellingPrice}`:''}
+              </span>
             ))}
           </div>
-        </div>
+        </BC>
       );
     })()}
 
-    {/* CATEGORY PERFORMANCE SEGMENTATION */}
+    {/* Category Rankings */}
     {Object.keys(categoryRankings).length > 0 && (
-      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-        <h4 style={styles.biTitle}><Layers size={16} /> CATEGORY PERFORMANCE SEGMENTATION</h4>
-        <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '20px' }}>
-          Sales velocity by category — top performers and underperforming items for the selected period.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-          {Object.entries(categoryRankings).map(([cat, m]) => (
-            <div key={cat} style={{ background: '#050505', border: '1px solid #111', padding: '18px', borderRadius: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #111', paddingBottom: '10px' }}>
-                <span style={{ fontWeight: '900', fontSize: '0.82rem', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {cat.replace('cat_', '').replace('CAT_', '')}
+      <BC style={{ marginBottom:'14px' }}>
+        <BT icon={<Layers size={14} strokeWidth={1.5}/>}>CATEGORY PERFORMANCE</BT>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'12px' }}>
+          {Object.entries(categoryRankings).map(([cat,m])=>(
+            <div key={cat} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'12px', padding:'15px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', paddingBottom:'10px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontWeight:'900', fontSize:'0.72rem', color:'#d3bfa2', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                  {cat.replace('cat_','').replace('CAT_','')}
                 </span>
-                <span style={{ fontSize: '0.62rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(211,191,162,0.06)', color: '#888', fontWeight: '800', border: '1px solid #1a1a1a' }}>
+                <span style={{ fontSize:'0.52rem', padding:'2px 8px', borderRadius:'4px', background:'rgba(211,191,162,0.06)', color:'rgba(211,191,162,0.5)', border:'1px solid rgba(211,191,162,0.12)', fontWeight:'800' }}>
                   {m.totalSoldInCategory} units
                 </span>
               </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <small style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '1px', display: 'flex', alignItems:'center', gap:'4px', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  <ArrowUp size={10}/> Top Performers
-                </small>
-                {(m.topDishes || []).map((d, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', padding: '4px 0', borderBottom: '1px solid #0d0d0d' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '0.6rem', color: '#8a704d', fontWeight: '900', minWidth: '14px' }}>#{i + 1}</span>
-                      <span style={{ color: '#fff', fontWeight: '700' }}>{d.name}</span>
+              <div style={{ marginBottom:'10px' }}>
+                <div style={{ fontSize:'0.46rem', color:'rgba(211,191,162,0.4)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'6px', display:'flex', alignItems:'center', gap:'4px' }}>
+                  <ArrowUp size={9}/> TOP PERFORMERS
+                </div>
+                {(m.topDishes||[]).map((d,i)=>(
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.7rem', padding:'4px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                      <span style={{ fontSize:'0.55rem', color:'rgba(211,191,162,0.35)', minWidth:'14px' }}>#{i+1}</span>
+                      <span style={{ color:'rgba(255,255,255,0.65)', fontWeight:'700' }}>{d.name}</span>
                     </div>
-                    <span style={{ color: '#d3bfa2', fontWeight: '900', fontSize: '0.72rem' }}>{d.sold} sold</span>
+                    <span style={{ color:'rgba(211,191,162,0.6)', fontWeight:'900', fontSize:'0.65rem' }}>{d.sold} sold</span>
                   </div>
                 ))}
               </div>
-
               <div>
-                <small style={{ fontSize: '0.58rem', color: '#555', fontWeight: '900', letterSpacing: '1px', display: 'flex', alignItems:'center', gap:'4px', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  <ArrowDown size={10}/> Needs Attention
-                </small>
-                {(m.bottomDishes || []).map((d, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', padding: '4px 0', borderBottom: '1px solid #0a0a0a' }}>
-                    <span style={{ color: '#444', fontWeight: '600' }}>• {d.name}</span>
-                    <span style={{ color: '#333', fontWeight: '700', fontSize: '0.68rem' }}>{d.sold} sold</span>
+                <div style={{ fontSize:'0.46rem', color:'rgba(255,255,255,0.15)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'6px', display:'flex', alignItems:'center', gap:'4px' }}>
+                  <ArrowDown size={9}/> NEEDS ATTENTION
+                </div>
+                {(m.bottomDishes||[]).map((d,i)=>(
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.68rem', padding:'4px 0', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                    <span style={{ color:'rgba(255,255,255,0.2)' }}>{d.name}</span>
+                    <span style={{ color:'rgba(255,255,255,0.15)', fontSize:'0.62rem' }}>{d.sold} sold</span>
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </BC>
     )}
 
-    {/* EXTRA ITEMS REVENUE */}
+    {/* Extra Items */}
     {extraAnalytics && extraAnalytics.totalSold > 0 && (
-      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-        <h4 style={styles.biTitle}><ShoppingBag size={16} /> EXTRA ITEMS REVENUE — SUPPLEMENTARY CATALOG</h4>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+      <BC style={{ marginBottom:'14px' }}>
+        <BT icon={<ShoppingBag size={14} strokeWidth={1.5}/>}>EXTRA ITEMS REVENUE</BT>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'16px' }}>
           {[
-            { l: 'TOTAL REVENUE', v: `₹${(extraAnalytics.totalRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
-            { l: 'TOTAL COST', v: `₹${(extraAnalytics.totalCost || 0).toLocaleString()}`, c: '#BA7517' },
-            { l: 'GROSS PROFIT', v: `₹${(extraAnalytics.totalProfit || 0).toLocaleString()}`, c: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b' },
-            { l: 'UNITS SOLD', v: extraAnalytics.totalSold || 0, c: '#fff' },
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-              <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            { l:'REVENUE',      v:`₹${(extraAnalytics.totalRevenue||0).toLocaleString()}`, accent:true },
+            { l:'COST',         v:`₹${(extraAnalytics.totalCost||0).toLocaleString()}` },
+            { l:'GROSS PROFIT', v:`₹${(extraAnalytics.totalProfit||0).toLocaleString()}` },
+            { l:'UNITS SOLD',   v:extraAnalytics.totalSold||0 },
+          ].map(s=>(
+            <div key={s.l} style={{ padding:'11px 12px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px', textAlign:'center' }}>
+              <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'5px' }}>{s.l}</div>
+              <div style={{ fontSize:'0.9rem', fontWeight:'900', color: s.accent?'#d3bfa2':'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{s.v}</div>
             </div>
           ))}
         </div>
-
-        <div style={{ overflowX: 'auto' }} className="custom-scroll">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse' }}>
             <thead>
-              <tr style={{ fontSize: '0.58rem', color: '#444', borderBottom: '1px solid #1a1a1a', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                {['Item', 'Category', 'Sell ₹', 'Margin', 'Sold', 'Revenue', 'Profit'].map(h => (
-                  <th key={h} style={{ padding: '0 12px 10px 0', textAlign: 'left' }}>{h}</th>
+              <tr style={{ fontSize:'0.46rem', color:'rgba(255,255,255,0.2)', borderBottom:'1px solid rgba(255,255,255,0.06)', textTransform:'uppercase', letterSpacing:'1.5px' }}>
+                {['Item','Category','Price','Margin','Sold','Revenue','Profit'].map(h=>(
+                  <th key={h} style={{ padding:'0 12px 9px 0', textAlign:'left', fontWeight:'900' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(extraAnalytics.items || [])
-                .filter(i => i.totalSold > 0)
-                .sort((a, b) => b.profit - a.profit)
-                .map(item => (
-                  <tr key={item._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
-                    <td style={{ padding: '10px 12px 10px 0', fontWeight: '900', color: '#fff' }}>{item.name}</td>
-                    <td style={{ color: '#555', paddingRight: '12px' }}>{item.category}</td>
-                    <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{item.price}</td>
-                    <td style={{ paddingRight: '12px' }}>
-                      <span style={{
-                        fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '900',
-                        background: item.margin > 40 ? 'rgba(74,222,128,0.08)' : 'rgba(186,117,23,0.08)',
-                        color: item.margin > 40 ? '#4ade80' : '#BA7517',
-                        border: `1px solid ${item.margin > 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`
-                      }}>
-                        {item.margin}%
-                      </span>
-                    </td>
-                    <td style={{ color: '#888', paddingRight: '12px' }}>{item.totalSold}</td>
-                    <td style={{ color: '#d3bfa2', fontWeight: '800', paddingRight: '12px' }}>₹{(item.revenue || 0).toLocaleString()}</td>
-                    <td style={{ fontWeight: '900', color: item.profit > 0 ? '#4ade80' : '#c0392b' }}>
-                      ₹{(item.profit || 0).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
+              {(extraAnalytics.items||[]).filter(i=>i.totalSold>0).sort((a,b)=>b.profit-a.profit).map(item=>(
+                <tr key={item._id} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)', fontSize:'0.72rem' }}>
+                  <td style={{ padding:'9px 12px 9px 0', fontWeight:'800', color:'rgba(255,255,255,0.7)' }}>{item.name}</td>
+                  <td style={{ color:'rgba(255,255,255,0.25)', paddingRight:'12px' }}>{item.category}</td>
+                  <td style={{ color:'rgba(211,191,162,0.7)', fontWeight:'800', paddingRight:'12px', fontFamily:'monospace' }}>₹{item.price}</td>
+                  <td style={{ paddingRight:'12px' }}>
+                    <span style={{ fontSize:'0.6rem', padding:'2px 7px', borderRadius:'4px', fontWeight:'900', background: item.margin>40?'rgba(211,191,162,0.07)':'rgba(255,255,255,0.03)', color: item.margin>40?'rgba(211,191,162,0.8)':'rgba(255,255,255,0.35)', border:`1px solid ${item.margin>40?'rgba(211,191,162,0.18)':'rgba(255,255,255,0.07)'}` }}>
+                      {item.margin}%
+                    </span>
+                  </td>
+                  <td style={{ color:'rgba(255,255,255,0.4)', paddingRight:'12px' }}>{item.totalSold}</td>
+                  <td style={{ color:'rgba(211,191,162,0.6)', fontWeight:'800', paddingRight:'12px', fontFamily:'monospace' }}>₹{(item.revenue||0).toLocaleString()}</td>
+                  <td style={{ fontWeight:'900', fontFamily:'monospace', color: item.profit>0?'rgba(211,191,162,0.8)':'rgba(255,255,255,0.25)' }}>₹{(item.profit||0).toLocaleString()}</td>
+                </tr>
+              ))}
             </tbody>
-            <tfoot>
-              <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
-                <td colSpan="4" style={{ padding: '12px 0', fontSize: '0.6rem', color: '#8a704d', fontWeight: '900' }}>TOTALS</td>
-                <td style={{ padding: '12px 0', color: '#888', fontWeight: '800' }}>
-                  {(extraAnalytics.items || []).filter(i => i.totalSold > 0).reduce((a, i) => a + i.totalSold, 0)}
-                </td>
-                <td style={{ padding: '12px 0', color: '#d3bfa2', fontWeight: '900' }}>
-                  ₹{(extraAnalytics.totalRevenue || 0).toLocaleString()}
-                </td>
-                <td style={{ padding: '12px 0', color: (extraAnalytics.totalProfit || 0) > 0 ? '#4ade80' : '#c0392b', fontWeight: '900' }}>
-                  ₹{(extraAnalytics.totalProfit || 0).toLocaleString()}
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
-
-        {Object.keys(extraAnalytics.byCategory || {}).length > 1 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #111' }}>
-            {Object.entries(extraAnalytics.byCategory).map(([cat, data]) => (
-              <div key={cat} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-                <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat}</div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: '800' }}>₹{(data.revenue || 0).toLocaleString()}</div>
-                <div style={{ fontSize: '0.62rem', color: '#4ade80', marginTop: '3px' }}>profit ₹{(data.profit || 0).toLocaleString()}</div>
-                <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '2px' }}>{data.sold} units</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* DEAD STOCK — EXTRA ITEMS NEW */}
-        {(() => {
-          const deadExtras = (extraAnalytics.items || []).filter(i => !i.totalSold || i.totalSold === 0);
-          if (deadExtras.length === 0) return null;
-          return (
-            <div style={{marginTop:'16px', paddingTop:'16px', borderTop:'1px solid #111'}}>
-              <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
-                <Package size={12}/> DEAD STOCK — ZERO SALES THIS PERIOD ({deadExtras.length})
-              </div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                {deadExtras.map(i=>(
-                  <span key={i._id} style={{fontSize:'0.62rem',padding:'3px 10px',background:'rgba(192,57,43,0.06)',border:'1px solid rgba(192,57,43,0.18)',borderRadius:'4px',color:'#888',fontWeight:'700'}}>
-                    {i.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-        <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.62rem', color: '#555', fontWeight: '900' }}>CURRENT STOCK VALUE</span>
-          <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#8a704d' }}>₹{(extraAnalytics.stockValue || 0).toLocaleString()}</span>
-        </div>
-      </div>
+      </BC>
     )}
 
-{/* SWIGGY / ZOMATO AGGREGATOR REVENUE — only shown if tenant has at least one platform enabled */}
+    {/* Aggregator */}
     {aggregatorAnalytics?.enabled && (aggregatorAnalytics.swiggy || aggregatorAnalytics.zomato) && (
-      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-        <h4 style={styles.biTitle}><Truck size={16} /> ONLINE AGGREGATOR REVENUE — SWIGGY & ZOMATO</h4>
-        <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '18px' }}>
-          Orders received via Dyno integration for {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '20px' }}>
+      <BC style={{ marginBottom:'14px' }}>
+        <BT icon={<Truck size={14} strokeWidth={1.5}/>}>ONLINE AGGREGATOR REVENUE</BT>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'16px' }}>
           {[
-            { l: 'COMBINED AGGREGATOR REVENUE', v: `₹${(aggregatorAnalytics.combinedRevenue || 0).toLocaleString()}`, c: '#d3bfa2' },
-            { l: 'SWIGGY ORDERS', v: aggregatorAnalytics.swiggy?.orderCount || 0, c: '#fc8019' },
-            { l: 'ZOMATO ORDERS', v: aggregatorAnalytics.zomato?.orderCount || 0, c: '#cb202d' },
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+            { l:'COMBINED REVENUE', v:`₹${(aggregatorAnalytics.combinedRevenue||0).toLocaleString()}`, accent:true },
+            { l:'SWIGGY ORDERS',    v:aggregatorAnalytics.swiggy?.orderCount||0 },
+            { l:'ZOMATO ORDERS',    v:aggregatorAnalytics.zomato?.orderCount||0 },
+          ].map(s=>(
+            <div key={s.l} style={{ padding:'12px 13px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+              <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'5px' }}>{s.l}</div>
+              <div style={{ fontSize:'0.95rem', fontWeight:'900', color: s.accent?'#d3bfa2':'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{s.v}</div>
             </div>
           ))}
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: aggregatorAnalytics.swiggyEnabled && aggregatorAnalytics.zomatoEnabled ? '1fr 1fr' : '1fr', gap: '16px' }}>
-
-          {/* SWIGGY CARD */}
+        <div style={{ display:'grid', gridTemplateColumns: aggregatorAnalytics.swiggyEnabled&&aggregatorAnalytics.zomatoEnabled?'1fr 1fr':'1fr', gap:'12px' }}>
           {aggregatorAnalytics.swiggyEnabled && (
-            <div style={{ background: '#050505', border: '1px solid rgba(252,128,25,0.2)', borderTop: '2px solid #fc8019', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: '900', color: '#fc8019' }}>SWIGGY</span>
-                <span style={{ fontSize: '0.62rem', color: '#555' }}>{aggregatorAnalytics.swiggy?.orderCount || 0} orders</span>
+            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,165,25,0.15)', borderTop:'2px solid rgba(255,165,25,0.5)', borderRadius:'12px', padding:'14px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+                <span style={{ fontSize:'0.75rem', fontWeight:'900', color:'rgba(252,128,25,0.8)' }}>SWIGGY</span>
+                <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.25)' }}>{aggregatorAnalytics.swiggy?.orderCount||0} orders</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
-                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>REVENUE</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{(aggregatorAnalytics.swiggy?.revenue || 0).toLocaleString()}</div>
-                </div>
-                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
-                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>AVG ORDER</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{aggregatorAnalytics.swiggy?.avgOrderValue || 0}</div>
-                </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'7px' }}>
+                {[{l:'REVENUE',v:`₹${(aggregatorAnalytics.swiggy?.revenue||0).toLocaleString()}`},{l:'AVG ORDER',v:`₹${aggregatorAnalytics.swiggy?.avgOrderValue||0}`}].map(s=>(
+                  <div key={s.l} style={{ padding:'9px', background:'rgba(255,255,255,0.03)', borderRadius:'8px' }}>
+                    <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginBottom:'4px' }}>{s.l}</div>
+                    <div style={{ fontSize:'0.85rem', fontWeight:'900', color:'rgba(255,255,255,0.65)', fontFamily:'monospace' }}>{s.v}</div>
+                  </div>
+                ))}
               </div>
-              {(aggregatorAnalytics.swiggy?.rejectedCount || 0) > 0 && (
-                <div style={{ fontSize: '0.6rem', color: '#f87171', marginBottom: '10px' }}>
-                  {aggregatorAnalytics.swiggy.rejectedCount} order{aggregatorAnalytics.swiggy.rejectedCount > 1 ? 's' : ''} rejected this month
-                </div>
-              )}
-              {(aggregatorAnalytics.swiggy?.topItems || []).length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP ITEMS</div>
-                  {aggregatorAnalytics.swiggy.topItems.map(it => (
-                    <div key={it.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.68rem' }}>
-                      <span style={{ color: '#ccc' }}>{it.name}</span>
-                      <span style={{ color: '#fc8019', fontWeight: '800' }}>{it.qty}×</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
-
-          {/* ZOMATO CARD */}
           {aggregatorAnalytics.zomatoEnabled && (
-            <div style={{ background: '#050505', border: '1px solid rgba(203,32,45,0.2)', borderTop: '2px solid #cb202d', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: '900', color: '#cb202d' }}>ZOMATO</span>
-                <span style={{ fontSize: '0.62rem', color: '#555' }}>{aggregatorAnalytics.zomato?.orderCount || 0} orders</span>
+            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(203,32,45,0.15)', borderTop:'2px solid rgba(203,32,45,0.5)', borderRadius:'12px', padding:'14px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+                <span style={{ fontSize:'0.75rem', fontWeight:'900', color:'rgba(203,32,45,0.8)' }}>ZOMATO</span>
+                <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.25)' }}>{aggregatorAnalytics.zomato?.orderCount||0} orders</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
-                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>REVENUE</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{(aggregatorAnalytics.zomato?.revenue || 0).toLocaleString()}</div>
-                </div>
-                <div style={{ background: '#0a0a0a', padding: '10px', borderRadius: '8px', border: '1px solid #151515' }}>
-                  <div style={{ fontSize: '0.5rem', color: '#444', fontWeight: '900' }}>AVG ORDER</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', marginTop: '3px' }}>₹{aggregatorAnalytics.zomato?.avgOrderValue || 0}</div>
-                </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'7px' }}>
+                {[{l:'REVENUE',v:`₹${(aggregatorAnalytics.zomato?.revenue||0).toLocaleString()}`},{l:'AVG ORDER',v:`₹${aggregatorAnalytics.zomato?.avgOrderValue||0}`}].map(s=>(
+                  <div key={s.l} style={{ padding:'9px', background:'rgba(255,255,255,0.03)', borderRadius:'8px' }}>
+                    <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginBottom:'4px' }}>{s.l}</div>
+                    <div style={{ fontSize:'0.85rem', fontWeight:'900', color:'rgba(255,255,255,0.65)', fontFamily:'monospace' }}>{s.v}</div>
+                  </div>
+                ))}
               </div>
-              {(aggregatorAnalytics.zomato?.rejectedCount || 0) > 0 && (
-                <div style={{ fontSize: '0.6rem', color: '#f87171', marginBottom: '10px' }}>
-                  {aggregatorAnalytics.zomato.rejectedCount} order{aggregatorAnalytics.zomato.rejectedCount > 1 ? 's' : ''} rejected this month
-                </div>
-              )}
-              {(aggregatorAnalytics.zomato?.topItems || []).length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.55rem', color: '#444', fontWeight: '900', marginBottom: '6px', letterSpacing: '0.5px' }}>TOP ITEMS</div>
-                  {aggregatorAnalytics.zomato.topItems.map(it => (
-                    <div key={it.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.68rem' }}>
-                      <span style={{ color: '#ccc' }}>{it.name}</span>
-                      <span style={{ color: '#cb202d', fontWeight: '800' }}>{it.qty}×</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
-      </div>
+      </BC>
     )}
 
-    {/* ═══════════ SECTION 4 — OPERATIONS & RESOURCES ═══════════ */}
+    {/* ════════════════════════════════
+        SECTION 4 — OPERATIONS
+    ════════════════════════════════ */}
     <SectionHeader icon={<Layers size={16}/>} title="Operations & Resources" subtitle="Tables, staff, and inventory health" />
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Layers size={16}/> TABLE PERFORMANCE</h4>
-        {trendsData?.tables?.performance?.length>0 ? trendsData.tables.performance.slice(0,5).map(t=>{
-          const mx=trendsData.tables.performance[0]?.revenue||1;
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px' }}>
+      {/* Table Performance */}
+      <BC>
+        <BT icon={<Layers size={14} strokeWidth={1.5}/>}>TABLE PERFORMANCE</BT>
+        {trendsData?.tables?.performance?.length > 0 ? trendsData.tables.performance.slice(0,5).map(t=>{
+          const mx = trendsData.tables.performance[0]?.revenue||1;
+          const pct = Math.round((t.revenue/mx)*100);
           return (
-            <div key={t.table} style={{padding:'10px 0',borderBottom:'1px solid #111'}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:'5px'}}>
-                <span style={{color:'#fff',fontWeight:'900',fontSize:'0.8rem'}}>Table {t.table}</span>
-                <span style={{color:'#d3bfa2',fontWeight:'900',fontSize:'0.8rem'}}>₹{t.revenue.toLocaleString()}</span>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                <div style={{flex:1,height:'4px',background:'#111',borderRadius:'2px',overflow:'hidden'}}>
-                  <div style={{height:'100%',width:`${Math.round((t.revenue/mx)*100)}%`,background:'#8a704d'}}/>
+            <div key={t.table} style={{ padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
+                <span style={{ color:'rgba(255,255,255,0.65)', fontWeight:'800', fontSize:'0.72rem' }}>Table {t.table}</span>
+                <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+                  <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.25)' }}>{t.turns} turns</span>
+                  <span style={{ color:'rgba(211,191,162,0.7)', fontWeight:'900', fontSize:'0.72rem', fontFamily:'monospace' }}>₹{t.revenue.toLocaleString()}</span>
                 </div>
-                <span style={{fontSize:'0.65rem',color:'#555'}}>{t.turns} turns</span>
+              </div>
+              <div style={{ height:'4px', background:'rgba(255,255,255,0.05)', borderRadius:'2px', overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.35)', borderRadius:'2px' }} />
               </div>
             </div>
           );
-        }) : <div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div>}
-      </div>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Timer size={16}/> AVG DWELL TIME</h4>
-        {trendsData?.tables ? (
-          [{label:'AVG DWELL',val:trendsData.tables.overallAvgDwell>0?`${trendsData.tables.overallAvgDwell} min`:'—'},
-           {label:'FASTEST',val:trendsData.tables.fastest?`T${trendsData.tables.fastest.table} · ${trendsData.tables.fastest.avgDwell}m`:'—'},
-           {label:'SLOWEST',val:trendsData.tables.slowest?`T${trendsData.tables.slowest.table} · ${trendsData.tables.slowest.avgDwell}m`:'—'}
-          ].map(s=>(
-            <div key={s.label} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #111'}}>
-              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.label}</small>
-              <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#fff'}}>{s.val}</span>
-            </div>
-          ))
-        ) : <div style={{opacity:0.3,fontSize:'0.75rem',paddingTop:'30px',textAlign:'center'}}>NO DATA</div>}
+        }) : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'30px' }}>No data yet</div>}
+      </BC>
 
-        {/* COST-PER-COVER — NEW */}
-        {profitabilityData.length > 0 && trendsData?.customers?.total > 0 && (() => {
-          const totalCost = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
-          const totalCovers = trendsData.customers.total;
-          const costPerCover = totalCovers > 0 ? Math.round(totalCost / totalCovers) : 0;
-          return (
-            <div style={{marginTop:'10px',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',display:'flex',justifyContent:'space-between'}}>
-              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>COST PER COVER</small>
-              <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#d3bfa2'}}>₹{costPerCover}</span>
-            </div>
-          );
-        })()}
-      </div>
+      {/* Dwell + Cost per Cover */}
+      <BC>
+        <BT icon={<Timer size={14} strokeWidth={1.5}/>}>AVG DWELL TIME</BT>
+        {trendsData?.tables ? (
+          <>
+            {[
+              { l:'AVG DWELL',  v: trendsData.tables.overallAvgDwell>0?`${trendsData.tables.overallAvgDwell} min`:'—' },
+              { l:'FASTEST',    v: trendsData.tables.fastest?`T${trendsData.tables.fastest.table} · ${trendsData.tables.fastest.avgDwell}m`:'—' },
+              { l:'SLOWEST',    v: trendsData.tables.slowest?`T${trendsData.tables.slowest.table} · ${trendsData.tables.slowest.avgDwell}m`:'—' },
+            ].map(s=>(
+              <div key={s.l} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.25)', fontWeight:'900' }}>{s.l}</span>
+                <span style={{ fontSize:'0.75rem', fontWeight:'900', color:'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{s.v}</span>
+              </div>
+            ))}
+            {profitabilityData.length>0 && trendsData?.customers?.total>0 && (() => {
+              const totalCostCP = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
+              const cpc = Math.round(totalCostCP/trendsData.customers.total);
+              return (
+                <div style={{ marginTop:'12px', padding:'10px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'9px', display:'flex', justifyContent:'space-between' }}>
+                  <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.25)', fontWeight:'900' }}>COST PER COVER</span>
+                  <span style={{ fontSize:'0.75rem', fontWeight:'900', color:'rgba(211,191,162,0.7)', fontFamily:'monospace' }}>₹{cpc}</span>
+                </div>
+              );
+            })()}
+          </>
+        ) : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'30px' }}>No data</div>}
+      </BC>
     </div>
 
-    {/* STAFF EFFICIENCY */}
+    {/* Staff Efficiency */}
     {staffEfficiency.length > 0 && (
-      <div style={{ ...styles.biCard, marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h4 style={{ ...styles.biTitle, margin: 0 }}>
-            <Zap size={16} /> STAFF EFFICIENCY — {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </h4>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div style={{ fontSize: '0.6rem', color: '#555', fontWeight: '900' }}>
-              SHOWING: {viewDate.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}
-            </div>
-              <button
-                onClick={async () => {
-                  const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-                  await Promise.all([
-                    fetchMonthlySalary(monthStr),
-                    fetchAnalytics(),
-                  ]);
-                  showNotif(`Data refreshed for ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`);
-                }}
-              style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '6px 12px', borderRadius: '6px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}
-            >
-              ↻ REFRESH
-            </button>
-          </div>
-        </div>
-
+      <BC style={{ marginBottom:'14px' }}>
+        <BT icon={<Zap size={14} strokeWidth={1.5}/>} right={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'}).toUpperCase()}>
+          STAFF EFFICIENCY
+        </BT>
         {(() => {
-          const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-          const totalHrs = staffEfficiency.reduce((a, s) => a + (s.totalHours || 0), 0);
-          const paidCount = staffEfficiency.filter(s => {
-            const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-            return (rec?.status || s.salaryStatus) === 'Paid';
+          const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+          const totalHrs = staffEfficiency.reduce((a,s)=>a+(s.totalHours||0),0);
+          const paidCount = staffEfficiency.filter(s=>{
+            const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+            return (rec?.status||s.salaryStatus)==='Paid';
           }).length;
-          const pendingPay = filteredStaff.reduce((acc, m) => {
-            const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr);
-            return (rec?.status || 'Unpaid') === 'Paid' ? acc : acc + (Number(rec?.baseSalary || m.baseSalary) || 0);
-          }, 0);
+          const pendingPay = filteredStaff.reduce((acc,m)=>{
+            const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===m._id?.toString()&&r.monthStr===monthStr);
+            return (rec?.status||'Unpaid')==='Paid'?acc:acc+(Number(rec?.baseSalary||m.baseSalary)||0);
+          },0);
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-              {[
-                { l: 'TOTAL STAFF', v: staffEfficiency.length, c: '#d3bfa2' },
-                { l: 'HOURS LOGGED', v: `${totalHrs.toFixed(1)}h`, c: '#4ade80' },
-                { l: 'SALARIES PAID', v: `${paidCount}/${staffEfficiency.length}`, c: paidCount === staffEfficiency.length ? '#4ade80' : '#BA7517' },
-                { l: 'PENDING PAYROLL', v: `₹${pendingPay.toLocaleString()}`, c: pendingPay > 0 ? '#BA7517' : '#4ade80' }
-              ].map(s => (
-                <div key={s.l} style={{ background: '#050505', padding: '12px', borderRadius: '10px', border: '1px solid #111' }}>
-                  <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-                  <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
-                </div>
-              ))}
-            </div>
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'16px' }}>
+                {[
+                  { l:'TOTAL STAFF',    v:staffEfficiency.length },
+                  { l:'HOURS LOGGED',   v:`${totalHrs.toFixed(1)}h` },
+                  { l:'SALARIES PAID',  v:`${paidCount}/${staffEfficiency.length}`, accent: paidCount===staffEfficiency.length },
+                  { l:'PENDING PAYROLL',v:`₹${pendingPay.toLocaleString()}`, warn: pendingPay>0 },
+                ].map(s=>(
+                  <div key={s.l} style={{ padding:'11px 12px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.15)':s.warn?'rgba(240,165,0,0.15)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+                    <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>{s.l}</div>
+                    <div style={{ fontSize:'0.88rem', fontWeight:'900', fontFamily:'monospace', color: s.accent?'#d3bfa2':s.warn?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.6)' }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ fontSize:'0.46rem', color:'rgba(255,255,255,0.2)', borderBottom:'1px solid rgba(255,255,255,0.06)', textTransform:'uppercase', letterSpacing:'1.5px' }}>
+                      {['Name','Role','Attendance','Hours','Rev/Hr','Salary','Status'].map(h=>(
+                        <th key={h} style={{ padding:'0 12px 9px 0', textAlign:'left', fontWeight:'900' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffEfficiency.map(s=>{
+                      const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+                      const status = rec?.status||s.salaryStatus||'Unpaid';
+                      const isPaid = status==='Paid';
+                      const attPct = Math.round((s.daysPresent/26)*100);
+                      return (
+                        <tr key={s._id} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)', fontSize:'0.7rem' }}>
+                          <td style={{ padding:'10px 12px 10px 0', fontWeight:'800', color:'rgba(255,255,255,0.7)' }}>{s.name}</td>
+                          <td style={{ color:'rgba(255,255,255,0.3)', paddingRight:'12px' }}>{s.role}</td>
+                          <td style={{ paddingRight:'12px' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'7px' }}>
+                              <span style={{ color:'rgba(211,191,162,0.7)', fontWeight:'800', fontFamily:'monospace' }}>{s.daysPresent}d</span>
+                              <div style={{ flex:1, height:'4px', background:'rgba(255,255,255,0.06)', borderRadius:'2px', overflow:'hidden', minWidth:'36px' }}>
+                                <div style={{ height:'100%', width:`${Math.min(100,attPct)}%`, background:'rgba(211,191,162,0.4)', borderRadius:'2px' }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ color:'rgba(255,255,255,0.4)', paddingRight:'12px' }}>{s.totalHours}h</td>
+                          <td style={{ fontWeight:'800', color: s.revenuePerHour>0?'rgba(211,191,162,0.6)':'rgba(255,255,255,0.2)', fontFamily:'monospace', paddingRight:'12px' }}>
+                            {s.revenuePerHour>0?`₹${s.revenuePerHour.toLocaleString()}`:'—'}
+                          </td>
+                          <td style={{ color:'rgba(255,255,255,0.5)', paddingRight:'12px', fontFamily:'monospace' }}>₹{Number(rec?.baseSalary||s.baseSalary).toLocaleString()}</td>
+                          <td>
+                            <select value={status}
+                              onChange={async e=>{
+                                await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`,{status:e.target.value});
+                                fetchMonthlySalary(monthStr);
+                                showNotif(`${s.name} — ${monthStr} marked ${e.target.value}`);
+                              }}
+                              style={{ background:'rgba(255,255,255,0.03)', color: isPaid?'rgba(211,191,162,0.8)':'rgba(255,255,255,0.3)', border:`1px solid ${isPaid?'rgba(211,191,162,0.2)':'rgba(255,255,255,0.07)'}`, padding:'5px 9px', borderRadius:'6px', fontSize:'0.58rem', fontWeight:'900', outline:'none', cursor:'pointer' }}>
+                              <option value="Unpaid">UNPAID</option>
+                              <option value="Paid">PAID</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           );
         })()}
-
-        <div style={{ overflowX: 'auto' }} className="custom-scroll">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ fontSize: '0.6rem', color: '#555', borderBottom: '1px solid #121212', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                {['Name', 'Role', 'Days Present', 'Hours', 'Rev/Hour', 'Base Salary', 'Payroll Status'].map(h => (
-                  <th key={h} style={{ padding: '0 12px 12px 0', textAlign: 'left' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {staffEfficiency.map(s => {
-                const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-                const monthRec = monthlySalaryRecords.find(r =>
-                  r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr
-                );
-                const salaryStatus = monthRec?.status || s.salaryStatus || 'Unpaid';
-                const isPaid = salaryStatus === 'Paid';
-                const recordedSalary = monthRec?.baseSalary || s.baseSalary;
-                const attendancePct = Math.round((s.daysPresent / 26) * 100);
-
-                return (
-                  <tr key={s._id} style={{ borderBottom: '1px solid #090909', fontSize: '0.78rem' }}>
-                    <td style={{ padding: '12px 12px 12px 0', fontWeight: '900', color: '#fff' }}>{s.name}</td>
-                    <td style={{ color: '#555', fontWeight: '800' }}>{s.role}</td>
-                    <td style={{ paddingRight: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#d3bfa2', fontWeight: '900' }}>{s.daysPresent}d</span>
-                        <div style={{ flex: 1, height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden', minWidth: '40px' }}>
-                          <div style={{ height: '100%', width: `${Math.min(100, attendancePct)}%`, background: attendancePct >= 80 ? '#4ade80' : attendancePct >= 50 ? '#d3bfa2' : '#BA7517', borderRadius: '2px', transition: 'width 0.6s ease' }} />
-                        </div>
-                        <span style={{ fontSize: '0.58rem', color: '#444' }}>{attendancePct}%</span>
-                      </div>
-                    </td>
-                    <td style={{ color: '#888' }}>{s.totalHours}h</td>
-                    <td style={{ fontWeight: '900', color: s.revenuePerHour > 0 ? '#d3bfa2' : '#333' }}>
-                      {s.revenuePerHour > 0 ? `₹${s.revenuePerHour.toLocaleString()}` : '—'}
-                    </td>
-                    <td style={{ color: '#fff' }}>₹{Number(recordedSalary).toLocaleString()}<small style={{ color: '#444', fontSize: '0.6rem' }}>/mo</small></td>
-                    <td>
-                      <select
-                        value={salaryStatus}
-                        onChange={async e => {
-                          const newStatus = e.target.value;
-                          await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`, { status: newStatus });
-                          fetchMonthlySalary(monthStr);
-                          showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
-                        }}
-                        style={{
-                          background: '#000',
-                          color: isPaid ? '#d3bfa2' : '#444',
-                          border: isPaid ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
-                          padding: '6px 10px', borderRadius: '6px',
-                          fontSize: '0.65rem', fontWeight: '900',
-                          outline: 'none', cursor: 'pointer'
-                        }}
-                      >
-                        <option value="Unpaid">UNPAID</option>
-                        <option value="Paid">PAID</option>
-                      </select>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr style={{ background: '#050505', borderTop: '2px solid #1a1a1a' }}>
-                <td colSpan="4" style={{ padding: '14px 0' }} />
-                <td colSpan="2" style={{ padding: '14px 12px', fontSize: '0.65rem', fontWeight: '900', color: '#8a704d', textTransform: 'uppercase' }}>
-                  PENDING PAYROLL:
-                </td>
-                <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.9rem' }}>
-                  ₹{totalPayrollValue.toLocaleString()}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
+      </BC>
     )}
 
-    {/* INVENTORY HEALTH SCORECARD */}
+    {/* Inventory Health */}
     {inventory.length > 0 && (() => {
-      const totalItems   = inventory.length;
-      const lowItems     = inventory.filter(i=>i.currentStock<=i.minThreshold).length;
-      const depletedItems = inventory.filter(i=>i.currentStock<=0).length;
-      const healthyItems = totalItems - lowItems;
-      const healthScore  = Math.round((healthyItems/totalItems)*100);
-      const criticals    = inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
-
-      // DEAD STOCK — NEW (items with healthy stock but possibly unused — heuristic: stock unchanged & no recipe usage)
-      const totalStockValue = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
-
+      const totalItems = inventory.length;
+      const lowItems = inventory.filter(i=>i.currentStock<=i.minThreshold).length;
+      const depleted = inventory.filter(i=>i.currentStock<=0).length;
+      const healthy  = totalItems - lowItems;
+      const score    = Math.round((healthy/totalItems)*100);
+      const criticals= inventory.filter(i=>i.currentStock<=i.minThreshold).sort((a,b)=>a.currentStock-b.currentStock).slice(0,4);
+      const stockVal = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
       return (
-        <div style={{...styles.biCard, marginBottom:'20px', borderLeft:`4px solid ${healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}`}}>
-          <h4 style={styles.biTitle}><Layers size={16}/> INVENTORY HEALTH SCORECARD</h4>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 3fr',gap:'20px',marginBottom:'16px',alignItems:'center'}}>
-            <div style={{textAlign:'center',background:'#050505',padding:'20px',borderRadius:'14px',border:'1px solid #111'}}>
-              <div style={{fontSize:'2.5rem',fontWeight:'900',color:healthScore>80?'#4ade80':healthScore>50?'#BA7517':'#c0392b'}}>{healthScore}%</div>
-              <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',marginTop:'4px'}}>STOCK HEALTH</div>
+        <BC style={{ marginBottom:'14px', borderLeft:`3px solid rgba(211,191,162,${score>80?'0.6':score>50?'0.3':'0.15'})` }}>
+          <BT icon={<Layers size={14} strokeWidth={1.5}/>}>INVENTORY HEALTH</BT>
+          <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'16px', alignItems:'center', marginBottom:'14px' }}>
+            <div style={{ textAlign:'center', padding:'16px 20px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'12px' }}>
+              <div style={{ fontSize:'2rem', fontWeight:'900', color: score>80?'#d3bfa2':score>50?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.3)', fontFamily:'monospace', lineHeight:1 }}>{score}%</div>
+              <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginTop:'4px', letterSpacing:'1px' }}>HEALTH SCORE</div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px'}}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'7px' }}>
               {[
-                {l:'TOTAL ITEMS', v:totalItems, c:'#fff'},
-                {l:'HEALTHY', v:healthyItems, c:'#4ade80'},
-                {l:'LOW STOCK', v:lowItems, c:'#BA7517'},
-                {l:'DEPLETED', v:depletedItems, c:'#c0392b'},
+                { l:'TOTAL ITEMS', v:totalItems },
+                { l:'HEALTHY',     v:healthy,    c:'rgba(211,191,162,0.8)' },
+                { l:'LOW STOCK',   v:lowItems,   c: lowItems>0?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.3)' },
+                { l:'DEPLETED',    v:depleted,   c: depleted>0?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.3)' },
               ].map(s=>(
-                <div key={s.l} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
-                  <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'3px'}}>{s.l}</div>
-                  <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+                <div key={s.l} style={{ padding:'10px 11px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px' }}>
+                  <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginBottom:'4px' }}>{s.l}</div>
+                  <div style={{ fontSize:'0.9rem', fontWeight:'900', color: s.c||'rgba(255,255,255,0.55)', fontFamily:'monospace' }}>{s.v}</div>
                 </div>
               ))}
             </div>
           </div>
-
-          <div style={{display:'flex',justifyContent:'space-between',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',marginBottom: criticals.length>0 ? '14px' : 0}}>
-            <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>TOTAL STOCK VALUE</small>
-            <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#8a704d'}}>₹{totalStockValue.toLocaleString()}</span>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'9px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'9px', marginBottom: criticals.length>0?'12px':0 }}>
+            <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.25)', fontWeight:'900' }}>TOTAL STOCK VALUE</span>
+            <span style={{ fontSize:'0.72rem', fontWeight:'900', color:'rgba(211,191,162,0.6)', fontFamily:'monospace' }}>₹{stockVal.toLocaleString()}</span>
           </div>
-
           {criticals.length > 0 && (
-            <div style={{background:'rgba(192,57,43,0.04)',border:'1px solid rgba(192,57,43,0.15)',borderRadius:'10px',padding:'14px'}}>
-              <div style={{fontSize:'0.6rem',color:'#c0392b',fontWeight:'900',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
-                <AlertTriangle size={12}/> NEEDS IMMEDIATE RESTOCK
+            <div style={{ padding:'13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:'10px' }}>
+              <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.3)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'9px', display:'flex', alignItems:'center', gap:'5px' }}>
+                <AlertTriangle size={10} color="rgba(255,255,255,0.3)" strokeWidth={2} /> NEEDS RESTOCK
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px'}}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'7px' }}>
                 {criticals.map(item=>(
-                  <div key={item._id} style={{background:'#050505',padding:'10px',borderRadius:'8px',border:'1px solid #1a1a1a'}}>
-                    <div style={{fontSize:'0.75rem',fontWeight:'900',color:'#fff'}}>{item.itemName}</div>
-                    <div style={{fontSize:'0.62rem',color:'#c0392b',marginTop:'2px'}}>{item.currentStock<=0?'OUT OF STOCK':`Only ${item.currentStock} ${item.unit} left`}</div>
-                    <div style={{fontSize:'0.58rem',color:'#444',marginTop:'1px'}}>Min: {item.minThreshold} {item.unit}</div>
+                  <div key={item._id} style={{ padding:'9px 11px', background:'rgba(255,255,255,0.02)', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize:'0.68rem', fontWeight:'800', color:'rgba(255,255,255,0.6)' }}>{item.itemName}</div>
+                    <div style={{ fontSize:'0.58rem', color: item.currentStock<=0?'rgba(255,255,255,0.35)':'rgba(240,165,0,0.6)', marginTop:'2px' }}>
+                      {item.currentStock<=0 ? 'Out of stock' : `${item.currentStock} ${item.unit} left`}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
+        </BC>
       );
     })()}
 
-    {/* INGREDIENT COST INTELLIGENCE */}
-    {profitabilityData.length > 0 && inventory.length > 0 && (() => {
-      const lowStockItems = inventory.filter(i => i.currentStock < 0);
-      const negativeStockValue = lowStockItems.reduce((a, i) => a + Math.abs(i.currentStock * (i.weightedAvgCost || i.costPrice || 0)), 0);
-      const totalCostAllDishes = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0);
-      const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
-
-      return (
-        <div style={{ ...styles.biCard, marginBottom: '20px' }}>
-          <h4 style={styles.biTitle}><AlertTriangle size={16} /> INGREDIENT COST INTELLIGENCE</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
-            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>RECIPE-BASED FOOD COST</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: totalCostAllDishes / Math.max(totalRevAllDishes, 1) > 0.4 ? '#BA7517' : '#4ade80' }}>
-                {totalRevAllDishes > 0 ? `${Math.round((totalCostAllDishes / totalRevAllDishes) * 100)}%` : '—'}
+    {/* Wastage */}
+    {wastageAnalytics && (
+      <BC style={{ marginBottom:'14px' }}>
+        <BT icon={<Trash2 size={14} strokeWidth={1.5}/>} right={wastageAnalytics.monthLabel}>WASTAGE INTELLIGENCE</BT>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'14px' }}>
+          {(() => {
+            const totalRev2 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0) + (extraAnalytics?.totalRevenue||0);
+            const wastagePct = totalRev2>0 ? ((wastageAnalytics.totalCost||0)/totalRev2*100).toFixed(1) : 0;
+            return [
+              { l:'COST LOST',        v:`₹${(wastageAnalytics.totalCost||0).toLocaleString()}` },
+              { l:'ENTRIES',          v:wastageAnalytics.totalEntries||0 },
+              { l:'% OF REVENUE',     v:`${wastagePct}%` },
+            ].map(s=>(
+              <div key={s.l} style={{ padding:'11px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px', textAlign:'center' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'5px' }}>{s.l}</div>
+                <div style={{ fontSize:'0.9rem', fontWeight:'900', color:'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{s.v}</div>
               </div>
-              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>of revenue · ideal: {'<'}35%</div>
-            </div>
-            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>OVER-DEPLETED STOCK</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: lowStockItems.length > 0 ? '#c0392b' : '#4ade80' }}>
-                {lowStockItems.length} items
-              </div>
-              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>stock below zero — check recipes</div>
-            </div>
-            <div style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>EST. DEPLETION COST</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: negativeStockValue > 0 ? '#BA7517' : '#4ade80' }}>
-                ₹{Math.round(negativeStockValue).toLocaleString()}
-              </div>
-              <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>untracked ingredient usage</div>
-            </div>
-          </div>
-          {lowStockItems.length > 0 && (
-            <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(192,57,43,0.05)', border: '1px solid rgba(192,57,43,0.2)', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.6rem', color: '#c0392b', fontWeight: '900', marginBottom: '8px', display:'flex', alignItems:'center', gap:'6px' }}>
-                <AlertTriangle size={12}/> OVER-DEPLETED INGREDIENTS (stock negative)
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {lowStockItems.map((i, idx) => (
-                  <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: '4px', color: '#c0392b', fontWeight: '800' }}>
-                    {i.itemName}: {i.currentStock.toFixed(1)} {i.unit}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+            ));
+          })()}
         </div>
-      );
-    })()}
-
-
-{/* WASTAGE COST INTELLIGENCE — NEW */}
-{wastageAnalytics && (
-  <div style={{ ...styles.biCard, marginBottom: '20px', borderLeft: `4px solid ${(wastageAnalytics.totalCost || 0) > 0 ? '#f87171' : '#4ade80'}` }}>
-    <h4 style={styles.biTitle}>
-      <Trash2 size={16} /> WASTAGE COST INTELLIGENCE
-      <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
-        {wastageAnalytics.monthLabel}
-      </span>
-    </h4>
-    <p style={{ fontSize: '0.72rem', color: '#555', marginTop: '-15px', marginBottom: '16px' }}>
-      Spoilage, overcooked, dropped, and excess prep — tracked from your kitchen wastage log.
-    </p>
-
-    {/* KPI strip */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '16px' }}>
-      {(() => {
-        const totalRevAllDishes = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
-        const wastagePct = totalRevAllDishes > 0 ? ((wastageAnalytics.totalCost || 0) / totalRevAllDishes) * 100 : 0;
-        return [
-          { l: 'TOTAL COST LOST', v: `₹${(wastageAnalytics.totalCost || 0).toLocaleString()}`, c: '#f87171' },
-          { l: 'ENTRIES THIS MONTH', v: wastageAnalytics.totalEntries || 0, c: '#d3bfa2' },
-          { l: 'WASTAGE % OF REVENUE', v: `${wastagePct.toFixed(1)}%`, c: wastagePct > 3 ? '#f87171' : wastagePct > 1 ? '#BA7517' : '#4ade80' },
-        ].map(s => (
-          <div key={s.l} style={{ background: '#050505', padding: '14px', borderRadius: '10px', border: '1px solid #111' }}>
-            <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', marginBottom: '4px' }}>{s.l}</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: '900', color: s.c }}>{s.v}</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+          {/* Top wasted */}
+          <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'11px', padding:'14px' }}>
+            <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'5px' }}>
+              <TrendingDown size={10} color="rgba(255,255,255,0.2)" /> TOP WASTED
+            </div>
+            {(wastageAnalytics.topWasted||[]).length > 0 ? wastageAnalytics.topWasted.map((item,i)=>(
+              <div key={item.name} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'7px' }}>
+                  <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.2)', minWidth:'14px' }}>#{i+1}</span>
+                  <div>
+                    <div style={{ fontSize:'0.7rem', fontWeight:'700', color:'rgba(255,255,255,0.6)' }}>{item.name}</div>
+                    <div style={{ fontSize:'0.52rem', color:'rgba(255,255,255,0.2)' }}>{item.count} entries</div>
+                  </div>
+                </div>
+                <span style={{ fontSize:'0.68rem', fontWeight:'900', color:'rgba(255,255,255,0.4)', fontFamily:'monospace' }}>
+                  {item.cost>0?`₹${item.cost.toFixed(0)}`:`×${item.count}`}
+                </span>
+              </div>
+            )) : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.12)', fontSize:'0.62rem', paddingTop:'20px' }}>No wastage logged</div>}
           </div>
-        ));
-      })()}
+          {/* By reason */}
+          <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'11px', padding:'14px' }}>
+            <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'5px' }}>
+              <AlertTriangle size={10} color="rgba(255,255,255,0.2)" /> BY REASON
+            </div>
+            {Object.keys(wastageAnalytics.byReason||{}).length > 0 ? (() => {
+              const total2 = wastageAnalytics.totalEntries||1;
+              return Object.entries(wastageAnalytics.byReason).sort((a,b)=>b[1].cost-a[1].cost).map(([reason,data])=>{
+                const pct = Math.round((data.count/total2)*100);
+                return (
+                  <div key={reason} style={{ marginBottom:'9px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                      <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.4)', fontWeight:'700' }}>{reason}</span>
+                      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'rgba(255,255,255,0.35)', fontFamily:'monospace' }}>
+                        {data.cost>0?`₹${data.cost.toFixed(0)}`:`${data.count}×`} <span style={{ color:'rgba(255,255,255,0.2)' }}>({pct}%)</span>
+                      </span>
+                    </div>
+                    <div style={{ height:'4px', background:'rgba(255,255,255,0.05)', borderRadius:'2px', overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.3)', borderRadius:'2px' }} />
+                    </div>
+                  </div>
+                );
+              });
+            })() : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.12)', fontSize:'0.62rem', paddingTop:'20px' }}>No data</div>}
+          </div>
+        </div>
+      </BC>
+    )}
+
+    {/* ════════════════════════════════
+        SECTION 5 — CUSTOMERS & CHANNELS
+    ════════════════════════════════ */}
+    <SectionHeader icon={<Users size={16}/>} title="Customers & Channels" subtitle="Retention, acquisition, and revenue sources" />
+
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px' }}>
+      <BC>
+        <BT icon={<User size={14} strokeWidth={1.5}/>}>REPEAT vs NEW CUSTOMERS</BT>
+        {trendsData?.customers?.total > 0 ? (
+          <>
+            <div style={{ display:'flex', height:'7px', borderRadius:'4px', overflow:'hidden', marginBottom:'14px', gap:'2px' }}>
+              <div style={{ width:`${trendsData.customers.repeatPct}%`, background:'rgba(211,191,162,0.7)', borderRadius:'4px 0 0 4px' }} />
+              <div style={{ flex:1, background:'rgba(255,255,255,0.08)', borderRadius:'0 4px 4px 0' }} />
+            </div>
+            {[
+              { l:'TOTAL CUSTOMERS', v:trendsData.customers.total },
+              { l:'REPEAT VISITORS', v:`${trendsData.customers.repeat} (${trendsData.customers.repeatPct}%)`, c:'rgba(211,191,162,0.8)' },
+              { l:'NEW CUSTOMERS',   v:trendsData.customers.new },
+              { l:'AVG VISITS',      v:`${trendsData.customers.avgVisits}×` },
+            ].map(s=>(
+              <div key={s.l} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.25)', fontWeight:'900' }}>{s.l}</span>
+                <span style={{ fontSize:'0.72rem', fontWeight:'900', color: s.c||'rgba(255,255,255,0.55)', fontFamily:'monospace' }}>{s.v}</span>
+              </div>
+            ))}
+          </>
+        ) : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.68rem', paddingTop:'30px', lineHeight:1.6 }}>Capture customer phone numbers at billing to unlock retention metrics.</div>}
+      </BC>
+
+      <BC>
+        <BT icon={<Globe size={14} strokeWidth={1.5}/>}>REVENUE SOURCES</BT>
+        {Object.entries(advancedStats.sources).length > 0 ? (() => {
+          const total3 = Object.values(advancedStats.sources).reduce((a,b)=>a+b,0)||1;
+          return Object.entries(advancedStats.sources).map(([src,val])=>{
+            const pct = Math.round((val/total3)*100);
+            return (
+              <div key={src} style={{ marginBottom:'10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                  <span style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.45)', textTransform:'capitalize', fontWeight:'700' }}>{src}</span>
+                  <span style={{ fontSize:'0.65rem', fontWeight:'900', color:'rgba(255,255,255,0.55)', fontFamily:'monospace' }}>₹{val.toLocaleString()}</span>
+                </div>
+                <div style={{ height:'5px', background:'rgba(255,255,255,0.05)', borderRadius:'3px', overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.35)', borderRadius:'3px' }} />
+                </div>
+              </div>
+            );
+          });
+        })() : <div style={{ textAlign:'center', color:'rgba(255,255,255,0.15)', fontSize:'0.7rem', paddingTop:'30px' }}>No source data</div>}
+      </BC>
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+    {/* ════════════════════════════════
+        SECTION 6 — FINANCIAL HEALTH
+    ════════════════════════════════ */}
+    <SectionHeader icon={<Wallet size={16}/>} title="Financial Health" subtitle="Cash flow, profitability, and break-even" />
 
-      {/* TOP WASTED ITEMS */}
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <TrendingDown size={12} color="#f87171" /> TOP WASTED INGREDIENTS
-        </div>
-        {(wastageAnalytics.topWasted || []).length > 0 ? wastageAnalytics.topWasted.map((item, i) => (
-          <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #0d0d0d' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.6rem', color: i === 0 ? '#f87171' : '#555', fontWeight: '900', minWidth: '14px' }}>#{i + 1}</span>
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#fff' }}>{item.name}</div>
-                <div style={{ fontSize: '0.58rem', color: '#444' }}>{item.count} entries{item.qty > 0 ? ` · ${item.qty} units` : ''}</div>
+    {/* Payment mode intelligence */}
+    {analytics.length > 0 && (() => {
+      const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
+      const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
+      const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
+      const grand  = totalC + totalU + totalK;
+      if (!grand) return null;
+      const digitalPct = Math.round(((totalU+totalK)/grand)*100);
+      const modes = [
+        { label:'Cash', val:totalC, pct:Math.round((totalC/grand)*100) },
+        { label:'UPI',  val:totalU, pct:Math.round((totalU/grand)*100) },
+        { label:'Card', val:totalK, pct:Math.round((totalK/grand)*100) },
+      ];
+      return (
+        <BC style={{ marginBottom:'14px' }}>
+          <BT icon={<CreditCard size={14} strokeWidth={1.5}/>}>PAYMENT MODE INTELLIGENCE</BT>
+          <div style={{ display:'flex', height:'10px', borderRadius:'5px', overflow:'hidden', marginBottom:'14px', gap:'1px' }}>
+            {modes.map(m=><div key={m.label} style={{ width:`${m.pct}%`, background:`rgba(211,191,162,${m.label==='Cash'?0.7:m.label==='UPI'?0.45:0.25})` }} />)}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'12px' }}>
+            {modes.map(m=>(
+              <div key={m.label} style={{ padding:'11px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>{m.label.toUpperCase()}</div>
+                <div style={{ fontSize:'0.9rem', fontWeight:'900', color:'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>₹{m.val.toLocaleString()}</div>
+                <div style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)', marginTop:'2px' }}>{m.pct}%</div>
               </div>
-            </div>
-            <span style={{ fontSize: '0.72rem', fontWeight: '900', color: i === 0 ? '#f87171' : '#888' }}>
-              {item.cost > 0 ? `₹${item.cost.toFixed(0)}` : `×${item.count}`}
+            ))}
+          </div>
+          <div style={{ padding:'9px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'9px', display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+            <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.25)', fontWeight:'900' }}>DIGITAL ADOPTION (UPI+CARD)</span>
+            <span style={{ fontSize:'0.7rem', fontWeight:'900', color: digitalPct>60?'rgba(211,191,162,0.7)':'rgba(255,255,255,0.35)', fontFamily:'monospace' }}>{digitalPct}%</span>
+          </div>
+          <div style={{ padding:'10px 12px', background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:'8px', display:'flex', gap:'8px', alignItems:'flex-start' }}>
+            <Lightbulb size={12} color="rgba(211,191,162,0.5)" strokeWidth={1.8} style={{ flexShrink:0, marginTop:'1px' }} />
+            <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.3)', lineHeight:1.55 }}>
+              {totalU>totalC ? 'UPI dominates — enable UPI QR at every table for faster settlement.' : totalC>totalU ? 'Cash is primary — keep sufficient change ready, especially during peak hours.' : 'Balanced payment mix — good for cash flow predictability.'}
             </span>
           </div>
-        )) : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', paddingTop: '20px' }}>NO WASTAGE LOGGED</div>}
-      </div>
-
-      {/* BY REASON */}
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <AlertTriangle size={12} color="#fbbf24" /> BY REASON
-        </div>
-        {Object.keys(wastageAnalytics.byReason || {}).length > 0 ? (() => {
-          const reasonColors = {
-            'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
-            'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
-            'Customer Return': '#60a5fa', 'Other': '#9ca3af',
-          };
-          const total = wastageAnalytics.totalEntries || 1;
-          return Object.entries(wastageAnalytics.byReason)
-            .sort((a, b) => b[1].cost - a[1].cost)
-            .map(([reason, data]) => {
-              const pct = Math.round((data.count / total) * 100);
-              const rc = reasonColors[reason] || '#9ca3af';
-              return (
-                <div key={reason} style={{ marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: rc, display: 'inline-block' }} />
-                      {reason}
-                    </span>
-                    <span style={{ fontSize: '0.62rem', fontWeight: '900', color: rc }}>
-                      {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
-                      <span style={{ color: '#444', fontWeight: '600', marginLeft: '5px' }}>{pct}%</span>
-                    </span>
-                  </div>
-                  <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: rc + '80', borderRadius: '2px', transition: 'width 0.6s ease' }} />
-                  </div>
-                </div>
-              );
-            });
-        })() : <div style={{ textAlign: 'center', opacity: 0.3, fontSize: '0.7rem', paddingTop: '20px' }}>NO DATA</div>}
-      </div>
-    </div>
-
-    {/* DAILY TREND SPARKLINE */}
-    {(wastageAnalytics.dailyTrend || []).length > 0 && (
-      <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px', marginTop: '16px' }}>
-        <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <TrendingDown size={12} color="#f87171" /> DAILY WASTAGE COST TREND
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
-          {(() => {
-            const maxCost = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
-            return wastageAnalytics.dailyTrend.map((d) => (
-              <div key={d.date}
-                title={`${d.date}: ₹${d.cost.toFixed(0)} · ${d.count} entries`}
-                style={{
-                  flex: 1, minWidth: 0,
-                  height: `${Math.max(4, Math.round((d.cost / maxCost) * 100))}%`,
-                  background: d.cost > 0 ? `rgba(248,113,113,${0.3 + (d.cost / maxCost) * 0.5})` : '#111',
-                  borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
-                }}
-              />
-            ));
-          })()}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{wastageAnalytics.dailyTrend[0]?.date?.slice(5)}</span>
-          <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{wastageAnalytics.dailyTrend[wastageAnalytics.dailyTrend.length - 1]?.date?.slice(5)}</span>
-        </div>
-      </div>
-    )}
-
-    {/* INSIGHT CALLOUT */}
-    {(wastageAnalytics.totalCost || 0) > 0 && (() => {
-      const topReason = Object.entries(wastageAnalytics.byReason || {}).sort((a,b)=>b[1].cost-a[1].cost)[0];
-      const topItem = (wastageAnalytics.topWasted || [])[0];
-      return (
-        <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(248,113,113,0.04)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '8px', fontSize: '0.68rem', color: '#666', lineHeight: '1.5', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-          <Lightbulb size={14} color="#f87171" style={{ flexShrink: 0, marginTop: '1px' }} />
-          <span>
-            <b style={{ color: '#f87171' }}>Insight:</b>{' '}
-            {topReason ? `"${topReason[0]}" is your biggest wastage driver (₹${topReason[1].cost.toFixed(0)}).` : ''}
-            {topItem ? ` ${topItem.name} accounts for the most loss — consider portion control or revised prep quantities.` : ''}
-          </span>
-        </div>
+        </BC>
       );
     })()}
-  </div>
-)}
-    {/* ═══════════ SECTION 5 — CUSTOMERS & CHANNELS ═══════════ */}
-    <SectionHeader icon={<Users size={16}/>} title="Customers & Channels" subtitle="Retention, acquisition, and where revenue comes from" />
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><User size={16}/> REPEAT VS NEW CUSTOMERS</h4>
-        {trendsData?.customers?.total>0 ? (<>
-          <div style={{display:'flex',height:'8px',borderRadius:'4px',overflow:'hidden',marginBottom:'16px'}}>
-            <div style={{width:`${trendsData.customers.repeatPct}%`,background:'#d3bfa2',transition:'width 0.8s ease'}}/>
-            <div style={{flex:1,background:'#1a1a1a'}}/>
-          </div>
-          {[
-            {l:'TOTAL CUSTOMERS',v:trendsData.customers.total,c:'#fff'},
-            {l:'REPEAT VISITORS',v:`${trendsData.customers.repeat} (${trendsData.customers.repeatPct}%)`,c:'#d3bfa2'},
-            {l:'NEW CUSTOMERS',v:trendsData.customers.new,c:'#888'},
-            {l:'AVG VISITS',v:trendsData.customers.avgVisits+'x',c:'#fff'},
-          ].map(s=>(
-            <div key={s.l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #111'}}>
-              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>{s.l}</small>
-              <span style={{fontSize:'0.8rem',fontWeight:'900',color:s.c}}>{s.v}</span>
-            </div>
-          ))}
-
-          {/* CHURN RISK — NEW (heuristic from repeat customer pool) */}
-          {trendsData.customers.repeat > 0 && (
-            <div style={{marginTop:'10px',padding:'10px 12px',background:'rgba(186,117,23,0.05)',border:'1px solid rgba(186,117,23,0.15)',borderRadius:'8px',fontSize:'0.65rem',color:'#888',display:'flex',alignItems:'flex-start',gap:'8px'}}>
-              <Lightbulb size={13} color="#BA7517" style={{flexShrink:0,marginTop:'1px'}}/>
-              <span>Track repeat customers who haven't visited in 30+ days — a churn alert list helps target win-back offers.</span>
-            </div>
-          )}
-        </>) : <div style={{textAlign:'center',padding:'20px',fontSize:'0.75rem',color:'#444'}}>Start capturing customer phone numbers at billing to unlock retention metrics.</div>}
-      </div>
-      <div style={styles.biCard}>
-        <h4 style={styles.biTitle}><Globe size={16}/> REVENUE SOURCES</h4>
-        {Object.entries(advancedStats.sources).map(([src,val])=>(
-          <div key={src} style={styles.sourceRow}>
-            <span style={{textTransform:'capitalize',width:'80px'}}>{src}</span>
-            <div style={styles.progressBg}><div style={{...styles.progressFill,width:`${(val/(stats.revenue||1))*100}%`}}/></div>
-            <span style={{minWidth:'60px',textAlign:'right'}}>₹{val.toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-
-    {/* WAITLIST & COUNTER — MONTHLY BREAKDOWN */}
-    {waitlistAnalytics && (
-      <div style={{ ...styles.biCard, marginBottom: '20px', borderTop: '2px solid #d3bfa2' }}>
-        <h4 style={styles.biTitle}>
-          <Users size={16} /> WAITLIST & COUNTER — MONTHLY BREAKDOWN
-          <span style={{ marginLeft: 'auto', fontSize: '0.58rem', color: '#333', fontWeight: '700', letterSpacing: '1px' }}>
-            {waitlistAnalytics.month?.monthLabel}
-          </span>
-        </h4>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '20px' }}>
-          {[
-            { l: 'CONVERSION RATE',       v: `${waitlistAnalytics.month.conversionPct}%`,    c: waitlistAnalytics.month.conversionPct > 70 ? '#4ade80' : waitlistAnalytics.month.conversionPct > 50 ? '#d3bfa2' : '#BA7517' },
-            { l: 'AVG WAIT TIME',         v: `${waitlistAnalytics.month.avgWaitMin} min`,    c: waitlistAnalytics.month.avgWaitMin < 15 ? '#4ade80' : waitlistAnalytics.month.avgWaitMin < 25 ? '#d3bfa2' : '#E24B4A' },
-            { l: 'PRE-ORDER REVENUE',     v: `₹${waitlistAnalytics.month.preOrderRevenue.toLocaleString()}`, c: '#d3bfa2' },
-            { l: 'NOTIF DELIVERED',       v: `${waitlistAnalytics.month.notifDeliveredPct}%`, c: '#60a5fa' },
-          ].map(s => (
-            <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* NO-SHOW RATE — NEW */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'12px',marginBottom:'20px'}}>
-          {(() => {
-            const total = waitlistAnalytics.month.total || 0;
-            const walked = waitlistAnalytics.month.total - (waitlistAnalytics.month.seated + (waitlistAnalytics.month.pickupSettled||0));
-            const noShowPct = total > 0 ? Math.round((Math.max(0,walked) / total) * 100) : 0;
-            const repeatGroups = waitlistAnalytics.month.repeatGroups || 0;
-            return [
-              { l: 'NO-SHOW / WALK-AWAY RATE', v: `${noShowPct}%`, c: noShowPct > 20 ? '#E24B4A' : noShowPct > 10 ? '#BA7517' : '#4ade80', sub: `${Math.max(0,walked)} of ${total} groups` },
-              { l: 'REPEAT WAITLIST CUSTOMERS', v: repeatGroups, c: '#d3bfa2', sub: 'returning for waitlist/pickup' },
-            ].map(s=>(
-              <div key={s.l} style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ fontSize: '0.52rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '8px' }}>{s.l}</div>
-                <div style={{ fontSize: '1.3rem', fontWeight: '900', color: s.c, lineHeight: 1 }}>{s.v}</div>
-                <div style={{ fontSize: '0.58rem', color: '#444', marginTop: '4px' }}>{s.sub}</div>
-              </div>
-            ));
-          })()}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>MODE SPLIT — {waitlistAnalytics.month.total} TOTAL</div>
-            {waitlistAnalytics.month.total > 0 && (
-              <>
-                <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', gap: '2px' }}>
-                  <div style={{ width: `${Math.round((waitlistAnalytics.month.dineIn / waitlistAnalytics.month.total) * 100)}%`, background: '#d3bfa2', borderRadius: '4px 0 0 4px', transition: 'width 0.8s ease' }} />
-                  <div style={{ flex: 1, background: '#60a5fa', borderRadius: '0 4px 4px 0' }} />
-                </div>
-                {[
-                  { l: 'Dine-in Waitlist', v: waitlistAnalytics.month.dineIn,  seated: waitlistAnalytics.month.seated,  c: '#d3bfa2' },
-                  { l: 'Pickup / Takeaway', v: waitlistAnalytics.month.pickup, seated: waitlistAnalytics.month.pickupSettled, c: '#60a5fa' },
-                ].map(s => (
-                  <div key={s.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #0d0d0d' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.c }} />
-                      <span style={{ fontSize: '0.68rem', color: '#666' }}>{s.l}</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{s.v}</span>
-                      <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>{s.seated} completed</span>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-
-          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '12px' }}>PARTY SIZE DISTRIBUTION</div>
-            {Object.entries(waitlistAnalytics.month.partySizes || {}).map(([size, count]) => {
-              const maxCount = Math.max(...Object.values(waitlistAnalytics.month.partySizes || {}), 1);
-              return (
-                <div key={size} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '0.65rem', color: '#555', fontWeight: '900', minWidth: '24px', textAlign: 'right' }}>{size}</span>
-                  <div style={{ flex: 1, height: '6px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.round((count / maxCount) * 100)}%`, background: 'rgba(211,191,162,0.6)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
-                  </div>
-                  <span style={{ fontSize: '0.65rem', color: '#888', fontWeight: '900', minWidth: '24px' }}>{count}</span>
-                </div>
-              );
-            })}
-            {waitlistAnalytics.month.peakHour && (
-              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #111', fontSize: '0.62rem', color: '#555' }}>
-                Peak arrival: <span style={{ color: '#d3bfa2', fontWeight: '900' }}>
-                  {waitlistAnalytics.month.peakHour.hour === 0 ? '12am'
-                    : waitlistAnalytics.month.peakHour.hour < 12 ? `${waitlistAnalytics.month.peakHour.hour}am`
-                    : waitlistAnalytics.month.peakHour.hour === 12 ? '12pm'
-                    : `${waitlistAnalytics.month.peakHour.hour - 12}pm`}
-                </span>
-                <span style={{ color: '#333', marginLeft: '8px' }}>({waitlistAnalytics.month.peakHour.count} groups)</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {waitlistAnalytics.dailyTrend?.length > 0 && (
-          <div style={{ background: '#050505', border: '1px solid #111', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900', letterSpacing: '1px', marginBottom: '14px' }}>DAILY FOOTFALL TREND</div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '52px' }}>
-              {(() => {
-                const maxVal = Math.max(...waitlistAnalytics.dailyTrend.map(d => d.total), 1);
-                return waitlistAnalytics.dailyTrend.map((d, i) => (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
-                    title={`${d.date}: ${d.total} groups · ${d.seated} seated · ${d.pickup} pickup · ${d.walked} walked`}>
-                    <div style={{
-                      width: '100%', minWidth: 0,
-                      height: `${Math.max(4, Math.round((d.total / maxVal) * 100))}%`,
-                      background: d.walked > d.seated ? 'rgba(226,75,74,0.4)' : d.total > 0 ? 'rgba(211,191,162,0.5)' : '#111',
-                      borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
-                    }} />
-                  </div>
-                ));
-              })()}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-              <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{waitlistAnalytics.dailyTrend[0]?.date?.slice(5)}</span>
-              <span style={{ fontSize: '0.5rem', color: '#2a2a2a' }}>{waitlistAnalytics.dailyTrend[waitlistAnalytics.dailyTrend.length - 1]?.date?.slice(5)}</span>
-            </div>
-            <div style={{ display: 'flex', gap: '16px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #0d0d0d' }}>
-              {[
-                { c: 'rgba(211,191,162,0.5)', l: 'Normal / Good conversion' },
-                { c: 'rgba(226,75,74,0.4)',   l: 'High walk-aways' },
-              ].map(s => (
-                <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '10px', height: '6px', borderRadius: '2px', background: s.c }} />
-                  <span style={{ fontSize: '0.55rem', color: '#333', fontWeight: '700' }}>{s.l}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    )}
-
-    {/* ═══════════ SECTION 6 — FINANCIAL HEALTH ═══════════ */}
-    <SectionHeader icon={<Wallet size={16}/>} title="Financial Health" subtitle="Cash flow, profitability, and break-even tracking" />
-
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-
-      {/* PAYMENT MODE INTELLIGENCE */}
-      {analytics.length > 0 && (() => {
-        const totalC = analytics.reduce((a,b)=>a+(b.cash||0),0);
-        const totalU = analytics.reduce((a,b)=>a+(b.upi||0),0);
-        const totalK = analytics.reduce((a,b)=>a+(b.card||0),0);
-        const grand  = totalC + totalU + totalK;
-        if (grand === 0) return <div style={styles.biCard}><h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4><div style={{textAlign:'center',opacity:0.3,fontSize:'0.75rem',paddingTop:'30px'}}>NO DATA YET</div></div>;
-        const totalDigital = totalU + totalK;
-        const digitalPct = Math.round((totalDigital/grand)*100);
-        const modes = [
-          { label:'Cash', icon:<Banknote size={14}/>, val:totalC, color:'#d3bfa2', pct: Math.round((totalC/grand)*100) },
-          { label:'UPI',  icon:<Smartphone size={14}/>, val:totalU, color:'#4ade80', pct: Math.round((totalU/grand)*100) },
-          { label:'Card', icon:<CreditCard size={14}/>, val:totalK, color:'#2980B9', pct: Math.round((totalK/grand)*100) },
-        ];
-        return (
-          <div style={styles.biCard}>
-            <h4 style={styles.biTitle}><CreditCard size={16}/> PAYMENT MODE INTELLIGENCE</h4>
-            <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
-              Understanding how customers pay helps optimise cash flow and settlement timing.
-            </p>
-            <div style={{display:'flex',height:'12px',borderRadius:'6px',overflow:'hidden',marginBottom:'16px'}}>
-              {modes.map(m=><div key={m.label} style={{width:`${m.pct}%`,background:m.color,transition:'width 0.8s ease'}}/>)}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'16px'}}>
-              {modes.map(m=>(
-                <div key={m.label} style={{background:'#050505',padding:'12px',borderRadius:'10px',border:'1px solid #111'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.68rem',color:'#888',marginBottom:'4px'}}>{m.icon} {m.label}</div>
-                  <div style={{fontSize:'0.95rem',fontWeight:'900',color:m.color}}>₹{m.val.toLocaleString()}</div>
-                  <div style={{fontSize:'0.58rem',color:'#444',marginTop:'2px'}}>{m.pct}% of revenue</div>
-                </div>
-              ))}
-            </div>
-            {/* CASH VS DIGITAL */}
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 12px',background:'#050505',border:'1px solid #111',borderRadius:'8px',marginBottom:'12px'}}>
-              <small style={{fontSize:'0.62rem',color:'#555',fontWeight:'900'}}>DIGITAL ADOPTION (UPI+CARD)</small>
-              <span style={{fontSize:'0.8rem',fontWeight:'900',color:digitalPct>60?'#4ade80':'#BA7517'}}>{digitalPct}%</span>
-            </div>
-            <div style={{padding:'12px',background:'#050505',borderRadius:'10px',border:'1px solid #111',fontSize:'0.68rem',color:'#666',lineHeight:'1.5',display:'flex',alignItems:'flex-start',gap:'8px'}}>
-              <Lightbulb size={14} color="#d3bfa2" style={{flexShrink:0,marginTop:'1px'}}/>
-              <span><b style={{color:'#d3bfa2'}}>Insight:</b> {
-                totalU > totalC ? 'UPI dominates — your customers are digital-first. Enable UPI QR at every table.'
-                : totalC > totalU ? 'Cash is king here — keep sufficient change ready, especially during peak hours.'
-                : 'Balanced payment mix — good for cash flow predictability.'
-              }</span>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* P&L SUMMARY — NEW */}
-      {profitabilityData.length > 0 && (() => {
-        const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
-        const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0) + (extraAnalytics?.totalCost || 0);
-        const payrollCost = totalPayrollValue || staffEfficiency.reduce((a,s)=>{
-          const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-          const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-          return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
-        },0);
-        const grossProfit = totalRevenue - ingredientCost;
-        const netProfit = grossProfit - payrollCost;
-        const netMarginPct = totalRevenue > 0 ? Math.round((netProfit/totalRevenue)*100) : 0;
-
-        return (
-          <div style={styles.biCard}>
-            <h4 style={styles.biTitle}><FileText size={16}/> P&L SUMMARY — {viewDate.toLocaleString('default',{month:'long',year:'numeric'})}</h4>
-            <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
-              Revenue minus ingredient cost and staff payroll. Overheads (rent, utilities) not included.
-            </p>
-            {[
-              { l: 'TOTAL REVENUE', v: totalRevenue, c: '#fff', sign: '' },
-              { l: 'INGREDIENT COST', v: -ingredientCost, c: '#BA7517', sign: '-' },
-              { l: 'GROSS PROFIT', v: grossProfit, c: '#d3bfa2', sign: '', bold: true },
-              { l: 'STAFF PAYROLL', v: -payrollCost, c: '#BA7517', sign: '-' },
-            ].map(s=>(
-              <div key={s.l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #111'}}>
-                <small style={{fontSize:'0.65rem',color: s.bold?'#888':'#555',fontWeight:'900'}}>{s.l}</small>
-                <span style={{fontSize: s.bold?'0.85rem':'0.8rem',fontWeight:'900',color:s.c}}>{s.sign}₹{Math.abs(s.v).toLocaleString()}</span>
-              </div>
-            ))}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0 4px'}}>
-              <span style={{fontSize:'0.75rem',color:'#888',fontWeight:'900'}}>NET PROFIT</span>
-              <span style={{fontSize:'1.1rem',fontWeight:'900',padding:'4px 12px',borderRadius:'6px',
-                background: netProfit>=0 ? 'rgba(74,222,128,0.1)' : 'rgba(226,75,74,0.1)',
-                color: netProfit>=0 ? '#4ade80' : '#E24B4A'}}>
-                ₹{netProfit.toLocaleString()} <small style={{fontSize:'0.6rem',opacity:0.8}}>({netMarginPct}%)</small>
-              </span>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
-
-    {/* BREAK-EVEN TRACKER — NEW, full width */}
-    {profitabilityData.length > 0 && staffEfficiency.length > 0 && currentMonthAnalytics.length > 0 && (() => {
-      const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-      const monthlyPayroll = staffEfficiency.reduce((a,s)=>{
-        const rec = monthlySalaryRecords.find(r => r.staffId?.toString() === s._id?.toString() && r.monthStr === monthStr);
-        return a + (Number(rec?.baseSalary || s.baseSalary) || 0);
+    {/* Break-even tracker */}
+    {profitabilityData.length>0 && staffEfficiency.length>0 && currentMonthAnalytics.length>0 && (() => {
+      const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+      const payroll = staffEfficiency.reduce((a,s)=>{
+        const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
+        return a + (Number(rec?.baseSalary||s.baseSalary)||0);
       },0);
-      const totalRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0) + (extraAnalytics?.totalRevenue || 0);
-      const ingredientCost = profitabilityData.reduce((a, b) => a + (b.totalIngredientCost || 0), 0) + (extraAnalytics?.totalCost || 0);
-      const foodCostPct = totalRevenue > 0 ? (ingredientCost/totalRevenue) : 0.3;
-      const contributionMarginPct = 1 - foodCostPct;
-      const breakEvenRevenue = contributionMarginPct > 0 ? monthlyPayroll / contributionMarginPct : 0;
-      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-      const breakEvenPerDay = breakEvenRevenue / daysInMonth;
-      const progressPct = breakEvenRevenue > 0 ? Math.min(100, Math.round((totalRevenue/breakEvenRevenue)*100)) : 0;
-
+      const totalRev4 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0)+(extraAnalytics?.totalRevenue||0);
+      const totalCost4= profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0)+(extraAnalytics?.totalCost||0);
+      const fcPct4 = totalRev4>0 ? (totalCost4/totalRev4) : 0.3;
+      const cmPct4 = 1 - fcPct4;
+      const beRev = cmPct4>0 ? payroll/cmPct4 : 0;
+      const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
+      const bePerDay = beRev/daysInMonth;
+      const progressPct = beRev>0 ? Math.min(100, Math.round((totalRev4/beRev)*100)) : 0;
       return (
-        <div style={{...styles.biCard, marginBottom:'20px', borderLeft: `4px solid ${progressPct>=100?'#4ade80':'#BA7517'}`}}>
-          <h4 style={styles.biTitle}><Activity size={16}/> BREAK-EVEN TRACKER</h4>
-          <p style={{fontSize:'0.7rem',color:'#555',marginTop:'-14px',marginBottom:'16px'}}>
-            Estimated monthly revenue needed to cover staff payroll, based on current food-cost margin. Excludes rent/utilities.
-          </p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'16px'}}>
+        <BC style={{ marginBottom:'14px', borderLeft:`3px solid ${progressPct>=100?'rgba(211,191,162,0.6)':'rgba(255,255,255,0.2)'}` }}>
+          <BT icon={<Activity size={14} strokeWidth={1.5}/>}>BREAK-EVEN TRACKER</BT>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'14px' }}>
             {[
-              { l: 'MONTHLY PAYROLL', v: `₹${Math.round(monthlyPayroll).toLocaleString()}`, c:'#BA7517' },
-              { l: 'CONTRIBUTION MARGIN', v: `${Math.round(contributionMarginPct*100)}%`, c:'#d3bfa2' },
-              { l: 'BREAK-EVEN REVENUE', v: `₹${Math.round(breakEvenRevenue).toLocaleString()}`, c:'#fff' },
-              { l: 'BREAK-EVEN / DAY', v: `₹${Math.round(breakEvenPerDay).toLocaleString()}`, c:'#fff' },
+              { l:'MONTHLY PAYROLL',      v:`₹${Math.round(payroll).toLocaleString()}` },
+              { l:'CONTRIBUTION MARGIN',  v:`${Math.round(cmPct4*100)}%` },
+              { l:'BREAK-EVEN REVENUE',   v:`₹${Math.round(beRev).toLocaleString()}` },
+              { l:'BREAK-EVEN / DAY',     v:`₹${Math.round(bePerDay).toLocaleString()}` },
             ].map(s=>(
-              <div key={s.l} style={{background:'#050505',padding:'14px',borderRadius:'10px',border:'1px solid #111'}}>
-                <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',marginBottom:'4px'}}>{s.l}</div>
-                <div style={{fontSize:'1rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+              <div key={s.l} style={{ padding:'11px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>{s.l}</div>
+                <div style={{ fontSize:'0.88rem', fontWeight:'900', color:'rgba(255,255,255,0.6)', fontFamily:'monospace' }}>{s.v}</div>
               </div>
             ))}
           </div>
-          <div style={{marginBottom:'6px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
-              <span style={{fontSize:'0.6rem',color:'#555'}}>This month's progress to break-even</span>
-              <span style={{fontSize:'0.6rem',color:progressPct>=100?'#4ade80':'#d3bfa2',fontWeight:'900'}}>{progressPct}%</span>
+          <div>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
+              <span style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)' }}>Progress to break-even</span>
+              <span style={{ fontSize:'0.5rem', color: progressPct>=100?'rgba(211,191,162,0.7)':'rgba(255,255,255,0.3)', fontWeight:'900' }}>{progressPct}%</span>
             </div>
-            <div style={{height:'6px',background:'#111',borderRadius:'3px',overflow:'hidden'}}>
-              <div style={{height:'100%',width:`${progressPct}%`,background: progressPct>=100?'#4ade80':'linear-gradient(90deg,#8a704d,#d3bfa2)',borderRadius:'3px'}}/>
+            <div style={{ height:'5px', background:'rgba(255,255,255,0.06)', borderRadius:'3px', overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${progressPct}%`, background: progressPct>=100?'rgba(211,191,162,0.6)':'linear-gradient(90deg,rgba(211,191,162,0.2),rgba(211,191,162,0.5))', borderRadius:'3px' }} />
             </div>
+            {progressPct>=100 && (
+              <div style={{ marginTop:'8px', fontSize:'0.6rem', color:'rgba(211,191,162,0.6)', fontWeight:'800', display:'flex', alignItems:'center', gap:'5px' }}>
+                <ClipboardCheck size={12} /> Break-even achieved for this month
+              </div>
+            )}
           </div>
-          {progressPct >= 100 && (
-            <div style={{marginTop:'10px',fontSize:'0.65rem',color:'#4ade80',fontWeight:'800',display:'flex',alignItems:'center',gap:'6px'}}>
-              <ClipboardCheck size={13}/> Break-even achieved for this month
-            </div>
-          )}
-        </div>
+        </BC>
       );
     })()}
 
-  </motion.div>
+    </>
+  );
+})()}
+
+</motion.div>
 )}
 
 {/* ── PREMIUM AUDIT TRAIL TAB ── */}
 {/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
 {activeTab === 'audit' && (
-  <motion.div key="audit" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-    style={{ padding: '16px', paddingBottom: '100px', maxWidth: '960px', margin: '0 auto', width: '100%' }}>
+  <motion.div key="audit" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '100px', width: '100%' }}>
 
-    {/* Header */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ width: '30px', height: '30px', borderRadius: '8px',
-          background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ShieldCheck size={14} color="#d3bfa2" strokeWidth={1.5} />
+    {/* ══════════ HEADER ══════════ */}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', paddingBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ShieldCheck size={17} color="#d3bfa2" strokeWidth={1.4} />
         </div>
         <div>
-          <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>AUDIT TRAIL</div>
-          <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)', marginTop: '1px' }}>Complete action history</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>AUDIT TRAIL</div>
+          <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.25)', marginTop: '3px', fontWeight: '500' }}>
+            {auditLogs.length} records · Complete action history
+          </div>
         </div>
       </div>
+      <button onClick={fetchAuditLogs}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: 'rgba(211,191,162,0.7)', fontSize: '0.58rem', fontWeight: '800', cursor: 'pointer', outline: 'none', fontFamily: 'Poppins, sans-serif', letterSpacing: '0.5px' }}>
+        <RefreshCw size={12} strokeWidth={2} />
+        REFRESH
+      </button>
     </div>
 
-    {/* Category blocks */}
+    {/* ══════════ CATEGORY SECTIONS ══════════ */}
     {[
-      { key: 'BILLING',            label: 'BILLING',              icon: <ReceiptIndianRupee size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'MENU_UPDATES',       label: 'MENU UPDATES',         icon: <UtensilsCrossed size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'MENU_VISIBILITY',    label: 'MENU VISIBILITY',      icon: <EyeOff size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'INVENTORY',          label: 'INVENTORY CHANGES',    icon: <Package size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'RECIPE_INGREDIENTS', label: 'RECIPES & INGREDIENTS',icon: <ChefHat size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'SALARY_STAFF',       label: 'SALARY & STAFF',       icon: <Users size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-      { key: 'SECURITY_SYSTEM',    label: 'SECURITY & SYSTEM',    icon: <ShieldCheck size={13} color="#d3bfa2" strokeWidth={1.5} /> },
-    ].map(({ key, label, icon }) => {
+      { key: 'BILLING',            label: 'BILLING',               icon: <ReceiptIndianRupee size={14} strokeWidth={1.5} />, accent: '#d3bfa2' },
+      { key: 'MENU_UPDATES',       label: 'MENU UPDATES',          icon: <UtensilsCrossed size={14} strokeWidth={1.5} />,    accent: '#d3bfa2' },
+      { key: 'MENU_VISIBILITY',    label: 'MENU VISIBILITY',       icon: <EyeOff size={14} strokeWidth={1.5} />,            accent: '#d3bfa2' },
+      { key: 'INVENTORY',          label: 'INVENTORY CHANGES',     icon: <Package size={14} strokeWidth={1.5} />,           accent: '#d3bfa2' },
+      { key: 'RECIPE_INGREDIENTS', label: 'RECIPES & INGREDIENTS', icon: <ChefHat size={14} strokeWidth={1.5} />,           accent: '#d3bfa2' },
+      { key: 'SALARY_STAFF',       label: 'SALARY & STAFF',        icon: <Users size={14} strokeWidth={1.5} />,             accent: '#d3bfa2' },
+      { key: 'SECURITY_SYSTEM',    label: 'SECURITY & SYSTEM',     icon: <ShieldCheck size={14} strokeWidth={1.5} />,       accent: '#d3bfa2' },
+    ].map(({ key, label, icon, accent }) => {
       const sectionLogs = auditLogs.filter(l => l.category === key);
       if (sectionLogs.length === 0) return null;
+
       return (
-        <div key={key} style={{ marginBottom: '18px' }}>
+        <div key={key} style={{ marginBottom: '20px' }}>
+
           {/* Section header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 12px', marginBottom: '8px',
-            background: 'rgba(211,191,162,0.04)',
-            border: '1px solid rgba(211,191,162,0.1)',
-            borderRadius: '8px' }}>
-            {icon}
-            <span style={{ color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '2px' }}>{label}</span>
-            <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.2)', fontSize: '0.58rem' }}>
-              {sectionLogs.length} record{sectionLogs.length > 1 ? 's' : ''}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', marginBottom: '10px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderLeft: `3px solid ${accent}`, borderRadius: '10px' }}>
+            <span style={{ color: '#d3bfa2' }}>{icon}</span>
+            <span style={{ color: '#d3bfa2', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '2px', flex: 1 }}>{label}</span>
+            <span style={{ padding: '2px 9px', borderRadius: '12px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', color: 'rgba(211,191,162,0.6)', fontSize: '0.5rem', fontWeight: '800', fontFamily: 'monospace' }}>
+              {sectionLogs.length}
             </span>
           </div>
 
           {/* Log rows */}
-          {sectionLogs.slice(0, 8).map((log, idx) => (
-            <div key={log._id || idx} style={{ padding: '10px 13px', marginBottom: '5px',
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <ClipboardCheck size={10} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />
-                  <span style={{ color: '#d3bfa2', fontSize: '0.67rem', fontWeight: '800' }}>
-                    {log.action?.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: '0.58rem', fontFamily: 'monospace' }}>
-                  {new Date(log.createdAt).toLocaleString('en-IN', {
-                    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short',
-                    hour: '2-digit', minute: '2-digit'
-                  })}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: (log.before || log.after) ? '6px' : 0 }}>
-                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.63rem' }}>
-                  By: <strong style={{ color: 'rgba(255,255,255,0.55)' }}>{log.actorName}</strong>
-                </span>
-                {log.entity && <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.63rem' }}>{log.entity}</span>}
-                {log.note  && <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.63rem', fontStyle: 'italic' }}>"{log.note}"</span>}
-              </div>
-              {(log.before || log.after) && (
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {log.before && (
-                    <span style={{ color: 'rgba(211,191,162,0.5)', fontSize: '0.58rem',
-                      background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)',
-                      padding: '2px 7px', borderRadius: '4px' }}>
-                      Before: {JSON.stringify(log.before).replace(/[{}"]/g,'').slice(0,55)}
-                    </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {sectionLogs.slice(0, 8).map((log, idx) => {
+              const ts = new Date(log.createdAt);
+              const timeStr = ts.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+              const beforeStr = log.before ? JSON.stringify(log.before).replace(/[{}"]/g, '').slice(0, 50) : null;
+              const afterStr  = log.after  ? JSON.stringify(log.after).replace(/[{}"]/g, '').slice(0, 50)  : null;
+
+              return (
+                <div key={log._id || idx} style={{ background: '#060606', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '12px 16px', transition: 'border-color 0.15s' }}>
+
+                  {/* Row 1: action + timestamp */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '7px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#d3bfa2', flexShrink: 0, opacity: 0.6 }} />
+                      <span style={{ color: '#ffffff', fontSize: '0.72rem', fontWeight: '800', letterSpacing: '0.2px' }}>
+                        {log.action?.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.52rem', fontFamily: 'monospace', flexShrink: 0, marginLeft: '12px' }}>{timeStr}</span>
+                  </div>
+
+                  {/* Row 2: actor + entity */}
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: (beforeStr || afterStr) ? '8px' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <User size={10} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
+                      <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
+                        By&nbsp;<strong style={{ color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>{log.actorName}</strong>
+                      </span>
+                    </div>
+                    {log.entity && (
+                      <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', padding: '1px 7px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '4px' }}>
+                        {log.entity}
+                      </span>
+                    )}
+                    {log.note && (
+                      <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>"{log.note}"</span>
+                    )}
+                  </div>
+
+                  {/* Row 3: before / after diff */}
+                  {(beforeStr || afterStr) && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {beforeStr && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '6px', maxWidth: '100%' }}>
+                          <ArrowDown size={9} color="rgba(211,191,162,0.4)" strokeWidth={2} />
+                          <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.45)', wordBreak: 'break-all' }}>
+                            {beforeStr}
+                          </span>
+                        </div>
+                      )}
+                      {afterStr && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 9px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', maxWidth: '100%' }}>
+                          <CheckCircle2 size={9} color="rgba(255,255,255,0.3)" strokeWidth={2} />
+                          <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.4)', wordBreak: 'break-all' }}>
+                            {afterStr}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {log.after && (
-                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.58rem',
-                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
-                      padding: '2px 7px', borderRadius: '4px' }}>
-                      After: {JSON.stringify(log.after).replace(/[{}"]/g,'').slice(0,55)}
-                    </span>
-                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            })}
+
+            {sectionLogs.length > 8 && (
+              <div style={{ textAlign: 'center', padding: '8px', fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>
+                + {sectionLogs.length - 8} more records — export to view all
+              </div>
+            )}
+          </div>
         </div>
       );
     })}
 
+    {/* ══════════ EMPTY STATE ══════════ */}
     {auditLogs.length === 0 && (
-      <div style={{ textAlign: 'center', paddingTop: '80px' }}>
-        <FileText size={32} color="rgba(255,255,255,0.06)" strokeWidth={1} style={{ marginBottom: '12px' }} />
-        <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.72rem' }}>No audit records yet.</div>
-        <div style={{ color: 'rgba(255,255,255,0.1)', fontSize: '0.62rem', marginTop: '4px' }}>
-          Actions will appear here after settlements, menu edits, stock changes and more.
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '80px', gap: '14px' }}>
+        <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <FileText size={24} color="rgba(255,255,255,0.1)" strokeWidth={1.3} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.75rem', fontWeight: '700', marginBottom: '5px' }}>No audit records yet</div>
+          <div style={{ color: 'rgba(255,255,255,0.12)', fontSize: '0.62rem', maxWidth: '280px', lineHeight: 1.6 }}>
+            Settlements, menu edits, inventory changes and recipe saves will appear here automatically.
+          </div>
         </div>
       </div>
     )}

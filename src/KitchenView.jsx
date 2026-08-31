@@ -605,18 +605,15 @@ const visibleCategories = useMemo(() => {
   return categories.filter(cat => {
     const k = cat.categoryId?.toLowerCase().trim() || '';
     if (!k) return false;
-
-    // Always show a category if it has PENDING tickets right now
-    if (categoryPendingCounts[k] > 0) return true;
-
-    // Also show if menuItems confirms dishes exist in this category
-    const profile = categoryVegProfile[k];
-    if (!profile) return false;
-    if (tenantOnlyVeg) return profile.hasVeg;
-    return isNonVegMode ? profile.hasNonVeg : profile.hasVeg;
+    // Always show if there are active tickets in this category right now
+    if ((categoryPendingCounts[k] || 0) > 0) return true;
+    // Also show if menuItems confirms dishes exist here
+    const p = categoryVegProfile[k];
+    if (!p) return false;
+    if (tenantOnlyVeg) return p.hasVeg;
+    return isNonVegMode ? p.hasNonVeg : p.hasVeg;
   });
 }, [categories, categoryPendingCounts, categoryVegProfile, tenantOnlyVeg, isNonVegMode]);
-
   /* ─────────────────────────────────────
      DERIVED LAYOUT FLAGS
   ───────────────────────────────────── */
@@ -633,121 +630,121 @@ const visibleCategories = useMemo(() => {
   /* ──────────────────────────────────────────────────────────────
      SIDEBAR CONTENT (shared between drawer and permanent sidebar)
   ────────────────────────────────────────────────────────────── */
-  const SidebarContent = ({ inDrawer = false }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <div style={rs.sidebarHeader}>
-        <Layers size={14} color="#d3bfa2" />
-        <span>KITCHEN SECTIONS</span>
-        {inDrawer && (
-          <button
-            onClick={() => setSidebarOpen(false)}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 4 }}>
-            <X size={20} />
-          </button>
-        )}
-      </div>
+//   const SidebarContent = ({ inDrawer = false }) => (
+//     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+//       {/* Header */}
+//       <div style={rs.sidebarHeader}>
+//         <Layers size={14} color="#d3bfa2" />
+//         <span>KITCHEN SECTIONS</span>
+//         {inDrawer && (
+//           <button
+//             onClick={() => setSidebarOpen(false)}
+//             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 4 }}>
+//             <X size={20} />
+//           </button>
+//         )}
+//       </div>
 
-      {/* Veg / Non-veg toggle */}
-      {!tenantOnlyVeg && (
-        <div style={rs.vegToggleWrap}>
-          {[false, true].map(nv => (
-            <button
-              key={String(nv)}
-              onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
-              style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
-              <div style={{
-                width: 12, height: 12,
-                border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`,
-                borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                {nv
-                  ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
-                  : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
-                }
-              </div>
-              {nv ? 'NON-VEG' : 'VEG'}
-            </button>
-          ))}
-        </div>
-      )}
+//       {/* Veg / Non-veg toggle */}
+//       {!tenantOnlyVeg && (
+//         <div style={rs.vegToggleWrap}>
+//           {[false, true].map(nv => (
+//             <button
+//               key={String(nv)}
+//               onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
+//               style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
+//               <div style={{
+//                 width: 12, height: 12,
+//                 border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`,
+//                 borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center'
+//               }}>
+//                 {nv
+//                   ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
+//                   : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
+//                 }
+//               </div>
+//               {nv ? 'NON-VEG' : 'VEG'}
+//             </button>
+//           ))}
+//         </div>
+//       )}
 
-      {/* Category list */}
-      <div style={rs.sidebarStack} className="no-scrollbar">
-        <button
-          onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-          style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
-            <span>ALL SECTIONS</span>
-          </div>
-{/* Count badge — number of active orders in this category */}
-<span style={{
-  ...rs.countBadge,
-  background: sel ? '#0f1013' : '#1a1c23',
-  color: sel ? '#d3bfa2' : '#8e94a4',
-  border: sel ? '1px solid #d3bfa2' : '1px solid #232730'
-}}>
-  {(() => {
-    // Count distinct orders that have items in this category
-    const activeInCat = orders.filter(o =>
-      ['pending', 'ready'].includes(o.status) &&
-      o.items?.some(item => {
-        const cId = item.categoryId?.toLowerCase().trim()
-                 || dishToCategoryMap[item.name?.toLowerCase().trim()];
-        return cId === k && !item.isExtraItem;
-      })
-    ).length;
-    return activeInCat < 10 ? `0${activeInCat}` : activeInCat;
-  })()}
-</span>
-        </button>
+//       {/* Category list */}
+//       <div style={rs.sidebarStack} className="no-scrollbar">
+//         <button
+//           onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }}
+//           style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
+//           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+//             <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
+//             <span>ALL SECTIONS</span>
+//           </div>
+// {/* Count badge — number of active orders in this category */}
+// <span style={{
+//   ...rs.countBadge,
+//   background: sel ? '#0f1013' : '#1a1c23',
+//   color: sel ? '#d3bfa2' : '#8e94a4',
+//   border: sel ? '1px solid #d3bfa2' : '1px solid #232730'
+// }}>
+//   {(() => {
+//     // Count distinct orders that have items in this category
+//     const activeInCat = orders.filter(o =>
+//       ['pending', 'ready'].includes(o.status) &&
+//       o.items?.some(item => {
+//         const cId = item.categoryId?.toLowerCase().trim()
+//                  || dishToCategoryMap[item.name?.toLowerCase().trim()];
+//         return cId === k && !item.isExtraItem;
+//       })
+//     ).length;
+//     return activeInCat < 10 ? `0${activeInCat}` : activeInCat;
+//   })()}
+// </span>
+//         </button>
 
-        {visibleCategories.map(cat => {
-          const k   = cat.categoryId?.toLowerCase().trim() || '';
-          const count = categoryPendingCounts[k] || 0;
-          const sel = selectedCategory === k && !showMetricsDashboard;
-          return (
-            <button
-              key={cat._id}
-              onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-              style={sel ? rs.activeSidebarNode : rs.sidebarNode}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Flame size={14} color={sel ? '#0f1013' : '#bda88a'} />
-                <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span
-                  onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
-                  style={rs.mini86}
-                  title="86 item">
-                  <EyeOff size={10} />
-                </span>
-                <span style={{
-                  ...rs.countBadge,
-                  background: sel ? '#0f1013' : '#1a1c23',
-                  color: sel ? '#d3bfa2' : '#8e94a4',
-                  border: sel ? '1px solid #d3bfa2' : '1px solid #232730'
-                }}>
-                  {count < 10 ? `0${count}` : count}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+//         {visibleCategories.map(cat => {
+//           const k   = cat.categoryId?.toLowerCase().trim() || '';
+//           const count = categoryPendingCounts[k] || 0;
+//           const sel = selectedCategory === k && !showMetricsDashboard;
+//           return (
+//             <button
+//               key={cat._id}
+//               onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }}
+//               style={sel ? rs.activeSidebarNode : rs.sidebarNode}>
+//               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+//                 <Flame size={14} color={sel ? '#0f1013' : '#bda88a'} />
+//                 <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
+//               </div>
+//               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+//                 <span
+//                   onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
+//                   style={rs.mini86}
+//                   title="86 item">
+//                   <EyeOff size={10} />
+//                 </span>
+// <span style={{
+//   ...rs.countBadge,
+//   background: selectedCategory === k && !showMetricsDashboard ? '#0f1013' : '#1a1c23',
+//   color:      selectedCategory === k && !showMetricsDashboard ? '#d3bfa2' : '#8e94a4',
+//   border:     selectedCategory === k && !showMetricsDashboard ? '1px solid #d3bfa2' : '1px solid #232730'
+// }}>
+//   {count < 10 ? `0${count}` : count}
+// </span>
+//               </div>
+//             </button>
+//           );
+//         })}
 
-        {/* Metrics shortcut */}
-        <button
-          onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }}
-          style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TrendingUp size={14} color="#d3bfa2" />
-            <span>SPEED LOGS</span>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
+//         {/* Metrics shortcut */}
+//         <button
+//           onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }}
+//           style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
+//           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+//             <TrendingUp size={14} color="#d3bfa2" />
+//             <span>SPEED LOGS</span>
+//           </div>
+//         </button>
+//       </div>
+//     </div>
+//   );
 
   /* ──────────────────────────────────────────────────────────────
      RENDER
@@ -775,7 +772,75 @@ const visibleCategories = useMemo(() => {
                 // Wider drawer on tablet so text doesn't cramp
                 width: isSmallTablet ? 280 : 260,
               }}>
-              <SidebarContent inDrawer />
+<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+  <div style={rs.sidebarHeader}>
+    <Layers size={14} color="#d3bfa2" />
+    <span>KITCHEN SECTIONS</span>
+    <button onClick={() => setSidebarOpen(false)}
+      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 4 }}>
+      <X size={20} />
+    </button>
+  </div>
+  {!tenantOnlyVeg && (
+    <div style={rs.vegToggleWrap}>
+      {[false, true].map(nv => (
+        <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
+          style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
+          <div style={{ width: 12, height: 12, border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {nv
+              ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
+              : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
+            }
+          </div>
+          {nv ? 'NON-VEG' : 'VEG'}
+        </button>
+      ))}
+    </div>
+  )}
+  <div style={rs.sidebarStack} className="no-scrollbar">
+    <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }}
+      style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
+        <span>ALL SECTIONS</span>
+      </div>
+      <span style={{ ...rs.countBadge, background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129', color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f' }}>
+        {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
+      </span>
+    </button>
+    {visibleCategories.map(cat => {
+      const k     = cat.categoryId?.toLowerCase().trim() || '';
+      const count = categoryPendingCounts[k] || 0;
+      const isSel = selectedCategory === k && !showMetricsDashboard;
+      return (
+        <button key={cat._id}
+          onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }}
+          style={isSel ? rs.activeSidebarNode : rs.sidebarNode}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Flame size={14} color={isSel ? '#0f1013' : '#bda88a'} />
+            <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
+              style={rs.mini86} title="86 item">
+              <EyeOff size={10} />
+            </span>
+            <span style={{ ...rs.countBadge, background: isSel ? '#0f1013' : '#1a1c23', color: isSel ? '#d3bfa2' : '#8e94a4', border: isSel ? '1px solid #d3bfa2' : '1px solid #232730' }}>
+              {count < 10 ? `0${count}` : count}
+            </span>
+          </div>
+        </button>
+      );
+    })}
+    <button onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }}
+      style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <TrendingUp size={14} color="#d3bfa2" />
+        <span>SPEED LOGS</span>
+      </div>
+    </button>
+  </div>
+</div>
             </motion.aside>
           </>
         )}
@@ -1001,7 +1066,72 @@ const visibleCategories = useMemo(() => {
             // Narrower on large tablet to leave more room for cards
             width: isLargeTablet ? 210 : 250,
           }}>
-            <SidebarContent />
+<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+  <div style={rs.sidebarHeader}>
+    <Layers size={14} color="#d3bfa2" />
+    <span>KITCHEN SECTIONS</span>
+  </div>
+  {!tenantOnlyVeg && (
+    <div style={rs.vegToggleWrap}>
+      {[false, true].map(nv => (
+        <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
+          style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
+          <div style={{ width: 12, height: 12, border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {nv
+              ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
+              : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
+            }
+          </div>
+          {nv ? 'NON-VEG' : 'VEG'}
+        </button>
+      ))}
+    </div>
+  )}
+  <div style={rs.sidebarStack} className="no-scrollbar">
+    <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); }}
+      style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
+        <span>ALL SECTIONS</span>
+      </div>
+      <span style={{ ...rs.countBadge, background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129', color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f' }}>
+        {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
+      </span>
+    </button>
+    {visibleCategories.map(cat => {
+      const k     = cat.categoryId?.toLowerCase().trim() || '';
+      const count = categoryPendingCounts[k] || 0;
+      const isSel = selectedCategory === k && !showMetricsDashboard;
+      return (
+        <button key={cat._id}
+          onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); }}
+          style={isSel ? rs.activeSidebarNode : rs.sidebarNode}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Flame size={14} color={isSel ? '#0f1013' : '#bda88a'} />
+            <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
+              style={rs.mini86} title="86 item">
+              <EyeOff size={10} />
+            </span>
+            <span style={{ ...rs.countBadge, background: isSel ? '#0f1013' : '#1a1c23', color: isSel ? '#d3bfa2' : '#8e94a4', border: isSel ? '1px solid #d3bfa2' : '1px solid #232730' }}>
+              {count < 10 ? `0${count}` : count}
+            </span>
+          </div>
+        </button>
+      );
+    })}
+    <button onClick={() => setShowMetricsDashboard(true)}
+      style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <TrendingUp size={14} color="#d3bfa2" />
+        <span>SPEED LOGS</span>
+      </div>
+    </button>
+  </div>
+</div>
+
           </aside>
         )}
 
@@ -2161,25 +2291,41 @@ const aggBorderColor = order.source === 'zomato' ? '#cb202d' : order.source === 
 {/* Card header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
-          <h2 style={{
-            fontSize: isMobile ? '1.8rem' : isTablet ? '1.8rem' : '2.1rem',
-            margin: 0, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', lineHeight: 1
-          }}>
-            {order.source === 'swiggy'
-              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fc8019' }}>
-                  <Package size={isMobile ? 20 : 22} /> SWIGGY
-                </span>
-              : order.source === 'zomato'
-              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cb202d' }}>
-                  <Package size={isMobile ? 20 : 22} /> ZOMATO
-                </span>
-              : order.tableNumber?.toLowerCase() === 'takeaway'
-              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
-                  <Package size={isMobile ? 20 : 22} /> PARCEL
-                </span>
-              : `T-${order.tableNumber}`
-            }
-          </h2>
+<h2 style={{
+  fontSize: isMobile ? '1.8rem' : isTablet ? '1.8rem' : '2.1rem',
+  margin: 0, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', lineHeight: 1
+}}>
+  {order.source === 'swiggy'
+    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fc8019' }}>
+        <Package size={isMobile ? 20 : 22} /> SWIGGY
+      </span>
+    : order.source === 'zomato'
+    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cb202d' }}>
+        <Package size={isMobile ? 20 : 22} /> ZOMATO
+      </span>
+    : order.source === 'counter-pickup'
+    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
+        <Package size={isMobile ? 20 : 22} /> PICKUP
+      </span>
+    : order.tableNumber?.toLowerCase() === 'takeaway' || order.tableNumber?.toLowerCase() === 'counter'
+    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
+        <Package size={isMobile ? 20 : 22} /> PARCEL
+      </span>
+    : order.source === 'reservation'
+    ? <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.1 }}>
+        <span style={{ fontSize: isMobile ? '1rem' : '1.2rem', color: '#d3bfa2', fontWeight: 900, letterSpacing: '1px' }}>T-{order.tableNumber}</span>
+        <span style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: 700, letterSpacing: '2px', opacity: 0.6 }}>RESERVATION</span>
+      </span>
+    : order.source === 'waitlist'
+    ? <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.1 }}>
+        <span style={{ fontSize: isMobile ? '1rem' : '1.2rem', color: '#d3bfa2', fontWeight: 900, letterSpacing: '1px' }}>
+          {order.tableNumber && /^\d+$/.test(order.tableNumber.toString()) ? `T-${order.tableNumber}` : 'WAITLIST'}
+        </span>
+        <span style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: 700, letterSpacing: '2px', opacity: 0.6 }}>WALK-IN</span>
+      </span>
+    : `T-${order.tableNumber}`
+  }
+</h2>
           <span style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 800 }}>
             ID: {order._id.slice(-4).toUpperCase()}
             {order.aggregatorOrderId && (
@@ -2244,15 +2390,22 @@ const aggBorderColor = order.source === 'zomato' ? '#cb202d' : order.source === 
 
     const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
     const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
+const hasRealTable = order.tableNumber &&
+  order.tableNumber.toLowerCase() !== 'takeaway' &&
+  order.tableNumber.toLowerCase() !== 'counter' &&
+  order.tableNumber.toLowerCase() !== 'counter-pickup' &&
+  /^\d+$/.test(order.tableNumber.toString().trim());
+
 const forceParcel =
-      order.tableNumber?.toLowerCase() === 'takeaway' ||
-      order.tableNumber?.toLowerCase() === 'counter' ||
-      order.source === 'counter-pickup' ||
-      order.source === 'takeaway' ||
-      order.source === 'waitlist' ||
-      order.source === 'swiggy' ||
-      order.source === 'zomato' ||
-      item.isParcel === true;
+  item.isParcel === true ||
+  order.source === 'swiggy' ||
+  order.source === 'zomato' ||
+  order.source === 'counter-pickup' ||
+  order.source === 'takeaway' ||
+  order.tableNumber?.toLowerCase() === 'takeaway' ||
+  order.tableNumber?.toLowerCase() === 'counter' ||
+  // waitlist/reservation: only parcel if NO real table assigned
+  ((order.source === 'waitlist' || order.source === 'reservation') && !hasRealTable);
       
       if (!modeMatch) return (
       <div key={idx} style={{
