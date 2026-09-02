@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo,useCallback  } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { io } from "socket.io-client";
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
@@ -8,265 +8,220 @@ import {
   X, Zap, History, LayoutGrid, BarChart3,
   Package, UtensilsCrossed, Clock, CheckSquare,
   Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff,
-  Menu, ChevronLeft, ChevronRight, AlignJustify,  Trash2, FlameKindling, AlertTriangle, Droplets,
-  Scale, RotateCcw, FileText, ChevronDown,
-  TrendingDown, BadgeAlert, RefreshCw, IndianRupee,
-  Search
- 
+  AlignJustify, Trash2, AlertTriangle, RotateCcw,
+  TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight,
+  CheckCircle2, ArrowRight, Scale, FileText, Droplets, FlameKindling
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
 
-/* ─────────────────────────────────────────────────────────────
-   RESPONSIVE BREAKPOINTS
-───────────────────────────────────────────────────────────── */
+/* ─── helpers ─── */
 const useWindowSize = () => {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
-    const handler = () => setSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
+    const h = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
   }, []);
   return size;
 };
 
-/* ─────────────────────────────────────────────────────────────
-   SWIPE HOOK for mobile card navigation
-───────────────────────────────────────────────────────────── */
 const useSwipe = (onLeft, onRight) => {
-  const touchStart = useRef(null);
+  const tx = useRef(null);
   return {
-    onTouchStart: (e) => { touchStart.current = e.touches[0].clientX; },
-    onTouchEnd: (e) => {
-      if (touchStart.current === null) return;
-      const diff = touchStart.current - e.changedTouches[0].clientX;
-      if (Math.abs(diff) > 50) diff > 0 ? onLeft?.() : onRight?.();
-      touchStart.current = null;
+    onTouchStart: e => { tx.current = e.touches[0].clientX; },
+    onTouchEnd:   e => {
+      if (tx.current === null) return;
+      const diff = tx.current - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 48) diff > 0 ? onLeft?.() : onRight?.();
+      tx.current = null;
     }
   };
 };
 
-/* ═══════════════════════════════════════════════════════════
-   MAIN KITCHEN VIEW
-═══════════════════════════════════════════════════════════ */
+const getOrderType = order => {
+  if (order.source === 'swiggy')          return 'swiggy';
+  if (order.source === 'zomato')          return 'zomato';
+  if (order.source === 'counter-pickup' || order.source === 'takeaway'
+    || order.tableNumber?.toLowerCase() === 'takeaway'
+    || order.tableNumber?.toLowerCase() === 'counter')  return 'parcel';
+  return 'dine-in'; // waitlist, reservation, direct all → dine-in
+};
+
+const fmt = s => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const p = n => n.toString().padStart(2,'0');
+  return h > 0 ? `${h}h ${p(m)}m` : `${p(m)}:${p(sec)}`;
+};
+
+const REASON_OPTIONS = ['Spoiled / Expired','Overcooked','Dropped / Spilled','Excess Prep','Customer Return','Other'];
+const UNIT_OPTIONS   = ['kg','g','litre','ml','pcs','plate','portion'];
+
+/* ═══════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+═══════════════════════════════════════════════════════════════════ */
 const KitchenView = () => {
   const { tenantId } = useParams();
-  const { w, h } = useWindowSize();
+  const { w }        = useWindowSize();
 
-  // Breakpoints — phone < 600, small tablet 600-839, large tablet 840-1199, desktop >= 1200
   const isMobile      = w < 600;
   const isSmallTablet = w >= 600  && w < 840;
   const isLargeTablet = w >= 840  && w < 1200;
   const isTablet      = w >= 600  && w < 1200;
   const isDesktop     = w >= 1200;
 
-  const [orders, setOrders] = useState([]);
-  const [waiterCalls, setWaiterCalls] = useState([]);
-  const [recallQueue, setRecallQueue] = useState([]);
-  const [isAggregateView, setIsAggregateView] = useState(false);
-  const [isNonVegMode, setIsNonVegMode] = useState(false);
-  const [tenantOnlyVeg, setTenantOnlyVeg] = useState(true);
-
-  const [categories, setCategories] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [stationFilter, setStationFilter] = useState('ALL');
-
-  const [checkedItemsGlobal, setCheckedItemsGlobal] = useState({});
-  const [isListening, setIsListening] = useState(false);
-  const [interceptedAlerts, setInterceptedAlerts] = useState([]);
+  /* ── state ── */
+  const [orders,               setOrders]               = useState([]);
+  const [waiterCalls,          setWaiterCalls]          = useState([]);
+  const [recallQueue,          setRecallQueue]          = useState([]);
+  const [isAggregateView,      setIsAggregateView]      = useState(false);
+  const [isNonVegMode,         setIsNonVegMode]         = useState(false);
+  const [tenantOnlyVeg,        setTenantOnlyVeg]        = useState(true);
+  const [categories,           setCategories]           = useState([]);
+  const [menuItems,            setMenuItems]            = useState([]);
+  const [selectedCategory,     setSelectedCategory]     = useState('ALL');
+  const [stationFilter,        setStationFilter]        = useState('ALL');
+  const [checkedItemsGlobal,   setCheckedItemsGlobal]   = useState({});
+  const [isListening,          setIsListening]          = useState(false);
+  const [interceptedAlerts,    setInterceptedAlerts]    = useState([]);
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline,             setIsOnline]             = useState(navigator.onLine);
+  const [sidebarOpen,          setSidebarOpen]          = useState(false);
+  const [mobileCardIndex,      setMobileCardIndex]      = useState(0);
+  const [completedTicketsCount,setCompletedTicketsCount]= useState(0);
+  const [totalProcessingTime,  setTotalProcessingTime]  = useState(0);
+  const [showWastagePanel,     setShowWastagePanel]     = useState(false);
+  const [wastageTab,           setWastageTab]           = useState('log');
+  const [wastageForm,          setWastageForm]          = useState({ itemName:'', inventoryId:null, quantity:'', unit:'kg', reason:'Spoiled / Expired', loggedBy:'', notes:'' });
+  const [wastageSuggestions,   setWastageSuggestions]   = useState([]);
+  const [showWastageSuggest,   setShowWastageSuggest]   = useState(false);
+  const [wastageInventory,     setWastageInventory]     = useState([]);
+  const [wastageLog,           setWastageLog]           = useState([]);
+  const [wastageAnalytics,     setWastageAnalytics]     = useState(null);
+  const [wastageSaving,        setWastageSaving]        = useState(false);
+  const [wastageLoading,       setWastageLoading]       = useState(false);
+  const [kitchenHealth,        setKitchenHealth]        = useState(null);
+  const [itemFinalTimes,       setItemFinalTimes]       = useState({});
+  const [searchQuery,          setSearchQuery]          = useState('');
+  const [showSearch,           setShowSearch]           = useState(false);
+  const [waiterCallTimer,      setWaiterCallTimer]      = useState({});
+  const [tenantName,           setTenantName]           = useState('');
 
-
-
-  // Drawer state — used on both mobile and tablet
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mobileCardIndex, setMobileCardIndex] = useState(0);
-
-  const [completedTicketsCount, setCompletedTicketsCount] = useState(0);
-  const [totalProcessingTime, setTotalProcessingTime] = useState(0);
-
-const [showWastagePanel, setShowWastagePanel]   = useState(false);
-const [wastageTab,       setWastageTab]         = useState('log');   // 'log' | 'report'
-const [wastageForm,      setWastageForm]        = useState({
-  itemName: '', inventoryId: null, quantity: '', unit: 'kg',
-  reason: 'Spoiled / Expired', loggedBy: '', notes: ''
-});
-const [wastageSuggestions,  setWastageSuggestions]  = useState([]);
-const [showWastageSuggest,  setShowWastageSuggest]  = useState(false);
-const [wastageInventory,    setWastageInventory]     = useState([]);   // full inventory list
-const [wastageLog,          setWastageLog]           = useState([]);   // today's DB entries
-const [wastageAnalytics,    setWastageAnalytics]     = useState(null); // monthly analytics
-const [wastageSaving,       setWastageSaving]        = useState(false);
-const [wastageLoading,      setWastageLoading]       = useState(false);
-const [kitchenHealth, setKitchenHealth] = useState(null);
-const [itemFinalTimes, setItemFinalTimes] = useState({}); // { idx: seconds }
-
-  const audioPlayer   = useRef(null);
-  const alertPlayer   = useRef(null);
+  /* ── refs ── */
+  const audioPlayer    = useRef(null);
+  const alertPlayer    = useRef(null);
   const recognitionRef = useRef(null);
-  const socketRef     = useRef(null);
+  const socketRef      = useRef(null);
   const speechQueueRef = useRef([]);
   const isSpeakingRef  = useRef(false);
   const synthVoicesRef = useRef([]);
 
-  /* ── dish veg map ── */
-  const dishToVegMap = useMemo(() => {
-    const map = {};
-    menuItems.forEach(item => {
-      if (item.name) map[item.name.toLowerCase().trim()] = item.isVeg !== false;
-    });
-    return map;
-  }, [menuItems]);
-
-  /* ── speech ── */
+  /* ── voice setup ── */
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
-    const loadVoices = () => { synthVoicesRef.current = window.speechSynthesis.getVoices(); };
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    const load = () => { synthVoicesRef.current = window.speechSynthesis.getVoices(); };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
   }, []);
 
   const processSpeechQueue = () => {
-    if (speechQueueRef.current.length === 0) { isSpeakingRef.current = false; return; }
+    if (!speechQueueRef.current.length) { isSpeakingRef.current = false; return; }
     isSpeakingRef.current = true;
     const next = speechQueueRef.current.shift();
     next.onend = next.onerror = processSpeechQueue;
     window.speechSynthesis.speak(next);
   };
 
-const speakOrder = (order) => {
+  const speakOrder = order => {
     if (!('speechSynthesis' in window)) return;
-    let text = (order.source === 'swiggy' || order.source === 'zomato')
-      ? `Chef, new ${order.source} order. `
-      : `Chef, new ticket for Table ${order.tableNumber}. `;
-      text += order.items.map(i => {
-      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? `${i.portion} ` : "";
-      const type = (order.tableNumber?.toLowerCase() === 'takeaway' || i.isParcel) ? 'Parcel' : 'Dine in';
-      let d = `${i.quantity} ${portion}${i.name} ${type}`;
-      if (i.suggestion?.trim()) d += `. Special instruction: ${i.suggestion}`;
+    const otype = getOrderType(order);
+    let text = otype === 'swiggy' ? 'Chef, new Swiggy order. '
+             : otype === 'zomato' ? 'Chef, new Zomato order. '
+             : otype === 'parcel' ? 'Chef, new pickup order. '
+             : `Chef, new ticket for Table ${order.tableNumber}. `;
+    text += order.items.filter(i => !i.isExtraItem && i.extraItemId == null).map(i => {
+      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? `${i.portion} ` : '';
+      const tag = otype === 'parcel' ? 'Parcel' : 'Dine in';
+      let d = `${i.quantity} ${portion}${i.name} ${tag}`;
+      if (i.suggestion?.trim()) d += `. Note: ${i.suggestion}`;
       return d;
-    }).join(". ");
+    }).join('. ');
     const utt = new SpeechSynthesisUtterance(text);
-const voices = synthVoicesRef.current;
-const kitchenVoice =
-  voices.find(v => v.lang === 'en-IN') ||
-  voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india')) ||
-  voices.find(v => /^[a-z]{2}-IN$/i.test(v.lang)) ||   // any proper xx-IN locale
-  voices[0];
-if (kitchenVoice) utt.voice = kitchenVoice;
-utt.rate  = 0.88;   // slightly faster than menu — kitchen needs quick announcements
-utt.pitch = 1.02;   // slightly higher for clarity over kitchen noise    speechQueueRef.current.push(utt);
+    const voices = synthVoicesRef.current;
+    const v = voices.find(v => v.lang === 'en-IN')
+           || voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india'))
+           || voices[0];
+    if (v) utt.voice = v;
+    utt.rate = 0.88; utt.pitch = 1.02;
+    speechQueueRef.current.push(utt);
     if (!isSpeakingRef.current) processSpeechQueue();
   };
 
-  /* ── fetch ── */
+  const fetchHealth = async () => {
+    try {
+      const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`);
+      setKitchenHealth(r.data);
+    } catch {}
+  };
+
   const fetchActiveOrders = async () => {
     try {
-      const [ordersRes, categoriesRes, menuRes, tenantRes] = await Promise.all([
+      const [ordersRes, catRes, menuRes, tenantRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
         axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
         axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
+        axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null })),
       ]);
-      const incoming = ordersRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const incoming = (ordersRes.data || []).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(incoming);
-      fetchHealth();
-      setCategories(categoriesRes.data || []);
-      setMenuItems(menuRes.data || []);
-      if (tenantRes.data?.config?.onlyVeg !== undefined) setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
+      setCategories(catRes.data  || []);
+      setMenuItems(menuRes.data  || []);
+      if (tenantRes.data?.name)                              setTenantName(tenantRes.data.name);
+      if (tenantRes.data?.config?.onlyVeg !== undefined)     setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
       const hydrationMap = {};
-      incoming.forEach(o => o.items?.forEach((item, idx) => {
-        if (item.isCrossedLocal) hydrationMap[`${o._id}-${idx}`] = true;
-      }));
+      incoming.forEach(o => o.items?.forEach((item,idx) => { if (item.isCrossedLocal) hydrationMap[`${o._id}-${idx}`] = true; }));
       setCheckedItemsGlobal(hydrationMap);
-          // Fetch kitchen health alongside orders
-    axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`)
-      .then(r => setKitchenHealth(r.data))
-      .catch(() => {});
-    } catch (err) { console.error("KDS fetch error"); }
+      fetchHealth();
+    } catch (err) { console.error('KDS fetch:', err.message); }
   };
 
-  /* ── voice control ── */
+  /* ── voice recognition ── */
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
-    rec.continuous = true; rec.interimResults = false; rec.lang = 'mr-IN';
-rec.onresult = (e) => {
-  const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-
-  // ── TABLE COMPLETE — English + Marathi ──
-  const isCompleteCmd =
-    txt.includes('complete table') ||
-    txt.includes('ready table') ||
-    txt.includes('टेबल तयार') ||      // Marathi: "table ready"
-    txt.includes('तयार टेबल') ||
-    txt.includes('पूर्ण टेबल') ||     // Marathi: "complete table"
-    txt.includes('आर्डर तयार');       // Marathi: "order ready"
-
-  if (isCompleteCmd) {
-    // Extract table number — handle English digits and Marathi words
-    const marathiNums = {
-      'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,
-      'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10,
-      'अकरा':11,'बारा':12,'तेरा':13,'चौदा':14,'पंधरा':15
+    rec.continuous = true; rec.interimResults = false; rec.lang = 'hi-IN';
+    rec.onresult = e => {
+      const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
+      const isCompleteCmd = txt.includes('complete table') || txt.includes('ready table')
+        || txt.includes('टेबल तयार') || txt.includes('तयार टेबल')
+        || txt.includes('पूर्ण टेबल') || txt.includes('आर्डर तयार');
+      if (isCompleteCmd) {
+        const mNums = { 'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10 };
+        let tNum = null;
+        Object.entries(mNums).forEach(([w,n]) => { if (txt.includes(w)) tNum = n.toString(); });
+        if (!tNum) { const m = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/); if (m?.[1]) tNum = m[1].toUpperCase(); }
+        if (tNum) { const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tNum.toUpperCase()); if (o) markAsReady(o._id); }
+      }
+      if (txt.includes('recall last') || txt.includes('परत आण')) handleRecall();
+      if (txt.includes('show summary') || txt.includes('सारांश')) setIsAggregateView(v => !v);
     };
-    let tableNum = null;
-    // Check Marathi number words
-    Object.entries(marathiNums).forEach(([word, num]) => {
-      if (txt.includes(word)) tableNum = num.toString();
-    });
-    // Fallback to English digits
-    if (!tableNum) {
-      const match = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/);
-      if (match?.[1]) tableNum = match[1].toUpperCase();
-    }
-    if (tableNum) {
-      const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tableNum.toString().toUpperCase());
-      if (o) markAsReady(o._id);
-    }
-  }
-
-  // ── RECALL — English + Marathi ──
-  if (
-    txt.includes('recall last') ||
-    txt.includes('pratyeksha recall') ||
-    txt.includes('परत आण') ||         // Marathi: "bring back"
-    txt.includes('रिकॉल')             // Marathi transliteration
-  ) {
-    handleRecall();
-  }
-
-  // ── AGGREGATE VIEW TOGGLE ──
-  if (
-    txt.includes('show summary') ||
-    txt.includes('aggregate view') ||
-    txt.includes('सारांश दाखवा')      // Marathi: "show summary"
-  ) {
-    setIsAggregateView(v => !v);
-  }
-};
-
-// ── Set recognition language to support both EN and MR ──
-rec.lang = 'hi-IN'; // Marathi — also recognizes Hindi + English numbers
     rec.onerror = rec.onend = () => setIsListening(false);
     recognitionRef.current = rec;
   }, [orders, recallQueue]);
 
-  const toggleVoiceListener = () => {
-    if (!recognitionRef.current) return alert("Speech recognition not supported.");
+  const toggleVoice = () => {
+    if (!recognitionRef.current) return alert('Speech recognition not supported.');
     if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
-    else { recognitionRef.current.start(); setIsListening(true); }
+    else             { recognitionRef.current.start(); setIsListening(true); }
   };
 
-  /* ── init ── */
+  /* ── main effect: socket + initial fetch ── */
   useEffect(() => {
     if (!tenantId) return;
     const today = new Date().toISOString().split('T')[0];
-    const saved = localStorage.getItem(`kds_operational_date_${tenantId}`);
-    if (saved !== today) {
+    const prevDay = localStorage.getItem(`kds_operational_date_${tenantId}`);
+    if (prevDay !== today) {
       localStorage.removeItem(`kds_completed_count_${tenantId}`);
       localStorage.removeItem(`kds_processing_time_${tenantId}`);
       localStorage.setItem(`kds_operational_date_${tenantId}`, today);
@@ -275,7 +230,6 @@ rec.lang = 'hi-IN'; // Marathi — also recognizes Hindi + English numbers
     const ct = localStorage.getItem(`kds_processing_time_${tenantId}`);
     if (cc) setCompletedTicketsCount(parseInt(cc, 10));
     if (ct) setTotalProcessingTime(parseInt(ct, 10));
-
     fetchActiveOrders();
 
     const onOnline  = () => setIsOnline(true);
@@ -283,109 +237,110 @@ rec.lang = 'hi-IN'; // Marathi — also recognizes Hindi + English numbers
     window.addEventListener('online',  onOnline);
     window.addEventListener('offline', onOffline);
 
-    const socket = io("https://pratyeksha-backend.onrender.com", { transports: ['polling', 'websocket'] });
+    const socket = io('https://pratyeksha-backend.onrender.com', { transports: ['polling','websocket'] });
     socketRef.current = socket;
-    socket.emit("join_restaurant", tenantId);
-    socket.on("connect",    () => setIsOnline(true));
-    socket.on("disconnect", () => setIsOnline(false));
+    socket.emit('join_restaurant', tenantId);
+    socket.on('connect',    () => setIsOnline(true));
+    socket.on('disconnect', () => setIsOnline(false));
 
+    socket.on('new_order', newOrder => {
+      if (newOrder.tenantId !== tenantId) return;
+      const kitchenItems = (newOrder.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
+      if (!kitchenItems.length) return;
+      const allExtra = kitchenItems.every(i => i.isExtraItem === true || i.extraItemId != null);
+      if (allExtra) return;
+      const cleanOrder = { ...newOrder, items: kitchenItems };
+      setOrders(prev => [cleanOrder, ...prev]);
+      setMobileCardIndex(0);
+      const otype = getOrderType(cleanOrder);
+      if (otype === 'swiggy' || otype === 'zomato')
+        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+      else audioPlayer.current?.play().catch(() => {});
+      speakOrder(cleanOrder);
+    });
 
-socket.on("new_order", (newOrder) => {
-  if (newOrder.tenantId !== tenantId) return;
- 
-  // ── Drop extra-item-only orders from KDS entirely ──
-  const allExtra = (newOrder.items || []).every(
-    i => i.isExtraItem === true || i.extraItemId != null
-  );
-  if (allExtra) return;
- 
-  // ── Strip any extra items mixed into a regular order ──
-  const kitchenItems = (newOrder.items || []).filter(
-    i => !i.isExtraItem && i.extraItemId == null
-  );
-  if (kitchenItems.length === 0) return;
-  
-const cleanOrder = { ...newOrder, items: kitchenItems };
- 
-  setOrders(prev => [cleanOrder, ...prev]);
-  setMobileCardIndex(0);
-  const isTakeaway = cleanOrder.tableNumber?.toLowerCase() === 'takeaway';
-  const isAggregator = cleanOrder.source === 'swiggy' || cleanOrder.source === 'zomato';
-  if (isAggregator) new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
-  else if (isTakeaway) new Audio('https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3').play().catch(() => {});
-  else audioPlayer.current?.play().catch(() => {});
-  speakOrder(cleanOrder);
-});
-
-    socket.on("kds_item_cross_sync", ({ orderId, idx, newState }) => {
-      setCheckedItemsGlobal(prev => ({ ...prev, [`${orderId}-${idx}`]: newState }));
+    socket.on('kds_item_cross_sync', data => {
+      if (data.tenantId !== tenantId) return;
       setOrders(prev => prev.map(o => {
-        if (o._id !== orderId) return o;
-        const items = [...o.items];
-        if (items[idx]) items[idx].isCrossedLocal = newState;
+        if (o._id !== data.orderId) return o;
+        const items = o.items.map((it,i) => i === data.idx ? { ...it, isCrossedLocal: data.newState } : it);
         return { ...o, items };
       }));
     });
 
-    socket.on("order_modification_detected", (data) => {
+    socket.on('order_modification_detected', data => {
       if (data.tenantId !== tenantId) return;
       alertPlayer.current?.play().catch(() => {});
       setInterceptedAlerts(prev => [{ id: Date.now(), ...data }, ...prev]);
       fetchActiveOrders();
     });
 
-    socket.on("waiter_called", (data) => {
-      if (data.tenantId === tenantId) setWaiterCalls(prev => [{ id: Date.now(), ...data }, ...prev]);
+    socket.on('waiter_called', data => {
+      if (data.tenantId === tenantId) {
+        const id = Date.now();
+        setWaiterCalls(prev => [{ id, ...data }, ...prev]);
+        // auto-dismiss after 60s
+        setTimeout(() => setWaiterCalls(prev => prev.filter(c => c.id !== id)), 60000);
+      }
     });
 
-return () => {
-  socket.off("new_order");
-  socket.off("kds_item_cross_sync");
-  socket.off("order_modification_detected");
-  socket.off("waiter_called");
-  socket.off("order_status_updated"); // ← ADD THIS
-  socket.disconnect();
-  window.removeEventListener('online', onOnline);
-  window.removeEventListener('offline', onOffline);
-};
+    socket.on('new_waiter_request', data => {
+      if (data.tenantId === tenantId) {
+        const id = Date.now();
+        setWaiterCalls(prev => [{ id, ...data }, ...prev]);
+        setTimeout(() => setWaiterCalls(prev => prev.filter(c => c.id !== id)), 60000);
+      }
+    });
+
+    return () => {
+      ['new_order','kds_item_cross_sync','order_modification_detected','waiter_called','new_waiter_request']
+        .forEach(ev => socket.off(ev));
+      socket.disconnect();
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }, [tenantId]);
 
   /* ── actions ── */
-  const markAsReady = async (orderId) => {
+  const markAsReady = async orderId => {
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
-    const dur = Math.floor((new Date() - new Date(order.createdAt)) / 1000);
-    setTotalProcessingTime(prev => { const n = prev + dur; localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
-    setCompletedTicketsCount(prev => { const n = prev + 1; localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
+    const dur = Math.floor((Date.now() - new Date(order.createdAt)) / 1000);
+    setTotalProcessingTime(prev  => { const n = prev + dur;  localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
+    setCompletedTicketsCount(prev => { const n = prev + 1;   localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
     if (mobileCardIndex > 0) setMobileCardIndex(i => i - 1);
     try {
-await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
+      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
       setOrders(prev => prev.filter(o => o._id !== orderId));
     } catch (err) { console.error(err); }
   };
-
-
 
   const handleRecall = () => {
     if (!recallQueue.length) return;
     setOrders(prev => [recallQueue[0], ...prev]);
     setRecallQueue(prev => prev.slice(1));
-    setCompletedTicketsCount(prev => { const n = Math.max(0, prev - 1); localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
+    setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); localStorage.setItem(`kds_completed_count_${tenantId}`,n); return n; });
   };
 
-  const trigger86KillToggle = async (itemName) => {
+  const trigger86 = async itemName => {
     const node = menuItems.find(m => m.name.toLowerCase().trim() === itemName.toLowerCase().trim());
     if (!node) return;
-    if (!window.confirm(`Lock "${itemName}" on customer menus?`)) return;
+    if (!window.confirm(`86 "${itemName}" on customer menus?`)) return;
     try {
       await axios.patch(`${BASE_URL}/menu-item/${node._id}`, { isAvailable: false });
-      alert(`"${itemName}" set out of stock. [86 Active]`);
+      alert(`"${itemName}" — 86 Active on customer menus.`);
       fetchActiveOrders();
-    } catch { alert("Could not update item."); }
+    } catch { alert('Could not update item.'); }
   };
 
-  /* ── computed ── */
+  /* ── derived maps ── */
+  const dishToVegMap = useMemo(() => {
+    const m = {};
+    menuItems.forEach(item => { if (item.name) m[item.name.toLowerCase().trim()] = item.isVeg !== false; });
+    return m;
+  }, [menuItems]);
+
   const dishToCategoryMap = useMemo(() => {
     const m = {};
     menuItems.forEach(item => { if (item.name && item.categoryId) m[item.name.toLowerCase().trim()] = item.categoryId.toLowerCase().trim(); });
@@ -397,593 +352,396 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
     menuItems.forEach(item => {
       const cId = item.categoryId?.toLowerCase().trim();
       if (!cId) return;
-      if (!p[cId]) p[cId] = { hasVeg: false, hasNonVeg: false };
-      if (item.isVeg !== false) p[cId].hasVeg = true;
-      else p[cId].hasNonVeg = true;
+      if (!p[cId]) p[cId] = { hasVeg:false, hasNonVeg:false };
+      if (item.isVeg !== false) p[cId].hasVeg = true; else p[cId].hasNonVeg = true;
     });
     return p;
   }, [menuItems]);
 
-const categoryPendingCounts = useMemo(() => {
-  const counts = {};
-  orders.forEach(order => {
-    // Only count active orders (pending + ready — not served/settled)
-    if (!['pending', 'ready'].includes(order.status)) return;
-
-    const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-    if (stationFilter === 'DINEIN' && isTakeaway) return;
-    if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return;
-
-    order.items.forEach((item, idx) => {
-      if (item.isExtraItem || item.extraItemId != null) return;
-
-      // Use categoryId from item first, fallback to dishToCategoryMap
-      let fId = item.categoryId?.toLowerCase().trim()
-             || dishToCategoryMap[item.name?.toLowerCase().trim()]
-             || null;
-
-      if (!fId) return;
-
-      const isVeg = item.isVeg !== undefined
-        ? item.isVeg !== false
-        : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-      const matches = isNonVegMode ? !isVeg : isVeg;
-
-      if (matches) {
-        // Count unchecked items as active tickets
-        const isChecked = checkedItemsGlobal[`${order._id}-${idx}`];
-        if (!isChecked) {
-          counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 1);
-        }
-      }
-    });
-  });
-  return counts;
-}, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
-
-
-const filteredOrders = useMemo(() => {
-  return orders.filter(order => {
-    // ── NEVER show orders that contain only extra items ──
-    const hasKitchenItems = order.items?.some(
-      item => !item.isExtraItem && item.extraItemId == null
-    );
-    if (!hasKitchenItems) return false;
-
-    const isTakeaway = order.tableNumber?.toLowerCase() === 'takeaway' || order.items.some(i => i.isParcel);
-    if (stationFilter === 'DINEIN' && isTakeaway) return false;
-    if (stationFilter === 'PARCEL' && !isTakeaway && order.items.every(i => !i.isParcel)) return false;
-    if (isNonVegMode) {
-      const hasNV = order.items.some(item => {
-        const v = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
-        return !v;
+  const categoryPendingCounts = useMemo(() => {
+    const counts = {};
+    orders.forEach(order => {
+      if (!['pending','ready'].includes(order.status)) return;
+      const otype = getOrderType(order);
+      if (stationFilter === 'DINEIN'  && otype !== 'dine-in') return;
+      if (stationFilter === 'PARCEL'  && otype !== 'parcel')  return;
+      order.items.forEach((item,idx) => {
+        if (item.isExtraItem || item.extraItemId != null) return;
+        const fId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
+        if (!fId) return;
+        const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+        const matches = isNonVegMode ? !isVeg : isVeg;
+        if (matches && !checkedItemsGlobal[`${order._id}-${idx}`]) counts[fId] = (counts[fId]||0) + (Number(item.quantity)||1);
       });
-      if (!hasNV) return false;
-    }
-
-    // ── Aggregator orders (Swiggy/Zomato) bypass category filtering —
-    // their item names won't reliably map to internal categoryIds,
-    // and the chef must never lose visibility of an accepted online order ──
-    const isAggregator = order.source === 'swiggy' || order.source === 'zomato';
-if (selectedCategory !== 'ALL' && !isAggregator) {
-  // Order passes if ANY non-extra item belongs to the selected category
-  const sel = selectedCategory.toLowerCase().trim();
-  const hasMatch = order.items?.some(item => {
-    if (item.isExtraItem || item.extraItemId != null) return false;
-    const cId = (item.categoryId?.toLowerCase().trim())
-             || (dishToCategoryMap[item.name?.toLowerCase().trim()])
-             || '';
-    return cId === sel;
-  });
-  if (!hasMatch) return false;
-}
-return true;
-  });
-}, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode]);
-
-  // Fetch today's wastage from DB
-const fetchWastageLog = useCallback(async () => {
-  if (!tenantId) return;
-  setWastageLoading(true);
-  try {
-    const res = await axios.get(`${BASE_URL}/wastage/${tenantId}`);
-    setWastageLog(res.data || []);
-  } catch { setWastageLog([]); }
-  finally { setWastageLoading(false); }
-}, [tenantId]);
- 
-// Fetch monthly analytics
-const fetchWastageAnalytics = useCallback(async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`);
-    setWastageAnalytics(res.data || null);
-  } catch { setWastageAnalytics(null); }
-}, [tenantId]);
- 
-// Fetch inventory for autocomplete (once)
-const fetchWastageInventory = useCallback(async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/inventory/${tenantId}`);
-    setWastageInventory(res.data || []);
-  } catch { setWastageInventory([]); }
-}, [tenantId]);
- 
-// Save wastage entry to DB
-const saveWastageEntry = async () => {
-  const { itemName, quantity, unit, reason, loggedBy } = wastageForm;
-  if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
-  setWastageSaving(true);
-  try {
-    await axios.post(`${BASE_URL}/wastage/${tenantId}`, {
-      itemName:    wastageForm.itemName.trim(),
-      inventoryId: wastageForm.inventoryId || undefined,
-      quantity:    Number(wastageForm.quantity),
-      unit:        wastageForm.unit,
-      reason:      wastageForm.reason,
-      loggedBy:    wastageForm.loggedBy.trim(),
-      notes:       wastageForm.notes || '',
     });
-    setWastageForm(p => ({
-      itemName: '', inventoryId: null, quantity: '', unit: 'kg',
-      reason: 'Spoiled / Expired', loggedBy: p.loggedBy, notes: ''
-    }));
-    setWastageSuggestions([]);
-    fetchWastageLog();
-    // refresh inventory too (stock was deducted)
-    fetchWastageInventory();
-  } catch (err) {
-    console.error('Wastage save error:', err.message);
-  } finally { setWastageSaving(false); }
-};
- 
-// Delete entry (re-credits inventory on backend)
-const deleteWastageEntry = async (entryId) => {
-  try {
-    await axios.delete(`${BASE_URL}/wastage/${tenantId}/${entryId}`);
-    setWastageLog(prev => prev.filter(e => e._id !== entryId));
-  } catch { }
-};
+    return counts;
+  }, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
 
- 
-// ── 4. ADD THIS useEffect inside KitchenView to load when panel opens ──
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const hasKitchenItems = order.items?.some(i => !i.isExtraItem && i.extraItemId == null);
+      if (!hasKitchenItems) return false;
+      const otype = getOrderType(order);
+      if (stationFilter === 'DINEIN' && otype !== 'dine-in') return false;
+      if (stationFilter === 'PARCEL' && otype !== 'parcel')  return false;
+      if (isNonVegMode) {
+        const hasNV = order.items.some(item => {
+          const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
+          return !isVeg;
+        });
+        if (!hasNV) return false;
+      }
+      const isAgg = otype === 'swiggy' || otype === 'zomato';
+      if (selectedCategory !== 'ALL' && !isAgg) {
+        const sel = selectedCategory.toLowerCase().trim();
+        const hasMatch = order.items?.some(item => {
+          if (item.isExtraItem || item.extraItemId != null) return false;
+          const cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || '';
+          return cId === sel;
+        });
+        if (!hasMatch) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTable  = order.tableNumber?.toString().toLowerCase().includes(q);
+        const matchSource = order.source?.toLowerCase().includes(q);
+        const matchItem   = order.items?.some(i => i.name?.toLowerCase().includes(q));
+        if (!matchTable && !matchSource && !matchItem) return false;
+      }
+      return true;
+    });
+  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery]);
 
-useEffect(() => {
-  if (showWastagePanel) {
-    fetchWastageInventory();
-    fetchWastageLog();
-    if (wastageTab === 'report') fetchWastageAnalytics();
-  }
-}, [showWastagePanel, fetchWastageInventory, fetchWastageLog, fetchWastageAnalytics]);
-
-
-useEffect(() => {
-  if (showWastagePanel && wastageTab === 'report') fetchWastageAnalytics();
-}, [wastageTab, showWastagePanel, fetchWastageAnalytics]);
-
-
-const aggregatedTotals = useMemo(() => {
-  const totals = {};
-  orders.forEach(o => o.items
-    .filter(i => !i.isExtraItem && i.extraItemId == null)  // ← skip extra items
-    .forEach((i, idx) => {
+  const aggregatedTotals = useMemo(() => {
+    const totals = {};
+    orders.forEach(o => o.items.filter(i => !i.isExtraItem && i.extraItemId == null).forEach((i,idx) => {
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
-      const parcel = o.tableNumber?.toLowerCase() === 'takeaway' || i.isParcel;
-      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? ` (${i.portion})` : "";
-      const key = `${i.name}${portion} ${parcel ? '[P]' : '[D]'}`;
-      totals[key] = (totals[key] || 0) + i.quantity;
+      const otype = getOrderType(o);
+      const isP = otype === 'parcel';
+      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? ` (${i.portion})` : '';
+      const key = `${i.name}${portion}__${isP ? 'P' : 'D'}`;
+      totals[key] = (totals[key]||0) + i.quantity;
     }));
-  return totals;
-}, [orders, checkedItemsGlobal]);
- 
+    return totals;
+  }, [orders, checkedItemsGlobal]);
 
-const masterPrepMarqueeList = useMemo(() => {
-  const m = {};
-  filteredOrders.forEach(o => o.items
-    .filter(i => !i.isExtraItem && i.extraItemId == null)  // ← skip extra items
-    .forEach((i, idx) => {
+  const masterPrepMarqueeList = useMemo(() => {
+    const m = {};
+    filteredOrders.forEach(o => o.items.filter(i => !i.isExtraItem && i.extraItemId == null).forEach((i,idx) => {
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
-      m[i.name] = (m[i.name] || 0) + i.quantity;
+      m[i.name] = (m[i.name]||0) + i.quantity;
     }));
-  return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
-}, [filteredOrders, checkedItemsGlobal]);
+    return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,7);
+  }, [filteredOrders, checkedItemsGlobal]);
 
-  const averageClearVelocityString = useMemo(() => {
-    if (!completedTicketsCount) return "—";
+  const avgClearTime = useMemo(() => {
+    if (!completedTicketsCount) return '—';
     const avg = Math.floor(totalProcessingTime / completedTicketsCount);
-    return `${Math.floor(avg / 60)}m ${avg % 60}s`;
+    return `${Math.floor(avg/60)}m ${avg%60}s`;
   }, [totalProcessingTime, completedTicketsCount]);
 
-  /* ── safe card index (mobile) ── */
-  const safeCardIndex = Math.min(mobileCardIndex, Math.max(0, filteredOrders.length - 1));
-  const swipeHandlers = useSwipe(
+  const visibleCategories = useMemo(() => {
+    return categories.filter(cat => {
+      const k = cat.categoryId?.toLowerCase().trim() || '';
+      if (!k) return false;
+      if (categoryPendingCounts[k] > 0) return true;
+      const profile = categoryVegProfile[k];
+      if (!profile) return false;
+      if (tenantOnlyVeg) return profile.hasVeg;
+      return isNonVegMode ? profile.hasNonVeg : profile.hasVeg;
+    });
+  }, [categories, categoryPendingCounts, categoryVegProfile, tenantOnlyVeg, isNonVegMode]);
+
+  /* ── wastage ── */
+  const fetchWastageInventory = useCallback(async () => {
+    try { const r = await axios.get(`${BASE_URL}/inventory/${tenantId}`); setWastageInventory(r.data||[]); } catch { setWastageInventory([]); }
+  }, [tenantId]);
+  const fetchWastageLog = useCallback(async () => {
+    setWastageLoading(true);
+    try { const r = await axios.get(`${BASE_URL}/wastage/${tenantId}`); setWastageLog(r.data||[]); } catch { setWastageLog([]); } finally { setWastageLoading(false); }
+  }, [tenantId]);
+  const fetchWastageAnalytics = useCallback(async () => {
+    try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
+  }, [tenantId]);
+  useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); if (wastageTab==='report') fetchWastageAnalytics(); } }, [showWastagePanel]);
+  useEffect(() => { if (showWastagePanel && wastageTab==='report') fetchWastageAnalytics(); }, [wastageTab, showWastagePanel]);
+
+  const saveWastageEntry = async () => {
+    const { itemName,quantity,unit,reason,loggedBy } = wastageForm;
+    if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
+    setWastageSaving(true);
+    try {
+      await axios.post(`${BASE_URL}/wastage/${tenantId}`, {
+        itemName: itemName.trim(), inventoryId: wastageForm.inventoryId||undefined,
+        quantity: Number(quantity), unit, reason, loggedBy: loggedBy.trim(), notes: wastageForm.notes||''
+      });
+      setWastageForm(p => ({ itemName:'', inventoryId:null, quantity:'', unit:'kg', reason:'Spoiled / Expired', loggedBy:p.loggedBy, notes:'' }));
+      setWastageSuggestions([]); setShowWastageSuggest(false);
+      fetchWastageLog(); fetchWastageInventory();
+    } catch (err) { console.error(err.message); }
+    finally { setWastageSaving(false); }
+  };
+
+  const deleteWastageEntry = async id => {
+    try { await axios.delete(`${BASE_URL}/wastage/${tenantId}/${id}`); setWastageLog(prev => prev.filter(e => e._id !== id)); } catch {}
+  };
+
+  /* ── breakpoint helpers ── */
+  const showDrawerToggle  = isMobile || isSmallTablet;
+  const showPermanentSide = isLargeTablet || isDesktop;
+  const useCardView       = isMobile;
+  const safeCardIndex     = Math.min(mobileCardIndex, Math.max(0, filteredOrders.length - 1));
+  const swipeHandlers     = useSwipe(
     () => setMobileCardIndex(i => Math.min(i + 1, filteredOrders.length - 1)),
     () => setMobileCardIndex(i => Math.max(i - 1, 0))
   );
 
-  /* ── visible category list ── */
-const visibleCategories = useMemo(() => {
-  return categories.filter(cat => {
-    const k = cat.categoryId?.toLowerCase().trim() || '';
-    if (!k) return false;
-    // Always show if there are active tickets in this category right now
-    if ((categoryPendingCounts[k] || 0) > 0) return true;
-    // Also show if menuItems confirms dishes exist here
-    const p = categoryVegProfile[k];
-    if (!p) return false;
-    if (tenantOnlyVeg) return p.hasVeg;
-    return isNonVegMode ? p.hasNonVeg : p.hasVeg;
-  });
-}, [categories, categoryPendingCounts, categoryVegProfile, tenantOnlyVeg, isNonVegMode]);
-  /* ─────────────────────────────────────
-     DERIVED LAYOUT FLAGS
-  ───────────────────────────────────── */
-  // Show drawer on mobile + small tablet; sidebar always visible on large tablet + desktop
-  const showDrawerToggle  = isMobile || isSmallTablet;
-  const showPermanentSide = isLargeTablet || isDesktop;
-  // On mobile use swipe-card view; tablet & desktop use grid
-  const useCardView       = isMobile;
-  // Bottom nav only on mobile
-  const showBottomNav     = isMobile;
-  // Station capsule in header: hidden on mobile (in bottom nav), shown on all tablets and desktop
-  const showStationHeader = !isMobile;
+  const gridCols = isMobile ? 1 : isSmallTablet ? 2 : isLargeTablet ? 3 : 3;
 
-  /* ──────────────────────────────────────────────────────────────
-     SIDEBAR CONTENT (shared between drawer and permanent sidebar)
-  ────────────────────────────────────────────────────────────── */
-//   const SidebarContent = ({ inDrawer = false }) => (
-//     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-//       {/* Header */}
-//       <div style={rs.sidebarHeader}>
-//         <Layers size={14} color="#d3bfa2" />
-//         <span>KITCHEN SECTIONS</span>
-//         {inDrawer && (
-//           <button
-//             onClick={() => setSidebarOpen(false)}
-//             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 4 }}>
-//             <X size={20} />
-//           </button>
-//         )}
-//       </div>
+  /* ─── SIDEBAR CONTENT ─────────────────────────────────────────── */
+  const SidebarContent = ({ inDrawer = false }) => (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', gap:0 }}>
+      {/* top */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:14, borderBottom:'1px solid rgba(211,191,162,0.07)', marginBottom:14, flexShrink:0 }}>
+        <div style={rs.sidebarHeaderIcon}><Layers size={14} color="#d3bfa2" /></div>
+        <span style={{ fontSize:'0.56rem', fontWeight:900, color:'rgba(211,191,162,0.35)', letterSpacing:'2.5px', flex:1, textTransform:'uppercase' }}>STATIONS</span>
+        {inDrawer && (
+          <button onClick={() => setSidebarOpen(false)} style={{ background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)', color:'#555', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
 
-//       {/* Veg / Non-veg toggle */}
-//       {!tenantOnlyVeg && (
-//         <div style={rs.vegToggleWrap}>
-//           {[false, true].map(nv => (
-//             <button
-//               key={String(nv)}
-//               onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
-//               style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
-//               <div style={{
-//                 width: 12, height: 12,
-//                 border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`,
-//                 borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center'
-//               }}>
-//                 {nv
-//                   ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
-//                   : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
-//                 }
-//               </div>
-//               {nv ? 'NON-VEG' : 'VEG'}
-//             </button>
-//           ))}
-//         </div>
-//       )}
+      {/* veg / non-veg toggle */}
+      {!tenantOnlyVeg && (
+        <div style={{ display:'flex', background:'#070709', borderRadius:9, border:'1px solid rgba(211,191,162,0.07)', padding:3, marginBottom:10, flexShrink:0 }}>
+          {[false,true].map(nv => (
+            <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
+              style={{ flex:1, padding:'7px 4px', borderRadius:7, border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all 0.15s',
+                background: isNonVegMode===nv ? (nv ? 'rgba(138,48,48,0.3)' : 'rgba(42,74,40,0.35)') : 'transparent',
+                color: isNonVegMode===nv ? (nv ? '#e07070' : '#7ec87a') : '#3a3e4a' }}>
+              <div style={{ width:10, height:10, border:`1.5px solid ${isNonVegMode===nv ? (nv?'#e07070':'#7ec87a') : '#333'}`, borderRadius:nv?2:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {nv ? <div style={{ width:0, height:0, borderLeft:'2.5px solid transparent', borderRight:'2.5px solid transparent', borderBottom:`4.5px solid ${isNonVegMode?'#e07070':'#333'}` }} />
+                    : <div style={{ width:4, height:4, borderRadius:'50%', background:!isNonVegMode?'#7ec87a':'#333' }} />}
+              </div>
+              {nv ? 'NON-VEG' : 'VEG'}
+            </button>
+          ))}
+        </div>
+      )}
 
-//       {/* Category list */}
-//       <div style={rs.sidebarStack} className="no-scrollbar">
-//         <button
-//           onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-//           style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
-//           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-//             <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
-//             <span>ALL SECTIONS</span>
-//           </div>
-// {/* Count badge — number of active orders in this category */}
-// <span style={{
-//   ...rs.countBadge,
-//   background: sel ? '#0f1013' : '#1a1c23',
-//   color: sel ? '#d3bfa2' : '#8e94a4',
-//   border: sel ? '1px solid #d3bfa2' : '1px solid #232730'
-// }}>
-//   {(() => {
-//     // Count distinct orders that have items in this category
-//     const activeInCat = orders.filter(o =>
-//       ['pending', 'ready'].includes(o.status) &&
-//       o.items?.some(item => {
-//         const cId = item.categoryId?.toLowerCase().trim()
-//                  || dishToCategoryMap[item.name?.toLowerCase().trim()];
-//         return cId === k && !item.isExtraItem;
-//       })
-//     ).length;
-//     return activeInCat < 10 ? `0${activeInCat}` : activeInCat;
-//   })()}
-// </span>
-//         </button>
+      {/* section list */}
+      <div style={{ display:'flex', flexDirection:'column', gap:4, overflowY:'auto', flex:1 }} className="no-scrollbar">
+        {/* ALL */}
+        {(() => {
+          const sel = selectedCategory === 'ALL' && !showMetricsDashboard;
+          const total = orders.filter(o => ['pending','ready'].includes(o.status)).length;
+          return (
+            <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <Coffee size={12} color={sel?'#0f1013':'#555'} />
+                <span>ALL SECTIONS</span>
+              </div>
+              <span style={{ ...rs.countChip(sel, total>0), minWidth:24, textAlign:'center' }}>{total<10?`0${total}`:total}</span>
+            </button>
+          );
+        })()}
 
-//         {visibleCategories.map(cat => {
-//           const k   = cat.categoryId?.toLowerCase().trim() || '';
-//           const count = categoryPendingCounts[k] || 0;
-//           const sel = selectedCategory === k && !showMetricsDashboard;
-//           return (
-//             <button
-//               key={cat._id}
-//               onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-//               style={sel ? rs.activeSidebarNode : rs.sidebarNode}>
-//               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-//                 <Flame size={14} color={sel ? '#0f1013' : '#bda88a'} />
-//                 <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
-//               </div>
-//               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-//                 <span
-//                   onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
-//                   style={rs.mini86}
-//                   title="86 item">
-//                   <EyeOff size={10} />
-//                 </span>
-// <span style={{
-//   ...rs.countBadge,
-//   background: selectedCategory === k && !showMetricsDashboard ? '#0f1013' : '#1a1c23',
-//   color:      selectedCategory === k && !showMetricsDashboard ? '#d3bfa2' : '#8e94a4',
-//   border:     selectedCategory === k && !showMetricsDashboard ? '1px solid #d3bfa2' : '1px solid #232730'
-// }}>
-//   {count < 10 ? `0${count}` : count}
-// </span>
-//               </div>
-//             </button>
-//           );
-//         })}
+        {visibleCategories.map(cat => {
+          const k = cat.categoryId?.toLowerCase().trim() || '';
+          const count = categoryPendingCounts[k] || 0;
+          const sel = selectedCategory === k && !showMetricsDashboard;
+          return (
+            <button key={cat._id} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                <Flame size={12} color={sel?'#0f1013':count>0?'#bda88a':'#333'} style={{ flexShrink:0 }} />
+                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase', fontSize:'0.62rem' }}>{cat.name}</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+                <span title={`86 "${cat.name}"`} onClick={e => { e.stopPropagation(); trigger86(cat.name); }}
+                  style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'rgba(211,191,162,0.03)', border:'1px solid rgba(211,191,162,0.07)', borderRadius:4, cursor:'pointer', color:'#333', transition:'0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.07)'; e.currentTarget.style.color='#333'; }}>
+                  <EyeOff size={9} />
+                </span>
+                <span style={{ ...rs.countChip(sel, count>0), minWidth:22, textAlign:'center' }}>{count<10?`0${count}`:count}</span>
+              </div>
+            </button>
+          );
+        })}
 
-//         {/* Metrics shortcut */}
-//         <button
-//           onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }}
-//           style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
-//           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-//             <TrendingUp size={14} color="#d3bfa2" />
-//             <span>SPEED LOGS</span>
-//           </div>
-//         </button>
-//       </div>
-//     </div>
-//   );
+        {/* Speed Logs node */}
+        <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid rgba(211,191,162,0.06)', display:'flex', flexDirection:'column', gap:4 }}>
+          <button onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(showMetricsDashboard), justifyContent:'space-between' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <TrendingUp size={12} color={showMetricsDashboard?'#0f1013':'#555'} />
+              SPEED LOGS
+            </div>
+            {completedTicketsCount > 0 && (
+              <span style={{ ...rs.countChip(showMetricsDashboard, true) }}>{completedTicketsCount}</span>
+            )}
+          </button>
+          {/* Refresh */}
+          <button onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(211,191,162,0.07)', background:'transparent', color:'#333', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.color='#d3bfa2'; e.currentTarget.style.borderColor='rgba(211,191,162,0.2)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color='#333'; e.currentTarget.style.borderColor='rgba(211,191,162,0.07)'; }}>
+            <RefreshCw size={12} /> REFRESH ORDERS
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
-  /* ──────────────────────────────────────────────────────────────
+  /* ═══════════════════════════════════════════════════════════
      RENDER
-  ────────────────────────────────────────────────────────────── */
+  ═══════════════════════════════════════════════════════════ */
   return (
     <div style={rs.root}>
-      <audio ref={audioPlayer} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" />
-      <audio ref={alertPlayer} src="https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3" />
+      <audio ref={audioPlayer} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
+      <audio ref={alertPlayer} src="https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3"  preload="auto" />
 
-      {/* ── DRAWER OVERLAY (mobile + small tablet) ── */}
+      {/* ── DRAWER OVERLAY ── */}
       <AnimatePresence>
         {sidebarOpen && showDrawerToggle && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
               onClick={() => setSidebarOpen(false)}
-              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 90 }} />
-            <motion.aside
-              initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              style={{
-                ...rs.sidebar,
-                position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 100,
-                borderRadius: '0 16px 16px 0',
-                // Wider drawer on tablet so text doesn't cramp
-                width: isSmallTablet ? 280 : 260,
-              }}>
-<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-  <div style={rs.sidebarHeader}>
-    <Layers size={14} color="#d3bfa2" />
-    <span>KITCHEN SECTIONS</span>
-    <button onClick={() => setSidebarOpen(false)}
-      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 4 }}>
-      <X size={20} />
-    </button>
-  </div>
-  {!tenantOnlyVeg && (
-    <div style={rs.vegToggleWrap}>
-      {[false, true].map(nv => (
-        <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
-          style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
-          <div style={{ width: 12, height: 12, border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {nv
-              ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
-              : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
-            }
-          </div>
-          {nv ? 'NON-VEG' : 'VEG'}
-        </button>
-      ))}
-    </div>
-  )}
-  <div style={rs.sidebarStack} className="no-scrollbar">
-    <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-      style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
-        <span>ALL SECTIONS</span>
-      </div>
-      <span style={{ ...rs.countBadge, background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129', color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f' }}>
-        {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
-      </span>
-    </button>
-    {visibleCategories.map(cat => {
-      const k     = cat.categoryId?.toLowerCase().trim() || '';
-      const count = categoryPendingCounts[k] || 0;
-      const isSel = selectedCategory === k && !showMetricsDashboard;
-      return (
-        <button key={cat._id}
-          onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }}
-          style={isSel ? rs.activeSidebarNode : rs.sidebarNode}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Flame size={14} color={isSel ? '#0f1013' : '#bda88a'} />
-            <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
-              style={rs.mini86} title="86 item">
-              <EyeOff size={10} />
-            </span>
-            <span style={{ ...rs.countBadge, background: isSel ? '#0f1013' : '#1a1c23', color: isSel ? '#d3bfa2' : '#8e94a4', border: isSel ? '1px solid #d3bfa2' : '1px solid #232730' }}>
-              {count < 10 ? `0${count}` : count}
-            </span>
-          </div>
-        </button>
-      );
-    })}
-    <button onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }}
-      style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <TrendingUp size={14} color="#d3bfa2" />
-        <span>SPEED LOGS</span>
-      </div>
-    </button>
-  </div>
-</div>
+              style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', zIndex:90, backdropFilter:'blur(3px)' }} />
+            <motion.aside initial={{ x:-310 }} animate={{ x:0 }} exit={{ x:-310 }}
+              transition={{ type:'spring', stiffness:320, damping:32 }}
+              style={{ ...rs.sidebar, position:'fixed', left:0, top:0, bottom:0, width: isSmallTablet?290:270, borderRadius:'0 16px 16px 0', zIndex:100, padding:'18px 14px' }}>
+              <SidebarContent inDrawer />
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* ── HEADER ── */}
+      {/* ══════════════ HEADER ══════════════ */}
       <header style={rs.header}>
-        <div style={rs.brandCluster}>
-          {/* Hamburger on mobile + small tablet */}
+        {/* Left: menu + brand */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
           {showDrawerToggle && (
             <button onClick={() => setSidebarOpen(true)} style={rs.iconBtn}>
-              <AlignJustify size={20} color="#d3bfa2" />
+              <AlignJustify size={18} color="#d3bfa2" />
             </button>
           )}
-          <div style={rs.logoBadge}>
-            <ChefHat color="#d3bfa2" size={isMobile ? 20 : isTablet ? 24 : 30} />
-          </div>
-          <div>
-            <h1 style={{
-              ...rs.mainTitle,
-              fontSize: isMobile ? '0.8rem' : isSmallTablet ? '0.9rem' : isLargeTablet ? '1rem' : '1.15rem'
-            }}>
-              PRATYEKSHA
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <span style={isOnline ? rs.dotGold : rs.dotRed} />
-              {!isMobile && (
-                <p style={rs.subTitle}>
+          <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+            <div style={{ width:isMobile?28:34, height:isMobile?28:34, borderRadius:10, background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.14)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <ChefHat size={isMobile?15:18} color="#d3bfa2" />
+            </div>
+            <div>
+              <h1 style={{ margin:0, fontWeight:900, letterSpacing:'3px', fontSize:isMobile?'0.8rem':isTablet?'0.85rem':'0.92rem', color:'#fff', fontFamily:"'Outfit',sans-serif", lineHeight:1.1 }}>
+                PRATYEKSHA <span style={{ color:'rgba(211,191,162,0.35)', fontWeight:600, letterSpacing:'1px', fontSize:'0.6em' }}>KDS</span>
+              </h1>
+              <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
+                <span style={isOnline ? rs.dotGold : rs.dotRed} />
+                <span style={{ color:'#2a2e38', fontSize:'0.5rem', fontWeight:900, letterSpacing:'1.5px' }}>
                   {isOnline
-                    ? isSmallTablet ? "ONLINE" : "TITANIUM V17.0 • ONLINE"
-: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><WifiOff size={11} color="#ff4d4d" /> DISCONNECTED</span>}                </p>
-              )}
+                    ? (isMobile ? 'LIVE' : tenantName ? tenantName.toUpperCase() : 'KITCHEN — ONLINE')
+                    : <span style={{ color:'#ff4d4d', display:'inline-flex', alignItems:'center', gap:3 }}><WifiOff size={9} /> DISCONNECTED</span>}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={rs.actionCenter}>
-          {/* Station pills — visible on tablet + desktop */}
-          {showStationHeader && (
-            <div style={rs.stationCapsule}>
-              {['ALL', 'DINEIN', 'PARCEL'].map(s => (
-                <button key={s} onClick={() => setStationFilter(s)}
-                  style={stationFilter === s ? rs.capsuleActive : rs.capsule}>
-                  {s === 'ALL' ? 'ALL' : s === 'DINEIN' ? 'DINE-IN' : 'PARCELS'}
+        {/* Right: action cluster */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, overflowX:'auto', scrollbarWidth:'none', msOverflowStyle:'none' }}>
+
+          {/* Station filter — tablet/desktop */}
+          {!isMobile && (
+            <div style={{ display:'flex', background:'#070709', padding:3, borderRadius:9, border:'1px solid rgba(211,191,162,0.08)', flexShrink:0 }}>
+              {[
+                { val:'ALL',    lbl:'ALL',      icon:<Monitor size={11} /> },
+                { val:'DINEIN', lbl:'DINE-IN',  icon:<UtensilsCrossed size={11} /> },
+                { val:'PARCEL', lbl:'PARCEL',   icon:<Package size={11} /> },
+              ].map(s => (
+                <button key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(211,191,162,0.1)' : 'transparent', border:'none', color: stationFilter===s.val ? '#d3bfa2' : '#3a3e4a', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
+                  <span style={{ color: stationFilter===s.val ? '#d3bfa2' : '#333' }}>{s.icon}</span>
+                  {s.lbl}
                 </button>
               ))}
             </div>
           )}
 
+          {/* Search toggle */}
+          <button onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(211,191,162,0.3)' : 'rgba(211,191,162,0.08)', background: showSearch ? 'rgba(211,191,162,0.07)' : '#0a0a0c' }}>
+            <Search size={14} color={showSearch?'#d3bfa2':'#555'} />
+          </button>
+
           {/* Voice */}
-          <button
-            onClick={toggleVoiceListener}
-            style={{ ...rs.utilBtn, borderColor: isListening ? '#d3bfa2' : '#252932', background: isListening ? 'rgba(211,191,162,0.12)' : '#191b22' }}>
-            <Mic size={15} color={isListening ? '#d3bfa2' : '#9fa4b0'} />
-{!isMobile && (
-  <span style={{ color: isListening ? '#d3bfa2' : '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
-    {isListening ? "LIVE — EN/MR" : "VOICE"}
-  </span>
-)}
+          <button onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(211,191,162,0.45)' : 'rgba(211,191,162,0.08)', background: isListening ? 'rgba(211,191,162,0.1)' : '#0a0a0c' }}>
+            <Mic size={14} color={isListening?'#d3bfa2':'#555'} />
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isListening?'#d3bfa2':'#555' }}>{isListening ? 'LIVE' : 'VOICE'}</span>}
           </button>
 
           {/* Aggregate toggle */}
-          <button onClick={() => setIsAggregateView(v => !v)} style={rs.utilBtn}>
-            {isAggregateView ? <LayoutGrid size={16} color="#d3bfa2" /> : <BarChart3 size={16} color="#d3bfa2" />}
-            {!isMobile && (
-              <span style={{ fontSize: '0.72rem', fontWeight: 700 }}>
-                {isAggregateView ? "TICKETS" : "SUMMARY"}
-              </span>
+          <button onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(211,191,162,0.07)' : '#0a0a0c', borderColor: isAggregateView ? 'rgba(211,191,162,0.3)' : 'rgba(211,191,162,0.08)' }}>
+            {isAggregateView ? <LayoutGrid size={14} color="#d3bfa2" /> : <BarChart3 size={14} color="#555" />}
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isAggregateView?'#d3bfa2':'#555' }}>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
+          </button>
+
+          {/* Recall */}
+          {recallQueue.length > 0 && (
+            <button onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(211,191,162,0.25)', background:'rgba(211,191,162,0.05)', position:'relative' }}>
+              <History size={14} color="#d3bfa2" />
+              {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color:'#d3bfa2' }}>RECALL</span>}
+              <div style={{ position:'absolute', top:-6, right:-6, width:16, height:16, borderRadius:'50%', background:'linear-gradient(135deg,#bda88a,#d3bfa2)', color:'#0f1013', fontSize:'0.48rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>{recallQueue.length}</div>
+            </button>
+          )}
+
+          {/* Wastage */}
+          <button onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(211,191,162,0.3)' : 'rgba(211,191,162,0.08)', background: showWastagePanel ? 'rgba(211,191,162,0.07)' : '#0a0a0c', position:'relative' }}>
+            <Trash2 size={14} color={showWastagePanel?'#d3bfa2':'#555'} />
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: showWastagePanel?'#d3bfa2':'#555' }}>WASTAGE</span>}
+            {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length > 0 && (
+              <div style={{ position:'absolute', top:-5, right:-5, width:14, height:14, borderRadius:'50%', background:'rgba(211,191,162,0.8)', color:'#0f1013', fontSize:'0.44rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length}
+              </div>
             )}
           </button>
 
-{recallQueue.length > 0 && (
-  <button onClick={handleRecall} style={{
-    ...rs.utilBtn,
-    border: '1px solid rgba(211,191,162,0.3)',
-    background: 'rgba(211,191,162,0.06)',
-    position: 'relative'
-  }}>
-    <History size={16} color="#d3bfa2" />
-    {!isMobile && (
-      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>RECALL</span>
-    )}
-    {/* Count badge */}
-    <div style={{
-      position: 'absolute', top: '-6px', right: '-6px',
-      width: '18px', height: '18px', borderRadius: '50%',
-      background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-      color: '#0f1013', fontSize: '0.55rem', fontWeight: '900',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'monospace', lineHeight: 1
-    }}>
-      {recallQueue.length}
-    </div>
-  </button>
-)}
-
-{/* Wastage button */}
-<button
-  onClick={() => setShowWastagePanel(true)}
-  style={{
-    ...rs.utilBtn,
-    borderColor: showWastagePanel ? 'rgba(211,191,162,0.4)' : '#252932',
-    background: showWastagePanel ? 'rgba(211,191,162,0.08)' : '#191b22',
-    position: 'relative'
-  }}>
-<Trash2 size={15} color="#d3bfa2" />
-  {!isMobile && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d3bfa2' }}>WASTAGE</span>}
-  {wastageLog.filter(e =>
-  new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()
-).length > 0 && (
-    <div style={{
-      position: 'absolute', top: -6, right: -6,
-      width: 16, height: 16, borderRadius: '50%',
-      background: '#ff4d4d', color: '#fff',
-      fontSize: '0.48rem', fontWeight: 900,
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}>
-{wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length}
-    </div>
-  )}
-</button>
-          {/* Ticket count badge */}
-          <div style={rs.ticketBadge}>
-            <span style={rs.ticketNum}>{filteredOrders.length}</span>
-            {!isMobile && (
-              <span style={{ color: '#1a1c23', fontSize: '0.55rem', fontWeight: 900, marginLeft: 5 }}>
-                TICKETS
-              </span>
-            )}
+          {/* Ticket count pill */}
+          <div style={{ background: filteredOrders.length>0 ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : '#0a0a0c', padding:'7px 13px', borderRadius:10, display:'flex', alignItems:'center', gap:6, flexShrink:0, border: filteredOrders.length===0 ? '1px solid rgba(211,191,162,0.08)' : 'none', minHeight:38 }}>
+            <span style={{ color: filteredOrders.length>0 ? '#0f1013' : '#222', fontSize:'1.05rem', fontWeight:950, fontFamily:'JetBrains Mono, monospace', lineHeight:1 }}>{filteredOrders.length<10?`0${filteredOrders.length}`:filteredOrders.length}</span>
+            {!isMobile && <span style={{ color: filteredOrders.length>0 ? '#0f1013' : '#222', fontSize:'0.5rem', fontWeight:900, letterSpacing:'0.5px' }}>TICKETS</span>}
           </div>
         </div>
       </header>
 
-      {/* ── MARQUEE BANNER ── */}
+      {/* ── SEARCH BAR ── */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
+            style={{ display:'flex', alignItems:'center', gap:9, background:'#080809', border:'1px solid rgba(211,191,162,0.1)', borderRadius:11, padding:'9px 14px', flexShrink:0 }}>
+            <Search size={13} color="#8a704d" />
+            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source, or dish name…" style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e8e0d0', fontSize:'0.82rem', fontFamily:"'Outfit',sans-serif" }} />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} style={{ background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', color:'#888', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
+                <X size={11} /> CLEAR
+              </button>
+            )}
+            <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background:'transparent', border:'none', color:'#333', cursor:'pointer', display:'flex', alignItems:'center' }}>
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── PREP MARQUEE ── */}
       <AnimatePresence>
         {masterPrepMarqueeList.length > 0 && !isAggregateView && !showMetricsDashboard && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={rs.marquee}>
-            <div style={rs.marqueeLabel}><Activity size={11} /> PREP QUEUE:</div>
-            <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="no-scrollbar">
-              {masterPrepMarqueeList.map(([name, qty]) => (
-                <div key={name} style={rs.marqueeToken}>
-                  <span style={{ color: '#d3bfa2', fontWeight: 900, fontFamily: 'monospace' }}>{qty}×</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#fff', whiteSpace: 'nowrap' }}>{name.toUpperCase()}</span>
+          <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
+            style={{ display:'flex', alignItems:'center', background:'#070709', border:'1px solid rgba(211,191,162,0.07)', padding:'7px 14px', borderRadius:10, gap:10, overflow:'hidden', flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:'0.52rem', fontWeight:900, color:'#8a704d', letterSpacing:'1.5px', flexShrink:0 }}>
+              <Activity size={10} /> PREP QUEUE
+            </div>
+            <div style={{ width:'1px', height:'14px', background:'rgba(211,191,162,0.1)', flexShrink:0 }} />
+            <div style={{ display:'flex', gap:7, overflowX:'auto' }} className="no-scrollbar">
+              {masterPrepMarqueeList.map(([name,qty]) => (
+                <div key={name} style={{ background:'#0a0a0c', border:'1px solid rgba(211,191,162,0.1)', padding:'3px 10px', borderRadius:6, display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
+                  <span style={{ color:'#d3bfa2', fontWeight:900, fontFamily:'monospace', fontSize:'0.72rem' }}>{qty}×</span>
+                  <span style={{ fontSize:'0.65rem', fontWeight:800, color:'#c8c0b0', whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.3px' }}>{name}</span>
                 </div>
               ))}
             </div>
@@ -991,1801 +749,988 @@ const visibleCategories = useMemo(() => {
         )}
       </AnimatePresence>
 
-      {/* ── RECALL QUEUE PREVIEW ── */}
-<AnimatePresence>
-  {recallQueue.length > 0 && (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'rgba(211,191,162,0.04)',
-        border: '1px solid rgba(211,191,162,0.1)',
-        borderRadius: 9, padding: '6px 12px', flexShrink: 0, overflow: 'hidden'
-      }}>
-      <History size={11} color="rgba(211,191,162,0.4)" />
-      <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.35)', fontWeight: 900, letterSpacing: '1px', flexShrink: 0 }}>
-        RECALL ({recallQueue.length}/10):
-      </span>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }} className="no-scrollbar">
-        {recallQueue.map((o, i) => (
-          <span key={i} style={{
-            fontSize: '0.58rem', fontWeight: 900,
-            padding: '2px 8px', borderRadius: 5,
-            background: i === 0 ? 'rgba(211,191,162,0.12)' : '#0d0e11',
-            border: `1px solid ${i === 0 ? 'rgba(211,191,162,0.25)' : '#1f222a'}`,
-            color: i === 0 ? '#d3bfa2' : '#4a4f5c',
-            whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'monospace'
-          }}>
-            T-{o.tableNumber} · {o.items?.length} items
-          </span>
-        ))}
-      </div>
-      <span style={{ fontSize: '0.52rem', color: 'rgba(211,191,162,0.2)', flexShrink: 0 }}>
-        ← NEXT
-      </span>
-    </motion.div>
-  )}
-</AnimatePresence>
+      {/* ── RECALL STRIP ── */}
+      <AnimatePresence>
+        {recallQueue.length > 0 && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(211,191,162,0.02)', border:'1px solid rgba(211,191,162,0.07)', borderRadius:9, padding:'6px 13px', flexShrink:0, overflow:'hidden' }}>
+            <History size={10} color="rgba(211,191,162,0.25)" />
+            <span style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.25)', fontWeight:900, letterSpacing:'1px', flexShrink:0 }}>RECALL ({recallQueue.length}/10)</span>
+            <div style={{ display:'flex', gap:5, overflowX:'auto' }} className="no-scrollbar">
+              {recallQueue.map((o,i) => (
+                <span key={i} style={{ fontSize:'0.56rem', fontWeight:900, padding:'2px 8px', borderRadius:5, background: i===0 ? 'rgba(211,191,162,0.1)' : '#0d0e11', border:`1px solid ${i===0?'rgba(211,191,162,0.2)':'#111'}`, color: i===0?'#d3bfa2':'#2a2a2a', whiteSpace:'nowrap', flexShrink:0, fontFamily:'monospace' }}>
+                  {getOrderType(o)==='parcel' ? 'PARCEL' : `T-${o.tableNumber}`} · {o.items?.length}
+                </span>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── MODIFICATION ALERTS ── */}
       <AnimatePresence>
         {interceptedAlerts.map(alert => (
-          <motion.div
-            key={alert.id}
-            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ ...rs.alertBox, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 30 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ background: 'rgba(0,0,0,0.2)', padding: 10, borderRadius: 10 }}>
-                <BellRing size={20} />
-              </div>
+          <motion.div key={alert.id} initial={{ scale:0.95, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ opacity:0 }}
+            style={{ background:'rgba(100,20,20,0.95)', border:'1px solid rgba(248,113,113,0.3)', padding: isMobile ? '12px 14px' : '13px 20px', borderRadius:13, display:'flex', alignItems:'center', justifyContent:'space-between', flexDirection: isMobile ? 'column' : 'row', gap:12, flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ background:'rgba(0,0,0,0.2)', padding:9, borderRadius:9, flexShrink:0 }}><BellRing size={17} color="#f87171" /></div>
               <div>
-                <h3 style={{ margin: 0, fontSize: isMobile ? '0.85rem' : '1.1rem', fontWeight: 900 }}>
-                  ORDER CHANGE — TABLE {alert.tableNumber}
-                </h3>
-                <p style={{ margin: '4px 0 0', color: '#aaa', fontSize: '0.72rem' }}>
-                  <span style={{ color: '#d3bfa2', fontWeight: 'bold' }}>"{alert.modificationNote}"</span>
+                <h3 style={{ margin:0, fontSize: isMobile ? '0.82rem' : '0.95rem', fontWeight:900, color:'#fff' }}>ORDER CHANGE — TABLE {alert.tableNumber}</h3>
+                <p style={{ margin:'3px 0 0', color:'rgba(255,255,255,0.45)', fontSize:'0.65rem' }}>
+                  Modification: <span style={{ color:'#ffb3b3', fontWeight:700 }}>"{alert.modificationNote}"</span>
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}
-              style={{ background: '#0d0e11', border: '1px solid rgba(255,77,77,0.3)', color: '#ff4d4d', padding: '10px 18px', borderRadius: 8, fontSize: '0.72rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              CONFIRM RECEIPT
+            <button onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}
+              style={{ background:'rgba(0,0,0,0.25)', border:'1px solid rgba(248,113,113,0.3)', color:'#f87171', padding:'9px 16px', borderRadius:8, fontSize:'0.66rem', fontWeight:900, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, transition:'all 0.15s' }}>
+              ACKNOWLEDGE
             </button>
           </motion.div>
         ))}
       </AnimatePresence>
 
-      {/* ── BODY ── */}
+      {/* ══════════════ BODY ══════════════ */}
       <div style={rs.body}>
-
-        {/* Permanent sidebar — large tablet + desktop */}
+        {/* PERMANENT SIDEBAR */}
         {showPermanentSide && (
-          <aside style={{
-            ...rs.sidebar,
-            // Narrower on large tablet to leave more room for cards
-            width: isLargeTablet ? 210 : 250,
-          }}>
-<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-  <div style={rs.sidebarHeader}>
-    <Layers size={14} color="#d3bfa2" />
-    <span>KITCHEN SECTIONS</span>
-  </div>
-  {!tenantOnlyVeg && (
-    <div style={rs.vegToggleWrap}>
-      {[false, true].map(nv => (
-        <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
-          style={{ ...rs.vegBtn, ...(isNonVegMode === nv ? (nv ? rs.vegBtnActiveNV : rs.vegBtnActiveV) : {}) }}>
-          <div style={{ width: 12, height: 12, border: `2px solid ${isNonVegMode === nv ? (nv ? '#e07070' : '#7ec87a') : '#444'}`, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {nv
-              ? <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: `5px solid ${isNonVegMode ? '#e07070' : '#444'}` }} />
-              : <div style={{ width: 5, height: 5, borderRadius: '50%', background: !isNonVegMode ? '#7ec87a' : '#444' }} />
-            }
-          </div>
-          {nv ? 'NON-VEG' : 'VEG'}
-        </button>
-      ))}
-    </div>
-  )}
-  <div style={rs.sidebarStack} className="no-scrollbar">
-    <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); }}
-      style={selectedCategory === 'ALL' && !showMetricsDashboard ? rs.activeSidebarNode : rs.sidebarNode}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Coffee size={14} color={selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#d3bfa2'} />
-        <span>ALL SECTIONS</span>
-      </div>
-      <span style={{ ...rs.countBadge, background: selectedCategory === 'ALL' && !showMetricsDashboard ? '#0f1013' : '#1e2129', color: selectedCategory === 'ALL' && !showMetricsDashboard ? '#d3bfa2' : '#8a909f' }}>
-        {Object.values(categoryPendingCounts).reduce((a, b) => a + b, 0)}
-      </span>
-    </button>
-    {visibleCategories.map(cat => {
-      const k     = cat.categoryId?.toLowerCase().trim() || '';
-      const count = categoryPendingCounts[k] || 0;
-      const isSel = selectedCategory === k && !showMetricsDashboard;
-      return (
-        <button key={cat._id}
-          onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); }}
-          style={isSel ? rs.activeSidebarNode : rs.sidebarNode}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Flame size={14} color={isSel ? '#0f1013' : '#bda88a'} />
-            <span style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{cat.name}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span onClick={(e) => { e.stopPropagation(); trigger86KillToggle(cat.name); }}
-              style={rs.mini86} title="86 item">
-              <EyeOff size={10} />
-            </span>
-            <span style={{ ...rs.countBadge, background: isSel ? '#0f1013' : '#1a1c23', color: isSel ? '#d3bfa2' : '#8e94a4', border: isSel ? '1px solid #d3bfa2' : '1px solid #232730' }}>
-              {count < 10 ? `0${count}` : count}
-            </span>
-          </div>
-        </button>
-      );
-    })}
-    <button onClick={() => setShowMetricsDashboard(true)}
-      style={{ ...rs.sidebarNode, marginTop: 'auto', borderTop: '1px solid #1f222a' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <TrendingUp size={14} color="#d3bfa2" />
-        <span>SPEED LOGS</span>
-      </div>
-    </button>
-  </div>
-</div>
-
+          <aside style={{ ...rs.sidebar, width: isLargeTablet ? 210 : 240 }}>
+            <SidebarContent />
           </aside>
         )}
 
-        {/* Main workspace */}
-        <main style={rs.workspace} className="no-scrollbar">
+        {/* MAIN WORKSPACE */}
+        <main style={{ ...rs.workspace, display:'flex', flexDirection:'column', gap:12 }} className="no-scrollbar">
 
-{/* ── KITCHEN HEALTH PANEL ── */}
-{kitchenHealth?.stations?.length > 0 && !showMetricsDashboard && (
-  <div style={{
-    background: '#0d0d0d',
-    border: '1px solid rgba(211,191,162,0.1)',
-    borderRadius: '12px',
-    padding: '13px 15px',
-    marginBottom: '12px',
-    fontFamily: 'Poppins, sans-serif'
-  }}>
-
-    {/* Header */}
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center', marginBottom: '10px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-        <Activity size={13} color="#d3bfa2" strokeWidth={1.8} />
-        <span style={{
-          color: '#d3bfa2', fontSize: '0.6rem',
-          fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase'
-        }}>
-          KITCHEN HEALTH
-        </span>
-      </div>
-      {kitchenHealth.bottleneck ? (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          background: 'rgba(248,113,113,0.08)',
-          border: '1px solid rgba(248,113,113,0.2)',
-          borderRadius: '5px', padding: '2px 8px'
-        }}>
-          <AlertTriangle size={9} color="#f87171" strokeWidth={2} />
-          <span style={{
-            color: '#f87171', fontSize: '0.58rem', fontWeight: '800'
-          }}>
-            BOTTLENECK
-          </span>
-        </div>
-      ) : (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          background: 'rgba(74,222,128,0.06)',
-          border: '1px solid rgba(74,222,128,0.15)',
-          borderRadius: '5px', padding: '2px 8px'
-        }}>
-          <CheckSquare size={9} color="#4ade80" strokeWidth={2} />
-          <span style={{
-            color: '#4ade80', fontSize: '0.58rem', fontWeight: '800'
-          }}>
-            NORMAL
-          </span>
-        </div>
-      )}
-    </div>
-
-    {/* Station bars */}
-    {kitchenHealth.stations.slice(0, 5).map(s => (
-      <div key={s.name} style={{ marginBottom: '8px' }}>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', marginBottom: '3px'
-        }}>
-          <span style={{
-            color: s.isBottleneck
-              ? '#f87171'
-              : 'rgba(255,255,255,0.55)',
-            fontSize: '0.67rem',
-            fontWeight: s.isBottleneck ? '700' : '500'
-          }}>
-            {s.name}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{
-              color: s.isBottleneck
-                ? '#f87171'
-                : 'rgba(255,255,255,0.25)',
-              fontSize: '0.6rem',
-              fontFamily: 'monospace'
-            }}>
-              {s.avgToday}m avg
-            </span>
-            {s.isBottleneck && (
-              <AlertTriangle size={9} color="#f87171" strokeWidth={2} />
-            )}
-          </div>
-        </div>
-        {/* Bar track */}
-        <div style={{
-          height: '3px', borderRadius: '2px',
-          background: 'rgba(255,255,255,0.05)', overflow: 'hidden'
-        }}>
-          <div style={{
-            height: '100%',
-            width: `${Math.min(s.loadPct, 100)}%`,
-            borderRadius: '2px',
-            background:
-              s.loadPct >= 85 ? '#f87171' :
-              s.loadPct >= 70 ? '#f0a500' :
-              '#4ade80',
-            transition: 'width 0.6s ease'
-          }} />
-        </div>
-        {/* Load label */}
-        <div style={{
-          fontSize: '0.52rem',
-          color: 'rgba(255,255,255,0.15)',
-          marginTop: '2px', textAlign: 'right'
-        }}>
-          {s.loadPct}% load · {s.orderCount} tickets
-        </div>
-      </div>
-    ))}
-
-    {/* Recommendation */}
-    {kitchenHealth.recommendation && (
-      <div style={{
-        marginTop: '10px', padding: '8px 10px',
-        background: 'rgba(211,191,162,0.04)',
-        border: '1px solid rgba(211,191,162,0.08)',
-        borderRadius: '8px',
-        display: 'flex', alignItems: 'flex-start', gap: '7px'
-      }}>
-        <Zap size={11} color="rgba(211,191,162,0.5)"
-          strokeWidth={1.8} style={{ marginTop: '1px', flexShrink: 0 }} />
-        <span style={{
-          color: 'rgba(255,255,255,0.3)',
-          fontSize: '0.63rem', lineHeight: 1.55
-        }}>
-          {kitchenHealth.recommendation}
-        </span>
-      </div>
-    )}
-  </div>
-)}
-          {/* ── METRICS PANEL ── */}
-          {showMetricsDashboard ? (
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} style={rs.metricsPanel}>
-              <TrendingUp size={36} color="#d3bfa2" />
-              <h2 style={{ margin: '16px 0 0', fontSize: isMobile ? '1.1rem' : '1.5rem', fontWeight: 900 }}>
-                SPEED METRICS
-              </h2>
-              <div style={{
-                display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center',
-                marginTop: 30, width: '100%', maxWidth: 700
-              }}>
-                {[
-                  { label: 'TICKETS PROCESSED', value: completedTicketsCount, color: '#fff' },
-                  { label: 'AVG CLEAR TIME', value: averageClearVelocityString, color: '#d3bfa2' }
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={{ ...rs.metricBox, minWidth: isMobile ? 140 : 240 }}>
-                    <small style={{ fontSize: '0.65rem', fontWeight: 900, color: '#5c616e', letterSpacing: '1.5px', display: 'block', marginBottom: 12 }}>
-                      {label}
-                    </small>
-                    <div style={{ fontSize: isMobile ? '2.2rem' : isTablet ? '2.8rem' : '3.5rem', fontWeight: 950, color, fontFamily: 'monospace', lineHeight: 1 }}>
-                      {value}
+          {/* KITCHEN HEALTH */}
+          {kitchenHealth?.stations?.length > 0 && !showMetricsDashboard && (
+            <div style={{ background:'#080809', border:'1px solid rgba(211,191,162,0.07)', borderRadius:13, padding:'13px 15px', flexShrink:0 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                  <Activity size={12} color="#d3bfa2" />
+                  <span style={{ color:'rgba(211,191,162,0.5)', fontSize:'0.53rem', fontWeight:900, letterSpacing:'2px', textTransform:'uppercase' }}>KITCHEN HEALTH</span>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:5, background: kitchenHealth.bottleneck ? 'rgba(248,113,113,0.08)' : 'rgba(211,191,162,0.04)', border:`1px solid ${kitchenHealth.bottleneck ? 'rgba(248,113,113,0.2)' : 'rgba(211,191,162,0.08)'}` }}>
+                  {kitchenHealth.bottleneck ? <AlertTriangle size={9} color="#f87171" /> : <CheckCircle2 size={9} color="#d3bfa2" />}
+                  <span style={{ fontSize:'0.5rem', fontWeight:900, color: kitchenHealth.bottleneck ? '#f87171' : '#8a704d', letterSpacing:'0.5px' }}>
+                    {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(kitchenHealth.stations.slice(0,5).length, isMobile?2:5)},1fr)`, gap:8 }}>
+                {kitchenHealth.stations.slice(0,5).map(s => (
+                  <div key={s.name} style={{ background:'#0a0a0c', border:`1px solid ${s.isBottleneck ? 'rgba(248,113,113,0.2)' : 'rgba(211,191,162,0.06)'}`, borderRadius:8, padding:'9px 10px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                      <span style={{ fontSize:'0.55rem', color: s.isBottleneck ? '#f87171' : '#777', fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1, marginRight:4 }}>{s.name}</span>
+                      <span style={{ fontSize:'0.54rem', fontFamily:'monospace', fontWeight:900, color: s.isBottleneck ? '#f87171' : '#444', flexShrink:0 }}>{s.pending}</span>
+                    </div>
+                    <div style={{ height:3, background:'rgba(211,191,162,0.06)', borderRadius:2, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${Math.min(100, Math.round((s.pending/Math.max(s.pending,5))*100))}%`, background: s.isBottleneck ? '#f87171' : 'rgba(211,191,162,0.4)', borderRadius:2, transition:'width 0.5s ease' }} />
                     </div>
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowMetricsDashboard(false)} style={rs.metricClose}>
-                BACK TO TRACKER
+              {kitchenHealth.recommendation && (
+                <div style={{ display:'flex', alignItems:'flex-start', gap:7, marginTop:10, padding:'8px 11px', background:'rgba(211,191,162,0.03)', border:'1px solid rgba(211,191,162,0.06)', borderRadius:8 }}>
+                  <Zap size={11} color="#8a704d" style={{ flexShrink:0, marginTop:1 }} />
+                  <span style={{ fontSize:'0.6rem', color:'#555', lineHeight:1.55 }}>{kitchenHealth.recommendation}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SPEED METRICS PANEL */}
+          {showMetricsDashboard && (
+            <motion.div initial={{ opacity:0, y:15 }} animate={{ opacity:1, y:0 }}
+              style={{ background:'#080809', border:'1px solid rgba(211,191,162,0.08)', borderRadius:16, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding: isMobile ? '36px 20px' : '52px 30px', minHeight:300 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                <TrendingUp size={22} color="#d3bfa2" />
+                <h2 style={{ margin:0, fontSize: isMobile ? '0.9rem' : '1.1rem', fontWeight:900, letterSpacing:'3px', color:'#fff', textTransform:'uppercase' }}>Speed Metrics</h2>
+              </div>
+              <p style={{ color:'#1e2028', fontSize:'0.6rem', marginBottom:32, letterSpacing:'0.5px', textAlign:'center' }}>Session performance — resets at midnight IST</p>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, width:'100%', maxWidth:520, marginBottom:28 }}>
+                {[
+                  { label:'TICKETS DISPATCHED', value:completedTicketsCount, sub:'today', big:true },
+                  { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
+                  { label:'CURRENTLY PENDING',   value:filteredOrders.length, sub:'active tickets', big:true },
+                  { label:'WAITER CALLS',         value:waiterCalls.length,    sub:'pending', big:true },
+                ].map(s => (
+                  <div key={s.label} style={{ background:'#0a0a0c', border:'1px solid rgba(211,191,162,0.08)', borderTop:'2px solid rgba(211,191,162,0.15)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
+                    <div style={{ fontSize:'0.5rem', fontWeight:900, color:'#2a2a2a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:10 }}>{s.label}</div>
+                    <div style={{ fontSize: s.big ? '2.8rem' : '1.8rem', fontWeight:950, color:'#d3bfa2', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:6 }}>{s.value}</div>
+                    <div style={{ fontSize:'0.58rem', color:'#1e2028', fontWeight:700 }}>{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setShowMetricsDashboard(false)}
+                style={{ background:'transparent', border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
+                ← BACK TO KITCHEN
               </button>
             </motion.div>
+          )}
 
-          /* ── AGGREGATE SUMMARY ── */
-          ) : isAggregateView ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile
-                ? 'repeat(2, 1fr)'
-                : isSmallTablet
-                ? 'repeat(3, 1fr)'
-                : isLargeTablet
-                ? 'repeat(4, 1fr)'
-                : 'repeat(auto-fill, minmax(180px, 1fr))',
-              gap: isMobile ? 10 : 14
-            }}>
-              {Object.entries(aggregatedTotals).map(([name, qty]) => (
-                <div key={name} style={rs.aggCard}>
-                  <div style={{ fontSize: isMobile ? '2.2rem' : isTablet ? '2.8rem' : '3.2rem', fontWeight: 900, color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>
-                    {qty < 10 ? `0${qty}` : qty}
-                  </div>
-                  <div style={{ fontSize: isMobile ? '0.65rem' : '0.72rem', color: '#7c8291', marginTop: 10, fontWeight: 800, textTransform: 'uppercase', lineHeight: 1.3 }}>
-                    {name}
-                  </div>
+          {/* AGGREGATE SUMMARY */}
+          {!showMetricsDashboard && isAggregateView && (
+            <div style={{ flex:1, overflowY:'auto' }} className="no-scrollbar">
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                <BarChart3 size={14} color="#8a704d" />
+                <span style={{ fontSize:'0.57rem', fontWeight:900, color:'#3a3e4a', letterSpacing:'2px', textTransform:'uppercase' }}>BATCH PREP SUMMARY</span>
+                <span style={{ marginLeft:'auto', fontSize:'0.54rem', color:'#1e2028', fontFamily:'monospace' }}>
+                  {Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets
+                </span>
+              </div>
+              {Object.keys(aggregatedTotals).length === 0 ? (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:12 }}>
+                  <ChefHat size={32} color="#1a1c23" />
+                  <p style={{ color:'#1e2028', fontWeight:900, fontSize:'0.82rem', letterSpacing:'2px', margin:0 }}>KITCHEN CLEAR</p>
                 </div>
-              ))}
+              ) : (
+                <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isMobile?'140px':'160px'}, 1fr))`, gap: isMobile ? 10 : 13 }}>
+                  {Object.entries(aggregatedTotals).map(([key, qty]) => {
+                    const [namePart, typePart] = key.split('__');
+                    const isParcel = typePart === 'P';
+                    return (
+                      <div key={key} style={{ background:'#080809', border:`1px solid ${isParcel?'rgba(211,191,162,0.14)':'rgba(211,191,162,0.07)'}`, borderTop:`2px solid ${isParcel?'rgba(211,191,162,0.45)':'rgba(211,191,162,0.15)'}`, borderRadius:13, padding: isMobile ? '16px 12px' : '20px 14px', textAlign:'center' }}>
+                        <div style={{ fontSize: isMobile ? '2.4rem' : '2.8rem', fontWeight:900, color:'#d3bfa2', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:8 }}>{qty<10?`0${qty}`:qty}</div>
+                        <div style={{ fontSize: isMobile ? '0.62rem' : '0.67rem', color:'#888', fontWeight:800, textTransform:'uppercase', lineHeight:1.4, marginBottom:7 }}>{namePart}</div>
+                        <div style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:'0.47rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background: isParcel ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.03)', color: isParcel ? '#d3bfa2' : '#3a3e4a', border:`1px solid ${isParcel?'rgba(211,191,162,0.15)':'rgba(211,191,162,0.04)'}` }}>
+                          {isParcel ? <Package size={8} /> : <UtensilsCrossed size={8} />}
+                          {isParcel ? 'PARCEL' : 'DINE-IN'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          )}
 
-          /* ── MOBILE SINGLE CARD SWIPE VIEW ── */
-          ) : useCardView ? (
+          {/* MOBILE SWIPE CARDS */}
+          {!showMetricsDashboard && !isAggregateView && useCardView && (
             filteredOrders.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#333', gap: 12 }}>
-                <ChefHat size={48} color="#232731" />
-                <p style={{ fontWeight: 800, color: '#3a3e4a', fontSize: '0.9rem', letterSpacing: 1 }}>KITCHEN CLEAR</p>
+              <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
+                <div style={{ width:64, height:64, borderRadius:18, background:'#080809', border:'1px solid rgba(211,191,162,0.06)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#1a1c23" /></div>
+                <div style={{ textAlign:'center' }}>
+                  <p style={{ fontWeight:900, color:'#1e2028', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
+                  <p style={{ fontSize:'0.6rem', color:'#111', margin:0, fontWeight:700 }}>Waiting for next order…</p>
+                </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12 }}>
-                {/* Progress dots */}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                  {filteredOrders.map((_, i) => (
-                    <div
-                      key={i}
-                      onClick={() => setMobileCardIndex(i)}
-                      style={{
-                        width: i === safeCardIndex ? 20 : 7, height: 7, borderRadius: 4,
-                        background: i === safeCardIndex ? '#d3bfa2' : '#252932',
-                        transition: 'all 0.25s', cursor: 'pointer'
-                      }} />
+              <div style={{ flex:1, display:'flex', flexDirection:'column', gap:10, overflow:'hidden' }}>
+                {/* Dot nav */}
+                <div style={{ display:'flex', justifyContent:'center', gap:5, flexShrink:0, flexWrap:'wrap', padding:'0 20px' }}>
+                  {filteredOrders.map((_,i) => (
+                    <div key={i} onClick={() => setMobileCardIndex(i)} style={{ width: i===safeCardIndex ? 20 : 6, height:6, borderRadius:3, background: i===safeCardIndex ? '#d3bfa2' : '#1f222a', transition:'all 0.25s', cursor:'pointer' }} />
                   ))}
                 </div>
-                {/* Swipeable card */}
-                <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }} {...swipeHandlers}>
+                {/* Card */}
+                <div style={{ flex:1, overflow:'hidden' }} {...swipeHandlers}>
                   <AnimatePresence mode="wait">
-                    <motion.div
-                      key={filteredOrders[safeCardIndex]?._id}
-                      initial={{ opacity: 0, x: 60 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -60 }}
-                      style={{ height: '100%' }}>
+                    <motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity:0, x:50 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-50 }} style={{ height:'100%' }}>
                       {filteredOrders[safeCardIndex] && (
-                        <KDSOrderCard
-                          order={filteredOrders[safeCardIndex]}
-                          isNewest={safeCardIndex === 0}
-                          onReady={markAsReady}
-                          dishToCategoryMap={dishToCategoryMap}
-                          dishToVegMap={dishToVegMap}
-                          selectedCategory={selectedCategory}
-                          checkedItemsGlobal={checkedItemsGlobal}
-                          setCheckedItemsGlobal={setCheckedItemsGlobal}
-                          socketInstance={socketRef.current}
-                          isNonVegMode={isNonVegMode}
-                          tenantOnlyVeg={tenantOnlyVeg}
-                          isMobile={true}
-                            itemFinalTimes={itemFinalTimes}
-  setItemFinalTimes={setItemFinalTimes}
-
-                        />
+                        <KDSOrderCard order={filteredOrders[safeCardIndex]} isNewest={safeCardIndex===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={true} isTablet={false} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} />
                       )}
                     </motion.div>
                   </AnimatePresence>
                 </div>
-                {/* Prev / Next */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                  <button
-                    onClick={() => setMobileCardIndex(i => Math.max(0, i - 1))}
-                    disabled={safeCardIndex === 0}
-                    style={{ ...rs.navBtn, opacity: safeCardIndex === 0 ? 0.3 : 1 }}>
-                    <ChevronLeft size={18} /> PREV
-                  </button>
-                  <span style={{ color: '#5c616e', fontSize: '0.75rem', fontWeight: 800 }}>
-                    {safeCardIndex + 1} / {filteredOrders.length}
-                  </span>
-                  <button
-                    onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length - 1, i + 1))}
-                    disabled={safeCardIndex === filteredOrders.length - 1}
-                    style={{ ...rs.navBtn, opacity: safeCardIndex === filteredOrders.length - 1 ? 0.3 : 1 }}>
-                    NEXT <ChevronRight size={18} />
-                  </button>
+                {/* Prev/Next */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+                  <button onClick={() => setMobileCardIndex(i => Math.max(0,i-1))} disabled={safeCardIndex===0} style={{ ...rs.navBtn, opacity: safeCardIndex===0 ? 0.25 : 1 }}><ChevronLeft size={16} /> PREV</button>
+                  <span style={{ color:'#3a3e4a', fontSize:'0.7rem', fontWeight:900, fontFamily:'monospace' }}>{safeCardIndex+1} / {filteredOrders.length}</span>
+                  <button onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length-1,i+1))} disabled={safeCardIndex===filteredOrders.length-1} style={{ ...rs.navBtn, opacity: safeCardIndex===filteredOrders.length-1 ? 0.25 : 1 }}>NEXT <ChevronRight size={16} /></button>
                 </div>
               </div>
             )
+          )}
 
-          /* ── TABLET + DESKTOP GRID ── */
-          ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isSmallTablet
-                ? 'repeat(auto-fill, minmax(260px, 1fr))'
-                : isLargeTablet
-                ? 'repeat(auto-fill, minmax(270px, 1fr))'
-                : 'repeat(auto-fill, minmax(310px, 1fr))',
-              gap: isTablet ? 14 : 18,
-              alignContent: 'flex-start'
-            }}>
+          {/* TABLET/DESKTOP GRID */}
+          {!showMetricsDashboard && !isAggregateView && !useCardView && (
+            <div style={{ flex:1, overflowY:'auto', display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isSmallTablet?'240px':'300px'},1fr))`, gap: isTablet ? 12 : 16, alignContent:'flex-start' }} className="no-scrollbar">
               <AnimatePresence mode="popLayout">
-                {filteredOrders.map((order, i) => (
-                  <KDSOrderCard
-                    key={order._id}
-                    order={order}
-                    isNewest={i === 0}
-                    onReady={markAsReady}
-                    dishToCategoryMap={dishToCategoryMap}
-                    dishToVegMap={dishToVegMap}
-                    selectedCategory={selectedCategory}
-                    checkedItemsGlobal={checkedItemsGlobal}
-                    setCheckedItemsGlobal={setCheckedItemsGlobal}
-                    socketInstance={socketRef.current}
-                    isNonVegMode={isNonVegMode}
-                    tenantOnlyVeg={tenantOnlyVeg}
-                    isMobile={false}
-                    isTablet={isTablet}
-                  />
+                {filteredOrders.map((order,i) => (
+                  <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} />
                 ))}
               </AnimatePresence>
+              {filteredOrders.length === 0 && (
+                <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
+                  <div style={{ width:64, height:64, borderRadius:18, background:'#080809', border:'1px solid rgba(211,191,162,0.06)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#1a1c23" /></div>
+                  <div style={{ textAlign:'center' }}>
+                    <p style={{ fontWeight:900, color:'#1e2028', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
+                    <p style={{ fontSize:'0.6rem', color:'#111', margin:0, fontWeight:700 }}>All tickets dispatched</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
       </div>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
-      {showBottomNav && (
-        <nav style={rs.mobileBottomBar}>
-          {['ALL', 'DINEIN', 'PARCEL'].map(s => (
-            <button key={s} onClick={() => setStationFilter(s)}
-              style={{
-                ...rs.bottomBarBtn,
-                color: stationFilter === s ? '#d3bfa2' : '#4a4f5c',
-                borderTop: stationFilter === s ? '2px solid #d3bfa2' : '2px solid transparent'
-              }}>
-              {s === 'ALL' ? <Monitor size={18} /> : s === 'DINEIN' ? <UtensilsCrossed size={18} /> : <Package size={18} />}
-              <span style={{ fontSize: '0.55rem', fontWeight: 800, marginTop: 2 }}>
-                {s === 'ALL' ? 'ALL' : s === 'DINEIN' ? 'DINE-IN' : 'PARCEL'}
-              </span>
+      {/* MOBILE BOTTOM NAV */}
+      {isMobile && (
+        <nav style={{ display:'flex', background:'#080809', border:'1px solid rgba(211,191,162,0.07)', borderRadius:14, padding:'3px', flexShrink:0, gap:2 }}>
+          {[
+            { val:'ALL',    lbl:'ALL',     icon:<Monitor size={16} /> },
+            { val:'DINEIN', lbl:'DINE-IN', icon:<UtensilsCrossed size={16} /> },
+            { val:'PARCEL', lbl:'PARCEL',  icon:<Package size={16} /> },
+          ].map(s => (
+            <button key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(211,191,162,0.08)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#d3bfa2' : '#333', transition:'all 0.15s' }}>
+              {s.icon}
+              <span style={{ fontSize:'0.48rem', fontWeight:900, letterSpacing:'0.3px' }}>{s.lbl}</span>
+              {s.val !== 'ALL' && (() => {
+                const c = filteredOrders.filter(o => {
+                  const t = getOrderType(o);
+                  return s.val==='DINEIN' ? t==='dine-in' : t==='parcel';
+                }).length;
+                return c > 0 ? <span style={{ fontSize:'0.44rem', fontFamily:'monospace', fontWeight:900, color:'#8a704d' }}>{c}</span> : null;
+              })()}
             </button>
           ))}
-          <button
-            onClick={() => setIsAggregateView(v => !v)}
-            style={{
-              ...rs.bottomBarBtn,
-              color: isAggregateView ? '#d3bfa2' : '#4a4f5c',
-              borderTop: isAggregateView ? '2px solid #d3bfa2' : '2px solid transparent'
-            }}>
-            <BarChart3 size={18} />
-            <span style={{ fontSize: '0.55rem', fontWeight: 800, marginTop: 2 }}>SUMMARY</span>
+          <button onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(211,191,162,0.08)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#d3bfa2' : '#333', transition:'all 0.15s' }}>
+            <BarChart3 size={16} />
+            <span style={{ fontSize:'0.48rem', fontWeight:900 }}>SUMMARY</span>
           </button>
-          <button
-            onClick={() => setShowMetricsDashboard(v => !v)}
-            style={{
-              ...rs.bottomBarBtn,
-              color: showMetricsDashboard ? '#d3bfa2' : '#4a4f5c',
-              borderTop: showMetricsDashboard ? '2px solid #d3bfa2' : '2px solid transparent'
-            }}>
-            <TrendingUp size={18} />
-            <span style={{ fontSize: '0.55rem', fontWeight: 800, marginTop: 2 }}>METRICS</span>
+          <button onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(211,191,162,0.08)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#d3bfa2' : '#333', transition:'all 0.15s' }}>
+            <TrendingUp size={16} />
+            <span style={{ fontSize:'0.48rem', fontWeight:900 }}>METRICS</span>
           </button>
         </nav>
       )}
-{/* ── WASTAGE & SPOILAGE PANEL ── */}
-<AnimatePresence>
-  {showWastagePanel && (
-    <>
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 0.75 }} exit={{ opacity: 0 }}
-        onClick={() => setShowWastagePanel(false)}
-        style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000 }}
-      />
- 
-      {/* Drawer */}
-      <motion.div
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-        style={{
-          position: 'fixed', right: 0, top: 0, bottom: 0,
-          width: isMobile ? '100vw' : isTablet ? 420 : 500,
-          background: '#0d0e11',
-          borderLeft: '1px solid #1f222a',
-          borderRadius: isMobile ? 0 : '20px 0 0 20px',
-          zIndex: 3001, display: 'flex', flexDirection: 'column', overflow: 'hidden'
-        }}
-      >
-        {/* ── PANEL HEADER ── */}
-        <div style={{
-          padding: '18px 20px', borderBottom: '1px solid #1a1c23',
-          background: '#0a0b0e', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(239,68,68,0.08)',
-              border: '1px solid rgba(239,68,68,0.18)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-            }}>
-              <Trash2 size={17} color="#f87171" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: 0.3 }}>
-                WASTAGE LOG
-              </div>
-              <div style={{ fontSize: '0.56rem', color: '#3a3e4a', fontWeight: 800, letterSpacing: 1.5, marginTop: 1 }}>
-                SPOILAGE · OVERCOOKED · DROPPED · EXCESS PREP
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowWastagePanel(false)}
-            style={{
-              background: '#13151a', border: '1px solid #252932',
-              color: '#5c616e', padding: 8, borderRadius: 9,
-              cursor: 'pointer', display: 'flex', alignItems: 'center'
-            }}>
-            <X size={17} />
-          </button>
-        </div>
- 
-        {/* ── TAB SWITCHER ── */}
-        <div style={{
-          display: 'flex', background: '#0a0b0e',
-          borderBottom: '1px solid #1a1c23', flexShrink: 0
-        }}>
-          {[
-            { id: 'log',    label: 'LOG ENTRY',      icon: <FileText size={13} /> },
-            { id: 'report', label: 'MONTHLY REPORT', icon: <TrendingDown size={13} /> },
-          ].map(tab => (
-            <button key={tab.id}
-              onClick={() => setWastageTab(tab.id)}
-              style={{
-                flex: 1, padding: '11px 8px', border: 'none', cursor: 'pointer',
-                background: 'transparent',
-                borderBottom: wastageTab === tab.id ? '2px solid #d3bfa2' : '2px solid transparent',
-                color: wastageTab === tab.id ? '#d3bfa2' : '#3a3e4a',
-                fontSize: '0.6rem', fontWeight: 900, letterSpacing: 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                transition: 'all 0.15s'
-              }}>
-              {tab.icon} {tab.label}
-            </button>
-          ))}
-        </div>
- 
-        {/* ── SCROLLABLE BODY ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 24px' }} className="custom-scroll">
- 
-          {/* ══════════════ LOG ENTRY TAB ══════════════ */}
-          {wastageTab === 'log' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
- 
-              {/* ENTRY FORM */}
-              <div style={{
-                background: '#0a0b0e', border: '1px solid #1f222a',
-                borderRadius: 14, padding: '16px 16px 18px'
-              }}>
-                <div style={{
-                  fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 900,
-                  letterSpacing: 1.5, marginBottom: 14,
-                  display: 'flex', alignItems: 'center', gap: 6
-                }}>
-                  <BadgeAlert size={12} color="#d3bfa2" />
-                  NEW ENTRY
+
+      {/* WASTAGE PANEL */}
+      <AnimatePresence>
+        {showWastagePanel && (
+          <>
+            <motion.div initial={{ opacity:0 }} animate={{ opacity:0.7 }} exit={{ opacity:0 }}
+              onClick={() => setShowWastagePanel(false)}
+              style={{ position:'fixed', inset:0, background:'#000', zIndex:3000, backdropFilter:'blur(4px)' }} />
+            <motion.div initial={{ x:'100%' }} animate={{ x:0 }} exit={{ x:'100%' }}
+              transition={{ type:'spring', stiffness:300, damping:32 }}
+              style={{ position:'fixed', right:0, top:0, bottom:0, width: isMobile ? '100vw' : isTablet ? 420 : 500, background:'#0a0b0e', borderLeft:'1px solid rgba(211,191,162,0.08)', borderRadius: isMobile ? 0 : '16px 0 0 16px', zIndex:3001, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+              {/* Panel header */}
+              <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(211,191,162,0.06)', background:'#080809', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:11 }}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(211,191,162,0.05)', border:'1px solid rgba(211,191,162,0.12)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <Trash2 size={16} color="#d3bfa2" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:900, fontSize:'0.88rem', color:'#fff', letterSpacing:0.3 }}>WASTAGE LOG</div>
+                    <div style={{ fontSize:'0.5rem', color:'#2a2e38', fontWeight:900, letterSpacing:'1.5px', marginTop:2, textTransform:'uppercase' }}>Spoilage · Overcooked · Dropped · Excess</div>
+                  </div>
                 </div>
- 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
- 
-                  {/* ── ITEM NAME with inventory autocomplete ── */}
-                  <div style={{ position: 'relative' }}>
-                    <label style={wFormLabel}>
-                      <Package size={11} style={{ display: 'inline', marginRight: 4 }} />
-                      INGREDIENT NAME
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={13} color="#3a3e4a" style={{
-                        position: 'absolute', left: 10, top: '50%',
-                        transform: 'translateY(-50%)', pointerEvents: 'none'
-                      }} />
-                      <input
-                        type="text"
-                        placeholder="e.g. Paneer, Tomato, Dal..."
-                        value={wastageForm.itemName}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setWastageForm(p => ({ ...p, itemName: val, inventoryId: null }));
-                          if (val.trim().length >= 1) {
-                            const matches = wastageInventory.filter(i =>
-                              i.itemName.toLowerCase().includes(val.toLowerCase())
-                            );
-                            setWastageSuggestions(matches.slice(0, 6));
-                            setShowWastageSuggest(matches.length > 0);
-                          } else {
-                            setShowWastageSuggest(false);
-                            setWastageSuggestions([]);
-                          }
-                        }}
-                        onBlur={() => setTimeout(() => setShowWastageSuggest(false), 200)}
-                        onFocus={() => {
-                          if (wastageForm.itemName.trim().length >= 1 && wastageSuggestions.length > 0)
-                            setShowWastageSuggest(true);
-                        }}
-                        style={{ ...wInput, paddingLeft: 32 }}
-                      />
-                    </div>
- 
-                    {/* Inventory suggestions dropdown */}
-                    {showWastageSuggest && wastageSuggestions.length > 0 && (
-                      <div style={{
-                        position: 'absolute', top: '100%', left: 0, right: 0,
-                        zIndex: 999, background: '#13151a',
-                        border: '1px solid rgba(211,191,162,0.2)',
-                        borderRadius: 10, marginTop: 4,
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.6)', overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          padding: '6px 10px', fontSize: '0.52rem',
-                          color: '#3a3e4a', fontWeight: 900, letterSpacing: 1,
-                          borderBottom: '1px solid #1f222a'
-                        }}>
-                          FROM INVENTORY — CLICK TO LINK
+                <button onClick={() => setShowWastagePanel(false)} style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.1)', color:'#444', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display:'flex', background:'#080809', borderBottom:'1px solid rgba(211,191,162,0.06)', flexShrink:0 }}>
+                {[['log','LOG ENTRY'],['report','MONTHLY REPORT']].map(([t,lbl]) => (
+                  <button key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#d3bfa2' : '#2a2e38', borderBottom:`2px solid ${wastageTab===t ? 'rgba(211,191,162,0.5)' : 'transparent'}`, transition:'all 0.15s' }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+
+              {/* Panel body */}
+              <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }} className="custom-scroll">
+                {wastageTab === 'log' ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                    {/* NEW ENTRY FORM */}
+                    <div style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.08)', borderRadius:14, padding:'16px', display:'flex', flexDirection:'column', gap:12 }}>
+                      <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#3a3e4a', letterSpacing:'2px', textTransform:'uppercase', paddingBottom:10, borderBottom:'1px solid rgba(211,191,162,0.05)' }}>NEW ENTRY</div>
+
+                      {/* item name */}
+                      <div style={{ position:'relative' }}>
+                        <label style={wFormLabel}>INGREDIENT *</label>
+                        <input value={wastageForm.itemName}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setWastageForm(p => ({ ...p, itemName:v, inventoryId:null }));
+                            if (v.length >= 2) { const m = wastageInventory.filter(i => i.itemName.toLowerCase().includes(v.toLowerCase())).slice(0,5); setWastageSuggestions(m); setShowWastageSuggest(true); }
+                            else setShowWastageSuggest(false);
+                          }}
+                          onBlur={() => setTimeout(() => setShowWastageSuggest(false), 150)}
+                          placeholder="Type ingredient name…" style={wInput} />
+                        {showWastageSuggest && wastageSuggestions.length > 0 && (
+                          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#13151a', border:'1px solid rgba(211,191,162,0.12)', borderRadius:9, zIndex:10, overflow:'hidden', marginTop:2, boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+                            {wastageSuggestions.map(s => (
+                              <button key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName:s.itemName, inventoryId:s._id, unit:s.unit||'kg' })); setShowWastageSuggest(false); }}
+                                style={{ width:'100%', padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#c8c0b0', fontSize:'0.75rem', fontWeight:700, textAlign:'left', transition:'background 0.1s' }}
+                                onMouseEnter={e => e.currentTarget.style.background='rgba(211,191,162,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <span>{s.itemName}</span>
+                                <span style={{ fontSize:'0.58rem', color:'#3a3e4a', fontFamily:'monospace' }}>{s.currentStock}{s.unit}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* qty + unit */}
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                        <div>
+                          <label style={wFormLabel}>QUANTITY *</label>
+                          <input type="number" min="0.01" step="0.01" placeholder="0.00" value={wastageForm.quantity} onChange={e => setWastageForm(p => ({ ...p, quantity:e.target.value }))} style={wInput} />
                         </div>
-                        {wastageSuggestions.map(item => {
-                          const wac = item.weightedAvgCost || item.costPrice || 0;
-                          const isLow = item.currentStock <= item.minThreshold;
-                          return (
-                            <div key={item._id}
-                              onMouseDown={() => {
-                                setWastageForm(p => ({
-                                  ...p,
-                                  itemName: item.itemName,
-                                  inventoryId: item._id,
-                                  unit: item.unit
-                                }));
-                                setShowWastageSuggest(false);
-                                setWastageSuggestions([]);
-                              }}
-                              style={{
-                                padding: '10px 12px', cursor: 'pointer',
-                                borderBottom: '1px solid #111',
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                transition: 'background 0.1s'
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.05)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                            >
-                              <div>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fff' }}>
-                                  {item.itemName}
+                        <div>
+                          <label style={wFormLabel}>UNIT</label>
+                          <select value={wastageForm.unit} onChange={e => setWastageForm(p => ({ ...p, unit:e.target.value }))} style={wInput}>
+                            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* reason chips */}
+                      <div>
+                        <label style={wFormLabel}>REASON *</label>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                          {REASON_OPTIONS.map(r => (
+                            <button key={r} onClick={() => setWastageForm(p => ({ ...p, reason:r }))}
+                              style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${wastageForm.reason===r?'rgba(211,191,162,0.35)':'rgba(211,191,162,0.08)'}`, background: wastageForm.reason===r ? 'rgba(211,191,162,0.1)' : 'transparent', color: wastageForm.reason===r ? '#d3bfa2' : '#3a3e4a', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', transition:'all 0.15s' }}>
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* logged by */}
+                      <div>
+                        <label style={wFormLabel}>LOGGED BY *</label>
+                        <input value={wastageForm.loggedBy} onChange={e => setWastageForm(p => ({ ...p, loggedBy:e.target.value }))} placeholder="Chef / Staff name" style={wInput} />
+                      </div>
+
+                      {/* notes */}
+                      <div>
+                        <label style={wFormLabel}>NOTES (optional)</label>
+                        <input value={wastageForm.notes} onChange={e => setWastageForm(p => ({ ...p, notes:e.target.value }))} placeholder="Any context…" style={wInput} />
+                      </div>
+
+                      {/* save button */}
+                      <button onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
+                        style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#0d0e11' : 'linear-gradient(135deg,#bda88a,#d3bfa2)', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#2a2e38' : '#0f1013', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
+                        {wastageSaving ? <><RotateCcw size={13} style={{ animation:'spin 1s linear infinite' }} /> SAVING…</> : <><Trash2 size={13} /> LOG WASTAGE</>}
+                      </button>
+                    </div>
+
+                    {/* LOG LIST */}
+                    {wastageLoading ? (
+                      <div style={{ textAlign:'center', padding:'24px', color:'#2a2e38', fontSize:'0.7rem' }}>Loading log…</div>
+                    ) : wastageLog.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#2a2e38', letterSpacing:'2px', textTransform:'uppercase', marginBottom:10 }}>TODAY'S ENTRIES — {wastageLog.length}</div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                          {[...wastageLog].reverse().map(e => (
+                            <div key={e._id} style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.06)', borderLeft:'3px solid rgba(211,191,162,0.15)', borderRadius:10, padding:'11px 14px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
+                                  <span style={{ fontWeight:800, fontSize:'0.76rem', color:'#c8c0b0' }}>{e.itemName}</span>
+                                  <span style={{ fontSize:'0.52rem', fontFamily:'monospace', color:'#8a704d', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'rgba(138,112,77,0.08)', border:'1px solid rgba(138,112,77,0.2)' }}>{e.quantity}{e.unit}</span>
+                                  {e.costLoss > 0 && <span style={{ fontSize:'0.54rem', color:'#d3bfa2', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{e.costLoss.toFixed(0)}</span>}
                                 </div>
-                                <div style={{ fontSize: '0.6rem', color: '#3a3e4a', marginTop: 2 }}>
-                                  {item.currentStock} {item.unit} in stock
-                                  {wac > 0 && (
-                                    <span style={{ color: '#5c616e', marginLeft: 6 }}>
-                                      · WAC ₹{wac.toFixed(2)}/{item.unit}
-                                    </span>
-                                  )}
+                                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                  <span style={{ fontSize:'0.5rem', padding:'1px 6px', borderRadius:4, background:'rgba(211,191,162,0.04)', color:'#555', border:'1px solid rgba(211,191,162,0.07)', fontWeight:700 }}>{e.reason}</span>
+                                  <span style={{ fontSize:'0.5rem', color:'#2a2e38', fontWeight:700 }}>{e.loggedBy}</span>
+                                  {e.notes && <span style={{ fontSize:'0.5rem', color:'#1e2028', fontStyle:'italic' }}>{e.notes}</span>}
                                 </div>
                               </div>
-                              <span style={{
-                                fontSize: '0.52rem', fontWeight: 900, padding: '2px 7px',
-                                borderRadius: 5,
-                                background: isLow ? 'rgba(239,68,68,0.1)' : 'rgba(211,191,162,0.06)',
-                                border: `1px solid ${isLow ? 'rgba(239,68,68,0.25)' : '#1f222a'}`,
-                                color: isLow ? '#f87171' : '#3a3e4a'
-                              }}>
-                                {isLow ? 'LOW' : 'OK'}
-                              </span>
+                              <button onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(211,191,162,0.06)', color:'#2a2e38', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
+                                onMouseEnter={ev => { ev.currentTarget.style.borderColor='rgba(211,191,162,0.2)'; ev.currentTarget.style.color='#d3bfa2'; }}
+                                onMouseLeave={ev => { ev.currentTarget.style.borderColor='rgba(211,191,162,0.06)'; ev.currentTarget.style.color='#2a2e38'; }}>
+                                <X size={12} />
+                              </button>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign:'center', padding:'30px 20px', background:'#0d0e11', borderRadius:12, border:'1px dashed rgba(211,191,162,0.06)' }}>
+                        <div style={{ fontSize:'0.64rem', color:'#1e2028', fontWeight:700 }}>No wastage entries today</div>
                       </div>
                     )}
                   </div>
- 
-                  {/* ── QUANTITY + UNIT ── */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={wFormLabel}>
-                        <Scale size={11} style={{ display: 'inline', marginRight: 4 }} />
-                        QUANTITY
-                      </label>
-                      <input
-                        type="number" min="0" step="0.1"
-                        placeholder="e.g. 2.5"
-                        value={wastageForm.quantity}
-                        onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))}
-                        style={wInput}
-                      />
-                    </div>
-                    <div>
-                      <label style={wFormLabel}>UNIT</label>
-                      <select
-                        value={wastageForm.unit}
-                        onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}
-                        style={{ ...wInput, appearance: 'none', cursor: 'pointer' }}>
-                        {['kg','gm','litre','ml','pieces','portions','dozen'].map(u => (
-                          <option key={u} value={u}>{u}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
- 
-                  {/* ── REASON PILLS ── */}
-                  <div>
-                    <label style={wFormLabel}>
-                      <AlertTriangle size={11} style={{ display: 'inline', marginRight: 4 }} />
-                      REASON
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-                      {[
-                        { val: 'Spoiled / Expired',  icon: <Droplets size={13} />,      color: '#f87171' },
-                        { val: 'Overcooked',          icon: <FlameKindling size={13} />, color: '#fb923c' },
-                        { val: 'Dropped / Spilled',   icon: <AlertTriangle size={13} />, color: '#fbbf24' },
-                        { val: 'Excess Prep',         icon: <Scale size={13} />,         color: '#a78bfa' },
-                        { val: 'Customer Return',     icon: <RotateCcw size={13} />,     color: '#60a5fa' },
-                        { val: 'Other',               icon: <FileText size={13} />,      color: '#9ca3af' },
-                      ].map(r => {
-                        const sel = wastageForm.reason === r.val;
-                        return (
-                          <button key={r.val} type="button"
-                            onClick={() => setWastageForm(p => ({ ...p, reason: r.val }))}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 7,
-                              padding: '9px 10px', borderRadius: 9, cursor: 'pointer',
-                              border: `1px solid ${sel ? r.color + '55' : '#1f222a'}`,
-                              background: sel ? r.color + '14' : '#13151a',
-                              color: sel ? r.color : '#3a3e4a',
-                              fontSize: '0.62rem', fontWeight: sel ? 900 : 700,
-                              transition: 'all 0.12s', textAlign: 'left'
-                            }}>
-                            <span style={{ color: sel ? r.color : '#2a2e38', flexShrink: 0 }}>{r.icon}</span>
-                            <span style={{ lineHeight: 1.3 }}>{r.val}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
- 
-                  {/* ── LOGGED BY ── */}
-                  <div>
-                    <label style={wFormLabel}>LOGGED BY</label>
-                    <input
-                      type="text"
-                      placeholder="Chef name"
-                      value={wastageForm.loggedBy}
-                      onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))}
-                      style={wInput}
-                    />
-                  </div>
- 
-                  {/* ── NOTES ── */}
-                  <div>
-                    <label style={wFormLabel}>
-                      NOTES <span style={{ color: '#2a2e38', fontWeight: 600 }}>(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Found mold on delivery batch"
-                      value={wastageForm.notes}
-                      onChange={e => setWastageForm(p => ({ ...p, notes: e.target.value }))}
-                      style={wInput}
-                    />
-                  </div>
- 
-                  {/* WAC COST PREVIEW — only when linked to inventory */}
-                  {wastageForm.inventoryId && wastageForm.quantity && (() => {
-                    const inv = wastageInventory.find(i => i._id === wastageForm.inventoryId);
-                    if (!inv) return null;
-                    const wac  = inv.weightedAvgCost || inv.costPrice || 0;
-                    const cost = Math.round(Number(wastageForm.quantity) * wac * 100) / 100;
-                    if (cost <= 0) return null;
-                    return (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: 'rgba(239,68,68,0.05)',
-                        border: '1px solid rgba(239,68,68,0.15)',
-                        borderRadius: 8, padding: '8px 12px'
-                      }}>
-                        <IndianRupee size={13} color="#f87171" />
-                        <div>
-                          <span style={{ fontSize: '0.6rem', color: '#3a3e4a', fontWeight: 800 }}>
-                            ESTIMATED COST LOSS:&nbsp;
-                          </span>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#f87171' }}>
-                            ₹{cost.toFixed(2)}
-                          </span>
-                          <span style={{ fontSize: '0.58rem', color: '#2a2e38', marginLeft: 6 }}>
-                            ({wastageForm.quantity} {wastageForm.unit} × ₹{wac.toFixed(2)} WAC)
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
- 
-                  {/* ── SUBMIT ── */}
-                  <button
-                    onClick={saveWastageEntry}
-                    disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
-                    style={{
-                      width: '100%', padding: '13px',
-                      borderRadius: 10, border: 'none', cursor: 'pointer',
-                      fontWeight: 900, fontSize: '0.78rem', letterSpacing: 0.5,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                      transition: 'all 0.15s',
-                      background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim())
-                        ? '#13151a'
-                        : 'linear-gradient(135deg,#c94f4f,#e05e5e)',
-                      color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim())
-                        ? '#2a2e38'
-                        : '#fff',
-                    }}>
-                    {wastageSaving
-                      ? <><RefreshCw size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> SAVING...</>
-                      : <><Trash2 size={14} /> LOG WASTAGE ENTRY</>
-                    }
-                  </button>
-                </div>
-              </div>
- 
-              {/* ── TODAY'S ENTRIES (from DB) ── */}
-              <div>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  marginBottom: 10
-                }}>
-                  <div style={{
-                    fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 900,
-                    letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 6
-                  }}>
-                    <FileText size={12} color="#d3bfa2" />
-                    TODAY'S ENTRIES ({wastageLog.length})
-                  </div>
-                  <button onClick={fetchWastageLog} style={{
-                    background: 'transparent', border: '1px solid #1f222a',
-                    color: '#3a3e4a', padding: '4px 8px', borderRadius: 7,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                    fontSize: '0.58rem', fontWeight: 800
-                  }}>
-                    <RefreshCw size={11} /> REFRESH
-                  </button>
-                </div>
- 
-                {wastageLoading ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#2a2e38', fontSize: '0.75rem' }}>
-                    Loading...
-                  </div>
-                ) : wastageLog.length === 0 ? (
-                  <div style={{
-                    textAlign: 'center', padding: '36px 0',
-                    color: '#2a2e38', fontSize: '0.75rem', fontWeight: 700,
-                    background: '#0a0b0e', borderRadius: 12, border: '1px dashed #1a1c23'
-                  }}>
-                    <Trash2 size={22} color="#1a1c23" style={{ display: 'block', margin: '0 auto 10px' }} />
-                    No wastage logged today
-                  </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {wastageLog.map(entry => {
-                      const reasonColors = {
-                        'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
-                        'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
-                        'Customer Return': '#60a5fa',   'Other': '#9ca3af',
-                      };
-                      const rc = reasonColors[entry.reason] || '#9ca3af';
-                      return (
-                        <motion.div key={entry._id}
-                          initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                          style={{
-                            background: '#0a0b0e', border: '1px solid #1a1c23',
-                            borderLeft: `3px solid ${rc}66`,
-                            borderRadius: 11, padding: '12px 13px',
-                            display: 'flex', alignItems: 'flex-start',
-                            justifyContent: 'space-between', gap: 10
-                          }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#fff' }}>
-                                {entry.itemName}
-                              </span>
-                              <span style={{
-                                background: '#13151a', border: '1px solid #252932',
-                                padding: '2px 8px', borderRadius: 5,
-                                fontSize: '0.6rem', fontWeight: 900, color: '#d3bfa2', fontFamily: 'monospace'
-                              }}>
-                                {entry.quantity} {entry.unit}
-                              </span>
-                              <span style={{
-                                background: rc + '14', border: `1px solid ${rc}33`,
-                                padding: '2px 8px', borderRadius: 5,
-                                fontSize: '0.58rem', fontWeight: 900,
-                                color: rc, textTransform: 'uppercase', letterSpacing: 0.5
-                              }}>
-                                {entry.reason}
-                              </span>
+                  /* REPORT TAB */
+                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                    {wastageAnalytics ? (
+                      <>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                          {[
+                            { l:'TOTAL COST', v:`₹${Math.round(wastageAnalytics.totalCost||0).toLocaleString()}` },
+                            { l:'ENTRIES',   v:wastageAnalytics.totalEntries||0 },
+                            { l:'TOP ITEM',  v:wastageAnalytics.topWasted?.[0]?.name||'—' },
+                          ].map(s => (
+                            <div key={s.l} style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.07)', borderRadius:11, padding:'12px 10px', textAlign:'center' }}>
+                              <div style={{ fontSize:'0.48rem', color:'#2a2e38', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:6 }}>{s.l}</div>
+                              <div style={{ fontSize:'1.05rem', fontWeight:900, color:'#d3bfa2', fontFamily:'monospace' }}>{s.v}</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                              {entry.totalCost > 0 && (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', color: '#f87171', fontWeight: 800 }}>
-                                  <IndianRupee size={10} /> {entry.totalCost.toFixed(2)} lost
-                                </span>
-                              )}
-                              <span style={{ fontSize: '0.58rem', color: '#3a3e4a', fontWeight: 700 }}>
-                                by {entry.loggedBy}
-                              </span>
-                              <span style={{ fontSize: '0.56rem', color: '#2a2e38' }}>
-                                {new Date(entry.loggedAt || entry.createdAt).toLocaleTimeString('en-IN', {
-                                  hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
-                                })}
-                              </span>
+                          ))}
+                        </div>
+
+                        {wastageAnalytics.byReason && Object.keys(wastageAnalytics.byReason).length > 0 && (
+                          <div style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.07)', borderRadius:12, padding:'14px 16px' }}>
+                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#2a2e38', letterSpacing:'1.8px', textTransform:'uppercase', marginBottom:14, paddingBottom:10, borderBottom:'1px solid rgba(211,191,162,0.05)', display:'flex', alignItems:'center', gap:6 }}>
+                              <Scale size={11} color="#3a3e4a" /> BY REASON
                             </div>
-                            {entry.notes && (
-                              <div style={{ fontSize: '0.6rem', color: '#2a2e38', marginTop: 5, fontStyle: 'italic' }}>
-                                "{entry.notes}"
-                              </div>
-                            )}
+                            {Object.entries(wastageAnalytics.byReason).sort((a,b) => b[1].cost - a[1].cost).map(([reason, data]) => {
+                              const pct = wastageAnalytics.totalEntries > 0 ? Math.round((data.count/wastageAnalytics.totalEntries)*100) : 0;
+                              return (
+                                <div key={reason} style={{ marginBottom:10 }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                                    <span style={{ fontSize:'0.64rem', fontWeight:800, color:'#888' }}>{reason}</span>
+                                    <span style={{ fontSize:'0.62rem', fontWeight:900, color:'#d3bfa2', fontFamily:'monospace' }}>
+                                      {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
+                                      <span style={{ color:'#2a2e38', fontWeight:600, marginLeft:6 }}>{pct}%</span>
+                                    </span>
+                                  </div>
+                                  <div style={{ height:4, background:'rgba(211,191,162,0.05)', borderRadius:2, overflow:'hidden' }}>
+                                    <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.3)', borderRadius:2, transition:'width 0.6s ease' }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <button onClick={() => deleteWastageEntry(entry._id)}
-                            style={{ background: 'none', border: 'none', color: '#252932', cursor: 'pointer', padding: 4, borderRadius: 6, transition: 'color 0.15s' }}
-                            onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
-                            onMouseLeave={e => e.currentTarget.style.color = '#252932'}
-                            title="Delete & restore stock">
-                            <X size={14} />
-                          </button>
-                        </motion.div>
-                      );
-                    })}
+                        )}
+
+                        {(wastageAnalytics.dailyTrend||[]).length > 0 && (
+                          <div style={{ background:'#0d0e11', border:'1px solid rgba(211,191,162,0.07)', borderRadius:12, padding:'14px 16px' }}>
+                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#2a2e38', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                              <TrendingDown size={11} color="#8a704d" /> DAILY COST TREND (30 days)
+                            </div>
+                            <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:52 }}>
+                              {(() => {
+                                const maxC = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
+                                return wastageAnalytics.dailyTrend.map(d => (
+                                  <div key={d.date} title={`${d.date}: ₹${d.cost.toFixed(0)}`}
+                                    style={{ flex:1, minWidth:0, height:`${Math.max(8, Math.round((d.cost/maxC)*100))}%`, background: d.cost>0 ? `rgba(211,191,162,${0.12+(d.cost/maxC)*0.6})` : '#0d0e11', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }} />
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        <button onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(211,191,162,0.12)', color:'#8a704d', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                          <RefreshCw size={12} /> REFRESH REPORT
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ textAlign:'center', padding:'40px 20px' }}>
+                        <button onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(211,191,162,0.05)', border:'1px solid rgba(211,191,162,0.12)', color:'#8a704d', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
-          )}
- 
-          {/* ══════════════ MONTHLY REPORT TAB ══════════════ */}
-          {wastageTab === 'report' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {!wastageAnalytics ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#2a2e38', fontSize: '0.75rem' }}>
-                  <RefreshCw size={20} color="#1a1c23" style={{ display: 'block', margin: '0 auto 10px' }} />
-                  Loading report...
-                </div>
-              ) : (
-                <>
-                  {/* KPI STRIP */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {[
-                      { label: 'TOTAL COST LOST', value: `₹${(wastageAnalytics.totalCost || 0).toLocaleString()}`, color: '#f87171', icon: <IndianRupee size={16} /> },
-                      { label: 'ENTRIES THIS MONTH', value: wastageAnalytics.totalEntries || 0, color: '#d3bfa2', icon: <FileText size={16} /> },
-                    ].map(s => (
-                      <div key={s.label} style={{
-                        background: '#0a0b0e', border: '1px solid #1f222a',
-                        borderTop: `2px solid ${s.color}44`, borderRadius: 12, padding: '14px 13px'
-                      }}>
-                        <div style={{ color: s.color, opacity: 0.5, marginBottom: 8 }}>{s.icon}</div>
-                        <div style={{ fontSize: '1.3rem', fontWeight: 900, color: s.color, fontFamily: 'monospace', lineHeight: 1, marginBottom: 4 }}>
-                          {s.value}
-                        </div>
-                        <div style={{ fontSize: '0.5rem', color: '#2a2e38', fontWeight: 900, letterSpacing: 1 }}>
-                          {s.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
- 
-                  {/* TOP WASTED ITEMS */}
-                  {(wastageAnalytics.topWasted || []).length > 0 && (
-                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
-                        <TrendingDown size={13} color="#f87171" /> TOP WASTED INGREDIENTS
-                      </div>
-                      {wastageAnalytics.topWasted.map((item, i) => (
-                        <div key={item.name} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '9px 0',
-                          borderBottom: i < wastageAnalytics.topWasted.length - 1 ? '1px solid #13151a' : 'none'
-                        }}>
-                          <div style={{
-                            width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                            background: i === 0 ? 'rgba(248,113,113,0.12)' : '#13151a',
-                            border: `1px solid ${i === 0 ? 'rgba(248,113,113,0.25)' : '#1f222a'}`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '0.65rem', fontWeight: 900,
-                            color: i === 0 ? '#f87171' : '#3a3e4a', fontFamily: 'monospace'
-                          }}>
-                            {i + 1}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#c8ccd6' }}>{item.name}</div>
-                            <div style={{ fontSize: '0.58rem', color: '#2a2e38', marginTop: 1 }}>
-                              {item.count} {item.count === 1 ? 'entry' : 'entries'}
-                              {item.qty > 0 && ` · ${item.qty} units`}
-                            </div>
-                          </div>
-                          <div style={{
-                            background: i === 0 ? 'rgba(248,113,113,0.1)' : '#13151a',
-                            border: `1px solid ${i === 0 ? 'rgba(248,113,113,0.2)' : '#1f222a'}`,
-                            padding: '3px 9px', borderRadius: 6,
-                            fontSize: '0.65rem', fontWeight: 900,
-                            color: i === 0 ? '#f87171' : '#3a3e4a', fontFamily: 'monospace'
-                          }}>
-                            {item.cost > 0 ? `₹${item.cost.toFixed(0)}` : `×${item.count}`}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
- 
-                  {/* BY REASON */}
-                  {Object.keys(wastageAnalytics.byReason || {}).length > 0 && (
-                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
-                        <AlertTriangle size={13} color="#fbbf24" /> BY REASON
-                      </div>
-                      {Object.entries(wastageAnalytics.byReason)
-                        .sort((a, b) => b[1].cost - a[1].cost)
-                        .map(([reason, data]) => {
-                          const total = wastageAnalytics.totalEntries || 1;
-                          const pct   = Math.round((data.count / total) * 100);
-                          const reasonColors = {
-                            'Spoiled / Expired': '#f87171', 'Overcooked': '#fb923c',
-                            'Dropped / Spilled': '#fbbf24', 'Excess Prep': '#a78bfa',
-                            'Customer Return': '#60a5fa', 'Other': '#9ca3af',
-                          };
-                          const rc = reasonColors[reason] || '#9ca3af';
-                          return (
-                            <div key={reason} style={{ marginBottom: 11 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8a8f9f', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: rc, flexShrink: 0, display: 'inline-block' }} />
-                                  {reason}
-                                </span>
-                                <span style={{ fontSize: '0.65rem', fontWeight: 900, color: rc, fontFamily: 'monospace' }}>
-                                  {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
-                                  <span style={{ color: '#2a2e38', fontWeight: 600, marginLeft: 5 }}>{pct}%</span>
-                                </span>
-                              </div>
-                              <div style={{ height: 4, background: '#13151a', borderRadius: 2, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${pct}%`, background: rc + '80', borderRadius: 2, transition: 'width 0.6s ease' }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
- 
-                  {/* DAILY SPARKLINE */}
-                  {(wastageAnalytics.dailyTrend || []).length > 0 && (
-                    <div style={{ background: '#0a0b0e', border: '1px solid #1f222a', borderRadius: 13, padding: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.58rem', fontWeight: 900, color: '#3a3e4a', letterSpacing: 1.5, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #1a1c23' }}>
-                        <TrendingDown size={13} color="#f87171" /> DAILY COST TREND
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 48 }}>
-                        {(() => {
-                          const maxCost = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
-                          return wastageAnalytics.dailyTrend.map((d) => (
-                            <div key={d.date}
-                              title={`${d.date}: ₹${d.cost.toFixed(0)} · ${d.count} entries`}
-                              style={{
-                                flex: 1, minWidth: 0,
-                                height: `${Math.max(8, Math.round((d.cost / maxCost) * 100))}%`,
-                                background: d.cost > 0 ? `rgba(248,113,113,${0.3 + (d.cost / maxCost) * 0.5})` : '#13151a',
-                                borderRadius: '3px 3px 0 0', transition: 'height 0.4s ease'
-                              }}
-                            />
-                          ));
-                        })()}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                        <span style={{ fontSize: '0.5rem', color: '#1f222a' }}>
-                          {wastageAnalytics.dailyTrend[0]?.date?.slice(8)}
-                        </span>
-                        <span style={{ fontSize: '0.5rem', color: '#1f222a' }}>
-                          {wastageAnalytics.dailyTrend[wastageAnalytics.dailyTrend.length - 1]?.date?.slice(8)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
- 
-                  <button onClick={fetchWastageAnalytics} style={{
-                    width: '100%', padding: '11px', background: 'transparent',
-                    border: '1px solid rgba(211,191,162,0.15)', color: '#d3bfa2',
-                    borderRadius: 9, fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
-                  }}>
-                    <RefreshCw size={13} /> REFRESH REPORT
-                  </button>
-                </>
-              )}
-            </div>
-          )}
- 
-        </div>
-      </motion.div>
-    </>
-  )}
-</AnimatePresence>
- 
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
-      {/* ── WAITER CALLS ── */}
-      <div style={{
-        position: 'fixed',
-        bottom: isMobile ? 80 : 30,
-        right: isMobile ? 12 : isTablet ? 16 : 30,
-        zIndex: 2000,
-        display: 'flex', flexDirection: 'column', gap: 12,
-        maxWidth: isMobile ? 'calc(100vw - 24px)' : isTablet ? 320 : 400
-      }}>
+      {/* WAITER CALL TOASTS */}
+      <div style={{ position:'fixed', bottom: isMobile ? 78 : 24, right: isMobile ? 12 : 24, zIndex:2000, display:'flex', flexDirection:'column', gap:9, maxWidth: isMobile ? 'calc(100vw - 24px)' : 370 }}>
         <AnimatePresence>
           {waiterCalls.map(call => (
-            <motion.div
-              key={call.id}
-              initial={{ x: 200, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 200, opacity: 0 }}
-              style={{
-                background: 'linear-gradient(135deg,#bda88a,#d3bfa2)', color: '#0f1013',
-                padding: isMobile ? '12px 16px' : '14px 24px',
-                borderRadius: 14, display: 'flex', alignItems: 'center', gap: 14,
-                fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: 950,
-                boxShadow: '0 12px 30px rgba(0,0,0,0.4)'
-              }}>
-              <div style={{ background: 'rgba(0,0,0,0.07)', padding: 8, borderRadius: 8 }}>
-                <BellRing size={18} color="#000" />
+            <motion.div key={call.id} initial={{ x:200, opacity:0 }} animate={{ x:0, opacity:1 }} exit={{ x:200, opacity:0 }}
+              style={{ background:'#d3bfa2', color:'#0f1013', padding: isMobile ? '12px 15px' : '13px 18px', borderRadius:13, display:'flex', alignItems:'center', gap:12, boxShadow:'0 12px 40px rgba(0,0,0,0.55)' }}>
+              <div style={{ background:'rgba(0,0,0,0.1)', padding:8, borderRadius:8, flexShrink:0 }}>
+                <BellRing size={16} color="#0f1013" />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <b>TABLE {call.tableNumber}</b>: {call.reason?.toUpperCase()}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:900, fontSize: isMobile ? '0.82rem' : '0.88rem', letterSpacing:'0.3px' }}>TABLE {call.tableNumber}</div>
+                <div style={{ fontSize:'0.62rem', opacity:0.55, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' }}>{call.reason || call.serviceRequest || 'Service required'}</div>
               </div>
-              <X
-                size={18}
-                style={{ cursor: 'pointer', flexShrink: 0 }}
-                onClick={() => setWaiterCalls(prev => prev.filter(c => c.id !== call.id))} />
+              <X size={16} style={{ cursor:'pointer', opacity:0.45, flexShrink:0 }} onClick={() => setWaiterCalls(prev => prev.filter(c => c.id !== call.id))} />
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-<style>{`
+      <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-          body {
-          margin: 0;
-          background: #0d0e11;
-          color: #fff;
-          overflow: hidden;
-          font-family: 'Outfit', sans-serif;
-          -webkit-tap-highlight-color: transparent;
-        }
+        body { margin: 0; background: #0d0e11; color: #fff; overflow: hidden; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
         button { font-family: 'Outfit', sans-serif; }
+        input, select, textarea { font-family: 'Outfit', sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #232730; border-radius: 10px; }
-        @keyframes strobePulse {
-          0%   { box-shadow: 0 0 0 0 rgba(211,191,162,0.3); }
-          70%  { box-shadow: 0 0 0 8px rgba(211,191,162,0); }
-          100% { box-shadow: 0 0 0 0 rgba(211,191,162,0); }
-        }
-        .voice-pulse { animation: strobePulse 1.8s infinite; border-radius: 50%; }
-        @keyframes extremeFlash {
-          0%,100% { border-color: #1f222a; box-shadow: none; }
-          50%      { border-color: #bda88a; box-shadow: 0 0 20px rgba(211,191,162,0.2); }
-        }
-        .flash-card-pulse { animation: extremeFlash 1.6s infinite ease-in-out; }
-
-        /* Tablet: prevent header overflow */
-        @media (min-width: 600px) and (max-width: 839px) {
-          .kds-header-actions { flex-wrap: nowrap; overflow-x: auto; }
-        }
+        .custom-scroll::-webkit-scrollbar { width: 3px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(211,191,162,0.12); border-radius: 10px; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes strobePulse { 0% { box-shadow: 0 0 0 0 rgba(211,191,162,0.45); } 70% { box-shadow: 0 0 0 10px rgba(211,191,162,0); } 100% { box-shadow: 0 0 0 0 rgba(211,191,162,0); } }
+        .voice-pulse { animation: strobePulse 1.8s infinite; border-radius: 9px; }
+        @keyframes urgentPulse { 0%,100% { border-color: rgba(211,191,162,0.16); box-shadow: none; } 50% { border-color: rgba(211,191,162,0.5); box-shadow: 0 0 22px rgba(211,191,162,0.1); } }
+        .flash-card-pulse { animation: urgentPulse 1.8s ease-in-out infinite; }
+        @keyframes newOrder { 0% { transform: scale(0.97); box-shadow: 0 0 0 0 rgba(211,191,162,0.35); } 50% { transform: scale(1); box-shadow: 0 0 20px 4px rgba(211,191,162,0.12); } 100% { transform: scale(1); box-shadow: none; } }
+        .new-order-flash { animation: newOrder 0.6s ease forwards; }
       `}</style>
     </div>
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
-   KDS ORDER CARD
-═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+   KDS ORDER CARD COMPONENT
+═══════════════════════════════════════════════════════════════════ */
 const KDSOrderCard = ({
-  order, onReady, isNewest, dishToCategoryMap, dishToVegMap,
+  order, onReady, isNewest,
+  dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-  socketInstance, isNonVegMode, tenantOnlyVeg, isMobile, isTablet = false,itemFinalTimes, setItemFinalTimes
+  socketInstance, isNonVegMode, tenantOnlyVeg,
+  isMobile, isTablet,
+  itemFinalTimes, setItemFinalTimes
 }) => {
-  // ── aggregator order helper — local to this component, not the parent ──
-  const isAggregatorOrder = (o) => o.source === 'swiggy' || o.source === 'zomato';
+  const otype        = getOrderType(order);
+  const isAggOrder   = otype === 'swiggy' || otype === 'zomato';
+  const isParcelOrder = otype === 'parcel';
 
-  const [seconds, setSeconds] = useState(0);
+  const [seconds,       setSeconds]       = useState(0);
+  const [itemStartTimes,setItemStartTimes]= useState({});
+  const [itemElapsed,   setItemElapsed]   = useState({});
+  const [showNote,      setShowNote]      = useState(false);
+  const [localNote,     setLocalNote]     = useState('');
 
-const [itemStartTimes, setItemStartTimes] = useState({}); 
-// { idx: timestamp } — when chef tapped the item (started cooking)
-const [itemElapsed, setItemElapsed] = useState({});
-
-useEffect(() => {
-  const t = setInterval(() => {
-    setItemElapsed(prev => {
-      const updated = {};
-      Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
-        updated[idx] = Math.floor((Date.now() - startMs) / 1000);
-      });
-      return updated;
-    });
-  }, 1000);
-  return () => clearInterval(t);
-}, [itemStartTimes]);
-
+  /* live second counter */
   useEffect(() => {
-    const update = () => setSeconds(Math.floor((new Date() - new Date(order.createdAt)) / 1000));
-    update();
-    const t = setInterval(update, 1000);
+    const tick = () => setSeconds(Math.floor((Date.now() - new Date(order.createdAt)) / 1000));
+    tick();
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [order.createdAt]);
 
-  const formatTime = (s) => {
-    const h   = Math.floor(s / 3600);
-    const m   = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    const p   = n => n.toString().padStart(2, '0');
-    return h > 0 ? `${h}h ${p(m)}m ${p(sec)}s` : `${p(m)}:${p(sec)}`;
-  };
+  /* item-level cook timers */
+  useEffect(() => {
+    const t = setInterval(() => {
+      setItemElapsed(prev => {
+        const u = {};
+        Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
+          u[idx] = Math.floor((Date.now() - startMs) / 1000);
+        });
+        return u;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [itemStartTimes]);
 
   const urgency = seconds >= 900 ? 'high' : seconds >= 450 ? 'medium' : 'low';
 
-const toggleItemCrossed = async (idx) => {
-  const key  = `${order._id}-${idx}`;
-  const next = !checkedItemsGlobal[key];
+  const accentColor = {
+    swiggy:   '#fc8019',
+    zomato:   '#cb202d',
+    high:     'rgba(211,191,162,0.8)',
+    medium:   'rgba(138,112,77,0.55)',
+    low:      'rgba(211,191,162,0.1)',
+  };
+  const topBarColor = isAggOrder
+    ? accentColor[otype]
+    : urgency === 'high'
+      ? 'linear-gradient(90deg,#8a704d,#d3bfa2)'
+      : urgency === 'medium'
+        ? 'rgba(138,112,77,0.5)'
+        : 'rgba(211,191,162,0.08)';
 
-  // Capture final elapsed when crossing OFF → ON
-  if (next && itemStartTimes[idx]) {
-    const finalSecs = Math.floor((Date.now() - itemStartTimes[idx]) / 1000);
-    setItemFinalTimes(prev => ({ ...prev, [idx]: finalSecs }));
-  }
+  const kitchenItems = (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
+  const checkedCount  = kitchenItems.filter((_,idx) => checkedItemsGlobal[`${order._id}-${idx}`]).length;
+  const totalItems    = kitchenItems.length;
+  const progressPct   = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
+  const allDone       = progressPct === 100 && totalItems > 0;
 
-  setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
-      socketInstance?.emit("kds_item_cross_sync", {
-      orderId: order._id, tenantId: order.tenantId, idx, newState: next
-    });
+  const toggleItemCrossed = async idx => {
+    const key  = `${order._id}-${idx}`;
+    const next = !checkedItemsGlobal[key];
+    if (next && itemStartTimes[idx]) {
+      const s = Math.floor((Date.now() - itemStartTimes[idx]) / 1000);
+      setItemFinalTimes(prev => ({ ...prev, [idx]: s }));
+    }
+    if (!next && !itemStartTimes[idx]) {
+      setItemStartTimes(p => ({ ...p, [idx]: Date.now() }));
+    }
+    setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
+    socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState:next });
     try {
-      const items = order.items.map((item, i) => i === idx ? { ...item, isCrossedLocal: next } : item);
+      const items = order.items.map((it,i) => i===idx ? { ...it, isCrossedLocal:next } : it);
       await axios.patch(`${BASE_URL}/admin/orders/${order._id}`, { items });
-    } catch { }
+    } catch {}
   };
 
-  // Card height: mobile fills full flex, tablet is slightly shorter than desktop
-  const cardHeight = isMobile ? '100%' : isTablet ? 400 : 420;
-
-const aggBorderColor = order.source === 'zomato' ? '#cb202d' : order.source === 'swiggy' ? '#fc8019' : null;
-  const cardStyle = {
-    borderRadius: 18,
-    padding: isMobile ? '16px' : isTablet ? '16px' : '20px',
-    display: 'flex', flexDirection: 'column',
-    height: cardHeight,
-    border: `1px solid ${aggBorderColor ? aggBorderColor + '55' : isNewest ? '#d3bfa2' : '#1f222a'}`,
-    position: 'relative', overflow: 'hidden',
-    background: '#13151a',
-    boxShadow: aggBorderColor
-      ? `0 0 30px ${aggBorderColor}1a`
-      : isNewest ? '0 0 30px rgba(211,191,162,0.06)' : '0 4px 15px rgba(0,0,0,0.2)',
+  const startItemTimer = (idx, e) => {
+    e.preventDefault();
+    if (!itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`]) {
+      setItemStartTimes(p => ({ ...p, [idx]: Date.now() }));
+    }
   };
+
+  /* Header label */
+  const tableLabel = otype === 'swiggy' ? <span style={{ color:'#fc8019' }}>SWIGGY</span>
+    : otype === 'zomato'  ? <span style={{ color:'#cb202d' }}>ZOMATO</span>
+    : isParcelOrder ? <span style={{ color:'#bda88a' }}>PARCEL</span>
+    : <span style={{ color:'#fff' }}>T-{order.tableNumber}</span>;
+
+  const sourceMeta = {
+    waitlist:        { label:'WAITLIST',   color:'#8a704d', bg:'rgba(138,112,77,0.08)', border:'rgba(138,112,77,0.22)' },
+    reservation:     { label:'RESERVATION',color:'#bda88a', bg:'rgba(189,168,138,0.08)',border:'rgba(189,168,138,0.22)' },
+    'counter-pickup':{ label:'PICKUP',     color:'#d3bfa2', bg:'rgba(211,191,162,0.07)',border:'rgba(211,191,162,0.2)' },
+    swiggy:          { label:'SWIGGY',     color:'#fc8019', bg:'rgba(252,128,25,0.1)',  border:'rgba(252,128,25,0.3)' },
+    zomato:          { label:'ZOMATO',     color:'#cb202d', bg:'rgba(203,32,45,0.1)',   border:'rgba(203,32,45,0.3)' },
+    takeaway:        { label:'TAKEAWAY',   color:'#bda88a', bg:'rgba(189,168,138,0.08)',border:'rgba(189,168,138,0.2)' },
+    direct:          { label:'DINE-IN',    color:'#3a3e4a', bg:'rgba(211,191,162,0.03)',border:'rgba(211,191,162,0.07)' },
+  };
+  const sm = sourceMeta[order.source] || sourceMeta.direct;
+
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      className={urgency === 'high' ? 'flash-card-pulse' : ''}
-      style={cardStyle}>
+      initial={{ opacity:0, y:16, scale:0.98 }}
+      animate={{ opacity:1, y:0,  scale:1 }}
+      exit={{ opacity:0, scale:0.96 }}
+      className={urgency === 'high' ? 'flash-card-pulse' : isNewest ? 'new-order-flash' : ''}
+      style={{
+        borderRadius:16,
+        padding: isMobile ? '14px' : isTablet ? '14px' : '16px',
+        display:'flex', flexDirection:'column',
+        height: isMobile ? '100%' : isTablet ? 390 : 420,
+        border: `1px solid ${isAggOrder ? accentColor[otype]+'40' : isNewest ? 'rgba(211,191,162,0.22)' : 'rgba(211,191,162,0.07)'}`,
+        position:'relative', overflow:'hidden',
+        background:'#0d0f14',
+        boxShadow: isAggOrder ? `0 0 28px ${accentColor[otype]}14` : isNewest ? '0 0 22px rgba(211,191,162,0.05)' : '0 4px 18px rgba(0,0,0,0.28)',
+        transition:'border-color 0.3s',
+      }}>
 
-{/* Urgency bar — aggregator orders get their platform color regardless of urgency tier */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 4,
-        background: aggBorderColor
-          ? aggBorderColor
-          : urgency === 'low' ? '#1f222a' : urgency === 'medium' ? 'linear-gradient(90deg,#1f222a,#d3bfa2)' : '#d3bfa2'
-      }} />
+      {/* TOP URGENCY BAR */}
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:topBarColor, flexShrink:0 }} />
 
-      {/* Card header */}
-{/* Card header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div>
-<h2 style={{
-  fontSize: isMobile ? '1.8rem' : isTablet ? '1.8rem' : '2.1rem',
-  margin: 0, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', lineHeight: 1
-}}>
-  {order.source === 'swiggy'
-    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fc8019' }}>
-        <Package size={isMobile ? 20 : 22} /> SWIGGY
-      </span>
-    : order.source === 'zomato'
-    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cb202d' }}>
-        <Package size={isMobile ? 20 : 22} /> ZOMATO
-      </span>
-    : order.source === 'counter-pickup'
-    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
-        <Package size={isMobile ? 20 : 22} /> PICKUP
-      </span>
-    : order.tableNumber?.toLowerCase() === 'takeaway' || order.tableNumber?.toLowerCase() === 'counter'
-    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#d3bfa2' }}>
-        <Package size={isMobile ? 20 : 22} /> PARCEL
-      </span>
-    : order.source === 'reservation'
-    ? <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.1 }}>
-        <span style={{ fontSize: isMobile ? '1rem' : '1.2rem', color: '#d3bfa2', fontWeight: 900, letterSpacing: '1px' }}>T-{order.tableNumber}</span>
-        <span style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: 700, letterSpacing: '2px', opacity: 0.6 }}>RESERVATION</span>
-      </span>
-    : order.source === 'waitlist'
-    ? <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.1 }}>
-        <span style={{ fontSize: isMobile ? '1rem' : '1.2rem', color: '#d3bfa2', fontWeight: 900, letterSpacing: '1px' }}>
-          {order.tableNumber && /^\d+$/.test(order.tableNumber.toString()) ? `T-${order.tableNumber}` : 'WAITLIST'}
-        </span>
-        <span style={{ fontSize: '0.5rem', color: '#d3bfa2', fontWeight: 700, letterSpacing: '2px', opacity: 0.6 }}>WALK-IN</span>
-      </span>
-    : `T-${order.tableNumber}`
-  }
-</h2>
-          <span style={{ fontSize: '0.6rem', color: '#5c616e', fontWeight: 800 }}>
-            ID: {order._id.slice(-4).toUpperCase()}
+      {/* ── CARD HEADER ── */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10, gap:8 }}>
+        {/* Left — table / platform */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+            <h2 style={{ fontSize: isMobile?'1.7rem':isTablet?'1.6rem':'1.9rem', margin:0, fontWeight:900, lineHeight:1, letterSpacing:'-0.5px' }}>
+              {tableLabel}
+            </h2>
+            {isNewest && (
+              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'rgba(211,191,162,0.1)', color:'#d3bfa2', border:'1px solid rgba(211,191,162,0.22)', letterSpacing:'0.5px', flexShrink:0 }}>NEW</span>
+            )}
+          </div>
+          {/* Source + order ID row */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+            <span style={{ fontSize:'0.47rem', fontWeight:900, padding:'2px 6px', borderRadius:4, letterSpacing:'0.5px', textTransform:'uppercase', background:sm.bg, color:sm.color, border:`1px solid ${sm.border}` }}>
+              {sm.label}
+            </span>
+            <span style={{ fontSize:'0.48rem', color:'#2a2e38', fontFamily:'monospace', fontWeight:900 }}>
+              #{order._id.slice(-4).toUpperCase()}
+            </span>
             {order.aggregatorOrderId && (
-              <span style={{ marginLeft: 6, color: order.source === 'zomato' ? '#cb202d' : '#fc8019' }}>
-                · #{order.aggregatorOrderId.toString().slice(-6).toUpperCase()}
+              <span style={{ fontSize:'0.48rem', color: accentColor[otype]+'99', fontFamily:'monospace' }}>
+                ·{order.aggregatorOrderId.toString().slice(-6)}
               </span>
             )}
-          </span>
+          </div>
         </div>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 7,
-          padding: '4px 10px', borderRadius: 8,
-          border: `1px solid ${urgency !== 'low' ? '#d3bfa2' : '#272a33'}`,
-          background: '#0d0e11'
-        }}>
-          <Clock size={14} color={urgency !== 'low' ? '#d3bfa2' : '#5c616e'} />
-          <span style={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 900,
-            fontSize: isMobile ? '0.9rem' : isTablet ? '0.88rem' : '1rem',
-            color: urgency === 'high' ? '#d3bfa2' : '#fff'
-          }}>
-            {formatTime(seconds)}
-          </span>
+
+        {/* Right — timer */}
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3, flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1px solid ${urgency!=='low' ? accentColor[urgency+'_border']||'rgba(211,191,162,0.25)' : 'rgba(211,191,162,0.08)'}`, background: urgency==='high' ? 'rgba(211,191,162,0.07)' : '#080809' }}>
+            <Clock size={12} color={urgency==='high'?'#d3bfa2':urgency==='medium'?'#bda88a':'#333'} />
+            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#d3bfa2':urgency==='medium'?'#8a704d':'#555', letterSpacing:'-0.3px' }}>
+              {fmt(seconds)}
+            </span>
+          </div>
+          {urgency !== 'low' && (
+            <span style={{ fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? 'rgba(211,191,162,0.55)' : 'rgba(138,112,77,0.55)', letterSpacing:'0.5px', textTransform:'uppercase' }}>
+              {urgency==='high' ? '⚡ OVERDUE' : 'DELAYED'}
+            </span>
+          )}
         </div>
-        {/* Aggregator platform tag + customer info strip */}
-      {isAggregatorOrder(order) && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 10, padding: '7px 11px', borderRadius: 9,
-          background: order.source === 'zomato' ? 'rgba(203,32,45,0.08)' : 'rgba(252,128,25,0.08)',
-          border: `1px solid ${order.source === 'zomato' ? 'rgba(203,32,45,0.25)' : 'rgba(252,128,25,0.25)'}`
-        }}>
-          <span style={{
-            fontSize: '0.58rem', fontWeight: 900, letterSpacing: '1px',
-            color: order.source === 'zomato' ? '#cb202d' : '#fc8019',
-            display: 'flex', alignItems: 'center', gap: 5
-          }}>
-            <Zap size={11} /> {order.source.toUpperCase()} ORDER
+      </div>
+
+      {/* AGGREGATOR CUSTOMER STRIP */}
+      {isAggOrder && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10, padding:'6px 10px', borderRadius:8, background: otype==='zomato' ? 'rgba(203,32,45,0.07)' : 'rgba(252,128,25,0.07)', border:`1px solid ${otype==='zomato'?'rgba(203,32,45,0.2)':'rgba(252,128,25,0.2)'}` }}>
+          <span style={{ fontSize:'0.52rem', fontWeight:900, letterSpacing:'0.8px', color:accentColor[otype], display:'flex', alignItems:'center', gap:4 }}>
+            <Zap size={10} /> {otype.toUpperCase()} ORDER
           </span>
           {order.aggregatorCustomer?.name && (
-            <span style={{ fontSize: '0.62rem', color: '#8a8f9f', fontWeight: 700 }}>
-              {order.aggregatorCustomer.name}
+            <span style={{ fontSize:'0.6rem', color:'#8a8f9f', fontWeight:700 }}>{order.aggregatorCustomer.name}</span>
+          )}
+          {order.aggregatorRaw?.expectedDeliveryTime && (
+            <span style={{ fontSize:'0.52rem', color:'rgba(211,191,162,0.35)', fontFamily:'monospace' }}>
+              ~{order.aggregatorRaw.expectedDeliveryTime}m
             </span>
           )}
         </div>
       )}
-      </div>
 
-      {/* Item list */}
-      <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scroll">
-{order.items
-  .map((item, idx) => {
-    // ── Skip extra items entirely — they go to waiter, not kitchen ──
-    if (item.isExtraItem || item.extraItemId != null) return null;
-
-    let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
-    const isVeg = item.isVeg !== undefined
-      ? item.isVeg !== false
-      : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
-
-    if (selectedCategory !== 'ALL' && catId !== selectedCategory.toLowerCase().trim()) return null;
-
-    const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
-    const crossed   = checkedItemsGlobal[`${order._id}-${idx}`];
-const hasRealTable = order.tableNumber &&
-  order.tableNumber.toLowerCase() !== 'takeaway' &&
-  order.tableNumber.toLowerCase() !== 'counter' &&
-  order.tableNumber.toLowerCase() !== 'counter-pickup' &&
-  /^\d+$/.test(order.tableNumber.toString().trim());
-
-const forceParcel =
-  item.isParcel === true ||
-  order.source === 'swiggy' ||
-  order.source === 'zomato' ||
-  order.source === 'counter-pickup' ||
-  order.source === 'takeaway' ||
-  order.tableNumber?.toLowerCase() === 'takeaway' ||
-  order.tableNumber?.toLowerCase() === 'counter' ||
-  // waitlist/reservation: only parcel if NO real table assigned
-  ((order.source === 'waitlist' || order.source === 'reservation') && !hasRealTable);
-      
-      if (!modeMatch) return (
-      <div key={idx} style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '9px 0', borderBottom: '1px solid #1c1f26',
-        opacity: crossed ? 0.06 : 0.2, pointerEvents: 'none', filter: 'grayscale(1)'
-      }}>
-        <div style={{
-          width: 28, height: 28,
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          borderRadius: 7, fontWeight: 900, color: '#d3bfa2',
-          background: '#0d0e11', fontFamily: 'monospace', flexShrink: 0
-        }}>{item.quantity}</div>
-        <span style={{ fontSize: '0.82rem', color: '#444', fontWeight: 600 }}>{item.name}</span>
-      </div>
-    );
-
-    return (
-      <div
-        key={idx}
-        onClick={() => {
-          toggleItemCrossed(idx);
-          if (!checkedItemsGlobal[`${order._id}-${idx}`] && !itemStartTimes[idx]) {
-            setItemStartTimes(prev => ({ ...prev, [idx]: Date.now() }));
-          }
-        }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '9px 0', borderBottom: '1px solid #1c1f26',
-          cursor: 'pointer', opacity: crossed ? 0.2 : 1,
-          transition: '0.15s', WebkitTapHighlightColor: 'transparent'
-        }}>
-        <div style={{
-          width: 28, height: 28,
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          borderRadius: 7,
-          background: crossed ? '#0d0e11' : '#1e2129',
-          fontWeight: 900, color: '#d3bfa2', flexShrink: 0, fontFamily: 'monospace'
-        }}>
-          {item.quantity}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-            <span style={{
-              fontSize: isMobile ? '0.88rem' : isTablet ? '0.86rem' : '0.95rem',
-              fontWeight: 700, lineHeight: 1.3,
-              textDecoration: crossed ? 'line-through' : 'none',
-              color: item.isChefSpecial ? '#0f1013' : '#fff',
-              background: item.isChefSpecial ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'transparent',
-              padding: item.isChefSpecial ? '2px 7px' : 0,
-              borderRadius: item.isChefSpecial ? 5 : 0
-            }}>
-              {item.isChefSpecial && <Sparkles size={11} style={{ display: 'inline', marginRight: 3 }} />}
-              {item.name}
-            </span>
-            {!tenantOnlyVeg && (
-              <div style={{
-                width: 10, height: 10,
-                border: `1.5px solid ${isVeg ? '#4a7c3f' : '#8a3030'}`,
-                borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-              }}>
-                {isVeg
-                  ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4a7c3f' }} />
-                  : <div style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '4px solid #8a3030' }} />
-                }
-              </div>
-            )}
-            <div style={{
-              background: order.source === 'zomato'
-                ? 'rgba(203,32,45,0.08)'
-                : order.source === 'swiggy'
-                ? 'rgba(252,128,25,0.08)'
-                : forceParcel ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.03)',
-              color: order.source === 'zomato'
-                ? '#cb202d'
-                : order.source === 'swiggy'
-                ? '#fc8019'
-                : forceParcel ? '#d3bfa2' : '#a0a5b5',
-              fontSize: '0.5rem', padding: '2px 5px', borderRadius: 4,
-              border: `1px solid ${
-                order.source === 'zomato' ? 'rgba(203,32,45,0.2)'
-                : order.source === 'swiggy' ? 'rgba(252,128,25,0.2)'
-                : forceParcel ? 'rgba(211,191,162,0.12)' : '#232731'
-              }`,
-              fontWeight: 900, display: 'flex', alignItems: 'center', gap: 2
-            }}>
-              {(order.source === 'swiggy' || order.source === 'zomato')
-                ? <Zap size={9} />
-                : forceParcel ? <Package size={9} /> : <UtensilsCrossed size={9} />}
-              {order.source === 'zomato' ? 'ZOMATO' : order.source === 'swiggy' ? 'SWIGGY' : forceParcel ? 'PARCEL' : 'DINE-IN'}
-            </div>
+      {/* PREP PROGRESS BAR */}
+      {totalItems > 0 && (
+        <div style={{ marginBottom:10 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+            <span style={{ fontSize:'0.47rem', color:'#2a2e38', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px' }}>PREP PROGRESS</span>
+            <span style={{ fontSize:'0.52rem', fontWeight:900, color: allDone ? '#d3bfa2' : '#333', fontFamily:'monospace' }}>{checkedCount}/{totalItems}</span>
           </div>
-          <span style={{
-            fontSize: '0.6rem', fontWeight: 900,
-            color: item.portion?.toLowerCase() === 'half' ? '#d3bfa2' : '#7c8291',
-            display: 'block', marginTop: 2
-          }}>
-            {item.portion?.toUpperCase() || 'STANDARD'}
-          </span>
-
-          {/* ── ITEM-LEVEL COOK TIMER ── */}
-          {itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`] && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              marginTop: 4,
-              fontSize: '0.55rem', fontWeight: 900,
-              color: (itemElapsed[idx]||0) >= 300 ? '#d3bfa2' : 'rgba(211,191,162,0.4)',
-              background: (itemElapsed[idx]||0) >= 300 ? 'rgba(211,191,162,0.08)' : 'transparent',
-              padding: (itemElapsed[idx]||0) >= 300 ? '2px 6px' : '0',
-              borderRadius: 4,
-              border: (itemElapsed[idx]||0) >= 300 ? '1px solid rgba(211,191,162,0.2)' : 'none',
-              fontFamily: 'monospace'
-            }}>
-              <Timer size={9} />
-              {(() => {
-                const s = itemElapsed[idx] || 0;
-                const m = Math.floor(s / 60);
-                const sec = s % 60;
-                return `${m}:${sec.toString().padStart(2,'0')}`;
-              })()}
-              {(itemElapsed[idx]||0) >= 300 && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.48rem', letterSpacing: '0.5px' }}>
-                  <AlertTriangle size={8} strokeWidth={2.5} /> SLOW
-                </span>
-              )}
-            </div>
-          )}
-          {checkedItemsGlobal[`${order._id}-${idx}`] && itemStartTimes[idx] && (() => {
-            const s = itemFinalTimes[idx] ?? (itemElapsed[idx] || 0);
-            return (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4,
-                fontSize: '0.55rem', fontWeight: 900, color: '#555', fontFamily: 'monospace' }}>
-                <Timer size={9} />
-                Done in {Math.floor(s / 60)}m {s % 60}s
-              </div>
-            );
-          })()}
-
-          {item.suggestion && (
-            <div style={{
-              color: '#bda88a', fontSize: '0.62rem', marginTop: 4,
-              display: 'flex', alignItems: 'center', gap: 4,
-              background: 'rgba(211,191,162,0.04)', padding: '4px 8px',
-              borderRadius: 6, border: '1px solid rgba(211,191,162,0.08)'
-            }}>
-              <StickyNote size={9} />
-              <span style={{ textTransform: 'uppercase' }}>{item.suggestion}</span>
-            </div>
-          )}
+          <div style={{ height:3, background:'rgba(211,191,162,0.05)', borderRadius:2, overflow:'hidden' }}>
+            <div style={{ height:'100%', width:`${progressPct}%`, background: allDone ? 'linear-gradient(90deg,#8a704d,#d3bfa2)' : urgency==='high' ? 'rgba(211,191,162,0.5)' : 'rgba(211,191,162,0.2)', borderRadius:2, transition:'width 0.4s ease' }} />
+          </div>
         </div>
-        {crossed && <CheckSquare size={16} color="#d3bfa2" style={{ flexShrink: 0 }} />}
-      </div>
-    );
-  })}
+      )}
+
+      {/* ITEM LIST */}
+      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }} className="custom-scroll">
+        {order.items.map((item, idx) => {
+          if (item.isExtraItem || item.extraItemId != null) return null;
+
+          let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
+          if (selectedCategory !== 'ALL' && catId !== selectedCategory.toLowerCase().trim()) return null;
+
+          const isVeg = item.isVeg !== undefined
+            ? item.isVeg !== false
+            : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
+          const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
+          if (!modeMatch) return null;
+
+          const crossed      = !!checkedItemsGlobal[`${order._id}-${idx}`];
+          const hasStarted   = !!itemStartTimes[idx];
+          const elapsedSecs  = itemElapsed[idx] || 0;
+          const isSlow       = hasStarted && !crossed && elapsedSecs >= 300;
+          const finalSecs    = itemFinalTimes?.[idx] ?? elapsedSecs;
+
+          /* Per-item source tag */
+          const itemTag = isAggOrder
+            ? { label: otype.toUpperCase(), color: accentColor[otype], bg:`${accentColor[otype]}10`, border:`${accentColor[otype]}30`, icon:<Zap size={9}/> }
+            : isParcelOrder
+              ? { label:'PARCEL',  color:'#bda88a', bg:'rgba(189,168,138,0.07)', border:'rgba(189,168,138,0.18)', icon:<Package size={9}/> }
+              : { label:'DINE-IN', color:'#3a3e4a', bg:'rgba(255,255,255,0.02)', border:'rgba(211,191,162,0.05)', icon:<UtensilsCrossed size={9}/> };
+
+          return (
+            <div
+              key={idx}
+              onClick={() => toggleItemCrossed(idx)}
+              onContextMenu={e => startItemTimer(idx, e)}
+              style={{
+                display:'flex', alignItems:'flex-start', gap:10,
+                padding: isMobile?'10px 11px':'11px 12px',
+                borderRadius:10,
+                background: crossed ? 'rgba(211,191,162,0.02)' : hasStarted ? '#0a0b0e' : '#080809',
+                border: `1px solid ${crossed ? 'rgba(211,191,162,0.04)' : hasStarted ? 'rgba(211,191,162,0.14)' : 'rgba(211,191,162,0.06)'}`,
+                borderLeft: `3px solid ${crossed ? 'rgba(211,191,162,0.04)' : hasStarted ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.08)'}`,
+                cursor:'pointer', transition:'all 0.15s', userSelect:'none',
+                opacity: crossed ? 0.5 : 1,
+              }}>
+
+              {/* Qty badge */}
+              <div style={{ width:28, height:28, borderRadius:7, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize:'0.85rem', background: crossed ? 'rgba(211,191,162,0.03)' : 'rgba(211,191,162,0.09)', border:`1px solid ${crossed?'rgba(211,191,162,0.04)':'rgba(211,191,162,0.15)'}`, color: crossed ? '#2a2e38' : '#d3bfa2' }}>
+                {item.quantity}
+              </div>
+
+              <div style={{ flex:1, minWidth:0 }}>
+                {/* Name row */}
+                <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:3 }}>
+                  <span style={{ fontSize: isMobile?'0.86rem':isTablet?'0.83rem':'0.9rem', fontWeight:700, lineHeight:1.25, textDecoration: crossed ? 'line-through' : 'none', color: crossed ? '#2a2e38' : item.isChefSpecial ? '#0f1013' : '#e8e0d0', background: item.isChefSpecial && !crossed ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'transparent', padding: item.isChefSpecial && !crossed ? '1px 6px' : 0, borderRadius: item.isChefSpecial ? 4 : 0 }}>
+                    {item.isChefSpecial && !crossed && <Sparkles size={10} style={{ display:'inline', marginRight:3 }} />}
+                    {item.name}
+                  </span>
+
+                  {/* Veg/NonVeg dot */}
+                  {!tenantOnlyVeg && !crossed && (
+                    <div style={{ width:10, height:10, border:`1.5px solid ${isVeg?'#4a7c3f':'#8a3030'}`, borderRadius: isVeg?'50%':2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {isVeg
+                        ? <div style={{ width:4, height:4, borderRadius:'50%', background:'#4a7c3f' }} />
+                        : <div style={{ width:0, height:0, borderLeft:'2.5px solid transparent', borderRight:'2.5px solid transparent', borderBottom:'4px solid #8a3030' }} />}
+                    </div>
+                  )}
+
+                  {/* Source tag */}
+                  {!crossed && (
+                    <div style={{ fontSize:'0.46rem', padding:'1px 5px', borderRadius:4, background:itemTag.bg, color:itemTag.color, border:`1px solid ${itemTag.border}`, fontWeight:900, display:'inline-flex', alignItems:'center', gap:2 }}>
+                      {itemTag.icon} {itemTag.label}
+                    </div>
+                  )}
+                </div>
+
+                {/* Portion */}
+                {!crossed && (
+                  <div style={{ fontSize:'0.58rem', fontWeight:900, color: item.portion?.toLowerCase()==='half' ? '#d3bfa2' : '#3a3e4a', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.3px' }}>
+                    {item.portion?.toUpperCase() || 'STANDARD'}
+                  </div>
+                )}
+
+                {/* Cook timer */}
+                {hasStarted && !crossed && (
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', fontWeight:900, color: isSlow ? '#d3bfa2' : 'rgba(211,191,162,0.3)', background: isSlow ? 'rgba(211,191,162,0.07)' : 'transparent', padding: isSlow ? '2px 6px' : 0, borderRadius:4, border: isSlow ? '1px solid rgba(211,191,162,0.15)' : 'none', fontFamily:'monospace' }}>
+                    <Timer size={9} />
+                    {`${Math.floor(elapsedSecs/60)}:${(elapsedSecs%60).toString().padStart(2,'0')}`}
+                    {isSlow && <span style={{ display:'inline-flex', alignItems:'center', gap:2, fontSize:'0.44rem' }}><AlertTriangle size={8} strokeWidth={2.5} /> SLOW</span>}
+                  </div>
+                )}
+
+                {/* Done time */}
+                {crossed && hasStarted && (
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', color:'#2a2e38', fontFamily:'monospace', fontWeight:900 }}>
+                    <Timer size={9} /> Done {Math.floor(finalSecs/60)}m {finalSecs%60}s
+                  </div>
+                )}
+
+                {/* Long-press hint — only on first unchecked */}
+                {!hasStarted && !crossed && idx === order.items.findIndex(i => !checkedItemsGlobal[`${order._id}-${order.items.indexOf(i)}`] && !i.isExtraItem && i.extraItemId == null) && (
+                  <div style={{ fontSize:'0.46rem', color:'rgba(211,191,162,0.15)', marginTop:2, fontStyle:'italic' }}>Hold to start cook timer</div>
+                )}
+
+                {/* Suggestion note */}
+                {item.suggestion && !crossed && (
+                  <div style={{ display:'flex', alignItems:'flex-start', gap:5, marginTop:5, padding:'5px 8px', borderRadius:7, background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.08)' }}>
+                    <StickyNote size={9} color="#8a704d" style={{ flexShrink:0, marginTop:1 }} />
+                    <span style={{ fontSize:'0.6rem', color:'#bda88a', fontWeight:700, textTransform:'uppercase', lineHeight:1.4 }}>{item.suggestion}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cross indicator */}
+              {crossed && <CheckSquare size={16} color="rgba(211,191,162,0.3)" style={{ flexShrink:0, marginTop:2 }} />}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Done button */}
-      <button
-        onClick={() => onReady(order._id)}
-        style={{
-          width: '100%',
-          padding: isMobile ? '16px' : isTablet ? '13px' : '14px',
-          borderRadius: 12,
-          border: '1px solid rgba(211,191,162,0.3)',
-          fontWeight: 900,
-          fontSize: isMobile ? '0.9rem' : isTablet ? '0.78rem' : '0.8rem',
-          cursor: 'pointer', marginTop: 12,
-          textTransform: 'uppercase', letterSpacing: '0.5px', transition: '0.15s',
-          background: urgency === 'high' ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'transparent',
-          color: urgency === 'high' ? '#0f1013' : '#d3bfa2',
-          minHeight: 48
-        }}>
-<span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-          {urgency === 'high' && <Flame size={15} color="#0f1013" strokeWidth={2.5} />}
-          {urgency === 'high' ? 'OVERDUE — DISPATCH NOW' : 'COMPLETE TICKET'}
-        </span>
-              </button>
+      {/* CHEF NOTE PANEL */}
+      {showNote && (
+        <div style={{ marginTop:8, background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:9, padding:'10px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
+          <StickyNote size={12} color="#8a704d" style={{ flexShrink:0, marginTop:2 }} />
+          <textarea value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Add a kitchen note for this ticket…"
+            style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#bda88a', fontSize:'0.72rem', resize:'none', fontFamily:"'Outfit', sans-serif", lineHeight:1.5, minHeight:52 }} rows={2} />
+        </div>
+      )}
+
+      {/* BOTTOM ACTIONS */}
+      <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
+        {/* Note toggle — small secondary action */}
+        <div style={{ display:'flex', justifyContent:'flex-end' }}>
+          <button onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(211,191,162,0.07)', color:'#3a3e4a', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.22)'; e.currentTarget.style.color='#d3bfa2'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.07)'; e.currentTarget.style.color='#3a3e4a'; }}>
+            <StickyNote size={10} /> {showNote ? 'HIDE NOTE' : 'ADD NOTE'}
+          </button>
+        </div>
+
+        {/* DISPATCH BUTTON */}
+        <button
+          onClick={() => onReady(order._id)}
+          style={{
+            width:'100%',
+            padding: isMobile?'15px':isTablet?'13px':'14px',
+            borderRadius:12,
+            border: allDone ? 'none' : `1px solid ${urgency==='high' ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.15)'}`,
+            fontWeight:900,
+            fontSize: isMobile?'0.86rem':isTablet?'0.75rem':'0.78rem',
+            cursor:'pointer',
+            textTransform:'uppercase', letterSpacing:'0.8px',
+            transition:'all 0.2s',
+            background: urgency==='high'
+              ? 'linear-gradient(135deg,#bda88a,#d3bfa2)'
+              : allDone
+                ? 'rgba(211,191,162,0.1)'
+                : 'transparent',
+            color: urgency==='high' ? '#0f1013' : '#d3bfa2',
+            minHeight: isMobile?50:44,
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+          }}>
+          {urgency === 'high' && <Flame size={14} color="#0f1013" strokeWidth={2.5} />}
+          {urgency === 'high'
+            ? 'OVERDUE — DISPATCH NOW'
+            : allDone
+              ? <><CheckCircle2 size={14} /> ALL READY — DISPATCH</>
+              : <>COMPLETE TICKET <ArrowRight size={13} /></>}
+        </button>
+      </div>
     </motion.div>
   );
 };
 
 /* ─────────────────────────────────────────────────────────────
    STYLE TOKENS
-   All values are static — breakpoint-dependent values are
-   applied inline in JSX using isMobile / isTablet flags.
 ───────────────────────────────────────────────────────────── */
 const rs = {
-  /* shell */
   root: {
-    position: 'fixed', inset: 0,
-    display: 'flex', flexDirection: 'column',
-    background: '#0d0e11', padding: '10px', gap: 8,
-    overflow: 'hidden'
+    position:'fixed', inset:0,
+    display:'flex', flexDirection:'column',
+    background:'#0d0e11', padding:'10px', gap:8,
+    overflow:'hidden',
   },
-
-  /* header */
   header: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    background: '#13151a', padding: '10px 14px',
-    borderRadius: 12, border: '1px solid #1f222a',
-    flexShrink: 0, zIndex: 10, gap: 8,
-    /* Allow scrolling on very narrow tablets without wrapping */
-    overflowX: 'hidden',
-    minHeight: 52,
-  },
-  brandCluster: { display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 },
-  logoBadge: {
-    background: '#0d0e11', padding: '7px', borderRadius: 9,
-    border: '1px solid #1f222a', flexShrink: 0
-  },
-  mainTitle: { margin: 0, fontWeight: 900, letterSpacing: '0.5px', fontFamily: "'Outfit', sans-serif" },
-  dotGold: { width: 6, height: 6, background: '#d3bfa2', borderRadius: '50%', boxShadow: '0 0 8px #d3bfa2', flexShrink: 0 },
-  dotRed:  { width: 6, height: 6, background: '#ff4d4d', borderRadius: '50%', boxShadow: '0 0 8px #ff4d4d', flexShrink: 0 },
-  subTitle: { color: '#5c616e', margin: 0, fontSize: '0.56rem', letterSpacing: '2px', fontWeight: 800 },
-
-  actionCenter: {
-    display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-    overflowX: 'auto', /* allow scroll when many buttons on small tablet */
-    /* hide native scrollbar */
-    msOverflowStyle: 'none', scrollbarWidth: 'none',
-  },
-  utilBtn: {
-    background: '#191b22', border: '1px solid #252932', color: '#fff',
-    padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', gap: 5, transition: '0.15s',
-    flexShrink: 0, minHeight: 38,
+    display:'flex', justifyContent:'space-between', alignItems:'center',
+    background:'#080809', padding:'9px 13px',
+    borderRadius:13, border:'1px solid rgba(211,191,162,0.07)',
+    flexShrink:0, zIndex:10, gap:8, minHeight:52,
+    overflowX:'hidden',
   },
   iconBtn: {
-    background: '#191b22', border: '1px solid #252932', padding: '8px',
-    borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0
+    background:'#0a0a0c', border:'1px solid rgba(211,191,162,0.1)',
+    padding:'8px', borderRadius:9, cursor:'pointer',
+    display:'flex', alignItems:'center', flexShrink:0,
+    transition:'all 0.15s',
   },
-  ticketBadge: {
-    background: 'linear-gradient(135deg,#bda88a,#d3bfa2)',
-    padding: '6px 12px', borderRadius: 8,
-    display: 'flex', alignItems: 'center', flexShrink: 0, minHeight: 38, justifyContent: 'center'
+  utilBtn: {
+    background:'#0a0a0c', border:'1px solid rgba(211,191,162,0.08)',
+    color:'#fff', padding:'7px 11px', borderRadius:9,
+    cursor:'pointer', display:'flex', alignItems:'center',
+    gap:5, transition:'all 0.15s', flexShrink:0, minHeight:36,
   },
-  ticketNum: { color: '#0f1013', fontSize: '1.1rem', fontWeight: 950, fontFamily: 'JetBrains Mono, monospace' },
-
-  stationCapsule: {
-    display: 'flex', background: '#0d0e11', padding: 3, borderRadius: 9, border: '1px solid #1f222a'
+  dotGold: {
+    width:5, height:5, background:'#d3bfa2', borderRadius:'50%',
+    boxShadow:'0 0 7px rgba(211,191,162,0.7)', flexShrink:0,
   },
-  capsule: {
-    padding: '6px 10px', background: 'transparent', border: 'none',
-    color: '#5c616e', fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer',
-    borderRadius: 7, whiteSpace: 'nowrap'
+  dotRed: {
+    width:5, height:5, background:'#ff4d4d', borderRadius:'50%',
+    boxShadow:'0 0 7px rgba(255,77,77,0.7)', flexShrink:0,
   },
-  capsuleActive: {
-    padding: '6px 10px', background: 'rgba(211,191,162,0.08)', border: 'none',
-    color: '#d3bfa2', fontSize: '0.6rem', fontWeight: 900,
-    borderRadius: 7, whiteSpace: 'nowrap'
-  },
-
-  /* marquee */
-  marquee: {
-    display: 'flex', alignItems: 'center',
-    background: '#0a0a0c', border: '1px solid #191b22',
-    padding: '8px 14px', borderRadius: 9, gap: 10, overflow: 'hidden', flexShrink: 0
-  },
-  marqueeLabel: {
-    fontSize: '0.6rem', fontWeight: 900, color: '#bda88a', letterSpacing: '1px',
-    display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0
-  },
-  marqueeToken: {
-    background: '#13151a', border: '1px solid #1f222a',
-    padding: '3px 9px', borderRadius: 6, display: 'flex', gap: 5, alignItems: 'center'
-  },
-
-  /* alerts */
-  alertBox: {
-    background: '#541717', border: '1px solid #ff4d4d',
-    padding: '14px 20px', borderRadius: 12,
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.4)', flexShrink: 0
-  },
-
-  /* body */
-  body: { display: 'flex', flex: 1, gap: 12, overflow: 'hidden', minHeight: 0 },
-
-  /* sidebar (permanent) */
+  body: { display:'flex', flex:1, gap:10, overflow:'hidden', minHeight:0 },
   sidebar: {
-    background: '#13151a', border: '1px solid #1f222a',
-    borderRadius: 12, display: 'flex', flexDirection: 'column',
-    padding: '14px 10px', flexShrink: 0, height: '100%', overflowY: 'auto'
+    background:'#080809', border:'1px solid rgba(211,191,162,0.07)',
+    borderRadius:13, display:'flex', flexDirection:'column',
+    padding:'15px 12px', flexShrink:0, height:'100%', overflowY:'auto',
   },
-  sidebarHeader: {
-    display: 'flex', alignItems: 'center', gap: 7,
-    fontSize: '0.6rem', fontWeight: 900, color: '#5c616e', letterSpacing: '1.5px',
-    marginBottom: 12, borderBottom: '1px solid #1f222a', paddingBottom: 10
+  sidebarHeaderIcon: {
+    width:28, height:28, borderRadius:8,
+    background:'rgba(211,191,162,0.05)', border:'1px solid rgba(211,191,162,0.12)',
+    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
   },
-  sidebarStack: { display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 },
-  sidebarNode: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '11px 10px', background: '#171921', border: '1px solid #20242e',
-    color: '#8e94a4', width: '100%', textAlign: 'left',
-    borderRadius: 8, cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700,
-    transition: 'all 0.15s', minHeight: 44
+  sidebarBtn: (active) => ({
+    display:'flex', alignItems:'center', padding:'10px 10px',
+    borderRadius:9, border: active ? 'none' : '1px solid rgba(211,191,162,0.07)',
+    background: active ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'rgba(211,191,162,0.02)',
+    color: active ? '#0f1013' : '#888',
+    cursor:'pointer', fontSize:'0.64rem', fontWeight: active ? 900 : 800,
+    width:'100%', textAlign:'left', transition:'all 0.15s',
+    letterSpacing:'0.3px', minHeight:40, gap:0,
+    boxShadow: active ? '0 4px 12px rgba(211,191,162,0.12)' : 'none',
+  }),
+  countChip: (active, hasItems) => ({
+    fontSize:'0.54rem', fontFamily:'monospace', padding:'1px 6px',
+    borderRadius:5, fontWeight:900,
+    background: active ? 'rgba(0,0,0,0.15)' : hasItems ? 'rgba(211,191,162,0.08)' : 'rgba(211,191,162,0.03)',
+    color: active ? '#0f1013' : hasItems ? '#d3bfa2' : '#2a2e38',
+    border: active ? 'none' : hasItems ? '1px solid rgba(211,191,162,0.15)' : '1px solid rgba(211,191,162,0.05)',
+  }),
+  workspace: {
+    flex:1, overflowY:'auto', minWidth:0,
   },
-  activeSidebarNode: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '11px 10px', background: 'linear-gradient(135deg,#bda88a,#d3bfa2)',
-    border: 'none', color: '#0f1013', width: '100%', textAlign: 'left',
-    borderRadius: 8, fontSize: '0.7rem', fontWeight: 950,
-    boxShadow: '0 4px 12px rgba(211,191,162,0.12)', minHeight: 44
-  },
-  countBadge: { fontSize: '0.6rem', padding: '3px 6px', borderRadius: 5, fontWeight: 900, border: '1px solid #232730' },
-  mini86: {
-    padding: '3px', cursor: 'pointer', display: 'inline-flex',
-    background: 'rgba(255,255,255,0.01)', border: '1px solid #232730',
-    borderRadius: 5, color: '#444', transition: '0.2s'
-  },
-  vegToggleWrap: {
-    display: 'flex', background: '#0d0e11', borderRadius: 8,
-    border: '1px solid #1f222a', padding: 3, marginBottom: 10, flexShrink: 0
-  },
-  vegBtn: {
-    flex: 1, padding: '6px 4px', borderRadius: 6, border: 'none', cursor: 'pointer',
-    fontSize: '0.6rem', fontWeight: 900, display: 'flex', alignItems: 'center',
-    justifyContent: 'center', gap: 5, background: 'transparent', color: '#555', transition: 'all 0.15s'
-  },
-  vegBtnActiveV:  { background: 'linear-gradient(135deg,#2a4a28,#3a6435)', color: '#7ec87a' },
-  vegBtnActiveNV: { background: 'rgba(138,48,48,0.35)', color: '#e07070' },
-
-  /* workspace */
-  workspace: { flex: 1, overflowY: 'auto', minWidth: 0 },
-
-  /* metrics */
-  metricsPanel: {
-    background: '#13151a', border: '1px solid #1f222a',
-    padding: '36px 16px', borderRadius: 16,
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    minHeight: '100%'
-  },
-  metricBox: {
-    background: '#0d0e11', border: '1px solid #1f222a',
-    padding: '24px 16px', borderRadius: 12, flex: 1, textAlign: 'center'
-  },
-  metricClose: {
-    marginTop: 28, background: 'transparent',
-    border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2',
-    padding: '11px 26px', borderRadius: 9, fontSize: '0.76rem', fontWeight: 900,
-    cursor: 'pointer', minHeight: 44
-  },
-
-  /* aggregate */
-  aggCard: {
-    background: '#13151a', padding: '20px 14px', borderRadius: 12,
-    border: '1px solid #1f222a', textAlign: 'center'
-  },
-
-  /* mobile bottom bar */
-  mobileBottomBar: {
-    display: 'flex', background: '#13151a', border: '1px solid #1f222a',
-    borderRadius: 12, padding: '3px', flexShrink: 0, gap: 2
-  },
-  bottomBarBtn: {
-    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-    padding: '9px 3px', background: 'transparent', border: 'none',
-    cursor: 'pointer', transition: '0.15s', borderRadius: 9, gap: 2, minHeight: 50
-  },
-
-  /* mobile nav buttons */
   navBtn: {
-    display: 'flex', alignItems: 'center', gap: 5,
-    background: '#191b22', border: '1px solid #252932', color: '#d3bfa2',
-    padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-    fontSize: '0.72rem', fontWeight: 800, minHeight: 44
+    display:'flex', alignItems:'center', gap:5,
+    background:'#080809', border:'1px solid rgba(211,191,162,0.1)',
+    color:'#d3bfa2', padding:'10px 14px', borderRadius:9,
+    cursor:'pointer', fontSize:'0.7rem', fontWeight:800, minHeight:44,
+    transition:'all 0.15s',
   },
 };
 
 const wInput = {
-  width: '100%', padding: '10px 11px',
-  background: '#13151a', border: '1px solid #252932',
-  color: '#fff', borderRadius: 9, fontSize: '0.82rem',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: "'Outfit', sans-serif"
+  width:'100%', padding:'10px 12px',
+  background:'#0d0e11', border:'1px solid rgba(211,191,162,0.1)',
+  color:'#e8e0d0', borderRadius:9, fontSize:'0.8rem',
+  outline:'none', boxSizing:'border-box',
+  fontFamily:"'Outfit', sans-serif",
+  transition:'border-color 0.15s',
 };
- 
+
 const wFormLabel = {
-  display: 'block', fontSize: '0.55rem', color: '#3a3e4a',
-  fontWeight: 900, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase'
+  display:'block', fontSize:'0.5rem', color:'#2a2e38',
+  fontWeight:900, letterSpacing:'1.2px', marginBottom:6,
+  textTransform:'uppercase',
 };
 
 export default KitchenView;
