@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import { io } from "socket.io-client";
 import { 
-  CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,
+  CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,ChevronDown ,
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,
@@ -862,369 +862,289 @@ const getRecommendedDish = (item) => {
   );
 };
 
+
 const speakDish = (item) => {
   if (
     typeof window === 'undefined' ||
     !window.speechSynthesis ||
     typeof SpeechSynthesisUtterance === 'undefined'
   ) {
-    setSpokenText(
-      'Voice description is not supported in this browser.'
-    );
+    setSpokenText('Voice description is not supported in this browser.');
     return;
   }
-
-  // If this exact dish is already speaking → stop.
+ 
+  // Toggle off if already speaking this dish
   if (speakingItemId === item._id) {
     stopSpeech();
     return;
   }
-
-  // Only ONE dish can speak at a time.
+ 
   stopSpeech();
   setSpokenText('');
-
+ 
   const recommended = getRecommendedDish(item);
-  const lang = voiceLang;
-
-  const dishName = getDishName(item, lang);
+  const lang        = voiceLang;
+  const dishName    = getDishName(item, lang);
   const ingredients = getIngredients(item, lang);
   const description = getDescription(item, lang);
-  const spice = getSpiceLevel(item, lang);
-
-  const isBestSeller =
-    item._eng?.quadrant === 'star' ||
-    item.isBestSeller === true;
-
-  const isChefSpecial =
-    item.isChefSpecial === true;
-
-  const serves = item.servingSize
-    ? String(item.servingSize)
-    : '';
-
-  const recName = recommended
-    ? getDishName(recommended, lang)
-    : '';
-
-  // ───────────────────────────────────────────────────────────
-  // NATURAL INDIAN LANGUAGE SCRIPTS
-  // ───────────────────────────────────────────────────────────
-
+  const spice       = getSpiceLevel(item, lang);
+  const isBestSeller = item._eng?.quadrant === 'star' || item.isBestSeller === true;
+  const isChefSpecial = item.isChefSpecial === true;
+  const serves = item.servingSize ? String(item.servingSize) : '';
+  const recName = recommended ? getDishName(recommended, lang) : '';
+  const restName = restaurantData?.name || 'our restaurant';
+ 
+  // ─────────────────────────────────────────────────────────────────
+  // REEL-STYLE INDIAN SCRIPTS
+  // Written as a real person would speak — warm, conversational,
+  // slightly fast-paced, with natural breathing pauses via commas.
+  // Dish names kept as-is so TTS doesn't mangle them.
+  // ─────────────────────────────────────────────────────────────────
   const scripts = {
-
-    // ───────────── ENGLISH INDIA ─────────────
+ 
+    // ── ENGLISH INDIA — warm food-blogger reel tone ──
     'en-IN': () => {
+      const hour = new Date().getHours();
+      const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
       const parts = [];
-
-      parts.push(
-        `Welcome to ${restaurantData?.name || 'our restaurant'}.`
-      );
-
-      parts.push(
-        `Let me tell you about ${dishName}.`
-      );
-
-      if (isBestSeller) {
-        parts.push(
-          `${dishName} is one of our bestsellers.`
-        );
-      } else if (isChefSpecial) {
-        parts.push(
-          `${dishName} is a Chef Special, specially recommended by our chef.`
-        );
-      }
-
-      if (item.isVeg !== undefined) {
-        parts.push(
-          item.isVeg !== false
-            ? 'It is a vegetarian dish.'
-            : 'It is a non-vegetarian dish.'
-        );
-      }
-
-      if (serves) {
-        parts.push(
-          `It is suitable for ${serves} people.`
-        );
-      }
-
-      if (spice) {
-        parts.push(
-          `The spice level is ${spice}.`
-        );
-      }
-
-      if (ingredients.length) {
-        parts.push(
-          `The main ingredients are ${ingredients.join(', ')}.`
-        );
-      }
-
-      if (description) {
+ 
+      parts.push(`${greet}, and welcome to ${restName}!`);
+      parts.push(`Today, let me introduce you to something really special — ${dishName}.`);
+ 
+      if (isBestSeller)
+        parts.push(`And honestly? This one is an absolute crowd favourite here. People come back again and again just for this.`);
+      else if (isChefSpecial)
+        parts.push(`Our chef personally recommends this dish, and trust me — it's made with a lot of love and care.`);
+ 
+      if (item.isVeg !== undefined)
+        parts.push(item.isVeg !== false
+          ? `It's a beautifully crafted vegetarian dish.`
+          : `It's a rich non-vegetarian delicacy.`);
+ 
+      if (serves)
+        parts.push(`This portion serves ${serves} people comfortably — perfect for sharing.`);
+ 
+      if (spice)
+        parts.push(`The spice level is ${spice}, so it has that perfect kick without being overwhelming.`);
+ 
+      if (ingredients.length)
+        parts.push(`It's made with — ${ingredients.join(', ')} — all fresh, all flavourful.`);
+ 
+      if (description)
         parts.push(description);
-      }
-
-      if (recName) {
-        parts.push(
-          `For a great combination, you can also try ${recName} with this dish.`
-        );
-      }
-
-      return parts.join(' ');
+ 
+      if (recName)
+        parts.push(`For the full experience, pair it with ${recName}. That combination is absolutely chef's kiss!`);
+ 
+      parts.push(`Go ahead, give it a try. We're sure you'll love it.`);
+ 
+      return parts.join('  ');
     },
-
-    // ───────────── HINDI ─────────────
+ 
+    // ── HINDI — natural desi reel voice ──
     'hi-IN': () => {
+      const hour = new Date().getHours();
+      const greet = hour < 12 ? 'नमस्ते!' : hour < 17 ? 'नमस्कार!' : 'शुभ संध्या!';
       const parts = [];
-
-      parts.push(
-        `हमारे रेस्तरां में आपका स्वागत है।`
-      );
-
-      parts.push(
-        `आइए, मैं आपको ${dishName} के बारे में बताता हूँ।`
-      );
-
-      if (isBestSeller) {
-        parts.push(
-          `${dishName} हमारे सबसे पसंदीदा और लोकप्रिय व्यंजनों में से एक है।`
-        );
-      } else if (isChefSpecial) {
-        parts.push(
-          `${dishName} हमारे शेफ की खास पसंद और विशेष व्यंजन है।`
-        );
-      }
-
-      if (item.isVeg !== undefined) {
-        parts.push(
-          item.isVeg !== false
-            ? `यह एक शाकाहारी व्यंजन है।`
-            : `यह एक मांसाहारी व्यंजन है।`
-        );
-      }
-
-      if (serves) {
-        parts.push(
-          `यह ${serves} लोगों के लिए उपयुक्त है।`
-        );
-      }
-
-      if (spice) {
-        parts.push(
-          `इसका तीखापन ${spice} है।`
-        );
-      }
-
-      if (ingredients.length) {
-        parts.push(
-          `इसके मुख्य ingredients हैं: ${ingredients.join(', ')}।`
-        );
-      }
-
-      if (description) {
-        // Use database Hindi description when available.
-        // Otherwise preserve the restaurant's actual description.
+ 
+      parts.push(`${greet}  ${restName} में आपका दिल से स्वागत है।`);
+      parts.push(`आज मैं आपको बताने वाला हूँ एक बेहतरीन डिश के बारे में — ${dishName}.`);
+ 
+      if (isBestSeller)
+        parts.push(`और सच कहूँ तो, ये हमारे यहाँ की सबसे ज़्यादा पसंद की जाने वाली डिश है। लोग इसके लिए बार-बार आते हैं।`);
+      else if (isChefSpecial)
+        parts.push(`ये हमारे शेफ की खास पसंद है — बड़े प्यार और मेहनत से बनाई गई।`);
+ 
+      if (item.isVeg !== undefined)
+        parts.push(item.isVeg !== false
+          ? `ये एक लाजवाब शाकाहारी डिश है।`
+          : `ये एक शानदार मांसाहारी व्यंजन है।`);
+ 
+      if (serves)
+        parts.push(`इतनी quantity ${serves} लोगों के लिए बिल्कुल सही रहती है।`);
+ 
+      if (spice)
+        parts.push(`इसका तीखापन ${spice} है — न ज़्यादा, न कम — बस एकदम सही।`);
+ 
+      if (ingredients.length)
+        parts.push(`इसमें डाले जाते हैं — ${ingredients.join(', ')} — सब कुछ एकदम ताज़ा।`);
+ 
+      if (description)
         parts.push(description);
-      }
-
-      if (recName) {
-        parts.push(
-          `इसके साथ आप ${recName} भी आज़मा सकते हैं। यह एक बेहतरीन combination रहेगा।`
-        );
-      }
-
-      return parts.join(' ');
+ 
+      if (recName)
+        parts.push(`इसके साथ अगर आप ${recName} भी try करें, तो combination एकदम कमाल रहेगा।`);
+ 
+      parts.push(`तो देर किस बात की? एक बार ज़रूर आज़माएं।`);
+ 
+      return parts.join('  ');
     },
-
-    // ───────────── MARATHI INDIA ─────────────
+ 
+    // ── MARATHI — authentic Kolhapuri warmth ──
     'mr-IN': () => {
+      const hour = new Date().getHours();
+      const greet = hour < 12 ? 'सुप्रभात!' : hour < 17 ? 'नमस्कार!' : 'शुभ संध्याकाळ!';
       const parts = [];
-
-      parts.push(
-        `आमच्या रेस्टॉरंटमध्ये आपले मनःपूर्वक स्वागत आहे।`
-      );
-
-      parts.push(
-        `चला, मी तुम्हाला ${dishName} बद्दल सांगतो।`
-      );
-
-      if (isBestSeller) {
-        parts.push(
-          `${dishName} हा आमच्या सर्वाधिक पसंतीच्या पदार्थांपैकी एक आहे।`
-        );
-      } else if (isChefSpecial) {
-        parts.push(
-          `${dishName} हा आमच्या शेफची खास शिफारस असलेला विशेष पदार्थ आहे।`
-        );
-      }
-
-      if (item.isVeg !== undefined) {
-        parts.push(
-          item.isVeg !== false
-            ? `हा शाकाहारी पदार्थ आहे।`
-            : `हा मांसाहारी पदार्थ आहे।`
-        );
-      }
-
-      if (serves) {
-        parts.push(
-          `हा ${serves} व्यक्तींसाठी योग्य आहे।`
-        );
-      }
-
-      if (spice) {
-        parts.push(
-          `या पदार्थाचा तिखटपणा ${spice} आहे।`
-        );
-      }
-
-      if (ingredients.length) {
-        parts.push(
-          `यामधील मुख्य घटक आहेत: ${ingredients.join(', ')}।`
-        );
-      }
-
-      if (description) {
+ 
+      parts.push(`${greet}  ${restName} मध्ये आपले मनापासून स्वागत आहे.`);
+      parts.push(`आज मी तुम्हाला एका अप्रतिम पदार्थाबद्दल सांगणार आहे — ${dishName}.`);
+ 
+      if (isBestSeller)
+        parts.push(`खरं सांगायचं तर, हा आमच्याकडचा सगळ्यात जास्त आवडणारा पदार्थ आहे. लोक याच्यासाठी परत परत येतात.`);
+      else if (isChefSpecial)
+        parts.push(`हा आमच्या शेफची खास शिफारस आहे — खूप मेहनत आणि प्रेमाने बनवलेला.`);
+ 
+      if (item.isVeg !== undefined)
+        parts.push(item.isVeg !== false
+          ? `हा एक सुंदर शाकाहारी पदार्थ आहे.`
+          : `हा एक चविष्ट मांसाहारी पदार्थ आहे.`);
+ 
+      if (serves)
+        parts.push(`हे ${serves} जणांसाठी एकदम योग्य आहे.`);
+ 
+      if (spice)
+        parts.push(`यातला तिखटपणा ${spice} आहे — न जास्त, न कमी — अगदी परफेक्ट.`);
+ 
+      if (ingredients.length)
+        parts.push(`यात वापरले जातात — ${ingredients.join(', ')} — सगळं एकदम ताज्या दर्जाचं.`);
+ 
+      if (description)
         parts.push(description);
-      }
-
-      if (recName) {
-        parts.push(
-          `यासोबत तुम्ही ${recName} देखील नक्की करून पाहू शकता। ही एक उत्तम जोडी ठरेल।`
-        );
-      }
-
-      return parts.join(' ');
-    }
+ 
+      if (recName)
+        parts.push(`याच्यासोबत ${recName} पण नक्की try करा. ही जोडी एकदम जमेल!`);
+ 
+      parts.push(`तर मग उशीर नको — एकदा जरूर चाखून पाहा.`);
+ 
+      return parts.join('  ');
+    },
   };
-
-  const text =
-    (scripts[lang] || scripts['en-IN'])()
-      .replace(/\s+/g, ' ')
-      .trim();
-
+ 
+  const text = (scripts[lang] || scripts['en-IN'])()
+    .replace(/\s+/g, ' ')
+    .trim();
+ 
   if (!text) return;
-
+ 
   setSpokenText(text);
-
+ 
   const utterance = new SpeechSynthesisUtterance(text);
-  // Reset word highlighting whenever a new speech starts.
-setCurrentSpeechWordIndex(0);
-
-// Speech boundary event.
-// Chrome/Edge generally provide this for word-level synchronization.
-utterance.onboundary = (event) => {
-  if (event.name !== 'word') return;
-
-  const beforeCurrentWord = text.slice(
-    0,
-    event.charIndex
-  );
-
-  const wordIndex =
-    beforeCurrentWord
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .length;
-
-  setCurrentSpeechWordIndex(wordIndex);
-};
-
-  utterance.lang = lang;
+  setCurrentSpeechWordIndex(0);
+ 
+  // Word boundary for live transcript highlight
+  utterance.onboundary = (event) => {
+    if (event.name !== 'word') return;
+    const beforeWord = text.slice(0, event.charIndex);
+    const wordIndex = beforeWord.trim().split(/\s+/).filter(Boolean).length;
+    setCurrentSpeechWordIndex(wordIndex);
+  };
+ 
+  utterance.lang   = lang;
   utterance.volume = 1;
-
-  // Natural Indian restaurant-style pacing.
+ 
+  // ── REEL-STYLE CADENCE per language ──
+  // Faster than default but not robotic — sounds like a confident
+  // Indian food creator speaking naturally.
   if (lang === 'en-IN') {
-    utterance.rate = 0.88;
-    utterance.pitch = 1.02;
+    utterance.rate  = 0.92;   // slightly brisk, energetic
+    utterance.pitch = 1.08;   // a touch warm/bright
   } else if (lang === 'hi-IN') {
-    utterance.rate = 0.84;
-    utterance.pitch = 1.0;
+    utterance.rate  = 0.88;   // natural Hindi pace
+    utterance.pitch = 1.04;
   } else {
-    utterance.rate = 0.82;
-    utterance.pitch = 1.0;
+    utterance.rate  = 0.86;   // Marathi is slightly deliberate
+    utterance.pitch = 1.02;
   }
-
-  // ───────────────────────────────────────────────────────────
-  // BEST AVAILABLE INDIAN VOICE
-  // ───────────────────────────────────────────────────────────
-
+ 
+  // ── BEST INDIAN VOICE SELECTION ──
+  // Priority: Google India female → Microsoft India → any India → lang prefix
   const selectVoice = (voices) => {
     if (!voices?.length) return null;
-
-    const langCode = lang.split('-')[0];
-
-    return (
-      voices.find(v =>
-        v.lang === lang &&
-        /india|indian/i.test(v.name)
-      ) ||
-
-      voices.find(v =>
-        v.lang === lang
-      ) ||
-
-      voices.find(v =>
-        v.lang?.startsWith(langCode) &&
-        /india|indian/i.test(v.name)
-      ) ||
-
-      voices.find(v =>
-        v.lang?.startsWith(langCode)
-      ) ||
-
-      null
+    const lc = lang.split('-')[0]; // 'en' | 'hi' | 'mr'
+ 
+    // 1. Google female India (Chrome — best quality, sounds human)
+    const googleFemale = voices.find(v =>
+      v.lang === lang &&
+      /google/i.test(v.name) &&
+      /female|woman|neerja|raveena|heera|swara|lekha/i.test(v.name)
     );
+    if (googleFemale) return googleFemale;
+ 
+    // 2. Any Google India voice
+    const googleIndia = voices.find(v =>
+      v.lang === lang && /google/i.test(v.name)
+    );
+    if (googleIndia) return googleIndia;
+ 
+    // 3. Microsoft India female (Edge/Windows)
+    const msFemale = voices.find(v =>
+      v.lang === lang &&
+      /microsoft/i.test(v.name) &&
+      /neerja|swara|heera|raveena|female|woman/i.test(v.name)
+    );
+    if (msFemale) return msFemale;
+ 
+    // 4. Any Microsoft India
+    const msIndia = voices.find(v =>
+      v.lang === lang && /microsoft/i.test(v.name)
+    );
+    if (msIndia) return msIndia;
+ 
+    // 5. Any voice exactly matching the lang code
+    const exactLang = voices.find(v => v.lang === lang);
+    if (exactLang) return exactLang;
+ 
+    // 6. Lang prefix + India in name
+    const prefixIndia = voices.find(v =>
+      v.lang?.startsWith(lc) && /india|indian/i.test(v.name)
+    );
+    if (prefixIndia) return prefixIndia;
+ 
+    // 7. Any voice with matching language prefix
+    return voices.find(v => v.lang?.startsWith(lc)) || null;
   };
-
-  const voices = window.speechSynthesis.getVoices();
-  const selectedVoice = selectVoice(voices);
-
-  if (selectedVoice) {
-    utterance.voice = selectedVoice;
-  }
-
+ 
+  const loadAndSpeak = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const voice  = selectVoice(voices);
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+ 
   utterance.onstart = () => {
     setSpeakingItemId(item._id);
     setVoicePaused(false);
   };
-
-utterance.onend = () => {
-  setSpeakingItemId(null);
-  setVoicePaused(false);
-  setCurrentSpeechWordIndex(-1);
-  speechRef.current = null;
-};
-
+ 
+  utterance.onend = () => {
+    setSpeakingItemId(null);
+    setVoicePaused(false);
+    setCurrentSpeechWordIndex(-1);
+    speechRef.current = null;
+  };
+ 
   utterance.onerror = (event) => {
-    console.warn('PRATYEKSHA voice error:', event?.error);
-
+    console.warn('Voice error:', event?.error);
     setSpeakingItemId(null);
     setVoicePaused(false);
     speechRef.current = null;
   };
-
+ 
   speechRef.current = utterance;
-
-  // Some Chrome installations load voices asynchronously.
+ 
+  const voices = window.speechSynthesis.getVoices();
   if (!voices.length) {
+    // Chrome loads voices async — wait for them
     window.speechSynthesis.onvoiceschanged = () => {
-      const loadedVoices = window.speechSynthesis.getVoices();
-      const voice = selectVoice(loadedVoices);
-
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
+      window.speechSynthesis.onvoiceschanged = null;
+      loadAndSpeak();
     };
   } else {
-    window.speechSynthesis.speak(utterance);
+    loadAndSpeak();
   }
 };
+ 
 
 const toggleVoicePause = (e) => {
   e?.stopPropagation();
@@ -7211,6 +7131,7 @@ onClick={() => {
 </AnimatePresence>
 
       <AnimatePresence>
+
 {activeModel && (
   <motion.div
     initial={{ opacity: 0 }}
@@ -7219,141 +7140,82 @@ onClick={() => {
     transition={{ duration: 0.22 }}
     style={styles.modalOverlay}
   >
-
-    {/* ══════════ NAV BAR ══════════ */}
+ 
+    {/* ══════════ STICKY NAV BAR ══════════ */}
     <div style={styles.modalNav}>
       <div style={{ minWidth: 0, flex: 1 }}>
-
-        {/* Dish name */}
+ 
         <h2 style={{ ...styles.modalTitle, color: primaryColor }}>
           {language === 'mr'
             ? (activeModel.name_mr || activeModel.name)
             : activeModel.name}
         </h2>
-
+ 
         {/* Badges row */}
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          gap: '6px', marginTop: '5px', flexWrap: 'wrap'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px', flexWrap: 'wrap' }}>
+ 
           {/* Veg / Non-veg */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '2px 8px', borderRadius: '5px',
-            border: '1px solid rgba(211,191,162,0.15)',
-            background: 'rgba(211,191,162,0.05)'
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '5px', border: '1px solid rgba(211,191,162,0.15)', background: 'rgba(211,191,162,0.05)' }}>
             <Leaf size={9} color="rgba(211,191,162,0.5)" strokeWidth={2} />
-            <span style={{
-              fontSize: '0.48rem', fontWeight: '800',
-              color: 'rgba(211,191,162,0.5)', letterSpacing: '0.5px'
-            }}>
+            <span style={{ fontSize: '0.47rem', fontWeight: '800', color: 'rgba(211,191,162,0.5)', letterSpacing: '0.5px' }}>
               {activeModel.isVeg !== false ? 'VEG' : 'NON-VEG'}
             </span>
           </div>
-
+ 
           {/* Bestseller */}
           {(activeModel.isBestSeller || activeModel._eng?.quadrant === 'star') && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              padding: '2px 8px', borderRadius: '5px',
-              border: '1px solid rgba(211,191,162,0.2)',
-              background: 'rgba(211,191,162,0.07)'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '5px', border: '1px solid rgba(211,191,162,0.2)', background: 'rgba(211,191,162,0.07)' }}>
               <Tag size={9} color="#d3bfa2" strokeWidth={2} />
-              <span style={{
-                fontSize: '0.48rem', fontWeight: '900',
-                color: '#d3bfa2', letterSpacing: '0.5px'
-              }}>
-                BESTSELLER
-              </span>
+              <span style={{ fontSize: '0.47rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>BESTSELLER</span>
             </div>
           )}
-
+ 
           {/* Chef Special */}
           {activeModel.isChefSpecial && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              padding: '2px 8px', borderRadius: '5px',
-              border: '1px solid rgba(211,191,162,0.18)',
-              background: 'rgba(211,191,162,0.06)'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '5px', border: '1px solid rgba(211,191,162,0.18)', background: 'rgba(211,191,162,0.06)' }}>
               <Utensils size={9} color="#d3bfa2" strokeWidth={2} />
-              <span style={{
-                fontSize: '0.48rem', fontWeight: '900',
-                color: '#d3bfa2', letterSpacing: '0.5px'
-              }}>
-                CHEF SPECIAL
-              </span>
+              <span style={{ fontSize: '0.47rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>CHEF SPECIAL</span>
             </div>
           )}
-
+ 
           {/* Spice */}
           {activeModel.spiceLevel && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '3px',
-              padding: '2px 7px', borderRadius: '5px',
-              border: '1px solid rgba(255,255,255,0.07)',
-              background: 'rgba(255,255,255,0.03)'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
               <Flame size={9} color="rgba(255,255,255,0.3)" strokeWidth={2} />
-              <span style={{
-                fontSize: '0.48rem', fontWeight: '700',
-                color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize'
-              }}>
-                {activeModel.spiceLevel}
-              </span>
+              <span style={{ fontSize: '0.47rem', fontWeight: '700', color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize' }}>{activeModel.spiceLevel}</span>
             </div>
           )}
-
+ 
           {/* Price */}
           {activeModel.price > 0 && (
-            <span style={{
-              fontSize: '0.72rem', fontWeight: '900',
-              color: 'rgba(211,191,162,0.7)',
-              fontFamily: 'monospace', letterSpacing: '-0.5px',
-              marginLeft: '2px'
-            }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: '900', color: 'rgba(211,191,162,0.7)', fontFamily: 'monospace', letterSpacing: '-0.5px', marginLeft: '2px' }}>
               ₹{activeModel.priceFull || activeModel.price}
             </span>
           )}
         </div>
       </div>
-
-      {/* Close button */}
+ 
+      {/* Close */}
       <button
         type="button"
         aria-label="Close 3D dish view"
         onClick={() => { stopSpeech(); setSpokenText(''); setActiveModel(null); }}
-        style={{
-          width: '36px', height: '36px', borderRadius: '10px',
-          border: '1px solid rgba(255,255,255,0.08)',
-          background: 'rgba(255,255,255,0.04)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', flexShrink: 0, marginLeft: '12px'
-        }}
+        style={{ width: '36px', height: '36px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: '12px' }}
       >
         <X size={18} color="rgba(255,255,255,0.55)" strokeWidth={2} />
       </button>
     </div>
-
-    {/* ══════════ MODEL CONTAINER ══════════ */}
+ 
+    {/* ══════════ SCROLLABLE CONTENT ══════════ */}
     <div style={styles.modelContainer}>
-
-      {/* ── 3D VIEWER ── */}
+ 
+      {/* ── 3D VIEWER (fixed height, allows scroll past it) ── */}
       <div style={styles.dishModelWrapper}>
-        {/* Gradient overlays for depth */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          height: '80px', zIndex: 2, pointerEvents: 'none',
-          background: 'linear-gradient(to top, #080808 0%, transparent 100%)'
-        }} />
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          height: '40px', zIndex: 2, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(5,5,5,0.4) 0%, transparent 100%)'
-        }} />
-
+        {/* bottom fade */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '70px', zIndex: 2, pointerEvents: 'none', background: 'linear-gradient(to top, #080808 0%, transparent 100%)' }} />
+        {/* top fade */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '30px', zIndex: 2, pointerEvents: 'none', background: 'linear-gradient(to bottom, rgba(5,5,5,0.4) 0%, transparent 100%)' }} />
+ 
         <model-viewer
           src={activeModel.modelUrl}
           ar ar-modes="webxr scene-viewer quick-look"
@@ -7362,27 +7224,15 @@ onClick={() => {
           exposure="0.9"
           style={{ width: '100%', height: '100%' }}
         />
-
-        {/* Hint label */}
-        <div style={{
-          position: 'absolute', bottom: '14px',
-          left: '50%', transform: 'translateX(-50%)',
-          zIndex: 5, pointerEvents: 'none',
-          display: 'flex', alignItems: 'center', gap: '5px',
-          padding: '4px 11px', borderRadius: '20px',
-          background: 'rgba(0,0,0,0.55)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(8px)'
-        }}>
+ 
+        {/* Drag hint */}
+        <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 11px', borderRadius: '20px', background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.07)', backdropFilter: 'blur(8px)' }}>
           <CircleDot size={9} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
-          <span style={{
-            fontSize: '0.46rem', color: 'rgba(255,255,255,0.25)',
-            fontWeight: '700', letterSpacing: '0.5px', whiteSpace: 'nowrap'
-          }}>
+          <span style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.25)', fontWeight: '700', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
             {t[language].zoomRotate || 'Drag to rotate · Pinch to zoom'}
           </span>
         </div>
-
+ 
         {/* Chef bubble */}
         {activeModel.isChefSpecial === true && (
           <div style={styles.chefContainerAR}>
@@ -7398,56 +7248,44 @@ onClick={() => {
                 />
               </div>
               <div style={styles.chefBubbleRight}>
-                <MessageSquare size={10} style={{
-                  position: 'absolute', top: '12px', left: '-7px',
-                  color: 'rgba(211,191,162,0.4)'
-                }} />
+                <MessageSquare size={10} style={{ position: 'absolute', top: '12px', left: '-7px', color: 'rgba(211,191,162,0.4)' }} />
                 "{activeModel.chefMessage || "My personal favourite — you'll love the flavours."}"
               </div>
             </div>
           </div>
         )}
       </div>
-
+ 
+      {/* ── SCROLL HINT — nudges user to scroll ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 0 4px', background: '#080808' }}>
+        <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out infinite' }} />
+        <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          Scroll for details
+        </span>
+        <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out 0.2s infinite' }} />
+      </div>
+ 
       {/* ══════════ DISH INFO CARD ══════════ */}
-      <div style={{
-        margin: '0 13px 13px 13px',
-        background: 'rgba(13,13,13,0.98)',
-        border: '1px solid rgba(211,191,162,0.1)',
-        borderRadius: '18px',
-        overflow: 'hidden'
-      }}>
-
+      <div style={{ background: '#0c0c0c', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+ 
         {/* Description */}
         {activeModel.description && (
-          <div style={{
-            padding: '14px 16px 12px 16px',
-            borderBottom: '1px solid rgba(255,255,255,0.05)'
-          }}>
-            <div style={{
-              fontSize: '0.55rem', fontWeight: '700',
-              color: 'rgba(211,191,162,0.3)', letterSpacing: '2px',
-              textTransform: 'uppercase', marginBottom: '6px'
-            }}>
-              ABOUT THIS DISH
-            </div>
-            <p style={{
-              margin: 0, fontSize: '0.72rem',
-              color: 'rgba(255,255,255,0.55)',
-              lineHeight: 1.65, fontWeight: '400'
-            }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '7px' }}>ABOUT THIS DISH</div>
+            <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, fontWeight: '400' }}>
               {activeModel.description}
             </p>
           </div>
         )}
-
-        {/* Quick stats row */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-          borderBottom: '1px solid rgba(255,255,255,0.05)'
-        }}>
+ 
+        {/* Stats grid */}
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.05)', overflowX: 'auto', flexWrap: 'nowrap' }} className="no-scrollbar">
           {[
+            activeModel.isVeg !== undefined && {
+              icon: <Leaf size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
+              label: 'Type',
+              value: activeModel.isVeg !== false ? 'Veg' : 'Non-Veg'
+            },
             activeModel.servingSize && {
               icon: <Users size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
               label: 'Serves',
@@ -7469,42 +7307,18 @@ onClick={() => {
               value: `₹${activeModel.priceFull}`
             },
           ].filter(Boolean).map((stat, i) => (
-            <div key={i} style={{
-              padding: '12px 14px',
-              borderRight: '1px solid rgba(255,255,255,0.04)',
-              textAlign: 'center'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>
-                {stat.icon}
-              </div>
-              <div style={{
-                fontSize: '0.78rem', fontWeight: '800',
-                color: 'rgba(255,255,255,0.7)', marginBottom: '2px'
-              }}>
-                {stat.value}
-              </div>
-              <div style={{
-                fontSize: '0.48rem', fontWeight: '700',
-                color: 'rgba(255,255,255,0.2)', letterSpacing: '0.5px',
-                textTransform: 'uppercase'
-              }}>
-                {stat.label}
-              </div>
+            <div key={i} style={{ padding: '12px 18px', borderRight: '1px solid rgba(255,255,255,0.04)', textAlign: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>{stat.icon}</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: '800', color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{stat.value}</div>
+              <div style={{ fontSize: '0.48rem', fontWeight: '700', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{stat.label}</div>
             </div>
           ))}
         </div>
-
+ 
         {/* Ingredients */}
         {activeModel.ingredients?.en?.length > 0 && (
-          <div style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid rgba(255,255,255,0.05)'
-          }}>
-            <div style={{
-              fontSize: '0.5rem', fontWeight: '700',
-              color: 'rgba(211,191,162,0.3)', letterSpacing: '2px',
-              textTransform: 'uppercase', marginBottom: '8px'
-            }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px' }}>
               KEY INGREDIENTS
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
@@ -7512,85 +7326,50 @@ onClick={() => {
                 ? activeModel.ingredients.mr
                 : activeModel.ingredients.en
               ).slice(0, 6).map((ing, i) => (
-                <span key={i} style={{
-                  padding: '3px 9px', borderRadius: '5px',
-                  fontSize: '0.6rem', fontWeight: '600',
-                  color: 'rgba(211,191,162,0.5)',
-                  background: 'rgba(211,191,162,0.05)',
-                  border: '1px solid rgba(211,191,162,0.1)'
-                }}>
+                <span key={i} style={{ padding: '3px 9px', borderRadius: '5px', fontSize: '0.6rem', fontWeight: '600', color: 'rgba(211,191,162,0.5)', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
                   {ing}
                 </span>
               ))}
             </div>
           </div>
         )}
-
+ 
         {/* ══════════ VOICE PANEL ══════════ */}
         {typeof window !== 'undefined' && window.speechSynthesis && (
-          <div style={{ padding: '14px 16px 16px 16px' }}>
-
+          <div style={{ padding: '16px 16px 20px' }}>
+ 
             {/* Header row */}
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between', marginBottom: '12px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '8px',
-                  background: 'rgba(211,191,162,0.07)',
-                  border: '1px solid rgba(211,191,162,0.18)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <Volume2 size={13} color="#d3bfa2" strokeWidth={1.8} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: speakingItemId === activeModel._id ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.06)', border: `1px solid ${speakingItemId === activeModel._id ? 'rgba(211,191,162,0.3)' : 'rgba(211,191,162,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                  <Volume2 size={14} color="#d3bfa2" strokeWidth={1.8} />
                 </div>
                 <div>
-                  <div style={{
-                    fontSize: '0.58rem', fontWeight: '900',
-                    color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase'
-                  }}>
+                  <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                     HEAR THIS DISH
                   </div>
-                  <div style={{
-                    fontSize: '0.46rem', color: 'rgba(255,255,255,0.2)',
-                    marginTop: '1px', fontWeight: '500'
-                  }}>
-                    Listen in your preferred language
+                  <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', marginTop: '2px', fontWeight: '500' }}>
+                    {voiceLang === 'mr-IN'
+                      ? 'मराठीत वर्णन ऐका'
+                      : voiceLang === 'hi-IN'
+                      ? 'हिन्दी में विवरण सुनें'
+                      : 'Listen in Indian English'}
                   </div>
                 </div>
               </div>
-
-              {/* Language selector pill group */}
-              <div style={{
-                display: 'flex', gap: '2px',
-                padding: '2px', borderRadius: '8px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)'
-              }}>
+ 
+              {/* Language selector */}
+              <div style={{ display: 'flex', gap: '2px', padding: '3px', borderRadius: '9px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 {[
-                  { code: 'en-IN', label: 'EN' },
-                  { code: 'hi-IN', label: 'HI' },
-                  { code: 'mr-IN', label: 'MR' },
-                ].map(({ code, label }) => {
+                  { code: 'en-IN', label: 'EN', full: 'English' },
+                  { code: 'hi-IN', label: 'HI', full: 'हिन्दी' },
+                  { code: 'mr-IN', label: 'MR', full: 'मराठी' },
+                ].map(({ code, label, full }) => {
                   const active = voiceLang === code;
                   return (
                     <button key={code} type="button"
-                      aria-label={`Speak in ${label}`}
-                      onClick={() => {
-                        if (voiceLang !== code) {
-                          stopSpeech(); setSpokenText(''); setVoiceLang(code);
-                        }
-                      }}
-                      style={{
-                        height: '26px', minWidth: '32px', padding: '0 7px',
-                        borderRadius: '6px', cursor: 'pointer',
-                        outline: 'none', fontFamily: 'Poppins, sans-serif',
-                        fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
-                        border: active ? '1px solid rgba(211,191,162,0.35)' : '1px solid transparent',
-                        background: active ? 'rgba(211,191,162,0.12)' : 'transparent',
-                        color: active ? '#d3bfa2' : 'rgba(255,255,255,0.28)',
-                        transition: 'all 0.15s'
-                      }}
+                      onClick={() => { if (voiceLang !== code) { stopSpeech(); setSpokenText(''); setVoiceLang(code); } }}
+                      style={{ height: '28px', minWidth: '34px', padding: '0 8px', borderRadius: '7px', cursor: 'pointer', outline: 'none', fontFamily: 'Poppins, sans-serif', fontSize: '0.5rem', fontWeight: '900', letterSpacing: '0.3px', border: active ? '1px solid rgba(211,191,162,0.4)' : '1px solid transparent', background: active ? 'rgba(211,191,162,0.14)' : 'transparent', color: active ? '#d3bfa2' : 'rgba(255,255,255,0.25)', transition: 'all 0.15s' }}
                     >
                       {label}
                     </button>
@@ -7598,88 +7377,67 @@ onClick={() => {
                 })}
               </div>
             </div>
-
-            {/* Transcript display */}
-            <div style={{
-              minHeight: '60px', marginBottom: '12px',
-              padding: '10px 12px',
-              background: 'rgba(211,191,162,0.03)',
-              border: '1px solid rgba(211,191,162,0.09)',
-              borderRadius: '10px'
-            }}>
+ 
+            {/* ── LIVE TRANSCRIPT BOX ── */}
+            <div style={{ minHeight: '72px', marginBottom: '13px', padding: '11px 13px', background: speakingItemId === activeModel._id ? 'rgba(211,191,162,0.04)' : 'rgba(211,191,162,0.02)', border: `1px solid ${speakingItemId === activeModel._id ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.07)'}`, borderRadius: '11px', transition: 'all 0.3s', position: 'relative', overflow: 'hidden' }}>
+              {/* Subtle shimmer when speaking */}
+              {speakingItemId === activeModel._id && (
+                <div style={{ position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.04), transparent)', animation: 'shimmer 2.5s ease-in-out infinite', pointerEvents: 'none' }} />
+              )}
               {speakingItemId === activeModel._id && spokenText ? (
-                <p aria-live="polite" style={{
-                  margin: 0, fontSize: '0.62rem',
-                  color: 'rgba(211,191,162,0.55)',
-                  lineHeight: 1.7, fontWeight: '400',
-                  fontStyle: 'italic', whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word'
-                }}>
-                  {spokenText}
+                <p aria-live="polite" style={{ margin: 0, fontSize: '0.63rem', color: 'rgba(211,191,162,0.6)', lineHeight: 1.75, fontWeight: '400', fontStyle: 'normal', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {spokenText.split(/\s+/).map((word, i) => (
+                    <span key={i} style={{
+                      display: 'inline',
+                      color: i === currentSpeechWordIndex
+                        ? '#d3bfa2'
+                        : i < currentSpeechWordIndex
+                          ? 'rgba(211,191,162,0.35)'
+                          : 'rgba(211,191,162,0.55)',
+                      fontWeight: i === currentSpeechWordIndex ? '700' : '400',
+                      transition: 'color 0.15s, font-weight 0.15s',
+                    }}>
+                      {word}{' '}
+                    </span>
+                  ))}
                 </p>
               ) : (
-                <p style={{
-                  margin: 0, fontSize: '0.58rem',
-                  color: 'rgba(255,255,255,0.15)',
-                  lineHeight: 1.6, fontStyle: 'italic'
-                }}>
+                <p style={{ margin: 0, fontSize: '0.58rem', color: 'rgba(255,255,255,0.14)', lineHeight: 1.65, fontStyle: 'italic' }}>
                   {voiceLang === 'mr-IN'
-                    ? 'या पदार्थाबद्दल ऐकण्यासाठी खाली दाबा...'
+                    ? 'खाली दाबा आणि या पदार्थाबद्दल ऐका...'
                     : voiceLang === 'hi-IN'
-                    ? 'इस व्यंजन के बारे में सुनने के लिए नीचे दबाएं...'
-                    : 'Tap below to hear a full description of this dish...'}
+                    ? 'नीचे दबाएं और इस डिश के बारे में सुनें...'
+                    : 'Tap below to hear a full reel-style description...'}
                 </p>
               )}
             </div>
-
-            {/* Controls */}
+ 
+            {/* ── CONTROLS ── */}
             <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
-
-              {/* Main play / stop */}
+ 
+              {/* Main play/stop button */}
               <button
                 type="button"
                 aria-label={speakingItemId === activeModel._id ? 'Stop' : 'Hear description'}
                 onClick={() => speakDish(activeModel)}
-                style={{
-                  flex: 1, height: '44px', borderRadius: '12px',
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: '8px',
-                  cursor: 'pointer', outline: 'none',
-                  fontFamily: 'Poppins, sans-serif',
-                  border: `1px solid ${speakingItemId === activeModel._id
-                    ? 'rgba(211,191,162,0.45)'
-                    : 'rgba(211,191,162,0.22)'}`,
-                  background: speakingItemId === activeModel._id
-                    ? 'rgba(211,191,162,0.14)'
-                    : 'rgba(211,191,162,0.08)',
-                  transition: 'all 0.2s'
-                }}
+                style={{ flex: 1, height: '48px', borderRadius: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', cursor: 'pointer', outline: 'none', fontFamily: 'Poppins, sans-serif', border: `1px solid ${speakingItemId === activeModel._id ? 'rgba(211,191,162,0.45)' : 'rgba(211,191,162,0.22)'}`, background: speakingItemId === activeModel._id ? 'rgba(211,191,162,0.14)' : 'rgba(211,191,162,0.08)', transition: 'all 0.2s' }}
               >
                 {speakingItemId === activeModel._id ? (
                   <>
-                    <div style={{ display: 'flex', gap: '2.5px', alignItems: 'center', height: '16px' }}>
-                      {[5, 10, 7, 13, 6, 11, 4].map((h, i) => (
-                        <div key={i} style={{
-                          width: '2px', borderRadius: '1px',
-                          background: '#d3bfa2', height: `${h}px`,
-                          animation: `pulse ${0.6 + i * 0.08}s ease-in-out ${i * 0.1}s infinite`
-                        }} />
+                    {/* Animated waveform */}
+                    <div style={{ display: 'flex', gap: '2.5px', alignItems: 'center', height: '18px' }}>
+                      {[5, 11, 7, 14, 6, 12, 4, 9, 13, 5].map((h, i) => (
+                        <div key={i} style={{ width: '2.5px', borderRadius: '2px', background: '#d3bfa2', height: `${h}px`, animation: `pulse ${0.55 + i * 0.07}s ease-in-out ${i * 0.08}s infinite` }} />
                       ))}
                     </div>
-                    <span style={{
-                      fontSize: '0.58rem', fontWeight: '900',
-                      color: '#d3bfa2', letterSpacing: '1px'
-                    }}>
-                      {voicePaused ? 'PAUSED · TAP TO STOP' : 'PLAYING · TAP TO STOP'}
+                    <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.8px' }}>
+                      {voicePaused ? 'PAUSED' : voiceLang === 'mr-IN' ? 'बोलत आहे...' : voiceLang === 'hi-IN' ? 'बोल रहा है...' : 'PLAYING...'}
                     </span>
                   </>
                 ) : (
                   <>
-                    <Volume2 size={15} color="#d3bfa2" strokeWidth={1.8} />
-                    <span style={{
-                      fontSize: '0.58rem', fontWeight: '900',
-                      color: '#d3bfa2', letterSpacing: '0.8px'
-                    }}>
+                    <Volume2 size={16} color="#d3bfa2" strokeWidth={1.8} />
+                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '0.5px' }}>
                       {voiceLang === 'mr-IN' ? 'वर्णन ऐका'
                         : voiceLang === 'hi-IN' ? 'विवरण सुनें'
                         : 'HEAR DESCRIPTION'}
@@ -7687,78 +7445,49 @@ onClick={() => {
                   </>
                 )}
               </button>
-
-              {/* Pause / resume */}
+ 
+              {/* Pause/Resume */}
               {speakingItemId === activeModel._id && (
                 <button type="button"
                   aria-label={voicePaused ? 'Resume' : 'Pause'}
                   onClick={toggleVoicePause}
-                  style={{
-                    width: '44px', height: '44px', borderRadius: '12px',
-                    flexShrink: 0, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(211,191,162,0.06)',
-                    border: '1px solid rgba(211,191,162,0.2)',
-                    cursor: 'pointer', outline: 'none'
-                  }}
+                  style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.2)', cursor: 'pointer', outline: 'none' }}
                 >
                   {voicePaused
-                    ? <Play  size={15} color="#d3bfa2" strokeWidth={2} />
-                    : <Pause size={15} color="#d3bfa2" strokeWidth={2} />
-                  }
+                    ? <Play  size={16} color="#d3bfa2" strokeWidth={2} />
+                    : <Pause size={16} color="#d3bfa2" strokeWidth={2} />}
                 </button>
               )}
-
+ 
               {/* Stop */}
               {speakingItemId === activeModel._id && (
                 <button type="button" aria-label="Stop"
                   onClick={() => { stopSpeech(); setSpokenText(''); }}
-                  style={{
-                    width: '44px', height: '44px', borderRadius: '12px',
-                    flexShrink: 0, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    cursor: 'pointer', outline: 'none'
-                  }}
+                  style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', outline: 'none' }}
                 >
-                  <X size={15} color="rgba(255,255,255,0.4)" strokeWidth={2} />
+                  <X size={16} color="rgba(255,255,255,0.4)" strokeWidth={2} />
                 </button>
               )}
             </div>
-
+ 
             {/* Status line */}
             {speakingItemId === activeModel._id && (
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                gap: '6px', marginTop: '9px'
-              }}>
-                <div style={{
-                  width: '5px', height: '5px', borderRadius: '50%',
-                  background: 'rgba(211,191,162,0.6)', flexShrink: 0,
-                  animation: 'pulse 0.9s ease-in-out infinite'
-                }} />
-                <span style={{
-                  fontSize: '0.48rem', fontWeight: '600',
-                  color: 'rgba(211,191,162,0.3)', letterSpacing: '0.2px'
-                }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px' }}>
+                <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'rgba(211,191,162,0.7)', flexShrink: 0, animation: 'pulse 0.9s ease-in-out infinite' }} />
+                <span style={{ fontSize: '0.48rem', fontWeight: '600', color: 'rgba(211,191,162,0.3)', letterSpacing: '0.2px' }}>
                   {voicePaused
-                    ? 'Paused — tap play to continue'
-                    : `Speaking in ${
-                        voiceLang === 'mr-IN' ? 'Marathi (मराठी)'
-                        : voiceLang === 'hi-IN' ? 'Hindi (हिन्दी)'
-                        : 'English (India)'
-                      }...`
+                    ? (voiceLang === 'mr-IN' ? 'थांबवले — पुन्हा सुरू करण्यासाठी दाबा' : voiceLang === 'hi-IN' ? 'रुका हुआ — जारी रखने के लिए दबाएं' : 'Paused — tap play to continue')
+                    : (voiceLang === 'mr-IN' ? 'मराठीत बोलत आहे...' : voiceLang === 'hi-IN' ? 'हिन्दी में बोल रहा है...' : 'Speaking in Indian English...')
                   }
                 </span>
               </div>
             )}
           </div>
         )}
-
+ 
       </div>{/* end dish info card */}
-
-    </div>{/* end modelContainer */}
+ 
+    </div>{/* end modelContainer / scroller */}
   </motion.div>
 )}
       </AnimatePresence>
@@ -8666,13 +8395,21 @@ onClick={() => {
     overflow-x: hidden; 
   },
 
+    @keyframes bounceY {
+    0%, 100% { transform: translateY(0px); opacity: 0.25; }
+    50%       { transform: translateY(4px); opacity: 0.5;  }
+  }
+  @keyframes shimmer {
+    0%   { left: -100%; }
+    100% { left: 160%;  }
+  }
   @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
+}
   @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
 }
 `}</style>
 </div>
@@ -8759,16 +8496,40 @@ contentWrapper: {
   drawerRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },
   drawerFooter: { padding: '20px', paddingBottom: '40px' },
   billLinkBtn: { background: 'none', border: 'none', color: '#888', marginTop: '15px', width: '100%', fontSize: '0.8rem', textDecoration: 'underline' },
-modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 7000, display: 'flex', flexDirection: 'column', background: '#050505', overflow: 'hidden' },
+modalOverlay: {
+  position: 'fixed', top: 0, left: 0,
+  width: '100vw', height: '100vh',
+  zIndex: 7000,
+  display: 'flex', flexDirection: 'column',
+  background: '#050505',
+  overflow: 'hidden',          // ← outer shell stays hidden
+},
+ 
+// modelContainer is now the ONE scroller — everything below the sticky nav scrolls
+modelContainer: {
+  flex: 1,
+  background: '#080808',
+  display: 'flex', flexDirection: 'column',
+  overflowY: 'auto', overflowX: 'hidden',
+  WebkitOverflowScrolling: 'touch',
+  scrollBehavior: 'smooth',
+},
+ 
+// 3D viewer box — fixed height that doesn't eat the full screen,
+// so content below is naturally reachable on scroll
+dishModelWrapper: {
+  width: '100%',
+  height: '46vmax',
+  maxHeight: '52vh',
+  minHeight: '240px',
+  position: 'relative',
+  flexShrink: 0,
+  background: 'radial-gradient(ellipse at 50% 60%, #1a1510 0%, #070707 100%)',
+},
+
 modalNav: { padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211,191,162,0.09)', flexShrink: 0, position: 'sticky', top: 0, zIndex: 10, background: 'rgba(5,5,5,0.97)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' },
 modalTitle: { margin: 0, fontSize: '1rem', fontWeight: '800' },
-modelContainer: { flex: 1, background: '#080808', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' },
-dishModelWrapper: {
-  width: '100%', height: '52vmax',
-  maxHeight: '62vh', minHeight: '260px',
-  position: 'relative',
-  background: 'radial-gradient(ellipse at 50% 60%, #1a1510 0%, #070707 100%)'
-},
+
 chefContainerAR: {
   position: 'absolute', bottom: '110px',
   left: '0', zIndex: 50,

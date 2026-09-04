@@ -289,7 +289,15 @@ const [newCampaign, setNewCampaign]           = useState({
 });
 const [campaignSending, setCampaignSending]   = useState(false);
 
-
+const [feedbackData, setFeedbackData] = useState({ feedback: [], summary: { total: 0, unread: 0, avgRating: 0 } });
+const [feedbackLoading, setFeedbackLoading] = useState(false);
+const [feedbackNoteModal, setFeedbackNoteModal] = useState(null);
+const [feedbackNoteText, setFeedbackNoteText] = useState('');
+const [feedbackMonth, setFeedbackMonth]   = useState(() => {
+  const d = new Date(new Date().getTime() + 330*60*1000);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+});
+ 
   // ── IST today string — used for billing HUD and daily breakdowns
 const istTodayStr = useMemo(() => {
   return new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
@@ -3912,271 +3920,413 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 )}
  
 <aside style={styles.sidebar} className={`p-sidebar ${sidebarOpen ? 'p-sidebar-open' : ''}`}>
-  <div style={styles.sidebarTop} className="p-sidebar-top">
-    <div style={styles.logoWrapper}>
-      <img src={logoPath} alt="Logo" style={styles.sidebarLogo} className="p-sidebar-logo-wrap"/>
-    </div>
-    <nav style={styles.navStack} className="p-nav-stack">
-      {[
-  {id:'pending',      label:'LIVE KITCHEN',   icon:<CookingPot size={18}/>},
-  {id:'billing',      label:'BILLING HUB',    icon:<ReceiptIndianRupee size={18}/>},
-  {id:'menu',         label:'MENU EDITOR',    icon:<UtensilsCrossed size={18}/>},
-  {id:'insights',     label:'INSIGHTS',       icon:<BarChart3 size={18}/>},
-  {id:'audit', label:'AUDIT', icon:<ShieldCheck size={18}/>},
-  {id:'assist', label:'ASSIST', icon:<Sparkles size={18}/>},
-  {id:'intelligence', label:'INTELLIGENCE',   icon:<MessageSquare size={18}/>},
-  {id:'management',   label:'MANAGEMENT',     icon:<ShieldCheck size={18}/>},
-  {id:'inventory',    label:'INVENTORY',      icon:<Layers size={18}/>},
-  {id:'extras',       label:'EXTRA ITEMS',    icon:<ShoppingBag size={18}/>},
-  {id:'recipes',      label:'RECIPES',        icon:<ChefHat size={18}/>},
-  {id:'customers',    label:'CUSTOMERS',      icon:<Users size={18}/>},        // ← NEW
-  {id:'marketing',    label:'MARKETING',      icon:<Megaphone size={18}/>},    // ← NEW
-
-].map(tab => (
-        <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
-          style={activeTab === tab.id ? styles.activeTab : styles.navBtn}
-          className="p-nav-btn"
-          title={tab.label}>
-          <span style={{marginRight:'15px', flexShrink: 0}}>{tab.icon}</span>
-          <span className="p-nav-label">{tab.label}</span>
-        </button>
-      ))}
-    </nav>
-  </div>
-  <div style={styles.sidebarBottom} className="p-sidebar-bottom">
-    <div style={styles.operatorCard} className="p-op-card">
-      <User size={16} color="#d3bfa2"/>
-      <div className="p-op-text">
-        <div style={{fontSize:'0.75rem',fontWeight:'900'}}>MANAGER</div>
-        <div style={{fontSize:'0.6rem',color:'#444'}}>SESSION ACTIVE</div>
+ 
+  {/* ── Logo / Brand block ── */}
+  <div style={{
+    padding:'28px 22px 20px',
+    borderBottom:'1px solid rgba(211,191,162,0.06)',
+    flexShrink:0
+  }}>
+    {/* Logo row */}
+    <div style={{display:'flex',alignItems:'center',gap:'11px',marginBottom:'18px'}}>
+      <div style={{
+        width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
+        background:'linear-gradient(135deg,rgba(211,191,162,0.15),rgba(138,112,77,0.08))',
+        border:'1px solid rgba(211,191,162,0.18)',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        boxShadow:'0 4px 16px rgba(0,0,0,0.4)'
+      }}>
+        <img src={logoPath} alt="P" style={{width:'22px',height:'22px',objectFit:'contain',filter:'brightness(1.4)'}} className="p-sidebar-logo-wrap"/>
+      </div>
+      <div>
+        <div style={{fontSize:'0.78rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1.5px',lineHeight:1}}>PRATYEKSHA</div>
+        <div style={{fontSize:'0.5rem',color:'#333',fontWeight:'700',letterSpacing:'1px',marginTop:'3px'}}>OPERATOR TERMINAL</div>
       </div>
     </div>
-    <button onClick={handleLogout} style={styles.logoutBtn} className="p-logout-btn">
-      LOGOUT TERMINAL
+ 
+  </div>
+ 
+  {/* ── Navigation ── */}
+  <div style={{...styles.sidebarTop,padding:'14px 14px',flex:1}} className="p-sidebar-top">
+    {/* Section labels + nav items */}
+    {[
+      {
+        section: 'OPERATIONS',
+        items: [
+          {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
+          {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
+          {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
+        ]
+      },
+      {
+        section: 'INTELLIGENCE',
+        items: [
+          {id:'insights',     label:'Insights',        icon:<BarChart3 size={16}/>,    badge: null},
+          {id:'intelligence', label:'AI Intelligence', icon:<Sparkles size={16}/>,     badge: null},
+          {id:'assist',       label:'Assist',          icon:<MessageSquare size={16}/>, badge: null},
+          {id:'audit',        label:'Audit',           icon:<ShieldCheck size={16}/>,  badge: null},
+        ]
+      },
+      {
+        section: 'CATALOG',
+        items: [
+          {id:'inventory',    label:'Inventory',       icon:<Layers size={16}/>,       badge: (procurementData||[]).filter(p=>p.daysRemaining!==null&&p.daysRemaining<=2).length || null},
+          {id:'extras',       label:'Extra Items',     icon:<ShoppingBag size={16}/>,  badge: null},
+          {id:'recipes',      label:'Recipes',         icon:<ChefHat size={16}/>,      badge: null},
+        ]
+      },
+      {
+        section: 'PEOPLE & GROWTH',
+        items: [
+          {id:'management',   label:'Management',      icon:<UserRoundCog size={16}/>, badge: null},
+          {id:'customers',    label:'Customers',       icon:<Users size={16}/>,        badge: null},
+          {id:'marketing',    label:'Marketing',       icon:<Megaphone size={16}/>,    badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length || null},
+          // {id:'feedback',     label:'Feedback',        icon:<MessageCircle size={16}/>,badge: (feedbackData?.summary?.unread ?? 0) > 0 ? feedbackData.summary.unread : null},
+        ]
+      },
+    ].map(({section,items})=>(
+      <div key={section} style={{marginBottom:'6px'}}>
+        {/* Section label */}
+        <div style={{
+          fontSize:'0.44rem',color:'#272727',fontWeight:'900',
+          letterSpacing:'1.8px',padding:'10px 8px 6px',
+          textTransform:'uppercase'
+        }}>{section}</div>
+        {/* Items */}
+        <nav style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+          {items.map(tab=>{
+            const isActive = activeTab === tab.id;
+            return (
+              <button key={tab.id}
+                onClick={()=>{setActiveTab(tab.id);setSidebarOpen(false);}}
+                className="p-nav-btn"
+                title={tab.label}
+                style={{
+                  display:'flex',alignItems:'center',gap:'10px',
+                  padding:'9px 10px',borderRadius:'9px',cursor:'pointer',
+                  background: isActive ? 'rgba(211,191,162,0.09)' : 'transparent',
+                  border: isActive ? '1px solid rgba(211,191,162,0.18)' : '1px solid transparent',
+                  color: isActive ? '#d3bfa2' : '#2e2e2e',
+                  transition:'all 0.15s',
+                  position:'relative',
+                  textAlign:'left',
+                }}
+                onMouseEnter={e=>{if(!isActive){e.currentTarget.style.background='rgba(255,255,255,0.03)';e.currentTarget.style.color='#555';}}}
+                onMouseLeave={e=>{if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#2e2e2e';}}}
+              >
+                {/* Active indicator bar */}
+                {isActive && (
+                  <div style={{
+                    position:'absolute',left:0,top:'20%',bottom:'20%',
+                    width:'2px',borderRadius:'2px',
+                    background:'linear-gradient(180deg,transparent,#d3bfa2,transparent)'
+                  }}/>
+                )}
+                <span style={{
+                  flexShrink:0,
+                  color: isActive ? '#d3bfa2' : '#2a2a2a',
+                  transition:'color 0.15s'
+                }}>{tab.icon}</span>
+                <span className="p-nav-label" style={{
+                  fontSize:'0.7rem',fontWeight: isActive ? '900' : '700',
+                  flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'
+                }}>{tab.label}</span>
+                {/* Badge */}
+                {tab.badge !== null && tab.badge > 0 && (
+                  <span style={{
+                    fontSize:'0.48rem',fontWeight:'900',minWidth:'18px',height:'18px',
+                    borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center',
+                    padding:'0 4px',flexShrink:0,fontFamily:'monospace',
+                    background: isActive ? 'rgba(211,191,162,0.15)' : 'rgba(255,255,255,0.05)',
+                    color: isActive ? '#d3bfa2' : '#3a3a3a',
+                    border: isActive ? '1px solid rgba(211,191,162,0.2)' : '1px solid rgba(255,255,255,0.06)'
+                  }}>{tab.badge}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    ))}
+  </div>
+ 
+  {/* ── Bottom operator card ── */}
+  <div style={{
+    padding:'16px',borderTop:'1px solid rgba(211,191,162,0.06)',
+    flexShrink:0
+  }} className="p-sidebar-bottom">
+    <div style={{
+      display:'flex',alignItems:'center',gap:'11px',
+      padding:'12px 13px',borderRadius:'11px',marginBottom:'10px',
+      background:'rgba(211,191,162,0.04)',
+      border:'1px solid rgba(211,191,162,0.09)'
+    }} className="p-op-card">
+      <div style={{
+        width:'32px',height:'32px',borderRadius:'9px',flexShrink:0,
+        background:'linear-gradient(135deg,rgba(211,191,162,0.15),rgba(138,112,77,0.08))',
+        border:'1px solid rgba(211,191,162,0.2)',
+        display:'flex',alignItems:'center',justifyContent:'center'
+      }}>
+        <User size={14} color="#d3bfa2"/>
+      </div>
+      <div className="p-op-text" style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:'0.68rem',fontWeight:'900',color:'#d3bfa2',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>MANAGER</div>
+        <div style={{fontSize:'0.52rem',color:'#2a2a2a',fontWeight:'700',marginTop:'1px'}}>Session active</div>
+      </div>
+    </div>
+    <button onClick={handleLogout} className="p-logout-btn" style={{
+      width:'100%',padding:'10px',background:'transparent',
+      border:'1px solid rgba(255,255,255,0.05)',color:'#252525',
+      borderRadius:'9px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',
+      letterSpacing:'1px',transition:'all 0.15s'
+    }}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.15)';e.currentTarget.style.color='#555';}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.05)';e.currentTarget.style.color='#252525';}}>
+      SIGN OUT
     </button>
   </div>
 </aside>
 
 
 <main style={styles.mainContent}>
-  <header style={styles.topHeader} className="p-top-header">
+<header style={styles.topHeader} className="p-top-header">
  
-    {/* HAMBURGER — mobile/tablet only */}
-    <button
-      className="p-hamburger"
-      onClick={() => setSidebarOpen(true)}
-      style={{
-        display: 'none',
-        background: 'transparent',
-        border: '1px solid #1a1a1a',
-        color: '#d3bfa2',
-        width: '38px', height: '38px',
-        borderRadius: '10px',
-        cursor: 'pointer',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}
-      aria-label="Open menu"
-    >
-      <AlignJustify size={18} color="#d3bfa2" />
-    </button>
+  {/* Hamburger */}
+  <button className="p-hamburger" onClick={()=>setSidebarOpen(true)} style={{
+    display:'none',background:'transparent',border:'1px solid #1a1a1a',color:'#d3bfa2',
+    width:'36px',height:'36px',borderRadius:'9px',cursor:'pointer',
+    alignItems:'center',justifyContent:'center',flexShrink:0
+  }} aria-label="Open menu">
+    <AlignJustify size={16} color="#d3bfa2"/>
+  </button>
  
-    <div className="p-header-left">
-      <h1 style={styles.pageTitle} className="p-page-title">
-        {activeTab.replace('_',' ').toUpperCase()}
-      </h1>
+  {/* Page title block */}
+  <div className="p-header-left" style={{display:'flex',alignItems:'center',gap:'14px',minWidth:0}}>
+    {/* Icon for active tab */}
+    <div style={{
+      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
+      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',
+      display:'flex',alignItems:'center',justifyContent:'center'
+    }}>
+      {activeTab==='pending'     ? <CookingPot size={16} color="#d3bfa2"/> :
+       activeTab==='billing'     ? <ReceiptIndianRupee size={16} color="#d3bfa2"/> :
+       activeTab==='menu'        ? <UtensilsCrossed size={16} color="#d3bfa2"/> :
+       activeTab==='insights'    ? <BarChart3 size={16} color="#d3bfa2"/> :
+       activeTab==='intelligence'? <Sparkles size={16} color="#d3bfa2"/> :
+       activeTab==='assist'      ? <MessageSquare size={16} color="#d3bfa2"/> :
+       activeTab==='audit'       ? <ShieldCheck size={16} color="#d3bfa2"/> :
+       activeTab==='management'  ? <UserRoundCog size={16} color="#d3bfa2"/> :
+       activeTab==='inventory'   ? <Layers size={16} color="#d3bfa2"/> :
+       activeTab==='extras'      ? <ShoppingBag size={16} color="#d3bfa2"/> :
+       activeTab==='recipes'     ? <ChefHat size={16} color="#d3bfa2"/> :
+       activeTab==='customers'   ? <Users size={16} color="#d3bfa2"/> :
+       activeTab==='marketing'   ? <Megaphone size={16} color="#d3bfa2"/> :
+       activeTab==='feedback'    ? <MessageCircle size={16} color="#d3bfa2"/> :
+       <BarChart3 size={16} color="#d3bfa2"/>}
     </div>
+    <div>
+      <h1 style={{...styles.pageTitle,fontSize:'0.95rem',margin:0,letterSpacing:'2px',lineHeight:1}} className="p-page-title">
+        {activeTab==='pending'?'LIVE KITCHEN':
+         activeTab==='billing'?'BILLING HUB':
+         activeTab==='menu'?'MENU EDITOR':
+         activeTab==='insights'?'INSIGHTS':
+         activeTab==='intelligence'?'AI INTELLIGENCE':
+         activeTab==='assist'?'OPERATOR ASSIST':
+         activeTab==='audit'?'AUDIT LOG':
+         activeTab==='management'?'MANAGEMENT':
+         activeTab==='inventory'?'INVENTORY':
+         activeTab==='extras'?'EXTRA ITEMS':
+         activeTab==='recipes'?'RECIPES':
+         activeTab==='customers'?'CUSTOMERS':
+         activeTab==='marketing'?'MARKETING':
+         activeTab==='feedback'?'FEEDBACK':
+         activeTab.replace('_',' ').toUpperCase()}
+      </h1>
+      <div style={{fontSize:'0.5rem',color:'#2a2a2a',fontWeight:'700',marginTop:'3px',letterSpacing:'0.5px'}}>
+        {activeTab==='pending'?'Live orders · KDS · Table floor':
+         activeTab==='billing'?'Settle bills · Invoices · Payment breakdown':
+         activeTab==='menu'?'Dish catalog · Availability · Pricing':
+         activeTab==='insights'?'Revenue · Analytics · Trends':
+         activeTab==='intelligence'?'AI recommendations · Business intelligence':
+         activeTab==='assist'?'Ask anything about your restaurant data':
+         activeTab==='audit'?'Order history · Settlement log':
+         activeTab==='management'?'Staff roster · Attendance · Payroll':
+         activeTab==='inventory'?'Stock levels · Procurement · Wastage':
+         activeTab==='extras'?'Beverages · Snacks · Retail catalog':
+         activeTab==='recipes'?'Recipe costing · Ingredient mapping':
+         activeTab==='customers'?'CRM · Segments · Visit history':
+         activeTab==='marketing'?'Announcements · Offers · Campaigns':
+         activeTab==='feedback'?'Customer reviews · NPS · Ratings':
+         ''}
+      </div>
+    </div>
+  </div>
  
-    {/* ── Billing HUD ── */}
-{/* ── Billing HUD ── */}
-    {activeTab==='billing' && (
+  {/* ── BILLING header controls ── */}
+  {activeTab==='billing' && (
+    <>
       <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}}
         style={styles.hudCountersRow} className="p-hud">
         {[
-          {
-            label: (() => {
-              const istNow = new Date(new Date().getTime() + 330*60*1000);
-              const isCurrentMonth =
-                viewDate.getFullYear() === istNow.getFullYear() &&
-                viewDate.getMonth()    === istNow.getMonth();
-              return isCurrentMonth ? "TODAY'S INVOICES" : "MONTH INVOICES";
-            })(),
-            val: hudLiveCounterBreakdown.total,
-            color: '#d3bfa2'
-          },          
-          {label:"DINE-IN SETTLED",  val:hudLiveCounterBreakdown.direct},
-          {label:"TAKEAWAY SETTLED", val:hudLiveCounterBreakdown.takeaway},
-          {label:"ONLINE SETTLED",   val:hudLiveCounterBreakdown.online},
+          {label:(()=>{const istNow=new Date(new Date().getTime()+330*60*1000);const isCurrentMonth=viewDate.getFullYear()===istNow.getFullYear()&&viewDate.getMonth()===istNow.getMonth();return isCurrentMonth?"TODAY'S BILLS":"MONTH BILLS";})(),val:hudLiveCounterBreakdown.total,color:'#d3bfa2'},
+          {label:'DINE-IN',  val:hudLiveCounterBreakdown.direct},
+          {label:'TAKEAWAY', val:hudLiveCounterBreakdown.takeaway},
+          {label:'ONLINE',   val:hudLiveCounterBreakdown.online},
         ].map((s,i)=>(
-          <div key={i} style={{...styles.hudStatBox, borderLeft:i>0?'1px solid #1c1f26':'none'}}>
-            <small style={{...styles.hudStatLabel, color:i===0?'#bda88a':undefined}}>{s.label}</small>
+          <div key={i} style={{...styles.hudStatBox,borderLeft:i>0?'1px solid #1c1f26':'none'}}>
+            <small style={{...styles.hudStatLabel,color:i===0?'#bda88a':undefined}}>{s.label}</small>
             <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
-              {typeof s.val === 'number' ? (s.val<10?`0${s.val}`:s.val) : s.val}
+              {typeof s.val==='number'?(s.val<10?`0${s.val}`:s.val):s.val}
             </div>
           </div>
         ))}
       </motion.div>
-    )}
-
-    {activeTab==='billing' && (
-      <button
-        onClick={downloadAllTodaysInvoices}
-        disabled={isDownloadingAllBills}
-        style={{
-          marginLeft: '12px', padding: '10px 18px',
-          background: isDownloadingAllBills ? '#0d0d0d' : 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-          border: 'none', color: isDownloadingAllBills ? '#444' : '#000',
-          borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900',
-          cursor: isDownloadingAllBills ? 'not-allowed' : 'pointer',
-          display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0,
-          letterSpacing: '0.3px'
-        }}
-      >
-        <FileText size={14} />
-        {isDownloadingAllBills ? 'GENERATING...' : "DOWNLOAD TODAY'S INVOICES"}
+      <button onClick={downloadAllTodaysInvoices} disabled={isDownloadingAllBills} style={{
+        marginLeft:'10px',padding:'9px 16px',
+        background:isDownloadingAllBills?'#0d0d0d':'linear-gradient(135deg,#d3bfa2,#bda88a)',
+        border:'none',color:isDownloadingAllBills?'#444':'#000',
+        borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',
+        cursor:isDownloadingAllBills?'not-allowed':'pointer',
+        display:'flex',alignItems:'center',gap:'6px',flexShrink:0
+      }}>
+        <FileText size={13}/>
+        {isDownloadingAllBills?'GENERATING…':"DOWNLOAD INVOICES"}
       </button>
-    )}
-
-    
-    {activeTab==='inventory' && (
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingBottom:'20px',borderBottom:'1px solid #151515'}}>
-        <button onClick={()=>exportToExcel('inventory')}
-          style={{padding:'10px 18px',background:'transparent',border:'1px solid rgba(211,191,162,0.25)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer'}}>
-          EXPORT XLS
+    </>
+  )}
+ 
+  {/* ── INSIGHTS header controls ── */}
+  {activeTab==='insights' && (
+    <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-insights-header">
+      <div style={{...styles.headerMonthSelector,borderRadius:'9px',padding:'5px 12px'}}>
+        <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
+        <div style={{...styles.headerMonthDisplay,gap:'6px'}}>
+          <Calendar size={12} color="#8a704d"/>
+          <span style={{fontWeight:'900',fontSize:'0.78rem',color:'#d3bfa2'}}>
+            {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
+          </span>
+        </div>
+        <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
+      </div>
+      {['daily','weekly','monthly','annual'].map(p=>(
+        <button key={p} onClick={()=>exportToExcel(p)} className="p-xls-btn"
+          style={{padding:'7px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.2)';e.currentTarget.style.color='#d3bfa2';}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
+          {p.toUpperCase()} XLS
         </button>
-      </div>
-    )}
+      ))}
+    </div>
+  )}
  
-    {activeTab==='insights' && (
-      <div style={{display:'flex',alignItems:'center',gap:'10px'}} className="p-insights-header">
-        <div style={styles.headerMonthSelector}>
-          <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={16}/></button>
-          <div style={styles.headerMonthDisplay}>
-            <Calendar size={14} color="#d3bfa2"/>
-            <span style={{fontWeight:'900',fontSize:'0.85rem'}}>
-              {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
-            </span>
-          </div>
-          <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={16}/></button>
+  {/* ── INVENTORY header controls ── */}
+  {activeTab==='inventory' && (
+    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
+      <button onClick={()=>exportToExcel('inventory')}
+        style={{padding:'9px 16px',background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',transition:'all 0.15s'}}
+        onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.07)';}}
+        onMouseLeave={e=>{e.currentTarget.style.background='transparent';}}>
+        <FileText size={13}/> EXPORT XLS
+      </button>
+    </div>
+  )}
+ 
+  {/* ── MANAGEMENT header controls ── */}
+  {activeTab==='management' && (
+    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
+      <div style={{...styles.headerMonthSelector,borderRadius:'9px',padding:'5px 12px'}}>
+        <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
+        <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
+          {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
+        </span>
+        <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
+      </div>
+    </div>
+  )}
+ 
+  {/* ── EXTRAS header controls ── */}
+  {activeTab==='extras' && (
+    <div style={{marginLeft:'auto',display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
+      {[
+        {l:'TOTAL',v:extraItems.length,c:'#d3bfa2'},
+        {l:'AVAILABLE',v:extraItems.filter(i=>i.isAvailable).length,c:'#4ade80'},
+        {l:'STOCK VALUE',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}`,c:'#d3bfa2'},
+      ].map((s,i)=>(
+        <div key={i} style={{
+          textAlign:'center',padding:'8px 16px',
+          background:'rgba(211,191,162,0.04)',
+          border:'1px solid rgba(211,191,162,0.1)',borderRadius:'9px'
+        }}>
+          <div style={{fontSize:'1.05rem',fontWeight:'900',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
+          <div style={{fontSize:'0.46rem',color:'#333',fontWeight:'900',marginTop:'2px',letterSpacing:'0.8px'}}>{s.l}</div>
         </div>
-        {['daily','weekly','monthly','annual'].map(p=>(
-          <button key={p} onClick={()=>exportToExcel(p)}
-            style={{padding:'6px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#555',borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer'}}
-            className="p-xls-btn">
-            {p.toUpperCase()} XLS
+      ))}
+    </div>
+  )}
+ 
+  {/* ── MENU header controls ── */}
+  {activeTab==='menu' && (
+    <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-menu-header-actions">
+      <div style={{display:'flex',background:'#000',border:'1px solid #1a1a1a',borderRadius:'9px',padding:'3px',gap:'3px'}}>
+        {[{val:'all',label:'ALL'},{val:'veg',label:'VEG'},{val:'nonveg',label:'NON-VEG'}].map(f=>(
+          <button key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
+            padding:'6px 12px',border:'none',borderRadius:'6px',cursor:'pointer',
+            fontSize:'0.6rem',fontWeight:'900',transition:'all 0.15s',
+            background:menuVegFilter===f.val?'#d3bfa2':'transparent',
+            color:menuVegFilter===f.val?'#000':'#444'
+          }}>
+            {f.val==='veg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'7px',height:'7px',borderRadius:'50%',background:menuVegFilter==='veg'?'#4a7c3f':'#555',display:'inline-block'}}/>VEG</span>}
+            {f.val==='nonveg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:0,height:0,borderLeft:'3px solid transparent',borderRight:'3px solid transparent',borderBottom:`6px solid ${menuVegFilter==='nonveg'?'#8a3030':'#555'}`,display:'inline-block'}}/>NON-VEG</span>}
+            {f.val==='all'&&'ALL'}
           </button>
         ))}
       </div>
-    )}
- 
-
-    {activeTab==='extras' && (
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'24px',borderBottom:'1px solid #151515'}}>
-        <div style={{display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
-
-        </div>
-      </div>
-    )}
- 
-    {activeTab==='pending' && (
-      <div style={styles.zoneControl}>
-        {['all','fresh','delayed'].map(z=>(
-          <button key={z} onClick={()=>setOrderZone(z)}
-            style={orderZone===z ? styles.activeZoneBtn : styles.zoneBtn}>
-            {z.toUpperCase()}
+      <button onClick={async()=>{try{await axios.post(`${BASE_URL}/admin/recalculate-bestsellers/${tenantId}`);await fetchInitialData();showNotif('Bestsellers recalculated');}catch{showNotif('Failed','error');}}}
+        style={{display:'flex',alignItems:'center',gap:'5px',padding:'7px 13px',borderRadius:'8px',cursor:'pointer',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.15)',color:'#d3bfa2',fontSize:'0.58rem',fontWeight:'900',outline:'none',fontFamily:'inherit',transition:'all 0.15s'}}
+        onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.12)';}}
+        onMouseLeave={e=>{e.currentTarget.style.background='rgba(211,191,162,0.06)';}}>
+        <Tag size={11}/> REFRESH BESTSELLERS
+      </button>
+      {tenantConfig&&(
+        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 12px',background:'#000',border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.22)':'#1a1a1a'}`,borderRadius:'9px',transition:'all 0.2s'}} className="p-autohide-toggle">
+          <Layers size={12} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#333'}/>
+          <span style={{fontSize:'0.58rem',fontWeight:'900',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#333'}} className="p-autohide-label">AUTO-HIDE</span>
+          <button type="button" onClick={async()=>{const nv=!tenantConfig.config?.autoHideDishesOnLowStock;await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);}}
+            style={{width:'36px',height:'19px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#1a1a1a'}}>
+            <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:tenantConfig.config?.autoHideDishesOnLowStock?'#0c0c0c':'#444',transition:'left 0.2s'}}/>
           </button>
-        ))}
-      </div>
-    )}
- 
-    {activeTab==='menu' && (
-      <div style={{display:'flex',alignItems:'center',gap:'14px'}} className="p-menu-header-actions">
-        <div style={{display:'flex',background:'#000',border:'1px solid #1a1a1a',borderRadius:'10px',padding:'4px',gap:'4px'}}>
-          {[
-            {val:'all',    label:'ALL'},
-            {val:'veg',    label:'VEG'},
-            {val:'nonveg', label:'NON-VEG'},
-          ].map(f=>(
-            <button key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
-              padding:'7px 14px',border:'none',borderRadius:'7px',cursor:'pointer',
-              fontSize:'0.65rem',fontWeight:'900',
-              background: menuVegFilter===f.val ? '#d3bfa2' : 'transparent',
-              color: menuVegFilter===f.val ? '#000' : '#444',
-              transition:'all 0.15s'
-            }}>
-              {f.val==='veg' && (
-                <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}>
-                  <span style={{width:'8px',height:'8px',borderRadius:'50%',background:menuVegFilter==='veg'?'#4a7c3f':'#555',display:'inline-block'}}/>
-                  VEG
-                </span>
-              )}
-              {f.val==='nonveg' && (
-                <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}>
-                  <span style={{width:0,height:0,borderLeft:'4px solid transparent',borderRight:'4px solid transparent',borderBottom:`7px solid ${menuVegFilter==='nonveg'?'#8a3030':'#555'}`,display:'inline-block'}}/>
-                  NON-VEG
-                </span>
-              )}
-              {f.val==='all' && 'ALL'}
-            </button>
-          ))}
         </div>
-
-        <button
-  onClick={async () => {
-    try {
-      await axios.post(`${BASE_URL}/admin/recalculate-bestsellers/${tenantId}`);
-      await fetchInitialData();
-      showNotif('Bestsellers recalculated — top 3 per category updated');
-    } catch {
-      showNotif('Recalculation failed', 'error');
-    }
-  }}
-  style={{
-    display: 'flex', alignItems: 'center', gap: '6px',
-    padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
-    background: 'rgba(211,191,162,0.07)',
-    border: '1px solid rgba(211,191,162,0.2)',
-    color: '#d3bfa2', fontSize: '0.6rem',
-    fontWeight: '800', letterSpacing: '0.5px',
-    outline: 'none', fontFamily: 'Poppins, sans-serif'
-  }}
->
-  <Tag size={12} color="#d3bfa2" strokeWidth={1.8} />
-  REFRESH BESTSELLERS
-</button>
+      )}
+    </div>
+  )}
  
-        {tenantConfig && (
-          <div style={{
-            display:'flex',alignItems:'center',gap:'10px',
-            padding:'8px 14px',background:'#000',
-            border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.25)':'#1a1a1a'}`,
-            borderRadius:'10px',transition:'all 0.2s'
-          }} className="p-autohide-toggle">
-            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-              <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#444'}/>
-              <span style={{fontSize:'0.62rem',fontWeight:'900',letterSpacing:'0.5px',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#444'}}
-                className="p-autohide-label">
-                AUTO-HIDE LOW STOCK
-              </span>
-            </div>
-            <button type="button"
-              onClick={async()=>{
-                const nv=!tenantConfig.config?.autoHideDishesOnLowStock;
-                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});
-                setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));
-                showNotif(`Auto-hide ${nv?'enabled — dishes hide when stock hits zero':'disabled'}`);
-              }}
-              style={{width:'38px',height:'20px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',
-                background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#1a1a1a'}}>
-              <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'20px':'3px',width:'14px',height:'14px',borderRadius:'50%',
-                background:tenantConfig.config?.autoHideDishesOnLowStock?'#0c0c0c':'#444',transition:'left 0.2s'}}/>
-            </button>
-          </div>
-        )}
-      </div>
-    )}
-  </header>
+  {/* ── MARKETING header controls ── */}
+  {activeTab==='marketing' && (
+    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
+      {announcements.some(a=>a.isActive&&new Date(a.expiresAt)>new Date())&&(
+        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'6px 12px',borderRadius:'20px',background:'rgba(74,222,128,0.05)',border:'1px solid rgba(74,222,128,0.18)'}}>
+          <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 6px rgba(74,222,128,0.5)',animation:'moodPulse 2s ease-in-out infinite'}}/>
+          <span style={{fontSize:'0.55rem',color:'#4ade80',fontWeight:'900',letterSpacing:'1px'}}>BANNER LIVE</span>
+        </div>
+      )}
+      {/* Sub-tab pills */}
+      {['announcements','offers','campaigns'].map(st=>(
+        <button key={st} onClick={()=>setMarketingSubTab(st)}
+          style={{
+            padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
+            fontSize:'0.6rem',fontWeight:'900',letterSpacing:'0.5px',
+            border:marketingSubTab===st?'none':'1px solid #1a1a1a',
+            background:marketingSubTab===st?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#0d0d0d',
+            color:marketingSubTab===st?'#000':'#333',
+            transition:'all 0.15s',textTransform:'uppercase'
+          }}>
+          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':''}
+        </button>
+      ))}
+    </div>
+  )}
+ 
+</header>
   
 {ingredientAlerts.filter(a => !a.dismissed).length > 0 && (
     <div style={{
@@ -5900,609 +6050,770 @@ const totalRevenueAllTime = canonicalMonthRevenue;
   </motion.div>
 )}
 
+
 {activeTab === 'marketing' && (
-<motion.div key="marketing" initial={{opacity:0}} animate={{opacity:1}}
-  style={{display:'flex',flexDirection:'column',gap:'0px'}}>
-
-  {/* ══ SECTION HEADER ══ */}
+<motion.div key="marketing" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}}
+  style={{display:'flex',flexDirection:'column',gap:'0px',paddingBottom:'80px'}}>
+ 
+  {/* ── SUB-TAB SWITCHER ── */}
   <div style={{
-    display:'flex',alignItems:'center',gap:'14px',
-    padding:'28px 0 18px',
-    borderBottom:'1px solid rgba(211,191,162,0.07)'
+    display:'flex',alignItems:'center',gap:'0px',
+    padding:'20px 0 0',marginBottom:'24px',
+    borderBottom:'1px solid #111'
   }}>
-    <div style={{
-      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
-      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.14)',
-      display:'flex',alignItems:'center',justifyContent:'center'
-    }}>
-      <Megaphone size={16} color="#d3bfa2"/>
-    </div>
-    <div>
-      <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'3px',textTransform:'uppercase'}}>
-        Live Menu Announcements
-      </div>
-      <div style={{fontSize:'0.62rem',color:'#444',marginTop:'3px',fontWeight:'600'}}>
-        Banners on every customer's QR menu — scheduled or instant, auto-expire at the time you set
-      </div>
-    </div>
-    {announcements.some(a => a.isActive && new Date(a.expiresAt) > new Date()) && (
-      <div style={{
-        marginLeft:'auto',display:'flex',alignItems:'center',gap:'7px',
-        padding:'6px 14px',borderRadius:'20px',
-        background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.18)'
-      }}>
-        <div style={{
-          width:'6px',height:'6px',borderRadius:'50%',background:'#d3bfa2',
-          boxShadow:'0 0 8px rgba(211,191,162,0.5)',
-          animation:'moodPulse 2s ease-in-out infinite'
-        }}/>
-        <span style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'1.5px'}}>
-          LIVE ON MENU
-        </span>
-      </div>
-    )}
-    {/* Scheduled-but-not-yet-live count */}
-    {announcements.filter(a => !a.isActive && new Date(a.startsAt) > new Date()).length > 0 && (
-      <div style={{
-        display:'flex',alignItems:'center',gap:'7px',
-        padding:'6px 14px',borderRadius:'20px',
-        background:'rgba(186,117,23,0.07)',border:'1px solid rgba(186,117,23,0.18)'
-      }}>
-        <Clock size={10} color="#BA7517"/>
-        <span style={{fontSize:'0.58rem',color:'#BA7517',fontWeight:'900',letterSpacing:'1.5px'}}>
-          {announcements.filter(a => !a.isActive && new Date(a.startsAt) > new Date()).length} SCHEDULED
-        </span>
-      </div>
-    )}
-  </div>
-
-  <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:'24px',padding:'20px 0 32px',borderBottom:'1px solid rgba(211,191,162,0.06)'}}>
-
-    {/* ── COMPOSE FORM ── */}
-    <div style={{
-      background:'#0d0d0d',border:'1px solid #1c1f26',borderRadius:'16px',
-      padding:'22px',position:'sticky',top:'20px'
-    }}>
-      <div style={{display:'flex',flexDirection:'column',gap:'15px'}}>
-
-        {/* Type picker */}
-        <div>
-          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'8px'}}>TYPE</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'7px'}}>
-            {[
-              {id:'offer',        label:'Offer',         icon:<Tag size={13}/>      },
-              {id:'discount',     label:'Discount',      icon:<Percent size={13}/>  },
-              {id:'wish',         label:'Festive Wish',  icon:<Sparkles size={13}/> },
-              {id:'announcement', label:'Notice',        icon:<Megaphone size={13}/>},
-            ].map(opt => (
-              <button key={opt.id}
-                onClick={() => setNewAnnouncement(p => ({...p, type:opt.id}))}
-                style={{
-                  display:'flex',alignItems:'center',gap:'8px',
-                  padding:'10px 11px',borderRadius:'9px',cursor:'pointer',
-                  border: newAnnouncement.type === opt.id
-                    ? '1px solid rgba(211,191,162,0.35)'
-                    : '1px solid #1c1f26',
-                  background: newAnnouncement.type === opt.id
-                    ? 'rgba(211,191,162,0.07)'
-                    : '#0d0e11',
-                  color: newAnnouncement.type === opt.id ? '#d3bfa2' : '#555',
-                  fontSize:'0.68rem',fontWeight:'800',transition:'all 0.15s'
-                }}
-              >
-                {opt.icon}{opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Headline */}
-        <div>
-          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
-            <span>HEADLINE</span>
-            <span style={{color:'#333'}}>{newAnnouncement.title.length}/60</span>
-          </div>
-          <input
-            value={newAnnouncement.title}
-            onChange={e => setNewAnnouncement(p=>({...p,title:e.target.value}))}
-            placeholder="e.g. Weekend Special — 20% Off"
-            maxLength={60}
-            style={{
-              width:'100%',padding:'10px 12px',
-              background:'#0d0e11',border:'1px solid #252932',
-              color:'#fff',borderRadius:'9px',fontSize:'0.83rem',
-              outline:'none',fontWeight:'700'
-            }}
-          />
-        </div>
-
-        {/* Message */}
-        <div>
-          <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between'}}>
-            <span>MESSAGE</span>
-            <span style={{color:'#333'}}>{newAnnouncement.message.length}/140</span>
-          </div>
-          <textarea
-            value={newAnnouncement.message}
-            onChange={e => setNewAnnouncement(p=>({...p,message:e.target.value}))}
-            placeholder="e.g. Enjoy 20% off on all main course dishes this weekend only!"
-            rows={3} maxLength={140}
-            style={{
-              width:'100%',padding:'10px 12px',
-              background:'#0d0e11',border:'1px solid #252932',
-              color:'#fff',borderRadius:'9px',fontSize:'0.79rem',
-              outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5
-            }}
-          />
-        </div>
-
-        {/* Discount value — only for offer/discount */}
-        {(newAnnouncement.type === 'offer' || newAnnouncement.type === 'discount') && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-            <div>
-              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>VALUE (OPTIONAL)</div>
-              <input
-                type="number" value={newAnnouncement.discountValue}
-                onChange={e => setNewAnnouncement(p=>({...p,discountValue:e.target.value}))}
-                placeholder="e.g. 20"
-                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none'}}
-              />
-            </div>
-            <div>
-              <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px'}}>UNIT</div>
-              <select
-                value={newAnnouncement.discountType}
-                onChange={e => setNewAnnouncement(p=>({...p,discountType:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}
-              >
-                <option value="percent">% Off</option>
-                <option value="fixed">₹ Off</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* ══ SCHEDULED START (NEW) ══ */}
-        <div style={{
-          background:'rgba(186,117,23,0.04)',
-          border:'1px solid rgba(186,117,23,0.12)',
-          borderRadius:'11px',padding:'14px'
-        }}>
-          <div style={{
-            display:'flex',alignItems:'center',justifyContent:'space-between',
-            marginBottom:'10px'
+    {[
+      {id:'announcements', label:'Menu Banners',  icon:<Megaphone size={13}/>,
+        badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length },
+      {id:'offers',        label:'Offers',        icon:<Tag size={13}/>,
+        badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length },
+      {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
+        badge: null },
+    ].map(st=>{
+      const isActive = marketingSubTab === st.id;
+      return (
+        <button key={st.id} onClick={()=>setMarketingSubTab(st.id)}
+          style={{
+            display:'flex',alignItems:'center',gap:'7px',
+            padding:'10px 20px',
+            background:'transparent',border:'none',
+            borderBottom: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
+            color: isActive ? '#d3bfa2' : '#333',
+            fontSize:'0.68rem',fontWeight:'900',cursor:'pointer',
+            letterSpacing:'0.5px',transition:'all 0.15s',
+            marginBottom:'-1px'
           }}>
-            <div style={{fontSize:'0.5rem',color:'#BA7517',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px'}}>
-              <Clock size={10}/> GOES LIVE AT <span style={{color:'#555',marginLeft:'4px'}}>(optional — blank = now)</span>
-            </div>
-            {(newAnnouncement.startDate || newAnnouncement.startTime) && (
-              <button
-                onClick={() => setNewAnnouncement(p=>({...p, startDate:'', startTime:''}))}
-                style={{fontSize:'0.52rem',color:'#555',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}
-              >
-                CLEAR (publish now)
-              </button>
-            )}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
-            <input
-              type="date" value={newAnnouncement.startDate}
-              min={new Date().toISOString().split('T')[0]}
-              onChange={e => setNewAnnouncement(p=>({...p,startDate:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
-            />
-            <input
-              type="time" value={newAnnouncement.startTime}
-              onChange={e => setNewAnnouncement(p=>({...p,startTime:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
-            />
-          </div>
-          {/* Quick-schedule presets */}
-          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-            {[
-              {label:'Tonight 7 PM', fn:()=>{ const d=new Date(); d.setHours(19,0,0,0); return d; }},
-              {label:'Tomorrow 12 PM', fn:()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(12,0,0,0); return d; }},
-              {label:'This Fri 7 PM', fn:()=>{
-                const d=new Date();
-                const daysUntilFri = (5 - d.getDay() + 7) % 7 || 7;
-                d.setDate(d.getDate()+daysUntilFri); d.setHours(19,0,0,0); return d;
-              }},
-              {label:'This Sat 12 PM', fn:()=>{
-                const d=new Date();
-                const daysUntilSat = (6 - d.getDay() + 7) % 7 || 7;
-                d.setDate(d.getDate()+daysUntilSat); d.setHours(12,0,0,0); return d;
-              }},
-            ].map(p=>(
-              <button key={p.label} onClick={()=>{
-                const d=p.fn();
-                setNewAnnouncement(prev=>({
-                  ...prev,
-                  startDate:d.toISOString().split('T')[0],
-                  startTime:d.toTimeString().slice(0,5)
-                }));
-              }} style={{
-                padding:'4px 10px',borderRadius:'6px',
-                border:'1px solid rgba(186,117,23,0.2)',background:'rgba(186,117,23,0.06)',
-                color:'#BA7517',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
-              }}>{p.label}</button>
-            ))}
-          </div>
-          {/* Scheduled preview label */}
-          {newAnnouncement.startDate && newAnnouncement.startTime && (
-            <div style={{
-              marginTop:'10px',display:'flex',alignItems:'center',gap:'6px',
-              padding:'6px 10px',borderRadius:'7px',
-              background:'rgba(186,117,23,0.08)',border:'1px solid rgba(186,117,23,0.18)'
-            }}>
-              <Clock size={10} color="#BA7517"/>
-              <span style={{fontSize:'0.6rem',color:'#BA7517',fontWeight:'800'}}>
-                Will go live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
-              </span>
-            </div>
+          <span style={{color: isActive?'#d3bfa2':'#2a2a2a'}}>{st.icon}</span>
+          {st.label}
+          {st.badge > 0 && (
+            <span style={{
+              fontSize:'0.5rem',fontWeight:'900',
+              padding:'1px 6px',borderRadius:'8px',
+              background: isActive?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.04)',
+              color: isActive?'#d3bfa2':'#2a2a2a',
+              border:`1px solid ${isActive?'rgba(211,191,162,0.25)':'rgba(255,255,255,0.06)'}`,
+              fontFamily:'monospace'
+            }}>{st.badge}</span>
           )}
+        </button>
+      );
+    })}
+ 
+    {/* Right side: live status pill */}
+    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
+      {announcements.some(a=>a.isActive&&new Date(a.expiresAt)>new Date()) && (
+        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'20px',background:'rgba(74,222,128,0.05)',border:'1px solid rgba(74,222,128,0.2)'}}>
+          <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#4ade80',boxShadow:'0 0 6px rgba(74,222,128,0.6)',animation:'moodPulse 2s ease-in-out infinite'}}/>
+          <span style={{fontSize:'0.54rem',fontWeight:'900',color:'#4ade80',letterSpacing:'1px'}}>BANNER LIVE ON MENU</span>
         </div>
-
-        {/* Expiry */}
-        <div style={{
-          background:'rgba(211,191,162,0.03)',
-          border:'1px solid rgba(211,191,162,0.1)',
-          borderRadius:'11px',padding:'14px'
-        }}>
-          <div style={{fontSize:'0.5rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',marginBottom:'10px'}}>
-            <Clock size={10}/> VISIBLE UNTIL <span style={{color:'#555',marginLeft:'4px'}}>(required)</span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
-            <input
-              type="date" value={newAnnouncement.expiryDate}
-              min={new Date().toISOString().split('T')[0]}
-              onChange={e => setNewAnnouncement(p=>({...p,expiryDate:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
-            />
-            <input
-              type="time" value={newAnnouncement.expiryTime}
-              onChange={e => setNewAnnouncement(p=>({...p,expiryTime:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#0d0e11',border:'1px solid #252932',color:'#fff',borderRadius:'9px',fontSize:'0.79rem',outline:'none',colorScheme:'dark'}}
-            />
-          </div>
-          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-            {[
-              {label:'Today 11 PM', fn:()=>{const d=new Date();d.setHours(23,59,0,0);return d;}},
-              {label:'+24h',        fn:()=>new Date(Date.now()+86400000)},
-              {label:'+3 days',     fn:()=>new Date(Date.now()+3*86400000)},
-              {label:'+7 days',     fn:()=>new Date(Date.now()+7*86400000)},
-            ].map(p=>(
-              <button key={p.label} onClick={()=>{
-                const d=p.fn();
-                setNewAnnouncement(prev=>({
-                  ...prev,
-                  expiryDate:d.toISOString().split('T')[0],
-                  expiryTime:d.toTimeString().slice(0,5)
-                }));
-              }} style={{
-                padding:'4px 10px',borderRadius:'6px',
-                border:'1px solid #252932',background:'transparent',
-                color:'#8a704d',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
-              }}>{p.label}</button>
-            ))}
+      )}
+      {announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length > 0 && (
+        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'20px',background:'rgba(186,117,23,0.06)',border:'1px solid rgba(186,117,23,0.2)'}}>
+          <Clock size={9} color="#BA7517"/>
+          <span style={{fontSize:'0.54rem',fontWeight:'900',color:'#BA7517',letterSpacing:'1px'}}>
+            {announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length} SCHEDULED
+          </span>
+        </div>
+      )}
+    </div>
+  </div>
+ 
+  {/* ══════════════════════════════════════════════════
+      SUB-TAB: ANNOUNCEMENTS (MENU BANNERS)
+  ══════════════════════════════════════════════════ */}
+  {marketingSubTab === 'announcements' && (
+  <motion.div key="ann-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+ 
+    {/* KPI row */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
+      {[
+        {l:'Total Banners', v:announcements.length,                                                                          c:'#d3bfa2', icon:<Megaphone size={13}/>},
+        {l:'Live Now',      v:announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length,                  c:'#4ade80', icon:<Zap size={13}/>},
+        {l:'Scheduled',     v:announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length,      c:'#BA7517', icon:<Clock size={13}/>},
+        {l:'Total Views',   v:announcements.reduce((acc,x)=>acc+(x.viewCount||0),0),                                        c:'#8a704d', icon:<Eye size={13}/>},
+      ].map((s,i)=>(
+        <div key={i} style={{background:'#080808',border:'1px solid #161616',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+          <div>
+            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:'0.48rem',color:'#333',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
           </div>
         </div>
-
-        {/* Live preview */}
-        {(newAnnouncement.title || newAnnouncement.message) && (
-          <div style={{
-            background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.1)',
-            borderRadius:'11px',padding:'14px'
-          }}>
-            <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'10px'}}>CUSTOMER MENU PREVIEW</div>
-            <div style={{
-              background:'#13151a',borderRadius:'10px',padding:'14px',
-              borderLeft:'3px solid #C9A84C',
-              display:'flex',alignItems:'flex-start',gap:'12px'
-            }}>
-              <div style={{
-                width:'34px',height:'34px',borderRadius:'8px',flexShrink:0,
-                background:'rgba(201,168,76,0.12)',border:'1px solid rgba(201,168,76,0.22)',
-                display:'flex',alignItems:'center',justifyContent:'center'
-              }}>
-                {newAnnouncement.type==='offer'?<Tag size={15} color="#C9A84C"/>
-                  :newAnnouncement.type==='discount'?<Percent size={15} color="#C9A84C"/>
-                  :newAnnouncement.type==='wish'?<Sparkles size={15} color="#C9A84C"/>
-                  :<Megaphone size={15} color="#C9A84C"/>}
+      ))}
+    </div>
+ 
+    {/* Two-column layout */}
+    <div style={{display:'grid',gridTemplateColumns:'390px 1fr',gap:'22px',alignItems:'start'}}>
+ 
+      {/* ── COMPOSE FORM ── */}
+      <div style={{background:'#080808',border:'1px solid #161616',borderRadius:'16px',overflow:'hidden',position:'sticky',top:'20px'}}>
+        <div style={{padding:'16px 20px',borderBottom:'1px solid #111',background:'#060606'}}>
+          <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>COMPOSE BANNER</div>
+          <div style={{fontSize:'0.54rem',color:'#2a2a2a',marginTop:'2px'}}>Shown on every customer's QR menu in real-time</div>
+        </div>
+        <div style={{padding:'18px 20px',display:'flex',flexDirection:'column',gap:'13px'}}>
+ 
+          {/* Type picker */}
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'7px',textTransform:'uppercase'}}>Banner Type</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
+              {[
+                {id:'offer',        label:'Offer',        icon:<Tag size={12}/>},
+                {id:'discount',     label:'Discount',     icon:<Percent size={12}/>},
+                {id:'wish',         label:'Festive Wish', icon:<Sparkles size={12}/>},
+                {id:'announcement', label:'Notice',       icon:<Megaphone size={12}/>},
+              ].map(opt=>(
+                <button key={opt.id} onClick={()=>setNewAnnouncement(p=>({...p,type:opt.id}))}
+                  style={{
+                    display:'flex',alignItems:'center',gap:'7px',padding:'9px 10px',
+                    borderRadius:'8px',cursor:'pointer',transition:'all 0.15s',
+                    border:newAnnouncement.type===opt.id?'1px solid rgba(211,191,162,0.3)':'1px solid #1a1a1a',
+                    background:newAnnouncement.type===opt.id?'rgba(211,191,162,0.07)':'#0d0d0d',
+                    color:newAnnouncement.type===opt.id?'#d3bfa2':'#444',
+                    fontSize:'0.65rem',fontWeight:'800'
+                  }}>
+                  {opt.icon}{opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+ 
+          {/* Headline */}
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+              <span>Headline *</span><span style={{color:'#2a2a2a'}}>{newAnnouncement.title.length}/60</span>
+            </div>
+            <input value={newAnnouncement.title}
+              onChange={e=>setNewAnnouncement(p=>({...p,title:e.target.value}))}
+              placeholder="e.g. Weekend Special — 20% Off"
+              maxLength={60}
+              style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',fontWeight:'700',boxSizing:'border-box'}}/>
+          </div>
+ 
+          {/* Message */}
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+              <span>Message *</span><span style={{color:'#2a2a2a'}}>{newAnnouncement.message.length}/140</span>
+            </div>
+            <textarea value={newAnnouncement.message}
+              onChange={e=>setNewAnnouncement(p=>({...p,message:e.target.value}))}
+              placeholder="e.g. Enjoy 20% off on all main course dishes this weekend!"
+              rows={3} maxLength={140}
+              style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
+          </div>
+ 
+          {/* Discount fields */}
+          {(newAnnouncement.type==='offer'||newAnnouncement.type==='discount') && (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+              <div>
+                <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Value (optional)</div>
+                <input type="number" value={newAnnouncement.discountValue}
+                  onChange={e=>setNewAnnouncement(p=>({...p,discountValue:e.target.value}))}
+                  placeholder="e.g. 20"
+                  style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
               </div>
               <div>
-                <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff',marginBottom:'4px'}}>{newAnnouncement.title||'Your headline'}</div>
-                <div style={{fontSize:'0.7rem',color:'#888',lineHeight:1.5}}>{newAnnouncement.message||'Your message'}</div>
-                {(newAnnouncement.discountValue && newAnnouncement.type !== 'wish') && (
-                  <div style={{marginTop:'8px',display:'inline-flex',padding:'3px 10px',borderRadius:'6px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)'}}>
-                    <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#C9A84C'}}>
-                      {newAnnouncement.discountValue}{newAnnouncement.discountType==='percent'?'%':'₹'} OFF
-                    </span>
-                  </div>
-                )}
+                <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
+                <select value={newAnnouncement.discountType}
+                  onChange={e=>setNewAnnouncement(p=>({...p,discountType:e.target.value}))}
+                  style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}>
+                  <option value="percent">% Off</option>
+                  <option value="fixed">₹ Off</option>
+                </select>
               </div>
             </div>
+          )}
+ 
+          {/* Scheduled start */}
+          <div style={{background:'rgba(186,117,23,0.04)',border:'1px solid rgba(186,117,23,0.12)',borderRadius:'10px',padding:'12px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+              <div style={{fontSize:'0.48rem',color:'#BA7517',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',textTransform:'uppercase'}}>
+                <Clock size={9}/> Goes Live At
+                <span style={{color:'#444',fontWeight:'600',marginLeft:'3px'}}>(blank = now)</span>
+              </div>
+              {(newAnnouncement.startDate||newAnnouncement.startTime) && (
+                <button onClick={()=>setNewAnnouncement(p=>({...p,startDate:'',startTime:''}))}
+                  style={{fontSize:'0.48rem',color:'#444',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}>CLEAR</button>
+              )}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <input type="date" value={newAnnouncement.startDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={e=>setNewAnnouncement(p=>({...p,startDate:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+              <input type="time" value={newAnnouncement.startTime}
+                onChange={e=>setNewAnnouncement(p=>({...p,startTime:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+            </div>
+            {/* Quick presets */}
+            <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
+              {[
+                {label:'Tonight 7PM',fn:()=>{const d=new Date();d.setHours(19,0,0,0);return d;}},
+                {label:'Tomorrow 12PM',fn:()=>{const d=new Date();d.setDate(d.getDate()+1);d.setHours(12,0,0,0);return d;}},
+                {label:'Fri 7PM',fn:()=>{const d=new Date();const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);d.setHours(19,0,0,0);return d;}},
+                {label:'Sat 12PM',fn:()=>{const d=new Date();const ds=(6-d.getDay()+7)%7||7;d.setDate(d.getDate()+ds);d.setHours(12,0,0,0);return d;}},
+              ].map(p=>(
+                <button key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:d.toISOString().split('T')[0],startTime:d.toTimeString().slice(0,5)}));}}
+                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(186,117,23,0.2)',background:'rgba(186,117,23,0.06)',color:'#BA7517',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
+              ))}
+            </div>
+            {newAnnouncement.startDate && newAnnouncement.startTime && (
+              <div style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'5px',padding:'5px 9px',borderRadius:'6px',background:'rgba(186,117,23,0.07)',border:'1px solid rgba(186,117,23,0.15)'}}>
+                <Clock size={9} color="#BA7517"/>
+                <span style={{fontSize:'0.56rem',color:'#BA7517',fontWeight:'800'}}>
+                  Goes live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
+                </span>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Publish button */}
-        <button
-          onClick={async () => {
-            if (!newAnnouncement.title || !newAnnouncement.message || !newAnnouncement.expiryDate || !newAnnouncement.expiryTime) {
-              showNotif('Headline, message and expiry are required', 'error'); return;
-            }
-            const expiresAt = new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
-            if (expiresAt <= new Date()) { showNotif('Expiry must be in the future', 'error'); return; }
-
-            // Compute startsAt — null means publish immediately
-            let startsAt = null;
-            if (newAnnouncement.startDate && newAnnouncement.startTime) {
-              startsAt = new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`);
-              if (startsAt >= expiresAt) {
-                showNotif('Start time must be before expiry time', 'error'); return;
+ 
+          {/* Expiry */}
+          <div style={{background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.09)',borderRadius:'10px',padding:'12px'}}>
+            <div style={{fontSize:'0.48rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',marginBottom:'8px',textTransform:'uppercase'}}>
+              <Clock size={9}/> Expires At <span style={{color:'#444',fontWeight:'600',marginLeft:'3px'}}>(required)</span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <input type="date" value={newAnnouncement.expiryDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={e=>setNewAnnouncement(p=>({...p,expiryDate:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+              <input type="time" value={newAnnouncement.expiryTime}
+                onChange={e=>setNewAnnouncement(p=>({...p,expiryTime:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
+              {[
+                {label:'Tonight 11PM',fn:()=>{const d=new Date();d.setHours(23,59,0,0);return d;}},
+                {label:'+24h',fn:()=>new Date(Date.now()+86400000)},
+                {label:'+3 days',fn:()=>new Date(Date.now()+3*86400000)},
+                {label:'+7 days',fn:()=>new Date(Date.now()+7*86400000)},
+              ].map(p=>(
+                <button key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:d.toISOString().split('T')[0],expiryTime:d.toTimeString().slice(0,5)}));}}
+                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid #1e1e1e',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
+              ))}
+            </div>
+          </div>
+ 
+          {/* Live preview */}
+          {(newAnnouncement.title||newAnnouncement.message) && (
+            <div style={{background:'#0a0a0a',border:'1px solid #141414',borderRadius:'10px',padding:'12px'}}>
+              <div style={{fontSize:'0.48rem',color:'#333',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'9px',textTransform:'uppercase'}}>Customer Preview</div>
+              <div style={{background:'#13151a',borderRadius:'9px',padding:'13px',borderLeft:'3px solid #C9A84C',display:'flex',alignItems:'flex-start',gap:'11px'}}>
+                <div style={{width:'32px',height:'32px',borderRadius:'7px',flexShrink:0,background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {newAnnouncement.type==='offer'?<Tag size={14} color="#C9A84C"/>:newAnnouncement.type==='discount'?<Percent size={14} color="#C9A84C"/>:newAnnouncement.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff',marginBottom:'3px'}}>{newAnnouncement.title||'Your headline'}</div>
+                  <div style={{fontSize:'0.68rem',color:'#888',lineHeight:1.5}}>{newAnnouncement.message||'Your message'}</div>
+                  {newAnnouncement.discountValue && newAnnouncement.type!=='wish' && (
+                    <div style={{marginTop:'7px',display:'inline-flex',padding:'2px 9px',borderRadius:'5px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)'}}>
+                      <span style={{fontSize:'0.65rem',fontWeight:'900',color:'#C9A84C'}}>{newAnnouncement.discountValue}{newAnnouncement.discountType==='percent'?'%':'₹'} OFF</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+ 
+          {/* Publish button */}
+          <button
+            onClick={async()=>{
+              if(!newAnnouncement.title||!newAnnouncement.message||!newAnnouncement.expiryDate||!newAnnouncement.expiryTime){
+                showNotif('Headline, message and expiry are required','error');return;
               }
-            }
-
-            const isScheduled = startsAt && startsAt > new Date();
-
-            try {
-              await axios.post(`${BASE_URL}/announcements/${tenantId}`, {
-                title: newAnnouncement.title,
-                message: newAnnouncement.message,
-                type: newAnnouncement.type,
-                accentColor: newAnnouncement.accentColor,
-                icon: newAnnouncement.icon,
-                discountValue: newAnnouncement.discountValue || null,
-                discountType: newAnnouncement.discountType || null,
-                expiresAt: expiresAt.toISOString(),
-                startsAt: startsAt ? startsAt.toISOString() : new Date().toISOString(),
-                // If scheduled for the future, create as inactive — cron will activate it
-                isActive: !isScheduled,
-              });
-              showNotif(isScheduled
-                ? `Scheduled for ${startsAt.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
-                : 'Live on customer menu now ✓'
-              );
-              setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
-              fetchAnnouncements();
-            } catch(err) { showNotif(err.response?.data?.error||'Failed to publish','error'); }
-          }}
-          disabled={!newAnnouncement.title || !newAnnouncement.message}
-          style={{
-            padding:'13px',borderRadius:'10px',border:'none',
-            background:(newAnnouncement.title&&newAnnouncement.message)
-              ? (newAnnouncement.startDate
-                  ? 'linear-gradient(135deg,#8a5c0a,#BA7517)'   // amber = scheduled
-                  : 'linear-gradient(135deg,#bda88a,#d3bfa2)')  // gold = publish now
-              : '#13151a',
-            color:(newAnnouncement.title&&newAnnouncement.message)?'#0d0d0d':'#333',
-            fontWeight:'900',fontSize:'0.76rem',letterSpacing:'0.5px',
-            cursor:(newAnnouncement.title&&newAnnouncement.message)?'pointer':'not-allowed',
-            display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'
-          }}
-        >
-          {newAnnouncement.startDate
-            ? <><Clock size={13}/> SCHEDULE ANNOUNCEMENT</>
-            : <><Send size={13}/> PUBLISH TO CUSTOMER MENU</>
-          }
+              const expiresAt=new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
+              if(expiresAt<=new Date()){showNotif('Expiry must be in the future','error');return;}
+              let startsAt=null;
+              if(newAnnouncement.startDate&&newAnnouncement.startTime){
+                startsAt=new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`);
+                if(startsAt>=expiresAt){showNotif('Start time must be before expiry time','error');return;}
+              }
+              const isScheduled=startsAt&&startsAt>new Date();
+              try{
+                await axios.post(`${BASE_URL}/announcements/${tenantId}`,{
+                  title:newAnnouncement.title,
+                  message:newAnnouncement.message,
+                  type:newAnnouncement.type,
+                  accentColor:newAnnouncement.accentColor||'gold',
+                  icon:newAnnouncement.icon||'tag',
+                  discountValue:newAnnouncement.discountValue||null,
+                  discountType:newAnnouncement.discountType||null,
+                  expiresAt:expiresAt.toISOString(),
+                  startsAt:startsAt?startsAt.toISOString():new Date().toISOString(),
+                  isActive:!isScheduled,
+                });
+                showNotif(isScheduled
+                  ?`Scheduled for ${startsAt.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
+                  :'Live on customer menu now ✓');
+                setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
+                fetchAnnouncements();
+              }catch(err){showNotif(err.response?.data?.error||'Failed to publish','error');}
+            }}
+            disabled={!newAnnouncement.title||!newAnnouncement.message}
+            style={{
+              padding:'12px',borderRadius:'9px',border:'none',
+              background:(newAnnouncement.title&&newAnnouncement.message)
+                ?(newAnnouncement.startDate?'linear-gradient(135deg,#8a5c0a,#BA7517)':'linear-gradient(135deg,#bda88a,#d3bfa2)')
+                :'#111',
+              color:(newAnnouncement.title&&newAnnouncement.message)?'#000':'#2a2a2a',
+              fontWeight:'900',fontSize:'0.72rem',letterSpacing:'0.5px',
+              cursor:(newAnnouncement.title&&newAnnouncement.message)?'pointer':'not-allowed',
+              display:'flex',alignItems:'center',justifyContent:'center',gap:'7px',transition:'all 0.2s'
+            }}>
+            {newAnnouncement.startDate
+              ?<><Clock size={12}/> SCHEDULE ANNOUNCEMENT</>
+              :<><Send size={12}/> PUBLISH TO CUSTOMER MENU</>}
+          </button>
+        </div>
+      </div>
+ 
+      {/* ── ANNOUNCEMENTS LIST ── */}
+      <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
+        {announcements.length===0 ? (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'14px',padding:'70px 20px',border:'1px dashed #141414',borderRadius:'14px',color:'#1e1e1e'}}>
+            <Megaphone size={30} color="#141414"/>
+            <div>
+              <div style={{fontSize:'0.78rem',fontWeight:'700',color:'#1e1e1e',textAlign:'center'}}>No banners yet</div>
+              <div style={{fontSize:'0.62rem',color:'#141414',textAlign:'center',marginTop:'4px'}}>Compose on the left · publish instantly or schedule</div>
+            </div>
+          </div>
+        ) : announcements.map(a=>{
+          const now=new Date();
+          const isScheduled=!a.isActive&&a.startsAt&&new Date(a.startsAt)>now;
+          const isLive=a.isActive&&new Date(a.expiresAt)>now;
+          const isEnded=!isLive&&!isScheduled;
+          const timeLeft=isLive?getTimeRemaining(a.expiresAt):null;
+          const timeUntil=isScheduled?getTimeRemaining(a.startsAt):null;
+ 
+          return (
+            <motion.div key={a._id} initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+              style={{
+                background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(186,117,23,0.03)':'#080808',
+                border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(186,117,23,0.15)':'#111'}`,
+                borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(186,117,23,0.45)':'#1a1a1a'}`,
+                borderRadius:'13px',padding:'16px 18px',
+                opacity:isEnded?0.42:1,transition:'all 0.2s'
+              }}>
+              {isLive&&<div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.3),transparent)'}}/>}
+ 
+              <div style={{display:'flex',alignItems:'flex-start',gap:'12px'}}>
+                <div style={{width:'34px',height:'34px',borderRadius:'8px',flexShrink:0,background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.14)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {a.type==='offer'?<Tag size={14} color="#C9A84C"/>:a.type==='discount'?<Percent size={14} color="#C9A84C"/>:a.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
+                </div>
+ 
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'4px',flexWrap:'wrap'}}>
+                    <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.82rem'}}>{a.title}</span>
+                    {isLive&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(74,222,128,0.07)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.18)',letterSpacing:'1px'}}>● LIVE</span>}
+                    {isScheduled&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(186,117,23,0.07)',color:'#BA7517',border:'1px solid rgba(186,117,23,0.18)',letterSpacing:'1px'}}>◷ SCHEDULED</span>}
+                    {isEnded&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(255,255,255,0.02)',color:'#2a2a2a',border:'1px solid rgba(255,255,255,0.04)',letterSpacing:'1px'}}>ENDED</span>}
+                  </div>
+                  <div style={{fontSize:'0.7rem',color:'#555',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
+                  <div style={{display:'flex',gap:'10px',flexWrap:'wrap',fontSize:'0.56rem',color:'#333',alignItems:'center'}}>
+                    {a.discountValue&&(
+                      <span style={{padding:'2px 8px',borderRadius:'4px',background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.13)',color:'#C9A84C',fontWeight:'900',fontFamily:'monospace'}}>
+                        {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
+                      </span>
+                    )}
+                    {isScheduled&&timeUntil&&<span style={{color:'#BA7517',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>}
+                    {isLive&&timeLeft&&<span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ends in {timeLeft}</span>}
+                    {isEnded&&<span style={{display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
+                    <span style={{display:'flex',alignItems:'center',gap:'3px'}}><Eye size={8}/>{a.viewCount||0} views</span>
+                  </div>
+                </div>
+ 
+                {/* Actions */}
+                <div style={{display:'flex',flexDirection:'column',gap:'5px',flexShrink:0,alignItems:'flex-end'}}>
+                  <div style={{display:'flex',gap:'5px'}}>
+                    {isLive&&(
+                      <button onClick={()=>setConfirmModal({show:true,title:'End this announcement?',subtitle:'Removed from customer menu immediately.',onConfirm:async()=>{try{await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false});fetchAnnouncements();showNotif('Announcement ended');}catch{showNotif('Failed','error');}}})}
+                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid rgba(186,117,23,0.22)',background:'rgba(186,117,23,0.06)',color:'#BA7517',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
+                        <Zap size={8}/> END
+                      </button>
+                    )}
+                    {isScheduled&&(
+                      <button onClick={()=>setConfirmModal({show:true,title:'Cancel this scheduled announcement?',subtitle:'It will not go live.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();showNotif('Schedule cancelled');}catch{showNotif('Failed','error');}}})}
+                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid #1e1e1e',background:'transparent',color:'#444',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
+                        <X size={8}/> CANCEL
+                      </button>
+                    )}
+                    {isEnded&&(
+                      <button onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{}}})}
+                        style={{width:'26px',height:'26px',padding:0,borderRadius:'6px',cursor:'pointer',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={10}/></button>
+                    )}
+                  </div>
+                  {isEnded&&(
+                    <button onClick={()=>{
+                      setNewAnnouncement({
+                        title:a.title,message:a.message,type:a.type,
+                        accentColor:a.accentColor||'gold',icon:a.icon||'tag',
+                        discountValue:a.discountValue?String(a.discountValue):'',
+                        discountType:a.discountType||'percent',
+                        startDate:'',startTime:'',expiryDate:'',expiryTime:''
+                      });
+                      window.scrollTo({top:0,behavior:'smooth'});
+                      showNotif('Pre-filled · set a new expiry and publish');
+                    }} style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid rgba(211,191,162,0.16)',background:'rgba(211,191,162,0.04)',color:'#d3bfa2',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px',transition:'all 0.15s'}}
+                      onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.09)';}}
+                      onMouseLeave={e=>{e.currentTarget.style.background='rgba(211,191,162,0.04)';}}>
+                      <RefreshCw size={8}/> RELAUNCH
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  </motion.div>
+  )}
+ 
+  {/* ══════════════════════════════════════════════════
+      SUB-TAB: OFFERS
+  ══════════════════════════════════════════════════ */}
+  {marketingSubTab === 'offers' && (
+  <motion.div key="offers-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+ 
+    {/* KPI */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
+      {[
+        {l:'Total Offers',  v:(Array.isArray(offers)?offers:[]).length,                                       c:'#d3bfa2', icon:<Tag size={13}/>},
+        {l:'Active',        v:(Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length,                 c:'#4ade80', icon:<CheckCircle2 size={13}/>},
+        {l:'Percent Off',   v:(Array.isArray(offers)?offers:[]).filter(o=>o.type==='percent_off').length,     c:'#BA7517', icon:<Percent size={13}/>},
+        {l:'Total Redeemed',v:(Array.isArray(offers)?offers:[]).reduce((a,o)=>a+(o.usageCount||0),0),         c:'#8a704d', icon:<ShoppingCart size={13}/>},
+      ].map((s,i)=>(
+        <div key={i} style={{background:'#080808',border:'1px solid #161616',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+          <div>
+            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:'0.48rem',color:'#333',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+ 
+    {/* Create offer form */}
+    <div style={{background:'#080808',border:'1px solid #161616',borderRadius:'16px',overflow:'hidden'}}>
+      <div style={{padding:'15px 20px',borderBottom:'1px solid #111',background:'#060606',display:'flex',alignItems:'center',gap:'9px'}}>
+        <Tag size={13} color="#d3bfa2"/>
+        <div>
+          <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>CREATE OFFER</div>
+          <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'1px'}}>Coupon codes, happy hours, discounts — trackable usage</div>
+        </div>
+      </div>
+      <div style={{padding:'18px 20px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'12px'}}>
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Offer Title *</div>
+            <input type="text" placeholder="e.g. Happy Hour Special"
+              value={newOffer.title} onChange={e=>setNewOffer(p=>({...p,title:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Coupon Code</div>
+            <input type="text" placeholder="e.g. HAPPY20 (optional)"
+              value={newOffer.code||''} onChange={e=>setNewOffer(p=>({...p,code:e.target.value.toUpperCase()}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#C9A84C',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}/>
+          </div>
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Type</div>
+            <select value={newOffer.type} onChange={e=>setNewOffer(p=>({...p,type:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}>
+              <option value="percent_off">% Off</option>
+              <option value="fixed_off">₹ Off</option>
+              <option value="free_item">Free Item</option>
+              <option value="happy_hour">Happy Hour</option>
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>
+              {newOffer.type==='free_item'?'Free Item Name':newOffer.type==='happy_hour'?'Happy Hour Start':'Value'}
+            </div>
+            {newOffer.type==='free_item'?(
+              <input type="text" placeholder="e.g. Masala Papad"
+                value={newOffer.freeItem} onChange={e=>setNewOffer(p=>({...p,freeItem:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+            ):(
+              <input type={newOffer.type==='happy_hour'?'time':'number'} placeholder="e.g. 20"
+                value={newOffer.type==='happy_hour'?newOffer.happyStart:newOffer.value}
+                onChange={e=>setNewOffer(p=>({...p,[newOffer.type==='happy_hour'?'happyStart':'value']:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+            )}
+          </div>
+          {newOffer.type==='happy_hour'&&(
+            <div>
+              <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Happy Hour End</div>
+              <input type="time" value={newOffer.happyEnd} onChange={e=>setNewOffer(p=>({...p,happyEnd:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+            </div>
+          )}
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Min Order (₹)</div>
+            <input type="number" placeholder="0 = no min"
+              value={newOffer.minOrder} onChange={e=>setNewOffer(p=>({...p,minOrder:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div>
+            <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Expires At (optional)</div>
+            <input type="date" value={newOffer.expiresAt} min={new Date().toISOString().split('T')[0]}
+              onChange={e=>setNewOffer(p=>({...p,expiresAt:e.target.value}))}
+              style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+          </div>
+        </div>
+        <button onClick={async()=>{
+          if(!newOffer.title?.trim()){showNotif('Offer title is required','error');return;}
+          try{
+            const payload={
+              title:newOffer.title.trim(),
+              type:newOffer.type,
+              value:Number(newOffer.value)||0,
+              freeItem:newOffer.freeItem?.trim()||undefined,
+              code:newOffer.code?.trim()||undefined,
+              minOrder:Number(newOffer.minOrder)||0,
+              happyStart:newOffer.happyStart||undefined,
+              happyEnd:newOffer.happyEnd||undefined,
+              expiresAt:newOffer.expiresAt?new Date(newOffer.expiresAt).toISOString():undefined,
+              isActive:true
+            };
+            await axios.post(`${BASE_URL}/offers/${tenantId}`,payload);
+            setNewOffer({title:'',type:'percent_off',value:'',freeItem:'',code:'',minOrder:'',categoryId:'',happyStart:'',happyEnd:'',expiresAt:''});
+            showNotif(`Offer "${payload.title}" created`);
+            fetchOffers();
+          }catch(err){showNotif(err.response?.data?.error||'Failed to create offer','error');}
+        }} style={{padding:'10px 24px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer',letterSpacing:'0.5px',display:'flex',alignItems:'center',gap:'6px'}}>
+          <Tag size={12}/> CREATE OFFER
         </button>
       </div>
     </div>
-
-    {/* ── ANNOUNCEMENTS LIST ── */}
-    <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-      {announcements.length === 0 ? (
-        <div style={{
-          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-          gap:'14px',padding:'60px 20px',
-          border:'1px dashed #1a1c23',borderRadius:'16px',color:'#2a2c30'
-        }}>
-          <Megaphone size={32} color="#1a1c23"/>
-          <span style={{fontSize:'0.78rem',fontWeight:'700',color:'#333'}}>No announcements yet</span>
-          <span style={{fontSize:'0.64rem',color:'#252932',maxWidth:'260px',textAlign:'center',lineHeight:1.6}}>
-            Compose one on the left — publish instantly or schedule for later.
-          </span>
-        </div>
-      ) : announcements.map(a => {
-        const now = new Date();
-        const isScheduled = !a.isActive && a.startsAt && new Date(a.startsAt) > now;
-        const isLive      = a.isActive && new Date(a.expiresAt) > now;
-        const isEnded     = !isLive && !isScheduled;
-        const timeLeft    = isLive ? getTimeRemaining(a.expiresAt) : null;
-        const timeUntil   = isScheduled ? getTimeRemaining(a.startsAt) : null;
-
-        return (
-          <motion.div key={a._id}
-            initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
-            style={{
-              background: isLive ? 'rgba(211,191,162,0.025)' : isScheduled ? 'rgba(186,117,23,0.03)' : '#0d0d0d',
-              border:`1px solid ${isLive?'rgba(211,191,162,0.16)':isScheduled?'rgba(186,117,23,0.18)':'#1a1c23'}`,
-              borderRadius:'13px',padding:'18px 20px',
-              opacity:isEnded?0.45:1,position:'relative',overflow:'hidden'
-            }}
-          >
-            {isLive && <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.4),transparent)'}}/>}
-            {isScheduled && <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(186,117,23,0.4),transparent)'}}/>}
-
-            <div style={{display:'flex',alignItems:'flex-start',gap:'14px'}}>
-              <div style={{
-                width:'38px',height:'38px',borderRadius:'9px',flexShrink:0,
-                background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.18)',
-                display:'flex',alignItems:'center',justifyContent:'center'
-              }}>
-                {a.type==='offer'?<Tag size={16} color="#C9A84C"/>
-                  :a.type==='discount'?<Percent size={16} color="#C9A84C"/>
-                  :a.type==='wish'?<Sparkles size={16} color="#C9A84C"/>
-                  :<Megaphone size={16} color="#C9A84C"/>}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
-                  <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.85rem'}}>{a.title}</span>
-                  {/* Status badge */}
-                  {isLive && (
-                    <span style={{
-                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
-                      letterSpacing:'1.5px',
-                      background:'rgba(211,191,162,0.1)',color:'#d3bfa2',
-                      border:'1px solid rgba(211,191,162,0.22)'
-                    }}>● LIVE</span>
-                  )}
-                  {isScheduled && (
-                    <span style={{
-                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
-                      letterSpacing:'1.5px',
-                      background:'rgba(186,117,23,0.1)',color:'#BA7517',
-                      border:'1px solid rgba(186,117,23,0.25)'
-                    }}>◷ SCHEDULED</span>
-                  )}
-                  {isEnded && (
-                    <span style={{
-                      fontSize:'0.48rem',fontWeight:'900',padding:'2px 8px',borderRadius:'10px',
-                      letterSpacing:'1.5px',
-                      background:'rgba(255,255,255,0.04)',color:'#3a3c40',
-                      border:'1px solid rgba(255,255,255,0.05)'
-                    }}>ENDED</span>
-                  )}
-                </div>
-                <div style={{fontSize:'0.71rem',color:'#666',lineHeight:1.5,marginBottom:'9px'}}>{a.message}</div>
-                <div style={{display:'flex',gap:'16px',flexWrap:'wrap',fontSize:'0.58rem',color:'#444',alignItems:'center'}}>
-                  {a.discountValue && (
-                    <span style={{
-                      padding:'2px 9px',borderRadius:'5px',
-                      background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.15)',
-                      color:'#C9A84C',fontWeight:'900',fontFamily:'monospace'
-                    }}>
-                      {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
-                    </span>
-                  )}
-                  {isScheduled && timeUntil && (
-                    <span style={{color:'#BA7517',fontWeight:'700',display:'flex',alignItems:'center',gap:'4px'}}>
-                      <Clock size={9}/>
-                      starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
-                    </span>
-                  )}
-                  {isLive && timeLeft && (
-                    <span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'4px'}}>
-                      <Clock size={9}/> ends in {timeLeft}
-                    </span>
-                  )}
-                  {isEnded && (
-                    <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                      <Clock size={9}/> ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
-                    </span>
-                  )}
-                  <span style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                    <Eye size={9}/> {a.viewCount||0} views
-                  </span>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div style={{display:'flex',gap:'7px',flexShrink:0,flexDirection:'column',alignItems:'flex-end'}}>
-                <div style={{display:'flex',gap:'7px'}}>
-                  {/* END button — only for live */}
-                  {isLive && (
-                    <button
-                      onClick={() => setConfirmModal({
-                        show:true,title:'End this announcement?',
-                        subtitle:'Removed from customer menu immediately.',
-                        onConfirm:async()=>{
-                          try { await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false}); fetchAnnouncements(); showNotif('Announcement ended'); }
-                          catch { showNotif('Failed','error'); }
-                        }
-                      })}
-                      style={{
-                        padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
-                        border:'1px solid rgba(186,117,23,0.25)',
-                        background:'rgba(186,117,23,0.07)',color:'#BA7517',
-                        fontSize:'0.58rem',fontWeight:'900',
-                        display:'flex',alignItems:'center',gap:'5px'
-                      }}
-                    >
-                      <Zap size={9}/> END
-                    </button>
-                  )}
-                  {/* CANCEL SCHEDULE — only for scheduled */}
-                  {isScheduled && (
-                    <button
-                      onClick={() => setConfirmModal({
-                        show:true,title:'Cancel this scheduled announcement?',
-                        subtitle:'It will be removed and will not go live.',
-                        onConfirm:async()=>{
-                          try { await axios.delete(`${BASE_URL}/announcements/${a._id}`); fetchAnnouncements(); showNotif('Schedule cancelled'); }
-                          catch { showNotif('Failed','error'); }
-                        }
-                      })}
-                      style={{
-                        padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
-                        border:'1px solid #252932',background:'transparent',color:'#555',
-                        fontSize:'0.58rem',fontWeight:'900',
-                        display:'flex',alignItems:'center',gap:'5px'
-                      }}
-                    >
-                      <X size={9}/> CANCEL
-                    </button>
-                  )}
-                  {/* DELETE — for ended ones */}
-                  {isEnded && (
-                    <button
-                      onClick={() => setConfirmModal({
-                        show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',
-                        onConfirm:async()=>{ try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{} }
-                      })}
-                      style={{
-                        padding:'6px 9px',borderRadius:'7px',cursor:'pointer',
-                        background:'transparent',border:'1px solid #252932',color:'#444'
-                      }}
-                    ><X size={12}/></button>
-                  )}
-                </div>
-
-                {/* ══ RELAUNCH BUTTON (feature 2) — shown on any ended announcement ══ */}
-                {isEnded && (
-                  <button
-                    onClick={() => {
-                      // Pre-fill the compose form with this announcement's content
-                      // Leave expiry blank so operator must consciously set a new end time
-                      setNewAnnouncement({
-                        title:         a.title,
-                        message:       a.message,
-                        type:          a.type,
-                        accentColor:   a.accentColor || 'gold',
-                        icon:          a.icon || 'tag',
-                        discountValue: a.discountValue ? String(a.discountValue) : '',
-                        discountType:  a.discountType || 'percent',
-                        startDate:     '',
-                        startTime:     '',
-                        expiryDate:    '',
-                        expiryTime:    '',
-                      });
-                      // Scroll compose form into view
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                      showNotif('Pre-filled from last announcement — set a new expiry and publish');
-                    }}
-                    style={{
-                      padding:'6px 12px',borderRadius:'7px',cursor:'pointer',
-                      border:'1px solid rgba(211,191,162,0.2)',
-                      background:'rgba(211,191,162,0.05)',color:'#d3bfa2',
-                      fontSize:'0.58rem',fontWeight:'900',
-                      display:'flex',alignItems:'center',gap:'5px',
-                      transition:'all 0.15s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background='rgba(211,191,162,0.1)'; e.currentTarget.style.borderColor='rgba(211,191,162,0.35)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background='rgba(211,191,162,0.05)'; e.currentTarget.style.borderColor='rgba(211,191,162,0.2)'; }}
-                  >
-                    <RefreshCw size={9}/> RELAUNCH
-                  </button>
+ 
+    {/* Offers grid */}
+    {(Array.isArray(offers)?offers:[]).length===0?(
+      <div style={{textAlign:'center',padding:'50px',background:'#080808',borderRadius:'13px',border:'1px dashed #141414'}}>
+        <Tag size={26} color="#141414" style={{marginBottom:'12px'}}/>
+        <div style={{color:'#1e1e1e',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
+      </div>
+    ):(
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'13px'}}>
+        {(Array.isArray(offers)?offers:[]).map(offer=>(
+          <div key={offer._id} style={{
+            background:'#080808',
+            border:`1px solid ${offer.isActive?'rgba(74,222,128,0.1)':'#111'}`,
+            borderTop:`2px solid ${offer.isActive?'rgba(74,222,128,0.28)':'#1a1a1a'}`,
+            borderRadius:'13px',padding:'17px',opacity:offer.isActive?1:0.5,transition:'all 0.2s'
+          }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+              <div>
+                <div style={{fontSize:'0.85rem',fontWeight:'900',color:'#fff',marginBottom:'4px'}}>{offer.title}</div>
+                {offer.code&&(
+                  <span style={{fontSize:'0.62rem',fontWeight:'900',padding:'2px 9px',borderRadius:'5px',background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.15)',color:'#C9A84C',fontFamily:'monospace'}}>{offer.code}</span>
                 )}
               </div>
+              <div style={{display:'flex',alignItems:'center',gap:'5px',padding:'3px 8px',borderRadius:'6px',background:offer.isActive?'rgba(74,222,128,0.05)':'rgba(255,255,255,0.02)',border:`1px solid ${offer.isActive?'rgba(74,222,128,0.14)':'rgba(255,255,255,0.04)'}`}}>
+                <div style={{width:'5px',height:'5px',borderRadius:'50%',background:offer.isActive?'#4ade80':'#2a2a2a'}}/>
+                <span style={{fontSize:'0.48rem',fontWeight:'900',color:offer.isActive?'#4ade80':'#2a2a2a'}}>{offer.isActive?'ACTIVE':'PAUSED'}</span>
+              </div>
             </div>
-          </motion.div>
-        );
-      })}
+ 
+            <div style={{display:'flex',gap:'7px',marginBottom:'12px',flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',padding:'4px 10px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'6px',fontFamily:'monospace'}}>
+                {offer.type==='percent_off'?`${offer.value}% OFF`:offer.type==='fixed_off'?`₹${offer.value} OFF`:offer.type==='free_item'?`FREE: ${offer.freeItem||'Item'}`:`${offer.happyStart||'?'}–${offer.happyEnd||'?'}`}
+              </span>
+              {offer.minOrder>0&&<span style={{fontSize:'0.58rem',color:'#444'}}>min ₹{offer.minOrder}</span>}
+              {offer.usageCount>0&&(
+                <span style={{fontSize:'0.58rem',color:'#555',display:'flex',alignItems:'center',gap:'3px'}}><ShoppingCart size={9}/>{offer.usageCount} used</span>
+              )}
+              {offer.expiresAt&&(
+                <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#c0392b':'#555',display:'flex',alignItems:'center',gap:'3px'}}>
+                  <Clock size={8}/>{new Date(offer.expiresAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}
+                </span>
+              )}
+            </div>
+ 
+            <div style={{display:'flex',gap:'6px'}}>
+              <button onClick={async()=>{
+                try{
+                  await axios.patch(`${BASE_URL}/offers/${tenantId}/${offer._id}`,{isActive:!offer.isActive});
+                  fetchOffers();
+                  showNotif(`"${offer.title}" ${!offer.isActive?'activated':'paused'}`);
+                }catch{showNotif('Update failed','error');}
+              }} style={{flex:1,padding:'8px',background:offer.isActive?'#0d0d0d':'rgba(74,222,128,0.05)',border:offer.isActive?'1px solid #1a1a1a':'1px solid rgba(74,222,128,0.16)',color:offer.isActive?'#444':'#4ade80',borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}>
+                {offer.isActive?'PAUSE':'ACTIVATE'}
+              </button>
+              <button onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${tenantId}/${offer._id}`);fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
+                style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </motion.div>
+  )}
+ 
+  {/* ══════════════════════════════════════════════════
+      SUB-TAB: CAMPAIGNS
+  ══════════════════════════════════════════════════ */}
+  {marketingSubTab === 'campaigns' && (
+  <motion.div key="campaigns-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+ 
+    {/* KPI */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px'}}>
+      {[
+        {l:'Campaigns Sent', v:(Array.isArray(campaigns)?campaigns:[]).length,                                       c:'#d3bfa2', icon:<Send size={13}/>},
+        {l:'Total Reached',  v:(Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0),          c:'#4ade80', icon:<Users size={13}/>},
+        {l:'Avg Reach',      v:(Array.isArray(campaigns)?campaigns:[]).length>0?Math.round((Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0)/(Array.isArray(campaigns)?campaigns:[]).length):0, c:'#8a704d', icon:<BarChart2 size={13}/>},
+      ].map((s,i)=>(
+        <div key={i} style={{background:'#080808',border:'1px solid #161616',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+          <div>
+            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:'0.48rem',color:'#333',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+          </div>
+        </div>
+      ))}
     </div>
-  </div>
+ 
+    {/* Send campaign */}
+    <div style={{background:'#080808',border:'1px solid #161616',borderRadius:'16px',overflow:'hidden'}}>
+      <div style={{padding:'15px 20px',borderBottom:'1px solid #111',background:'#060606',display:'flex',alignItems:'center',gap:'9px'}}>
+        <Send size={13} color="#d3bfa2"/>
+        <div>
+          <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>SEND PUSH CAMPAIGN</div>
+          <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'1px'}}>Push notification to customer segments who opted in</div>
+        </div>
+      </div>
+      <div style={{padding:'18px 20px',display:'flex',flexDirection:'column',gap:'14px'}}>
+ 
+        {/* Segment selector */}
+        <div>
+          <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Target Segment</div>
+          <div style={{display:'flex',gap:'7px',flexWrap:'wrap'}}>
+            {[
+              {id:'all',     label:'All Customers',    icon:<Users size={11}/>,       desc:'Everyone who opted in'},
+              {id:'loyal',   label:'Loyal',            icon:<Star size={11}/>,        desc:'6+ visits'},
+              {id:'at-risk', label:'At Risk',          icon:<AlertTriangle size={11}/>,desc:'No visit in 30 days'},
+              {id:'new',     label:'New',              icon:<UserPlus size={11}/>,    desc:'1–2 visits'},
+            ].map(seg=>{
+              const isActive=newCampaign.segment===seg.id;
+              return(
+                <button key={seg.id} onClick={()=>setNewCampaign(p=>({...p,segment:seg.id}))}
+                  title={seg.desc}
+                  style={{
+                    display:'flex',alignItems:'center',gap:'6px',
+                    padding:'8px 14px',borderRadius:'8px',cursor:'pointer',
+                    border:isActive?'none':'1px solid #1a1a1a',
+                    background:isActive?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#0d0d0d',
+                    color:isActive?'#000':'#444',fontSize:'0.65rem',fontWeight:'900',transition:'all 0.15s'
+                  }}>
+                  {seg.icon}{seg.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+ 
+        {/* Title */}
+        <div>
+          <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Notification Title *</div>
+          <input type="text" placeholder="e.g. Weekend Special 🎉"
+            value={newCampaign.title} onChange={e=>setNewCampaign(p=>({...p,title:e.target.value}))}
+            style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',fontWeight:'700',outline:'none',boxSizing:'border-box'}}/>
+        </div>
+ 
+        {/* Body */}
+        <div>
+          <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+            <span>Message *</span><span style={{color:'#2a2a2a'}}>{newCampaign.body.length}/200</span>
+          </div>
+          <textarea rows={3} maxLength={200}
+            placeholder="e.g. 20% off your next visit this weekend. Show this notification to our staff."
+            value={newCampaign.body} onChange={e=>setNewCampaign(p=>({...p,body:e.target.value}))}
+            style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
+        </div>
+ 
+        {/* Preview */}
+        {(newCampaign.title||newCampaign.body)&&(
+          <div style={{background:'#0a0a0a',border:'1px solid #141414',borderRadius:'10px',padding:'12px'}}>
+            <div style={{fontSize:'0.46rem',color:'#2a2a2a',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
+            <div style={{background:'#1a1c22',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
+              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}>🔔</div>
+              <div>
+                <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
+                <div style={{fontSize:'0.62rem',color:'#888',lineHeight:1.4}}>{newCampaign.body||'Your message here'}</div>
+                <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'5px'}}>Pratyeksha · now</div>
+              </div>
+            </div>
+          </div>
+        )}
+ 
+        <button disabled={campaignSending} onClick={async()=>{
+          if(!newCampaign.title?.trim()||!newCampaign.body?.trim()){showNotif('Title and message are required','error');return;}
+          setCampaignSending(true);
+          try{
+            await axios.post(`${BASE_URL}/campaigns/${tenantId}`,{
+              title:newCampaign.title.trim(),
+              body:newCampaign.body.trim(),
+              segment:newCampaign.segment||'all',
+              customPhones:newCampaign.customPhones||''
+            });
+            setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
+            showNotif('Campaign sent successfully!','success');
+            fetchCampaigns();
+          }catch(err){showNotif(err.response?.data?.error||'Failed to send','error');}
+          finally{setCampaignSending(false);}
+        }} style={{
+          padding:'11px 24px',
+          background:campaignSending?'#111':'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          border:'none',color:campaignSending?'#333':'#000',
+          borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',
+          cursor:campaignSending?'not-allowed':'pointer',
+          display:'flex',alignItems:'center',gap:'6px',letterSpacing:'0.5px',
+          alignSelf:'flex-start',transition:'all 0.2s'
+        }}>
+          <Send size={12}/>{campaignSending?'SENDING…':'SEND CAMPAIGN'}
+        </button>
+      </div>
+    </div>
+ 
+    {/* Campaign history */}
+    <div style={{background:'#080808',border:'1px solid #161616',borderRadius:'14px',overflow:'hidden'}}>
+      <div style={{padding:'13px 18px',borderBottom:'1px solid #111',background:'#060606',display:'flex',alignItems:'center',gap:'8px'}}>
+        <Clock size={12} color="#8a704d"/>
+        <div style={{fontSize:'0.56rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px'}}>SEND HISTORY</div>
+        <span style={{marginLeft:'auto',fontSize:'0.52rem',color:'#2a2a2a'}}>{(Array.isArray(campaigns)?campaigns:[]).length} campaigns</span>
+      </div>
+      {(Array.isArray(campaigns)?campaigns:[]).length===0?(
+        <div style={{textAlign:'center',padding:'40px',color:'#1a1a1a',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
+      ):(
+        <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
+          {[...(Array.isArray(campaigns)?campaigns:[])].reverse().map(c=>(
+            <div key={c._id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#060606',border:'1px solid #0d0d0d'}}>
+              <div style={{width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Send size={11} color="#8a704d"/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px',gap:'8px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+                    <span style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff'}}>{c.title||'Campaign'}</span>
+                    <span style={{fontSize:'0.52rem',fontWeight:'900',padding:'2px 8px',borderRadius:'5px',background:'rgba(211,191,162,0.07)',border:'1px solid rgba(211,191,162,0.12)',color:'#8a704d',textTransform:'uppercase'}}>{c.segment||'all'}</span>
+                  </div>
+                  <span style={{fontSize:'0.58rem',color:'#2a2a2a',display:'flex',alignItems:'center',gap:'3px',flexShrink:0,whiteSpace:'nowrap'}}><Users size={8}/>{c.sentCount||0} reached</span>
+                </div>
+                <div style={{fontSize:'0.68rem',color:'#555',lineHeight:1.5,marginBottom:'4px'}}>{c.body||c.message||''}</div>
+                <div style={{fontSize:'0.54rem',color:'#2a2a2a'}}>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </motion.div>
+  )}
+ 
 </motion.div>
 )}
+ 
 
           {/* ── BILLING ── */}
           {activeTab==='billing' && (
