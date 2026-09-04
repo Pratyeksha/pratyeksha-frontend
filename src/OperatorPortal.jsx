@@ -310,6 +310,8 @@ const istTodayStr = useMemo(() => {
   const [tenantConfig, setTenantConfig] = useState(null);
 
   const [queueSearch, setQueueSearch] = useState('');
+  const [pickupPaymentModal, setPickupPaymentModal] = useState(null); // { entry } | null
+const [pickupPaymentMethod, setPickupPaymentMethod] = useState('cash');
   const [wastageAnalytics, setWastageAnalytics] = useState(null);
 
   // ── These are re-fetched whenever viewDate changes (month selector)
@@ -4072,20 +4074,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
     {activeTab==='extras' && (
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'24px',borderBottom:'1px solid #151515'}}>
         <div style={{display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
-          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid #1a1a1a',borderRadius:'12px'}}>
-            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#d3bfa2'}}>{extraItems.length}</div>
-            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'2px'}}>TOTAL ITEMS</div>
-          </div>
-          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid #1a1a1a',borderRadius:'12px'}}>
-            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#4ade80'}}>{extraItems.filter(i=>i.isAvailable).length}</div>
-            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'2px'}}>AVAILABLE</div>
-          </div>
-          <div style={{textAlign:'center',padding:'20px 20px',background:'#0d0d0d',border:'1px solid rgba(211,191,162,0.15)',borderRadius:'12px',borderTop:'2px solid #d3bfa2'}}>
-            <div style={{fontSize:'1.4rem',fontWeight:'900',color:'#d3bfa2'}}>
-              ₹{extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}
-            </div>
-            <div style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',marginTop:'1px'}}>STOCK VALUE</div>
-          </div>
+
         </div>
       </div>
     )}
@@ -4795,7 +4784,10 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                         <div style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
                       </div>
-                      <button onClick={() => setConfirmModal({ show: true, title: `Settle Pickup — ${entry.customerName}?`, subtitle: `Collect ₹${entry.totalAmount?.toLocaleString()} · Takeaway · ${entry.items?.length || 0} items`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/settle`, { paymentMethod: 'cash', finalAmount: entry.totalAmount }); fetchCounterQueue(); fetchAnalytics(); showNotif(`${entry.customerName} — pickup settled`); } catch (err) { showNotif(err.response?.data?.error || 'Settlement failed', 'error'); } } })}
+                      <button onClick={() => {
+  setPickupPaymentMethod('cash');
+  setPickupPaymentModal(entry);
+}}
                         disabled={!isKitchenFired}
                         style={{ padding: '8px 14px', borderRadius: '9px', background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isKitchenFired ? 'rgba(211,191,162,0.05)' : '#0d0d0d', border: isReady ? 'none' : isKitchenFired ? '1px solid rgba(211,191,162,0.15)' : '1px solid #111', color: isReady ? '#000' : isKitchenFired ? '#8a704d' : '#1e1e1e', fontWeight: '900', fontSize: '0.58rem', cursor: isKitchenFired ? 'pointer' : 'not-allowed', opacity: !isKitchenFired ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}>
                         <Store size={11} /> SETTLE
@@ -4825,6 +4817,129 @@ const totalRevenueAllTime = canonicalMonthRevenue;
           </div>
         );
       })()}
+
+{/* ══ PICKUP PAYMENT MODAL ══ */}
+{pickupPaymentModal && (
+  <div style={{
+    position: 'fixed', inset: 0, zIndex: 9000,
+    background: 'rgba(0,0,0,0.75)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '20px'
+  }} onClick={() => setPickupPaymentModal(null)}>
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.2)',
+        borderRadius: '18px', padding: '24px', width: '100%', maxWidth: '380px'
+      }}
+    >
+      {/* Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px', marginBottom: '4px' }}>
+          SETTLE PICKUP ORDER
+        </div>
+        <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#fff' }}>
+          {pickupPaymentModal.customerName}
+        </div>
+        <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', marginTop: '2px' }}>
+          {pickupPaymentModal.items?.length || 0} items
+        </div>
+      </div>
+
+      {/* Amount */}
+      <div style={{
+        padding: '14px 16px', background: 'rgba(211,191,162,0.05)',
+        border: '1px solid rgba(211,191,162,0.15)', borderRadius: '12px',
+        marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+      }}>
+        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>AMOUNT TO COLLECT</span>
+        <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>
+          ₹{pickupPaymentModal.totalAmount?.toLocaleString()}
+        </span>
+      </div>
+
+      {/* Payment method selector */}
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(255,255,255,0.2)', letterSpacing: '2px', marginBottom: '10px' }}>
+          PAYMENT METHOD
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+          {[
+            { value: 'cash', label: 'Cash',  icon: <Banknote size={14} strokeWidth={1.8} /> },
+            { value: 'upi',  label: 'UPI',   icon: <Smartphone size={14} strokeWidth={1.8} /> },
+            { value: 'card', label: 'Card',  icon: <CreditCard size={14} strokeWidth={1.8} /> },
+          ].map(({ value, label, icon }) => {
+            const active = pickupPaymentMethod === value;
+            return (
+              <button
+                key={value}
+                onClick={() => setPickupPaymentMethod(value)}
+                style={{
+                  padding: '12px 8px',
+                  borderRadius: '10px',
+                  border: `1px solid ${active ? 'rgba(211,191,162,0.45)' : 'rgba(255,255,255,0.07)'}`,
+                  background: active ? 'rgba(211,191,162,0.12)' : 'rgba(255,255,255,0.02)',
+                  color: active ? '#d3bfa2' : 'rgba(255,255,255,0.3)',
+                  cursor: 'pointer', outline: 'none',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', gap: '6px',
+                  transition: 'all 0.15s',
+                  fontFamily: 'Poppins, sans-serif'
+                }}
+              >
+                {icon}
+                <span style={{ fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.5px' }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button
+          onClick={() => setPickupPaymentModal(null)}
+          style={{
+            flex: 1, padding: '12px', borderRadius: '10px',
+            background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
+            color: 'rgba(255,255,255,0.3)', fontSize: '0.62rem', fontWeight: '800',
+            cursor: 'pointer', outline: 'none', fontFamily: 'Poppins, sans-serif'
+          }}
+        >
+          CANCEL
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              await axios.patch(
+                `${BASE_URL}/waitlist/${pickupPaymentModal._id}/settle`,
+                { paymentMethod: pickupPaymentMethod, finalAmount: pickupPaymentModal.totalAmount }
+              );
+              setPickupPaymentModal(null);
+              fetchCounterQueue();
+              fetchAnalytics();
+              showNotif(`${pickupPaymentModal.customerName} — settled via ${pickupPaymentMethod.toUpperCase()}`);
+            } catch (err) {
+              showNotif(err.response?.data?.error || 'Settlement failed', 'error');
+            }
+          }}
+          style={{
+            flex: 2, padding: '12px', borderRadius: '10px',
+            background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+            border: 'none', color: '#0a0a0a',
+            fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px',
+            cursor: 'pointer', outline: 'none',
+            fontFamily: 'Poppins, sans-serif',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+          }}
+        >
+          <Store size={13} strokeWidth={2} />
+          CONFIRM SETTLEMENT
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ══ RESERVATIONS ══ */}
       {queueTab === 'reservations' && (() => {
@@ -9959,608 +10074,680 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 )}
 
           {/* ── MANAGEMENT ── */}
-          {activeTab==='management' && (
-            <motion.div key="management" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{duration:0.4}}
-              style={{display:'flex',flexDirection:'column',gap:'40px',paddingBottom:'100px',width:'100%'}}>
-              {/* workforce register + attendance — keeping existing implementation, condensed */}
-              <div style={{...styles.biCard,borderTop:'3px solid #d3bfa2'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'8px'}}>
-                  <User size={20} color="#d3bfa2"/>
-                  <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'1rem'}}>WORKFORCE REGISTER TERMINAL</h4>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'16px',alignItems:'end',padding:'0 10px'}}>
-                  {[{l:'FULL NAME',k:'name',p:'John Doe',t:'text'},{l:'AGE',k:'age',p:'25',t:'number'},{l:'CONTACT',k:'contact',p:'9876543210',t:'text'},{l:'SALARY(₹)',k:'baseSalary',p:'25000',t:'number'}].map(f=>(
-                    <div key={f.k}>
-                      <label style={{...styles.statLabel,color:'#888',marginBottom:'8px',display:'block'}}>{f.l}</label>
-                      <input type={f.t} placeholder={f.p} style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem'}}
-                        value={newStaff[f.k]} onChange={e=>setNewStaff({...newStaff,[f.k]:e.target.value})}/>
-                    </div>
-                  ))}
-                  <div>
-                    <label style={{...styles.statLabel,color:'#888',marginBottom:'8px',display:'block'}}>ROLE</label>
-                    <select style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',fontSize:'0.8rem',cursor:'pointer'}}
-                      value={newStaff.role} onChange={e=>setNewStaff({...newStaff,role:e.target.value,assignedTables:[]})}>
-                      {['Waiter','Chef','Manager','Cashier','Helper'].map(r=><option key={r} value={r}>{r.toUpperCase()}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{...styles.statLabel,color:'#888',marginBottom:'8px',display:'block'}}>SHIFT</label>
-                    <select style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',cursor:'pointer'}}
-                      value={newStaff.shiftType} onChange={e=>setNewStaff({...newStaff,shiftType:e.target.value})}>
-                      <option value="Day Shift">DAY SHIFT</option>
-                      <option value="Night Shift">NIGHT SHIFT</option>
-                      <option value="Both Shifts">BOTH SHIFTS</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{...styles.statLabel,color:'#888',marginBottom:'8px',display:'block'}}>JOINING DATE</label>
-                    <input type="date" style={{...styles.input,marginBottom:0,colorScheme:'dark',background:'#000',borderColor:'#151515',cursor:'pointer'}}
-                      value={newStaff.joiningDate} onChange={e=>setNewStaff({...newStaff,joiningDate:e.target.value})}/>
-                  </div>
-                </div>
-                {newStaff.role==='Waiter' && (
-                  <div style={{marginTop:'20px',background:'#080808',padding:'16px',borderRadius:'12px',border:'1px solid #121212'}}>
-                    <label style={{...styles.statLabel,color:'#888',marginBottom:'10px',display:'block'}}>TABLE ASSIGNMENTS</label>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-                      {Array.from({length:tableCount},(_,i)=>(i+1).toString()).map(t=>{
-                        const isSel=newStaff.assignedTables.includes(t);
-                        return (
-                          <button key={t} type="button" onClick={()=>setNewStaff({...newStaff,assignedTables:isSel?newStaff.assignedTables.filter(x=>x!==t):[...newStaff.assignedTables,t]})}
-                            style={{padding:'8px 16px',borderRadius:'8px',border:'none',fontSize:'0.7rem',fontWeight:'800',cursor:'pointer',
-                              background:isSel?'linear-gradient(135deg,#8a704d,#d3bfa2)':'#111',color:isSel?'#000':'#555'}}>T{t}</button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                {/* After role select, inside the grid */}
-{newStaff.role === 'Chef' && (
-  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-    style={{ gridColumn: 'span 2' }}>
-    <label style={{ ...styles.statLabel, color: '#d3bfa2', marginBottom: '8px', display: 'block', fontWeight: '800' }}>
-      CUISINE SPECIALIZATION — SELECT CATEGORIES
-    </label>
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', background: '#000', padding: '14px', borderRadius: '12px', border: '1px solid #1a1a1a', minHeight: '54px' }}>
-      {[...new Set(menuItems.map(item => item.categoryId))].filter(Boolean).map(catId => {
-        const currentSel = newStaff.cookingRole ? newStaff.cookingRole.split(', ') : [];
-        const isChecked = currentSel.includes(catId);
-        // Clean display name
-        const displayName = catId.replace(/^cat_/i, '').replace(/_/g, ' ');
-        return (
-          <button key={catId} type="button" onClick={() => {
-            const updated = isChecked
-              ? currentSel.filter(c => c !== catId)
-              : [...currentSel, catId];
-            setNewStaff({ ...newStaff, cookingRole: updated.join(', ') });
-          }} style={{
-            padding: '6px 14px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: '900',
-            border: isChecked ? 'none' : '1px solid #222', cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            background: isChecked ? '#d3bfa2' : '#0d0d0d',
-            color: isChecked ? '#000' : '#555'
-          }}>
-            {displayName.toUpperCase()}
-          </button>
-        );
-      })}
-      {menuItems.length === 0 && (
-        <span style={{ fontSize: '0.7rem', color: '#333' }}>Loading categories...</span>
-      )}
-    </div>
-    {newStaff.cookingRole && (
-      <div style={{ fontSize: '0.62rem', color: '#8a704d', marginTop: '6px', fontWeight: '700' }}>
-        Selected: {newStaff.cookingRole.split(', ').map(c => c.replace(/^cat_/i, '').replace(/_/g, ' ')).join(' • ').toUpperCase()}
-      </div>
-    )}
-  </motion.div>
-)}
-                <div style={{marginTop:'20px',display:'flex',gap:'16px',padding:'0 10px'}}>
-                  <input type="text" placeholder="Residential address" style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#151515',flex:1}}
-                    value={newStaff.address} onChange={e=>setNewStaff({...newStaff,address:e.target.value})}/>
-                  <button onClick={async()=>{
-
-                    if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif("Fill all required fields","error");
-                    try {
-                      
-                      const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
-                      if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
-                        await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables});
-                      showNotif(`${newStaff.name} enrolled`,"success");
-const istResetDate = (() => {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-})();
-
-setNewStaff({
-  name:'', role:'Waiter', age:'', contact:'', address:'',
-  shiftType:'Day Shift',
-  joiningDate: istResetDate, // ← IST not UTC
-  baseSalary:'', assignedTables:[], cookingRole:''
-});                      fetchManagementData();
-                    } catch { showNotif("Failed to enroll","error"); }
-                  }} style={{...styles.mainBtn,width:'200px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)'}}>AUTHORIZE ROSTER</button>
-                </div>
-              </div>
-
-              {/* LIVE FLOOR HUD */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'25px'}}>
-                <div style={{...styles.biCard,borderLeft:'4px solid #d3bfa2',padding:'24px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'16px'}}>
-                    <div style={{background:'rgba(211,191,162,0.06)',padding:'12px',borderRadius:'12px',color:'#d3bfa2',border:'1px solid rgba(211,191,162,0.1)'}}><ChefHat size={22}/></div>
-                    <div>
-                      <small style={{color:'#444',fontWeight:'900',fontSize:'0.65rem',letterSpacing:'1px',textTransform:'uppercase'}}>PRODUCTION CAPACITY</small>
-                      <div style={{fontSize:'1.6rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>{liveFloorIntelligence.activeChefs} Chefs • {liveFloorIntelligence.activeHelpers} Helpers</div>
-                    </div>
-                  </div>
-                </div>
-                <div style={{...styles.biCard,borderLeft:'4px solid #8a704d',padding:'24px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'16px'}}>
-                    <div style={{background:'rgba(138,112,77,0.06)',padding:'12px',borderRadius:'12px',color:'#8a704d',border:'1px solid rgba(138,112,77,0.1)'}}><MousePointer2 size={22}/></div>
-                    <div>
-                      <small style={{color:'#444',fontWeight:'900',fontSize:'0.65rem',letterSpacing:'1px',textTransform:'uppercase'}}>FLOORGRID COVERAGE</small>
-                      <div style={{fontSize:'1.6rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>{liveFloorIntelligence.coveredCount} <span style={{fontSize:'0.8rem',color:'#444'}}>OF {tableCount} TABLES</span></div>
-                      <div style={{fontSize:'0.65rem',color:'#8a704d',fontWeight:'bold',marginTop:'4px'}}>{liveFloorIntelligence.coveredList}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ROSTER LEDGER */}
-              <div style={{...styles.biCard,width:'100%'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'25px',gap:'20px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                    <Layers size={18} color="#d3bfa2"/>
-                    <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.95rem'}}>ROSTER REGISTRY</h4>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                    <div style={{...styles.searchWrapper,padding:'8px 14px',background:'#000',border:'1px solid #121212',borderRadius:'8px',marginBottom:0}}>
-                      <Search size={14} color="#444"/>
-                      <input type="text" placeholder="Filter by name..." style={{...styles.searchInput,width:'180px',fontSize:'0.75rem',color:'#fff'}}
-                        value={rosterSearchQuery} onChange={e=>setRosterSearchQuery(e.target.value)}/>
-                    </div>
-                    {/* Month selector for attendance column */}
-                    <div style={styles.headerMonthSelector}>
-                      <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
-                      <span style={{fontSize:'0.75rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
-                        {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
-                      </span>
-                      <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
-                    </div>
-                  </div>
-                </div>
-                <div style={{overflowX:'auto'}} className="custom-scroll">
-                  <table style={{width:'100%',borderCollapse:'collapse'}}>
-                    <thead>
-                      {/* Replace the existing thead tr */}
-<tr style={{textAlign:'left',fontSize:'0.65rem',color:'#555',borderBottom:'1px solid #121212',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-  {[
-    ['name','Staff'],
-    ['','Assignments / Specialization'],
-    ['','Shift'],
-    ['monthlyAttendance','Attendance',true],
-    ['joiningDate','Tenure'],
-    ['baseSalary','Salary'],
-    ['','Payroll'],
-    ['','Action']
-  ].map(([k,l,c],i)=>(
-    <th key={i} onClick={k?()=>requestLedgerSort(k):undefined}
-      style={{padding:i===0?'0 0 15px 12px':'0 0 15px 0',cursor:k?'pointer':'default',
-        color:ledgerSortConfig.key===k?'#d3bfa2':'#555',
-        textAlign:c?'center':'left'}}>
-      {l} {ledgerSortConfig.key===k&&(ledgerSortConfig.direction==='asc'?'▲':'▼')}
-    </th>
-  ))}
-</tr>
-                    </thead>
-                    <tbody>
-                      {filteredStaff.length>0 ? ['Chef','Waiter','Manager','Cashier','Helper'].map(role=>{
-                        const bucket=filteredStaff.filter(m=>(m.role||'Helper')===role);
-                        if(!bucket.length) return null;
-                        return (
-                          <React.Fragment key={role}>
-                            <tr><td colSpan="8" style={{padding:'10px 12px',background:'#090909',borderBottom:'1px solid #111'}}>
-                              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                                <span style={{width:'4px',height:'12px',background:'#d3bfa2',borderRadius:'2px'}}/>
-                                <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1.2px',textTransform:'uppercase'}}>{role}S ({bucket.length})</span>
-                              </div>
-                            </td></tr>
-                            {bucket.map(m=>{
-                              const prefix=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-                              const days=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)).length;
-                              const pureName=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
-                              return (
-                                <tr key={m._id} style={{borderBottom:'1px solid #090909',fontSize:'0.8rem'}}>
-                                  <td style={{padding:'16px 12px'}}>
-                                    <b style={{color:'#fff'}}>{pureName}</b>
-                                    <span style={{fontSize:'0.65rem',color:'#666',display:'block',marginTop:'2px'}}>{m.role.toUpperCase()} {m.age?`• ${m.age}y`:''}</span>
-                                  </td>
-                                 {/* Replace the second <td> — Assignments / Specialization */}
-<td style={{paddingRight:'16px', maxWidth:'180px'}}>
-  {m.role === 'Waiter' && m.assignedTables?.length > 0 ? (
-    <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
-      {m.assignedTables.map(t=>(
-        <span key={t} style={{fontSize:'0.62rem',padding:'2px 6px',background:'#111',border:'1px solid #161616',borderRadius:'4px',color:'#aaa'}}>
-          T{t}
-        </span>
-      ))}
-    </div>
-  ) : m.role === 'Chef' && m.cookingRole ? (
-    <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
-      {m.cookingRole.split(', ').filter(Boolean).map((cat, i) => (
-        <span key={i} style={{
-          fontSize:'0.58rem',padding:'2px 8px',
-          background:'rgba(211,191,162,0.06)',
-          border:'1px solid rgba(211,191,162,0.12)',
-          borderRadius:'4px',color:'#8a704d',fontWeight:'800',
-          textTransform:'uppercase'
-        }}>
-          {cat.replace(/^cat_/i,'').replace(/_/g,' ')}
-        </span>
-      ))}
-    </div>
-  ) : (
-    <span style={{fontSize:'0.65rem',color:'#333',fontStyle:'italic'}}>—</span>
-  )}
-</td>
-                                  <td><span style={{display:'inline-flex',alignItems:'center',gap:'5px',fontSize:'0.7rem',fontWeight:'800',color:m.shiftType==='Night Shift'?'#8a704d':'#d3bfa2'}}><Clock size={11}/>{m.shiftType?.toUpperCase()}</span></td>
-<td style={{textAlign:'center'}}>
-  <span style={{
-    padding:'4px 10px',borderRadius:'12px',
-    background:'rgba(211,191,162,0.03)',
-    border:'1px solid rgba(211,191,162,0.08)',
-    fontSize:'0.75rem',fontWeight:'800',color:'#fff'
+{activeTab==='management' && (
+<motion.div key="management" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{duration:0.4}}
+  style={{display:'flex',flexDirection:'column',gap:'32px',paddingBottom:'100px',width:'100%'}}>
+ 
+  {/* ── LIVE FLOOR INTELLIGENCE HUD ── */}
+  <div style={{
+    display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'14px'
   }}>
-    {days} <span style={{color:'#444',fontSize:'0.6rem'}}>DAYS</span>
-  </span>
-  {(() => {
-    // Calculate total hours for this staff in selected month
-    const prefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-    const staffLogs = attendanceLogs.filter(l =>
-      (l.staffId===m._id||l.staffId?.toString()===m._id?.toString()) &&
-      l.date?.startsWith(prefix) && l.clockIn && l.clockOut
-    );
-    const totalHrs = staffLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
-    const overtimeHrs = Math.max(0, totalHrs - (days * 8));
-    return overtimeHrs > 0 ? (
-      <div style={{
-        fontSize:'0.52rem',fontWeight:'900',color:'#BA7517',
-        marginTop:'3px',letterSpacing:'0.5px'
+    {[
+      {
+        label:'On Duty Now', icon:<Users size={16}/>,
+        val: (liveFloorIntelligence.activeChefs + liveFloorIntelligence.activeHelpers + (staff.filter(s=>s.role==='Waiter').length || 0)),
+        sub: `${liveFloorIntelligence.activeChefs} chefs · ${liveFloorIntelligence.activeHelpers} helpers`, accent:'#d3bfa2'
+      },
+      {
+        label:'Table Coverage', icon:<TableProperties size={16}/>,
+        val:`${liveFloorIntelligence.coveredCount}/${tableCount}`,
+        sub: liveFloorIntelligence.coveredList || 'No coverage data', accent:'#8a704d'
+      },
+      {
+        label:'Staff on Roster', icon:<ClipboardList size={16}/>,
+        val: staff.length,
+        sub:`${staff.filter(s=>s.role==='Waiter').length}W · ${staff.filter(s=>s.role==='Chef').length}Ch · ${staff.filter(s=>s.role==='Manager').length}Mg`, accent:'#d3bfa2'
+      },
+      {
+        label:'Today Attendance', icon:<CheckCircle2 size={16}/>,
+        val: attendanceLogs.filter(l => l.date === attendanceDate).length,
+        sub:'punched in today', accent:'#4ade80'
+      },
+    ].map((s,i)=>(
+      <div key={i} style={{
+        background:'#080808', border:'1px solid #161616',
+        borderTop:`2px solid ${s.accent}22`,
+        borderRadius:'14px', padding:'18px 20px',
+        display:'flex', flexDirection:'column', gap:'10px'
       }}>
-        +{overtimeHrs.toFixed(1)}h OT
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{
+            width:'32px',height:'32px',borderRadius:'9px',
+            background:`${s.accent}0d`,border:`1px solid ${s.accent}22`,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            color:s.accent
+          }}>{s.icon}</div>
+          <span style={{fontSize:'0.5rem',color:'#333',fontWeight:'900',letterSpacing:'1.5px',textTransform:'uppercase'}}>{s.label}</span>
+        </div>
+        <div>
+          <div style={{fontSize:'1.7rem',fontWeight:'900',color:'#fff',lineHeight:1,fontFamily:'monospace'}}>{s.val}</div>
+          <div style={{fontSize:'0.58rem',color:'#444',marginTop:'5px',fontWeight:'600'}}>{s.sub}</div>
+        </div>
       </div>
-    ) : null;
-  })()}
-</td>
-                                  <td style={{fontSize:'0.75rem',color:'#888'}}>{calculateTenure(m.joiningDate)}</td>
-                                  <td style={{fontWeight:'800',color:'#fff'}}>₹{Number(m.baseSalary).toLocaleString()}<small style={{color:'#444',fontSize:'0.6rem'}}>/mo</small></td>
-                                  {/* Replace the payroll <td> */}
-{/* PAYROLL TD — per-month status from MonthlySalary collection */}
-<td>
-  {(() => {
-    const istNow = new Date(new Date().getTime() + 330*60*1000);
-    const selectedMonthDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-    const currentMonthDate  = new Date(istNow.getFullYear(), istNow.getMonth(), 1);
-    const isFutureMonth = selectedMonthDate > currentMonthDate;
-    const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-
-    if (isFutureMonth) {
-      return (
-        <span style={{
-          fontSize:'0.65rem',padding:'6px 10px',borderRadius:'6px',fontWeight:'900',
-          background:'#0a0a0a',color:'#222',border:'1px solid #111',display:'inline-block'
-        }}>
-          UNPAID
-        </span>
-      );
-    }
-
-    // Find monthly record for this staff
-    const monthRec = monthlySalaryRecords.find(r =>
-      r.staffId?.toString() === m._id?.toString() && r.monthStr === monthStr
-    );
-    const currentStatus = monthRec?.status || 'Unpaid';
-    const recordedSalary = monthRec?.baseSalary || m.baseSalary;
-
-    return (
-      <select
-        value={currentStatus}
-        onChange={async e => {
-          const newStatus = e.target.value;
-          await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${m._id}/${monthStr}`, { status: newStatus });
-          fetchMonthlySalary(monthStr);
-          showNotif(`${pureName} — ${monthStr} marked ${newStatus}`);
-        }}
-        style={{
-          background:'#000',
-          color: currentStatus === 'Paid' ? '#d3bfa2' : '#444',
-          border: currentStatus === 'Paid' ? '1px solid rgba(211,191,162,0.25)' : '1px solid #151515',
-          padding:'6px 10px',borderRadius:'6px',
-          fontSize:'0.65rem',fontWeight:'900',
-          outline:'none',cursor:'pointer'
-        }}
-      >
-        <option value="Unpaid">UNPAID</option>
-        <option value="Paid">PAID</option>
-      </select>
-    );
-  })()}
-</td>
-<td style={{textAlign:'right',paddingRight:'12px',display:'flex',gap:'6px',justifyContent:'flex-end',alignItems:'center'}}>
-  {/* EDIT SALARY */}
-  <button
-    onClick={() => {
-      setSalaryEditModal({ staffId: m._id, name: pureName, currentSalary: m.baseSalary });
-      setSalaryEditValue(m.baseSalary.toString());
-      setSalaryEditPassword('');
-    }}
-    style={{
-      background:'transparent',border:'1px solid #1a1a1a',color:'#555',
-      padding:'6px 10px',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'800',cursor:'pointer'
-    }}
-    onMouseEnter={e=>{e.currentTarget.style.color='#d3bfa2';e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';}}
-    onMouseLeave={e=>{e.currentTarget.style.color='#555';e.currentTarget.style.borderColor='#1a1a1a';}}
-    title="Edit base salary"
-  >
-    ₹ EDIT
-  </button>
-  <button
-    onClick={() => generateSalarySlip(m)}
-    style={{background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'6px 10px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'800',cursor:'pointer'}}
-  >
-    SLIP
-  </button>
-  <button onClick={() => setPendingDeleteStaff(m)}
-    style={{background:'transparent',border:'1px solid #151515',color:'#444',padding:'6px 12px',borderRadius:'6px',fontSize:'0.65rem',fontWeight:'800',cursor:'pointer'}}
-    onMouseEnter={e=>{e.currentTarget.style.color='#ff4d4d';e.currentTarget.style.borderColor='rgba(255,77,77,0.3)';}}
-    onMouseLeave={e=>{e.currentTarget.style.color='#444';e.currentTarget.style.borderColor='#151515';}}>
-    WIPE
-  </button>
-</td>
-                                </tr>
-                              );
-                            })}
-                          </React.Fragment>
-                        );
-                      }) : (
-                        <tr><td colSpan="8" style={{textAlign:'center',padding:'40px',color:'#444',fontSize:'0.75rem'}}>NO STAFF RECORDS FOUND</td></tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-                      <tr style={{background:'#050505',borderTop:'2px solid #111'}}>
-                        <td colSpan="4" style={{padding:0}}/>
-<td style={{padding:'18px 12px',textAlign:'right',fontSize:'0.7rem',fontWeight:'900',color:'#8a704d',textTransform:'uppercase'}}>
-  PENDING PAYROLL: {/* ← was "AGGREGATED PAYROLL" */}
-</td>                        <td style={{padding:'18px 10px',fontWeight:'900',color:'#d3bfa2',fontSize:'0.9rem'}}>₹{totalPayrollValue.toLocaleString()}</td>
-                        <td style={{padding:0}}/><td style={{padding:0}}/>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-{/* ATTENDANCE PANEL */}
-<div style={{...styles.biCard, width:'100%', background:'#0d0d0d'}}>
-  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'20px',marginBottom:'20px'}}>
-    <div>
-      <h4 style={{...styles.biTitle,marginBottom:'4px',color:'#fff'}}>
-        <Calendar size={14} color="#8a704d"/> DAILY ATTENDANCE TRACKER
-      </h4>
-      <p style={{fontSize:'0.68rem',color:'#555',margin:0}}>
-        Showing: {new Date(attendanceDate).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
-      </p>
-    </div>
-    <div style={{display:'flex',gap:'12px',alignItems:'center'}}>
-      {/* Date navigator */}
-      <button onClick={() => {
-        const d = new Date(attendanceDate);
-        d.setDate(d.getDate()-1);
-        const s = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        setAttendanceDate(s);
-        fetchAttendanceForDate(s);
-      }} style={{background:'#000',border:'1px solid #181818',color:'#555',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
-        ← PREV
-      </button>
-      <input type="date" value={attendanceDate}
-        onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
-        style={{...styles.input,colorScheme:'dark',border:'1px solid #181818',background:'#000',fontSize:'0.75rem',padding:'8px 12px',width:'160px',marginBottom:0,cursor:'pointer'}}/>
-      <button onClick={() => {
-        const istNow = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
-        const s = istNow.getFullYear()+'-'+String(istNow.getMonth()+1).padStart(2,'0')+'-'+String(istNow.getDate()).padStart(2,'0');
-        setAttendanceDate(s);
-        fetchAttendanceForDate(s);
-      }} style={{background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#8a704d',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
-        TODAY
-      </button>
-      <button onClick={() => {
-        const d = new Date(attendanceDate);
-        d.setDate(d.getDate()+1);
-        const s = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        setAttendanceDate(s);
-        fetchAttendanceForDate(s);
-      }} style={{background:'#000',border:'1px solid #181818',color:'#555',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',fontSize:'0.7rem',fontWeight:'900'}}>
-        NEXT →
-      </button>
-    </div>
+    ))}
   </div>
-
-  {/* DAILY SUMMARY BAR */}
-  {(() => {
-    const todayLogs = attendanceLogs.filter(l => l.date === attendanceDate);
-    const presentCount = todayLogs.filter(l => l.clockIn).length;
-    const completedCount = todayLogs.filter(l => l.clockOut).length;
-    const totalHours = todayLogs.reduce((a,l) => a + (l.totalWorkingHours||0), 0);
-    const absentCount = staff.length - presentCount;
-    return (
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'24px',padding:'16px',background:'#080808',borderRadius:'12px',border:'1px solid #111'}}>
+ 
+  {/* ═══════════════════════════════════════════════════════
+      SECTION A — WORKFORCE REGISTER TERMINAL
+  ═══════════════════════════════════════════════════════ */}
+  <div style={{
+    background:'#080808', border:'1px solid #161616',
+    borderRadius:'18px', overflow:'hidden'
+  }}>
+    {/* Section header */}
+    <div style={{
+      display:'flex',alignItems:'center',gap:'14px',
+      padding:'20px 26px',
+      borderBottom:'1px solid #111',
+      background:'#060606'
+    }}>
+      <div style={{
+        width:'36px',height:'36px',borderRadius:'10px',
+        background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.14)',
+        display:'flex',alignItems:'center',justifyContent:'center'
+      }}>
+        <UserRoundCog size={16} color="#d3bfa2"/>
+      </div>
+      <div>
+        <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2.5px'}}>WORKFORCE REGISTER TERMINAL</div>
+        <div style={{fontSize:'0.6rem',color:'#333',marginTop:'2px',fontWeight:'600'}}>Enroll new staff — role, shift, table assignments, pay scale</div>
+      </div>
+    </div>
+ 
+    <div style={{padding:'24px 26px'}}>
+      {/* Main fields grid */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:'14px',marginBottom:'16px'}}>
         {[
-          {l:'PRESENT TODAY', v:presentCount, c:'#d3bfa2'},
-          {l:'SHIFTS COMPLETED', v:completedCount, c:'#4ade80'},
-          {l:'ABSENT / NOT PUNCHED', v:absentCount, c:'#555'},
-          {l:'TOTAL HOURS LOGGED', v:`${totalHours.toFixed(1)}h`, c:'#8a704d'},
-        ].map(s=>(
-          <div key={s.l} style={{textAlign:'center'}}>
-            <div style={{fontSize:'0.52rem',color:'#444',fontWeight:'900',letterSpacing:'1px',marginBottom:'4px'}}>{s.l}</div>
-            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c}}>{s.v}</div>
+          {l:'Full Name',k:'name',p:'e.g. Ramesh Pawar',t:'text'},
+          {l:'Age',k:'age',p:'25',t:'number'},
+          {l:'Contact',k:'contact',p:'9876543210',t:'text'},
+          {l:'Monthly Salary (₹)',k:'baseSalary',p:'25,000',t:'number'}
+        ].map(f=>(
+          <div key={f.k}>
+            <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>{f.l}</label>
+            <input type={f.t} placeholder={f.p}
+              style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box',fontWeight:'600'}}
+              value={newStaff[f.k]} onChange={e=>setNewStaff({...newStaff,[f.k]:e.target.value})}/>
           </div>
         ))}
-      </div>
-    );
-  })()}
-
-  {/* PER-ROLE ATTENDANCE GRID */}
-  <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-    {['Chef','Waiter','Manager','Cashier','Helper'].map(role => {
-      const roleStaff = staff.filter(m=>(m.role||'Helper')===role);
-      if(!roleStaff.length) return null;
-      return (
-        <div key={role} style={{border:'1px solid #121212',padding:'16px',borderRadius:'12px',background:'#090909'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px',borderBottom:'1px solid #151515',paddingBottom:'8px'}}>
-            <Clock size={12} color="#8a704d"/>
-            <span style={{fontSize:'0.68rem',fontWeight:'900',color:'#888',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-              {role}S ({roleStaff.length})
-            </span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'12px'}}>
-            {roleStaff.map(m => {
-              // Find ALL logs for this staff on this date (could have multiple clock-ins)
-              const dayLogs = attendanceLogs.filter(l =>
-                l.date === attendanceDate &&
-                (l.staffId === m._id || l.staffId?.toString() === m._id?.toString())
-              ).sort((a,b) => new Date(a.clockIn) - new Date(b.clockIn));
-              
-              const activeLogs = dayLogs.filter(l => l.clockIn && !l.clockOut);
-              const completedLogs = dayLogs.filter(l => l.clockIn && l.clockOut);
-              const totalHoursToday = completedLogs.reduce((a,l) => a+(l.totalWorkingHours||0), 0);
-              const isCurrentlyClockedIn = activeLogs.length > 0;
-              const hasAnyPunch = dayLogs.length > 0;
-              const latestActiveLog = activeLogs[activeLogs.length - 1];
-              const name = m.name.includes(' (')?m.name.split(' (')[0]:m.name;
-
-              // Status label
-              let statusLabel = 'NOT PUNCHED';
-              let statusColor = '#333';
-              if (isCurrentlyClockedIn) { statusLabel = 'ON DUTY'; statusColor = '#d3bfa2'; }
-              else if (completedLogs.length > 0) { statusLabel = `DONE — ${totalHoursToday.toFixed(1)}h`; statusColor = '#4ade80'; }
-
-              return (
-                <div key={m._id} style={{
-                  padding:'14px',borderRadius:'10px',background:'#050505',
-                  border: isCurrentlyClockedIn ? '1px solid rgba(211,191,162,0.2)' : completedLogs.length > 0 ? '1px solid rgba(74,222,128,0.12)' : '1px solid #111',
-                }}>
-                  {/* Header row */}
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
-                    <div>
-                      <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff'}}>{name}</div>
-                      <div style={{fontSize:'0.62rem',color:statusColor,fontWeight:'700',marginTop:'2px'}}>{statusLabel}</div>
-                    </div>
-                    {/* Clock In / Out button */}
-                    <button
-                      onClick={async () => {
-                        if (!isCurrentlyClockedIn) {
-                          // Clock IN
-                          await axios.post(`${BASE_URL}/staff/attendance/clock-in`, {tenantId, staffId: m._id});
-                        } else {
-                          // Clock OUT of the active session
-                          await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`);
-                        }
-                        fetchAttendanceForDate(attendanceDate);
-                      }}
-                      style={{
-                        background: isCurrentlyClockedIn ? 'rgba(138,112,77,0.1)' : '#d3bfa2',
-                        color: isCurrentlyClockedIn ? '#8a704d' : '#000',
-                        border: isCurrentlyClockedIn ? '1px solid rgba(138,112,77,0.3)' : 'none',
-                        padding:'8px 14px',borderRadius:'8px',
-                        fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
-                        whiteSpace:'nowrap',flexShrink:0
-                      }}
-                    >
-                      {isCurrentlyClockedIn ? 'CLOCK OUT' : 'CLOCK IN'}
-                    </button>
-                  </div>
-
-{/* Session history for today */}
-{dayLogs.length > 0 && (
-  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-    {dayLogs.map((log, idx) => {
-      const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
-      const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : null;
-      const hrs = log.totalWorkingHours;
-      return (
-        <div key={log._id} style={{
-          display:'flex',alignItems:'center',gap:'8px',
-          padding:'6px 8px',background:'#0a0a0a',
-          borderRadius:'6px',border:'1px solid #111'
-        }}>
-          <span style={{fontSize:'0.55rem',color:'#444',fontWeight:'900',minWidth:'20px'}}>#{idx+1}</span>
-          <div style={{display:'flex',alignItems:'center',gap:'6px',flex:1}}>
-            <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{inTime}</span>
-            <span style={{fontSize:'0.55rem',color:'#333'}}>→</span>
-            {outTime ? (
-              <>
-                <span style={{fontSize:'0.65rem',color:'#d3bfa2',fontWeight:'700'}}>{outTime}</span>
-                <span style={{
-                  marginLeft:'auto',fontSize:'0.6rem',fontWeight:'900',
-                  // ── OVERTIME FLAG: >9h in a single session ──
-                  color: hrs >= 9 ? '#BA7517' : '#d3bfa2',
-                  background: hrs >= 9 ? 'rgba(186,117,23,0.08)' : 'rgba(211,191,162,0.06)',
-                  padding:'2px 6px',borderRadius:'4px',
-                  border: hrs >= 9 ? '1px solid rgba(186,117,23,0.25)' : '1px solid rgba(211,191,162,0.12)'
-                }}>
-                  {hrs ? `${hrs.toFixed(1)}h` : '—'}
-                  {hrs >= 9 && <span style={{marginLeft:'4px',fontSize:'0.48rem',letterSpacing:'0.5px'}}>⚠ OT</span>}
-                </span>
-              </>
-            ) : (
-              <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontStyle:'italic',marginLeft:'auto'}}>IN PROGRESS...</span>
-            )}
-          </div>
+ 
+        {/* Role */}
+        <div>
+          <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Role</label>
+          <select
+            style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+            value={newStaff.role} onChange={e=>setNewStaff({...newStaff,role:e.target.value,assignedTables:[]})}>
+            {['Waiter','Chef','Manager','Cashier','Helper'].map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
         </div>
-      );
-    })}
-
-    {/* Total for day + overtime summary */}
-    {completedLogs.length > 0 && (
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
-        <span style={{fontSize:'0.62rem',color:'#8a704d',fontWeight:'900'}}>
-          TOTAL: {totalHoursToday.toFixed(2)}h
-        </span>
-        {totalHoursToday >= 9 && (
-          <span style={{
-            fontSize:'0.58rem',fontWeight:'900',
-            padding:'2px 8px',borderRadius:'4px',
-            background:'rgba(186,117,23,0.1)',
-            color:'#BA7517',
-            border:'1px solid rgba(186,117,23,0.25)'
-          }}>
-            ⚠ OVERTIME — {(totalHoursToday - 8).toFixed(1)}h extra
-          </span>
-        )}
+ 
+        {/* Shift */}
+        <div>
+          <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Shift</label>
+          <select
+            style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+            value={newStaff.shiftType} onChange={e=>setNewStaff({...newStaff,shiftType:e.target.value})}>
+            <option value="Day Shift">Day Shift</option>
+            <option value="Night Shift">Night Shift</option>
+            <option value="Both Shifts">Both Shifts</option>
+          </select>
+        </div>
+ 
+        {/* Joining Date */}
+        <div>
+          <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Joining Date</label>
+          <input type="date"
+            style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark',cursor:'pointer',boxSizing:'border-box'}}
+            value={newStaff.joiningDate} onChange={e=>setNewStaff({...newStaff,joiningDate:e.target.value})}/>
+        </div>
       </div>
-    )}
-  </div>
-)}
-
-                  {/* Absent indicator */}
-                  {!hasAnyPunch && (
-                    <div style={{
-                      padding:'6px 8px',background:'#0a0a0a',borderRadius:'6px',
-                      border:'1px solid #0d0d0d',textAlign:'center'
-                    }}>
-                      <span style={{fontSize:'0.6rem',color:'#222',fontWeight:'700',letterSpacing:'0.5px'}}>NO PUNCH RECORDED</span>
-                    </div>
-                  )}
-                </div>
+ 
+      {/* Table assignments — Waiter only */}
+      {newStaff.role==='Waiter' && (
+        <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
+          style={{background:'#0a0a0a',border:'1px solid #141414',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
+          <div style={{fontSize:'0.52rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1px',marginBottom:'12px',textTransform:'uppercase'}}>Table Assignments</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'7px'}}>
+            {Array.from({length:tableCount},(_,i)=>(i+1).toString()).map(t=>{
+              const isSel=newStaff.assignedTables.includes(t);
+              return (
+                <button key={t} type="button"
+                  onClick={()=>setNewStaff({...newStaff,assignedTables:isSel?newStaff.assignedTables.filter(x=>x!==t):[...newStaff.assignedTables,t]})}
+                  style={{
+                    padding:'7px 14px',borderRadius:'7px',border:'none',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s',
+                    background:isSel?'linear-gradient(135deg,#8a704d,#d3bfa2)':'#111',
+                    color:isSel?'#000':'#444'
+                  }}>T{t}</button>
               );
             })}
           </div>
+          {newStaff.assignedTables.length>0 && (
+            <div style={{fontSize:'0.58rem',color:'#555',marginTop:'8px'}}>
+              Assigned: {newStaff.assignedTables.map(t=>`T${t}`).join(', ')}
+            </div>
+          )}
+        </motion.div>
+      )}
+ 
+      {/* Chef cuisine specializations */}
+      {newStaff.role==='Chef' && (
+        <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
+          style={{background:'#0a0a0a',border:'1px solid #141414',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
+          <div style={{fontSize:'0.52rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1px',marginBottom:'12px',textTransform:'uppercase'}}>Cuisine Specialization</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'7px'}}>
+            {[...new Set(menuItems.map(item=>item.categoryId))].filter(Boolean).map(catId=>{
+              const currentSel=newStaff.cookingRole?newStaff.cookingRole.split(', '):[];
+              const isChecked=currentSel.includes(catId);
+              const displayName=catId.replace(/^cat_/i,'').replace(/_/g,' ');
+              return (
+                <button key={catId} type="button" onClick={()=>{
+                  const updated=isChecked?currentSel.filter(c=>c!==catId):[...currentSel,catId];
+                  setNewStaff({...newStaff,cookingRole:updated.join(', ')});
+                }} style={{
+                  padding:'6px 14px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'900',
+                  border:isChecked?'none':'1px solid #222',cursor:'pointer',transition:'all 0.15s',
+                  background:isChecked?'#d3bfa2':'#111',color:isChecked?'#000':'#555'
+                }}>
+                  {displayName.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+          {newStaff.cookingRole && (
+            <div style={{fontSize:'0.58rem',color:'#8a704d',marginTop:'8px',fontWeight:'700'}}>
+              Specializes in: {newStaff.cookingRole.split(', ').map(c=>c.replace(/^cat_/i,'').replace(/_/g,' ')).join(' · ')}
+            </div>
+          )}
+        </motion.div>
+      )}
+ 
+      {/* Address + Submit */}
+      <div style={{display:'flex',gap:'14px',alignItems:'flex-end'}}>
+        <div style={{flex:1}}>
+          <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Residential Address</label>
+          <input type="text" placeholder="Full residential address"
+            style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+            value={newStaff.address} onChange={e=>setNewStaff({...newStaff,address:e.target.value})}/>
+        </div>
+        <button onClick={async()=>{
+          if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif('Fill all required fields','error');
+          try {
+            const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
+            if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
+              await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables});
+            showNotif(`${newStaff.name} enrolled`,'success');
+            const istResetDate=(()=>{const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+            setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:istResetDate,baseSalary:'',assignedTables:[],cookingRole:''});
+            fetchManagementData();
+          } catch { showNotif('Failed to enroll','error'); }
+        }} style={{
+          padding:'10px 28px',
+          background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          border:'none',color:'#000',borderRadius:'10px',
+          fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',
+          whiteSpace:'nowrap',letterSpacing:'0.5px',flexShrink:0
+        }}>AUTHORIZE ROSTER</button>
+      </div>
+    </div>
+  </div>
+ 
+  {/* ═══════════════════════════════════════════════════════
+      SECTION B — ROSTER REGISTRY TABLE
+  ═══════════════════════════════════════════════════════ */}
+  <div style={{
+    background:'#080808', border:'1px solid #161616',
+    borderRadius:'18px', overflow:'hidden'
+  }}>
+    {/* Header */}
+    <div style={{
+      display:'flex',alignItems:'center',justifyContent:'space-between',
+      padding:'18px 26px', borderBottom:'1px solid #111',
+      background:'#060606', gap:'16px', flexWrap:'wrap'
+    }}>
+      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+        <Layers size={16} color="#d3bfa2"/>
+        <div>
+          <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>ROSTER REGISTRY</div>
+          <div style={{fontSize:'0.58rem',color:'#333',marginTop:'1px'}}>{filteredStaff.length} staff members</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+        {/* Search */}
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#0a0a0a',border:'1px solid #141414',borderRadius:'8px',padding:'8px 13px'}}>
+          <Search size={12} color="#333"/>
+          <input type="text" placeholder="Filter by name..."
+            style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'160px'}}
+            value={rosterSearchQuery} onChange={e=>setRosterSearchQuery(e.target.value)}/>
+          {rosterSearchQuery && <button onClick={()=>setRosterSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
+        </div>
+        {/* Month nav */}
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#0a0a0a',border:'1px solid #141414',borderRadius:'8px',padding:'6px 12px'}}>
+          <button onClick={()=>changeMonth(-1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronLeft size={13}/></button>
+          <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
+            {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
+          </span>
+          <button onClick={()=>changeMonth(1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronRight size={13}/></button>
+        </div>
+      </div>
+    </div>
+ 
+    {/* Table */}
+    <div style={{overflowX:'auto'}} className="custom-scroll">
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead>
+          <tr style={{background:'#050505',fontSize:'0.52rem',color:'#333',letterSpacing:'1.2px',textTransform:'uppercase'}}>
+            {[
+              ['name','Staff Member'],['','Assignments'],['','Shift'],
+              ['monthlyAttendance','Attendance',true],['joiningDate','Tenure'],
+              ['baseSalary','Salary'],['','Payroll'],['','Actions']
+            ].map(([k,l,center],i)=>(
+              <th key={i} onClick={k?()=>requestLedgerSort(k):undefined}
+                style={{
+                  padding:'12px 16px',textAlign:center?'center':'left',
+                  cursor:k?'pointer':'default',fontWeight:'900',
+                  color:ledgerSortConfig.key===k?'#d3bfa2':'#333',
+                  borderBottom:'1px solid #111',
+                  whiteSpace:'nowrap'
+                }}>
+                {l} {ledgerSortConfig.key===k&&(ledgerSortConfig.direction==='asc'?'↑':'↓')}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filteredStaff.length>0 ? ['Chef','Waiter','Manager','Cashier','Helper'].map(role=>{
+            const bucket=filteredStaff.filter(m=>(m.role||'Helper')===role);
+            if(!bucket.length) return null;
+            return (
+              <React.Fragment key={role}>
+                <tr>
+                  <td colSpan="8" style={{padding:'8px 16px',background:'#060606',borderBottom:'1px solid #0d0d0d',borderTop:'1px solid #0d0d0d'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{width:'3px',height:'14px',background:'#d3bfa2',borderRadius:'2px',flexShrink:0}}/>
+                      <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#8a704d',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({bucket.length})</span>
+                    </div>
+                  </td>
+                </tr>
+                {bucket.map(m=>{
+                  const prefix=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+                  const days=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)).length;
+                  const pureName=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
+                  const staffLogs=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)&&l.clockIn&&l.clockOut);
+                  const totalHrs=staffLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
+                  const overtimeHrs=Math.max(0,totalHrs-(days*8));
+                  return (
+                    <tr key={m._id} style={{borderBottom:'1px solid #0a0a0a',transition:'background 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#0a0a0a'}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+ 
+                      {/* Staff name */}
+                      <td style={{padding:'14px 16px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                          <div style={{
+                            width:'32px',height:'32px',borderRadius:'8px',
+                            background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                            fontSize:'0.72rem',fontWeight:'900',color:'#8a704d',flexShrink:0
+                          }}>
+                            {pureName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{fontSize:'0.8rem',fontWeight:'800',color:'#fff'}}>{pureName}</div>
+                            <div style={{fontSize:'0.58rem',color:'#444',marginTop:'1px'}}>
+                              {m.role}{m.age?` · ${m.age}y`:''}
+                              {m.contact&&<span style={{color:'#333'}}> · {m.contact}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+ 
+                      {/* Assignments */}
+                      <td style={{padding:'14px 8px',maxWidth:'160px'}}>
+                        {m.role==='Waiter'&&m.assignedTables?.length>0?(
+                          <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
+                            {m.assignedTables.map(t=>(
+                              <span key={t} style={{fontSize:'0.58rem',padding:'2px 6px',background:'#111',border:'1px solid #1a1a1a',borderRadius:'4px',color:'#888',fontFamily:'monospace'}}>T{t}</span>
+                            ))}
+                          </div>
+                        ):m.role==='Chef'&&m.cookingRole?(
+                          <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
+                            {m.cookingRole.split(', ').filter(Boolean).map((cat,i)=>(
+                              <span key={i} style={{fontSize:'0.55rem',padding:'2px 7px',background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',borderRadius:'4px',color:'#8a704d',fontWeight:'800'}}>
+                                {cat.replace(/^cat_/i,'').replace(/_/g,' ')}
+                              </span>
+                            ))}
+                          </div>
+                        ):(
+                          <span style={{fontSize:'0.62rem',color:'#2a2a2a'}}>—</span>
+                        )}
+                      </td>
+ 
+                      {/* Shift */}
+                      <td style={{padding:'14px 8px'}}>
+                        <span style={{
+                          display:'inline-flex',alignItems:'center',gap:'5px',
+                          fontSize:'0.62rem',fontWeight:'800',
+                          color:m.shiftType==='Night Shift'?'#8a704d':'#d3bfa2',
+                          padding:'3px 9px',borderRadius:'6px',
+                          background:m.shiftType==='Night Shift'?'rgba(138,112,77,0.07)':'rgba(211,191,162,0.05)',
+                          border:`1px solid ${m.shiftType==='Night Shift'?'rgba(138,112,77,0.15)':'rgba(211,191,162,0.1)'}`
+                        }}>
+                          <Clock size={9}/>{m.shiftType?.replace(' Shift','') || 'Day'}
+                        </span>
+                      </td>
+ 
+                      {/* Attendance */}
+                      <td style={{padding:'14px 8px',textAlign:'center'}}>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'3px'}}>
+                          <span style={{
+                            fontSize:'0.8rem',fontWeight:'900',color:'#fff',
+                            fontFamily:'monospace'
+                          }}>{days}<span style={{fontSize:'0.55rem',color:'#444',marginLeft:'3px'}}>days</span></span>
+                          {overtimeHrs>0&&(
+                            <span style={{fontSize:'0.52rem',fontWeight:'900',color:'#BA7517',background:'rgba(186,117,23,0.08)',padding:'1px 6px',borderRadius:'4px',border:'1px solid rgba(186,117,23,0.2)'}}>
+                              +{overtimeHrs.toFixed(1)}h OT
+                            </span>
+                          )}
+                        </div>
+                      </td>
+ 
+                      {/* Tenure */}
+                      <td style={{padding:'14px 8px'}}>
+                        <span style={{fontSize:'0.68rem',color:'#555',fontWeight:'600'}}>{calculateTenure(m.joiningDate)}</span>
+                      </td>
+ 
+                      {/* Salary */}
+                      <td style={{padding:'14px 8px'}}>
+                        <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>
+                          ₹{Number(m.baseSalary).toLocaleString()}
+                        </span>
+                        <span style={{fontSize:'0.55rem',color:'#333',display:'block'}}>per month</span>
+                      </td>
+ 
+                      {/* Payroll */}
+                      <td style={{padding:'14px 8px'}}>
+                        {(()=>{
+                          const istNow=new Date(new Date().getTime()+330*60*1000);
+                          const selectedMonthDate=new Date(viewDate.getFullYear(),viewDate.getMonth(),1);
+                          const currentMonthDate=new Date(istNow.getFullYear(),istNow.getMonth(),1);
+                          const isFutureMonth=selectedMonthDate>currentMonthDate;
+                          const monthStr=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+                          if(isFutureMonth) return (
+                            <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'#0a0a0a',color:'#222',border:'1px solid #111',display:'inline-block'}}>PENDING</span>
+                          );
+                          const salRecord=monthlySalaryRecords.find(r=>(r.staffId===m._id||r.staffId?.toString()===m._id?.toString())&&r.month===monthStr);
+                          if(salRecord?.paidAt) return (
+                            <div>
+                              <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'rgba(74,222,128,0.07)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.18)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
+                                <CheckCircle2 size={9}/>PAID
+                              </span>
+                              <div style={{fontSize:'0.52rem',color:'#333',marginTop:'3px'}}>
+                                ₹{Number(salRecord.netSalary||m.baseSalary).toLocaleString()}
+                              </div>
+                            </div>
+                          );
+                          return (
+                            <button onClick={async()=>{
+                              const istNow2=new Date(new Date().getTime()+330*60*1000);
+                              const currentMonthStr=istNow2.getFullYear()+'-'+String(istNow2.getMonth()+1).padStart(2,'0');
+                              if(monthStr>currentMonthStr){showNotif('Cannot pay future month','error');return;}
+                              const monthLogs=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(monthStr));
+                              const workDays=[...new Set(monthLogs.map(l=>l.date))].length;
+                              const perDay=Number(m.baseSalary)/26;
+                              const net=Math.round(perDay*workDays);
+                              setConfirmModal({
+                                show:true,
+                                title:`Pay ${pureName}?`,
+                                subtitle:`${workDays} days worked · ₹${net.toLocaleString()} net salary for ${viewDate.toLocaleString('default',{month:'long'})}`,
+                                onConfirm:async()=>{
+                                  await axios.post(`${BASE_URL}/staff/salary/mark-paid`,{tenantId,staffId:m._id,month:monthStr,workDays,netSalary:net,baseSalary:Number(m.baseSalary)});
+                                  showNotif(`${pureName} — salary marked paid`,'success');
+                                  const prefix2=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+                                  fetchMonthlySalary(prefix2);
+                                }
+                              });
+                            }} style={{
+                              padding:'5px 11px',borderRadius:'7px',cursor:'pointer',
+                              fontSize:'0.6rem',fontWeight:'900',
+                              border:'1px solid rgba(186,117,23,0.25)',
+                              background:'rgba(186,117,23,0.07)',color:'#BA7517'
+                            }}>PAY NOW</button>
+                          );
+                        })()}
+                      </td>
+ 
+                      {/* Actions */}
+                      <td style={{padding:'14px 8px'}}>
+                        <button onClick={()=>setConfirmModal({
+                          show:true,title:`Remove ${pureName}?`,
+                          subtitle:'This will permanently remove the staff member.',
+                          onConfirm:async()=>{
+                            await axios.delete(`${BASE_URL}/staff/${m._id}`);
+                            showNotif(`${pureName} removed`);
+                            fetchManagementData();
+                          }
+                        })} style={{
+                          width:'30px',height:'30px',background:'transparent',
+                          border:'1px solid #141414',color:'#2a2a2a',borderRadius:'7px',
+                          cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                          transition:'all 0.15s'
+                        }}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.3)';e.currentTarget.style.color='#c0392b';}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#141414';e.currentTarget.style.color='#2a2a2a';}}>
+                          <X size={12}/>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            );
+          }) : (
+            <tr><td colSpan="8" style={{padding:'50px',textAlign:'center',color:'#222',fontSize:'0.78rem'}}>
+              {rosterSearchQuery?`No staff matching "${rosterSearchQuery}"`:'No staff enrolled yet'}
+            </td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+ 
+  {/* ═══════════════════════════════════════════════════════
+      SECTION C — ATTENDANCE TERMINAL (side-by-side layout)
+  ═══════════════════════════════════════════════════════ */}
+  <div style={{
+    background:'#080808', border:'1px solid #161616',
+    borderRadius:'18px', overflow:'hidden'
+  }}>
+    {/* Header */}
+    <div style={{
+      display:'flex',alignItems:'center',justifyContent:'space-between',
+      padding:'18px 26px', borderBottom:'1px solid #111',
+      background:'#060606', gap:'16px', flexWrap:'wrap'
+    }}>
+      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+        <CalendarCog size={16} color="#d3bfa2"/>
+        <div>
+          <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>ATTENDANCE TERMINAL</div>
+          <div style={{fontSize:'0.58rem',color:'#333',marginTop:'1px'}}>Clock in/out · Session logs · Overtime detection</div>
+        </div>
+      </div>
+      {/* Date picker */}
+      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#0a0a0a',border:'1px solid #141414',borderRadius:'8px',padding:'6px 13px'}}>
+          <Calendar size={12} color="#8a704d"/>
+          <input type="date" value={attendanceDate}
+            onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
+            style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',fontWeight:'700',colorScheme:'dark',cursor:'pointer'}}/>
+        </div>
+        <button onClick={()=>fetchAttendanceForDate(attendanceDate)}
+          style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #141414',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#141414';e.currentTarget.style.color='#444';}}>
+          <RefreshCw size={13}/>
+        </button>
+      </div>
+    </div>
+ 
+    {/* Quick stats row */}
+    {(()=>{
+      const dayLogs=attendanceLogs.filter(l=>l.date===attendanceDate);
+      const presentStaffIds=[...new Set(dayLogs.map(l=>l.staffId?.toString()))];
+      const onDuty=dayLogs.filter(l=>l.clockIn&&!l.clockOut).length;
+      const completedToday=dayLogs.filter(l=>l.clockIn&&l.clockOut).length;
+      const absent=staff.length-presentStaffIds.length;
+      return (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',borderBottom:'1px solid #0d0d0d'}}>
+          {[
+            {l:'Present',v:presentStaffIds.length,c:'#d3bfa2'},
+            {l:'On Duty',v:onDuty,c:'#4ade80'},
+            {l:'Completed',v:completedToday,c:'#8a704d'},
+            {l:'Absent',v:Math.max(0,absent),c:'#555'},
+          ].map((s,i)=>(
+            <div key={i} style={{
+              padding:'14px 20px',
+              borderRight:i<3?'1px solid #0d0d0d':'none',
+              textAlign:'center'
+            }}>
+              <div style={{fontSize:'1.4rem',fontWeight:'900',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
+              <div style={{fontSize:'0.52rem',color:'#333',fontWeight:'900',letterSpacing:'1px',marginTop:'3px'}}>{s.l.toUpperCase()}</div>
+            </div>
+          ))}
         </div>
       );
-    })}
+    })()}
+ 
+    {/* Staff cards grid */}
+    <div style={{padding:'20px 24px'}}>
+      {['Chef','Waiter','Manager','Cashier','Helper'].map(role=>{
+        const roleStaff=filteredStaff.filter(m=>m.role===role);
+        if(!roleStaff.length) return null;
+        return (
+          <div key={role} style={{marginBottom:'24px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
+              <span style={{width:'3px',height:'14px',background:'#8a704d',borderRadius:'2px'}}/>
+              <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#555',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({roleStaff.length})</span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'12px'}}>
+              {roleStaff.map(m=>{
+                const dayLogs=attendanceLogs.filter(l=>l.date===attendanceDate&&(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())).sort((a,b)=>new Date(a.clockIn)-new Date(b.clockIn));
+                const activeLogs=dayLogs.filter(l=>l.clockIn&&!l.clockOut);
+                const completedLogs=dayLogs.filter(l=>l.clockIn&&l.clockOut);
+                const totalHoursToday=completedLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
+                const isCurrentlyClockedIn=activeLogs.length>0;
+                const hasAnyPunch=dayLogs.length>0;
+                const latestActiveLog=activeLogs[activeLogs.length-1];
+                const name=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
+                let statusLabel='Not punched'; let statusColor='#2a2a2a';
+                if(isCurrentlyClockedIn){statusLabel='On duty';statusColor='#4ade80';}
+                else if(completedLogs.length>0){statusLabel=`Done · ${totalHoursToday.toFixed(1)}h`;statusColor='#8a704d';}
+                return (
+                  <div key={m._id} style={{
+                    padding:'14px',borderRadius:'12px',background:'#050505',
+                    border:isCurrentlyClockedIn?'1px solid rgba(74,222,128,0.15)':completedLogs.length>0?'1px solid rgba(138,112,77,0.12)':'1px solid #0d0d0d',
+                    transition:'all 0.2s'
+                  }}>
+                    {/* Header */}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'9px'}}>
+                        <div style={{
+                          width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,
+                          background:isCurrentlyClockedIn?'rgba(74,222,128,0.08)':'rgba(255,255,255,0.03)',
+                          border:`1px solid ${isCurrentlyClockedIn?'rgba(74,222,128,0.2)':'#111'}`,
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          fontSize:'0.68rem',fontWeight:'900',
+                          color:isCurrentlyClockedIn?'#4ade80':'#333'
+                        }}>{name.charAt(0).toUpperCase()}</div>
+                        <div>
+                          <div style={{fontSize:'0.78rem',fontWeight:'800',color:'#fff'}}>{name}</div>
+                          <div style={{fontSize:'0.58rem',color:statusColor,fontWeight:'700',marginTop:'1px'}}>{statusLabel}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async()=>{
+                          if(!isCurrentlyClockedIn){
+                            await axios.post(`${BASE_URL}/staff/attendance/clock-in`,{tenantId,staffId:m._id});
+                          } else {
+                            await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`);
+                          }
+                          fetchAttendanceForDate(attendanceDate);
+                        }}
+                        style={{
+                          background:isCurrentlyClockedIn?'rgba(138,112,77,0.1)':'rgba(211,191,162,0.9)',
+                          color:isCurrentlyClockedIn?'#8a704d':'#000',
+                          border:isCurrentlyClockedIn?'1px solid rgba(138,112,77,0.25)':'none',
+                          padding:'7px 14px',borderRadius:'7px',
+                          fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',
+                          whiteSpace:'nowrap',flexShrink:0,transition:'all 0.15s'
+                        }}>
+                        {isCurrentlyClockedIn?'Clock Out':'Clock In'}
+                      </button>
+                    </div>
+ 
+                    {/* Session log */}
+                    {dayLogs.length>0&&(
+                      <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                        {dayLogs.map((log,idx)=>{
+                          const inTime=log.clockIn?new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}):'—';
+                          const outTime=log.clockOut?new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}):null;
+                          const hrs=log.totalWorkingHours;
+                          return (
+                            <div key={log._id} style={{
+                              display:'flex',alignItems:'center',gap:'7px',
+                              padding:'5px 8px',background:'#0a0a0a',borderRadius:'6px',border:'1px solid #0f0f0f'
+                            }}>
+                              <span style={{fontSize:'0.5rem',color:'#2a2a2a',fontWeight:'900',minWidth:'16px',fontFamily:'monospace'}}>#{idx+1}</span>
+                              <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{inTime}</span>
+                              <span style={{fontSize:'0.5rem',color:'#2a2a2a'}}>→</span>
+                              {outTime?(
+                                <>
+                                  <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{outTime}</span>
+                                  <span style={{
+                                    marginLeft:'auto',fontSize:'0.58rem',fontWeight:'900',
+                                    color:hrs>=9?'#BA7517':'#555',
+                                    padding:'1px 6px',borderRadius:'4px',
+                                    background:hrs>=9?'rgba(186,117,23,0.08)':'transparent',
+                                    border:hrs>=9?'1px solid rgba(186,117,23,0.2)':'none'
+                                  }}>
+                                    {hrs?`${hrs.toFixed(1)}h`:'—'}{hrs>=9&&' ⚠'}
+                                  </span>
+                                </>
+                              ):(
+                                <span style={{fontSize:'0.6rem',color:'#4ade80',fontStyle:'italic',marginLeft:'auto'}}>live…</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {completedLogs.length>0&&(
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
+                            <span style={{fontSize:'0.6rem',color:'#555',fontWeight:'700'}}>Total: {totalHoursToday.toFixed(2)}h</span>
+                            {totalHoursToday>=9&&(
+                              <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(186,117,23,0.08)',color:'#BA7517',border:'1px solid rgba(186,117,23,0.2)'}}>
+                                ⚠ {(totalHoursToday-8).toFixed(1)}h overtime
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+ 
+                    {!hasAnyPunch&&(
+                      <div style={{padding:'8px',background:'#080808',borderRadius:'6px',border:'1px solid #0d0d0d',textAlign:'center'}}>
+                        <span style={{fontSize:'0.58rem',color:'#1e1e1e',fontWeight:'700'}}>No punch recorded</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   </div>
-</div>
-            </motion.div>
-          )}
-
+ 
+</motion.div>
+)}
           {/* ════════════════════════════════════════════
               INVENTORY — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
@@ -12170,562 +12357,538 @@ setNewStaff({
           {/* ════════════════════════════════════════════
     EXTRA ITEMS — Cold drinks, Ice creams, etc.
     ════════════════════════════════════════════ */}
-{activeTab === 'extras' && (
-  <motion.div key="extras" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-    style={{ display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: '100px', width: '100%' }}>
 
-    {/* ── EDIT ITEM MODAL ── */}
-    <AnimatePresence>
-      {extraItemEditModal && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-          onClick={e => { if (e.target === e.currentTarget) setExtraItemEditModal(null); }}
-        >
-          <motion.div
-            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
-            style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderTop: '3px solid #d3bfa2', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '520px', maxHeight: '88vh', overflowY: 'auto' }}
-            className="custom-scroll"
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>EDIT EXTRA ITEM</h3>
-                <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#444', fontWeight: '600' }}>{extraItemEditModal.name}</p>
-              </div>
-              <button onClick={() => setExtraItemEditModal(null)}
-                style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <X size={14} />
-              </button>
+{activeTab==='extras' && (
+<motion.div key="extras" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
+  style={{display:'flex',flexDirection:'column',gap:'24px',paddingBottom:'100px',width:'100%'}}>
+ 
+  {/* ── EDIT MODAL ── */}
+  <AnimatePresence>
+    {extraItemEditModal&&(
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+        style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+        onClick={e=>{if(e.target===e.currentTarget)setExtraItemEditModal(null);}}>
+        <motion.div initial={{scale:0.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
+          style={{background:'#0a0a0a',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.35)',borderRadius:'20px',padding:'28px',width:'100%',maxWidth:'540px',maxHeight:'88vh',overflowY:'auto'}}
+          className="custom-scroll">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'24px'}}>
+            <div>
+              <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#d3bfa2'}}>EDIT ITEM</h3>
+              <p style={{margin:'3px 0 0',fontSize:'0.62rem',color:'#444'}}>{extraItemEditModal.name}</p>
             </div>
-
-            {/* Name + Category */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Item Name *</div>
-                <input
-                  value={extraItemEditData.name || ''}
-                  onChange={e => setExtraItemEditData(p => ({ ...p, name: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Category</div>
-                <select
-                  value={extraItemEditData.category || 'Cold Drinks'}
-                  onChange={e => setExtraItemEditData(p => ({ ...p, category: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
-                >
-                  {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+            <button onClick={()=>setExtraItemEditModal(null)}
+              style={{background:'transparent',border:'1px solid #1a1a1a',color:'#444',width:'30px',height:'30px',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <X size={13}/>
+            </button>
+          </div>
+ 
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'14px'}}>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Item Name *</div>
+              <input value={extraItemEditData.name||''} onChange={e=>setExtraItemEditData(p=>({...p,name:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
             </div>
-
-{/* Sell Price + Cost Price */}
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-  <div>
-    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Sell Price (₹) *</div>
-    <input
-      type="number"
-      value={extraItemEditData.price ?? ''}
-      onChange={e => setExtraItemEditData(p => ({ ...p, price: e.target.value }))}
-      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#d3bfa2', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '900', outline: 'none', boxSizing: 'border-box' }}
-    />
-  </div>
-  <div>
-    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Cost Price (₹)</div>
-    <input
-      type="number"
-      value={extraItemEditData.costPrice ?? ''}
-      onChange={e => setExtraItemEditData(p => ({ ...p, costPrice: e.target.value }))}
-      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
-    />
-    {extraItemEditData.price > 0 && extraItemEditData.costPrice !== '' && (
-      <div style={{ fontSize: '0.6rem', color: '#4ade80', marginTop: '5px', fontWeight: '700' }}>
-        Margin: {Math.round(((Number(extraItemEditData.price) - Number(extraItemEditData.costPrice)) / Number(extraItemEditData.price)) * 100)}%
-      </div>
-    )}
-  </div>
-</div>
-
-{/* Unit + Stock + Low Stock Threshold */}
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-  <div>
-    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Unit</div>
-    <select
-      value={extraItemEditData.unit || 'piece'}
-      onChange={e => setExtraItemEditData(p => ({ ...p, unit: e.target.value }))}
-      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
-    >
-      {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
-        <option key={u} value={u}>{u}</option>
-      ))}
-    </select>
-  </div>
-  <div>
-    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Current Stock</div>
-    <input
-      type="number"
-      value={extraItemEditData.currentStock ?? ''}
-      onChange={e => setExtraItemEditData(p => ({ ...p, currentStock: e.target.value }))}
-      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-    />
-  </div>
-  <div>
-    <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Low Stock Alert At</div>
-    <input
-      type="number"
-      value={extraItemEditData.lowStockThreshold ?? ''}
-      onChange={e => setExtraItemEditData(p => ({ ...p, lowStockThreshold: e.target.value }))}
-      placeholder="e.g. 5"
-      style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-    />
-  </div>
-</div>
-
-            {/* Description */}
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '6px', textTransform: 'uppercase' }}>Description</div>
-              <input
-                value={extraItemEditData.description || ''}
-                onChange={e => setExtraItemEditData(p => ({ ...p, description: e.target.value }))}
-                placeholder="Optional short description"
-                style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #1a1a1a', color: '#888', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
-              />
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Category</div>
+              <select value={extraItemEditData.category||'Cold Drinks'} onChange={e=>setExtraItemEditData(p=>({...p,category:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+                {['Cold Drinks','Ice Cream','Packaged Snacks','Juices','Mineral Water','Tobacco','Dairy','Sweets','Other'].map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
-
-            {/* Availability toggle */}
-            <div onClick={() => setExtraItemEditData(p => ({ ...p, isAvailable: !p.isAvailable }))}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: extraItemEditData.isAvailable ? 'rgba(74,222,128,0.05)' : '#111', border: `1px solid ${extraItemEditData.isAvailable ? 'rgba(74,222,128,0.2)' : '#1a1a1a'}`, borderRadius: '10px', cursor: 'pointer', marginBottom: '24px', transition: 'all 0.15s' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: '800', color: extraItemEditData.isAvailable ? '#4ade80' : '#444' }}>
-                {extraItemEditData.isAvailable ? 'VISIBLE ON MENU' : 'HIDDEN FROM MENU'}
-              </span>
-              <div style={{ width: '38px', height: '20px', borderRadius: '10px', position: 'relative', background: extraItemEditData.isAvailable ? '#4ade80' : '#222', transition: 'background 0.2s', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: '3px', left: extraItemEditData.isAvailable ? '20px' : '3px', width: '14px', height: '14px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#000' : '#555', transition: 'left 0.2s' }} />
-              </div>
+          </div>
+ 
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'14px'}}>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Sell Price (₹) *</div>
+              <input type="number" value={extraItemEditData.price??''} onChange={e=>setExtraItemEditData(p=>({...p,price:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
             </div>
-
-{/* Save / Cancel — fixed payload builder */}
-<div style={{ display: 'flex', gap: '10px' }}>
-  <button
-    onClick={async () => {
-      if (!extraItemEditData.name?.trim()) return showNotif('Name is required', 'error');
-      if (!extraItemEditData.price || Number(extraItemEditData.price) <= 0) return showNotif('Valid price required', 'error');
-      try {
-        const payload = {
-          name:        extraItemEditData.name.trim(),
-          category:    extraItemEditData.category,
-          price:       Number(extraItemEditData.price),
-          // ← FIX: only coerce costPrice to a number if it was actually edited (non-empty string);
-          // never collapse '' to 0 and overwrite a real saved cost.
-          costPrice:   extraItemEditData.costPrice === '' ? 0 : Number(extraItemEditData.costPrice),
-          unit:        extraItemEditData.unit,
-          currentStock: Number(extraItemEditData.currentStock) || 0,
-          lowStockThreshold: extraItemEditData.lowStockThreshold === '' ? 5 : Number(extraItemEditData.lowStockThreshold),
-          description: extraItemEditData.description?.trim() || '',
-          isAvailable: extraItemEditData.isAvailable,
-        };
-        const res = await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`, payload);
-        // Trust the server's echoed item rather than refetching the whole list
-        setExtraItems(prev => prev.map(i => (i._id === res.data.item._id ? res.data.item : i)));
-        showNotif(`${payload.name} — updated`);
-        setExtraItemEditModal(null);
-      } catch (err) {
-        showNotif(err.response?.data?.error || 'Update failed', 'error');
-      }
-    }}
-    style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
-  >
-    SAVE CHANGES
-  </button>
-  <button
-    onClick={() => setExtraItemEditModal(null)}
-    style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
-  >
-    CANCEL
-  </button>
-</div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-
-    {/* ── RESTOCK MODAL — replaces the ugly prompt() ── */}
-    <AnimatePresence>
-      {extraRestockModal && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-          onClick={e => { if (e.target === e.currentTarget) { setExtraRestockModal(null); setExtraRestockQty(''); } }}
-        >
-          <motion.div
-            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
-            style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderTop: '3px solid rgba(211,191,162,0.4)', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '360px' }}
-          >
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ margin: '0 0 4px', fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>RESTOCK</h3>
-              <p style={{ margin: 0, fontSize: '0.65rem', color: '#444' }}>{extraRestockModal.name} · current: {extraRestockModal.currentStock} {extraRestockModal.unit}s</p>
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', marginBottom: '7px', textTransform: 'uppercase' }}>Quantity to Add</div>
-              <input
-                type="number" min="1" autoFocus
-                value={extraRestockQty}
-                onChange={e => setExtraRestockQty(e.target.value)}
-                onKeyDown={async e => {
-                  if (e.key === 'Enter' && extraRestockQty && Number(extraRestockQty) > 0) {
-                    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
-                    showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
-                    setExtraRestockModal(null); setExtraRestockQty('');
-                    fetchExtraItems();
-                  }
-                }}
-                placeholder="e.g. 24"
-                style={{ width: '100%', padding: '12px', background: '#111', border: '1px solid rgba(211,191,162,0.2)', color: '#d3bfa2', borderRadius: '8px', fontSize: '1.1rem', fontWeight: '900', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
-              />
-              {extraRestockQty && Number(extraRestockQty) > 0 && (
-                <div style={{ fontSize: '0.62rem', color: '#555', marginTop: '7px', textAlign: 'center' }}>
-                  New total: <span style={{ color: '#d3bfa2', fontWeight: '800' }}>{extraRestockModal.currentStock + Number(extraRestockQty)} {extraRestockModal.unit}s</span>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Cost Price (₹)</div>
+              <input type="number" value={extraItemEditData.costPrice??''} onChange={e=>setExtraItemEditData(p=>({...p,costPrice:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.9rem',outline:'none',boxSizing:'border-box'}}/>
+              {extraItemEditData.price>0&&extraItemEditData.costPrice!==''&&(
+                <div style={{fontSize:'0.58rem',color:'#4ade80',marginTop:'4px',fontWeight:'700'}}>
+                  Margin: {Math.round(((Number(extraItemEditData.price)-Number(extraItemEditData.costPrice))/Number(extraItemEditData.price))*100)}%
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={async () => {
-                  if (!extraRestockQty || Number(extraRestockQty) <= 0) return showNotif('Enter a valid quantity', 'error');
-                  try {
-                    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
-                    showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
-                    setExtraRestockModal(null); setExtraRestockQty('');
-                    fetchExtraItems();
-                  } catch { showNotif('Restock failed', 'error'); }
-                }}
-                style={{ flex: 1, padding: '11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
-              >
-                + ADD STOCK
-              </button>
-              <button
-                onClick={() => { setExtraRestockModal(null); setExtraRestockQty(''); }}
-                style={{ padding: '11px 16px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}
-              >
-                CANCEL
-              </button>
+          </div>
+ 
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'12px',marginBottom:'14px'}}>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
+              <select value={extraItemEditData.unit||'piece'} onChange={e=>setExtraItemEditData(p=>({...p,unit:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+                {['piece','bottle','can','pack','cup','cone','bar','pouch','litre','ml'].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
             </div>
-          </motion.div>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Current Stock</div>
+              <input type="number" value={extraItemEditData.currentStock??''} onChange={e=>setExtraItemEditData(p=>({...p,currentStock:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div>
+              <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Alert At</div>
+              <input type="number" value={extraItemEditData.lowStockThreshold??''} onChange={e=>setExtraItemEditData(p=>({...p,lowStockThreshold:e.target.value}))}
+                placeholder="e.g. 5"
+                style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+          </div>
+ 
+          <div style={{marginBottom:'16px'}}>
+            <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Description</div>
+            <input value={extraItemEditData.description||''} onChange={e=>setExtraItemEditData(p=>({...p,description:e.target.value}))}
+              placeholder="Optional short description"
+              style={{width:'100%',padding:'10px 12px',background:'#111',border:'1px solid #1a1a1a',color:'#888',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}/>
+          </div>
+ 
+          <div onClick={()=>setExtraItemEditData(p=>({...p,isAvailable:!p.isAvailable}))}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:extraItemEditData.isAvailable?'rgba(74,222,128,0.04)':'#0d0d0d',border:`1px solid ${extraItemEditData.isAvailable?'rgba(74,222,128,0.18)':'#1a1a1a'}`,borderRadius:'10px',cursor:'pointer',marginBottom:'20px',transition:'all 0.15s'}}>
+            <span style={{fontSize:'0.68rem',fontWeight:'800',color:extraItemEditData.isAvailable?'#4ade80':'#333'}}>
+              {extraItemEditData.isAvailable?'Visible on menu':'Hidden from menu'}
+            </span>
+            <div style={{width:'36px',height:'19px',borderRadius:'10px',position:'relative',background:extraItemEditData.isAvailable?'#4ade80':'#1a1a1a',transition:'background 0.2s',flexShrink:0}}>
+              <div style={{position:'absolute',top:'3px',left:extraItemEditData.isAvailable?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:extraItemEditData.isAvailable?'#000':'#444',transition:'left 0.2s'}}/>
+            </div>
+          </div>
+ 
+          <div style={{display:'flex',gap:'10px'}}>
+            <button onClick={async()=>{
+              if(!extraItemEditData.name?.trim())return showNotif('Name is required','error');
+              if(!extraItemEditData.price||Number(extraItemEditData.price)<=0)return showNotif('Valid price required','error');
+              try {
+                const payload={
+                  name:extraItemEditData.name.trim(),category:extraItemEditData.category,
+                  price:Number(extraItemEditData.price),
+                  costPrice:extraItemEditData.costPrice===''?0:Number(extraItemEditData.costPrice),
+                  unit:extraItemEditData.unit,currentStock:Number(extraItemEditData.currentStock)||0,
+                  lowStockThreshold:extraItemEditData.lowStockThreshold===''?5:Number(extraItemEditData.lowStockThreshold),
+                  description:extraItemEditData.description?.trim()||'',isAvailable:extraItemEditData.isAvailable,
+                };
+                const res=await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`,payload);
+                setExtraItems(prev=>prev.map(i=>(i._id===res.data.item._id?res.data.item:i)));
+                showNotif(`${payload.name} — updated`);setExtraItemEditModal(null);
+              } catch(err){showNotif(err.response?.data?.error||'Update failed','error');}
+            }} style={{flex:1,padding:'12px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
+              SAVE CHANGES
+            </button>
+            <button onClick={()=>setExtraItemEditModal(null)}
+              style={{padding:'12px 20px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
+              CANCEL
+            </button>
+          </div>
         </motion.div>
-      )}
-    </AnimatePresence>
-
-    {/* ── ADD NEW ITEM FORM ── */}
-    <div style={{ background: '#080808', border: '1px solid #1a1a1a', borderRadius: '20px', padding: '28px', borderTop: '3px solid #d3bfa2' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ShoppingBag size={16} color="#d3bfa2" />
-        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+ 
+  {/* ── RESTOCK MODAL ── */}
+  <AnimatePresence>
+    {extraRestockModal&&(
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+        style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.82)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+        onClick={e=>{if(e.target===e.currentTarget){setExtraRestockModal(null);setExtraRestockQty('');}}}>
+        <motion.div initial={{scale:0.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
+          style={{background:'#0a0a0a',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.3)',borderRadius:'16px',padding:'26px',width:'100%',maxWidth:'340px'}}>
+          <div style={{marginBottom:'20px'}}>
+            <h3 style={{margin:'0 0 4px',fontSize:'0.9rem',fontWeight:'900',color:'#d3bfa2'}}>RESTOCK</h3>
+            <p style={{margin:0,fontSize:'0.62rem',color:'#444',fontWeight:'600'}}>{extraRestockModal.name} · current: {extraRestockModal.currentStock} {extraRestockModal.unit}s</p>
+          </div>
+          <div style={{marginBottom:'18px'}}>
+            <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Quantity to Add</div>
+            <input type="number" min="1" autoFocus
+              value={extraRestockQty} onChange={e=>setExtraRestockQty(e.target.value)}
+              onKeyDown={async e=>{
+                if(e.key==='Enter'&&extraRestockQty&&Number(extraRestockQty)>0){
+                  await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`,{addQty:Number(extraRestockQty)});
+                  showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
+                  setExtraRestockModal(null);setExtraRestockQty('');fetchExtraItems();
+                }
+              }}
+              placeholder="e.g. 24"
+              style={{width:'100%',padding:'14px',background:'#111',border:'1px solid rgba(211,191,162,0.18)',color:'#d3bfa2',borderRadius:'8px',fontSize:'1.2rem',fontWeight:'900',outline:'none',boxSizing:'border-box',textAlign:'center'}}/>
+            {extraRestockQty&&Number(extraRestockQty)>0&&(
+              <div style={{fontSize:'0.62rem',color:'#555',marginTop:'7px',textAlign:'center'}}>
+                New total: <span style={{color:'#d3bfa2',fontWeight:'800'}}>{extraRestockModal.currentStock+Number(extraRestockQty)} {extraRestockModal.unit}s</span>
+              </div>
+            )}
+          </div>
+          <div style={{display:'flex',gap:'8px'}}>
+            <button onClick={async()=>{
+              if(!extraRestockQty||Number(extraRestockQty)<=0)return showNotif('Enter a valid quantity','error');
+              try {
+                await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`,{addQty:Number(extraRestockQty)});
+                showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
+                setExtraRestockModal(null);setExtraRestockQty('');fetchExtraItems();
+              } catch{showNotif('Restock failed','error');}
+            }} style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
+              + ADD STOCK
+            </button>
+            <button onClick={()=>{setExtraRestockModal(null);setExtraRestockQty('');}}
+              style={{padding:'11px 16px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
+              CANCEL
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+ 
+  {/* ── KPI ROW ── */}
+  <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'12px'}}>
+    {[
+      {l:'Total Items',v:extraItems.length,c:'#d3bfa2',icon:<Package size={14}/>},
+      {l:'Available',v:extraItems.filter(i=>i.isAvailable).length,c:'#4ade80',icon:<CheckCircle2 size={14}/>},
+      {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#555',icon:<EyeOff size={14}/>},
+      {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:'#BA7517',icon:<AlertTriangle size={14}/>},
+      {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
+    ].map((s,i)=>(
+      <div key={i} style={{
+        background:'#080808',border:'1px solid #161616',
+        borderTop:`2px solid ${s.c}22`,
+        borderRadius:'13px',padding:'16px 18px',
+        display:'flex',alignItems:'center',gap:'12px'
+      }}>
+        <div style={{
+          width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,
+          background:`${s.c}0d`,border:`1px solid ${s.c}1a`,
+          display:'flex',alignItems:'center',justifyContent:'center',color:s.c
+        }}>{s.icon}</div>
         <div>
-          <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>ADD NEW EXTRA ITEM</h4>
-          <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '2px' }}>Fill all required fields and click register to add item to catalog</div>
+          <div style={{fontSize:typeof s.v==='string'&&s.v.length>6?'1rem':'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+          <div style={{fontSize:'0.5rem',color:'#333',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{s.l.toUpperCase()}</div>
         </div>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+    ))}
+  </div>
+ 
+  {/* ── ADD ITEM FORM ── */}
+  <div style={{
+    background:'#080808',border:'1px solid #161616',
+    borderRadius:'16px',overflow:'hidden'
+  }}>
+    <div style={{
+      display:'flex',alignItems:'center',gap:'12px',
+      padding:'16px 22px',borderBottom:'1px solid #111',background:'#060606'
+    }}>
+      <Package2 size={14} color="#d3bfa2"/>
+      <div>
+        <div style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>REGISTER NEW ITEM</div>
+        <div style={{fontSize:'0.56rem',color:'#333',marginTop:'1px'}}>Add beverage, snack or any retail item to your catalog</div>
+      </div>
+    </div>
+    <div style={{padding:'20px 22px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:'12px',marginBottom:'12px'}}>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Item Name *</label>
-          <input type="text" placeholder="e.g. Thums Up 300ml"
-            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newExtraItem.name}
-            onChange={e => setNewExtraItem({ ...newExtraItem, name: e.target.value })} />
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Item Name *</label>
+          <input type="text" placeholder="e.g. Thums Up 750ml"
+            style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            value={newExtraItem.name} onChange={e=>setNewExtraItem({...newExtraItem,name:e.target.value})}/>
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category *</label>
-          <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
-            value={newExtraItem.category}
-            onChange={e => setNewExtraItem({ ...newExtraItem, category: e.target.value })}>
-            {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Category</label>
+          <select style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
+            value={newExtraItem.category} onChange={e=>setNewExtraItem({...newExtraItem,category:e.target.value})}>
+            {['Cold Drinks','Ice Cream','Packaged Snacks','Juices','Mineral Water','Tobacco','Dairy','Sweets','Other'].map(c=><option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Sell Price (₹) *</label>
           <input type="number" placeholder="e.g. 40"
-            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newExtraItem.price}
-            onChange={e => setNewExtraItem({ ...newExtraItem, price: e.target.value })} />
+            style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}
+            value={newExtraItem.price} onChange={e=>setNewExtraItem({...newExtraItem,price:e.target.value})}/>
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Cost Price (₹)</label>
           <input type="number" placeholder="e.g. 28"
-            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newExtraItem.costPrice}
-            onChange={e => setNewExtraItem({ ...newExtraItem, costPrice: e.target.value })} />
-          {newExtraItem.price && newExtraItem.costPrice && Number(newExtraItem.price) > 0 && (
-            <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
-              Margin: {Math.round(((newExtraItem.price - newExtraItem.costPrice) / newExtraItem.price) * 100)}%
+            style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            value={newExtraItem.costPrice} onChange={e=>setNewExtraItem({...newExtraItem,costPrice:e.target.value})}/>
+          {newExtraItem.price&&newExtraItem.costPrice&&Number(newExtraItem.price)>0&&(
+            <div style={{fontSize:'0.56rem',color:'#4ade80',marginTop:'4px',fontWeight:'700'}}>
+              Margin: {Math.round(((newExtraItem.price-newExtraItem.costPrice)/newExtraItem.price)*100)}%
             </div>
           )}
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
-          <select style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}
-            value={newExtraItem.unit}
-            onChange={e => setNewExtraItem({ ...newExtraItem, unit: e.target.value })}>
-            {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
-              <option key={u} value={u}>{u}</option>
-            ))}
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Unit</label>
+          <select style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
+            value={newExtraItem.unit} onChange={e=>setNewExtraItem({...newExtraItem,unit:e.target.value})}>
+            {['piece','bottle','can','pack','cup','cone','bar','pouch','litre','ml'].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Opening Stock</label>
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Opening Stock</label>
           <input type="number" placeholder="e.g. 24"
-            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newExtraItem.currentStock}
-            onChange={e => setNewExtraItem({ ...newExtraItem, currentStock: e.target.value })} />
+            style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            value={newExtraItem.currentStock} onChange={e=>setNewExtraItem({...newExtraItem,currentStock:e.target.value})}/>
         </div>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'flex-end' }}>
-        <div>
-          <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description (optional)</label>
+      <div style={{display:'flex',gap:'12px',alignItems:'flex-end'}}>
+        <div style={{flex:1}}>
+          <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Description (optional)</label>
           <input type="text" placeholder="e.g. Chilled carbonated drink, served in bottle"
-            style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newExtraItem.description}
-            onChange={e => setNewExtraItem({ ...newExtraItem, description: e.target.value })} />
+            style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+            value={newExtraItem.description} onChange={e=>setNewExtraItem({...newExtraItem,description:e.target.value})}/>
         </div>
-        <button
-          onClick={async () => {
-            if (!newExtraItem.name?.trim()) return showNotif('Item name is required', 'error');
-            if (!newExtraItem.price || Number(newExtraItem.price) <= 0) return showNotif('Valid price is required', 'error');
-            try {
-              await axios.post(`${BASE_URL}/extra-items/${tenantId}`, {
-                name: newExtraItem.name.trim(),
-                category: newExtraItem.category,
-                price: Number(newExtraItem.price),
-                costPrice: Number(newExtraItem.costPrice) || 0,
-                unit: newExtraItem.unit,
-                currentStock: Number(newExtraItem.currentStock) || 0,
-                description: newExtraItem.description.trim(),
-                isAvailable: true
-              });
-              setNewExtraItem({ name: '', category: 'Cold Drinks', price: '', costPrice: '', unit: 'piece', currentStock: '', description: '', isAvailable: true, image: '' });
-              showNotif(`${newExtraItem.name} added to catalog`);
-              fetchExtraItems();
-            } catch (err) { showNotif(err.response?.data?.error || 'Failed to add item', 'error'); }
-          }}
-          style={{ padding: '11px 28px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px' }}>
-          + REGISTER ITEM
+        <button onClick={async()=>{
+          if(!newExtraItem.name?.trim())return showNotif('Item name is required','error');
+          if(!newExtraItem.price||Number(newExtraItem.price)<=0)return showNotif('Valid price is required','error');
+          try {
+            await axios.post(`${BASE_URL}/extra-items/${tenantId}`,{
+              name:newExtraItem.name.trim(),category:newExtraItem.category,
+              price:Number(newExtraItem.price),costPrice:Number(newExtraItem.costPrice)||0,
+              unit:newExtraItem.unit,currentStock:Number(newExtraItem.currentStock)||0,
+              description:newExtraItem.description.trim(),isAvailable:true
+            });
+            setNewExtraItem({name:'',category:'Cold Drinks',price:'',costPrice:'',unit:'piece',currentStock:'',description:'',isAvailable:true,image:''});
+            showNotif(`${newExtraItem.name} added to catalog`);fetchExtraItems();
+          } catch(err){showNotif(err.response?.data?.error||'Failed to add item','error');}
+        }} style={{
+          padding:'10px 24px',
+          background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          color:'#000',border:'none',borderRadius:'8px',
+          fontWeight:'900',fontSize:'0.72rem',cursor:'pointer',
+          whiteSpace:'nowrap',letterSpacing:'0.5px',flexShrink:0
+        }}>+ REGISTER ITEM</button>
+      </div>
+    </div>
+  </div>
+ 
+  {/* ── FILTER BAR ── */}
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'14px',flexWrap:'wrap'}}>
+    <div style={{display:'flex',gap:'7px',flexWrap:'wrap',flex:1}}>
+      {['All',...new Set(extraItems.map(i=>i.category))].map(cat=>(
+        <button key={cat} onClick={()=>setActiveExtraCategory(cat)} style={{
+          padding:'7px 16px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
+          border:activeExtraCategory===cat?'none':'1px solid #1a1a1a',
+          background:activeExtraCategory===cat?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#0d0d0d',
+          color:activeExtraCategory===cat?'#000':'#444',transition:'all 0.15s',
+          whiteSpace:'nowrap'
+        }}>
+          {cat} {cat!=='All'&&<span style={{opacity:0.7}}>({extraItems.filter(i=>i.category===cat).length})</span>}
         </button>
-      </div>
+      ))}
     </div>
-
-    {/* ── CATEGORY FILTER + SEARCH ── */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-        {['All', ...new Set(extraItems.map(i => i.category))].map(cat => (
-          <button key={cat} onClick={() => setActiveExtraCategory(cat)} style={{
-            padding: '7px 16px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer',
-            border: activeExtraCategory === cat ? 'none' : '1px solid #1a1a1a',
-            background: activeExtraCategory === cat ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#0d0d0d',
-            color: activeExtraCategory === cat ? '#000' : '#444', transition: 'all 0.15s'
-          }}>
-            {cat} {cat !== 'All' && `(${extraItems.filter(i => i.category === cat).length})`}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#000', border: '1px solid #121212', borderRadius: '8px', padding: '8px 14px', flexShrink: 0 }}>
-        <Search size={13} color="#444" />
+    <div style={{display:'flex',gap:'8px',alignItems:'center',flexShrink:0}}>
+      {/* Low stock filter */}
+      <button onClick={()=>setActiveExtraCategory(activeExtraCategory==='__lowstock__'?'All':'__lowstock__')}
+        style={{
+          display:'flex',alignItems:'center',gap:'6px',
+          padding:'7px 14px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
+          border:activeExtraCategory==='__lowstock__'?'none':'1px solid rgba(186,117,23,0.2)',
+          background:activeExtraCategory==='__lowstock__'?'linear-gradient(135deg,#8a5c0a,#BA7517)':'rgba(186,117,23,0.05)',
+          color:activeExtraCategory==='__lowstock__'?'#000':'#BA7517',transition:'all 0.15s'
+        }}>
+        <AlertTriangle size={10}/>
+        LOW STOCK ({extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length})
+      </button>
+      {/* Search */}
+      <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#0a0a0a',border:'1px solid #141414',borderRadius:'8px',padding:'8px 13px'}}>
+        <Search size={12} color="#333"/>
         <input type="text" placeholder="Search items..." value={extraItemSearchQuery}
-          onChange={e => setExtraItemSearchQuery(e.target.value)}
-          style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
-        {extraItemSearchQuery && (
-          <button onClick={() => setExtraItemSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: 0, display: 'flex' }}>
-            <X size={12} />
-          </button>
-        )}
+          onChange={e=>setExtraItemSearchQuery(e.target.value)}
+          style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'150px'}}/>
+        {extraItemSearchQuery&&<button onClick={()=>setExtraItemSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
       </div>
     </div>
-
-    {/* ── ITEMS GRID ── */}
-    {extraItemsLoading ? (
-      <div style={{ textAlign: 'center', padding: '60px', color: '#333', fontSize: '0.8rem' }}>LOADING CATALOG...</div>
-    ) : (() => {
-      const filtered = extraItems.filter(i => {
-        const matchCat = activeExtraCategory === 'All' || i.category === activeExtraCategory;
-        const matchSearch = i.name.toLowerCase().includes(extraItemSearchQuery.toLowerCase());
-        return matchCat && matchSearch;
-      });
-
-      if (filtered.length === 0) return (
-        <div style={{ textAlign: 'center', padding: '60px', background: '#0d0d0d', borderRadius: '20px', border: '1px dashed #1a1a1a' }}>
-          <ShoppingBag size={32} color="#222" style={{ marginBottom: '16px' }} />
-          <div style={{ color: '#333', fontSize: '0.85rem', fontWeight: '700' }}>
-            {extraItemSearchQuery ? `NO ITEMS MATCH "${extraItemSearchQuery.toUpperCase()}"` : 'NO ITEMS IN THIS CATEGORY YET'}
+  </div>
+ 
+  {/* ── ITEMS GRID ── */}
+  {extraItemsLoading?(
+    <div style={{textAlign:'center',padding:'60px',color:'#222',fontSize:'0.78rem',fontWeight:'700'}}>LOADING CATALOG...</div>
+  ):(()=>{
+    const filtered=extraItems.filter(i=>{
+      if(activeExtraCategory==='__lowstock__') return i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0;
+      const matchCat=activeExtraCategory==='All'||i.category===activeExtraCategory;
+      const matchSearch=i.name.toLowerCase().includes(extraItemSearchQuery.toLowerCase());
+      return matchCat&&matchSearch;
+    });
+ 
+    if(filtered.length===0) return (
+      <div style={{textAlign:'center',padding:'60px',background:'#080808',borderRadius:'16px',border:'1px dashed #141414'}}>
+        <Package2 size={28} color="#1a1a1a" style={{marginBottom:'12px'}}/>
+        <div style={{color:'#222',fontSize:'0.8rem',fontWeight:'700'}}>
+          {extraItemSearchQuery?`No items matching "${extraItemSearchQuery}"`:'No items in this category'}
+        </div>
+      </div>
+    );
+ 
+    // Group by category if "All"
+    const groups=activeExtraCategory==='All'||activeExtraCategory==='__lowstock__'
+      ? [...new Set(filtered.map(i=>i.category))].map(cat=>({cat,items:filtered.filter(i=>i.category===cat)}))
+      : [{cat:activeExtraCategory,items:filtered}];
+ 
+    return groups.map(({cat,items})=>(
+      <div key={cat} style={{marginBottom:'8px'}}>
+        {/* Category header */}
+        <div style={{
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'9px 14px',marginBottom:'12px',
+          background:'#060606',borderRadius:'10px',border:'1px solid #111'
+        }}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span style={{width:'3px',height:'14px',background:'#d3bfa2',borderRadius:'2px'}}/>
+            <span style={{fontSize:'0.6rem',fontWeight:'900',color:'#8a704d',letterSpacing:'1.5px',textTransform:'uppercase'}}>{cat}</span>
+            <span style={{fontSize:'0.52rem',color:'#333',fontWeight:'700'}}>{items.length} items</span>
+          </div>
+          <div style={{display:'flex',gap:'6px'}}>
+            <span style={{fontSize:'0.52rem',color:'#4ade80',fontWeight:'700',padding:'2px 8px',background:'rgba(74,222,128,0.06)',border:'1px solid rgba(74,222,128,0.12)',borderRadius:'6px'}}>
+              {items.filter(i=>i.isAvailable).length} available
+            </span>
+            {items.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length>0&&(
+              <span style={{fontSize:'0.52rem',color:'#BA7517',fontWeight:'700',padding:'2px 8px',background:'rgba(186,117,23,0.06)',border:'1px solid rgba(186,117,23,0.15)',borderRadius:'6px'}}>
+                {items.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length} low
+              </span>
+            )}
           </div>
         </div>
-      );
-
-      const grouped = {};
-      filtered.forEach(item => {
-        if (!grouped[item.category]) grouped[item.category] = [];
-        grouped[item.category].push(item);
-      });
-
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          {Object.entries(grouped).map(([cat, items]) => (
-            <div key={cat}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #151515' }}>
-                <span style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {categoryIconsLg[cat] || <Box size={16} color="#d3bfa2" />}
-                </span>
-                <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{cat}</span>
-                <span style={{ fontSize: '0.62rem', padding: '2px 8px', background: 'rgba(211,191,162,0.06)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900' }}>
-                  {items.length} item{items.length !== 1 ? 's' : ''}
-                </span>
-                <div style={{ flex: 1, height: '1px', background: '#111' }} />
-                <span style={{ fontSize: '0.62rem', color: '#444' }}>
-                  Cat. value: ₹{items.reduce((a, i) => a + Math.round(i.currentStock * i.price), 0).toLocaleString()}
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '16px' }}>
-                {items.map(item => {
-                  const isLowStock = item.currentStock <= 5 && item.currentStock > 0;
-                  const isOutOfStock = item.currentStock <= 0;
-                  const margin = item.price > 0 && item.costPrice >= 0
-                    ? Math.round(((item.price - (item.costPrice || 0)) / item.price) * 100) : null;
-
-                  return (
-                    <div key={item._id} style={{
-                      background: '#0a0a0a', borderRadius: '16px', padding: '18px',
-                      border: `1px solid ${isOutOfStock ? 'rgba(192,57,43,0.2)' : isLowStock ? 'rgba(186,117,23,0.2)' : '#151515'}`,
-                      borderTop: `2px solid ${isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? 'rgba(211,191,162,0.3)' : '#1a1a1a'}`,
-                      opacity: item.isAvailable ? 1 : 0.55,
-                      position: 'relative', transition: 'all 0.2s'
+ 
+        {/* Items grid */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'14px'}}>
+          {items.map(item=>{
+            const isLow=item.currentStock<=(item.lowStockThreshold||5)&&item.currentStock>0;
+            const isOut=item.currentStock<=0;
+            const margin=item.costPrice>0?Math.round(((item.price-item.costPrice)/item.price)*100):null;
+            return (
+              <div key={item._id} style={{
+                background:'#080808',
+                border:`1px solid ${isOut?'rgba(192,57,43,0.2)':isLow?'rgba(186,117,23,0.2)':'#141414'}`,
+                borderTop:`2px solid ${isOut?'rgba(192,57,43,0.4)':isLow?'rgba(186,117,23,0.35)':item.isAvailable?'rgba(211,191,162,0.12)':'#111'}`,
+                borderRadius:'14px',padding:'18px',
+                opacity:item.isAvailable?1:0.55,
+                position:'relative',
+                transition:'all 0.2s'
+              }}>
+                {/* Status dot */}
+                <div style={{
+                  position:'absolute',top:'14px',right:'14px',
+                  width:'7px',height:'7px',borderRadius:'50%',
+                  background:item.isAvailable?'#d3bfa2':'#222',
+                  boxShadow:item.isAvailable?'0 0 6px rgba(211,191,162,0.4)':'none'
+                }}/>
+ 
+                {/* Stock warning badges */}
+                {(isOut||isLow)&&(
+                  <div style={{
+                    position:'absolute',top:'10px',left:'10px',
+                    display:'flex',alignItems:'center',gap:'4px',
+                    padding:'2px 8px',borderRadius:'4px',
+                    background:isOut?'rgba(192,57,43,0.12)':'rgba(186,117,23,0.1)',
+                    border:`1px solid ${isOut?'rgba(192,57,43,0.3)':'rgba(186,117,23,0.25)'}`,
+                    fontSize:'0.48rem',fontWeight:'900',
+                    color:isOut?'#e74c3c':'#BA7517'
+                  }}>
+                    <AlertTriangle size={8}/>{isOut?'OUT OF STOCK':'LOW STOCK'}
+                  </div>
+                )}
+ 
+                {/* Name + category */}
+                <div style={{paddingTop:isOut||isLow?'18px':'0',marginBottom:'10px'}}>
+                  <div style={{fontSize:'0.9rem',fontWeight:'900',color:'#fff',marginBottom:'2px',paddingRight:'20px'}}>{item.name}</div>
+                  <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'600'}}>{item.category}</div>
+                  {item.description&&(
+                    <div style={{fontSize:'0.6rem',color:'#333',marginTop:'4px',lineHeight:1.4}}>{item.description}</div>
+                  )}
+                </div>
+ 
+                {/* Price + margin */}
+                <div style={{display:'flex',gap:'7px',alignItems:'center',marginBottom:'12px',flexWrap:'wrap'}}>
+                  <span style={{
+                    fontSize:'0.78rem',fontWeight:'900',color:'#d3bfa2',
+                    padding:'4px 10px',background:'rgba(211,191,162,0.06)',
+                    border:'1px solid rgba(211,191,162,0.12)',borderRadius:'6px',fontFamily:'monospace'
+                  }}>₹{item.price}</span>
+                  {item.costPrice>0&&(
+                    <span style={{fontSize:'0.6rem',color:'#555',fontFamily:'monospace'}}>cost ₹{item.costPrice}</span>
+                  )}
+                  {margin!==null&&(
+                    <span style={{
+                      fontSize:'0.58rem',fontWeight:'900',
+                      color:margin>=40?'#4ade80':margin>=20?'#8a704d':'#e74c3c',
+                      padding:'2px 7px',borderRadius:'4px',
+                      background:margin>=40?'rgba(74,222,128,0.06)':margin>=20?'rgba(138,112,77,0.06)':'rgba(231,76,60,0.06)',
+                      border:`1px solid ${margin>=40?'rgba(74,222,128,0.14)':margin>=20?'rgba(138,112,77,0.14)':'rgba(231,76,60,0.14)'}`
+                    }}>{margin}% margin</span>
+                  )}
+                </div>
+ 
+                {/* Stock gauge */}
+                <div style={{marginBottom:'14px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'5px'}}>
+                    <span style={{fontSize:'0.55rem',color:'#333',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>Stock</span>
+                    <span style={{fontSize:'0.7rem',fontWeight:'900',color:isOut?'#e74c3c':isLow?'#BA7517':'#d3bfa2',fontFamily:'monospace'}}>
+                      {item.currentStock} <span style={{fontSize:'0.55rem',color:'#444'}}>{item.unit}s</span>
+                    </span>
+                  </div>
+                  <div style={{height:'4px',background:'#111',borderRadius:'4px',overflow:'hidden'}}>
+                    <div style={{
+                      height:'100%',borderRadius:'4px',transition:'width 0.3s',
+                      width:`${Math.min(100,Math.max(0,(item.currentStock/(item.lowStockThreshold||5)*100)))}%`,
+                      background:isOut?'#e74c3c':isLow?'linear-gradient(90deg,#8a5c0a,#BA7517)':'linear-gradient(90deg,#8a704d,#d3bfa2)'
+                    }}/>
+                  </div>
+                  {item.lowStockThreshold>0&&(
+                    <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'3px',textAlign:'right'}}>alert at {item.lowStockThreshold}</div>
+                  )}
+                </div>
+ 
+                {/* Actions */}
+                <div style={{display:'flex',flexDirection:'column',gap:'7px'}}>
+                  {/* Restock */}
+                  <button onClick={()=>{setExtraRestockModal(item);setExtraRestockQty('');}}
+                    style={{
+                      width:'100%',padding:'9px',borderRadius:'8px',cursor:'pointer',
+                      background:isOut?'rgba(211,191,162,0.08)':'rgba(211,191,162,0.04)',
+                      border:isOut?'1px solid rgba(211,191,162,0.25)':'1px solid rgba(211,191,162,0.12)',
+                      color:isOut?'#d3bfa2':'#8a704d',fontSize:'0.65rem',fontWeight:'900',
+                      display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',
+                      transition:'all 0.15s',letterSpacing:'0.5px'
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.1)';e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=isOut?'rgba(211,191,162,0.08)':'rgba(211,191,162,0.04)';e.currentTarget.style.borderColor=isOut?'rgba(211,191,162,0.25)':'rgba(211,191,162,0.12)';e.currentTarget.style.color=isOut?'#d3bfa2':'#8a704d';}}>
+                    <Package size={11}/>+ ADD STOCK
+                  </button>
+ 
+                  {/* Hide/Show + Edit + Delete */}
+                  <div style={{display:'flex',gap:'6px'}}>
+                    <button onClick={async()=>{
+                      await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`,{isAvailable:!item.isAvailable});
+                      fetchExtraItems();
+                      showNotif(`${item.name} ${!item.isAvailable?'shown on menu':'hidden'}`);
+                    }} style={{
+                      flex:1,padding:'8px 6px',
+                      background:item.isAvailable?'#0d0d0d':'rgba(74,222,128,0.05)',
+                      border:item.isAvailable?'1px solid #1a1a1a':'1px solid rgba(74,222,128,0.18)',
+                      color:item.isAvailable?'#444':'#4ade80',
+                      borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'
                     }}>
-
-                      {/* Status dot */}
-                      <div style={{ position: 'absolute', top: '16px', right: '16px', width: '7px', height: '7px', borderRadius: '50%', background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : item.isAvailable ? '#4ade80' : '#333' }} />
-
-                      {/* Category badge */}
-                      <div style={{ marginBottom: '10px' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.52rem', padding: '3px 8px', background: 'rgba(211,191,162,0.05)', border: '1px solid #1a1a1a', borderRadius: '4px', color: '#555', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {categoryIcons[item.category] || <Box size={13} color="#555" />}
-                          {item.category}
-                        </span>
-                      </div>
-
-                      {/* Name */}
-                      <h3 style={{ margin: '0 0 4px', fontSize: '0.95rem', fontWeight: '900', color: '#fff', paddingRight: '14px' }}>{item.name}</h3>
-                      {item.description && (
-                        <p style={{ margin: '0 0 10px', fontSize: '0.65rem', color: '#444', lineHeight: '1.4' }}>{item.description}</p>
-                      )}
-
-                      {/* Price row with margin */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>₹{item.price}</span>
-                        <span style={{ fontSize: '0.62rem', color: '#444' }}>per {item.unit}</span>
-                        {item.costPrice > 0 && (
-                          <span style={{ fontSize: '0.58rem', color: '#555' }}>cost ₹{item.costPrice}</span>
-                        )}
-                        {margin !== null && (
-                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', padding: '2px 7px', background: margin >= 40 ? 'rgba(74,222,128,0.07)' : 'rgba(186,117,23,0.07)', border: `1px solid ${margin >= 40 ? 'rgba(74,222,128,0.2)' : 'rgba(186,117,23,0.2)'}`, borderRadius: '4px', color: margin >= 40 ? '#4ade80' : '#BA7517', fontWeight: '800' }}>
-                            {margin}% margin
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Sales badge */}
-                      {item.totalSold > 0 && (
-                        <div style={{ marginBottom: '10px' }}>
-                          <span style={{ fontSize: '0.6rem', color: '#555', padding: '2px 8px', background: '#111', border: '1px solid #1a1a1a', borderRadius: '4px' }}>
-                            {item.totalSold} sold · ₹{Math.round(item.totalRevenue || 0).toLocaleString()} revenue
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Stock bar */}
-                      <div style={{ marginBottom: '14px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                          <span style={{ fontSize: '0.58rem', color: '#444', fontWeight: '900' }}>STOCK</span>
-                          <span style={{ fontSize: '0.65rem', fontWeight: '900', color: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : '#d3bfa2' }}>
-                            {isOutOfStock ? 'OUT OF STOCK' : isLowStock ? `LOW — ${item.currentStock} left` : `${item.currentStock} ${item.unit}s`}
-                          </span>
-                        </div>
-                        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, (item.currentStock / Math.max(item.currentStock, 20)) * 100))}%`, background: isOutOfStock ? '#c0392b' : isLowStock ? '#BA7517' : 'linear-gradient(90deg,#8a704d,#d3bfa2)', borderRadius: '2px', transition: 'width 0.6s ease' }} />
-                        </div>
-                      </div>
-
-                      {/* Stock value */}
-                      <div style={{ fontSize: '0.6rem', color: '#333', marginBottom: '14px' }}>
-                        Stock value: <span style={{ color: '#555', fontWeight: '800' }}>₹{Math.round(item.currentStock * item.price).toLocaleString()}</span>
-                      </div>
-
-                      {/* Actions — 2 rows */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {/* Row 1: Restock (full width) */}
-                        <button
-                          onClick={() => { setExtraRestockModal(item); setExtraRestockQty(''); }}
-                          style={{ width: '100%', padding: '9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '9px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.09)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}
-                        >
-                          + ADD STOCK
-                        </button>
-
-                        {/* Row 2: HIDE/SHOW + EDIT + DELETE */}
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            onClick={async () => {
-                              await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`, { isAvailable: !item.isAvailable });
-                              fetchExtraItems();
-                              showNotif(`${item.name} ${!item.isAvailable ? 'activated' : 'hidden'}`);
-                            }}
-                            style={{ flex: 1, padding: '9px 6px', background: item.isAvailable ? '#111' : 'rgba(74,222,128,0.06)', border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(74,222,128,0.2)', color: item.isAvailable ? '#444' : '#4ade80', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}
-                          >
-                            {item.isAvailable ? 'HIDE' : 'SHOW'}
-                          </button>
-                          <button
-                            onClick={() => { setExtraItemEditModal(item); setExtraItemEditData({ ...item }); }}
-                            style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}
-                          >
-                            ✎
-                          </button>
-                          <button
-                            onClick={() => setConfirmModal({
-                              show: true,
-                              title: `Remove "${item.name}"?`,
-                              subtitle: 'This will permanently delete the item from your catalog.',
-                              onConfirm: async () => {
-                                await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);
-                                fetchExtraItems();
-                                showNotif(`${item.name} removed`);
-                              }
-                            })}
-                            style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#c0392b'; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      {item.isAvailable?'HIDE':'SHOW'}
+                    </button>
+                    <button onClick={()=>{setExtraItemEditModal(item);setExtraItemEditData({...item});}}
+                      style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#333',borderRadius:'7px',fontSize:'0.7rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}>✎</button>
+                    <button onClick={()=>setConfirmModal({
+                      show:true,title:`Remove "${item.name}"?`,
+                      subtitle:'This permanently removes the item from your catalog.',
+                      onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);fetchExtraItems();showNotif(`${item.name} removed`);}
+                    })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}>✕</button>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      );
-    })()}
-  </motion.div>
+      </div>
+    ));
+  })()}
+ 
+</motion.div>
 )}
+ 
 
         </section>{/* end scrollArea */}
       </main>
