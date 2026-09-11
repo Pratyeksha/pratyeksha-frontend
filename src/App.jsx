@@ -2264,7 +2264,11 @@ if (unavailableItems.length > 0) {
       tenantId,
       tableNumber,
       items:       orderItems,
-      billDetails: { itemsTotal: total, taxAmount: total * 0.05, grandTotal: total * 1.05 },
+billDetails: {
+  itemsTotal: total,
+  taxAmount: total * ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100,
+  grandTotal: Math.round(total * (1 + ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100))
+},
       status:        "pending",
       paymentStatus: "unpaid",
       createdAt:     new Date().toISOString()

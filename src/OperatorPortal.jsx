@@ -6632,14 +6632,15 @@ const totalRevenueAllTime = canonicalMonthRevenue;
             <div style={{display:'flex',gap:'6px'}}>
               <button onClick={async()=>{
                 try{
-                  await axios.patch(`${BASE_URL}/offers/${tenantId}/${offer._id}`,{isActive:!offer.isActive});
+await axios.patch(`${BASE_URL}/offers/${offer._id}`, {isActive:!offer.isActive});
                   fetchOffers();
                   showNotif(`"${offer.title}" ${!offer.isActive?'activated':'paused'}`);
                 }catch{showNotif('Update failed','error');}
               }} style={{flex:1,padding:'8px',background:offer.isActive?'#0d0d0d':'rgba(74,222,128,0.05)',border:offer.isActive?'1px solid #1a1a1a':'1px solid rgba(74,222,128,0.16)',color:offer.isActive?'#444':'#4ade80',borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}>
                 {offer.isActive?'PAUSE':'ACTIVATE'}
               </button>
-              <button onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${tenantId}/${offer._id}`);fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
+              <button onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${offer._id}`);
+fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
                 style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}>✕</button>
@@ -6751,12 +6752,13 @@ const totalRevenueAllTime = canonicalMonthRevenue;
           if(!newCampaign.title?.trim()||!newCampaign.body?.trim()){showNotif('Title and message are required','error');return;}
           setCampaignSending(true);
           try{
-            await axios.post(`${BASE_URL}/campaigns/${tenantId}`,{
-              title:newCampaign.title.trim(),
-              body:newCampaign.body.trim(),
-              segment:newCampaign.segment||'all',
-              customPhones:newCampaign.customPhones||''
-            });
+await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
+  title:        newCampaign.title.trim(),
+  body:         newCampaign.body.trim(),
+  segment:      newCampaign.segment || 'all',
+  customPhones: newCampaign.customPhones || '',
+  sendNow:      true   // ← ADD: triggers actual push delivery in server
+});
             setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
             showNotif('Campaign sent successfully!','success');
             fetchCampaigns();
@@ -10833,7 +10835,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                           show:true,title:`Remove ${pureName}?`,
                           subtitle:'This will permanently remove the staff member.',
                           onConfirm:async()=>{
-                            await axios.delete(`${BASE_URL}/staff/${m._id}`);
+await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                             showNotif(`${pureName} removed`);
                             fetchManagementData();
                           }
