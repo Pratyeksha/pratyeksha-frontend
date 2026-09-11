@@ -1521,11 +1521,14 @@ const margins = menuItems.map(m => {
     ['pending','ready','served','settled'].includes(o.status)
   );
   const countMap = {};
-  recentOrders.forEach(o => {
-    (o.items || []).forEach(it => {
-      countMap[it.name] = (countMap[it.name] || 0) + (Number(it.quantity) || 1);
-    });
+recentOrders.forEach(o => {
+  (o.items || []).forEach(it => {
+    if (it.isExtraItem || it.extraItemId) return; // ← skip extra items
+    if (!it.name) return;
+    countMap[it.name] = (countMap[it.name] || 0) + (Number(it.quantity) || 1);
   });
+});
+
   // Return set of dish names ordered 3+ times in last 2h
   return new Set(Object.entries(countMap).filter(([,v]) => v >= 3).map(([k]) => k));
 }, [orders]);

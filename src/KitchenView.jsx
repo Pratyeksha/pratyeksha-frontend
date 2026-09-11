@@ -311,7 +311,7 @@ const KitchenView = () => {
     setCompletedTicketsCount(prev => { const n = prev + 1;   localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
     if (mobileCardIndex > 0) setMobileCardIndex(i => i - 1);
     try {
-      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready' });
+await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
       setOrders(prev => prev.filter(o => o._id !== orderId));
     } catch (err) { console.error(err); }
   };

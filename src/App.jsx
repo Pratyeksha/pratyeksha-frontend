@@ -337,7 +337,13 @@ waitlistSocket.on('announcement_updated', (data) => {
 waitlistSocket.on('announcement_ended', () => {
   setActiveAnnouncement(null);
 });
-
+waitlistSocket.on('announcement_updated', (data) => {
+  setActiveAnnouncement(data.announcement);
+  setAnnouncementDismissed(false);
+});
+waitlistSocket.on('announcement_ended', () => {
+  setActiveAnnouncement(null);
+});
 // ── Operator manual push → browser notification on customer device ──
 waitlistSocket.on('operator_notify', (data) => {
   // Show browser / push notification
@@ -390,8 +396,6 @@ return () => {
   waitlistSocket.off('pickup_reminder');
   waitlistSocket.off('reservation_confirmed');
   waitlistSocket.off('operator_notify');
-  waitlistSocket.off('announcement_updated');
-  waitlistSocket.off('announcement_ended');
 };  }, [isCounterScan, sessionId, waitlistSocket]);
 
 // REPLACE the existing useEffect that has:
@@ -456,7 +460,16 @@ useEffect(() => {
   if (!tenantId) return;
   axios.get(`${BASE_URL}/announcements/${tenantId}/active`)
     .then(r => {
-      if (r.data?.active) setActiveAnnouncement(r.data.announcement);
+      if (!r.data?.active) return;
+      const ann = r.data.announcement;
+      setActiveAnnouncement(ann);
+      // Only increment viewCount once per browser session per announcement
+      const seenKey = `ann_seen_${ann._id}`;
+      if (!sessionStorage.getItem(seenKey)) {
+        sessionStorage.setItem(seenKey, '1');
+        // Server already increments on fetch — no extra call needed
+        // (the GET /active route does $inc: { viewCount: 1 } server-side)
+      }
     })
     .catch(() => {});
 }, [tenantId]);
@@ -1264,24 +1277,26 @@ socket.on('extra_item_out_of_stock', ({ itemId }) => {
   });
 });
 
+socket.on('announcement_updated', (data) => {
+  if (data?.announcement) {
+    setActiveAnnouncement(data.announcement);
+    setAnnouncementDismissed(false);
+  }
+});
+socket.on('announcement_ended', () => {
+  setActiveAnnouncement(null);
+});
     // ── Live order status updates for customer ──
 socket.on("order_status_updated", (data) => {
   if (data.tableNumber?.toString() !== tableNumber?.toString()) return;
   const orderId = data._id || data.orderId;
-  if (orderId) {
-    setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
-    if (data.status === 'ready') {
-      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
-      triggerAlert('🍽️ Your order is ready! Please collect.', 'success');
-    }
-  } else if (data.status === 'settled') {
-    setLiveOrderStatuses(prev => {
-      const updated = {};
-      Object.keys(prev).forEach(k => { updated[k] = 'served'; });
-      return updated;
-    });
+  if (!orderId) return; // always have orderId from server
+  setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
+  if (data.status === 'ready' || data.status === 'served') {
+    if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+    triggerAlert('🍽️ Your order is ready!', 'success');
   }
-});   // ← close socket.on callback HERE
+});
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
@@ -1290,6 +1305,8 @@ return () => {
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
   socket.off("order_status_updated");
+  socket.off('announcement_updated');
+socket.off('announcement_ended');
   if (window.speechSynthesis) window.speechSynthesis.cancel(); // ← ADD
   socket.disconnect();
 };
