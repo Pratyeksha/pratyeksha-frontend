@@ -1193,7 +1193,10 @@ const handleAssistQuery = useCallback(async (question) => {
       })
       .reduce((a, b) => a + (b.revenue || 0), 0);
 
-    const pendingOrders = orders.filter(o => o.status === 'pending');
+const pendingOrders = orders.filter(o =>
+  (o.status === 'pending' || o.status === 'incoming') &&
+  (o.items || []).some(i => !i.isExtraItem && !i.extraItemId)
+);
     const readyOrders   = orders.filter(o => o.status === 'ready');
     const servedOrders  = orders.filter(o => o.status === 'served');
 
@@ -7129,14 +7132,13 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <div style={styles.receiptRow}>
         <span style={{fontWeight:'900'}}>DISCOUNT %</span>
         <input type="number" value={discount}
-          onChange={e => setDiscount(e.target.value)}
+onChange={e => setDiscount(Number(e.target.value) || 0)}
           style={styles.discountInput}/>
       </div>
       {discount > 0 && (
         <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
           <span>Discount amount</span>
-          <span>- ₹{(tableBill.total * (discount / 100)).toFixed(2)}</span>
-        </div>
+<span>- ₹{(tableBill.subtotal * (discount / 100)).toFixed(2)}</span>        </div>
       )}
     </div>
 
