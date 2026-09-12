@@ -752,6 +752,12 @@ fetchAuditLogs();
         });
         fetchManagementData(); // refresh inventory numbers
       });
+      socket.on('inventory_expiry_alert', (data) => {
+  showNotif(`${data.itemName} expires in ${data.daysLeft} day${data.daysLeft>1?'s':''} — use first (FEFO)`, 'error');
+  setInventory(prev => prev.map(i =>
+    i._id === data.itemId ? { ...i, batchExpiry: data.batchExpiry, _expiryAlert: true } : i
+  ));
+});
       socket.on('ingredient_out_of_stock', (data) => {
     setIngredientAlerts(prev => {
         // Deduplicate: if same ingredient already has an active alert, replace it
@@ -1535,6 +1541,56 @@ recentOrders.forEach(o => {
 
   // Return set of dish names ordered 3+ times in last 2h
   return new Set(Object.entries(countMap).filter(([,v]) => v >= 3).map(([k]) => k));
+}, [orders]);
+const tableOccupancyBreakdown = useMemo(() => {
+  const total     = tableCount;
+  const allTables = Array.from({ length: total }, (_, i) => (i + 1).toString());
+
+  const billPendingTables = new Set(
+    (waiterRequests || [])
+      .filter(r => r.requestType === 'bill' && r.status === 'pending')
+      .map(r => r.tableNumber?.toString())
+  );
+  const reservedTables = new Set(
+    (reservationEntries || [])
+      .filter(r => r.status === 'confirmed' && r.tableNumber)
+      .map(r => r.tableNumber?.toString())
+  );
+  const occupied = new Set(occupiedTables.map(t => t.toString()));
+
+  const breakdown = allTables.map(t => {
+    if (billPendingTables.has(t) && occupied.has(t)) return 'bill_pending';
+    if (occupied.has(t)) return 'occupied';
+    if (reservedTables.has(t)) return 'reserved';
+    return 'free';
+  });
+
+  return {
+    free:         breakdown.filter(s => s === 'free').length,
+    occupied:     breakdown.filter(s => s === 'occupied').length,
+    bill_pending: breakdown.filter(s => s === 'bill_pending').length,
+    reserved:     breakdown.filter(s => s === 'reserved').length,
+    total,
+    occupancyRate: Math.round((breakdown.filter(s => s !== 'free').length / total) * 100)
+  };
+}, [occupiedTables, waiterRequests, reservationEntries, tableCount]);
+const avgTurnTimeToday = useMemo(() => {
+  const istToday = new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
+  const todaySettled = orders.filter(o =>
+    o.status === 'settled' &&
+    o.billDetails?.isSettlementAnchor === true &&
+    (o.billDetails?.headerDateStringIST || '').startsWith(istToday)
+  );
+  if (todaySettled.length < 2) return null;
+
+  const turns = todaySettled.map(o => {
+    const first = new Date(o.createdAt).getTime();
+    const settled = new Date(o.updatedAt || o.createdAt).getTime();
+    return (settled - first) / 60000; // minutes
+  }).filter(t => t > 0 && t < 300); // ignore < 0 or > 5h (data errors)
+
+  if (!turns.length) return null;
+  return Math.round(turns.reduce((a, b) => a + b, 0) / turns.length);
 }, [orders]);
 
   // ─────────────────────────────────────────────────────
@@ -4512,6 +4568,97 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 
 <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
   style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+
+
+{/* ── OCCUPANCY DASHBOARD ── */}
+<div style={{
+  display:'grid', gridTemplateColumns:'auto 1fr', gap:'14px',
+  background:'#080808', border:'1px solid #161616',
+  borderRadius:'16px', padding:'18px 20px', marginBottom:'20px',
+  alignItems:'center'
+}}>
+  {/* SVG Donut */}
+  <div style={{ position:'relative', width:'88px', height:'88px', flexShrink:0 }}>
+    <svg width="88" height="88" viewBox="0 0 88 88">
+      {(() => {
+        const r = 34, cx = 44, cy = 44;
+        const circ = 2 * Math.PI * r;
+        const segments = [
+          { key:'occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2' },
+          { key:'bill_pending', val:tableOccupancyBreakdown.bill_pending, color:'#BA7517' },
+          { key:'reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d' },
+          { key:'free',         val:tableOccupancyBreakdown.free,         color:'#1a1a1a'  },
+        ];
+        let offset = 0;
+        return segments.map(seg => {
+          const pct  = tableOccupancyBreakdown.total > 0 ? seg.val / tableOccupancyBreakdown.total : 0;
+          const dash = pct * circ;
+          const el   = (
+            <circle key={seg.key}
+              cx={cx} cy={cy} r={r}
+              fill="none" stroke={seg.color} strokeWidth="14"
+              strokeDasharray={`${dash} ${circ - dash}`}
+              strokeDashoffset={-offset}
+              style={{ transform:'rotate(-90deg)', transformOrigin:'44px 44px', transition:'stroke-dasharray 0.6s ease' }}
+            />
+          );
+          offset += dash;
+          return el;
+        });
+      })()}
+    </svg>
+    <div style={{
+      position:'absolute', inset:0, display:'flex', flexDirection:'column',
+      alignItems:'center', justifyContent:'center'
+    }}>
+      <div style={{ fontSize:'1.4rem', fontWeight:'900', color:'#fff', lineHeight:1, fontFamily:'monospace' }}>
+        {tableOccupancyBreakdown.occupancyRate}%
+      </div>
+      <div style={{ fontSize:'0.44rem', color:'#555', fontWeight:'900', letterSpacing:'1px', marginTop:'2px' }}>FULL</div>
+    </div>
+  </div>
+
+  {/* Legend + stats */}
+  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+    {[
+      { label:'Free',         val:tableOccupancyBreakdown.free,         color:'#2a2a2a', sub:'tables' },
+      { label:'Occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2', sub:'tables' },
+      { label:'Bill Pending', val:tableOccupancyBreakdown.bill_pending, color:'#BA7517', sub:'tables' },
+      { label:'Reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d', sub:'tables' },
+    ].map((s, i) => (
+      <div key={i} style={{
+        padding:'10px 12px', borderRadius:'10px',
+        background:'rgba(255,255,255,0.02)',
+        border:`1px solid ${s.color === '#2a2a2a' ? '#111' : `${s.color}20`}`,
+        display:'flex', flexDirection:'column', gap:'2px'
+      }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+          <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:s.color, flexShrink:0 }}/>
+          <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'900', letterSpacing:'1px', textTransform:'uppercase' }}>{s.label}</span>
+        </div>
+        <div style={{ fontSize:'1.2rem', fontWeight:'900', color:s.color, fontFamily:'monospace', lineHeight:1 }}>{s.val}</div>
+      </div>
+    ))}
+  </div>
+  {avgTurnTimeToday !== null && (
+  <div style={{
+    marginTop:'12px', paddingTop:'12px',
+    borderTop:'1px solid #111',
+    display:'flex', alignItems:'center', gap:'10px'
+  }}>
+    <Timer size={13} color="#8a704d" strokeWidth={1.5}/>
+    <div>
+      <span style={{ fontSize:'0.68rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace' }}>
+        ~{avgTurnTimeToday}m
+      </span>
+      <span style={{ fontSize:'0.58rem', color:'#444', fontWeight:'600', marginLeft:'6px' }}>
+        avg table turn time today
+      </span>
+    </div>
+  </div>
+)}
+
+</div>
 
   {/* ══════════════════════════════════════════════════
       ROW 1 — KITCHEN TICKETS + SERVICE CALLS

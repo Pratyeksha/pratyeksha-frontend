@@ -64,6 +64,9 @@ const [sessionToken] = useState(() => {
   return token;
 });
 
+const [orderPlacedAt, setOrderPlacedAt] = useState(null);
+const [prepPct, setPrepPct] = useState(0);
+const [cartUnavailableItems, setCartUnavailableItems] = useState([]);
 
   const [activeModel, setActiveModel] = useState(null);
 const [cart, setCart] = useState({});
@@ -129,6 +132,8 @@ const [sessionId, setSessionId] = useState(() => {
 });
 
 
+const [comboSuggestions, setComboSuggestions] = useState([]);
+const [showComboStrip, setShowComboStrip] = useState(false);
 
 const [welcomeCard, setWelcomeCard]         = useState(null);
 const [recommendedDishes, setRecommendedDishes] = useState([]); // smart dish suggestions for welcome card
@@ -294,6 +299,20 @@ return allMenuItems
     return (a.name || '').localeCompare(b.name || '');
   });
 }, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
+
+const cartUnavailableCheck = useMemo(() => {
+  if (!cart || Object.keys(cart).length === 0) return [];
+  return Object.entries(cart)
+    .filter(([key]) => {
+      const id = key.split('-')[0];
+      const item = allMenuItems.find(m => m._id === id || m._id?.toString() === id);
+      return item && !item.isAvailable;
+    })
+    .map(([key]) => {
+      const id = key.split('-')[0];
+      return allMenuItems.find(m => m._id === id || m._id?.toString() === id)?.name || 'Unknown item';
+    });
+}, [cart, allMenuItems]);
 
 // All matching search results across ALL categories (for search suggestion dropdown)
 const globalSearchResults = useMemo(() => {
@@ -1304,10 +1323,7 @@ socket.on("order_status_updated", (data) => {
   const orderId = data._id || data.orderId;
   if (!orderId) return; // always have orderId from server
   setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
-  if (data.status === 'ready' || data.status === 'served') {
-    if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
-    triggerAlert('🍽️ Your order is ready!', 'success');
-  }
+if (data.status === 'ready' || data.status === 'served') setPrepPct(100);
 });
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
@@ -2309,8 +2325,11 @@ if (unavailableItems.length > 0) {
     const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
     if (orderRes.data?._id) {
       setLiveOrderStatuses(prev => ({ ...prev, [orderRes.data._id]: 'pending' }));
+      setOrderPlacedAt(Date.now());
+setPrepPct(0);
     }
  
+    
     setPlacedOrders(prev => [...prev, ...orderItems]);
  
     // ── Customer upsert — single declaration, no duplicate ──
@@ -3029,7 +3048,18 @@ try {
 } catch { /* ignore */ }
 
 }, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
-
+useEffect(() => {
+  if (!orderPlacedAt || !orderEta?.etaMinutes) return;
+  const etaMs = orderEta.etaMinutes * 60 * 1000;
+  const tick = () => {
+    const elapsed = Date.now() - orderPlacedAt;
+    const pct = Math.min(95, Math.round((elapsed / etaMs) * 100)); // cap at 95% — hits 100 only when ready
+    setPrepPct(pct);
+  };
+  tick();
+  const interval = setInterval(tick, 10000); // update every 10s
+  return () => clearInterval(interval);
+}, [orderPlacedAt, orderEta]);
 
 // ── RESTORE placedOrders FROM SERVER on mount (multi-device safe) ──
 useEffect(() => {
@@ -3058,6 +3088,32 @@ useEffect(() => {
       // Silently fall back to localStorage (already handled above)
     });
 }, [tenantId, tableNumber, isCounterScan]);
+
+useEffect(() => {
+  if (!allMenuItems.length) return;
+  const cartIds = Object.keys(cart).map(k => k.split('-')[0]);
+  if (cartIds.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
+
+  const cartItems = cartIds.map(id => allMenuItems.find(m => m._id === id || m._id?.toString() === id)).filter(Boolean);
+  const hasMain = cartItems.some(i => {
+    const cat = (i.categoryId || '').toLowerCase();
+    return cat.includes('main') || cat.includes('curry') || cat.includes('rice') || cat.includes('roti') || cat.includes('biryani');
+  });
+
+  if (!hasMain) { setComboSuggestions([]); setShowComboStrip(false); return; }
+
+  // Find complementary items: drinks + desserts not already in cart
+  const suggestions = allMenuItems.filter(m => {
+    if (!m.isAvailable) return false;
+    if (cartIds.includes(m._id) || cartIds.includes(m._id?.toString())) return false;
+    const cat = (m.categoryId || '').toLowerCase();
+    return cat.includes('drink') || cat.includes('dessert') || cat.includes('sweet') || cat.includes('juice') || cat.includes('beverage') || cat.includes('ice');
+  }).slice(0, 6);
+
+  setComboSuggestions(suggestions);
+  setShowComboStrip(suggestions.length > 0);
+}, [cart, allMenuItems]);
+
 // REPLACE with:
 // ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -5673,25 +5729,40 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           </div>
 
           {/* Progress mini bar */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: '3px' }}>
-              {['pending','ready','served'].map((s, i) => {
-                const stepIdx = ['pending','ready','served'].indexOf(activeStatus);
-                return (
-                  <div key={s} style={{
-                    width: i <= stepIdx ? '14px' : '5px', height: '5px',
-                    borderRadius: '2.5px', transition: 'all 0.4s',
-                    background: i <= stepIdx
-                      ? (s === 'ready' || activeStatus === 'ready' ? 'rgba(109,186,150,0.7)' : 'rgba(211,191,162,0.5)')
-                      : 'rgba(255,255,255,0.07)'
-                  }} />
-                );
-              })}
-            </div>
-            <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.3px' }}>
-              {language === 'mr' ? 'तपशील पहा' : 'View details'}
-            </div>
-          </div>
+<div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px', flexShrink:0, minWidth:'70px' }}>
+  {hasPending && orderEta?.etaMinutes ? (
+    <>
+      <div style={{ width:'100%', height:'4px', background:'rgba(255,255,255,0.07)', borderRadius:'2px', overflow:'hidden' }}>
+        <motion.div
+          animate={{ width:`${prepPct}%` }}
+          transition={{ duration:1, ease:'easeOut' }}
+          style={{
+            height:'100%', borderRadius:'2px',
+            background:'linear-gradient(90deg,rgba(211,191,162,0.3),rgba(211,191,162,0.7))'
+          }}
+        />
+      </div>
+      <div style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.35)', fontWeight:'700', fontFamily:'monospace' }}>
+        {prepPct}% · ~{Math.max(0, orderEta.etaMinutes - Math.round((Date.now()-orderPlacedAt)/60000))}m left
+      </div>
+    </>
+  ) : (
+    <div style={{ display:'flex', gap:'3px' }}>
+      {['pending','ready','served'].map((s,i) => {
+        const stepIdx = ['pending','ready','served'].indexOf(activeStatus);
+        return (
+          <div key={s} style={{
+            width:i<=stepIdx?'14px':'5px', height:'5px', borderRadius:'2.5px', transition:'all 0.4s',
+            background:i<=stepIdx?(s==='ready'||activeStatus==='ready'?'rgba(109,186,150,0.7)':'rgba(211,191,162,0.5)'):'rgba(255,255,255,0.07)'
+          }}/>
+        );
+      })}
+    </div>
+  )}
+  <div style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)', fontWeight:'700', letterSpacing:'0.3px' }}>
+    {language==='mr'?'तपशील पहा':'View details'}
+  </div>
+</div>
         </div>
       </motion.div>
 
@@ -7294,6 +7365,81 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </div>
 
       <div style={styles.drawerFooter}>
+{showComboStrip && comboSuggestions.length > 0 && (
+  <motion.div
+    initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
+    exit={{ opacity:0, height:0 }}
+    style={{ margin:'0 0 10px', overflow:'hidden' }}
+  >
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+      <div style={{ fontSize:'0.5rem', fontWeight:'900', color:'rgba(201,168,76,0.45)', letterSpacing:'1.5px', display:'flex', alignItems:'center', gap:'5px' }}>
+        <Sparkles size={9} color="rgba(201,168,76,0.4)" strokeWidth={1.5}/>
+        {language==='mr' ? 'यांसोबत छान लागेल' : 'GOES WELL WITH YOUR ORDER'}
+      </div>
+      <button onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.2)', cursor:'pointer', padding:0, display:'flex' }}>
+        <X size={11}/>
+      </button>
+    </div>
+    <div style={{ display:'flex', gap:'8px', overflowX:'auto', paddingBottom:'4px' }} className="no-scrollbar">
+      {comboSuggestions.map(item => {
+        const isMulti = !!(item.priceHalf || item.priceFull);
+        const price = isMulti ? (item.priceHalf || item.price) : item.price;
+        const portion = isMulti ? 'Half' : 'Single';
+        const key = `${item._id}-${portion}`;
+        const inCart = cart[key] > 0;
+        return (
+          <motion.button key={item._id} whileTap={{ scale:0.94 }}
+            onClick={() => {
+              if (inCart) return;
+              setCart(prev => ({ ...prev, [key]: 1 }));
+              triggerAlert(language==='mr' ? `${item.name} जोडले` : `${item.name} added`, 'success');
+            }}
+            style={{
+              flexShrink:0, padding:'8px 12px', borderRadius:'12px', border:'none', cursor:'pointer',
+              background: inCart ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.03)',
+              border:`1px solid ${inCart ? 'rgba(201,168,76,0.3)' : 'rgba(255,255,255,0.07)'}`,
+              display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'3px',
+              minWidth:'100px', maxWidth:'130px', fontFamily:'Poppins, sans-serif'
+            }}
+          >
+            <div style={{ fontSize:'0.65rem', fontWeight:'700', color:inCart?'#c9a84c':'rgba(255,255,255,0.55)', textAlign:'left', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'110px' }}>
+              {item.name}
+            </div>
+            <div style={{ fontSize:'0.58rem', fontWeight:'900', color:'rgba(201,168,76,0.6)', fontFamily:'monospace' }}>
+              ₹{price}
+            </div>
+            {inCart && (
+              <div style={{ fontSize:'0.46rem', fontWeight:'900', color:'#c9a84c', letterSpacing:'0.5px' }}>ADDED</div>
+            )}
+          </motion.button>
+        );
+      })}
+    </div>
+  </motion.div>
+)}
+
+    {cartUnavailableCheck.length > 0 && (
+  <motion.div
+    initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+    style={{
+      margin:'0 16px 10px', padding:'10px 14px', borderRadius:'12px',
+      background:'rgba(186,117,23,0.08)', border:'1px solid rgba(186,117,23,0.25)',
+      borderLeft:'3px solid rgba(186,117,23,0.6)',
+      display:'flex', alignItems:'flex-start', gap:'10px'
+    }}
+  >
+    <AlertTriangle size={14} color="#BA7517" strokeWidth={1.8} style={{ flexShrink:0, marginTop:'1px' }}/>
+    <div>
+      <div style={{ fontSize:'0.65rem', fontWeight:'800', color:'#BA7517', marginBottom:'2px' }}>
+        {language==='mr' ? 'काही वस्तू आता उपलब्ध नाहीत' : 'Some items are no longer available'}
+      </div>
+      <div style={{ fontSize:'0.58rem', color:'rgba(186,117,23,0.7)', lineHeight:1.4 }}>
+        {cartUnavailableCheck.join(', ')} — {language==='mr' ? 'कृपया काढा' : 'please remove before ordering'}
+      </div>
+    </div>
+  </motion.div>
+)}
+
         {totalItemsInCart > 0 && (
 <button
   style={{
