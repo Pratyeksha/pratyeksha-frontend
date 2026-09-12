@@ -7,7 +7,7 @@ import {
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,ChevronDown ,
   MessageSquare, StickyNote, Flame, Globe2, Timer, Search, BellRing, 
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
-  Clock3, Users, ChevronLeft,
+  Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag
 } from 'lucide-react'; 
@@ -152,6 +152,7 @@ const preserveScroll = (fn) => {
 
 const [searchResultCategory, setSearchResultCategory] = useState(null);
 // When user selects a search result from a different category, we jump to it
+const [reorderConfirmPending, setReorderConfirmPending] = useState(false);
 
 const [waitlistEntry, setWaitlistEntry] = useState(null);
 const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
@@ -337,13 +338,6 @@ waitlistSocket.on('announcement_updated', (data) => {
 waitlistSocket.on('announcement_ended', () => {
   setActiveAnnouncement(null);
 });
-waitlistSocket.on('announcement_updated', (data) => {
-  setActiveAnnouncement(data.announcement);
-  setAnnouncementDismissed(false);
-});
-waitlistSocket.on('announcement_ended', () => {
-  setActiveAnnouncement(null);
-});
 // ── Operator manual push → browser notification on customer device ──
 waitlistSocket.on('operator_notify', (data) => {
   // Show browser / push notification
@@ -463,12 +457,11 @@ useEffect(() => {
       if (!r.data?.active) return;
       const ann = r.data.announcement;
       setActiveAnnouncement(ann);
-      // Only increment viewCount once per browser session per announcement
+      // Only count as a view once per browser session per announcement
       const seenKey = `ann_seen_${ann._id}`;
       if (!sessionStorage.getItem(seenKey)) {
         sessionStorage.setItem(seenKey, '1');
-        // Server already increments on fetch — no extra call needed
-        // (the GET /active route does $inc: { viewCount: 1 } server-side)
+        axios.post(`${BASE_URL}/announcements/${ann._id}/view`).catch(() => {});
       }
     })
     .catch(() => {});
@@ -1253,6 +1246,19 @@ socket.on('menu_bulk_updated', (updatedItems) => {
   });
 });
 
+socket.on('menu_item_deleted', ({ itemId }) => {
+  if (!itemId) return;
+  setAllMenuItems(prev => prev.filter(i => i._id !== itemId && i._id?.toString() !== itemId.toString()));
+  // Also remove from cart if customer had added this item
+  setCart(prev => {
+    const updated = { ...prev };
+    // Cart keys are `${_id}-${portion}` — remove any starting with this itemId
+    Object.keys(updated).forEach(key => {
+      if (key.startsWith(itemId)) delete updated[key];
+    });
+    return updated;
+  });
+});
 // ── Live extra item stock/availability updates ──
 socket.on('extra_item_updated', (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -1278,11 +1284,17 @@ socket.on('extra_item_out_of_stock', ({ itemId }) => {
 });
 
 socket.on('announcement_updated', (data) => {
-  if (data?.announcement) {
-    setActiveAnnouncement(data.announcement);
-    setAnnouncementDismissed(false);
+  if (!data?.announcement) return;
+  const ann = data.announcement;
+  setActiveAnnouncement(ann);
+  setAnnouncementDismissed(false);
+  const seenKey = `ann_seen_${ann._id}`;
+  if (!sessionStorage.getItem(seenKey)) {
+    sessionStorage.setItem(seenKey, '1');
+    axios.post(`${BASE_URL}/announcements/${ann._id}/view`).catch(() => {});
   }
 });
+
 socket.on('announcement_ended', () => {
   setActiveAnnouncement(null);
 });
@@ -1307,6 +1319,7 @@ return () => {
   socket.off("order_status_updated");
   socket.off('announcement_updated');
 socket.off('announcement_ended');
+socket.off('menu_item_deleted');
   if (window.speechSynthesis) window.speechSynthesis.cancel(); // ← ADD
   socket.disconnect();
 };
@@ -2337,8 +2350,10 @@ if (unavailableItems.length > 0) {
   }
 };
  
-  const placeWaitlistOrder = async () => {
+const placeWaitlistOrder = async () => {
   if (!customerInfo.name.trim()) return;
+  if (isPlacingOrder) return;          // ← ADD: prevent double-submit
+  setIsPlacingOrder(true);             // ← ADD
   const summary = {};
   Object.entries(cart).forEach(([key, qty]) => {
     const isMulti = key.includes('-');
@@ -2453,8 +2468,10 @@ askNotificationPermission();
       } catch (e) { console.warn('Push subscription failed:', e); }
     }
   } catch (err) {
-    console.error(err);
+    console.error('Waitlist order error:', err);
     triggerAlert('orderError', 'error');
+  } finally {
+    setIsPlacingOrder(false);           // ← ADD
   }
 };
 
@@ -2472,10 +2489,11 @@ const placeReservation = async () => {
     const isMulti = key.includes('-');
     const id = isMulti ? key.split('-')[0] : key;
     const portion = isMulti ? key.split('-')[1] : 'Single';
-    const item = allMenuItems.find(i => i._id === id);
-    const summaryKey = `${id}-${portion}`;
-    if (!summary[summaryKey]) {
-      const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+const item = allMenuItems.find(i => i._id === id || i._id?.toString() === id);
+if (!item) return; // ← ADD: skip deleted/missing items
+const summaryKey = `${id}-${portion}`;
+if (!summary[summaryKey]) {
+  const unitPrice = portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price);
       summary[summaryKey] = { menuItemId: item._id, name: item.name, quantity: 0, portion, pricePerUnit: unitPrice, subtotal: 0, price: unitPrice };
     }
     summary[summaryKey].quantity += qty;
@@ -7909,42 +7927,105 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
               )}
 
               {/* Last Order list */}
-              {welcomeCard.lastOrderItems?.length > 0 && (
-                <div style={{
-                  padding: '11px 12px',
-                  background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
-                  borderRadius: '13px', minWidth: 0
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '9px' }}>
-                    <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <ReceiptText size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-                      {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
-                    </div>
-                    {welcomeCard.lastOrderDate && (
-                      <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.14)', fontWeight: '600' }}>
-                        {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    {welcomeCard.lastOrderItems.slice(0, 3).map((item, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.56rem', fontWeight: '900', color: 'rgba(211,191,162,0.22)', fontFamily: 'monospace', minWidth: '16px', flexShrink: 0 }}>
-                          ×{item.quantity}
-                        </span>
-                        <span style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.32)', fontWeight: '500', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.name}
-                        </span>
-                        {item.subtotal > 0 && (
-                          <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0 }}>
-                            ₹{item.subtotal}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+{welcomeCard.lastOrderItems?.length > 0 && (
+  <div style={{
+    padding: '11px 12px', background: '#0d0d0d',
+    border: '1px solid rgba(211,191,162,0.07)',
+    borderRadius: '13px', minWidth: 0
+  }}>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'9px' }}>
+      <div style={{ fontSize:'0.44rem', color:'rgba(211,191,162,0.22)', fontWeight:'900', letterSpacing:'2px', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'5px' }}>
+        <ReceiptText size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
+        {language === 'mr' ? 'शेवटची ऑर्डर' : 'Last Order'}
+      </div>
+      {welcomeCard.lastOrderDate && (
+        <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.14)', fontWeight:'600' }}>
+          {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}
+        </div>
+      )}
+    </div>
+
+    {/* Item list */}
+    <div style={{ display:'flex', flexDirection:'column', gap:'5px', marginBottom:'10px' }}>
+      {welcomeCard.lastOrderItems.slice(0,3).map((item,i) => (
+        <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+          <span style={{ fontSize:'0.56rem', fontWeight:'900', color:'rgba(211,191,162,0.22)', fontFamily:'monospace', minWidth:'16px', flexShrink:0 }}>×{item.quantity}</span>
+          <span style={{ fontSize:'0.64rem', color:'rgba(255,255,255,0.32)', fontWeight:'500', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.name}</span>
+          {item.subtotal > 0 && (
+            <span style={{ fontSize:'0.58rem', color:'rgba(211,191,162,0.28)', fontFamily:'monospace', flexShrink:0 }}>₹{item.subtotal}</span>
+          )}
+        </div>
+      ))}
+      {welcomeCard.lastOrderItems.length > 3 && (
+        <div style={{ fontSize:'0.52rem', color:'rgba(255,255,255,0.14)', fontWeight:'600' }}>
+          +{welcomeCard.lastOrderItems.length - 3} {language==='mr'?'अधिक वस्तू':'more items'}
+        </div>
+      )}
+    </div>
+
+    {/* Order Again button */}
+    {(() => {
+      // Check how many items from last order are still available
+      const available = (welcomeCard.lastOrderItems || []).filter(lastItem => {
+        const found = allMenuItems.find(m =>
+          m.name?.toLowerCase() === lastItem.name?.toLowerCase() && m.isAvailable
+        );
+        return !!found;
+      });
+      if (available.length === 0) return null;
+
+      return (
+        <motion.button
+          whileTap={{ scale: 0.96 }}
+          onClick={() => {
+            if (reorderConfirmPending) {
+              // Confirmed — add to cart
+              let addedCount = 0;
+              available.forEach(lastItem => {
+                const menuItem = allMenuItems.find(m =>
+                  m.name?.toLowerCase() === lastItem.name?.toLowerCase() && m.isAvailable
+                );
+                if (!menuItem) return;
+                const portion = lastItem.portion || 'Single';
+                const key = `${menuItem._id}-${portion}`;
+                setCart(prev => ({ ...prev, [key]: (prev[key] || 0) + (Number(lastItem.quantity) || 1) }));
+                addedCount++;
+              });
+              setReorderConfirmPending(false);
+              triggerAlert(
+                language === 'mr'
+                  ? `${addedCount} वस्तू कार्टमध्ये जोडल्या`
+                  : `${addedCount} item${addedCount>1?'s':''} added to cart`,
+                'success'
+              );
+            } else {
+              setReorderConfirmPending(true);
+              // Auto-reset after 3 seconds if not confirmed
+              setTimeout(() => setReorderConfirmPending(false), 3000);
+            }
+          }}
+          style={{
+            width:'100%', padding:'9px 12px', borderRadius:'10px', border:'none',
+            background: reorderConfirmPending
+              ? 'linear-gradient(135deg,rgba(201,168,76,0.25),rgba(201,168,76,0.15))'
+              : 'rgba(211,191,162,0.06)',
+            border: `1px solid ${reorderConfirmPending ? 'rgba(201,168,76,0.45)' : 'rgba(211,191,162,0.1)'}`,
+            color: reorderConfirmPending ? '#c9a84c' : 'rgba(211,191,162,0.45)',
+            fontSize:'0.62rem', fontWeight:'900', cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:'6px',
+            transition:'all 0.2s', letterSpacing:'0.5px',
+            fontFamily:'Poppins, sans-serif'
+          }}
+        >
+          <RefreshCw size={11} strokeWidth={2.2}/>
+          {reorderConfirmPending
+            ? (language === 'mr' ? 'खात्री करा — पुन्हा टॅप करा' : 'Tap again to confirm')
+            : (language === 'mr' ? 'हे सर्व पुन्हा मागवा' : `Order Again (${available.length} item${available.length>1?'s':''})`)}
+        </motion.button>
+      );
+    })()}
+  </div>
+)}
             </div>
           )}
 

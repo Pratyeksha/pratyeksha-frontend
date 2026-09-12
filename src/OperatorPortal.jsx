@@ -419,6 +419,7 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   });
 
+const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'flat'
 
   const [inventoryLoading, setInventoryLoading] = useState(false);
   // ─────────────────────────────────────────────────────
@@ -1617,10 +1618,14 @@ acc.push({
       return acc;
     }, []);
 
-    aggregated.forEach(item => {
-  item.pricePerUnit = item.quantity > 0
-    ? Math.round((item.subtotal / item.quantity) * 100) / 100
-    : 0;
+aggregated.forEach(item => {
+  // Prefer stored pricePerUnit from order item (exact selling price)
+  // Fall back to derived value only if not available
+  if (!item.pricePerUnit || item.pricePerUnit === 0) {
+    item.pricePerUnit = item.quantity > 0
+      ? Math.round((item.subtotal / item.quantity) * 100) / 100
+      : 0;
+  }
 });
 
     // Use tenant-stored cgst/sgst percentages
@@ -1631,7 +1636,7 @@ acc.push({
     const subtotal   = aggregated.reduce((a, i) => a + i.subtotal, 0);
     const cgst       = Math.round(subtotal * cgstPct * 100) / 100;
     const sgst       = Math.round(subtotal * sgstPct * 100) / 100;
-    const grandTotal = subtotal + cgst + sgst;
+const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
 
     setTableBill({
       items:         aggregated,
@@ -1920,8 +1925,9 @@ const handleFinalSettle = async () => {
     if (isSettling) return;
     setIsSettling(true);
     
-const discountFactor  = 1 - (discount / 100);
-const discountedSub   = Math.round(tableBill.subtotal * discountFactor * 100) / 100;
+const discountedSub = discountType === 'flat'
+  ? Math.round(Math.max(0, tableBill.subtotal - Number(discount)) * 100) / 100
+  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * 100) / 100;
 const cgstPct         = parseFloat(tableBill.cgstPct) / 100;  // e.g. 2.5% → 0.025
 const sgstPct         = parseFloat(tableBill.sgstPct) / 100;
 const discountedCgst  = Math.round(discountedSub * cgstPct * 100) / 100;
@@ -7141,23 +7147,42 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       </p>
     </div>
 
-    {/* ── DISCOUNT ── */}
-    <div style={{borderTop:'1px dashed #ddd', marginTop:'12px', paddingTop:'12px'}}>
-      <div style={styles.receiptRow}>
-        <span style={{fontWeight:'900'}}>DISCOUNT %</span>
-        <input type="number" value={discount}
-onChange={e => {
-  const v = parseFloat(e.target.value);
-  setDiscount(isNaN(v) ? 0 : Math.min(100, Math.max(0, v)));
-}}          style={styles.discountInput}/>
+{/* ── DISCOUNT ── */}
+<div style={{borderTop:'1px dashed #ddd', marginTop:'12px', paddingTop:'12px'}}>
+  <div style={styles.receiptRow}>
+    <span style={{fontWeight:'900'}}>DISCOUNT</span>
+    <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
+      {/* Toggle percent / flat */}
+      <div style={{display:'flex', background:'#f0f0f0', borderRadius:'6px', padding:'2px', gap:'2px'}}>
+        {['percent','flat'].map(t => (
+          <button key={t} onClick={() => setDiscountType(t)} style={{
+            padding:'3px 8px', borderRadius:'4px', fontSize:'0.6rem',
+            fontWeight:'900', border:'none', cursor:'pointer',
+            background: discountType === t ? '#222' : 'transparent',
+            color: discountType === t ? '#fff' : '#888'
+          }}>{t === 'percent' ? '%' : '₹'}</button>
+        ))}
       </div>
-      {discount > 0 && (
-        <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
-          <span>Discount amount</span>
-<span>- ₹{(tableBill.subtotal * (discount / 100)).toFixed(2)}</span>
-  </div>
-      )}
+      <input type="number" value={discount}
+        onChange={e => {
+          const v = parseFloat(e.target.value);
+          setDiscount(isNaN(v) ? 0 : Math.max(0, v));
+        }}
+        placeholder={discountType === 'percent' ? '0-100' : '0'}
+        style={{...styles.discountInput, width:'70px'}}/>
     </div>
+  </div>
+  {discount > 0 && (
+    <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
+      <span>Discount deducted</span>
+      <span>- ₹{
+        discountType === 'percent'
+          ? (tableBill.subtotal * (discount / 100)).toFixed(2)
+          : Number(discount).toFixed(2)
+      }</span>
+    </div>
+  )}
+</div>
 
     {/* ── PAYMENT MODE ── */}
     <div style={{margin:'16px 0'}}>
