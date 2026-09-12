@@ -72,7 +72,6 @@ const KitchenView = () => {
 
   /* ── state ── */
   const [orders,               setOrders]               = useState([]);
-  const [waiterCalls,          setWaiterCalls]          = useState([]);
   const [recallQueue,          setRecallQueue]          = useState([]);
   const [isAggregateView,      setIsAggregateView]      = useState(false);
   const [isNonVegMode,         setIsNonVegMode]         = useState(false);
@@ -104,7 +103,6 @@ const KitchenView = () => {
   const [itemFinalTimes,       setItemFinalTimes]       = useState({});
   const [searchQuery,          setSearchQuery]          = useState('');
   const [showSearch,           setShowSearch]           = useState(false);
-  const [waiterCallTimer,      setWaiterCallTimer]      = useState({});
   const [tenantName,           setTenantName]           = useState('');
 
   /* ── refs ── */
@@ -275,25 +273,10 @@ const KitchenView = () => {
       fetchActiveOrders();
     });
 
-    socket.on('waiter_called', data => {
-      if (data.tenantId === tenantId) {
-        const id = Date.now();
-        setWaiterCalls(prev => [{ id, ...data }, ...prev]);
-        // auto-dismiss after 60s
-        setTimeout(() => setWaiterCalls(prev => prev.filter(c => c.id !== id)), 60000);
-      }
-    });
 
-    socket.on('new_waiter_request', data => {
-      if (data.tenantId === tenantId) {
-        const id = Date.now();
-        setWaiterCalls(prev => [{ id, ...data }, ...prev]);
-        setTimeout(() => setWaiterCalls(prev => prev.filter(c => c.id !== id)), 60000);
-      }
-    });
 
     return () => {
-      ['new_order','kds_item_cross_sync','order_modification_detected','waiter_called','new_waiter_request']
+      ['new_order','kds_item_cross_sync','order_modification_detected']
         .forEach(ev => socket.off(ev));
       socket.disconnect();
       window.removeEventListener('online',  onOnline);
@@ -420,7 +403,7 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
       const isP = otype === 'parcel';
       const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? ` (${i.portion})` : '';
       const key = `${i.name}${portion}__${isP ? 'P' : 'D'}`;
-      totals[key] = (totals[key]||0) + i.quantity;
+totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
     }));
     return totals;
   }, [orders, checkedItemsGlobal]);
@@ -429,7 +412,7 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
     const m = {};
     filteredOrders.forEach(o => o.items.filter(i => !i.isExtraItem && i.extraItemId == null).forEach((i,idx) => {
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
-      m[i.name] = (m[i.name]||0) + i.quantity;
+m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
     }));
     return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,7);
   }, [filteredOrders, checkedItemsGlobal]);
@@ -852,7 +835,6 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
                   { label:'TICKETS DISPATCHED', value:completedTicketsCount, sub:'today', big:true },
                   { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
                   { label:'CURRENTLY PENDING',   value:filteredOrders.length, sub:'active tickets', big:true },
-                  { label:'WAITER CALLS',         value:waiterCalls.length,    sub:'pending', big:true },
                 ].map(s => (
                   <div key={s.label} style={{ background:'#0a0a0c', border:'1px solid rgba(211,191,162,0.08)', borderTop:'2px solid rgba(211,191,162,0.15)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
                     <div style={{ fontSize:'0.5rem', fontWeight:900, color:'#2a2a2a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:10 }}>{s.label}</div>
@@ -1224,25 +1206,6 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
           </>
         )}
       </AnimatePresence>
-
-      {/* WAITER CALL TOASTS */}
-      <div style={{ position:'fixed', bottom: isMobile ? 78 : 24, right: isMobile ? 12 : 24, zIndex:2000, display:'flex', flexDirection:'column', gap:9, maxWidth: isMobile ? 'calc(100vw - 24px)' : 370 }}>
-        <AnimatePresence>
-          {waiterCalls.map(call => (
-            <motion.div key={call.id} initial={{ x:200, opacity:0 }} animate={{ x:0, opacity:1 }} exit={{ x:200, opacity:0 }}
-              style={{ background:'#d3bfa2', color:'#0f1013', padding: isMobile ? '12px 15px' : '13px 18px', borderRadius:13, display:'flex', alignItems:'center', gap:12, boxShadow:'0 12px 40px rgba(0,0,0,0.55)' }}>
-              <div style={{ background:'rgba(0,0,0,0.1)', padding:8, borderRadius:8, flexShrink:0 }}>
-                <BellRing size={16} color="#0f1013" />
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:900, fontSize: isMobile ? '0.82rem' : '0.88rem', letterSpacing:'0.3px' }}>TABLE {call.tableNumber}</div>
-                <div style={{ fontSize:'0.62rem', opacity:0.55, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' }}>{call.reason || call.serviceRequest || 'Service required'}</div>
-              </div>
-              <X size={16} style={{ cursor:'pointer', opacity:0.45, flexShrink:0 }} onClick={() => setWaiterCalls(prev => prev.filter(c => c.id !== call.id))} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');

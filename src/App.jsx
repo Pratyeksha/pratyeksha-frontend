@@ -2277,19 +2277,21 @@ if (unavailableItems.length > 0) {
     const orderItems = Object.values(summary);
     const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
  
-    const payload = {
-      tenantId,
-      tableNumber,
-      items:       orderItems,
-billDetails: {
-  itemsTotal: total,
-  taxAmount: total * ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100,
-  grandTotal: Math.round(total * (1 + ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100))
-},
-      status:        "pending",
-      paymentStatus: "unpaid",
-      createdAt:     new Date().toISOString()
-    };
+  const taxRate = ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100;
+  const payload = {
+    tenantId,
+    tableNumber,
+    source: isCounterScan ? 'counter-pickup' : 'direct',
+    items: orderItems,
+    billDetails: {
+      itemsTotal: total,
+      taxAmount:  Math.round(total * taxRate),
+      grandTotal: Math.round(total * (1 + taxRate))
+    },
+    status: "pending",
+    paymentStatus: "unpaid",
+    createdAt: new Date().toISOString()
+  };
  
     const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
     if (orderRes.data?._id) {

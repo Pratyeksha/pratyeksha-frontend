@@ -1584,8 +1584,22 @@ const generateBill = async (id) => {
     if (tenantRes.data) setTenantConfig(tenantRes.data);
     const freshTenant = tenantRes.data || tenantConfig;
 
-    const rawItems = res.data.flatMap(o => o.items);
-    if (!rawItems.length) { setTableBill(null); return; }
+const rawItems = res.data.flatMap(o => o.items);
+if (!rawItems.length) {
+  // Check if there are pending (not-yet-ready) orders for this table
+  const pendingForTable = orders.filter(o =>
+    o.tableNumber?.toString() === id?.toString() &&
+    o.status === 'pending'
+  );
+  if (pendingForTable.length > 0) {
+    showNotif('Orders are in kitchen — wait for KDS to mark ready before billing', 'error');
+  } else {
+    showNotif('No active orders found for this table', 'error');
+  }
+  setTableBill(null);
+  return;
+}
+ 
 
     const aggregated = rawItems.reduce((acc, item) => {
       const portionKey = item.portion || 'Single';
@@ -7132,13 +7146,16 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <div style={styles.receiptRow}>
         <span style={{fontWeight:'900'}}>DISCOUNT %</span>
         <input type="number" value={discount}
-onChange={e => setDiscount(Number(e.target.value) || 0)}
-          style={styles.discountInput}/>
+onChange={e => {
+  const v = parseFloat(e.target.value);
+  setDiscount(isNaN(v) ? 0 : Math.min(100, Math.max(0, v)));
+}}          style={styles.discountInput}/>
       </div>
       {discount > 0 && (
         <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
           <span>Discount amount</span>
-<span>- ₹{(tableBill.subtotal * (discount / 100)).toFixed(2)}</span>        </div>
+<span>- ₹{(tableBill.subtotal * (discount / 100)).toFixed(2)}</span>
+  </div>
       )}
     </div>
 
