@@ -1783,9 +1783,10 @@ const generateOnlineBill = async () => {
 };
 
 const settleBill = () => {
-    if (isSettling) return; // Guard here too
-const discountFactor = 1 - (discount / 100);
-const discountedSub  = Math.round(tableBill.subtotal * discountFactor * 100) / 100;
+    if (isSettling) return;
+const discountedSub = discountType === 'flat'
+  ? Math.round(Math.max(0, tableBill.subtotal - Number(discount)) * 100) / 100
+  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * 100) / 100;
 const cgstPct        = parseFloat(tableBill.cgstPct) / 100;
 const sgstPct        = parseFloat(tableBill.sgstPct) / 100;
 const finalAmt       = Math.round(discountedSub + discountedSub * cgstPct + discountedSub * sgstPct);
@@ -4993,7 +4994,15 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                         onMouseEnter={e => e.currentTarget.style.opacity = '0.85'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                         <TableProperties size={11} /> ASSIGN TABLE
                       </button>
-                      <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: `Mark as no-show and remove from queue.`, onConfirm: async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}`, { status: 'no-show' }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
+                      <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: `Mark as no-show and remove from queue.`, onConfirm: async () => {
+  try {
+    await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+    fetchCounterQueue();
+    showNotif(`${entry.customerName} — marked no-show`);
+  } catch (err) {
+    showNotif(err.response?.data?.error || 'Failed to mark no-show', 'error');
+  }
+ } })}
                         style={{ width: '36px', height: '36px', borderRadius: '9px', background: 'transparent', border: '1px solid #1a1a1a', color: '#2a2a2a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}>
