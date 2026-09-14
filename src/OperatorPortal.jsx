@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UtensilsCrossed, ReceiptIndianRupee, BarChart3,ClipboardList, FileClock, SquarePen, Boxes, ClipboardPenLine,
-FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus, ArrowUpRight,UserRound ,EyeOff ,
+FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus, ArrowUpRight, ArrowDownRight,UserRound ,EyeOff ,
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
@@ -721,9 +721,8 @@ fetchAuditLogs();
       socket.emit("join_restaurant", tenantId);
       fetchInitialData();
       fetchManagementData();
+      fetchTurnTimeData();
 
-      socket.on("whatsapp_qr", (qr) => { setQrCode(qr); setIsBotReady(false); });
-      socket.on("whatsapp_ready", () => { setIsBotReady(true); setQrCode(null); showNotif("System Linked", "success"); });
       socket.on("new_order", (order) => { 
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{}); 
         showNotif(`Order Update: Table ${order.tableNumber}`); 
@@ -1545,24 +1544,13 @@ const tableOccupancyBreakdown = useMemo(() => {
     occupancyRate: Math.round((breakdown.filter(s => s !== 'free').length / total) * 100)
   };
 }, [occupiedTables, waiterRequests, reservationEntries, tableCount]);
-const avgTurnTimeToday = useMemo(() => {
-  const istToday = new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
-  const todaySettled = orders.filter(o =>
-    o.status === 'settled' &&
-    o.billDetails?.isSettlementAnchor === true &&
-    (o.billDetails?.headerDateStringIST || '').startsWith(istToday)
-  );
-  if (todaySettled.length < 2) return null;
-
-  const turns = todaySettled.map(o => {
-    const first = new Date(o.createdAt).getTime();
-    const settled = new Date(o.updatedAt || o.createdAt).getTime();
-    return (settled - first) / 60000; // minutes
-  }).filter(t => t > 0 && t < 300); // ignore < 0 or > 5h (data errors)
-
-  if (!turns.length) return null;
-  return Math.round(turns.reduce((a, b) => a + b, 0) / turns.length);
-}, [orders]);
+const [turnTimeData, setTurnTimeData] = useState(null); // { today, yesterday, last7Days }
+const fetchTurnTimeData = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/admin/analytics/table-turn-time/${tenantId}`);
+    setTurnTimeData(res.data);
+  } catch { setTurnTimeData(null); }
+}, [tenantId]);
 
   // ─────────────────────────────────────────────────────
   // ACTIONS
@@ -2028,9 +2016,12 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
                 setSelectedTable(null);
                 setPaymentModes({ cash: 0, upi: 0, card: 0 });
                 setActivePaymentType('full');
+                setDiscount(0);
+                setDiscountReason('');
                 await fetchInitialData();
                 await fetchAnalytics();
                 fetchManagementData();
+                fetchTurnTimeData();
             }, 1500);
         }
     } catch (err) {
@@ -4618,21 +4609,36 @@ const totalRevenueAllTime = canonicalMonthRevenue;
       </div>
     ))}
   </div>
-  {avgTurnTimeToday !== null && (
+  {turnTimeData?.today?.avg != null && (
   <div style={{
     marginTop:'12px', paddingTop:'12px',
     borderTop:'1px solid #111',
     display:'flex', alignItems:'center', gap:'10px'
   }}>
     <Timer size={13} color="#8a704d" strokeWidth={1.5}/>
-    <div>
+    <div style={{ flex: 1 }}>
       <span style={{ fontSize:'0.68rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace' }}>
-        ~{avgTurnTimeToday}m
+        ~{turnTimeData.today.avg}m
       </span>
       <span style={{ fontSize:'0.58rem', color:'#444', fontWeight:'600', marginLeft:'6px' }}>
         avg table turn time today
       </span>
     </div>
+    {turnTimeData.yesterday?.avg != null && (() => {
+      const diff = turnTimeData.today.avg - turnTimeData.yesterday.avg;
+      const faster = diff < 0;
+      return (
+        <div title={`Yesterday: ~${turnTimeData.yesterday.avg}m`} style={{ display:'flex', alignItems:'center', gap:'3px', fontSize:'0.56rem', fontWeight:'900', color: faster ? '#4a9e6f' : diff > 0 ? '#BA7517' : '#555' }}>
+          {diff !== 0 && (faster ? <ArrowDownRight size={11}/> : <ArrowUpRight size={11}/>)}
+          {diff === 0 ? 'same as yesterday' : `${Math.abs(diff)}m ${faster ? 'faster' : 'slower'} vs yday`}
+        </div>
+      );
+    })()}
+  </div>
+)}
+{turnTimeData?.last7Days?.avg != null && (
+  <div style={{ marginTop:'4px', fontSize:'0.5rem', color:'#333', fontWeight:'700', paddingLeft:'23px' }}>
+    7-day average: ~{turnTimeData.last7Days.avg}m ({turnTimeData.last7Days.samples} tables)
   </div>
 )}
 

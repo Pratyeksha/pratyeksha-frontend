@@ -10,7 +10,7 @@ import {
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
-  Sun, Moon, ArrowUp
+  Sun, Moon, ArrowUp, WifiOff
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -68,6 +68,24 @@ const [sessionToken] = useState(() => {
 const [orderPlacedAt, setOrderPlacedAt] = useState(null);
 const [prepPct, setPrepPct] = useState(0);
 const [cartUnavailableItems, setCartUnavailableItems] = useState([]);
+const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+const [servingFromCache, setServingFromCache] = useState(false);
+
+// ── OFFLINE MENU BROWSING — register the service worker once, and track
+// online/offline transitions so we can show a subtle "browsing saved menu" note ──
+useEffect(() => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+  const goOnline = () => { setIsOffline(false); setServingFromCache(false); };
+  const goOffline = () => { setIsOffline(true); };
+  window.addEventListener('online', goOnline);
+  window.addEventListener('offline', goOffline);
+  return () => {
+    window.removeEventListener('online', goOnline);
+    window.removeEventListener('offline', goOffline);
+  };
+}, []);
 
   const [activeModel, setActiveModel] = useState(null);
 const [cart, setCart] = useState({});
@@ -1240,8 +1258,14 @@ const fetchMenuContent = async () => {
     setCategoryList(cat.data);
     setAllMenuItems(menuRes.data);
     setExtraItems(extras.data || []);
+    // If the browser reports offline but we still got real data back, it came
+    // from the service worker's menu cache, not a live network round-trip.
+    setServingFromCache(!navigator.onLine);
   } catch (error) {
     console.error("Setup error:", error);
+    // Offline with nothing cached yet for this tenant — surface it plainly
+    // instead of leaving the customer on a blank/loading screen forever.
+    if (!navigator.onLine) setIsOffline(true);
   } finally {
     setIsLoading(false);
   }
@@ -4636,7 +4660,22 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
   return (
     <div style={{...styles.body, backgroundColor: secondaryColor}}>
-      
+
+      {/* OFFLINE / SAVED-MENU NOTICE — persistent, not a timed toast */}
+      <AnimatePresence>
+        {(isOffline || servingFromCache) && (
+          <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, padding: '7px 14px', background: 'rgba(186,117,23,0.94)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}>
+            <WifiOff size={11} color="#0a0a0a" strokeWidth={2.5} />
+            <span style={{ fontSize: '0.62rem', fontWeight: '800', color: '#0a0a0a' }}>
+              {language === 'mr'
+                ? 'ऑफलाइन — जतन केलेला मेनू दाखवत आहे'
+                : "You're offline — showing the saved menu"}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ALERTS */}
       <AnimatePresence>
         {alert.show && (

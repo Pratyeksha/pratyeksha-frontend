@@ -16,6 +16,9 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, createContext
 import { Routes, Route, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
   Users, UserCircle2, Bell, ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
@@ -63,8 +66,18 @@ const GlobalStyles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-    html, body, #root { height: 100%; margin: 0; padding: 0; background: ${T.bg}; }
-    body { overflow-x: hidden; scroll-behavior: smooth; }
+    /* Neutralise Vite/CRA boilerplate CSS (#root max-width, body flex-centering) that
+       traps this app in a centered column and breaks scrolling on overflow. */
+    html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; }
+    body {
+      display: block !important; place-items: unset !important; min-width: 0 !important;
+      min-height: 100vh !important; background: ${T.bg}; overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+    #root {
+      max-width: none !important; width: 100% !important; margin: 0 !important; padding: 0 !important;
+      text-align: left !important; min-height: 100vh !important; display: block !important;
+    }
     .pown * { box-sizing: border-box; }
     .pown {
       font-family: ${T.font}; color: ${T.textHigh}; -webkit-font-smoothing: antialiased;
@@ -163,6 +176,59 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
 
   return { data, loading, error, refetch: () => fetchData(true) };
 }
+
+/* ════════════════════════════════════════════════════════════
+   EXPORT HELPERS — Excel (SheetJS) + branded PDF (jsPDF)
+   Requires: npm i xlsx jspdf jspdf-autotable
+   ════════════════════════════════════════════════════════════ */
+const rupee = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
+const todayLabel = () => new Date(Date.now() + 330 * 60000).toISOString().split('T')[0];
+
+/** sheets: [{ name, rows: [{col: val, ...}, ...] }] */
+function downloadExcel(filename, sheets) {
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(({ name, rows }) => {
+    const ws = XLSX.utils.json_to_sheet(rows && rows.length ? rows : [{ 'No data': '—' }]);
+    const colWidths = Object.keys(rows?.[0] || { 'No data': 1 }).map(k => ({ wch: Math.max(12, k.length + 2) }));
+    ws['!cols'] = colWidths;
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+  });
+  XLSX.writeFile(wb, filename);
+}
+
+/** Branded PDF document shell — Pratyeksha gold-on-dark header, tables via autoTable. */
+function newBrandedPdf(title, subtitle) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  doc.setFillColor(10, 10, 10);
+  doc.rect(0, 0, 210, 26, 'F');
+  doc.setTextColor(211, 191, 162);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+  doc.text('PRATYEKSHA', 14, 12);
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+  doc.text(title, 14, 19);
+  if (subtitle) { doc.setTextColor(160, 160, 160); doc.setFontSize(8); doc.text(subtitle, 14, 24); }
+  doc.setTextColor(20, 20, 20);
+  return doc;
+}
+/** Draws a heading + table, returns the next Y cursor. */
+function pdfSection(doc, startY, heading, head, body) {
+  let y = startY;
+  if (heading) {
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
+    doc.text(heading, 14, y);
+    y += 4;
+  }
+  if (head && body) {
+    autoTable(doc, {
+      startY: y, head: [head], body, theme: 'grid', styles: { fontSize: 8, cellPadding: 2.4 },
+      headStyles: { fillColor: [211, 191, 162], textColor: [10, 10, 10], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [247, 245, 241] }, margin: { left: 14, right: 14 }
+    });
+    y = doc.lastAutoTable.finalY + 9;
+  }
+  return y;
+}
+function savePdf(doc, filename) { doc.save(filename); }
 
 /* ════════════════════════════════════════════════════════════
    UI ATOMS
@@ -356,8 +422,20 @@ const GhostBtn = ({ children, onClick, icon: Icon, style }) => (
     background: 'transparent', color: T.textMed, border: `1px solid ${T.border}`,
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex',
     alignItems: 'center', gap: 7, ...style
-  }}>{Icon && <Icon size={14} />}{children}</button>
+  }}>{Icon && <Icon size={14} className={Icon === Loader2 ? 'pown-pulse' : ''} />}{children}</button>
 );
+
+const Toast = ({ message }) => {
+  if (!message) return null;
+  return (
+    <div className="pown-fade-in" style={{
+      position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 300,
+      background: T.surfaceRaised, border: `1px solid ${T.borderStrong}`, borderRadius: 12,
+      padding: '11px 18px', fontSize: 12.5, fontWeight: 700, color: T.textHigh, boxShadow: T.glowHover,
+      display: 'flex', alignItems: 'center', gap: 8
+    }}><CheckCircle2 size={15} color={T.primary} />{message}</div>
+  );
+};
 
 /* ════════════════════════════════════════════════════════════
    NAVIGATION CONFIG
@@ -1362,14 +1440,50 @@ const AlertsPage = () => {
 const CompliancePage = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month } });
+  const { tenantId } = useOwner();
+  const [toast, setToast] = useState(null);
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
 
-  const exportCsv = () => {
+  const exportInvoiceRegister = () => {
     if (!data) return;
-    const rows = [['Bill No', 'Date', 'Table', 'Amount', 'GST', 'Payment'],
-      ...data.invoiceRegister.map(r => [r.billNo, r.date, r.table, r.amount, r.gst, r.payment])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `invoice-register-${month}.csv`; a.click();
+    downloadExcel(`invoice-register-${month}.xlsx`, [
+      { name: 'Invoice Register', rows: data.invoiceRegister.map(r => ({ 'Bill No': r.billNo, Date: r.date, Table: r.table, Amount: r.amount, GST: r.gst, Payment: r.payment })) }
+    ]);
+    flash('Invoice register downloaded');
+  };
+
+  const exportGstr1 = () => {
+    if (!data) return;
+    // GSTR-1 (outward supplies) — B2C summary derived from settled invoices this month.
+    downloadExcel(`GSTR1-${month}.xlsx`, [
+      { name: 'B2C (Others)', rows: [{ 'Place of Supply': 'Intra-state', 'Rate %': (data.cgstPct + data.sgstPct), 'Taxable Value': data.revenue, 'CGST': data.cgst, 'SGST': data.sgst, 'Total Invoices': data.invoiceRegister.length }] },
+      { name: 'Invoice-wise', rows: data.invoiceRegister.map(r => ({ 'Invoice No': r.billNo, Date: r.date, 'Taxable Value': Math.round(r.amount - r.gst), GST: r.gst, 'Invoice Value': r.amount })) },
+    ]);
+    flash('GSTR-1 data downloaded');
+  };
+
+  const exportGstr3b = () => {
+    if (!data) return;
+    downloadExcel(`GSTR3B-${month}.xlsx`, [
+      { name: 'Summary', rows: [{
+        Month: data.monthLabel, 'Total Taxable Value': Math.round(data.revenue - data.totalGST),
+        'CGST Payable': data.cgst, 'SGST Payable': data.sgst, 'Total Tax Liability': data.totalGST,
+        'FY Turnover So Far': data.fyTurnoverSoFar, Regime: data.regime
+      }] }
+    ]);
+    flash('GSTR-3B data downloaded');
+  };
+
+  const emailToCa = () => {
+    if (!data) return;
+    const subject = encodeURIComponent(`GST Summary — ${data.monthLabel} — ${tenantId}`);
+    const body = encodeURIComponent(
+      `GST summary for ${data.monthLabel}\n\n` +
+      `Revenue: ${rupee(data.revenue)}\nCGST (${data.cgstPct}%): ${rupee(data.cgst)}\nSGST (${data.sgstPct}%): ${rupee(data.sgst)}\n` +
+      `Total GST due: ${rupee(data.totalGST)}\n\nFY turnover so far: ${rupee(data.fyTurnoverSoFar)}\nProjected annual: ${rupee(data.projectedAnnual)}\nRegime: ${data.regime}\n\n` +
+      `(Full invoice register attached separately — download from the Owner App and attach before sending.)`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -1403,10 +1517,13 @@ const CompliancePage = () => {
             <Card>
               <SectionHeading icon={FileSpreadsheet} title="Downloads" />
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <GhostBtn icon={FileSpreadsheet} onClick={exportCsv}>Invoice Register (CSV)</GhostBtn>
-                <GhostBtn icon={FileText}>GSTR-1 Data</GhostBtn>
-                <GhostBtn icon={FileText}>GSTR-3B Data</GhostBtn>
-                <GhostBtn icon={Mail}>Email to CA</GhostBtn>
+                <GhostBtn icon={FileSpreadsheet} onClick={exportInvoiceRegister}>Invoice Register (Excel)</GhostBtn>
+                <GhostBtn icon={FileText} onClick={exportGstr1}>GSTR-1 Data</GhostBtn>
+                <GhostBtn icon={FileText} onClick={exportGstr3b}>GSTR-3B Data</GhostBtn>
+                <GhostBtn icon={Mail} onClick={emailToCa}>Email to CA</GhostBtn>
+              </div>
+              <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 10, lineHeight: 1.6 }}>
+                GSTR exports are computation aids derived from settled invoices — verify against your books before filing.
               </div>
             </Card>
 
@@ -1435,6 +1552,7 @@ const CompliancePage = () => {
           </>
         )}
       </DataBoundary>
+      <Toast message={toast} />
     </div>
   );
 };
@@ -1455,17 +1573,86 @@ const REPORT_TYPES = [
 const ReportsPage = () => {
   const { tenantId } = useOwner();
   const [downloading, setDownloading] = useState(null);
+  const [toast, setToast] = useState(null);
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+
+  const buildDaily = (d) => {
+    const doc = newBrandedPdf('Daily Closing Report', `${d.date} · ${tenantId}`);
+    let y = 34;
+    y = pdfSection(doc, y, 'Summary', ['Metric', 'Value'], [
+      ['Total Revenue', rupee(d.revenue)], ['Orders Settled', d.orderCount],
+      ['Cash in Hand', rupee(d.cashInHand)], ['Wastage Cost', rupee(d.wastageCost)],
+      ['Staff Present', `${d.staffAttendance.present} / ${d.staffAttendance.total}`]
+    ]);
+    y = pdfSection(doc, y, 'Top 5 Dishes', ['Dish', 'Qty Sold', 'Revenue'],
+      d.top5Dishes.map(x => [x.name, x.qty, rupee(x.revenue)]));
+    pdfSection(doc, y, 'Payment Split', ['Mode', 'Amount'], [
+      ['Cash', rupee(d.paymentSplit.cash)], ['UPI', rupee(d.paymentSplit.upi)], ['Card', rupee(d.paymentSplit.card)]
+    ]);
+    savePdf(doc, `daily-closing-${d.date}.pdf`);
+  };
+
+  const buildWeekly = (d) => {
+    const doc = newBrandedPdf('Weekly Summary', `${d.from} to ${d.to} · ${tenantId}`);
+    let y = 34;
+    y = pdfSection(doc, y, 'Overview', ['Metric', 'Value'], [['Total Revenue', rupee(d.totalRevenue)]]);
+    y = pdfSection(doc, y, 'Revenue by Day', ['Date', 'Revenue'], d.revenueByDay.map(x => [x.date, rupee(x.revenue)]));
+    pdfSection(doc, y, 'Top Dishes', ['Dish', 'Qty Sold'], d.topDishes.map(x => [x.name, x.qty]));
+    savePdf(doc, `weekly-summary-${d.to}.pdf`);
+  };
+
+  const buildPnl = (d) => {
+    const doc = newBrandedPdf('Monthly P&L Report', `${d.monthLabel} · ${tenantId}`);
+    let y = 34;
+    y = pdfSection(doc, y, 'Waterfall', ['Line', 'Amount', '% of Revenue'], [
+      ['Gross Revenue', rupee(d.revenue), '100%'],
+      ['Food Cost', `- ${rupee(d.foodCost)}`, `${d.foodCostPct}%`],
+      ['Gross Profit', rupee(d.grossProfit), `${d.grossMarginPct}%`],
+      ['GST Paid', `- ${rupee(d.gstPaid)}`, ''],
+      ['Staff Payroll', `- ${rupee(d.staffCost)}`, ''],
+      ['Net Profit', rupee(d.netProfit), `${d.netMarginPct}%`],
+    ]);
+    y = pdfSection(doc, y, 'Top Cost Drivers', ['Ingredient', 'Cost', '% of Food Cost'],
+      d.topCostIngredients.map(x => [x.name, rupee(x.cost), `${x.pct}%`]));
+    if (d.alerts?.length) pdfSection(doc, y, 'Alerts', ['Message'], d.alerts.map(a => [a.message]));
+    savePdf(doc, `pnl-${d.monthLabel}.pdf`);
+  };
+
+  const buildInventoryExcel = (d) => downloadExcel(`inventory-report-${todayLabel()}.xlsx`, [
+    { name: 'Stock Health', rows: [{ 'Health Score %': d.healthScorePct, Healthy: d.counts.healthy, Low: d.counts.low, Critical: d.counts.critical, Depleted: d.counts.depleted, 'Total Stock Value': d.totalValue }] },
+    { name: 'Critical Items', rows: d.criticalItems.map(i => ({ Item: i.name, 'Current Stock': i.currentStock, Unit: i.unit, Status: i.status, 'Predicted Runout': i.predictedRunoutTime || '—' })) },
+    { name: 'Wastage', rows: d.wastage.topWasted.map(w => ({ Item: w.name, Cost: w.cost, Reason: w.reason })) },
+  ]);
+
+  const buildDishesExcel = (d) => downloadExcel(`dish-profitability-${d.monthLabel}.xlsx`, [
+    { name: 'Dish Performance', rows: d.dishTable.map(x => ({ Dish: x.name, Category: x.category, Price: x.price, 'Sold (mo)': x.sold, Revenue: x.revenue, 'Margin %': x.marginPct, Quadrant: x.quadrant })) },
+    { name: 'Category Revenue', rows: d.categoryBreakdown.map(c => ({ Category: c.category, Revenue: c.revenue, '% of Total': c.pct })) },
+  ]);
+
+  const buildStaffExcel = (d) => downloadExcel(`staff-report-${d.payroll.monthLabel}.xlsx`, [
+    { name: 'Today Attendance', rows: d.attendanceToday.list.map(s => ({ Name: s.name, Role: s.role, Status: s.status, 'Clock In': s.clockIn || '—', Hours: s.hours })) },
+    { name: 'Payroll', rows: [{ Month: d.payroll.monthLabel, Total: d.payroll.total, Paid: d.payroll.paid, 'Paid Count': d.payroll.paidCount, Pending: d.payroll.pending, 'Pending Count': d.payroll.pendingCount, 'Staff Cost Ratio %': d.payroll.staffCostRatio }] },
+    { name: 'Leaderboard', rows: d.leaderboard.map(l => ({ Name: l.name, 'Tables Served': l.tablesServed, 'Avg Service (min)': l.avgService, Rating: l.rating })) },
+  ]);
+
+  const buildGstExcel = (d) => downloadExcel(`gst-report-${d.monthLabel}.xlsx`, [
+    { name: 'GST Summary', rows: [{ Month: d.monthLabel, Revenue: d.revenue, CGST: d.cgst, SGST: d.sgst, 'Total GST': d.totalGST, 'FY Turnover So Far': d.fyTurnoverSoFar, 'Projected Annual': d.projectedAnnual, Regime: d.regime }] },
+    { name: 'Invoice Register', rows: d.invoiceRegister.map(r => ({ 'Bill No': r.billNo, Date: r.date, Table: r.table, Amount: r.amount, GST: r.gst, Payment: r.payment })) },
+  ]);
 
   const download = async (type) => {
     setDownloading(type);
     try {
-      const routeMap = { daily: 'daily', weekly: 'weekly', pnl: 'pnl', gst: 'gst' };
-      const route = routeMap[type];
-      if (route) {
-        const res = await api.get(`/api/owner/reports/${route}/${tenantId}`);
-        const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${type}-report.json`; a.click();
-      }
+      if (type === 'daily') buildDaily((await api.get(`/api/owner/reports/daily/${tenantId}`)).data);
+      else if (type === 'weekly') buildWeekly((await api.get(`/api/owner/reports/weekly/${tenantId}`)).data);
+      else if (type === 'pnl') buildPnl((await api.get(`/api/owner/reports/pnl/${tenantId}`)).data);
+      else if (type === 'inventory') buildInventoryExcel((await api.get(`/api/owner/inventory/health/${tenantId}`)).data);
+      else if (type === 'dishes') buildDishesExcel((await api.get(`/api/owner/menu/insights/${tenantId}`)).data);
+      else if (type === 'staff') buildStaffExcel((await api.get(`/api/owner/staff/summary/${tenantId}`)).data);
+      else if (type === 'gst') buildGstExcel((await api.get(`/api/owner/reports/gst/${tenantId}`)).data);
+      flash('Report downloaded');
+    } catch (e) {
+      flash(e?.response?.data?.error || 'Could not generate report');
     } finally { setDownloading(null); }
   };
 
@@ -1474,22 +1661,23 @@ const ReportsPage = () => {
       <p style={{ fontSize: 12.5, color: T.textLow, lineHeight: 1.6, maxWidth: 560 }}>
         The daily closing report auto-generates at 11 PM and is sent to your registered email. Tap any card below to pull it on demand.
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
         {REPORT_TYPES.map(r => (
-          <Card key={r.key} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Card key={r.key} interactive style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <r.icon size={17} color={T.primary} />
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <r.icon size={18} color={T.primary} />
               </div>
               <Badge tone="neutral">{r.format}</Badge>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{r.label}</div>
-            <GhostBtn icon={Download} onClick={() => download(r.key)} style={{ justifyContent: 'center' }}>
+            <GhostBtn icon={downloading === r.key ? Loader2 : Download} onClick={() => download(r.key)} style={{ justifyContent: 'center' }}>
               {downloading === r.key ? 'Preparing…' : 'Download'}
             </GhostBtn>
           </Card>
         ))}
       </div>
+      <Toast message={toast} />
     </div>
   );
 };
@@ -1503,6 +1691,9 @@ const SettingsPage = () => {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [announceOpen, setAnnounceOpen] = useState(false);
+  const [eightySixOpen, setEightySixOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
 
   useEffect(() => { if (data) setForm(data); }, [data]);
 
@@ -1527,7 +1718,7 @@ const SettingsPage = () => {
               <SectionHeading icon={Megaphone} title="Remote Controls" />
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <GhostBtn icon={Megaphone} onClick={() => setAnnounceOpen(true)}>Push Announcement</GhostBtn>
-                <GhostBtn icon={EyeOff}>Emergency 86 a Dish</GhostBtn>
+                <GhostBtn icon={EyeOff} onClick={() => setEightySixOpen(true)}>Emergency 86 a Dish</GhostBtn>
               </div>
               <div style={{ fontSize: 11, color: T.textLow, marginTop: 10 }}>Use the Menu Intelligence tab to hide dishes or change prices instantly.</div>
             </Card>
@@ -1594,6 +1785,10 @@ const SettingsPage = () => {
       <Modal open={announceOpen} onClose={() => setAnnounceOpen(false)} title="Push Announcement">
         <AnnouncementForm tenantId={tenantId} onDone={() => setAnnounceOpen(false)} />
       </Modal>
+      <Modal open={eightySixOpen} onClose={() => setEightySixOpen(false)} title="Emergency 86 a Dish" width={460}>
+        <EightySixForm tenantId={tenantId} onDone={(msg) => { setEightySixOpen(false); flash(msg); }} />
+      </Modal>
+      <Toast message={toast} />
     </div>
   );
 };
@@ -1621,6 +1816,49 @@ const AnnouncementForm = ({ tenantId, onDone }) => {
       <Field label="TITLE"><input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="e.g. Weekend Special" /></Field>
       <Field label="MESSAGE"><textarea value={message} onChange={e => setMessage(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Shown on every table's menu for 4 hours" /></Field>
       <PrimaryBtn icon={Send} onClick={send} disabled={sending || !title || !message}>{sending ? 'Sending…' : 'Push to All Tables'}</PrimaryBtn>
+    </div>
+  );
+};
+
+const EightySixForm = ({ tenantId, onDone }) => {
+  const { data, loading } = useOwnerData('/api/owner/menu/insights/:tenantId');
+  const [query, setQuery] = useState('');
+  const [hiding, setHiding] = useState(null);
+
+  const dishes = (data?.dishTable || []).filter(d => d.name.toLowerCase().includes(query.toLowerCase()));
+
+  const hideDish = async (dish) => {
+    setHiding(dish._id);
+    try {
+      await api.patch(`/api/owner/menu/hide/${tenantId}/${dish._id}`, { isAvailable: false });
+      onDone(`"${dish.name}" hidden from the menu`);
+    } finally { setHiding(null); }
+  };
+
+  return (
+    <div>
+      <Field label="SEARCH DISH">
+        <div style={{ position: 'relative' }}>
+          <Search size={14} color={T.textLow} style={{ position: 'absolute', left: 11, top: 12 }} />
+          <input value={query} onChange={e => setQuery(e.target.value)} style={{ ...inputStyle, paddingLeft: 32 }} placeholder="Type to filter…" autoFocus />
+        </div>
+      </Field>
+      <div className="pown-scroll" style={{ maxHeight: 280, overflowY: 'auto', display: 'grid', gap: 6 }}>
+        {loading ? <Skeleton h={40} /> : dishes.length === 0 ? (
+          <div style={{ fontSize: 12, color: T.textLow, padding: '10px 0' }}>No matching dishes</div>
+        ) : dishes.slice(0, 30).map(d => (
+          <div key={d._id} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px',
+            background: 'rgba(255,255,255,0.02)', borderRadius: 10
+          }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.name}</span>
+            <button onClick={() => hideDish(d)} disabled={hiding === d._id} className="pown-btn" style={{
+              background: T.dangerSoft, color: T.danger, border: 'none', borderRadius: 8,
+              padding: '6px 11px', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5
+            }}><EyeOff size={12} />{hiding === d._id ? 'Hiding…' : '86 It'}</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
