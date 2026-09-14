@@ -71,6 +71,9 @@ const [cartUnavailableItems, setCartUnavailableItems] = useState([]);
 
   const [activeModel, setActiveModel] = useState(null);
 const [cart, setCart] = useState({});
+const [cartStockWarning, setCartStockWarning] = useState(null); // { itemId, itemName }
+const cartRef = useRef({});
+useEffect(() => { cartRef.current = cart; }, [cart]);
  const [suggestions, setSuggestions] = useState({}); 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isBillOpen, setIsBillOpen] = useState(false);
@@ -1258,6 +1261,15 @@ socket.on("menu_updated", (updatedItem) => {
         item._id === updatedItem._id ? { ...item, ...updatedItem } : item
       )
     );
+    // ── Dish just went out of stock while it might be sitting in someone's cart ──
+    if (updatedItem.isAvailable === false) {
+      const inCart = Object.entries(cartRef.current).some(([key, qty]) =>
+        qty > 0 && (key === updatedItem._id || key.startsWith(`${updatedItem._id}-`))
+      );
+      if (inCart) {
+        setCartStockWarning({ itemId: updatedItem._id, itemName: updatedItem.name });
+      }
+    }
   }
 });  
 
@@ -1408,16 +1420,21 @@ const sendExtraItemsRequest = async () => {
 
 try {
   // Server handles Order creation + stock deduction on the waiter-request "EXTRA ITEMS:" prefix
-  await axios.post(`${BASE_URL}/waiter-requests`, {
+  const res = await axios.post(`${BASE_URL}/waiter-requests`, {
     tenantId,
     tableNumber,
     serviceRequest: `EXTRA ITEMS: ${requestText}`
   });
 
-  // Local state: add to placedOrders for customer's own bill summary view
-  setPlacedOrders(prev => [...prev, ...extraLineItems]);
-
-  triggerAlert('waiterSuccess');
+  if (res.data?.extraItemsWarning) {
+    // Extra items couldn't actually be fulfilled (e.g. ran out of stock) — don't
+    // show a false success or add them to the customer's own bill summary.
+    triggerAlert('orderError', 'error');
+  } else {
+    // Local state: add to placedOrders for customer's own bill summary view
+    setPlacedOrders(prev => [...prev, ...extraLineItems]);
+    triggerAlert('waiterSuccess');
+  }
   setExtraItemCart({});
   setIsExtraItemsOpen(false);
 } catch {
@@ -7235,6 +7252,22 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </div>
 
       <div style={styles.drawerContent}>
+        {cartStockWarning && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', marginBottom: '14px', borderRadius: '12px', background: 'rgba(186,117,23,0.1)', border: '1px solid rgba(186,117,23,0.3)' }}>
+            <AlertCircle size={16} color="#BA7517" style={{ flexShrink: 0, marginTop: '1px' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#BA7517' }}>
+                {language === 'mr'
+                  ? `"${cartStockWarning.itemName}" आता उपलब्ध नाही`
+                  : `"${cartStockWarning.itemName}" just went out of stock`}
+              </div>
+              <div style={{ fontSize: '0.6rem', color: 'rgba(186,117,23,0.75)', marginTop: '2px' }}>
+                {language === 'mr' ? 'कृपया ते कार्टमधून काढा.' : 'Please remove it before placing your order.'}
+              </div>
+            </div>
+            <X size={14} color="rgba(186,117,23,0.6)" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => setCartStockWarning(null)} />
+          </div>
+        )}
         {totalItemsInCart > 0 ? (
           Object.entries(cart).map(([key, qty]) => { 
             const isMulti = key.includes('-'); 
@@ -7242,10 +7275,15 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             const portion = isMulti ? key.split('-')[1] : ''; 
             const item = allMenuItems.find(i => i._id === id);
             if (!item) return null;
+            const isNowUnavailable = item.isAvailable === false;
 
             return (
-              <div key={key} style={{...styles.drawerItemBlock, borderBottom: `1px solid ${borderColor}`}}>
-
+              <div key={key} style={{...styles.drawerItemBlock, borderBottom: `1px solid ${borderColor}`, ...(isNowUnavailable ? { background: 'rgba(186,117,23,0.05)', borderRadius: '10px', border: '1px solid rgba(186,117,23,0.2)', padding: '8px' } : {})}}>
+                {isNowUnavailable && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.56rem', fontWeight: '800', color: '#BA7517', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <AlertCircle size={11} /> {language === 'mr' ? 'उपलब्ध नाही' : 'Out of stock'}
+                  </div>
+                )}
                 {/* ── NAME + PORTION + REMOVE ── */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                   <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>

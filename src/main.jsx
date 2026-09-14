@@ -7,6 +7,7 @@ import OperatorPortal from './OperatorPortal.jsx'
 import KitchenView from './KitchenView.jsx'
 import PratyekshaMasterAdmin from './PratyekshaMasterAdmin.jsx'
 import Pratyeksha from './Pratyeksha.jsx'
+import OwnerApp from './OwnerApp.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -24,11 +25,14 @@ createRoot(document.getElementById('root')).render(
         {/* 4. Operator Portal Route */}
         <Route path="/operator" element={<OperatorPortal />} />
 
-        {/* 5. Customer Menu Route (Dynamic) */}
+        {/* 5. Owner App Route (Live Dashboard, P&L, Inventory, Staff, etc.) */}
+        <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
+
+        {/* 6. Customer Menu Route (Dynamic) */}
         {/* Must stay near the bottom — catches /:tenantId */}
         <Route path="/:tenantId" element={<App />} />
 
-        {/* 6. Default Fallback → Landing Page */}
+        {/* 7. Default Fallback → Landing Page */}
         <Route path="/" element={<Navigate to="/landing" replace />} />
 
       </Routes>

@@ -10,7 +10,8 @@ import {
   Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff,
   AlignJustify, Trash2, AlertTriangle, RotateCcw,
   TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight,
-  CheckCircle2, ArrowRight, Scale, FileText, Droplets, FlameKindling
+  CheckCircle2, ArrowRight, Scale, FileText, Droplets, FlameKindling,
+  PackageX, ShieldAlert, Wrench
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -84,6 +85,9 @@ const KitchenView = () => {
   const [isListening,          setIsListening]          = useState(false);
   const [interceptedAlerts,    setInterceptedAlerts]    = useState([]);
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
+  const [eightySixModal, setEightySixModal] = useState(null); // { categoryKey, categoryName }
+  const [selectedDish86, setSelectedDish86] = useState(null);
+  const [selectedReason86, setSelectedReason86] = useState('ran_out');
   const [isOnline,             setIsOnline]             = useState(navigator.onLine);
   const [sidebarOpen,          setSidebarOpen]          = useState(false);
   const [mobileCardIndex,      setMobileCardIndex]      = useState(0);
@@ -306,16 +310,32 @@ await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
     setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); localStorage.setItem(`kds_completed_count_${tenantId}`,n); return n; });
   };
 
-  const trigger86 = async itemName => {
-    const node = menuItems.find(m => m.name.toLowerCase().trim() === itemName.toLowerCase().trim());
-    if (!node) return;
-    if (!window.confirm(`86 "${itemName}" on customer menus?`)) return;
+  const trigger86 = (categoryKey, categoryName) => {
+    setEightySixModal({ categoryKey, categoryName });
+    setSelectedDish86(null);
+    setSelectedReason86('ran_out');
+  };
+
+  const confirm86 = async () => {
+    if (!selectedDish86) return;
     try {
-      await axios.patch(`${BASE_URL}/menu-item/${node._id}`, { isAvailable: false });
-      alert(`"${itemName}" — 86 Active on customer menus.`);
+      await axios.patch(`${BASE_URL}/menu-item/${selectedDish86._id}`, {
+        isAvailable: false,
+        outOfStockReason: selectedReason86,
+        outOfStockAt: new Date().toISOString(),
+        outOfStockBy: 'Kitchen'
+      });
+      setEightySixModal(null);
+      setSelectedDish86(null);
       fetchActiveOrders();
     } catch { alert('Could not update item.'); }
   };
+
+  const EIGHTY_SIX_REASONS = [
+    { id: 'ran_out',            label: 'Ran Out',           icon: PackageX },
+    { id: 'quality_issue',      label: 'Quality Issue',     icon: ShieldAlert },
+    { id: 'equipment_failure',  label: 'Equipment Failure', icon: Wrench },
+  ];
 
   /* ── derived maps ── */
   const dishToVegMap = useMemo(() => {
@@ -541,7 +561,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase', fontSize:'0.62rem' }}>{cat.name}</span>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-                <span title={`86 "${cat.name}"`} onClick={e => { e.stopPropagation(); trigger86(cat.name); }}
+                <span title={`86 a dish in "${cat.name}"`} onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
                   style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'rgba(211,191,162,0.03)', border:'1px solid rgba(211,191,162,0.07)', borderRadius:4, cursor:'pointer', color:'#333', transition:'0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.25)'; e.currentTarget.style.color='#d3bfa2'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.07)'; e.currentTarget.style.color='#333'; }}>
@@ -1200,6 +1220,75 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* 86 (OUT OF STOCK) MODAL — pick the dish, pick a reason, hide it with the reason logged */}
+      <AnimatePresence>
+        {eightySixModal && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.75 }} exit={{ opacity: 0 }}
+              onClick={() => setEightySixModal(null)}
+              style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, backdropFilter: 'blur(4px)' }} />
+            <motion.div initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+              style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: isMobile ? '92vw' : 420, maxHeight: '82vh', background: '#0a0b0e', border: '1px solid rgba(211,191,162,0.12)', borderRadius: 18, zIndex: 3101, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
+
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(211,191,162,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(186,117,23,0.1)', border: '1px solid rgba(186,117,23,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <PackageX size={15} color="#BA7517" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', color: '#fff' }}>86 A DISH</div>
+                    <div style={{ fontSize: '0.5rem', color: '#2a2e38', fontWeight: 800, letterSpacing: '0.5px', marginTop: 2, textTransform: 'uppercase' }}>{eightySixModal.categoryName}</div>
+                  </div>
+                </div>
+                <button onClick={() => setEightySixModal(null)} style={{ background: '#0d0e11', border: '1px solid rgba(211,191,162,0.1)', color: '#444', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.56rem', fontWeight: 900, color: '#2a2e38', letterSpacing: '1px', marginBottom: 9, textTransform: 'uppercase' }}>Which dish?</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 200, overflowY: 'auto' }}>
+                  {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).map(dish => (
+                    <button key={dish._id} onClick={() => setSelectedDish86(dish)}
+                      style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: selectedDish86?._id === dish._id ? '#d3bfa2' : '#888', background: selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.09)' : 'transparent', border: `1px solid ${selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.07)'}`, transition: 'all 0.15s' }}>
+                      {dish.name}
+                    </button>
+                  ))}
+                  {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).length === 0 && (
+                    <div style={{ fontSize: '0.62rem', color: '#333', fontStyle: 'italic', padding: '8px 2px' }}>Everything in this category is already 86'd.</div>
+                  )}
+                </div>
+
+                {selectedDish86 && (
+                  <>
+                    <div style={{ fontSize: '0.56rem', fontWeight: 900, color: '#2a2e38', letterSpacing: '1px', marginBottom: 9, textTransform: 'uppercase' }}>Why?</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+                      {EIGHTY_SIX_REASONS.map(r => {
+                        const RIcon = r.icon;
+                        const active = selectedReason86 === r.id;
+                        return (
+                          <button key={r.id} onClick={() => setSelectedReason86(r.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: active ? '#d3bfa2' : '#888', background: active ? 'rgba(211,191,162,0.09)' : 'transparent', border: `1px solid ${active ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.07)'}`, transition: 'all 0.15s' }}>
+                            <RIcon size={13} />
+                            {r.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button onClick={confirm86}
+                      style={{ width: '100%', padding: '13px 0', borderRadius: 11, border: '1px solid rgba(186,117,23,0.4)', background: 'rgba(186,117,23,0.14)', color: '#BA7517', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <EyeOff size={14} /> 86 "{selectedDish86.name}"
+                    </button>
+                  </>
                 )}
               </div>
             </motion.div>

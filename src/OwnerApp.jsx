@@ -1,0 +1,1661 @@
+/**
+ * PRATYEKSHA OWNER — Owner-facing PWA
+ * ────────────────────────────────────────────────────────────────
+ * Mount this at /owner/:tenantId/* inside your existing router:
+ *
+ *   import OwnerApp from './OwnerApp/PratyekshaOwnerApp';
+ *   <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
+ *
+ * No JWT / auth-verify is included here by design — every call is
+ * scoped by :tenantId only, matching the rest of server.js.
+ *
+ * Requires: react-router-dom, axios, socket.io-client, recharts,
+ * lucide-react (all already in the Pratyeksha dependency tree).
+ */
+import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
+import { Routes, Route, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
+import { io } from 'socket.io-client';
+import {
+  LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
+  Users, UserCircle2, Bell, ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
+  ChevronDown, ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownRight, LayoutGrid, Wallet,
+  Target, AlertTriangle, CheckCircle2, Clock, Flame, Sparkles, Download, Send, Phone, Store,
+  Menu as MenuIcon, X, RefreshCcw, Eye, EyeOff, IndianRupee, Percent, TrendingDown, Boxes,
+  Timer, Megaphone, MapPin, Star, Gauge, CalendarClock, FileSpreadsheet, FileText, Mail,
+  Search, Filter, MoreVertical, Plus, Minus, Check, ShoppingBag, Truck, CreditCard, Banknote,
+  Smartphone, UserCheck, UserX, Award, ThumbsUp, PackageX, PackageCheck, Zap, Activity,
+  Receipt, ExternalLink, WifiOff, Loader2, BarChart3
+} from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell
+} from 'recharts';
+
+/* ════════════════════════════════════════════════════════════
+   THEME — identical to Pratyeksha's design system
+   ════════════════════════════════════════════════════════════ */
+const T = {
+  primary: '#d3bfa2',
+  primarySoft: 'rgba(211,191,162,0.14)',
+  bg: '#060606',
+  surface: '#0a0a0a',
+  surfaceRaised: '#0d0d0d',
+  border: 'rgba(211,191,162,0.12)',
+  borderStrong: 'rgba(211,191,162,0.24)',
+  textHigh: '#ffffff',
+  textMed: 'rgba(255,255,255,0.55)',
+  textLow: 'rgba(255,255,255,0.20)',
+  danger: 'rgba(248,113,113,0.85)',
+  dangerSoft: 'rgba(248,113,113,0.12)',
+  warning: 'rgba(240,165,0,0.85)',
+  warningSoft: 'rgba(240,165,0,0.12)',
+  success: '#d3bfa2',
+  successSoft: 'rgba(211,191,162,0.14)',
+  mono: "'JetBrains Mono', 'SF Mono', ui-monospace, monospace",
+  font: "'Poppins', -apple-system, sans-serif",
+  ease: 'cubic-bezier(.4,0,.2,1)',
+  glow: '0 0 0 1px rgba(211,191,162,0.06), 0 12px 32px -12px rgba(0,0,0,0.55)',
+  glowHover: '0 0 0 1px rgba(211,191,162,0.18), 0 20px 44px -14px rgba(0,0,0,0.7), 0 0 32px -8px rgba(211,191,162,0.12)',
+};
+
+const GlobalStyles = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+    html, body, #root { height: 100%; margin: 0; padding: 0; background: ${T.bg}; }
+    body { overflow-x: hidden; scroll-behavior: smooth; }
+    .pown * { box-sizing: border-box; }
+    .pown {
+      font-family: ${T.font}; color: ${T.textHigh}; -webkit-font-smoothing: antialiased;
+      min-height: 100vh; width: 100%;
+      background:
+        radial-gradient(ellipse 1100px 620px at 14% -8%, rgba(211,191,162,0.09), transparent 60%),
+        radial-gradient(ellipse 900px 560px at 100% 0%, rgba(211,191,162,0.055), transparent 55%),
+        radial-gradient(ellipse 1400px 900px at 50% 110%, rgba(211,191,162,0.035), transparent 60%),
+        ${T.bg};
+      background-attachment: fixed;
+    }
+    .pown ::selection { background: ${T.primarySoft}; color: ${T.primary}; }
+    .pown-scroll::-webkit-scrollbar, ::-webkit-scrollbar { width: 7px; height: 7px; }
+    .pown-scroll::-webkit-scrollbar-thumb, ::-webkit-scrollbar-thumb { background: ${T.borderStrong}; border-radius: 10px; }
+    .pown-scroll::-webkit-scrollbar-track, ::-webkit-scrollbar-track { background: transparent; }
+    .pown-mono { font-family: ${T.mono}; font-variant-numeric: tabular-nums; }
+    .pown-fade-in { animation: pownFadeIn .4s ${T.ease} both; }
+    @keyframes pownFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .pown-pulse { animation: pownPulse 1.8s ease-in-out infinite; }
+    @keyframes pownPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+    .pown-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.04) 63%); background-size: 400% 100%; animation: pownShimmer 1.6s ease infinite; border-radius: 10px; }
+    @keyframes pownShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+    .pown-btn { cursor: pointer; border: none; font-family: inherit; transition: transform .15s ${T.ease}, opacity .15s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease; }
+    .pown-btn:active { transform: scale(0.96); }
+    .pown-row-hover { transition: background .15s ease; }
+    .pown-row-hover:hover { background: rgba(211,191,162,0.035); }
+    .pown-nav-link { transition: color .18s ease, background .18s ease; position: relative; }
+    a.pown-nav-link, a.pown-nav-link:visited { text-decoration: none; }
+    .pown-card { transition: transform .25s ${T.ease}, border-color .25s ${T.ease}, box-shadow .25s ${T.ease}; }
+    .pown-card-hover:hover { transform: translateY(-3px); border-color: ${T.borderStrong} !important; box-shadow: ${T.glowHover}; }
+    .pown-kpi:hover .pown-kpi-icon { transform: scale(1.08) rotate(-4deg); }
+    .pown-kpi-icon { transition: transform .3s ${T.ease}; }
+    .pown-hide-scroll::-webkit-scrollbar { display: none; }
+    .pown-hide-scroll { scrollbar-width: none; }
+  `}</style>
+);
+
+/* ════════════════════════════════════════════════════════════
+   API + SOCKET CONTEXT
+   ════════════════════════════════════════════════════════════ */
+// Point this at your deployed backend (matches server.js CORS origins).
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:10000';
+
+const api = axios.create({ baseURL: API_BASE });
+
+const OwnerCtx = createContext(null);
+const useOwner = () => useContext(OwnerCtx);
+
+function OwnerProvider({ tenantId, children }) {
+  const [socket, setSocket] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [liveAlert, setLiveAlert] = useState(null);
+  const [outlet, setOutlet] = useState(tenantId);
+
+  useEffect(() => {
+    const s = io(API_BASE, { transports: ['websocket', 'polling'] });
+    s.on('connect', () => { setConnected(true); s.emit('join_owner_room', outlet); s.emit('join_restaurant', outlet); });
+    s.on('disconnect', () => setConnected(false));
+    s.on('owner_alert', (payload) => setLiveAlert({ ...payload, _t: Date.now() }));
+    setSocket(s);
+    return () => s.disconnect();
+  }, [outlet]);
+
+  const value = useMemo(() => ({ tenantId: outlet, setOutlet, socket, connected, liveAlert }), [outlet, socket, connected, liveAlert]);
+  return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
+}
+
+/** Generic fetch-with-loading hook, scoped to the active tenant, auto-refreshing. */
+function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
+  const { tenantId } = useOwner();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const paramsKey = JSON.stringify(params);
+
+  const fetchData = useCallback(async (silent) => {
+    if (!silent) setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get(path.replace(':tenantId', tenantId), { params });
+      setData(res.data);
+    } catch (e) {
+      setError(e?.response?.data?.error || e.message || 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, tenantId, paramsKey]);
+
+  useEffect(() => { fetchData(false); }, [fetchData]);
+  useEffect(() => {
+    if (!refreshMs) return;
+    const id = setInterval(() => fetchData(true), refreshMs);
+    return () => clearInterval(id);
+  }, [refreshMs, fetchData]);
+
+  return { data, loading, error, refetch: () => fetchData(true) };
+}
+
+/* ════════════════════════════════════════════════════════════
+   UI ATOMS
+   ════════════════════════════════════════════════════════════ */
+const Card = ({ children, style, padded = true, interactive = false, className = '', ...rest }) => (
+  <div
+    className={`pown-card${interactive ? ' pown-card-hover' : ''}${className ? ' ' + className : ''}`}
+    style={{
+      background: `linear-gradient(160deg, ${T.surfaceRaised} 0%, ${T.surface} 100%)`,
+      border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: T.glow,
+      padding: padded ? '22px' : 0, ...style
+    }}
+    {...rest}
+  >{children}</div>
+);
+
+const Label = ({ children, style }) => (
+  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.8, color: T.textLow, ...style }}>{children}</div>
+);
+
+const SectionHeading = ({ icon: Icon, title, action }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {Icon && (
+        <div style={{
+          width: 28, height: 28, borderRadius: 9, background: T.primarySoft,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        }}><Icon size={14} color={T.primary} strokeWidth={2.25} /></div>
+      )}
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: T.textHigh, letterSpacing: -0.2 }}>{title}</h2>
+    </div>
+    {action}
+  </div>
+);
+
+const Money = ({ value, size = 15, weight = 700, color = T.textHigh, prefix = '\u20B9' }) => (
+  <span className="pown-mono" style={{ fontSize: size, fontWeight: weight, color }}>
+    {prefix}{Number(value || 0).toLocaleString('en-IN')}
+  </span>
+);
+
+const Delta = ({ pct }) => {
+  const up = pct >= 0;
+  const Icon = up ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: up ? T.primary : T.danger }}>
+      <Icon size={12} strokeWidth={2.5} />
+      <span className="pown-mono">{Math.abs(pct)}%</span>
+    </span>
+  );
+};
+
+const Badge = ({ children, tone = 'neutral' }) => {
+  const tones = {
+    neutral: { bg: 'rgba(255,255,255,0.06)', c: T.textMed },
+    gold: { bg: T.primarySoft, c: T.primary },
+    danger: { bg: T.dangerSoft, c: T.danger },
+    warning: { bg: T.warningSoft, c: T.warning },
+  };
+  const s = tones[tone];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 100,
+      fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: s.bg, color: s.c, textTransform: 'uppercase'
+    }}>{children}</span>
+  );
+};
+
+const ProgressBar = ({ pct, tone = 'gold', height = 8 }) => {
+  const colors = { gold: T.primary, danger: T.danger, warning: T.warning };
+  return (
+    <div style={{ width: '100%', height, borderRadius: 100, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, height: '100%', background: colors[tone], borderRadius: 100, transition: 'width .5s ease' }} />
+    </div>
+  );
+};
+
+const Skeleton = ({ h = 90, style }) => <div className="pown-skel" style={{ height: h, width: '100%', ...style }} />;
+
+const SkeletonGrid = ({ count = 4, h = 108 }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+    {Array.from({ length: count }).map((_, i) => <Skeleton key={i} h={h} />)}
+  </div>
+);
+
+const EmptyState = ({ icon: Icon = Boxes, title, subtitle }) => (
+  <div style={{ textAlign: 'center', padding: '46px 20px', color: T.textLow }}>
+    <Icon size={26} strokeWidth={1.5} style={{ marginBottom: 10, opacity: 0.6 }} />
+    <div style={{ fontSize: 13.5, fontWeight: 600, color: T.textMed }}>{title}</div>
+    {subtitle && <div style={{ fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+  </div>
+);
+
+const ErrorState = ({ message, onRetry }) => (
+  <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+    <WifiOff size={22} color={T.danger} style={{ marginBottom: 10 }} />
+    <div style={{ fontSize: 13, color: T.textMed, marginBottom: 14 }}>{message || 'Could not load this data.'}</div>
+    {onRetry && (
+      <button onClick={onRetry} className="pown-btn" style={{
+        background: T.primarySoft, color: T.primary, border: `1px solid ${T.borderStrong}`,
+        borderRadius: 10, padding: '8px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex', gap: 6, alignItems: 'center'
+      }}><RefreshCcw size={13} /> Retry</button>
+    )}
+  </div>
+);
+
+/** Wraps a data section with automatic loading / error / empty handling. */
+const DataBoundary = ({ loading, error, empty, emptyProps, onRetry, skeleton, children }) => {
+  if (loading) return skeleton || <SkeletonGrid />;
+  if (error) return <ErrorState message={error} onRetry={onRetry} />;
+  if (empty) return <EmptyState {...emptyProps} />;
+  return children;
+};
+
+const IconBtn = ({ icon: Icon, onClick, active, title }) => (
+  <button onClick={onClick} title={title} className="pown-btn" style={{
+    width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: active ? T.primarySoft : 'transparent', border: `1px solid ${active ? T.borderStrong : T.border}`,
+    color: active ? T.primary : T.textMed
+  }}><Icon size={15} /></button>
+);
+
+const PillTabs = ({ options, value, onChange }) => (
+  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    {options.map(opt => (
+      <button key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
+        padding: '7px 13px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+        background: value === opt.value ? T.primary : 'transparent',
+        color: value === opt.value ? '#0a0a0a' : T.textMed,
+        border: `1px solid ${value === opt.value ? T.primary : T.border}`
+      }}>{opt.label}</button>
+    ))}
+  </div>
+);
+
+const Toggle = ({ checked, onChange }) => (
+  <button onClick={() => onChange(!checked)} className="pown-btn" style={{
+    width: 40, height: 23, borderRadius: 100, background: checked ? T.primary : 'rgba(255,255,255,0.12)',
+    position: 'relative', flexShrink: 0
+  }}>
+    <span style={{
+      position: 'absolute', top: 2, left: checked ? 19 : 2, width: 19, height: 19, borderRadius: '50%',
+      background: checked ? '#0a0a0a' : '#fff', transition: 'left .18s ease'
+    }} />
+  </button>
+);
+
+const Modal = ({ open, onClose, title, children, width = 420 }) => {
+  if (!open) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16
+    }} onClick={onClose}>
+      <div className="pown-fade-in" onClick={e => e.stopPropagation()} style={{
+        width, maxWidth: '100%', maxHeight: '85vh', overflowY: 'auto', background: T.surfaceRaised,
+        border: `1px solid ${T.borderStrong}`, borderRadius: 18, padding: 22
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h3>
+          <button onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const Field = ({ label, children }) => (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, color: T.textMed, marginBottom: 6, letterSpacing: 0.4 }}>{label}</div>
+    {children}
+  </div>
+);
+
+const inputStyle = {
+  width: '100%', background: '#050505', border: `1px solid ${T.border}`, borderRadius: 10,
+  padding: '10px 12px', color: T.textHigh, fontSize: 13, fontFamily: T.font, outline: 'none'
+};
+
+const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style }) => (
+  <button onClick={onClick} disabled={disabled} className="pown-btn" style={{
+    background: disabled ? 'rgba(211,191,162,0.35)' : T.primary, color: '#0a0a0a', border: 'none',
+    borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 800, display: 'inline-flex',
+    alignItems: 'center', gap: 7, opacity: disabled ? 0.6 : 1, ...style
+  }}>{Icon && <Icon size={14} />}{children}</button>
+);
+
+const GhostBtn = ({ children, onClick, icon: Icon, style }) => (
+  <button onClick={onClick} className="pown-btn" style={{
+    background: 'transparent', color: T.textMed, border: `1px solid ${T.border}`,
+    borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex',
+    alignItems: 'center', gap: 7, ...style
+  }}>{Icon && <Icon size={14} />}{children}</button>
+);
+
+/* ════════════════════════════════════════════════════════════
+   NAVIGATION CONFIG
+   ════════════════════════════════════════════════════════════ */
+const NAV_ITEMS = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'revenue', label: 'Revenue & Sales', icon: TrendingUp },
+  { key: 'pnl', label: 'P&L', icon: PieIcon },
+  { key: 'menu', label: 'Menu Intelligence', icon: UtensilsCrossed },
+  { key: 'inventory', label: 'Inventory & Stock', icon: Package },
+  { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat },
+  { key: 'staff', label: 'Staff & Payroll', icon: Users },
+  { key: 'customers', label: 'Customers', icon: UserCircle2 },
+  { key: 'alerts', label: 'Alerts', icon: Bell },
+  { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck },
+  { key: 'reports', label: 'Reports & Exports', icon: ClipboardList },
+  { key: 'settings', label: 'Settings', icon: SettingsIcon },
+];
+const BOTTOM_NAV_KEYS = ['dashboard', 'revenue', 'kitchen', 'staff', 'reports'];
+
+/* ════════════════════════════════════════════════════════════
+   LAYOUT — Sidebar (desktop) + Bottom Nav (mobile) + Top Bar
+   ════════════════════════════════════════════════════════════ */
+const Sidebar = () => {
+  const { tenantId } = useParams();
+  return (
+    <aside className="pown-scroll" style={{
+      width: 262, flexShrink: 0,
+      borderRight: `1px solid ${T.border}`,
+      background: `linear-gradient(180deg, ${T.surfaceRaised} 0%, ${T.bg} 100%)`,
+      display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0, overflowY: 'auto'
+    }}>
+      <div style={{ padding: '26px 22px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 6px 18px -4px rgba(211,191,162,0.5)`
+          }}>
+            <Store size={17} color="#0a0a0a" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
+            <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{ padding: '6px 14px', flex: 1 }}>
+        {NAV_ITEMS.map(item => (
+          <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
+            display: 'flex', alignItems: 'center', gap: 12, padding: '10.5px 13px', borderRadius: 12,
+            marginBottom: 3, fontSize: 13, fontWeight: 600,
+            background: isActive ? T.primarySoft : 'transparent',
+            color: isActive ? T.primary : T.textMed,
+            boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
+          })}>
+            <item.icon size={15} strokeWidth={2} />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+      <div style={{ padding: 18, borderTop: `1px solid ${T.border}` }}>
+        <button className="pown-btn" style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
+          borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
+        }}><LogOut size={14} /> Log out</button>
+      </div>
+    </aside>
+  );
+};
+
+const BottomNav = () => {
+  const { tenantId } = useParams();
+  const items = NAV_ITEMS.filter(i => BOTTOM_NAV_KEYS.includes(i.key));
+  return (
+    <nav style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: 'rgba(6,6,6,0.94)',
+      backdropFilter: 'blur(18px)', borderTop: `1px solid ${T.border}`, display: 'flex', zIndex: 100,
+      boxShadow: '0 -8px 24px -8px rgba(0,0,0,0.6)'
+    }}>
+      {items.map(item => (
+        <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} style={({ isActive }) => ({
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+          color: isActive ? T.primary : T.textLow, transition: 'color .18s ease'
+        })}>
+          <item.icon size={19} strokeWidth={2} />
+          <span style={{ fontSize: 9.5, fontWeight: 700 }}>{item.label.split(' ')[0]}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+};
+
+const TopBar = () => {
+  const { tenantId, connected } = useOwner();
+  const location = useLocation();
+  const current = NAV_ITEMS.find(i => location.pathname.includes(`/${i.key}`));
+  const [outletMenuOpen, setOutletMenuOpen] = useState(false);
+  return (
+    <header style={{
+      position: 'sticky', top: 0, zIndex: 50, background: 'rgba(6,6,6,0.72)', backdropFilter: 'blur(18px)',
+      borderBottom: `1px solid ${T.border}`, padding: '18px clamp(18px, 3vw, 40px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+    }}>
+      <div>
+        <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3 }}>{current?.label || 'Dashboard'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+          <span className={connected ? '' : 'pown-pulse'} style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? T.primary : T.textLow, boxShadow: connected ? `0 0 0 3px ${T.primarySoft}` : 'none' }} />
+          <span style={{ fontSize: 11, color: T.textLow, fontWeight: 600 }}>{connected ? 'Live' : 'Reconnecting…'} · {tenantId}</span>
+        </div>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => setOutletMenuOpen(v => !v)} className="pown-btn" style={{
+          display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
+          borderRadius: 12, padding: '9px 14px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, boxShadow: T.glow
+        }}>
+          <MapPin size={13} color={T.primary} /> {tenantId} <ChevronDown size={13} />
+        </button>
+        {outletMenuOpen && (
+          <div className="pown-fade-in" style={{
+            position: 'absolute', right: 0, top: 46, width: 210, background: T.surfaceRaised,
+            border: `1px solid ${T.borderStrong}`, borderRadius: 13, padding: 6, zIndex: 60, boxShadow: T.glowHover
+          }}>
+            <div style={{ padding: '8px 10px', fontSize: 10.5, color: T.textLow, fontWeight: 800, letterSpacing: 1 }}>OUTLETS</div>
+            <div style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 600, color: T.primary, background: T.primarySoft, borderRadius: 9 }}>{tenantId} (current)</div>
+            <div style={{ padding: '9px 10px', fontSize: 12, color: T.textLow, cursor: 'not-allowed' }}>+ Add outlet</div>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+};
+
+const OwnerShell = ({ children }) => {
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return (
+    <div className="pown" style={{ display: 'flex', width: '100%', minHeight: '100vh' }}>
+      {isDesktop && <Sidebar />}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <TopBar />
+        <main className="pown-scroll" style={{
+          flex: 1, width: '100%',
+          padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 48px' : '16px 14px 88px'
+        }}>
+          {children}
+        </main>
+      </div>
+      {!isDesktop && <BottomNav />}
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   REUSABLE: KPI CARD
+   ════════════════════════════════════════════════════════════ */
+const KpiCard = ({ icon: Icon, label, value, sub, delta, tone = 'default' }) => (
+  <Card interactive className="pown-kpi" style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 118, position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%',
+      background: `radial-gradient(circle, ${tone === 'danger' ? T.dangerSoft : T.primarySoft} 0%, transparent 70%)`, pointerEvents: 'none'
+    }} />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+      <Label>{label}</Label>
+      <div className="pown-kpi-icon" style={{
+        width: 30, height: 30, borderRadius: 9, flexShrink: 0,
+        background: tone === 'danger' ? T.dangerSoft : T.primarySoft,
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}><Icon size={15} color={tone === 'danger' ? T.danger : T.primary} strokeWidth={2} /></div>
+    </div>
+    <div className="pown-mono" style={{ fontSize: 25, fontWeight: 800, color: tone === 'danger' ? T.danger : T.textHigh, lineHeight: 1, position: 'relative', letterSpacing: -0.5 }}>{value}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+      {delta !== undefined && <Delta pct={delta} />}
+      {sub && <span style={{ fontSize: 11.5, color: T.textLow }}>{sub}</span>}
+    </div>
+  </Card>
+);
+
+/** Simple bar sparkline (recharts) used across modules */
+const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color = T.primary }) => (
+  <ResponsiveContainer width="100%" height={height}>
+    <BarChart data={data}>
+      <Bar dataKey={dataKey} radius={[3, 3, 0, 0]} fill={color} />
+    </BarChart>
+  </ResponsiveContainer>
+);
+
+const AxisTick = { fill: 'rgba(255,255,255,0.35)', fontSize: 10.5, fontFamily: T.mono };
+const chartTooltipStyle = {
+  contentStyle: { background: '#0d0d0d', border: `1px solid ${T.borderStrong}`, borderRadius: 10, fontSize: 12, fontFamily: T.mono },
+  labelStyle: { color: T.textMed }, itemStyle: { color: T.primary }
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 1 — LIVE DASHBOARD
+   ════════════════════════════════════════════════════════════ */
+const DashboardPage = () => {
+  const navigate = useNavigate();
+  const { tenantId } = useOwner();
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/dashboard/:tenantId', { refreshMs: 60000 });
+
+  if (loading) return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <SkeletonGrid count={4} h={112} />
+      <Skeleton h={54} />
+      <Skeleton h={220} />
+    </div>
+  );
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!data) return null;
+
+  const hourlyData = (data.hourlyToday || []).map(h => ({ x: h.hour, value: h.revenue }));
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      {/* Hero KPI row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+        <KpiCard icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${data.revenue.today.toLocaleString('en-IN')}`}
+          delta={data.revenue.todayVsYday} sub="vs yesterday" />
+        <KpiCard icon={LayoutGrid} label="LIVE TABLES" value={`${data.tables.occupied} / ${data.tables.total}`}
+          sub={`${data.tables.billPending} bill pending · ${data.tables.free} free`} />
+        <KpiCard icon={Wallet} label="GROSS PROFIT" value={`\u20B9${data.liveProfit.estimatedGrossProfit.toLocaleString('en-IN')}`}
+          sub={`${100 - data.liveProfit.foodCostPct}% margin est.`} />
+        <KpiCard icon={Target} label="BREAK-EVEN" value={`${data.breakEven.pct}% achieved`}
+          sub={`\u20B9${data.breakEven.remaining.toLocaleString('en-IN')} more to target`} />
+      </div>
+
+      {/* Live activity strip */}
+      <Card style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
+        <StripItem icon={ChefHat} label="Kitchen" value={`${data.orders.pendingInKDS} pending`} />
+        <Divider />
+        <StripItem icon={Bell} label="Service" value={`${data.serviceRequests} requests`} tone={data.serviceRequests > 0 ? 'warning' : 'default'} />
+        <Divider />
+        <StripItem icon={Package} label="Low stock" value={`${data.lowStockCount} items`} tone={data.lowStockCount > 0 ? 'danger' : 'default'} />
+        <Divider />
+        <StripItem icon={UserCheck} label="Staff" value={`${data.staffPresent} / ${data.staffTotal} present`} />
+      </Card>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: 14 }}>
+        {/* Hourly sparkline */}
+        <Card>
+          <SectionHeading icon={BarChart3} title="Today's Hourly Revenue" />
+          {hourlyData.some(h => h.value > 0)
+            ? <MiniBarChart data={hourlyData} height={140} />
+            : <EmptyState icon={BarChart3} title="No sales yet today" subtitle="Revenue will populate as orders settle" />}
+        </Card>
+
+        {/* Top dish + staff */}
+        <div style={{ display: 'grid', gap: 14 }}>
+          <Card>
+            <Label style={{ marginBottom: 10 }}>TOP DISH TODAY</Label>
+            {data.topDishToday ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 11, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Flame size={18} color={T.primary} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{data.topDishToday.name}</div>
+                  <div style={{ fontSize: 11.5, color: T.textLow }} className="pown-mono">{data.topDishToday.qty} sold · <Money value={data.topDishToday.revenue} size={11.5} weight={600} color={T.textLow} /></div>
+                </div>
+              </div>
+            ) : <EmptyState icon={Flame} title="No dishes sold yet" />}
+          </Card>
+          <Card>
+            <Label style={{ marginBottom: 10 }}>STAFF ATTENDANCE</Label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="pown-mono" style={{ fontSize: 20, fontWeight: 800 }}>{data.staffPresent} <span style={{ fontSize: 13, color: T.textLow, fontWeight: 600 }}>/ {data.staffTotal}</span></span>
+              <ProgressBar pct={data.staffTotal ? (data.staffPresent / data.staffTotal) * 100 : 0} height={7} />
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <GhostBtn icon={ChefHat} onClick={() => navigate(`/owner/${tenantId}/kitchen`)}>View Live Orders</GhostBtn>
+        <GhostBtn icon={Package} onClick={() => navigate(`/owner/${tenantId}/inventory`)}>Check Inventory</GhostBtn>
+        <GhostBtn icon={LayoutGrid} onClick={() => navigate(`/owner/${tenantId}/revenue`)}>View Floor Map</GhostBtn>
+      </div>
+    </div>
+  );
+};
+
+const StripItem = ({ icon: Icon, label, value, tone = 'default' }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <Icon size={14} color={tone === 'danger' ? T.danger : tone === 'warning' ? T.warning : T.primary} />
+    <span style={{ fontSize: 12, color: T.textLow, fontWeight: 600 }}>{label}:</span>
+    <span className="pown-mono" style={{ fontSize: 12.5, fontWeight: 700, color: tone === 'danger' ? T.danger : tone === 'warning' ? T.warning : T.textHigh }}>{value}</span>
+  </div>
+);
+const Divider = () => <div style={{ width: 1, height: 16, background: T.border }} />;
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 2 — REVENUE & SALES
+   ════════════════════════════════════════════════════════════ */
+const dateRangeFor = (key) => {
+  const fmt = (d) => d.toISOString().split('T')[0];
+  const today = new Date(Date.now() + 330 * 60000);
+  const y = new Date(today); y.setDate(y.getDate() - 1);
+  switch (key) {
+    case 'today': return { from: fmt(today), to: fmt(today) };
+    case 'yesterday': return { from: fmt(y), to: fmt(y) };
+    case 'week': { const s = new Date(today); s.setDate(s.getDate() - today.getUTCDay()); return { from: fmt(s), to: fmt(today) }; }
+    case 'month': { const s = new Date(today.getUTCFullYear(), today.getUTCMonth(), 1); return { from: fmt(s), to: fmt(today) }; }
+    case 'lastMonth': { const s = new Date(today.getUTCFullYear(), today.getUTCMonth() - 1, 1); const e = new Date(today.getUTCFullYear(), today.getUTCMonth(), 0); return { from: fmt(s), to: fmt(e) }; }
+    default: return { from: fmt(today), to: fmt(today) };
+  }
+};
+
+const RevenuePage = () => {
+  const [range, setRange] = useState('today');
+  const dates = useMemo(() => dateRangeFor(range), [range]);
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/revenue/summary/:tenantId', { params: dates });
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <PillTabs value={range} onChange={setRange} options={[
+        { value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' },
+        { value: 'week', label: 'This Week' }, { value: 'month', label: 'This Month' },
+        { value: 'lastMonth', label: 'Last Month' }
+      ]} />
+
+      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.orderCount === 0}
+        emptyProps={{ icon: TrendingUp, title: 'No settled orders in this range' }}>
+        {data && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <KpiCard icon={IndianRupee} label="TOTAL REVENUE" value={`\u20B9${data.totalRevenue.toLocaleString('en-IN')}`} sub={`${data.orderCount} orders`} />
+              <KpiCard icon={Receipt} label="AVG ORDER VALUE" value={`\u20B9${data.metrics.avgOrderValue}`} />
+              <KpiCard icon={Star} label="HIGHEST BILL" value={`\u20B9${data.metrics.highestBill.amount}`} sub={`Table ${data.metrics.highestBill.table}`} />
+              <KpiCard icon={LayoutGrid} label="TABLES TURNED" value={data.metrics.tablesTurned} sub={`\u20B9${data.metrics.revenuePerCover} / cover`} />
+            </div>
+
+            <Card>
+              <SectionHeading icon={BarChart3} title="Revenue Trend" />
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={data.dailyBreakdown}>
+                  <defs>
+                    <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={T.primary} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={T.primary} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} />
+                  <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} />
+                  <Tooltip {...chartTooltipStyle} />
+                  <Area type="monotone" dataKey="revenue" stroke={T.primary} strokeWidth={2} fill="url(#revFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+              <Card>
+                <SectionHeading title="By Source" />
+                <BreakdownList items={data.bySource.map(s => ({ label: s.source, value: s.revenue, pct: s.pct }))} />
+              </Card>
+              <Card>
+                <SectionHeading title="By Payment Mode" />
+                <BreakdownList items={data.byPayment.map(p => ({ label: p.mode, value: p.revenue, pct: p.pct, icon: p.mode === 'Cash' ? Banknote : p.mode === 'UPI' ? Smartphone : CreditCard }))} />
+              </Card>
+              <Card>
+                <SectionHeading title="By Time of Day" />
+                <BreakdownList items={data.byTimeOfDay.map(t => ({ label: `${t.label} (${t.range})`, value: t.revenue }))} showPct={false} />
+              </Card>
+            </div>
+
+            <Card>
+              <SectionHeading icon={Target} title="Revenue Forecast" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                <ForecastStat label="At current pace" value={data.forecast.atCurrentPace} />
+                <ForecastStat label="Best case" value={data.forecast.bestCase} />
+                <ForecastStat label="Month target" value={data.forecast.monthTarget} />
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11.5, color: T.textLow, fontWeight: 700 }}>{data.forecast.pctAchieved}% of monthly target achieved</span>
+                </div>
+                <ProgressBar pct={data.forecast.pctAchieved} />
+              </div>
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+const ForecastStat = ({ label, value }) => (
+  <div>
+    <Label style={{ marginBottom: 6 }}>{label.toUpperCase()}</Label>
+    <Money value={value} size={18} />
+  </div>
+);
+
+const BreakdownList = ({ items, showPct = true }) => (
+  <div style={{ display: 'grid', gap: 12 }}>
+    {items.map((it, i) => (
+      <div key={i}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textMed, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {it.icon && <it.icon size={13} color={T.primary} />}{it.label}
+          </span>
+          <span style={{ fontSize: 12.5 }}><Money value={it.value} size={12.5} weight={700} /> {showPct && it.pct !== undefined && <span style={{ color: T.textLow, marginLeft: 5 }}>({it.pct}%)</span>}</span>
+        </div>
+        {showPct && it.pct !== undefined && <ProgressBar pct={it.pct} height={5} />}
+      </div>
+    ))}
+  </div>
+);
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 3 — REAL-TIME P&L
+   ════════════════════════════════════════════════════════════ */
+const foodCostTone = (pct) => {
+  if (pct < 30) return { tone: 'gold', label: 'Excellent' };
+  if (pct < 38) return { tone: 'gold', label: 'Healthy' };
+  if (pct < 45) return { tone: 'warning', label: 'Watch this' };
+  return { tone: 'danger', label: 'Urgent attention' };
+};
+
+const PnlPage = () => {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/pnl/:tenantId', { params: { month } });
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ fontSize: 12.5, color: T.textLow, fontWeight: 700 }}>The real-time margin view — no other Indian POS shows you this live.</div>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+      </div>
+
+      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.revenue === 0}
+        emptyProps={{ icon: PieIcon, title: 'No settled revenue this month yet' }}>
+        {data && (() => {
+          const fc = foodCostTone(data.foodCostPct);
+          return (
+            <>
+              <Card>
+                <SectionHeading icon={Wallet} title="P&L Waterfall" action={<Badge tone={fc.tone}>{data.foodCostPct}% food cost — {fc.label}</Badge>} />
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <WaterfallRow label="GROSS REVENUE" value={data.revenue} pct={100} strong />
+                  <WaterfallRow label="Food Cost" value={-data.foodCost} pct={data.foodCostPct} tone="danger" />
+                  <WaterfallRow label="GROSS PROFIT" value={data.grossProfit} pct={data.grossMarginPct} strong divider />
+                  <WaterfallRow label="GST Paid" value={-data.gstPaid} pct={data.revenue ? Math.round((data.gstPaid / data.revenue) * 100) : 0} tone="danger" />
+                  <WaterfallRow label="Staff Payroll" value={-data.staffCost} pct={data.revenue ? Math.round((data.staffCost / data.revenue) * 100) : 0} tone="danger" />
+                  <WaterfallRow label="NET PROFIT" value={data.netProfit} pct={data.netMarginPct} strong divider highlight />
+                </div>
+              </Card>
+
+              {data.alerts?.length > 0 && (
+                <Card style={{ borderColor: 'rgba(240,165,0,0.3)' }}>
+                  {data.alerts.map((a, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <AlertTriangle size={16} color={T.warning} />
+                      <span style={{ fontSize: 12.5, color: T.textMed }}>{a.message}</span>
+                    </div>
+                  ))}
+                </Card>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+                <KpiCard icon={Percent} label="GROSS MARGIN" value={`${data.grossMarginPct}%`} />
+                <KpiCard icon={Percent} label="NET MARGIN" value={`${data.netMarginPct}%`} />
+                <KpiCard icon={Target} label="MONTH PROJECTION" value={`\u20B9${data.projection.atCurrentMargin.toLocaleString('en-IN')}`} sub="net profit, if margin holds" />
+              </div>
+
+              <Card>
+                <SectionHeading icon={TrendingUp} title="Daily Net Profit Trend" />
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={data.revenueByDay}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} />
+                    <Tooltip {...chartTooltipStyle} />
+                    <Line type="monotone" dataKey="profit" stroke={T.primary} strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card>
+                <SectionHeading icon={Flame} title="Top Cost Drivers" />
+                <BreakdownList items={data.topCostIngredients.map(c => ({ label: c.name, value: c.cost, pct: c.pct }))} />
+              </Card>
+            </>
+          );
+        })()}
+      </DataBoundary>
+    </div>
+  );
+};
+
+const WaterfallRow = ({ label, value, pct, tone, strong, divider, highlight }) => (
+  <div style={{ borderTop: divider ? `1px solid ${T.border}` : 'none', paddingTop: divider ? 10 : 0 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+      <span style={{ fontSize: strong ? 13 : 12.5, fontWeight: strong ? 800 : 600, color: highlight ? T.primary : strong ? T.textHigh : T.textMed }}>{label}</span>
+      <Money value={Math.abs(value)} size={strong ? 15 : 13} weight={strong ? 800 : 700}
+        color={value < 0 ? T.danger : highlight ? T.primary : T.textHigh}
+        prefix={value < 0 ? '\u2212\u20B9' : '\u20B9'} />
+    </div>
+    <ProgressBar pct={pct} tone={tone === 'danger' ? 'danger' : highlight ? 'gold' : 'gold'} height={6} />
+  </div>
+);
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 4 — MENU INTELLIGENCE
+   ════════════════════════════════════════════════════════════ */
+const QUADRANT_META = {
+  stars: { label: 'Stars', hint: 'Promote aggressively, protect margin', tone: 'gold' },
+  plowhorses: { label: 'Plowhorses', hint: 'Raise price 10–15%, or trim portion cost', tone: 'warning' },
+  puzzles: { label: 'Puzzles', hint: 'Market more, add photos, improve placement', tone: 'gold' },
+  dogs: { label: 'Dogs', hint: 'Consider removing or repricing', tone: 'danger' },
+};
+
+const MenuPage = () => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/menu/insights/:tenantId');
+  const [priceModal, setPriceModal] = useState(null);
+  const { tenantId } = useOwner();
+
+  const savePrice = async (itemId, price) => {
+    await api.patch(`/api/owner/menu/price/${tenantId}/${itemId}`, { price: Number(price) });
+    setPriceModal(null); refetch();
+  };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.dishTable.length === 0}
+        emptyProps={{ icon: UtensilsCrossed, title: 'No menu items with sales data' }}>
+        {data && (
+          <>
+            {data.deadItemsCount > 0 && (
+              <Card style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderColor: 'rgba(248,113,113,0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <AlertTriangle size={16} color={T.danger} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{data.deadItemsCount} dishes had zero orders this month</span>
+                </div>
+                <Badge tone="danger">Review</Badge>
+              </Card>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              {Object.entries(QUADRANT_META).map(([key, meta]) => (
+                <Card key={key}>
+                  <Badge tone={meta.tone}>{meta.label}</Badge>
+                  <div className="pown-mono" style={{ fontSize: 22, fontWeight: 800, margin: '10px 0 4px' }}>{data.matrix[key]?.length || 0}</div>
+                  <div style={{ fontSize: 11, color: T.textLow, lineHeight: 1.5 }}>{meta.hint}</div>
+                </Card>
+              ))}
+            </div>
+
+            <Card padded={false}>
+              <div style={{ padding: '18px 20px 0' }}><SectionHeading icon={ClipboardList} title="Dish Performance" /></div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      {['Dish', 'Sold', 'Revenue', 'Margin', 'Category', ''].map(h => (
+                        <th key={h} style={{ textAlign: h === 'Dish' ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.dishTable.slice(0, 30).map(d => (
+                      <tr key={d._id} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{d.name}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{d.sold}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }}><Money value={d.revenue} size={12.5} /></td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{d.marginPct}%</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }}><Badge tone={QUADRANT_META[d.quadrant.toLowerCase()]?.tone}>{d.quadrant}</Badge></td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }}>
+                          <button onClick={() => setPriceModal(d)} className="pown-btn" style={{ background: 'transparent', color: T.primary, fontSize: 11.5, fontWeight: 700 }}>Reprice</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading title="Category Revenue" />
+              <BreakdownList items={data.categoryBreakdown.map(c => ({ label: c.category, value: c.revenue, pct: c.pct }))} />
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+
+      <Modal open={!!priceModal} onClose={() => setPriceModal(null)} title={`Reprice — ${priceModal?.name || ''}`}>
+        {priceModal && <RepriceForm item={priceModal} onSave={savePrice} />}
+      </Modal>
+    </div>
+  );
+};
+
+const RepriceForm = ({ item, onSave }) => {
+  const [price, setPrice] = useState(item.price);
+  return (
+    <div>
+      <Field label="NEW PRICE (\u20B9)">
+        <input type="number" value={price} onChange={e => setPrice(e.target.value)} style={inputStyle} />
+      </Field>
+      <div style={{ fontSize: 11.5, color: T.textLow, marginBottom: 16 }}>Current: \u20B9{item.price} · {item.sold} sold this month</div>
+      <PrimaryBtn icon={Check} onClick={() => onSave(item._id, price)}>Update Price</PrimaryBtn>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 5 — INVENTORY & STOCK
+   ════════════════════════════════════════════════════════════ */
+const InventoryPage = () => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/inventory/health/:tenantId', { refreshMs: 60000 });
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (
+          <>
+            <Card>
+              <SectionHeading icon={Gauge} title="Stock Health" action={<Money value={data.totalValue} size={14} weight={700} />} />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+                <span className="pown-mono" style={{ fontSize: 26, fontWeight: 800 }}>{data.healthScorePct}%</span>
+              </div>
+              <ProgressBar pct={data.healthScorePct} height={9} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16 }}>
+                <StatBlock label="Healthy" value={data.counts.healthy} tone="gold" />
+                <StatBlock label="Low" value={data.counts.low} tone="warning" />
+                <StatBlock label="Critical" value={data.counts.critical} tone="danger" />
+                <StatBlock label="Depleted" value={data.counts.depleted} tone="danger" />
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={AlertTriangle} title="Critical Items" />
+              {data.criticalItems.length === 0
+                ? <EmptyState icon={PackageCheck} title="Nothing critical right now" />
+                : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {data.criticalItems.slice(0, 8).map((it, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i > 0 ? `1px solid ${T.border}` : 'none' }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700 }}>{it.name}</div>
+                          <div className="pown-mono" style={{ fontSize: 11, color: T.textLow }}>{it.currentStock} {it.unit} left</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {it.status === 'depleted'
+                            ? <Badge tone="danger">Out of stock</Badge>
+                            : it.predictedRunoutTime
+                              ? <Badge tone="warning">Runs out {new Date(it.predictedRunoutTime).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</Badge>
+                              : <Badge tone={it.status === 'critical' ? 'danger' : 'warning'}>{it.status}</Badge>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              <GhostBtn icon={Phone} style={{ marginTop: 14 }} onClick={() => {
+                const msg = encodeURIComponent(`Hi, please deliver:\n${data.criticalItems.slice(0, 6).map(i => `- ${i.name}`).join('\n')}\n\nThank you.`);
+                window.open(`https://wa.me/?text=${msg}`, '_blank');
+              }}>Contact Vendor on WhatsApp</GhostBtn>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Flame} title="Wastage" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 14 }}>
+                <KpiCard icon={Flame} label="TODAY" value={`\u20B9${data.wastage.today}`} />
+                <KpiCard icon={Flame} label="THIS MONTH" value={`\u20B9${data.wastage.month}`} />
+                <KpiCard icon={Percent} label="% OF REVENUE" value={`${data.wastage.pctOfRevenue}%`} tone={data.wastage.pctOfRevenue > 2 ? 'danger' : 'default'} />
+              </div>
+              <BreakdownList showPct={false} items={data.wastage.topWasted.map(w => ({ label: `${w.name} — ${w.reason}`, value: w.cost }))} />
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+const StatBlock = ({ label, value, tone }) => (
+  <div style={{ textAlign: 'center', padding: '10px 6px', background: 'rgba(255,255,255,0.02)', borderRadius: 10 }}>
+    <div className="pown-mono" style={{ fontSize: 16, fontWeight: 800, color: tone === 'danger' ? T.danger : tone === 'warning' ? T.warning : T.primary }}>{value}</div>
+    <div style={{ fontSize: 10, color: T.textLow, fontWeight: 700, marginTop: 2 }}>{label}</div>
+  </div>
+);
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 6 — KITCHEN PERFORMANCE (read-only KDS view)
+   ════════════════════════════════════════════════════════════ */
+const KitchenPage = () => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/kitchen/summary/:tenantId', { refreshMs: 20000 });
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (
+          <>
+            <Card>
+              <SectionHeading icon={Gauge} title="Today's Kitchen Score" />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <span className="pown-mono" style={{ fontSize: 30, fontWeight: 800 }}>{data.score}</span>
+                <span style={{ color: T.textLow, fontSize: 13 }}>/ 100</span>
+                <Badge tone={data.score >= 80 ? 'gold' : data.score >= 60 ? 'warning' : 'danger'}>
+                  {data.score >= 80 ? 'Excellent' : data.score >= 60 ? 'Good' : 'Needs attention'}
+                </Badge>
+              </div>
+              <ProgressBar pct={data.score} height={9} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 16 }}>
+                <ScoreLine label="Avg prep time" value={`${data.avgPrepTime} min`} pass={data.avgPrepTime < 15} target="< 15 min" />
+                <ScoreLine label="Delayed tickets" value={data.delayedTickets} pass={data.delayedTickets < 5} target="< 5" />
+                <ScoreLine label="Rejection rate" value={`${data.rejectionRate}%`} pass={data.rejectionRate === 0} target="0%" />
+                <ScoreLine label="Wastage cost" value={`\u20B9${data.wastageCost}`} pass={data.wastageCost < 1000} target="< \u20B91000" />
+              </div>
+            </Card>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <KpiCard icon={Timer} label="TODAY AVG" value={`${data.trends.todayAvg}m`} />
+              <KpiCard icon={Timer} label="YESTERDAY" value={`${data.trends.yesterdayAvg}m`} />
+              <KpiCard icon={Timer} label="WEEK AVG" value={`${data.trends.weekAvg}m`} />
+              <KpiCard icon={Zap} label="BEST / WORST" value={`${data.trends.best}m / ${data.trends.worst}m`} />
+            </div>
+
+            <Card>
+              <SectionHeading title="Slowest Dishes Today" />
+              {data.slowestDishes.length === 0 ? <EmptyState icon={ChefHat} title="No prep-time data yet today" /> : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {data.slowestDishes.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderTop: i > 0 ? `1px solid ${T.border}` : 'none' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.name}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="pown-mono" style={{ fontSize: 12 }}>avg {d.avgTime}m</span>
+                        <Badge tone={d.flag === 'Flag' ? 'danger' : d.flag === 'Watch' ? 'warning' : 'gold'}>{d.flag}</Badge>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Eye} title="Live Tickets" action={<span style={{ fontSize: 11, color: T.textLow }}>View only</span>} />
+              {data.liveTickets.length === 0 ? <EmptyState icon={CheckCircle2} title="No open tickets" /> : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {data.liveTickets.map((t, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700 }}>Table {t.tableNumber}</div>
+                        <div style={{ fontSize: 11, color: T.textLow }}>{t.items.slice(0, 3).join(', ')}</div>
+                      </div>
+                      <Badge tone={t.ageMinutes > 25 ? 'danger' : t.ageMinutes > 15 ? 'warning' : 'gold'}>{t.ageMinutes}m</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {data.eightySixedToday.length > 0 && (
+              <Card>
+                <SectionHeading icon={PackageX} title="86'd Items Today" />
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {data.eightySixedToday.map((e, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span>{e.name} — <span style={{ color: T.textLow }}>{e.reason}</span></span>
+                      <span className="pown-mono" style={{ color: T.textLow }}>{e.time}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+const ScoreLine = ({ label, value, pass, target }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 10 }}>
+    <div>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: T.textMed }}>{label}</div>
+      <div className="pown-mono" style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
+    </div>
+    {pass ? <CheckCircle2 size={16} color={T.primary} /> : <AlertTriangle size={16} color={T.warning} />}
+  </div>
+);
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 7 — STAFF & PAYROLL
+   ════════════════════════════════════════════════════════════ */
+const StaffPage = () => {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/staff/summary/:tenantId', { params: { month } });
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+      </div>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+              <KpiCard icon={UserCheck} label="PRESENT" value={data.attendanceToday.present} sub={`of ${data.attendanceToday.list.length}`} />
+              <KpiCard icon={UserX} label="ABSENT" value={data.attendanceToday.absent} tone={data.attendanceToday.absent > 0 ? 'danger' : 'default'} />
+              <KpiCard icon={Clock} label="LATE" value={data.attendanceToday.late} />
+              <KpiCard icon={Percent} label="STAFF COST RATIO" value={`${data.payroll.staffCostRatio}%`} sub="of revenue" />
+            </div>
+
+            <Card padded={false}>
+              <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Today's Attendance" /></div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{['Name', 'Role', 'Status', 'Clock In', 'Hours'].map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {data.attendanceToday.list.map((s, i) => (
+                      <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{s.name}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right', fontSize: 12, color: T.textLow }}>{s.role}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }}>
+                          <Badge tone={s.status === 'Present' ? 'gold' : s.status === 'Late' ? 'warning' : 'danger'}>{s.status}</Badge>
+                        </td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{s.clockIn || '\u2014'}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{s.hours ? `${s.hours}h` : '\u2014'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Wallet} title={`Payroll — ${data.payroll.monthLabel}`} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+                <div><Label>TOTAL</Label><Money value={data.payroll.total} size={17} /></div>
+                <div><Label>PAID</Label><Money value={data.payroll.paid} size={17} color={T.primary} /><div style={{ fontSize: 11, color: T.textLow }}>{data.payroll.paidCount} staff</div></div>
+                <div><Label>PENDING</Label><Money value={data.payroll.pending} size={17} color={T.danger} /><div style={{ fontSize: 11, color: T.textLow }}>{data.payroll.pendingCount} staff</div></div>
+              </div>
+              <ProgressBar pct={data.payroll.total ? (data.payroll.paid / data.payroll.total) * 100 : 0} />
+            </Card>
+
+            {data.leaderboard.length > 0 && (
+              <Card>
+                <SectionHeading icon={Award} title="Performance Leaderboard" />
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {data.leaderboard.map((l, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: i > 0 ? `1px solid ${T.border}` : 'none' }}>
+                      <span className="pown-mono" style={{ width: 20, color: T.textLow, fontSize: 12, fontWeight: 700 }}>#{i + 1}</span>
+                      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{l.name}</span>
+                      <span className="pown-mono" style={{ fontSize: 11.5, color: T.textLow }}>{l.tablesServed} tables</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Star size={12} color={T.primary} fill={T.primary} /><span className="pown-mono" style={{ fontSize: 12 }}>{l.rating}</span></span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 8 — CUSTOMERS
+   ════════════════════════════════════════════════════════════ */
+const CustomersPage = () => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/customers/insights/:tenantId');
+  const { tenantId } = useOwner();
+  const [sending, setSending] = useState(false);
+
+  const sendWinback = async () => {
+    if (!data?.atRiskList?.length) return;
+    setSending(true);
+    try {
+      await api.post(`/api/owner/customers/winback/${tenantId}`, {
+        phones: data.atRiskList.map(c => c.phone),
+        message: `We miss you! Here's 15% off your next visit. Valid 7 days.`
+      });
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+              <KpiCard icon={Users} label="TOTAL CUSTOMERS" value={data.overview.total} sub={`+${data.overview.newThisMonth} this month`} />
+              <KpiCard icon={ThumbsUp} label="RETURNING" value={`${data.overview.returningPct}%`} />
+              <KpiCard icon={AlertTriangle} label="AT-RISK" value={data.overview.atRisk} tone={data.overview.atRisk > 0 ? 'danger' : 'default'} />
+              <KpiCard icon={Star} label="AVG VISITS" value={data.overview.avgVisits} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <StatBlock label="VIP" value={data.segments.vip} tone="gold" />
+              <StatBlock label="Regular" value={data.segments.regular} />
+              <StatBlock label="One-time" value={data.segments.oneTime} />
+              <StatBlock label="At-risk" value={data.segments.atRisk} tone="danger" />
+            </div>
+
+            <Card>
+              <SectionHeading icon={Megaphone} title="Win-Back Campaign"
+                action={<Badge tone="gold">{data.atRiskList.length} at-risk</Badge>} />
+              <p style={{ fontSize: 12.5, color: T.textMed, lineHeight: 1.6, marginBottom: 14 }}>
+                "We miss you! Here's 15% off your next visit. Valid 7 days." — sent to customers silent for 30+ days. Estimated response rate 25–30%.
+              </p>
+              <PrimaryBtn icon={Send} onClick={sendWinback} disabled={sending || !data.atRiskList.length}>
+                {sending ? 'Sending…' : `Send to ${data.atRiskList.length} At-Risk Customers`}
+              </PrimaryBtn>
+            </Card>
+
+            <Card padded={false}>
+              <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Top Customers" /></div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{['Customer', 'Visits', 'Lifetime Spend', 'Last Visit', 'Favourite'].map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {data.topCustomers.map((c, i) => (
+                      <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{c.name} <span className="pown-mono" style={{ color: T.textLow, fontSize: 11 }}>{c.phone}</span></td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{c.visits}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right' }}><Money value={c.lifetimeSpend} size={12.5} /></td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right', fontSize: 11.5, color: T.textLow }}>{c.lastVisit != null ? `${c.lastVisit}d ago` : '\u2014'}</td>
+                        <td style={{ padding: '11px 20px', textAlign: 'right', fontSize: 12 }}>{c.favourite}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 9 — ALERTS & NOTIFICATIONS
+   ════════════════════════════════════════════════════════════ */
+const SEVERITY_META = {
+  urgent: { label: 'Urgent', tone: 'danger', icon: AlertTriangle },
+  attention: { label: 'Attention', tone: 'warning', icon: Bell },
+  info: { label: 'Info', tone: 'gold', icon: CheckCircle2 },
+};
+
+const AlertsPage = () => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/alerts/:tenantId', { refreshMs: 30000 });
+  const { liveAlert } = useOwner();
+
+  useEffect(() => { if (liveAlert) refetch(); }, [liveAlert]); // eslint-disable-line
+
+  const markRead = async (id) => { await api.post(`/api/owner/alerts/read/${id}`); refetch(); };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0}
+        emptyProps={{ icon: Bell, title: 'No alerts yet', subtitle: 'You\u2019ll see stock, revenue and kitchen alerts here in real time' }}>
+        {data && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <StatBlock label="Urgent" value={data.counts.urgent} tone="danger" />
+              <StatBlock label="Attention" value={data.counts.attention} tone="warning" />
+              <StatBlock label="Info" value={data.counts.info} tone="gold" />
+            </div>
+            <Card padded={false}>
+              {data.alerts.map((a, i) => {
+                const meta = SEVERITY_META[a.severity] || SEVERITY_META.info;
+                return (
+                  <div key={a._id} className="pown-row-hover" style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 20px',
+                    borderTop: i > 0 ? `1px solid ${T.border}` : 'none', opacity: a.isRead ? 0.55 : 1
+                  }}>
+                    <meta.icon size={16} color={a.severity === 'urgent' ? T.danger : a.severity === 'attention' ? T.warning : T.primary} style={{ marginTop: 2 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{a.message}</div>
+                      <div className="pown-mono" style={{ fontSize: 10.5, color: T.textLow, marginTop: 3 }}>
+                        {new Date(a.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · {a.category}
+                      </div>
+                    </div>
+                    {!a.isRead && <button onClick={() => markRead(a._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11 }}>Mark read</button>}
+                  </div>
+                );
+              })}
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 10 — COMPLIANCE & GST
+   ════════════════════════════════════════════════════════════ */
+const CompliancePage = () => {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month } });
+
+  const exportCsv = () => {
+    if (!data) return;
+    const rows = [['Bill No', 'Date', 'Table', 'Amount', 'GST', 'Payment'],
+      ...data.invoiceRegister.map(r => [r.billNo, r.date, r.table, r.amount, r.gst, r.payment])];
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `invoice-register-${month}.csv`; a.click();
+  };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+      </div>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (
+          <>
+            <Card>
+              <SectionHeading icon={ShieldCheck} title={`GST Overview — ${data.monthLabel}`} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
+                <div><Label>REVENUE</Label><Money value={data.revenue} size={17} /></div>
+                <div><Label>{`CGST @ ${data.cgstPct}%`}</Label><Money value={data.cgst} size={17} /></div>
+                <div><Label>{`SGST @ ${data.sgstPct}%`}</Label><Money value={data.sgst} size={17} /></div>
+                <div><Label>TOTAL GST DUE</Label><Money value={data.totalGST} size={17} color={T.primary} /></div>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading title="Annual Turnover Tracker" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 12 }}>
+                <div><Label>FY SO FAR</Label><Money value={data.fyTurnoverSoFar} size={16} /></div>
+                <div><Label>PROJECTED ANNUAL</Label><Money value={data.projectedAnnual} size={16} /></div>
+                <div><Label>COMPOSITION LIMIT</Label><Money value={data.compositionLimit} size={16} /></div>
+              </div>
+              <Badge tone={data.regime.includes('REGULAR') ? 'gold' : 'warning'}>{data.regime}</Badge>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={FileSpreadsheet} title="Downloads" />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <GhostBtn icon={FileSpreadsheet} onClick={exportCsv}>Invoice Register (CSV)</GhostBtn>
+                <GhostBtn icon={FileText}>GSTR-1 Data</GhostBtn>
+                <GhostBtn icon={FileText}>GSTR-3B Data</GhostBtn>
+                <GhostBtn icon={Mail}>Email to CA</GhostBtn>
+              </div>
+            </Card>
+
+            <Card padded={false}>
+              <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Invoice Register" /></div>
+              <div style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{['Bill No', 'Date', 'Table', 'Amount', 'GST', 'Payment'].map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, position: 'sticky', top: 0, background: T.surface }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {data.invoiceRegister.slice(0, 200).map((r, i) => (
+                      <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
+                        <td style={{ padding: '10px 20px', fontSize: 12 }} className="pown-mono">{r.billNo}</td>
+                        <td style={{ padding: '10px 20px', textAlign: 'right', fontSize: 11.5, color: T.textLow }}>{r.date}</td>
+                        <td style={{ padding: '10px 20px', textAlign: 'right', fontSize: 12 }}>{r.table}</td>
+                        <td style={{ padding: '10px 20px', textAlign: 'right' }}><Money value={r.amount} size={12} /></td>
+                        <td style={{ padding: '10px 20px', textAlign: 'right' }} className="pown-mono">{r.gst}</td>
+                        <td style={{ padding: '10px 20px', textAlign: 'right', fontSize: 11.5 }}>{r.payment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+      </DataBoundary>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 11 — REPORTS & EXPORTS
+   ════════════════════════════════════════════════════════════ */
+const REPORT_TYPES = [
+  { key: 'daily', label: 'Daily Closing Report', icon: CalendarClock, format: 'PDF' },
+  { key: 'weekly', label: 'Weekly Summary', icon: BarChart3, format: 'PDF' },
+  { key: 'pnl', label: 'Monthly P&L Report', icon: PieIcon, format: 'PDF' },
+  { key: 'inventory', label: 'Inventory Report', icon: Package, format: 'Excel' },
+  { key: 'dishes', label: 'Dish Profitability', icon: UtensilsCrossed, format: 'Excel' },
+  { key: 'staff', label: 'Staff Report', icon: Users, format: 'Excel' },
+  { key: 'gst', label: 'GST Report', icon: ShieldCheck, format: 'Excel' },
+];
+
+const ReportsPage = () => {
+  const { tenantId } = useOwner();
+  const [downloading, setDownloading] = useState(null);
+
+  const download = async (type) => {
+    setDownloading(type);
+    try {
+      const routeMap = { daily: 'daily', weekly: 'weekly', pnl: 'pnl', gst: 'gst' };
+      const route = routeMap[type];
+      if (route) {
+        const res = await api.get(`/api/owner/reports/${route}/${tenantId}`);
+        const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${type}-report.json`; a.click();
+      }
+    } finally { setDownloading(null); }
+  };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 14 }}>
+      <p style={{ fontSize: 12.5, color: T.textLow, lineHeight: 1.6, maxWidth: 560 }}>
+        The daily closing report auto-generates at 11 PM and is sent to your registered email. Tap any card below to pull it on demand.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        {REPORT_TYPES.map(r => (
+          <Card key={r.key} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <r.icon size={17} color={T.primary} />
+              </div>
+              <Badge tone="neutral">{r.format}</Badge>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{r.label}</div>
+            <GhostBtn icon={Download} onClick={() => download(r.key)} style={{ justifyContent: 'center' }}>
+              {downloading === r.key ? 'Preparing…' : 'Download'}
+            </GhostBtn>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   MODULE 12 — SETTINGS & REMOTE CONTROLS
+   ════════════════════════════════════════════════════════════ */
+const SettingsPage = () => {
+  const { tenantId } = useOwner();
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/settings/:tenantId');
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [announceOpen, setAnnounceOpen] = useState(false);
+
+  useEffect(() => { if (data) setForm(data); }, [data]);
+
+  const save = async () => {
+    setSaving(true);
+    try { await api.put(`/api/owner/settings/${tenantId}`, form); refetch(); }
+    finally { setSaving(false); }
+  };
+
+  const toggleAlert = (group, key) => {
+    setForm(f => ({
+      ...f, alerts: { ...f.alerts, [group]: { ...f.alerts[group], [key]: { ...f.alerts[group][key], enabled: !f.alerts[group][key].enabled } } }
+    }));
+  };
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <DataBoundary loading={loading || !form} error={error} onRetry={refetch}>
+        {form && (
+          <>
+            <Card>
+              <SectionHeading icon={Megaphone} title="Remote Controls" />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <GhostBtn icon={Megaphone} onClick={() => setAnnounceOpen(true)}>Push Announcement</GhostBtn>
+                <GhostBtn icon={EyeOff}>Emergency 86 a Dish</GhostBtn>
+              </div>
+              <div style={{ fontSize: 11, color: T.textLow, marginTop: 10 }}>Use the Menu Intelligence tab to hide dishes or change prices instantly.</div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Target} title="Revenue Targets" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Field label="DAILY TARGET (\u20B9)">
+                  <input type="number" value={form.dailyTarget} onChange={e => setForm(f => ({ ...f, dailyTarget: Number(e.target.value) }))} style={inputStyle} />
+                </Field>
+                <Field label="MONTHLY TARGET (\u20B9)">
+                  <input type="number" value={form.monthlyTarget} onChange={e => setForm(f => ({ ...f, monthlyTarget: Number(e.target.value) }))} style={inputStyle} />
+                </Field>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Clock} title="Operating Hours" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Field label="MON–FRI">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input type="time" value={form.operatingHours.weekday.open} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekday: { ...f.operatingHours.weekday, open: e.target.value } } }))} style={inputStyle} />
+                    <input type="time" value={form.operatingHours.weekday.close} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekday: { ...f.operatingHours.weekday, close: e.target.value } } }))} style={inputStyle} />
+                  </div>
+                </Field>
+                <Field label="SAT–SUN">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input type="time" value={form.operatingHours.weekend.open} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekend: { ...f.operatingHours.weekend, open: e.target.value } } }))} style={inputStyle} />
+                    <input type="time" value={form.operatingHours.weekend.close} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekend: { ...f.operatingHours.weekend, close: e.target.value } } }))} style={inputStyle} />
+                  </div>
+                </Field>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Bell} title="Alert Configuration" />
+              <div style={{ display: 'grid', gap: 10 }}>
+                <AlertToggleRow label="Daily revenue summary" checked={form.alerts.revenue.dailySummary.enabled} onChange={() => toggleAlert('revenue', 'dailySummary')} />
+                <AlertToggleRow label="Revenue milestones" checked={form.alerts.revenue.milestone.enabled} onChange={() => toggleAlert('revenue', 'milestone')} />
+                <AlertToggleRow label="Low stock" checked={form.alerts.inventory.lowStock.enabled} onChange={() => toggleAlert('inventory', 'lowStock')} />
+                <AlertToggleRow label="Predicted stock runout" checked={form.alerts.inventory.predictedRunout.enabled} onChange={() => toggleAlert('inventory', 'predictedRunout')} />
+                <AlertToggleRow label="Large discounts (>20%)" checked={form.alerts.financial.largeDiscount.enabled} onChange={() => toggleAlert('financial', 'largeDiscount')} />
+                <AlertToggleRow label="High food cost (>40%)" checked={form.alerts.financial.highFoodCost.enabled} onChange={() => toggleAlert('financial', 'highFoodCost')} />
+                <AlertToggleRow label="Staff absence" checked={form.alerts.staff.absentAlert.enabled} onChange={() => toggleAlert('staff', 'absentAlert')} />
+                <AlertToggleRow label="Kitchen ticket delays" checked={form.alerts.kitchen.ticketDelayed.enabled} onChange={() => toggleAlert('kitchen', 'ticketDelayed')} />
+                <AlertToggleRow label="GSTR filing reminders" checked={form.alerts.compliance.gstrReminder.enabled} onChange={() => toggleAlert('compliance', 'gstrReminder')} />
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Mail} title="Report Delivery" />
+              <Field label="EMAIL FOR REPORTS">
+                <input type="email" placeholder="owner@restaurant.com" value={form.reportEmail} onChange={e => setForm(f => ({ ...f, reportEmail: e.target.value }))} style={inputStyle} />
+              </Field>
+            </Card>
+
+            <div style={{ position: 'sticky', bottom: 14, display: 'flex', justifyContent: 'flex-end' }}>
+              <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</PrimaryBtn>
+            </div>
+          </>
+        )}
+      </DataBoundary>
+
+      <Modal open={announceOpen} onClose={() => setAnnounceOpen(false)} title="Push Announcement">
+        <AnnouncementForm tenantId={tenantId} onDone={() => setAnnounceOpen(false)} />
+      </Modal>
+    </div>
+  );
+};
+
+const AlertToggleRow = ({ label, checked, onChange }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textMed }}>{label}</span>
+    <Toggle checked={checked} onChange={onChange} />
+  </div>
+);
+
+const AnnouncementForm = ({ tenantId, onDone }) => {
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const send = async () => {
+    setSending(true);
+    try {
+      await api.post(`/api/owner/announcement/${tenantId}`, { title, message, expiresAt: new Date(Date.now() + 4 * 3600000).toISOString() });
+      onDone();
+    } finally { setSending(false); }
+  };
+  return (
+    <div>
+      <Field label="TITLE"><input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="e.g. Weekend Special" /></Field>
+      <Field label="MESSAGE"><textarea value={message} onChange={e => setMessage(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Shown on every table's menu for 4 hours" /></Field>
+      <PrimaryBtn icon={Send} onClick={send} disabled={sending || !title || !message}>{sending ? 'Sending…' : 'Push to All Tables'}</PrimaryBtn>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
+   ROOT — OwnerApp (mount at /owner/:tenantId/*)
+   ════════════════════════════════════════════════════════════ */
+const OwnerAppInner = () => (
+  <OwnerShell>
+    <Routes>
+      <Route path="dashboard" element={<DashboardPage />} />
+      <Route path="revenue" element={<RevenuePage />} />
+      <Route path="pnl" element={<PnlPage />} />
+      <Route path="menu" element={<MenuPage />} />
+      <Route path="inventory" element={<InventoryPage />} />
+      <Route path="kitchen" element={<KitchenPage />} />
+      <Route path="staff" element={<StaffPage />} />
+      <Route path="customers" element={<CustomersPage />} />
+      <Route path="alerts" element={<AlertsPage />} />
+      <Route path="compliance" element={<CompliancePage />} />
+      <Route path="reports" element={<ReportsPage />} />
+      <Route path="settings" element={<SettingsPage />} />
+      <Route path="*" element={<Navigate to="dashboard" replace />} />
+    </Routes>
+  </OwnerShell>
+);
+
+export default function OwnerApp() {
+  const { tenantId } = useParams();
+  return (
+    <>
+      <GlobalStyles />
+      <OwnerProvider tenantId={tenantId}>
+        <OwnerAppInner />
+      </OwnerProvider>
+    </>
+  );
+}

@@ -15,7 +15,8 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
   MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye,
-  ShoppingCart, Copy,Flame 
+  ShoppingCart, Copy,Flame ,
+  PackageX, ShieldAlert, Wrench
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -406,6 +407,9 @@ const [menuVegFilter, setMenuVegFilter] = useState('all'); // 'all' | 'veg' | 'n
   });
 
 const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'flat'
+const [discountReason, setDiscountReason] = useState('');
+const [editingPresets, setEditingPresets] = useState(false);
+const [newPresetDraft, setNewPresetDraft] = useState({ label: '', type: 'percent', value: '' });
 
   const [inventoryLoading, setInventoryLoading] = useState(false);
   // ─────────────────────────────────────────────────────
@@ -1568,6 +1572,26 @@ const showNotif = useCallback((msg, type = 'success', subtype = '') => {
   setTimeout(() => setNotif(p => ({ ...p, show: false })), 5000);
 }, []);
 
+const saveDiscountPresets = async (nextPresets) => {
+  try {
+    await axios.patch(`${BASE_URL}/tenant/profile/${tenantId}`, { 'config.discountPresets': nextPresets });
+    setTenantConfig(p => ({ ...p, config: { ...p.config, discountPresets: nextPresets } }));
+  } catch { showNotif('Could not save presets', 'error'); }
+};
+
+const addDiscountPreset = () => {
+  const val = parseFloat(newPresetDraft.value);
+  if (!newPresetDraft.label.trim() || isNaN(val) || val <= 0) return;
+  const next = [...(tenantConfig?.config?.discountPresets || []), { label: newPresetDraft.label.trim(), type: newPresetDraft.type, value: val }];
+  saveDiscountPresets(next);
+  setNewPresetDraft({ label: '', type: 'percent', value: '' });
+};
+
+const removeDiscountPreset = (idx) => {
+  const next = (tenantConfig?.config?.discountPresets || []).filter((_, i) => i !== idx);
+  saveDiscountPresets(next);
+};
+
   const requestLedgerSort = (key) => {
     setLedgerSortConfig(prev => ({ key, direction: prev.key===key && prev.direction==='asc' ? 'desc' : 'asc' }));
   };
@@ -1595,7 +1619,7 @@ const showNotif = useCallback((msg, type = 'success', subtype = '') => {
 
 const generateBill = async (id) => {
   setSelectedTable(id);
-  setDiscount(0);
+  setDiscount(0); setDiscountReason('');
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
     const [res, countRes, tenantRes] = await Promise.all([
@@ -1686,7 +1710,7 @@ const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
 
 const generateOnlineBill = async () => {
   setSelectedTable('Online');
-  setDiscount(0);
+  setDiscount(0); setDiscountReason('');
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
     const [res, countRes, tenantRes] = await Promise.all([
@@ -1967,6 +1991,7 @@ const paymentMethodDetails = activePaymentType === 'split'
 const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
     discount,
     discountType,
+    discountReason,
     finalAmount:    finalAmt,
     paymentMethods: paymentMethodDetails,
     customerPhone:  "",
@@ -5742,7 +5767,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                   const newVal = allHidden; // if all hidden → show all; else → hide all
                   try {
                     await Promise.all(catItems.map(item =>
-                      axios.patch(`${BASE_URL}/menu-item/${item._id}`, { isAvailable: newVal, _autoHiddenByIngredient: null })
+                      axios.patch(`${BASE_URL}/menu-item/${item._id}`, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '' })
                     ));
                     setMenuItems(prev => prev.map(i =>
                       catItems.find(c => c._id === i._id)
@@ -5786,10 +5811,18 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                   {/* AVAILABILITY DOT */}
                   <div style={{ position: 'absolute', top: '14px', right: '14px', width: '7px', height: '7px', borderRadius: '50%', background: item.isAvailable ? '#d3bfa2' : '#333', boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none' }} />
 
-                  {/* AUTO-HIDDEN BADGE */}
+                  {/* AUTO-HIDDEN BADGE (ingredient depleted) */}
                   {item._autoHiddenByIngredient && !item.isAvailable && (
                     <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#BA7517', display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <AlertTriangle size={9}/> STOCK OUT
+                    </div>
+                  )}
+
+                  {/* 86'D BY KITCHEN BADGE — with the reason chef selected */}
+                  {!item._autoHiddenByIngredient && !item.isAvailable && item.outOfStockReason && (
+                    <div title={item.outOfStockAt ? new Date(item.outOfStockAt).toLocaleString() : ''} style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#BA7517', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      {item.outOfStockReason === 'ran_out' ? <PackageX size={9}/> : item.outOfStockReason === 'quality_issue' ? <ShieldAlert size={9}/> : <Wrench size={9}/>}
+                      {item.outOfStockReason === 'ran_out' ? '86 · RAN OUT' : item.outOfStockReason === 'quality_issue' ? '86 · QUALITY' : '86 · EQUIPMENT'}
                     </div>
                   )}
 
@@ -5861,7 +5894,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                     <div style={{ display: 'flex', gap: '7px' }}>
                       <button onClick={async () => {
                         const newVal = !item.isAvailable;
-                        await updateMenu(item._id, { isAvailable: newVal, _autoHiddenByIngredient: null });
+                        await updateMenu(item._id, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '' });
                         // Clear the local auto-hidden flag immediately for instant feedback
                         setMenuItems(prev => prev.map(i => i._id === item._id ? { ...i, isAvailable: newVal, _autoHiddenByIngredient: null } : i));
                       }} style={{ flex: 1, padding: '9px 8px', background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)', border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)', color: item.isAvailable ? '#444' : '#d3bfa2', borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}>
@@ -7259,13 +7292,61 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
 {/* ── DISCOUNT ── */}
 <div style={{borderTop:'1px dashed #ddd', marginTop:'12px', paddingTop:'12px'}}>
+  {/* Quick presets — one-tap saved discount reasons, configured in Settings */}
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+    <span style={{ fontSize: '0.52rem', fontWeight: '900', color: '#aaa', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Quick Presets</span>
+    <button type="button" onClick={() => setEditingPresets(p => !p)}
+      style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.52rem', fontWeight: '800', color: '#999' }}>
+      <SquarePen size={9} /> {editingPresets ? 'Done' : 'Edit'}
+    </button>
+  </div>
+  {(tenantConfig?.config?.discountPresets?.length > 0) && (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+      {tenantConfig.config.discountPresets.map((preset, i) => {
+        const active = discountReason === preset.label && discountType === preset.type && discount === preset.value;
+        return editingPresets ? (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 8px 6px 10px', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '800', border: '1px solid #eee', background: '#fafafa', color: '#555' }}>
+            {preset.label} · {preset.type === 'percent' ? `${preset.value}%` : `₹${preset.value}`}
+            <X size={11} style={{ cursor: 'pointer', color: '#b33' }} onClick={() => removeDiscountPreset(i)} />
+          </div>
+        ) : (
+          <button key={i} type="button"
+            onClick={() => {
+              if (active) { setDiscount(0); setDiscountReason(''); return; }
+              setDiscountType(preset.type);
+              setDiscount(preset.value);
+              setDiscountReason(preset.label);
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 10px', borderRadius: '8px', fontSize: '0.6rem', fontWeight: '800', cursor: 'pointer', border: `1px solid ${active ? '#222' : '#ddd'}`, background: active ? '#222' : '#fafafa', color: active ? '#fff' : '#555', transition: 'all 0.15s' }}>
+            <Tag size={10} />
+            {preset.label} · {preset.type === 'percent' ? `${preset.value}%` : `₹${preset.value}`}
+          </button>
+        );
+      })}
+    </div>
+  )}
+  {editingPresets && (
+    <div style={{ display: 'flex', gap: '5px', marginBottom: '12px' }}>
+      <input value={newPresetDraft.label} onChange={e => setNewPresetDraft(p => ({ ...p, label: e.target.value }))}
+        placeholder="Reason (e.g. Staff Meal)" style={{ ...styles.discountInput, flex: 1, minWidth: 0 }} />
+      <select value={newPresetDraft.type} onChange={e => setNewPresetDraft(p => ({ ...p, type: e.target.value }))}
+        style={{ ...styles.discountInput, width: '52px' }}>
+        <option value="percent">%</option>
+        <option value="flat">₹</option>
+      </select>
+      <input type="number" value={newPresetDraft.value} onChange={e => setNewPresetDraft(p => ({ ...p, value: e.target.value }))}
+        placeholder="0" style={{ ...styles.discountInput, width: '55px' }} />
+      <button type="button" onClick={addDiscountPreset}
+        style={{ padding: '0 12px', borderRadius: '6px', border: 'none', background: '#222', color: '#fff', fontSize: '0.6rem', fontWeight: '900', cursor: 'pointer' }}>ADD</button>
+    </div>
+  )}
   <div style={styles.receiptRow}>
     <span style={{fontWeight:'900'}}>DISCOUNT</span>
     <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
       {/* Toggle percent / flat */}
       <div style={{display:'flex', background:'#f0f0f0', borderRadius:'6px', padding:'2px', gap:'2px'}}>
         {['percent','flat'].map(t => (
-          <button key={t} onClick={() => setDiscountType(t)} style={{
+          <button key={t} onClick={() => { setDiscountType(t); setDiscountReason(''); }} style={{
             padding:'3px 8px', borderRadius:'4px', fontSize:'0.6rem',
             fontWeight:'900', border:'none', cursor:'pointer',
             background: discountType === t ? '#222' : 'transparent',
@@ -7277,6 +7358,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         onChange={e => {
           const v = parseFloat(e.target.value);
           setDiscount(isNaN(v) ? 0 : Math.max(0, v));
+          setDiscountReason('');
         }}
         placeholder={discountType === 'percent' ? '0-100' : '0'}
         style={{...styles.discountInput, width:'70px'}}/>
@@ -7284,7 +7366,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
   </div>
   {discount > 0 && (
     <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
-      <span>Discount deducted</span>
+      <span>{discountReason ? `Discount · ${discountReason}` : 'Discount deducted'}</span>
       <span>- ₹{
         discountType === 'percent'
           ? (tableBill.subtotal * (discount / 100)).toFixed(2)
