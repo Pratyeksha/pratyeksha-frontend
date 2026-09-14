@@ -845,7 +845,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               </div>
               <button onClick={() => setShowMetricsDashboard(false)}
                 style={{ background:'transparent', border:'1px solid rgba(211,191,162,0.2)', color:'#d3bfa2', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
-                ← BACK TO KITCHEN
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><ChevronLeft size={13} /> BACK TO KITCHEN</span>
               </button>
             </motion.div>
           )}
@@ -1396,8 +1396,8 @@ const KDSOrderCard = ({
             </span>
           </div>
           {urgency !== 'low' && (
-            <span style={{ fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? 'rgba(211,191,162,0.55)' : 'rgba(138,112,77,0.55)', letterSpacing:'0.5px', textTransform:'uppercase' }}>
-              {urgency==='high' ? '⚡ OVERDUE' : 'DELAYED'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? 'rgba(211,191,162,0.55)' : 'rgba(138,112,77,0.55)', letterSpacing:'0.5px', textTransform:'uppercase' }}>
+              {urgency==='high' && <Zap size={8} />} {urgency==='high' ? 'OVERDUE' : 'DELAYED'}
             </span>
           )}
         </div>

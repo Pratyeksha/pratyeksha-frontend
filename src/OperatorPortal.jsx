@@ -192,11 +192,6 @@ const OperatorPortal = () => {
   const [activePaymentType, setActivePaymentType] = useState('full'); 
   const [selectedSingleMode, setSelectedSingleMode] = useState('cash');
   const [waiterRequests, setWaiterRequests] = useState([]);
-  const [qrCode, setQrCode] = useState(null);
-  const [isBotReady, setIsBotReady] = useState(false);
-  const [selectedBroadcastItem, setSelectedBroadcastItem] = useState('');
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [broadcastText, setBroadcastMsg] = useState("");
 const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subtype: '' });
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', subtitle: '', onConfirm: null });
   const [wipingStaffId, setWipingStaffId] = useState(null); 
@@ -288,15 +283,6 @@ const [newCampaign, setNewCampaign]           = useState({
   title: '', body: '', segment: 'all', customPhones: ''
 });
 const [campaignSending, setCampaignSending]   = useState(false);
-
-const [feedbackData, setFeedbackData] = useState({ feedback: [], summary: { total: 0, unread: 0, avgRating: 0 } });
-const [feedbackLoading, setFeedbackLoading] = useState(false);
-const [feedbackNoteModal, setFeedbackNoteModal] = useState(null);
-const [feedbackNoteText, setFeedbackNoteText] = useState('');
-const [feedbackMonth, setFeedbackMonth]   = useState(() => {
-  const d = new Date(new Date().getTime() + 330*60*1000);
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-});
  
   // ── IST today string — used for billing HUD and daily breakdowns
 const istTodayStr = useMemo(() => {
@@ -821,15 +807,6 @@ socket.on("table_occupied_live", (data) => {
     new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
 });
 
-// ← FIXED: moved OUT of table_occupied_live, now a separate top-level listener:
-socket.on('low_rating_alert', (data) => {
-    new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
-    showNotif(
-        `⚠ Low rating (${data.rating}★) from Table ${data.tableNumber} — check Feedback tab`,
-        'error'
-    );
-});
-
       socket.on("menu_item_deleted", ({ itemId }) => {
   setMenuItems(prev => prev.filter(m => m._id !== itemId));
   showNotif("Menu item removed by operator", "info");
@@ -975,16 +952,6 @@ const fetchCustomerProfile = useCallback(async (phone) => {
     setCustomerProfile(res.data);
   } catch { setCustomerProfile(null); }
 }, [tenantId]);
- 
-const fetchFeedback = useCallback(async () => {
-  setFeedbackLoading(true);
-  try {
-    const monthStr = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
-    const res = await axios.get(`${BASE_URL}/feedback/${tenantId}?month=${monthStr}&limit=100`);
-    setFeedbackData(res.data || { feedback: [], summary: {} });
-  } catch { setFeedbackData({ feedback: [], summary: {} }); }
-  finally { setFeedbackLoading(false); }
-}, [tenantId, viewDate]);
  
 const fetchOffers = useCallback(async () => {
   try {
@@ -1339,7 +1306,7 @@ const pendingOrders = orders.filter(o =>
     // 17. Wastage
     } else if (qL.includes('wastage') || qL.includes('waste') || qL.includes('spoil')) {
       try {
-        const wData = await axios.get(`${BASE_URL}/admin/wastage/${tenantId}?period=today`).catch(() => ({ data: [] }));
+        const wData = await axios.get(`${BASE_URL}/wastage/${tenantId}`).catch(() => ({ data: [] }));
         const wArr   = Array.isArray(wData.data) ? wData.data : [];
         const wCost  = wArr.reduce((a, w) => a + (w.cost || 0), 0);
         answer = wArr.length > 0
@@ -1813,7 +1780,6 @@ useEffect(() => {
     if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
     if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
     if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
-    if (activeTab === 'feedback') fetchFeedback();
     if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); }
     if (activeTab === 'extras') fetchExtraItems();
     if (activeTab === 'insights') fetchAnalytics();
@@ -1827,7 +1793,6 @@ useEffect(() => {
     fetchAnalytics,
     // ← FIXED: added missing deps
     fetchCustomerDir,
-    fetchFeedback,
     fetchOffers,
     fetchCampaigns,
     fetchAnnouncements,
@@ -1851,16 +1816,16 @@ useEffect(() => {
 
   const handleLowStock = (data) => {
     lowStockAudio.play().catch(() => {}); // browsers may block autoplay until first user interaction
-    showNotif(`⚠ LOW STOCK: ${data.name} — only ${data.currentStock} ${data.unit}s left`, 'warning');
+    showNotif(`LOW STOCK: ${data.name} — only ${data.currentStock} ${data.unit}s left`, 'warning');
   };
 
   const handleOutOfStock = (data) => {
     outOfStockAudio.play().catch(() => {});
-    showNotif(`🚫 ${data.name} is OUT OF STOCK — auto-hidden from menu`, 'error');
+    showNotif(`${data.name} is OUT OF STOCK — auto-hidden from menu`, 'error');
   };
 
   const handleBackInStock = (data) => {
-    showNotif(`✅ ${data.name} restocked — back on menu`, 'success');
+    showNotif(`${data.name} restocked — back on menu`, 'success');
   };
 
   socket.on('extra_item_updated', handleItemUpdated);
@@ -2001,6 +1966,7 @@ const paymentMethodDetails = activePaymentType === 'split'
     try {
 const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
     discount,
+    discountType,
     finalAmount:    finalAmt,
     paymentMethods: paymentMethodDetails,
     customerPhone:  "",
@@ -2065,16 +2031,6 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
     } catch { showNotif("Error clearing request","error"); }
   };
 
-  const handleBroadcast = async () => {
-    if (!broadcastText && !selectedBroadcastItem) return;
-    setIsBroadcasting(true);
-    try {
-      const item = menuItems.find(i=>i._id===selectedBroadcastItem);
-      await axios.post(`${BASE_URL}/admin/broadcast`,{tenantId, itemName:item?.name||'', customOffer:broadcastText});
-      showNotif("Campaign Dispatched"); setBroadcastMsg("");
-    } catch { showNotif("Broadcast failed","error"); }
-    finally { setIsBroadcasting(false); }
-  };
 const [acknowledgedTables, setAcknowledgedTables] = useState({});
   const getTableMood = useCallback((tableId) => {
   const tableOrders = orders.filter(o =>
@@ -4064,7 +4020,6 @@ const totalRevenueAllTime = canonicalMonthRevenue;
           {id:'management',   label:'Management',      icon:<UserRoundCog size={16}/>, badge: null},
           {id:'customers',    label:'Customers',       icon:<Users size={16}/>,        badge: null},
           {id:'marketing',    label:'Marketing',       icon:<Megaphone size={16}/>,    badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length || null},
-          // {id:'feedback',     label:'Feedback',        icon:<MessageCircle size={16}/>,badge: (feedbackData?.summary?.unread ?? 0) > 0 ? feedbackData.summary.unread : null},
         ]
       },
     ].map(({section,items})=>(
@@ -4204,7 +4159,6 @@ const totalRevenueAllTime = canonicalMonthRevenue;
        activeTab==='recipes'     ? <ChefHat size={16} color="#d3bfa2"/> :
        activeTab==='customers'   ? <Users size={16} color="#d3bfa2"/> :
        activeTab==='marketing'   ? <Megaphone size={16} color="#d3bfa2"/> :
-       activeTab==='feedback'    ? <MessageCircle size={16} color="#d3bfa2"/> :
        <BarChart3 size={16} color="#d3bfa2"/>}
     </div>
     <div>
@@ -4222,7 +4176,6 @@ const totalRevenueAllTime = canonicalMonthRevenue;
          activeTab==='recipes'?'RECIPES':
          activeTab==='customers'?'CUSTOMERS':
          activeTab==='marketing'?'MARKETING':
-         activeTab==='feedback'?'FEEDBACK':
          activeTab.replace('_',' ').toUpperCase()}
       </h1>
       <div style={{fontSize:'0.5rem',color:'#2a2a2a',fontWeight:'700',marginTop:'3px',letterSpacing:'0.5px'}}>
@@ -4239,7 +4192,6 @@ const totalRevenueAllTime = canonicalMonthRevenue;
          activeTab==='recipes'?'Recipe costing · Ingredient mapping':
          activeTab==='customers'?'CRM · Segments · Visit history':
          activeTab==='marketing'?'Announcements · Offers · Campaigns':
-         activeTab==='feedback'?'Customer reviews · NPS · Ratings':
          ''}
       </div>
     </div>
@@ -5578,9 +5530,9 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                   <select value={editDishData.spicylevel ?? ''} onChange={e => setEditDishData(p => ({ ...p, spicylevel: e.target.value }))}
                     style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}>
                     <option value="">None</option>
-                    <option value="low">🌶 Low</option>
-                    <option value="medium">🌶🌶 Medium</option>
-                    <option value="high">🌶🌶🌶 High</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
                   </select>
                 </div>
                 <div>
@@ -5844,7 +5796,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                   {/* HOT BADGE */}
                   {hotDishes.has(item.name) && item.isAvailable && (
                     <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', fontWeight: '900', color: '#BA7517', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      🔥 HOT
+                      <Flame size={10} /> HOT
                     </div>
                   )}
 
@@ -5887,8 +5839,10 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                       </span>
                     )}
                     {item.spicylevel && (
-                      <span style={{ fontSize: '0.58rem', padding: '2px 7px', background: 'rgba(186,117,23,0.06)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '5px', color: '#8a704d', fontWeight: '700' }}>
-                        {'🌶'.repeat(item.spicylevel === 'low' ? 1 : item.spicylevel === 'medium' ? 2 : 3)}
+                      <span style={{ fontSize: '0.58rem', padding: '2px 7px', background: 'rgba(186,117,23,0.06)', border: '1px solid rgba(186,117,23,0.15)', borderRadius: '5px', color: '#8a704d', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                        {Array.from({ length: item.spicylevel === 'low' ? 1 : item.spicylevel === 'medium' ? 2 : 3 }).map((_, i) => (
+                          <Flame key={i} size={9} />
+                        ))}
                       </span>
                     )}
                   </div>
@@ -5902,7 +5856,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
                     >
-                      ✎ EDIT ALL DETAILS
+                      <SquarePen size={12} /> EDIT ALL DETAILS
                     </button>
                     <div style={{ display: 'flex', gap: '7px' }}>
                       <button onClick={async () => {
@@ -5916,7 +5870,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                       <button onClick={() => setPendingDeleteDish(item)} style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '9px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
-                        title="Remove dish">✕</button>
+                        title="Remove dish"><X size={14} /></button>
                     </div>
                   </div>
                 </div>
@@ -6825,7 +6779,7 @@ await axios.patch(`${BASE_URL}/offers/${offer._id}`, {isActive:!offer.isActive})
 fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
                 style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}>✕</button>
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}><X size={12} /></button>
             </div>
           </div>
         ))}
@@ -6899,7 +6853,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         {/* Title */}
         <div>
           <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Notification Title *</div>
-          <input type="text" placeholder="e.g. Weekend Special 🎉"
+          <input type="text" placeholder="e.g. Weekend Special"
             value={newCampaign.title} onChange={e=>setNewCampaign(p=>({...p,title:e.target.value}))}
             style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',fontWeight:'700',outline:'none',boxSizing:'border-box'}}/>
         </div>
@@ -11225,7 +11179,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                                     background:hrs>=9?'rgba(186,117,23,0.08)':'transparent',
                                     border:hrs>=9?'1px solid rgba(186,117,23,0.2)':'none'
                                   }}>
-                                    {hrs?`${hrs.toFixed(1)}h`:'—'}{hrs>=9&&' ⚠'}
+                                    {hrs?`${hrs.toFixed(1)}h`:'—'}{hrs>=9&&<AlertTriangle size={9} style={{display:'inline',verticalAlign:'middle',marginLeft:'3px'}} />}
                                   </span>
                                 </>
                               ):(
@@ -11238,8 +11192,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
                             <span style={{fontSize:'0.6rem',color:'#555',fontWeight:'700'}}>Total: {totalHoursToday.toFixed(2)}h</span>
                             {totalHoursToday>=9&&(
-                              <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(186,117,23,0.08)',color:'#BA7517',border:'1px solid rgba(186,117,23,0.2)'}}>
-                                ⚠ {(totalHoursToday-8).toFixed(1)}h overtime
+                              <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(186,117,23,0.08)',color:'#BA7517',border:'1px solid rgba(186,117,23,0.2)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
+                                <AlertTriangle size={9} /> {(totalHoursToday-8).toFixed(1)}h overtime
                               </span>
                             )}
                           </div>
@@ -11458,7 +11412,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         setSelectedExistingItem(null);
         setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
       }} style={{ background: 'transparent', border: '1px solid #333', color: '#555', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
-        CLEAR ✕
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}>CLEAR <X size={10} /></span>
       </button>
     )}
   </div>
@@ -11524,7 +11478,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     {/* NAME with autocomplete */}
     <div style={{ position: 'relative' }}>
       <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        NAME {selectedExistingItem && <span style={{ color: '#d3bfa2' }}>✓ MATCHED</span>}
+        NAME {selectedExistingItem && <span style={{ color: '#d3bfa2', display:'inline-flex', alignItems:'center', gap:'3px' }}><CheckCircle2 size={10} /> MATCHED</span>}
       </label>
       <input type="text" placeholder="e.g. Tomato" style={{
         width: '100%', padding: '10px 12px',
@@ -11665,14 +11619,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, payload);
           if (res.data.merged) {
             const msg = res.data.wacUpdated
-              ? `✓ Restocked · WAC updated: ${res.data.note}`
-              : `✓ ${res.data.item.itemName} restocked at existing WAC`;
+              ? `Restocked · WAC updated: ${res.data.note}`
+              : `${res.data.item.itemName} restocked at existing WAC`;
             showNotif(msg);
             // Cost spike alert
-            if (res.data.priceChangePct > 25) showNotif(`⚠ Price spike: +${res.data.priceChangePct}% vs WAC — check supplier`, "error");
-            else if (res.data.priceChangePct > 10) showNotif(`⚡ Price up ${res.data.priceChangePct}% vs WAC`, "info");
+            if (res.data.priceChangePct > 25) showNotif(`Price spike: +${res.data.priceChangePct}% vs WAC — check supplier`, "error");
+            else if (res.data.priceChangePct > 10) showNotif(`Price up ${res.data.priceChangePct}% vs WAC`, "info");
           } else {
-            showNotif(`✓ ${res.data.item.itemName} added to inventory`);
+            showNotif(`${res.data.item.itemName} added to inventory`);
           }
           setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
           setSelectedExistingItem(null);
@@ -11688,8 +11642,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
   <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#333', fontWeight: '600' }}>
     {selectedExistingItem
-      ? '💡 Enter the price you paid THIS time — WAC auto-recalculates weighted average across all batches.'
-      : '💡 Type an ingredient name to see existing matches and restock with WAC calculation.'}
+      ? 'Enter the price you paid THIS time — WAC auto-recalculates weighted average across all batches.'
+      : 'Type an ingredient name to see existing matches and restock with WAC calculation.'}
   </div>
 </div>
               {/* LEDGER TABLE */}
@@ -11719,11 +11673,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Current Stock</th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
         Min Threshold
-        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}>✎ editable</span>
+        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}><SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /> editable</span>
       </th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
         Cost/Unit
-        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}>✎ editable</span>
+        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}><SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /> editable</span>
       </th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Stock Value</th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Status</th>
@@ -11768,7 +11722,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                   }}
                 />
                 {item.currentStock < 0 && (
-                  <span title="Stock depleted" style={{ fontSize: '0.7rem', color: '#BA7517' }}>⚠</span>
+                  <AlertTriangle size={12} title="Stock depleted" color="#BA7517" />
                 )}
               </div>
             </td>
@@ -11834,13 +11788,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         </div>
       );
     })()}
-    <span style={{ fontSize: '0.5rem', color: '#2a2a2a', letterSpacing: '0.5px' }}>WAC ✎</span>
+    <span style={{ fontSize: '0.5rem', color: '#2a2a2a', letterSpacing: '0.5px' }}>WAC <SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /></span>
   </div>
 </td>
  
             {/* STOCK VALUE */}
-            <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px' }}>
-              ₹{Math.abs(sv).toLocaleString()}{sv < 0 ? ' ⚠' : ''}
+            <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px', display:'flex', alignItems:'center', gap:'4px' }}>
+              ₹{Math.abs(sv).toLocaleString()}{sv < 0 && <AlertTriangle size={10} />}
             </td>
  
             {/* STATUS */}
@@ -12296,7 +12250,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <option value="">— Select a dish —</option>
               {menuItems.map(m => (
                 <option key={m._id} value={m._id}>
-                  {m.name} {recipes.some(r => r.menuItemId?.toString() === m._id && r.ingredients?.length > 0) ? '✓' : ''}
+                  {m.name}{recipes.some(r => r.menuItemId?.toString() === m._id && r.ingredients?.length > 0) ? ' (has recipe)' : ''}
                 </option>
               ))}
             </select>
@@ -12740,7 +12694,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         </button>
         <button onClick={fetchCounterQueue}
           style={{padding:'8px 14px',background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer'}}>
-          ↻ REFRESH
+          <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><RefreshCw size={11} /> REFRESH</span>
         </button>
       </div>
     </div>
@@ -12856,7 +12810,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                           style={{width:'26px',height:'26px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'6px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem'}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
                           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
-                          ✎
+                          <SquarePen size={12} />
                         </button>
                       </div>
                     </div>
@@ -13384,14 +13338,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     <button onClick={()=>{setExtraItemEditModal(item);setExtraItemEditData({...item});}}
                       style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#333',borderRadius:'7px',fontSize:'0.7rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}>✎</button>
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}><SquarePen size={12} /></button>
                     <button onClick={()=>setConfirmModal({
                       show:true,title:`Remove "${item.name}"?`,
                       subtitle:'This permanently removes the item from your catalog.',
                       onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);fetchExtraItems();showNotif(`${item.name} removed`);}
                     })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}>✕</button>
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}><X size={12} /></button>
                   </div>
                 </div>
               </div>
@@ -14821,7 +14775,7 @@ onClick={async () => {
 
           {/* Tip */}
           <div style={{ marginTop: '10px', fontSize: '0.6rem', color: '#333', lineHeight: 1.5 }}>
-            💡 Copy and paste into WhatsApp, SMS, or email to your supplier. Edit quantity and vendor above before copying.
+            Copy and paste into WhatsApp, SMS, or email to your supplier. Edit quantity and vendor above before copying.
           </div>
         </div>
       </motion.div>

@@ -9,7 +9,8 @@ import {
   Droplets, Trash2, HelpCircle, Minus, Plus, ReceiptText, ChevronRight, UtensilsCrossed, Layers, ShoppingBag ,Armchair,
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
-  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag
+  Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
+  Sun, Moon, ArrowUp
 } from 'lucide-react'; 
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -194,14 +195,14 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       visitAgain: "Visit us again!",
       rateGoogle: "Rate us on Google",
       backMenu: "BACK TO MENU",
-      orderSuccess: "Order sent to kitchen! 👨‍🍳",
+      orderSuccess: "Order sent to kitchen!",
       orderError: "Error sending order.",
       detailsReq: "Details required.",
       spiceHigh: "HIGH",
       spiceMed: "MEDIUM",
       spiceLow: "LOW",
       notes: "Less spicy, no onion etc...",
-      viewInSpace: "✨ VIEW IN YOUR SPACE",
+      viewInSpace: "VIEW IN YOUR SPACE",
       zoomRotate: "Pinch to zoom • Drag to rotate",
       searchPlaceholder: "Search dishes...",
       callWaiter: "Request Service",
@@ -245,14 +246,14 @@ const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.
       visitAgain: "पुन्हा नक्की या!",
       rateGoogle: "आम्हाला गुगलवर रेट करा",
       backMenu: "मेनूकडे परत जा",
-      orderSuccess: "ऑर्डर किचनमध्ये पाठवली आहे! 👨‍🍳",
+      orderSuccess: "ऑर्डर किचनमध्ये पाठवली आहे!",
       orderError: "ऑर्डर पाठवताना समस्या आली.",
       detailsReq: "माहिती भरणे आवश्यक आहे.",
       spiceHigh: "जास्त तिखट",
       spiceMed: "मध्यम तिखट",
       spiceLow: "कमी तिखट",
       notes: "तुमच्या आवडीनुसार सूचना...",
-      viewInSpace: "✨ तुमच्या जागेत पहा",
+      viewInSpace: "तुमच्या जागेत पहा",
       zoomRotate: "झूम करण्यासाठी पिंच करा • फिरवण्यासाठी ड्रॅग करा",
       searchPlaceholder: "पदार्थ शोधा...",
       callWaiter: "सेवा विनंती",
@@ -333,6 +334,10 @@ const globalSearchResults = useMemo(() => {
       setNotificationBanner({ type: 'table', tableNumber: data.tableNumber, restaurantName: data.restaurantName });
       if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
     });
+    waitlistSocket.on('reservation_seated', (data) => {
+      setNotificationBanner({ type: 'table', tableNumber: data.tableNumber, restaurantName: data.restaurantName });
+      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
+    });
     waitlistSocket.on('pickup_ready', (data) => {
       setNotificationBanner({ type: 'pickup', restaurantName: data.restaurantName });
       if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
@@ -404,6 +409,7 @@ waitlistSocket.on('operator_notify', (data) => {
 
 return () => {
   waitlistSocket.off('table_assigned');
+  waitlistSocket.off('reservation_seated');
   waitlistSocket.off('pickup_ready');
   waitlistSocket.off('position_updated');
   waitlistSocket.off('pickup_reminder');
@@ -555,8 +561,10 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(211,191,162,0.05)'
         }}>
-          <div style={{ fontSize: '36px', lineHeight: 1 }}>
-            {isTable ? '🪑' : '🛍️'}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isTable
+              ? <Armchair size={36} color="#d3bfa2" strokeWidth={1.5} />
+              : <ShoppingBag size={36} color="#d3bfa2" strokeWidth={1.5} />}
           </div>
         </div>
       </div>
@@ -782,7 +790,7 @@ const getDescription = (item, lang) => {
 };
 
 const getSpiceLevel = (item, lang) => {
-  const raw = String(item.spiceLevel || '').toLowerCase();
+  const raw = String(item.spicylevel || '').toLowerCase();
 
   if (lang === 'hi-IN') {
     return {
@@ -791,7 +799,7 @@ const getSpiceLevel = (item, lang) => {
       low: 'हल्का तीखा',
       mild: 'हल्का',
       none: 'बिल्कुल तीखा नहीं'
-    }[raw] || item.spiceLevel;
+    }[raw] || item.spicylevel;
   }
 
   if (lang === 'mr-IN') {
@@ -801,7 +809,7 @@ const getSpiceLevel = (item, lang) => {
       low: 'कमी तिखट',
       mild: 'सौम्य',
       none: 'अजिबात तिखट नाही'
-    }[raw] || item.spiceLevel;
+    }[raw] || item.spicylevel;
   }
 
   return {
@@ -810,7 +818,7 @@ const getSpiceLevel = (item, lang) => {
     low: 'low',
     mild: 'mild',
     none: 'not spicy'
-  }[raw] || item.spiceLevel;
+  }[raw] || item.spicylevel;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -3925,8 +3933,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         marginBottom: '14px'
       }}>
         {[
-          { id: 'lunch',  label: language === 'mr' ? '🌞  दुपारचे जेवण' : '🌞  Lunch',  sub: '1 PM – 4 PM' },
-          { id: 'dinner', label: language === 'mr' ? '🌙  रात्रीचे जेवण' : '🌙  Dinner', sub: '7 PM – 11 PM' },
+          { id: 'lunch',  icon: Sun,  label: language === 'mr' ? 'दुपारचे जेवण' : 'Lunch',  sub: '1 PM – 4 PM' },
+          { id: 'dinner', icon: Moon, label: language === 'mr' ? 'रात्रीचे जेवण' : 'Dinner', sub: '7 PM – 11 PM' },
         ].map(period => {
           const isActive = (() => {
             if (!reservationTime) return false;
@@ -3946,7 +3954,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 transition: 'all 0.15s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px'
               }}
             >
-              <span style={{ fontSize: '0.78rem', fontWeight: '900', color: isActive ? '#d3bfa2' : 'rgba(255,255,255,0.25)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: '900', color: isActive ? '#d3bfa2' : 'rgba(255,255,255,0.25)' }}>
+                <period.icon size={14} strokeWidth={2} />
                 {period.label}
               </span>
               <span style={{ fontSize: '0.52rem', color: isActive ? 'rgba(211,191,162,0.4)' : 'rgba(255,255,255,0.12)', fontWeight: '700' }}>
@@ -3974,8 +3983,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         };
 
         if (slots.length === 0) return (
-          <div style={{ textAlign: 'center', padding: '18px', color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', fontWeight: '600' }}>
-            {language === 'mr' ? '↑ वेळ निवडा' : '↑ Select a meal period above'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '18px', color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', fontWeight: '600' }}>
+            <ArrowUp size={14} />
+            {language === 'mr' ? 'वेळ निवडा' : 'Select a meal period above'}
           </div>
         );
 
@@ -7455,13 +7465,16 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       : sendBatchToKitchen
   }
 >
-            {isCounterScan
-              ? counterMode === 'dine-in'
-                ? (language === 'mr' ? 'रांगेत ऑर्डर द्या ✓' : 'PLACE WAITLIST ORDER ✓')
-                : counterMode === 'reservation'
-                ? (language === 'mr' ? 'बुकिंग कन्फर्म करा ✓' : 'CONFIRM RESERVATION ✓')
-                : (language === 'mr' ? 'पिकअप ऑर्डर द्या ✓' : 'PLACE PICKUP ORDER ✓')
-              : t[language].orderNow}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+              {isCounterScan && <CheckCircle2 size={16} />}
+              {isCounterScan
+                ? counterMode === 'dine-in'
+                  ? (language === 'mr' ? 'रांगेत ऑर्डर द्या' : 'PLACE WAITLIST ORDER')
+                  : counterMode === 'reservation'
+                  ? (language === 'mr' ? 'बुकिंग कन्फर्म करा' : 'CONFIRM RESERVATION')
+                  : (language === 'mr' ? 'पिकअप ऑर्डर द्या' : 'PLACE PICKUP ORDER')
+                : t[language].orderNow}
+            </span>
           </button>
         )}
         {!isCounterScan && (
@@ -7526,10 +7539,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           )}
  
           {/* Spice */}
-          {activeModel.spiceLevel && (
+          {activeModel.spicylevel && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
               <Flame size={9} color="rgba(255,255,255,0.3)" strokeWidth={2} />
-              <span style={{ fontSize: '0.47rem', fontWeight: '700', color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize' }}>{activeModel.spiceLevel}</span>
+              <span style={{ fontSize: '0.47rem', fontWeight: '700', color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize' }}>{activeModel.spicylevel}</span>
             </div>
           )}
  
@@ -7638,10 +7651,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
               label: 'Serves',
               value: activeModel.servingSize
             },
-            activeModel.spiceLevel && {
+            activeModel.spicylevel && {
               icon: <Flame size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
               label: 'Spice',
-              value: activeModel.spiceLevel.charAt(0).toUpperCase() + activeModel.spiceLevel.slice(1)
+              value: activeModel.spicylevel.charAt(0).toUpperCase() + activeModel.spicylevel.slice(1)
             },
             activeModel.priceHalf > 0 && {
               icon: <Tag size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.8} />,
