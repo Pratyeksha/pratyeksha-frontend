@@ -152,6 +152,7 @@ const api = axios.create({ baseURL: API_BASE });
 
 const OwnerCtx = createContext(null);
 const useOwner = () => useContext(OwnerCtx);
+const LAST_TENANT_KEY = 'pratyeksha_owner_last_tenant';
 
 function OwnerProvider({ tenantId, children }) {
   const [socket, setSocket] = useState(null);
@@ -166,6 +167,12 @@ function OwnerProvider({ tenantId, children }) {
     s.on('owner_alert', (payload) => setLiveAlert({ ...payload, _t: Date.now() }));
     setSocket(s);
     return () => s.disconnect();
+  }, [outlet]);
+
+  // Remember the active outlet so relaunching the installed app (which opens
+  // at the generic /owner/ start_url) can jump straight back to it.
+  useEffect(() => {
+    if (outlet) { try { localStorage.setItem(LAST_TENANT_KEY, outlet); } catch (e) {} }
   }, [outlet]);
 
   const value = useMemo(() => ({ tenantId: outlet, setOutlet, socket, connected, liveAlert }), [outlet, socket, connected, liveAlert]);
@@ -202,6 +209,70 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
   }, [refreshMs, fetchData]);
 
   return { data, loading, error, refetch: () => fetchData(true) };
+}
+
+/* ════════════════════════════════════════════════════════════
+   PWA — installable app (manifest + service worker + install prompt)
+   Files referenced below (/owner-manifest.webmanifest, /owner-sw.js,
+   /pwa/icon-*.png) must be placed in your Vite project's /public folder
+   — see the deployment note at the bottom of this file.
+   ════════════════════════════════════════════════════════════ */
+function usePwaInstall() {
+  const [installEvent, setInstallEvent] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+
+  useEffect(() => {
+    // Inject manifest link + theme-color + apple touch icon once, scoped to this app.
+    if (!document.querySelector('link[rel="manifest"]')) {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/owner-manifest.webmanifest';
+      document.head.appendChild(link);
+    }
+    if (!document.querySelector('meta[name="theme-color"]')) {
+      const meta = document.createElement('meta');
+      meta.name = 'theme-color'; meta.content = '#0a0a0a';
+      document.head.appendChild(meta);
+    }
+    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+      const link = document.createElement('link');
+      link.rel = 'apple-touch-icon';
+      link.href = '/pwa/apple-touch-icon.png';
+      document.head.appendChild(link);
+    }
+
+    // Register the service worker, scoped only to /owner/ so it never
+    // touches the customer menu / kitchen / admin routes.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/owner-sw.js', { scope: '/owner/' }).catch(() => {});
+    }
+
+    setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone);
+    setInstalled(window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true);
+
+    const onBeforeInstall = (e) => { e.preventDefault(); setInstallEvent(e); };
+    const onInstalled = () => { setInstalled(true); setInstallEvent(null); };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const promptInstall = async () => {
+    if (!installEvent) return 'unavailable';
+    installEvent.prompt();
+    const { outcome } = await installEvent.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+    setInstallEvent(null);
+    return outcome;
+  };
+
+  // canInstall: a real one-click native prompt is available (Chrome/Edge/Android/desktop).
+  // isIos: no native prompt exists on iOS Safari — show manual "Add to Home Screen" steps instead.
+  return { canInstall: !!installEvent, installed, isIos, promptInstall };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -487,6 +558,82 @@ const BOTTOM_NAV_KEYS = ['dashboard', 'revenue', 'kitchen', 'staff', 'reports'];
 /* ════════════════════════════════════════════════════════════
    LAYOUT — Sidebar (desktop) + Bottom Nav (mobile) + Top Bar
    ════════════════════════════════════════════════════════════ */
+const IosStep = ({ n, text }) => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+    <div style={{ width: 24, height: 24, borderRadius: '50%', background: T.primarySoft, color: T.primary, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</div>
+    <div style={{ fontSize: 12.5, color: T.textMed, lineHeight: 1.6, paddingTop: 2 }}>{text}</div>
+  </div>
+);
+
+const IosInstallModal = ({ open, onClose }) => (
+  <Modal open={open} onClose={onClose} title="Install on iPhone / iPad" width={360}>
+    <div style={{ display: 'grid', gap: 14 }}>
+      <IosStep n={1} text={<>Tap the <b>Share</b> icon in Safari's toolbar</>} />
+      <IosStep n={2} text={<>Scroll down and tap <b>"Add to Home Screen"</b></>} />
+      <IosStep n={3} text={<>Tap <b>Add</b> — the app icon appears on your home screen</>} />
+    </div>
+  </Modal>
+);
+
+/** Compact install button for the sidebar footer. */
+const InstallAppButton = () => {
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [showIosHelp, setShowIosHelp] = useState(false);
+
+  if (installed) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: T.textLow, fontWeight: 700, padding: '9px 2px' }}>
+      <CheckCircle2 size={13} color={T.primary} /> App installed
+    </div>
+  );
+  if (!canInstall && !isIos) return null;
+
+  return (
+    <>
+      <button onClick={() => isIos ? setShowIosHelp(true) : promptInstall()} className="pown-btn pown-shimmer-btn" style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, padding: '11px 12px',
+        borderRadius: 12, background: `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`, color: '#0a0a0a',
+        border: 'none', fontSize: 12.5, fontWeight: 800, boxShadow: '0 8px 20px -8px rgba(211,191,162,0.55)'
+      }}><Download size={14} /> Install App</button>
+      <IosInstallModal open={showIosHelp} onClose={() => setShowIosHelp(false)} />
+    </>
+  );
+};
+
+/** Prominent, dismissible install banner shown on the Dashboard. */
+const INSTALL_DISMISS_KEY = 'pratyeksha_owner_install_dismissed';
+const InstallBanner = () => {
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [dismissed, setDismissed] = useState(() => { try { return localStorage.getItem(INSTALL_DISMISS_KEY) === '1'; } catch (e) { return false; } });
+  const [showIosHelp, setShowIosHelp] = useState(false);
+
+  const dismiss = () => { setDismissed(true); try { localStorage.setItem(INSTALL_DISMISS_KEY, '1'); } catch (e) {} };
+
+  if (installed || dismissed || (!canInstall && !isIos)) return null;
+
+  return (
+    <Card interactive style={{
+      display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
+      background: `linear-gradient(120deg, ${T.surfaceRaised} 0%, ${T.surface} 60%, rgba(211,191,162,0.06) 100%)`,
+      flexWrap: 'wrap'
+    }}>
+      <div style={{
+        width: 44, height: 44, borderRadius: 13, flexShrink: 0,
+        background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px -6px rgba(211,191,162,0.5)'
+      }}><Smartphone size={20} color="#0a0a0a" strokeWidth={2.25} /></div>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700 }}>Install Pratyeksha Owner</div>
+        <div style={{ fontSize: 11.5, color: T.textLow, marginTop: 2 }}>One tap, no app store — live on your home screen like any other app.</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <PrimaryBtn icon={Download} onClick={() => isIos ? setShowIosHelp(true) : promptInstall()}>Install</PrimaryBtn>
+        <button onClick={dismiss} className="pown-btn" style={{ background: 'transparent', color: T.textLow, padding: 6 }}><X size={16} /></button>
+      </div>
+      <IosInstallModal open={showIosHelp} onClose={() => setShowIosHelp(false)} />
+    </Card>
+  );
+};
+
 const Sidebar = () => {
   const { tenantId } = useParams();
   return (
@@ -525,7 +672,8 @@ const Sidebar = () => {
           </NavLink>
         ))}
       </nav>
-      <div style={{ padding: 18, borderTop: `1px solid ${T.border}` }}>
+      <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10 }}>
+        <InstallAppButton />
         <button className="pown-btn" style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
           borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
@@ -729,6 +877,7 @@ const DashboardPage = () => {
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <LiveClock />
+      <InstallBanner />
       {/* Hero KPI row */}
       <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
         <KpiCard hero icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${data.revenue.today.toLocaleString('en-IN')}`}
@@ -1989,5 +2138,53 @@ export default function OwnerApp() {
         <OwnerAppInner />
       </OwnerProvider>
     </>
+  );
+}
+
+/**
+ * OwnerLauncher — mount this at the bare "/owner" path (exact, no :tenantId).
+ * This is what actually opens when someone taps the installed app icon,
+ * because a web manifest's start_url can't contain a dynamic segment.
+ * It jumps straight to the last outlet used on this device, or asks once.
+ *
+ *   import { OwnerLauncher } from './OwnerApp/PratyekshaOwnerApp.jsx';
+ *   <Route path="/owner" element={<OwnerLauncher />} />
+ *   <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
+ */
+export function OwnerLauncher() {
+  const navigate = useNavigate();
+  const [outletInput, setOutletInput] = useState('');
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let last = null;
+    try { last = localStorage.getItem(LAST_TENANT_KEY); } catch (e) {}
+    if (last) navigate(`/owner/${last}/dashboard`, { replace: true });
+    else setChecking(false);
+  }, [navigate]);
+
+  const go = () => {
+    const id = outletInput.trim();
+    if (id) navigate(`/owner/${id}/dashboard`);
+  };
+
+  if (checking) return null;
+
+  return (
+    <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: 20 }}>
+      <GlobalStyles />
+      <Card style={{ width: 360, maxWidth: '100%', textAlign: 'center' }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 15, margin: '0 auto 18px',
+          background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 26px -6px rgba(211,191,162,0.5)'
+        }}><Store size={24} color="#0a0a0a" strokeWidth={2.25} /></div>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Welcome to Pratyeksha Owner</div>
+        <div style={{ fontSize: 12, color: T.textLow, marginBottom: 20, lineHeight: 1.6 }}>Enter your outlet ID to open your dashboard. You'll only need to do this once on this device.</div>
+        <input value={outletInput} onChange={e => setOutletInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && go()}
+          placeholder="e.g. jay_ambe_fusion" style={{ ...inputStyle, textAlign: 'center', marginBottom: 14 }} autoFocus />
+        <PrimaryBtn icon={ChevronRight} onClick={go} disabled={!outletInput.trim()} style={{ width: '100%', justifyContent: 'center' }}>Open Dashboard</PrimaryBtn>
+      </Card>
+    </div>
   );
 }
