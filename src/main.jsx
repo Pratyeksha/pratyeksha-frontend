@@ -7,7 +7,7 @@ import OperatorPortal from './OperatorPortal.jsx'
 import KitchenView from './KitchenView.jsx'
 import PratyekshaMasterAdmin from './PratyekshaMasterAdmin.jsx'
 import Pratyeksha from './Pratyeksha.jsx'
-import OwnerApp from './OwnerApp.jsx'
+import OwnerApp, { OwnerLauncher } from './OwnerApp/PratyekshaOwnerApp.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -25,7 +25,11 @@ createRoot(document.getElementById('root')).render(
         {/* 4. Operator Portal Route */}
         <Route path="/operator" element={<OperatorPortal />} />
 
-        {/* 5. Owner App Route (Live Dashboard, P&L, Inventory, Staff, etc.) */}
+        {/* 5a. Owner App Launcher — this is what the installed PWA icon opens
+               (web manifest start_url is "/owner/", with no tenant segment) */}
+        <Route path="/owner" element={<OwnerLauncher />} />
+
+        {/* 5b. Owner App Route (Live Dashboard, P&L, Inventory, Staff, etc.) */}
         <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
 
         {/* 6. Customer Menu Route (Dynamic) */}
