@@ -2328,11 +2328,9 @@ useEffect(() => {
   if (!tenantId) return;
   axios.get(`${BASE_URL}/orders/${tenantId}?limit=1000`)
     .then(r => {
-      console.log('[ordersData] fetched:', r.data?.length, 'orders');
       setOrdersData(r.data || []);
     })
-    .catch(err => {
-      console.error('[ordersData] fetch failed:', err.response?.status, err.message);
+    .catch(() => {
       setOrdersData([]);
     });
 }, [tenantId]);
@@ -3774,7 +3772,6 @@ const downloadAllTodaysInvoices = useCallback(async () => {
     const res = await axios.get(`${BASE_URL}/admin/bills/${tenantId}/today`);
     const bills = res.data?.bills || [];
 
-    console.log('[downloadAllTodaysInvoices] bills fetched:', bills.length, bills);
 
     if (bills.length === 0) {
       showNotif('No settled invoices found for today', 'info');
@@ -3910,7 +3907,6 @@ const downloadAllTodaysInvoices = useCallback(async () => {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       const targetEl = renderHost.firstElementChild;
-      console.log(`[downloadAllTodaysInvoices] bill ${i + 1}/${bills.length} render size:`, targetEl.scrollWidth, 'x', targetEl.scrollHeight);
 
       if (targetEl.scrollHeight < 50) {
         console.error(`[downloadAllTodaysInvoices] bill ${i + 1} failed to render — skipping`);
@@ -7955,10 +7951,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     </div>
 
     {/* ── GRAND TOTAL ── */}
-    <div style={{borderTop:'2px solid #000', paddingTop:'14px'}}>
-      <div style={{display:'flex', justifyContent:'space-between', fontSize:'1.4rem', fontWeight:'900'}}>
-        <span>GRAND TOTAL</span>
-        <span>₹{(() => {
+    <div style={{
+      marginTop:'16px', padding:'18px 20px', borderRadius:'10px',
+      background:'#f7f5f2',
+      border:'1.5px solid #111',
+    }}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
+        <span style={{fontSize:'0.68rem', fontWeight:'900', color:'#333', letterSpacing:'1.5px'}}>GRAND TOTAL</span>
+        <span style={{fontSize:'1.65rem', fontWeight:'900', color:'#000', letterSpacing:'-0.5px', fontFamily:'monospace'}}>₹{(() => {
           // Must match the real settlement math in handleFinalSettle: discount is applied
           // to the pre-tax subtotal, then tax is recomputed on what's left — and, critically,
           // a flat ₹ discount is a rupee amount, never a percentage of the bill.
@@ -7967,10 +7967,10 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             : tableBill.subtotal * (1 - (Number(discount) || 0) / 100);
           const cgstPct = parseFloat(tableBill.cgstPct) / 100;
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
-          return Math.round(discSub + discSub * cgstPct + discSub * sgstPct);
+          return Math.round(discSub + discSub * cgstPct + discSub * sgstPct).toLocaleString('en-IN');
         })()}</span>
       </div>
-      <div style={{fontSize:'0.58rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'4px'}}>
+      <div style={{fontSize:'0.56rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'6px', letterSpacing:'0.5px'}}>
         MODE: {activePaymentType === 'split' ? 'SPLIT PAYMENT' : selectedSingleMode.toUpperCase()}
       </div>
     </div>
