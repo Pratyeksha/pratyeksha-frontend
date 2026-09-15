@@ -1,4 +1,3 @@
-// public/sw.js
 // ═══════════════════════════════════════════════════════════════
 // PRATYEKSHA — Customer menu offline cache
 // Place this file at the STATIC ROOT of the frontend build

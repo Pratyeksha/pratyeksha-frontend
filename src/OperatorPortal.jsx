@@ -9,7 +9,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
-  User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote,
+  User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote, ChevronUp, ChevronDown, LayoutGrid,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
@@ -315,10 +315,18 @@ const [pickupPaymentMethod, setPickupPaymentMethod] = useState('cash');
   const [prepTimeData, setPrepTimeData] = useState(null);
   const [profitabilityData, setProfitabilityData] = useState([]);
   const [procurementData, setProcurementData] = useState([]);
+const [vendors, setVendors] = useState([]);
+const [tableRevenueData, setTableRevenueData] = useState({ revenueByTable: {}, maxRevenue: 0 });
+const [floorEditMode, setFloorEditMode] = useState(false);
+const [draggingTable, setDraggingTable] = useState(null);
+const [localFloorLayout, setLocalFloorLayout] = useState(null); // null = use tenantConfig's saved layout
+const [showVendorPanel, setShowVendorPanel] = useState(false);
+const [newVendorDraft, setNewVendorDraft] = useState({ name: '', contactPerson: '', phone: '', email: '', paymentTerms: 'COD', leadTimeDays: 1 });
+const [editingVendorId, setEditingVendorId] = useState(null);
   const [staffEfficiency, setStaffEfficiency] = useState([]);
   const [categoryRankings, setCategoryRankings] = useState({});
 
-const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });  const [activeRecipeItemId, setActiveRecipeItemId] = useState('');
+const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '', expiryDate: '' });  const [activeRecipeItemId, setActiveRecipeItemId] = useState('');
   const [recipeIngredientRows, setRecipeIngredientRows] = useState([{ inventoryId: '', quantityUsed: '' }]);
   const [inventorySearchQuery, setInventorySearchQuery] = useState('');
   // ── NEW: recipe search
@@ -722,6 +730,7 @@ fetchAuditLogs();
       fetchInitialData();
       fetchManagementData();
       fetchTurnTimeData();
+      fetchTableRevenueData();
 
       socket.on("new_order", (order) => { 
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{}); 
@@ -1552,6 +1561,51 @@ const fetchTurnTimeData = useCallback(async () => {
   } catch { setTurnTimeData(null); }
 }, [tenantId]);
 
+const fetchTableRevenueData = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/admin/analytics/table-revenue-today/${tenantId}`);
+    setTableRevenueData(res.data);
+  } catch { setTableRevenueData({ revenueByTable: {}, maxRevenue: 0 }); }
+}, [tenantId]);
+
+// ── Build the working floor layout: saved layout if it exists, else an auto-arranged
+// grid from tableCount so the heatmap is usable on day one with zero setup ──
+const floorLayout = useMemo(() => {
+  if (localFloorLayout) return localFloorLayout;
+  const saved = tenantConfig?.floorLayout;
+  if (saved && saved.length > 0) return saved;
+  const count = tenantConfig?.tableCount || 12;
+  const perRow = Math.ceil(Math.sqrt(count * 1.6));
+  const rows = Math.ceil(count / perRow);
+  return Array.from({ length: count }, (_, i) => ({
+    tableNumber: String(i + 1),
+    x: 10 + (i % perRow) * (80 / Math.max(1, perRow - 1 || 1)),
+    y: 12 + Math.floor(i / perRow) * (76 / Math.max(1, rows - 1 || 1))
+  }));
+}, [localFloorLayout, tenantConfig]);
+
+const saveFloorLayout = async (layout) => {
+  try {
+    await axios.patch(`${BASE_URL}/tenant/floor-layout/${tenantId}`, { floorLayout: layout });
+    setTenantConfig(p => ({ ...p, floorLayout: layout }));
+    setLocalFloorLayout(null);
+  } catch { showNotif('Could not save floor layout', 'error'); }
+};
+
+const revenueColor = (tableNumber) => {
+  const rev = tableRevenueData.revenueByTable[tableNumber] || 0;
+  const max = tableRevenueData.maxRevenue || 1;
+  if (rev === 0) return { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', text: '#333' };
+  const intensity = Math.min(1, rev / max); // 0 → 1
+  // Interpolate from a dim gold to a deep, saturated gold as spend increases
+  const alpha = 0.12 + intensity * 0.68;
+  return {
+    bg: `rgba(211,191,162,${alpha})`,
+    border: `rgba(211,191,162,${Math.min(1, alpha + 0.25)})`,
+    text: intensity > 0.5 ? '#000' : '#d3bfa2'
+  };
+};
+
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
@@ -1559,6 +1613,136 @@ const showNotif = useCallback((msg, type = 'success', subtype = '') => {
   setNotif({ show: true, msg, type, subtype });
   setTimeout(() => setNotif(p => ({ ...p, show: false })), 5000);
 }, []);
+
+const fetchVendors = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/vendors/${tenantId}`);
+    setVendors(res.data || []);
+  } catch { setVendors([]); }
+}, [tenantId]);
+
+const saveVendor = async () => {
+  if (!newVendorDraft.name?.trim()) return showNotif('Vendor name is required', 'error');
+  try {
+    if (editingVendorId) {
+      await axios.patch(`${BASE_URL}/vendors/${tenantId}/${editingVendorId}`, newVendorDraft);
+      showNotif('Vendor updated');
+    } else {
+      await axios.post(`${BASE_URL}/vendors/${tenantId}`, newVendorDraft);
+      showNotif('Vendor added');
+    }
+    setNewVendorDraft({ name: '', contactPerson: '', phone: '', email: '', paymentTerms: 'COD', leadTimeDays: 1 });
+    setEditingVendorId(null);
+    fetchVendors();
+  } catch { showNotif('Could not save vendor', 'error'); }
+};
+
+const deleteVendor = async (id) => {
+  try {
+    await axios.delete(`${BASE_URL}/vendors/${tenantId}/${id}`);
+    fetchVendors();
+    fetchManagementData();
+    showNotif('Vendor removed');
+  } catch { showNotif('Could not remove vendor', 'error'); }
+};
+
+const linkIngredientVendor = async (inventoryItemId, vendorId) => {
+  try {
+    await axios.patch(`${BASE_URL}/inventory/item/${inventoryItemId}/vendor`, { vendorId: vendorId || null });
+    fetchManagementData();
+  } catch { showNotif('Could not link vendor', 'error'); }
+};
+
+const generatePurchaseOrderPDF = async (vendor) => {
+  const itemsForVendor = (procurementData || []).filter(p =>
+    (p.vendorId === vendor._id || p.vendorId?.toString?.() === vendor._id?.toString?.())
+    && p.suggestedReorderQty > 0
+  );
+  if (itemsForVendor.length === 0) {
+    showNotif(`Nothing due for reorder from ${vendor.name} right now`, 'info');
+    return;
+  }
+
+  const today = new Date();
+  const poNumber = `PO-${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}-${vendor.name.replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase()}`;
+  const rows = itemsForVendor.map((it, i) => `
+    <tr>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;">${i+1}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;font-weight:700;">${it.itemName}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;">${it.suggestedReorderQty}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;">${it.unit}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;">${it.currentStock}</td>
+    </tr>
+  `).join('');
+
+  const poHTML = `
+    <div id="po-frame" style="width:794px;padding:48px;background:#fff;font-family:Arial,sans-serif;color:#111;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:16px;margin-bottom:24px;">
+        <div>
+          <div style="font-size:22px;font-weight:900;letter-spacing:1px;">${tenantConfig?.name || 'PURCHASE ORDER'}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;">${tenantConfig?.address || ''}</div>
+          ${tenantConfig?.gstin ? `<div style="font-size:11px;color:#666;">GSTIN: ${tenantConfig.gstin}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:16px;font-weight:900;color:#BA7517;">PURCHASE ORDER</div>
+          <div style="font-size:12px;color:#666;margin-top:4px;">${poNumber}</div>
+          <div style="font-size:12px;color:#666;">${today.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px;">
+        <div style="flex:1;">
+          <div style="font-size:10px;color:#999;font-weight:800;letter-spacing:0.5px;margin-bottom:6px;">VENDOR</div>
+          <div style="font-size:14px;font-weight:900;">${vendor.name}</div>
+          ${vendor.contactPerson ? `<div style="font-size:12px;color:#444;margin-top:2px;">Attn: ${vendor.contactPerson}</div>` : ''}
+          ${vendor.phone ? `<div style="font-size:12px;color:#444;">${vendor.phone}</div>` : ''}
+          ${vendor.email ? `<div style="font-size:12px;color:#444;">${vendor.email}</div>` : ''}
+          ${vendor.address ? `<div style="font-size:12px;color:#444;margin-top:2px;">${vendor.address}</div>` : ''}
+        </div>
+        <div style="flex:1;text-align:right;">
+          <div style="font-size:10px;color:#999;font-weight:800;letter-spacing:0.5px;margin-bottom:6px;">TERMS</div>
+          <div style="font-size:12px;color:#444;">Payment: ${vendor.paymentTerms || 'COD'}</div>
+          <div style="font-size:12px;color:#444;">Expected lead time: ${vendor.leadTimeDays || 1} day${(vendor.leadTimeDays||1)>1?'s':''}</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <thead>
+          <tr style="background:#111;color:#fff;">
+            <th style="padding:10px 8px;text-align:left;font-size:11px;">#</th>
+            <th style="padding:10px 8px;text-align:left;font-size:11px;">ITEM</th>
+            <th style="padding:10px 8px;text-align:right;font-size:11px;">QTY TO ORDER</th>
+            <th style="padding:10px 8px;text-align:left;font-size:11px;">UNIT</th>
+            <th style="padding:10px 8px;text-align:right;font-size:11px;">CURRENT STOCK</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div style="margin-top:40px;padding-top:16px;border-top:1px solid #ddd;font-size:10px;color:#999;">
+        Generated from live stock levels and 30-day average usage on ${today.toLocaleString('en-IN')}. Quantities are suggestions — please review before ordering.
+      </div>
+    </div>
+  `;
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+  container.innerHTML = poHTML;
+  document.body.appendChild(container);
+
+  const html2pdf = await import('html2pdf.js');
+  const el = container.querySelector('#po-frame');
+  html2pdf.default().set({
+    margin: 0,
+    filename: `${poNumber}.pdf`,
+    image: { type: 'jpeg', quality: 1.0 },
+    html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).from(el).save().then(() => {
+    document.body.removeChild(container);
+    showNotif(`Purchase order generated for ${vendor.name}`);
+  });
+};
 
 const saveDiscountPresets = async (nextPresets) => {
   try {
@@ -1791,6 +1975,7 @@ const fetchRecipes = useCallback(async () => {
 useEffect(() => {
     if (activeTab === 'billing' || activeTab === 'reservations') fetchCounterQueue();
     if (activeTab === 'inventory' || activeTab === 'recipes') fetchManagementData();
+    if (activeTab === 'inventory') fetchVendors();
     if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
     if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); }
     if (activeTab === 'extras') fetchExtraItems();
@@ -1809,6 +1994,7 @@ useEffect(() => {
     fetchCampaigns,
     fetchAnnouncements,
     fetchRecipes,
+    fetchVendors,
     customerSegFilter,
     customerSearch,
 ]);
@@ -2022,6 +2208,7 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
                 await fetchAnalytics();
                 fetchManagementData();
                 fetchTurnTimeData();
+                fetchTableRevenueData();
             }, 1500);
         }
     } catch (err) {
@@ -4642,6 +4829,75 @@ const totalRevenueAllTime = canonicalMonthRevenue;
   </div>
 )}
 
+</div>
+
+{/* ══════════════════════════════════════════════════
+    LIVE FLOOR HEATMAP — table color intensity = today's revenue
+══════════════════════════════════════════════════ */}
+<div style={{ background:'#080809', borderRadius:'18px', border:'1px solid rgba(211,191,162,0.07)', padding:'18px 20px' }}>
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+      <div style={{ width:'28px', height:'28px', borderRadius:'8px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <LayoutGrid size={13} color="#d3bfa2" />
+      </div>
+      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#666', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Heatmap · Today</span>
+    </div>
+    <button
+      onClick={() => {
+        if (floorEditMode) { saveFloorLayout(localFloorLayout || floorLayout); }
+        else { setLocalFloorLayout(floorLayout); }
+        setFloorEditMode(p => !p);
+      }}
+      style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:`1px solid ${floorEditMode ? 'rgba(74,158,111,0.35)' : 'rgba(211,191,162,0.2)'}`, background: floorEditMode ? 'rgba(74,158,111,0.1)' : 'transparent', color: floorEditMode ? '#4a9e6f' : '#888', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+      {floorEditMode ? <><CheckCircle2 size={11}/> SAVE LAYOUT</> : <><SquarePen size={11}/> ARRANGE TABLES</>}
+    </button>
+  </div>
+
+  {floorEditMode && (
+    <div style={{ fontSize:'0.55rem', color:'#555', marginBottom:'10px', fontWeight:'700' }}>
+      Drag tables to match your real floor plan, then tap Save.
+    </div>
+  )}
+
+  <div
+    onMouseMove={(e) => {
+      if (!draggingTable) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = Math.max(2, Math.min(96, ((e.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(2, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
+      setLocalFloorLayout(prev => (prev || floorLayout).map(t => t.tableNumber === draggingTable ? { ...t, x, y } : t));
+    }}
+    onMouseUp={() => setDraggingTable(null)}
+    onMouseLeave={() => setDraggingTable(null)}
+    style={{ position:'relative', width:'100%', height: 'min(340px, 60vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid #111', borderRadius:'12px', overflow:'hidden' }}>
+    {floorLayout.map(t => {
+      const colors = revenueColor(t.tableNumber);
+      const rev = tableRevenueData.revenueByTable[t.tableNumber] || 0;
+      return (
+        <div key={t.tableNumber}
+          onMouseDown={() => floorEditMode && setDraggingTable(t.tableNumber)}
+          title={`Table ${t.tableNumber} — ₹${rev.toLocaleString()} today`}
+          style={{
+            position:'absolute', left:`${t.x}%`, top:`${t.y}%`, transform:'translate(-50%,-50%)',
+            width: 'clamp(38px, 8vw, 56px)', height: 'clamp(38px, 8vw, 56px)', borderRadius:'10px',
+            background: colors.bg, border:`1.5px solid ${colors.border}`,
+            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+            cursor: floorEditMode ? 'grab' : 'default', userSelect:'none',
+            transition: draggingTable === t.tableNumber ? 'none' : 'background 0.3s, border-color 0.3s',
+            boxShadow: floorEditMode ? '0 0 0 1px rgba(211,191,162,0.15)' : 'none'
+          }}>
+          <span style={{ fontSize:'0.62rem', fontWeight:'900', color: colors.text }}>{t.tableNumber}</span>
+          {rev > 0 && <span style={{ fontSize:'0.42rem', fontWeight:'800', color: colors.text, opacity:0.85, marginTop:'1px' }}>₹{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev}</span>}
+        </div>
+      );
+    })}
+  </div>
+
+  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginTop:'12px' }}>
+    <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'700' }}>LOW</span>
+    <div style={{ flex:1, height:'6px', borderRadius:'3px', background:'linear-gradient(90deg, rgba(211,191,162,0.06), rgba(211,191,162,0.85))' }} />
+    <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'700' }}>HIGH SPEND</span>
+  </div>
 </div>
 
   {/* ══════════════════════════════════════════════════
@@ -11660,11 +11916,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     {selectedExistingItem ? (
       <div>
         <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>VENDOR (optional)</label>
-        <input type="text" placeholder="e.g. Rajesh Traders"
+        <input type="text" placeholder="e.g. Rajesh Traders" list="vendor-name-list"
           style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
           value={newInventoryItem.vendor || ''}
           onChange={e => setNewInventoryItem({ ...newInventoryItem, vendor: e.target.value })}
         />
+        <datalist id="vendor-name-list">
+          {vendors.map(v => <option key={v._id} value={v.name} />)}
+        </datalist>
       </div>
     ) : (
       <>
@@ -11687,6 +11946,19 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       </>
     )}
 
+    {/* EXPIRY DATE — FEFO tracking: alerts fire 2 days before this batch expires */}
+    <div>
+      <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+        <CalendarClock size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
+        BATCH EXPIRY (optional)
+      </label>
+      <input type="date" min={new Date().toISOString().split('T')[0]}
+        style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        value={newInventoryItem.expiryDate || ''}
+        onChange={e => setNewInventoryItem({ ...newInventoryItem, expiryDate: e.target.value })}
+      />
+    </div>
+
     {/* ADD / RESTOCK BUTTON */}
     <div>
       <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
@@ -11699,6 +11971,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
             currentStock: Number(newInventoryItem.currentStock),
             vendor: newInventoryItem.vendor || '',
+            expiryDate: newInventoryItem.expiryDate || null,
             ...(selectedExistingItem
               ? { costPrice: Number(newInventoryItem.purchasePrice) }  // purchase price → WAC calc on server
               : { minThreshold: Number(newInventoryItem.minThreshold) || 0, costPrice: Number(newInventoryItem.costPrice) || 0 }
@@ -11716,7 +11989,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           } else {
             showNotif(`${res.data.item.itemName} added to inventory`);
           }
-          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
+          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '', expiryDate: '' });
           setSelectedExistingItem(null);
           setInventorySuggestions([]);
           setShowSuggestions(false);
@@ -11734,6 +12007,85 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       : 'Type an ingredient name to see existing matches and restock with WAC calculation.'}
   </div>
 </div>
+              {/* VENDOR MANAGEMENT */}
+              <div style={styles.biCard}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: showVendorPanel ? '20px' : '0'}}>
+                  <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'8px'}}>
+                    <Truck size={14} color="#d3bfa2" /> VENDORS <span style={{color:'#555',fontWeight:'500'}}>({vendors.length})</span>
+                  </h4>
+                  <button onClick={() => setShowVendorPanel(p => !p)}
+                    style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px', borderRadius:'8px', border:'1px solid rgba(211,191,162,0.25)', background:'rgba(211,191,162,0.06)', color:'#d3bfa2', fontSize:'0.65rem', fontWeight:'900', cursor:'pointer' }}>
+                    {showVendorPanel ? <ChevronUp size={12}/> : <ChevronDown size={12}/>} {showVendorPanel ? 'HIDE' : 'MANAGE'}
+                  </button>
+                </div>
+
+                {showVendorPanel && (
+                  <>
+                    {/* Add / edit vendor form */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr 0.7fr auto', gap: '8px', marginBottom: '16px' }}>
+                      <input placeholder="Vendor name *" value={newVendorDraft.name}
+                        onChange={e => setNewVendorDraft(p => ({ ...p, name: e.target.value }))}
+                        style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                      <input placeholder="Contact person" value={newVendorDraft.contactPerson}
+                        onChange={e => setNewVendorDraft(p => ({ ...p, contactPerson: e.target.value }))}
+                        style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                      <input placeholder="Phone" value={newVendorDraft.phone}
+                        onChange={e => setNewVendorDraft(p => ({ ...p, phone: e.target.value }))}
+                        style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                      <select value={newVendorDraft.paymentTerms} onChange={e => setNewVendorDraft(p => ({ ...p, paymentTerms: e.target.value }))}
+                        style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
+                        {['COD', 'Net 7', 'Net 15', 'Net 30'].map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <input type="number" placeholder="Lead days" value={newVendorDraft.leadTimeDays}
+                        onChange={e => setNewVendorDraft(p => ({ ...p, leadTimeDays: e.target.value }))}
+                        style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                      <button onClick={saveVendor}
+                        style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: '#d3bfa2', color: '#000', fontSize: '0.68rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        {editingVendorId ? 'UPDATE' : 'ADD'}
+                      </button>
+                    </div>
+
+                    {/* Vendor list */}
+                    {vendors.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '30px', color: '#333', fontSize: '0.75rem', fontWeight: '700' }}>
+                        NO VENDORS YET — ADD ONE ABOVE
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {vendors.map(v => {
+                          const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
+                          const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
+                          return (
+                            <div key={v._id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: '#0a0a0a', border: '1px solid #151515' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{v.name}</div>
+                                <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '2px' }}>
+                                  {v.contactPerson && `${v.contactPerson} · `}{v.phone || 'no phone'} · {v.paymentTerms} · {v.leadTimeDays}d lead · {linkedCount} ingredient{linkedCount !== 1 ? 's' : ''} linked
+                                </div>
+                              </div>
+                              <button onClick={() => generatePurchaseOrderPDF(v)}
+                                title={dueCount === 0 ? 'Nothing due for reorder' : `${dueCount} item(s) due for reorder`}
+                                disabled={dueCount === 0}
+                                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${dueCount > 0 ? 'rgba(74,158,111,0.35)' : 'rgba(255,255,255,0.08)'}`, background: dueCount > 0 ? 'rgba(74,158,111,0.1)' : 'transparent', color: dueCount > 0 ? '#4a9e6f' : '#333', fontSize: '0.6rem', fontWeight: '900', cursor: dueCount === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                <FileText size={11} /> PO {dueCount > 0 ? `(${dueCount})` : ''}
+                              </button>
+                              <button onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
+                                style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
+                                <SquarePen size={12} />
+                              </button>
+                              <button onClick={() => deleteVendor(v._id)}
+                                style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
+                                <X size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* LEDGER TABLE */}
               <div style={styles.biCard}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
@@ -11784,6 +12136,24 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             {/* INGREDIENT NAME */}
             <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>
               {item.itemName}
+              <div>
+                <select value={item.vendorId || ''} onChange={e => linkIngredientVendor(item._id, e.target.value)}
+                  style={{ marginTop: '4px', background: 'transparent', border: 'none', color: item.vendorId ? '#8a704d' : '#333', fontSize: '0.55rem', fontWeight: '700', outline: 'none', cursor: 'pointer', padding: 0 }}>
+                  <option value="">+ link vendor</option>
+                  {vendors.map(v => <option key={v._id} value={v._id}>{v.name}</option>)}
+                </select>
+              </div>
+              {item.batchExpiry && (() => {
+                const daysLeft = Math.ceil((new Date(item.batchExpiry) - new Date()) / 86400000);
+                if (daysLeft > 5) return null; // only surface it once it matters
+                const expired = daysLeft < 0;
+                return (
+                  <div title={new Date(item.batchExpiry).toLocaleDateString('en-IN')} style={{ marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 7px', borderRadius: '5px', fontSize: '0.48rem', fontWeight: '900', background: expired ? 'rgba(200,114,114,0.12)' : 'rgba(186,117,23,0.12)', border: `1px solid ${expired ? 'rgba(200,114,114,0.35)' : 'rgba(186,117,23,0.35)'}`, color: expired ? '#c87272' : '#BA7517' }}>
+                    <CalendarClock size={9} />
+                    {expired ? 'EXPIRED — USE FIRST' : daysLeft === 0 ? 'EXPIRES TODAY' : `${daysLeft}D LEFT · FEFO`}
+                  </div>
+                );
+              })()}
             </td>
  
             {/* UNIT */}
