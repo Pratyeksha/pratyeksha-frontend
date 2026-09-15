@@ -1234,9 +1234,15 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.75 }} exit={{ opacity: 0 }}
               onClick={() => setEightySixModal(null)}
               style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, backdropFilter: 'blur(4px)' }} />
-            <motion.div initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+            {/* Centering + scroll wrapper — must stay transform-free: framer-motion owns
+                the transform on the modal below via animate={{scale,y}}, and mixing that
+                with a manual translate(-50%,-50%) here made the centering offset get
+                silently dropped, which is why this used to open off-screen at the bottom. */}
+            <div onClick={() => setEightySixModal(null)}
+              style={{ position: 'fixed', inset: 0, zIndex: 3101, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
+            <motion.div onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
               transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-              style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: isMobile ? '92vw' : 420, maxHeight: '82vh', background: '#0a0b0e', border: '1px solid rgba(211,191,162,0.12)', borderRadius: 18, zIndex: 3101, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
+              style={{ width: isMobile ? '92vw' : 420, maxHeight: 'calc(82vh - 40px)', background: '#0a0b0e', border: '1px solid rgba(211,191,162,0.12)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
 
               <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(211,191,162,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1292,6 +1298,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 )}
               </div>
             </motion.div>
+            </div>
           </>
         )}
       </AnimatePresence>

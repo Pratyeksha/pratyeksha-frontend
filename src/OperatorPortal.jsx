@@ -9,7 +9,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
-  User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote, ChevronUp, ChevronDown, LayoutGrid,
+  User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote, ChevronUp, ChevronDown, LayoutGrid, Link2,
   ChefHat,Users, Clock3, UserCheck, PackageCheck, Hourglass, AlertOctagon,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
@@ -320,6 +320,11 @@ const [tableRevenueData, setTableRevenueData] = useState({ revenueByTable: {}, m
 const [floorEditMode, setFloorEditMode] = useState(false);
 const [draggingTable, setDraggingTable] = useState(null);
 const [localFloorLayout, setLocalFloorLayout] = useState(null); // null = use tenantConfig's saved layout
+const [joinMode, setJoinMode] = useState(false);
+const [pendingJoinSelection, setPendingJoinSelection] = useState([]);
+const [activeTableTicket, setActiveTableTicket] = useState(null); // tableNumber whose popover is open
+const [quickReserveTable, setQuickReserveTable] = useState(null); // tableNumber being reserved
+const [quickReserveDraft, setQuickReserveDraft] = useState({ customerName: '', customerPhone: '', partySize: 2 });
 const [showVendorPanel, setShowVendorPanel] = useState(false);
 const [newVendorDraft, setNewVendorDraft] = useState({ name: '', contactPerson: '', phone: '', email: '', paymentTerms: 'COD', leadTimeDays: 1 });
 const [editingVendorId, setEditingVendorId] = useState(null);
@@ -1532,8 +1537,8 @@ const tableOccupancyBreakdown = useMemo(() => {
   );
   const reservedTables = new Set(
     (reservationEntries || [])
-      .filter(r => r.status === 'confirmed' && r.tableNumber)
-      .map(r => r.tableNumber?.toString())
+      .filter(r => r.status === 'confirmed' && r.assignedTable)
+      .map(r => r.assignedTable?.toString())
   );
   const occupied = new Set(occupiedTables.map(t => t.toString()));
 
@@ -1580,7 +1585,9 @@ const floorLayout = useMemo(() => {
   return Array.from({ length: count }, (_, i) => ({
     tableNumber: String(i + 1),
     x: 10 + (i % perRow) * (80 / Math.max(1, perRow - 1 || 1)),
-    y: 12 + Math.floor(i / perRow) * (76 / Math.max(1, rows - 1 || 1))
+    y: 12 + Math.floor(i / perRow) * (76 / Math.max(1, rows - 1 || 1)),
+    seats: 4,
+    groupId: ''
   }));
 }, [localFloorLayout, tenantConfig]);
 
@@ -1604,6 +1611,67 @@ const revenueColor = (tableNumber) => {
     border: `rgba(211,191,162,${Math.min(1, alpha + 0.25)})`,
     text: intensity > 0.5 ? '#000' : '#d3bfa2'
   };
+};
+
+// ── Table-level helpers for the floor map's deeper interactions ──
+const getTableOrders = (tableNumber) =>
+  orders.filter(o => o.tableNumber?.toString() === tableNumber?.toString() && ['pending', 'ready', 'served'].includes(o.status));
+
+const getTableOrderStatus = (tableNumber) => {
+  const tOrders = getTableOrders(tableNumber);
+  if (tOrders.length === 0) return null;
+  if (tOrders.some(o => o.status === 'pending')) return 'pending';   // cooking — amber
+  if (tOrders.some(o => o.status === 'ready'))   return 'ready';     // ready to serve — green
+  return 'served';                                                   // eating — blue
+};
+
+const ORDER_STATUS_RING = {
+  pending: '#BA7517',  // amber — in the kitchen
+  ready:   '#4a9e6f',  // green — ready to serve
+  served:  '#5b8ac2',  // blue — being enjoyed
+};
+
+const hasServiceCall = (tableNumber) =>
+  waiterRequests.some(r => r.tableNumber?.toString() === tableNumber?.toString());
+
+const getJoinedGroup = (tableNumber, layout) => {
+  const table = layout.find(t => t.tableNumber === tableNumber);
+  if (!table?.groupId) return [tableNumber];
+  return layout.filter(t => t.groupId === table.groupId).map(t => t.tableNumber);
+};
+
+const toggleJoinSelection = (tableNumber) => {
+  setPendingJoinSelection(prev =>
+    prev.includes(tableNumber) ? prev.filter(t => t !== tableNumber) : [...prev, tableNumber]
+  );
+};
+
+const confirmJoinTables = async () => {
+  if (pendingJoinSelection.length < 2) { showNotif('Select at least 2 tables to join', 'error'); return; }
+  const groupId = `grp_${Date.now()}`;
+  const next = floorLayout.map(t =>
+    pendingJoinSelection.includes(t.tableNumber) ? { ...t, groupId } : t
+  );
+  await saveFloorLayout(next);
+  setPendingJoinSelection([]);
+  setJoinMode(false);
+  showNotif(`Tables ${pendingJoinSelection.join(', ')} joined`);
+};
+
+const unjoinTable = async (tableNumber) => {
+  const next = floorLayout.map(t => t.tableNumber === tableNumber ? { ...t, groupId: '' } : t);
+  await saveFloorLayout(next);
+  showNotif(`Table ${tableNumber} unjoined`);
+};
+
+const submitQuickReserve = async () => {
+  try {
+    await axios.post(`${BASE_URL}/admin/tables/${tenantId}/${quickReserveTable}/quick-reserve`, quickReserveDraft);
+    showNotif(`Table ${quickReserveTable} reserved`);
+    setQuickReserveTable(null);
+    setQuickReserveDraft({ customerName: '', customerPhone: '', partySize: 2 });
+    fetchInitialData();
+  } catch { showNotif('Could not reserve table', 'error'); }
 };
 
   // ─────────────────────────────────────────────────────
@@ -1794,8 +1862,10 @@ const generateBill = async (id) => {
   setDiscount(0); setDiscountReason('');
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
+    const joinedForBill = getJoinedGroup(id, floorLayout).filter(t => t !== id);
+    const joinedQuery = joinedForBill.length > 0 ? `?joined=${joinedForBill.join(',')}` : '';
     const [res, countRes, tenantRes] = await Promise.all([
-      axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}`),
+      axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}${joinedQuery}`),
       axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } })),
       axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
     ]);
@@ -2162,6 +2232,7 @@ const paymentMethodDetails = activePaymentType === 'split'
     setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
     
     try {
+const joinedTables = getJoinedGroup(selectedTable, floorLayout).filter(t => t !== selectedTable);
 const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
     discount,
     discountType,
@@ -2172,6 +2243,7 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
     subtotal:       discountedSub,      // ← discounted subtotal
     cgst:           discountedCgst,     // ← CGST on discounted amount
     sgst:           discountedSgst,     // ← SGST on discounted amount
+    joinedTables,                       // ← bill any joined tables together as one party
 });
         
         // ── Deduct extra items from stock on settlement ──
@@ -4832,30 +4904,48 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 </div>
 
 {/* ══════════════════════════════════════════════════
-    LIVE FLOOR HEATMAP — table color intensity = today's revenue
+    LIVE FLOOR MAP — revenue heat + status ring + service calls + joins
 ══════════════════════════════════════════════════ */}
 <div style={{ background:'#080809', borderRadius:'18px', border:'1px solid rgba(211,191,162,0.07)', padding:'18px 20px' }}>
-  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
     <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
       <div style={{ width:'28px', height:'28px', borderRadius:'8px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', display:'flex', alignItems:'center', justifyContent:'center' }}>
         <LayoutGrid size={13} color="#d3bfa2" />
       </div>
-      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#666', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Heatmap · Today</span>
+      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#666', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
-    <button
-      onClick={() => {
-        if (floorEditMode) { saveFloorLayout(localFloorLayout || floorLayout); }
-        else { setLocalFloorLayout(floorLayout); }
-        setFloorEditMode(p => !p);
-      }}
-      style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:`1px solid ${floorEditMode ? 'rgba(74,158,111,0.35)' : 'rgba(211,191,162,0.2)'}`, background: floorEditMode ? 'rgba(74,158,111,0.1)' : 'transparent', color: floorEditMode ? '#4a9e6f' : '#888', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
-      {floorEditMode ? <><CheckCircle2 size={11}/> SAVE LAYOUT</> : <><SquarePen size={11}/> ARRANGE TABLES</>}
-    </button>
+    <div style={{ display:'flex', gap:'8px' }}>
+      {joinMode && (
+        <button onClick={confirmJoinTables}
+          style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(74,158,111,0.35)', background:'rgba(74,158,111,0.1)', color:'#4a9e6f', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+          <CheckCircle2 size={11}/> JOIN ({pendingJoinSelection.length})
+        </button>
+      )}
+      <button
+        onClick={() => { setJoinMode(p => !p); setPendingJoinSelection([]); }}
+        style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:`1px solid ${joinMode ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.2)'}`, background: joinMode ? 'rgba(211,191,162,0.08)' : 'transparent', color: joinMode ? '#d3bfa2' : '#888', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+        <Link2 size={11}/> {joinMode ? 'CANCEL' : 'JOIN TABLES'}
+      </button>
+      <button
+        onClick={() => {
+          if (floorEditMode) { saveFloorLayout(localFloorLayout || floorLayout); }
+          else { setLocalFloorLayout(floorLayout); }
+          setFloorEditMode(p => !p);
+        }}
+        style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:`1px solid ${floorEditMode ? 'rgba(74,158,111,0.35)' : 'rgba(211,191,162,0.2)'}`, background: floorEditMode ? 'rgba(74,158,111,0.1)' : 'transparent', color: floorEditMode ? '#4a9e6f' : '#888', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
+        {floorEditMode ? <><CheckCircle2 size={11}/> SAVE LAYOUT</> : <><SquarePen size={11}/> ARRANGE</>}
+      </button>
+    </div>
   </div>
 
   {floorEditMode && (
     <div style={{ fontSize:'0.55rem', color:'#555', marginBottom:'10px', fontWeight:'700' }}>
-      Drag tables to match your real floor plan, then tap Save.
+      Drag tables to match your real floor plan, then tap Save Layout.
+    </div>
+  )}
+  {joinMode && (
+    <div style={{ fontSize:'0.55rem', color:'#555', marginBottom:'10px', fontWeight:'700' }}>
+      Tap tables to select a party sitting across them, then tap Join.
     </div>
   )}
 
@@ -4869,36 +4959,219 @@ const totalRevenueAllTime = canonicalMonthRevenue;
     }}
     onMouseUp={() => setDraggingTable(null)}
     onMouseLeave={() => setDraggingTable(null)}
-    style={{ position:'relative', width:'100%', height: 'min(340px, 60vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid #111', borderRadius:'12px', overflow:'hidden' }}>
+    style={{ position:'relative', width:'100%', height: 'min(520px, 78vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid #111', borderRadius:'12px', overflow:'hidden' }}>
+
+    {/* Connector lines between joined tables */}
+    <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
+      {floorLayout.filter(t => t.groupId).map(t => {
+        const partners = floorLayout.filter(o => o.groupId === t.groupId && o.tableNumber > t.tableNumber);
+        return partners.map(p => (
+          <line key={`${t.tableNumber}-${p.tableNumber}`}
+            x1={`${t.x}%`} y1={`${t.y}%`} x2={`${p.x}%`} y2={`${p.y}%`}
+            stroke="rgba(211,191,162,0.4)" strokeWidth="2" strokeDasharray="4,3" />
+        ));
+      })}
+    </svg>
+
     {floorLayout.map(t => {
       const colors = revenueColor(t.tableNumber);
       const rev = tableRevenueData.revenueByTable[t.tableNumber] || 0;
+      const orderStatus = getTableOrderStatus(t.tableNumber);
+      const serviceCall = hasServiceCall(t.tableNumber);
+      const isJoined = !!t.groupId;
+      const isSelectedForJoin = pendingJoinSelection.includes(t.tableNumber);
+      const isReserved = (reservationEntries || []).some(r => r.status === 'confirmed' && r.assignedTable?.toString() === t.tableNumber);
+
       return (
         <div key={t.tableNumber}
           onMouseDown={() => floorEditMode && setDraggingTable(t.tableNumber)}
-          title={`Table ${t.tableNumber} — ₹${rev.toLocaleString()} today`}
+          onClick={() => {
+            if (floorEditMode) return;
+            if (joinMode) { toggleJoinSelection(t.tableNumber); return; }
+            setActiveTableTicket(t.tableNumber);
+          }}
+          title={`Table ${t.tableNumber}${t.seats ? ` · ${t.seats} seats` : ''} — ₹${rev.toLocaleString()} today`}
           style={{
             position:'absolute', left:`${t.x}%`, top:`${t.y}%`, transform:'translate(-50%,-50%)',
-            width: 'clamp(38px, 8vw, 56px)', height: 'clamp(38px, 8vw, 56px)', borderRadius:'10px',
-            background: colors.bg, border:`1.5px solid ${colors.border}`,
+            width: 'clamp(58px, 12vw, 84px)', height: 'clamp(58px, 12vw, 84px)', borderRadius:'16px',
+            background: colors.bg,
+            border: `2.5px solid ${isSelectedForJoin ? '#d3bfa2' : orderStatus ? ORDER_STATUS_RING[orderStatus] : isReserved ? '#8a704d' : colors.border}`,
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-            cursor: floorEditMode ? 'grab' : 'default', userSelect:'none',
-            transition: draggingTable === t.tableNumber ? 'none' : 'background 0.3s, border-color 0.3s',
-            boxShadow: floorEditMode ? '0 0 0 1px rgba(211,191,162,0.15)' : 'none'
+            cursor: floorEditMode ? 'grab' : 'pointer', userSelect:'none',
+            transition: draggingTable === t.tableNumber ? 'none' : 'background 0.3s, border-color 0.3s, transform 0.15s',
+            boxShadow: isSelectedForJoin ? '0 0 0 4px rgba(211,191,162,0.25), 0 8px 20px rgba(0,0,0,0.4)' : floorEditMode ? '0 0 0 1px rgba(211,191,162,0.15)' : '0 6px 16px rgba(0,0,0,0.35)'
           }}>
-          <span style={{ fontSize:'0.62rem', fontWeight:'900', color: colors.text }}>{t.tableNumber}</span>
-          {rev > 0 && <span style={{ fontSize:'0.42rem', fontWeight:'800', color: colors.text, opacity:0.85, marginTop:'1px' }}>₹{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev}</span>}
+          {/* Service call pulse */}
+          {serviceCall && (
+            <span style={{ position:'absolute', top:-6, right:-6, width:14, height:14, borderRadius:'50%', background:'#d3567a', boxShadow:'0 0 0 3px #080809' }}>
+              <span style={{ position:'absolute', inset:0, borderRadius:'50%', background:'#d3567a', animation:'pulseDot 1.4s ease-out infinite' }} />
+            </span>
+          )}
+          {/* Joined-table link icon */}
+          {isJoined && !floorEditMode && (
+            <Link2 size={11} color="#d3bfa2" style={{ position:'absolute', top:-6, left:-6, background:'#080809', borderRadius:'50%', padding:2 }} />
+          )}
+          <span style={{ fontSize:'1.05rem', fontWeight:'900', color: colors.text, lineHeight:1 }}>{t.tableNumber}</span>
+          {t.seats > 0 && (
+            <span style={{ fontSize:'0.56rem', fontWeight:'800', color: colors.text, opacity:0.75, display:'flex', alignItems:'center', gap:'2px', marginTop:'2px' }}>
+              <Users size={9}/> {t.seats}
+            </span>
+          )}
+          {rev > 0 && <span style={{ fontSize:'0.6rem', fontWeight:'800', color: colors.text, opacity:0.9, marginTop:'2px' }}>₹{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev}</span>}
+
+          {/* Seats stepper — edit mode only */}
+          {floorEditMode && (
+            <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{ position:'absolute', bottom:-24, display:'flex', alignItems:'center', gap:'5px' }}>
+              <button onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: Math.max(1, (o.seats||2)-1) } : o))}
+                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#111', color:'#888', border:'1px solid #222', borderRadius:4, cursor:'pointer' }}>-</button>
+              <span style={{ fontSize:'0.55rem', color:'#888', fontWeight:800 }}>{t.seats || 2}</span>
+              <button onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: (o.seats||2)+1 } : o))}
+                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#111', color:'#888', border:'1px solid #222', borderRadius:4, cursor:'pointer' }}>+</button>
+            </div>
+          )}
         </div>
       );
     })}
   </div>
 
-  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginTop:'12px' }}>
-    <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'700' }}>LOW</span>
-    <div style={{ flex:1, height:'6px', borderRadius:'3px', background:'linear-gradient(90deg, rgba(211,191,162,0.06), rgba(211,191,162,0.85))' }} />
-    <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'700' }}>HIGH SPEND</span>
+  <div style={{ display:'flex', alignItems:'center', gap:'14px', marginTop:'14px', flexWrap:'wrap' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+      <span style={{ fontSize:'0.5rem', color:'#333', fontWeight:'700' }}>SPEND</span>
+      <div style={{ width:'50px', height:'6px', borderRadius:'3px', background:'linear-gradient(90deg, rgba(211,191,162,0.06), rgba(211,191,162,0.85))' }} />
+    </div>
+    {Object.entries(ORDER_STATUS_RING).map(([status, color]) => (
+      <div key={status} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+        <div style={{ width:'8px', height:'8px', borderRadius:'3px', border:`2px solid ${color}` }} />
+        <span style={{ fontSize:'0.48rem', color:'#555', fontWeight:'700', textTransform:'capitalize' }}>{status}</span>
+      </div>
+    ))}
+    <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+      <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#d3567a' }} />
+      <span style={{ fontSize:'0.48rem', color:'#555', fontWeight:'700' }}>Service call</span>
+    </div>
   </div>
 </div>
+
+{/* TABLE TICKET POPOVER — click any table to see its remaining order + quick actions */}
+<AnimatePresence>
+  {activeTableTicket && (() => {
+    const t = floorLayout.find(f => f.tableNumber === activeTableTicket);
+    const group = t ? getJoinedGroup(activeTableTicket, floorLayout) : [activeTableTicket];
+    const groupOrders = group.flatMap(tn => getTableOrders(tn));
+    const isReserved = (reservationEntries || []).some(r => r.status === 'confirmed' && r.assignedTable?.toString() === activeTableTicket);
+    return (
+      <>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+          onClick={() => setActiveTableTicket(null)}
+          style={{ position:'fixed', inset:0, background:'#000', zIndex:9300 }} />
+        <div onClick={() => setActiveTableTicket(null)}
+          style={{ position:'fixed', inset:0, zIndex:9301, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
+          <motion.div onClick={e => e.stopPropagation()}
+            initial={{ scale:0.94, opacity:0, y:12 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
+            transition={{ type:'spring', stiffness:320, damping:28 }}
+            style={{ width:400, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#0a0b0e', border:'1px solid rgba(211,191,162,0.15)', borderRadius:16, margin:'auto', boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
+            <div style={{ padding:'16px 18px', borderBottom:'1px solid rgba(211,191,162,0.08)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <div style={{ fontSize:'0.85rem', fontWeight:900, color:'#fff' }}>
+                  Table {group.join(' + ')} {t?.seats ? <span style={{ color:'#555', fontWeight:700, fontSize:'0.65rem' }}>· {t.seats} seats</span> : ''}
+                </div>
+                <div style={{ fontSize:'0.55rem', color:'#555', fontWeight:700, marginTop:2 }}>
+                  {groupOrders.length === 0 ? 'No active order' : `${groupOrders.reduce((a,o)=>a+(o.items?.length||0),0)} item(s) on the ticket`}
+                </div>
+              </div>
+              <button onClick={() => setActiveTableTicket(null)} style={{ background:'#111', border:'1px solid rgba(211,191,162,0.1)', color:'#888', padding:6, borderRadius:8, cursor:'pointer', display:'flex' }}>
+                <X size={13}/>
+              </button>
+            </div>
+
+            <div style={{ padding:'14px 18px' }}>
+              {groupOrders.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'30px 10px', color:'#333', fontSize:'0.7rem', fontWeight:700 }}>
+                  Table is free right now.
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
+                  {groupOrders.map(o => (o.items || []).map((it, i) => (
+                    <div key={`${o._id}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', background:'#000', borderRadius:8, border:'1px solid #151515' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ width:6, height:6, borderRadius:'50%', background: ORDER_STATUS_RING[o.status] || '#555' }} />
+                        <span style={{ fontSize:'0.7rem', fontWeight:800, color:'#ddd' }}>{it.name}</span>
+                        {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#555' }}>({it.portion})</span>}
+                      </div>
+                      <span style={{ fontSize:'0.65rem', fontWeight:900, color:'#888' }}>×{it.quantity}</span>
+                    </div>
+                  )))}
+                </div>
+              )}
+
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {t?.groupId && (
+                  <button onClick={() => { unjoinTable(activeTableTicket); setActiveTableTicket(null); }}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(211,191,162,0.15)', background:'transparent', color:'#888', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
+                    <Link2 size={12}/> UNJOIN TABLE
+                  </button>
+                )}
+                {!isReserved && groupOrders.length === 0 && (
+                  <button onClick={() => { setQuickReserveTable(activeTableTicket); setActiveTableTicket(null); }}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(138,112,77,0.35)', background:'rgba(138,112,77,0.1)', color:'#8a704d', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
+                    <CalendarClock size={12}/> RESERVE THIS TABLE
+                  </button>
+                )}
+                {groupOrders.length > 0 && (
+                  <button onClick={() => { generateBill(activeTableTicket); setActiveTableTicket(null); }}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(74,158,111,0.35)', background:'rgba(74,158,111,0.1)', color:'#4a9e6f', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
+                    <ReceiptText size={12}/> OPEN BILLING
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </>
+    );
+  })()}
+</AnimatePresence>
+
+{/* QUICK RESERVE MODAL */}
+<AnimatePresence>
+  {quickReserveTable && (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+        onClick={() => setQuickReserveTable(null)}
+        style={{ position:'fixed', inset:0, background:'#000', zIndex:9400 }} />
+      <div onClick={() => setQuickReserveTable(null)}
+        style={{ position:'fixed', inset:0, zIndex:9401, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
+        <motion.div onClick={e => e.stopPropagation()}
+          initial={{ scale:0.94, opacity:0, y:12 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
+          transition={{ type:'spring', stiffness:320, damping:28 }}
+          style={{ width:360, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#0a0b0e', border:'1px solid rgba(138,112,77,0.3)', borderRadius:16, margin:'auto', padding:20, boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
+          <div style={{ fontSize:'0.8rem', fontWeight:900, color:'#fff', marginBottom:4 }}>Reserve Table {quickReserveTable}</div>
+          <div style={{ fontSize:'0.58rem', color:'#555', fontWeight:700, marginBottom:16 }}>Quick walk-in-style reservation</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <input placeholder="Customer name" value={quickReserveDraft.customerName}
+              onChange={e => setQuickReserveDraft(p => ({ ...p, customerName: e.target.value }))}
+              style={{ padding:'10px 12px', background:'#000', border:'1px solid #1a1a1a', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
+            <input placeholder="Phone (optional)" value={quickReserveDraft.customerPhone}
+              onChange={e => setQuickReserveDraft(p => ({ ...p, customerPhone: e.target.value }))}
+              style={{ padding:'10px 12px', background:'#000', border:'1px solid #1a1a1a', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:'0.65rem', color:'#888', fontWeight:800 }}>Party size</span>
+              <button onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: Math.max(1, p.partySize-1) }))}
+                style={{ width:26, height:26, background:'#111', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>-</button>
+              <span style={{ fontSize:'0.75rem', color:'#fff', fontWeight:900 }}>{quickReserveDraft.partySize}</span>
+              <button onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: p.partySize+1 }))}
+                style={{ width:26, height:26, background:'#111', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>+</button>
+            </div>
+            <button onClick={submitQuickReserve}
+              style={{ marginTop:6, padding:'12px 0', borderRadius:9, border:'none', background:'#8a704d', color:'#000', fontSize:'0.68rem', fontWeight:900, cursor:'pointer' }}>
+              CONFIRM RESERVATION
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </>
+  )}
+</AnimatePresence>
 
   {/* ══════════════════════════════════════════════════
       ROW 1 — KITCHEN TICKETS + SERVICE CALLS
@@ -7548,7 +7821,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         <span>₹{Number(tableBill.sgst).toFixed(2)}</span>
       </div>
       <p style={{fontSize:'0.58rem', fontStyle:'italic', marginTop:'8px', fontWeight:'700', color:'#888'}}>
-        {numberToWords(Math.round(tableBill.total - (tableBill.total * (discount / 100))))}
+        {numberToWords(Math.round((() => {
+          const discSub = discountType === 'flat'
+            ? Math.max(0, tableBill.subtotal - Number(discount || 0))
+            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100);
+          const cgstPct = parseFloat(tableBill.cgstPct) / 100;
+          const sgstPct = parseFloat(tableBill.sgstPct) / 100;
+          return discSub + discSub * cgstPct + discSub * sgstPct;
+        })()))}
       </p>
     </div>
 
@@ -7678,7 +7958,17 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     <div style={{borderTop:'2px solid #000', paddingTop:'14px'}}>
       <div style={{display:'flex', justifyContent:'space-between', fontSize:'1.4rem', fontWeight:'900'}}>
         <span>GRAND TOTAL</span>
-        <span>₹{Math.round(tableBill.total - (tableBill.total * (discount / 100)))}</span>
+        <span>₹{(() => {
+          // Must match the real settlement math in handleFinalSettle: discount is applied
+          // to the pre-tax subtotal, then tax is recomputed on what's left — and, critically,
+          // a flat ₹ discount is a rupee amount, never a percentage of the bill.
+          const discSub = discountType === 'flat'
+            ? Math.max(0, tableBill.subtotal - Number(discount || 0))
+            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100);
+          const cgstPct = parseFloat(tableBill.cgstPct) / 100;
+          const sgstPct = parseFloat(tableBill.sgstPct) / 100;
+          return Math.round(discSub + discSub * cgstPct + discSub * sgstPct);
+        })()}</span>
       </div>
       <div style={{fontSize:'0.58rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'4px'}}>
         MODE: {activePaymentType === 'split' ? 'SPLIT PAYMENT' : selectedSingleMode.toUpperCase()}
@@ -14905,17 +15195,26 @@ onClick={async () => {
         style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9200 }}
       />
 
+      {/* Centering + scroll wrapper — kept transform-free so it doesn't fight
+          framer-motion's own transform on the modal below (mixing a manual
+          `transform: translate(-50%,-50%)` with animate={{scale,y}} makes
+          framer-motion silently overwrite the centering offset, which is why
+          this used to render off-screen toward the bottom). */}
+      <div
+        onClick={() => setPurchaseOrderModal(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 9201, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', overflowY: 'auto' }}
+      >
       {/* Modal */}
       <motion.div
+        onClick={e => e.stopPropagation()}
         initial={{ scale: 0.93, opacity: 0, y: 12 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.93, opacity: 0, y: 12 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
         style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-          width: '520px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
+          width: '520px', maxWidth: '95vw', maxHeight: 'calc(90vh - 48px)', overflowY: 'auto',
           background: '#0a0b0e', border: '1px solid rgba(186,117,23,0.3)',
-          borderRadius: '18px', zIndex: 9201,
+          borderRadius: '18px', margin: 'auto',
           boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(186,117,23,0.1)'
         }}
       >
@@ -15237,6 +15536,7 @@ onClick={async () => {
           </div>
         </div>
       </motion.div>
+      </div>
     </>
   )}
 </AnimatePresence>
@@ -15245,6 +15545,7 @@ onClick={async () => {
  
 /* ── BASE ── */
 @keyframes moodPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.03);}}
+@keyframes pulseDot{0%{transform:scale(1);opacity:0.9;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
 @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
 @keyframes p-slide-in{from{transform:translateX(-100%);}to{transform:translateX(0);}}
  
