@@ -7,7 +7,7 @@ import OperatorPortal from './OperatorPortal.jsx'
 import KitchenView from './KitchenView.jsx'
 import PratyekshaMasterAdmin from './PratyekshaMasterAdmin.jsx'
 import Pratyeksha from './Pratyeksha.jsx'
-import OwnerApp, { OwnerLauncher } from './OwnerApp/PratyekshaOwnerApp.jsx'
+import OwnerApp, { OwnerLauncher } from './OwnerApp.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
