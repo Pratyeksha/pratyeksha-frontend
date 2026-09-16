@@ -28,7 +28,8 @@ import {
   Timer, Megaphone, MapPin, Star, Gauge, CalendarClock, FileSpreadsheet, FileText, Mail,
   Search, Filter, MoreVertical, Plus, Minus, Check, ShoppingBag, Truck, CreditCard, Banknote,
   Smartphone, UserCheck, UserX, Award, ThumbsUp, PackageX, PackageCheck, Zap, Activity,
-  Receipt, ExternalLink, WifiOff, Loader2, BarChart3
+  Receipt, ExternalLink, WifiOff, Loader2, BarChart3, Rocket, Shield, PlayCircle, Quote,
+  Lock
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -139,6 +140,9 @@ const GlobalStyles = () => (
       border: 1px solid ${T.primary}; opacity: 0; animation: pownRing 2.2s ease-out infinite;
     }
     @keyframes pownRing { 0% { opacity: .55; transform: scale(0.6); } 100% { opacity: 0; transform: scale(2.1); } }
+    .pown-page-transition { animation: pownPageIn .38s cubic-bezier(.4,0,.2,1) both; }
+    @keyframes pownPageIn { from { opacity: 0; transform: translateY(8px) scale(0.994); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @media (max-width: 640px) { .pown-hide-mobile { display: none !important; } }
   `}</style>
 );
 
@@ -150,9 +154,36 @@ const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AP
 
 const api = axios.create({ baseURL: API_BASE });
 
+// Any 401 from the API (expired/invalid token) broadcasts a single event —
+// OwnerProvider listens for it and drops back to the login screen.
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) window.dispatchEvent(new Event('owner-auth-expired'));
+    return Promise.reject(err);
+  }
+);
+
 const OwnerCtx = createContext(null);
 const useOwner = () => useContext(OwnerCtx);
 const LAST_TENANT_KEY = 'pratyeksha_owner_last_tenant';
+const tokenKeyFor = (tenantId) => `pratyeksha_owner_token_${tenantId}`;
+
+/** Turns an axios error into a specific, actionable message instead of a generic failure. */
+function describeAuthError(err, url) {
+  if (err?.response) {
+    const status = err.response.status;
+    const serverMsg = err.response.data?.error;
+    if (status === 404) return `The server responded, but this tenant ID wasn't found (404). Check the tenant ID in the URL is exactly right.\n\nRequest: ${url}`;
+    return `Server responded with an error (${status}): ${serverMsg || 'no message'}\n\nRequest: ${url}`;
+  }
+  if (err?.request) {
+    return `No response from the server — this is almost always a wrong API URL or a CORS block.\n\n` +
+      `Request: ${url}\n\n` +
+      `Check: 1) VITE_API_URL is set to your actual backend address (currently: ${API_BASE}) 2) your backend's CORS config allows this site's origin 3) the backend is actually running.`;
+  }
+  return `Request failed before it was sent: ${err?.message || 'unknown error'}\n\nRequest: ${url}`;
+}
 
 function OwnerProvider({ tenantId, children }) {
   const [socket, setSocket] = useState(null);
@@ -160,23 +191,127 @@ function OwnerProvider({ tenantId, children }) {
   const [liveAlert, setLiveAlert] = useState(null);
   const [outlet, setOutlet] = useState(tenantId);
 
+  // authStatus: 'checking' | 'needsSetup' | 'needsLogin' | 'authed' | 'error'
+  const [authStatus, setAuthStatus] = useState('checking');
+  const [authToken, setAuthToken] = useState(null);
+  const [ownerName, setOwnerName] = useState('');
+  const [authErrorDetail, setAuthErrorDetail] = useState(null);
+
+  /**
+   * Sets (or clears) the axios default header immediately, as a plain object
+   * mutation — not through a useEffect. This matters: React fires a child
+   * component's mount effects (e.g. the Dashboard's first data fetch)
+   * BEFORE this provider's own effects in the same commit, so a
+   * useEffect([authToken]) here can lose the race and send the first
+   * request with no Authorization header at all, producing a 401 the
+   * instant login succeeds. Calling this synchronously, right before the
+   * state update that reveals the authenticated app, closes that gap.
+   */
+  const applyAuthHeader = (token) => {
+    if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    else delete api.defaults.headers.common['Authorization'];
+  };
+
+  const resolveAuth = useCallback(async () => {
+    let cancelled = false;
+    setAuthStatus('checking');
+    setAuthErrorDetail(null);
+    let stored = null;
+    try { stored = localStorage.getItem(tokenKeyFor(outlet)); } catch (e) {}
+
+    if (stored) {
+      try {
+        const res = await axios.get(`${API_BASE}/api/owner/auth/verify`, { headers: { Authorization: `Bearer ${stored}` } });
+        if (cancelled) return;
+        applyAuthHeader(stored);
+        setAuthToken(stored);
+        setOwnerName(res.data.ownerName || '');
+        setAuthStatus('authed');
+        return;
+      } catch (e) {
+        // A 401 here just means the token expired — fall through to a normal
+        // status check. Anything else (network/CORS/server down) should NOT
+        // be silently treated as "token invalid, ask for login" — surface it.
+        if (e?.response?.status && e.response.status !== 401) {
+          setAuthErrorDetail(describeAuthError(e, `${API_BASE}/api/owner/auth/verify`));
+          setAuthStatus('error');
+          return;
+        }
+        applyAuthHeader(null);
+        try { localStorage.removeItem(tokenKeyFor(outlet)); } catch (e2) {}
+      }
+    }
+    try {
+      const res = await axios.get(`${API_BASE}/api/owner/auth/status/${outlet}`);
+      if (cancelled) return;
+      setAuthStatus(res.data.setupComplete ? 'needsLogin' : 'needsSetup');
+    } catch (e) {
+      // Never guess between Setup/Login on a failed request — a wrong
+      // API URL, CORS block, or downed server must never look like a
+      // legitimate "please log in" screen, or the real problem gets hidden.
+      if (!cancelled) {
+        console.error('[owner-auth] status check failed:', e);
+        setAuthErrorDetail(describeAuthError(e, `${API_BASE}/api/owner/auth/status/${outlet}`));
+        setAuthStatus('error');
+      }
+    }
+  }, [outlet]);
+
+  // Resolve auth state whenever the outlet changes.
+  useEffect(() => { resolveAuth(); }, [resolveAuth]);
+
+  const completeAuth = useCallback((token, name) => {
+    try { localStorage.setItem(tokenKeyFor(outlet), token); } catch (e) {}
+    applyAuthHeader(token);
+    setAuthToken(token);
+    setOwnerName(name || '');
+    setAuthStatus('authed');
+  }, [outlet]);
+
+  const logout = useCallback(() => {
+    try { localStorage.removeItem(tokenKeyFor(outlet)); } catch (e) {}
+    applyAuthHeader(null);
+    setAuthToken(null);
+    setAuthStatus('needsLogin');
+  }, [outlet]);
+
   useEffect(() => {
-    const s = io(API_BASE, { transports: ['websocket', 'polling'] });
+    window.addEventListener('owner-auth-expired', logout);
+    return () => window.removeEventListener('owner-auth-expired', logout);
+  }, [logout]);
+
+  // Only open the realtime connection once actually authenticated.
+  useEffect(() => {
+    if (authStatus !== 'authed') return;
+    const s = io(API_BASE, { transports: ['websocket', 'polling'], auth: { token: authToken } });
     s.on('connect', () => { setConnected(true); s.emit('join_owner_room', outlet); s.emit('join_restaurant', outlet); });
     s.on('disconnect', () => setConnected(false));
     s.on('owner_alert', (payload) => setLiveAlert({ ...payload, _t: Date.now() }));
     setSocket(s);
     return () => s.disconnect();
-  }, [outlet]);
+  }, [outlet, authStatus, authToken]);
 
   // Remember the active outlet so relaunching the installed app (which opens
   // at the generic /owner/ start_url) can jump straight back to it.
   useEffect(() => {
-    if (outlet) { try { localStorage.setItem(LAST_TENANT_KEY, outlet); } catch (e) {} }
-  }, [outlet]);
+    if (outlet && authStatus === 'authed') { try { localStorage.setItem(LAST_TENANT_KEY, outlet); } catch (e) {} }
+  }, [outlet, authStatus]);
 
-  const value = useMemo(() => ({ tenantId: outlet, setOutlet, socket, connected, liveAlert }), [outlet, socket, connected, liveAlert]);
+  const value = useMemo(() => ({
+    tenantId: outlet, setOutlet, socket, connected, liveAlert,
+    authStatus, ownerName, completeAuth, logout, authErrorDetail, retryAuth: resolveAuth
+  }), [outlet, socket, connected, liveAlert, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
+}
+
+/** Gates the app behind auth — shows a splash while checking, then Setup/Login/Error/the real app. */
+function AuthGate({ children }) {
+  const { authStatus } = useOwner();
+  if (authStatus === 'checking') return <AuthSplash />;
+  if (authStatus === 'error') return <AuthErrorScreen />;
+  if (authStatus === 'needsSetup') return <SetupScreen />;
+  if (authStatus === 'needsLogin') return <LoginScreen />;
+  return children;
 }
 
 /** Generic fetch-with-loading hook, scoped to the active tenant, auto-refreshing. */
@@ -362,11 +497,40 @@ const SectionHeading = ({ icon: Icon, title, action }) => (
   </div>
 );
 
-const Money = ({ value, size = 15, weight = 700, color = T.textHigh, prefix = '\u20B9' }) => (
-  <span className="pown-mono" style={{ fontSize: size, fontWeight: weight, color }}>
-    {prefix}{Number(value || 0).toLocaleString('en-IN')}
-  </span>
-);
+/** Animates a number counting up/down to its new value whenever it changes. */
+function useCountUp(target, duration = 700) {
+  const numericTarget = Number(target) || 0;
+  const [display, setDisplay] = useState(numericTarget);
+  const prevRef = useRef(numericTarget);
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = numericTarget;
+    if (start === end) return;
+    let startTime = null;
+    let raf;
+    const step = (ts) => {
+      if (!startTime) startTime = ts;
+      const progress = Math.min(1, (ts - startTime) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (progress < 1) raf = requestAnimationFrame(step);
+      else prevRef.current = end;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [numericTarget, duration]);
+  return display;
+}
+
+const Money = ({ value, size = 15, weight = 700, color = T.textHigh, prefix = '\u20B9', animate = true }) => {
+  const animated = useCountUp(value);
+  const shown = animate ? animated : (Number(value) || 0);
+  return (
+    <span className="pown-mono" style={{ fontSize: size, fontWeight: weight, color }}>
+      {prefix}{shown.toLocaleString('en-IN')}
+    </span>
+  );
+};
 
 const Delta = ({ pct }) => {
   const up = pct >= 0;
@@ -537,6 +701,151 @@ const Toast = ({ message }) => {
 };
 
 /* ════════════════════════════════════════════════════════════
+   AUTH SCREENS — first-time setup, login, splash
+   ════════════════════════════════════════════════════════════ */
+const AuthShell = ({ children }) => (
+  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: 20 }}>
+    <GlobalStyles />
+    <div className="pown-fade-in" style={{ width: 400, maxWidth: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 24px -6px rgba(211,191,162,0.5)'
+        }}><Store size={19} color="#0a0a0a" strokeWidth={2.25} /></div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const AuthSplash = () => (
+  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+    <GlobalStyles />
+    <div className="pown-pulse" style={{
+      width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}><Store size={19} color="#0a0a0a" strokeWidth={2.25} /></div>
+  </div>
+);
+
+const AuthErrorScreen = () => {
+  const { authErrorDetail, retryAuth, tenantId } = useOwner();
+  return (
+    <AuthShell>
+      <Card style={{ borderColor: 'rgba(248,113,113,0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: T.dangerSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <WifiOff size={16} color={T.danger} />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>Couldn't reach the server</div>
+        </div>
+        <div style={{ fontSize: 12, color: T.textMed, marginBottom: 18, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+          {authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}
+        </div>
+        <PrimaryBtn icon={RefreshCcw} onClick={retryAuth} style={{ width: '100%', justifyContent: 'center' }}>Retry</PrimaryBtn>
+      </Card>
+    </AuthShell>
+  );
+};
+
+const LoginScreen = () => {
+  const { tenantId, completeAuth } = useOwner();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!username || !password) return;
+    setLoading(true); setError(null);
+    try {
+      const res = await axios.post(`${API_BASE}/api/owner/auth/login/${tenantId}`, { username, password });
+      completeAuth(res.data.token, res.data.ownerName);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not sign in');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <AuthShell>
+      <Card>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 3 }}>Welcome back</div>
+        <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>Signing in to <b style={{ color: T.primary }}>{tenantId}</b></div>
+        <form onSubmit={submit}>
+          <Field label="USERNAME">
+            <input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoFocus autoComplete="username" />
+          </Field>
+          <Field label="PASSWORD">
+            <div style={{ position: 'relative' }}>
+              <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: 38 }} autoComplete="current-password" />
+              <button type="button" onClick={() => setShowPw(v => !v)} className="pown-btn" style={{ position: 'absolute', right: 8, top: 8, background: 'transparent', color: T.textLow }}>
+                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </Field>
+          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
+          <PrimaryBtn icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+            {loading ? 'Signing in…' : 'Sign In'}
+          </PrimaryBtn>
+        </form>
+      </Card>
+      <div style={{ textAlign: 'center', fontSize: 11, color: T.textLow, marginTop: 16 }}>Wrong outlet? Close the app and open it again from a fresh link.</div>
+    </AuthShell>
+  );
+};
+
+const SetupScreen = () => {
+  const { tenantId, completeAuth } = useOwner();
+  const [ownerName, setOwnerNameField] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const canSubmit = username.trim() && password.length >= 6 && password === confirm;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setLoading(true); setError(null);
+    try {
+      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName });
+      completeAuth(res.data.token, res.data.ownerName);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not complete setup');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <AuthShell>
+      <Card>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 3 }}>Set up your owner login</div>
+        <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>First time here for <b style={{ color: T.primary }}>{tenantId}</b> — create your credentials. You'll only do this once.</div>
+        <form onSubmit={submit}>
+          <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" autoFocus /></Field>
+          <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" /></Field>
+          <Field label="CHOOSE A PASSWORD"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
+          <Field label="CONFIRM PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
+          {password && password.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Password needs at least 6 characters.</div>}
+          {confirm && password !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
+          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
+          <PrimaryBtn icon={loading ? Loader2 : CheckCircle2} disabled={loading || !canSubmit} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+            {loading ? 'Setting up…' : 'Create Login & Continue'}
+          </PrimaryBtn>
+        </form>
+      </Card>
+    </AuthShell>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
    NAVIGATION CONFIG
    ════════════════════════════════════════════════════════════ */
 const NAV_ITEMS = [
@@ -551,9 +860,11 @@ const NAV_ITEMS = [
   { key: 'alerts', label: 'Alerts', icon: Bell },
   { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck },
   { key: 'reports', label: 'Reports & Exports', icon: ClipboardList },
+  { key: 'growth', label: 'Why Pratyeksha', icon: Rocket, badge: true },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
-const BOTTOM_NAV_KEYS = ['dashboard', 'revenue', 'kitchen', 'staff', 'reports'];
+// Quick-access row on mobile; the 5th slot opens the full drawer with every tab.
+const BOTTOM_NAV_KEYS = ['dashboard', 'revenue', 'kitchen', 'alerts'];
 
 /* ════════════════════════════════════════════════════════════
    LAYOUT — Sidebar (desktop) + Bottom Nav (mobile) + Top Bar
@@ -635,7 +946,7 @@ const InstallBanner = () => {
 };
 
 const Sidebar = () => {
-  const { tenantId } = useParams();
+  const { tenantId, ownerName, logout } = useOwner();
   return (
     <aside className="pown-scroll pown-scrollpane" style={{
       width: 262, flexShrink: 0,
@@ -657,6 +968,14 @@ const Sidebar = () => {
             <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
           </div>
         </div>
+        {ownerName && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '9px 11px', background: 'rgba(255,255,255,0.03)', borderRadius: 11 }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: T.primarySoft, color: T.primary, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {ownerName.trim()[0]?.toUpperCase() || 'O'}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.textHigh, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ownerName}</div>
+          </div>
+        )}
       </div>
       <nav style={{ padding: '6px 14px', flex: '1 0 auto' }}>
         {NAV_ITEMS.map(item => (
@@ -669,12 +988,13 @@ const Sidebar = () => {
           })}>
             <item.icon size={15} strokeWidth={2} />
             {item.label}
+            {item.badge && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary }} />}
           </NavLink>
         ))}
       </nav>
       <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10 }}>
         <InstallAppButton />
-        <button className="pown-btn" style={{
+        <button onClick={logout} className="pown-btn" style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
           borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
         }}><LogOut size={14} /> Log out</button>
@@ -683,7 +1003,72 @@ const Sidebar = () => {
   );
 };
 
-const BottomNav = () => {
+/** Full-screen slide-in drawer listing every tab — how mobile reaches all 13, not just the bottom-nav 5. */
+const MobileDrawer = ({ open, onClose }) => {
+  const { tenantId, ownerName, logout } = useOwner();
+  const location = useLocation();
+  useEffect(() => { onClose(); /* eslint-disable-line */ }, [location.pathname]);
+
+  return (
+    <>
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, zIndex: 190, background: 'rgba(0,0,0,0.6)',
+        opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none', transition: 'opacity .28s ease'
+      }} />
+      <div style={{
+        position: 'fixed', top: 0, left: 0, bottom: 0, width: 288, maxWidth: '84vw', zIndex: 195,
+        background: `linear-gradient(180deg, ${T.surfaceRaised} 0%, ${T.bg} 100%)`, borderRight: `1px solid ${T.borderStrong}`,
+        transform: open ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform .32s cubic-bezier(.4,0,.2,1)',
+        display: 'flex', flexDirection: 'column', boxShadow: open ? '20px 0 60px -20px rgba(0,0,0,0.6)' : 'none'
+      }}>
+        <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}><Store size={16} color="#0a0a0a" strokeWidth={2.5} /></div>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: 1.2 }}>PRATYEKSHA</div>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.8, color: T.primary }}>OWNER SUITE</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textLow }}><X size={18} /></button>
+        </div>
+        {ownerName && (
+          <div style={{ margin: '0 16px 8px', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', background: 'rgba(255,255,255,0.03)', borderRadius: 11 }}>
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: T.primarySoft, color: T.primary, fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {ownerName.trim()[0]?.toUpperCase() || 'O'}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>{ownerName}</div>
+          </div>
+        )}
+        <nav className="pown-scrollpane" style={{ padding: '4px 14px', flex: 1 }}>
+          {NAV_ITEMS.map(item => (
+            <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 12,
+              marginBottom: 3, fontSize: 13.5, fontWeight: 600,
+              background: isActive ? T.primarySoft : 'transparent',
+              color: isActive ? T.primary : T.textMed,
+              boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
+            })}>
+              <item.icon size={16} strokeWidth={2} />
+              {item.label}
+              {item.badge && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary }} />}
+            </NavLink>
+          ))}
+        </nav>
+        <div style={{ padding: 16, borderTop: `1px solid ${T.border}` }}>
+          <button onClick={logout} className="pown-btn" style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
+            borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
+          }}><LogOut size={14} /> Log out</button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const BottomNav = ({ onMore }) => {
   const { tenantId } = useParams();
   const items = NAV_ITEMS.filter(i => BOTTOM_NAV_KEYS.includes(i.key));
   return (
@@ -701,11 +1086,18 @@ const BottomNav = () => {
           <span style={{ fontSize: 9.5, fontWeight: 700 }}>{item.label.split(' ')[0]}</span>
         </NavLink>
       ))}
+      <button onClick={onMore} className="pown-btn" style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+        background: 'transparent', color: T.textLow
+      }}>
+        <LayoutGrid size={19} strokeWidth={2} />
+        <span style={{ fontSize: 9.5, fontWeight: 700 }}>More</span>
+      </button>
     </nav>
   );
 };
 
-const TopBar = () => {
+const TopBar = ({ onMenu }) => {
   const { tenantId, connected } = useOwner();
   const location = useLocation();
   const current = NAV_ITEMS.find(i => location.pathname.includes(`/${i.key}`));
@@ -714,13 +1106,21 @@ const TopBar = () => {
     <header style={{
       flexShrink: 0, zIndex: 50, background: 'rgba(6,6,6,0.72)', backdropFilter: 'blur(18px)',
       borderBottom: `1px solid ${T.border}`, padding: '18px clamp(18px, 3vw, 40px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12
     }}>
-      <div>
-        <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3 }}>{current?.label || 'Dashboard'}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-          <span className={connected ? 'pown-live-dot' : 'pown-pulse'} style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? T.primary : T.textLow, boxShadow: connected ? `0 0 0 3px ${T.primarySoft}` : 'none' }} />
-          <span style={{ fontSize: 11, color: T.textLow, fontWeight: 600 }}>{connected ? 'Live' : 'Reconnecting…'} · {tenantId}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        {onMenu && (
+          <button onClick={onMenu} className="pown-btn" style={{
+            width: 36, height: 36, flexShrink: 0, borderRadius: 10, background: T.surfaceRaised,
+            border: `1px solid ${T.border}`, color: T.textHigh, display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}><MenuIcon size={17} /></button>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label || 'Dashboard'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            <span className={connected ? 'pown-live-dot' : 'pown-pulse'} style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? T.primary : T.textLow, boxShadow: connected ? `0 0 0 3px ${T.primarySoft}` : 'none' }} />
+            <span style={{ fontSize: 11, color: T.textLow, fontWeight: 600 }}>{connected ? 'Live' : 'Reconnecting…'} · {tenantId}</span>
+          </div>
         </div>
       </div>
       <div style={{ position: 'relative' }}>
@@ -728,7 +1128,7 @@ const TopBar = () => {
           display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
           borderRadius: 12, padding: '9px 14px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, boxShadow: T.glow
         }}>
-          <MapPin size={13} color={T.primary} /> {tenantId} <ChevronDown size={13} />
+          <MapPin size={13} color={T.primary} /> <span className="pown-hide-mobile">{tenantId}</span> <ChevronDown size={13} />
         </button>
         {outletMenuOpen && (
           <div className="pown-fade-in" style={{
@@ -754,6 +1154,7 @@ const TopBar = () => {
  */
 const OwnerShell = ({ children }) => {
   const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const mainRef = useRef(null);
 
@@ -769,16 +1170,19 @@ const OwnerShell = ({ children }) => {
   return (
     <div className="pown" style={{ display: 'flex', width: '100%', height: '100vh' }}>
       {isDesktop && <Sidebar />}
+      {!isDesktop && <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <TopBar />
+        <TopBar onMenu={!isDesktop ? () => setDrawerOpen(true) : undefined} />
         <main ref={mainRef} className="pown-scroll pown-scrollpane" style={{
           flex: '1 1 auto', minHeight: 0, width: '100%',
           padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
         }}>
-          {children}
+          <div key={location.pathname} className="pown-page-transition">
+            {children}
+          </div>
         </main>
       </div>
-      {!isDesktop && <BottomNav />}
+      {!isDesktop && <BottomNav onMore={() => setDrawerOpen(true)} />}
     </div>
   );
 };
@@ -861,6 +1265,8 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const { tenantId } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/dashboard/:tenantId', { refreshMs: 60000 });
+  const animatedRevenue = useCountUp(data?.revenue?.today || 0);
+  const animatedProfit = useCountUp(data?.liveProfit?.estimatedGrossProfit || 0);
 
   if (loading) return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -880,11 +1286,11 @@ const DashboardPage = () => {
       <InstallBanner />
       {/* Hero KPI row */}
       <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-        <KpiCard hero icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${data.revenue.today.toLocaleString('en-IN')}`}
+        <KpiCard hero icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${animatedRevenue.toLocaleString('en-IN')}`}
           delta={data.revenue.todayVsYday} sub="vs yesterday" />
         <KpiCard icon={LayoutGrid} label="LIVE TABLES" value={`${data.tables.occupied} / ${data.tables.total}`}
           sub={`${data.tables.billPending} bill pending · ${data.tables.free} free`} />
-        <KpiCard icon={Wallet} label="GROSS PROFIT" value={`\u20B9${data.liveProfit.estimatedGrossProfit.toLocaleString('en-IN')}`}
+        <KpiCard icon={Wallet} label="GROSS PROFIT" value={`\u20B9${animatedProfit.toLocaleString('en-IN')}`}
           sub={`${100 - data.liveProfit.foodCostPct}% margin est.`} />
         <KpiCard icon={Target} label="BREAK-EVEN" value={`${data.breakEven.pct}% achieved`}
           sub={`\u20B9${data.breakEven.remaining.toLocaleString('en-IN')} more to target`} />
@@ -1906,6 +2312,140 @@ const ReportsPage = () => {
 };
 
 /* ════════════════════════════════════════════════════════════
+   "WHY PRATYEKSHA" — growth-oriented value tab
+   ════════════════════════════════════════════════════════════ */
+const GROWTH_PILLARS = [
+  {
+    icon: Zap, title: 'Live, not next-morning',
+    body: "Revenue, food cost, and table status update the moment a bill settles — no end-of-day reconciliation, no waiting for someone to export a spreadsheet."
+  },
+  {
+    icon: Gauge, title: 'One number that matters: margin',
+    body: 'Most POS systems show you revenue. Pratyeksha computes food cost from your actual recipes and inventory, so you see real-time gross profit — not just top-line sales.'
+  },
+  {
+    icon: ShieldCheck, title: 'GST-ready, always',
+    body: 'Every settled invoice already carries its tax breakdown. Compliance, invoice registers, and GSTR exports are generated from the same ledger — never re-entered by hand.'
+  },
+  {
+    icon: Bell, title: 'It watches, so you don\u2019t have to',
+    body: 'Low stock, a large discount, a delayed kitchen ticket, an unusually quiet day — these surface as alerts the moment they happen, on whichever device you have open.'
+  },
+];
+
+const GROWTH_COMPARISON = [
+  { manual: 'Reconcile cash and card totals at midnight', pratyeksha: 'Payment split updates live as each table settles' },
+  { manual: 'Call the kitchen to ask what\u2019s running low', pratyeksha: 'Inventory health and predicted stock-outs, on one screen' },
+  { manual: 'Export orders to Excel to estimate food cost', pratyeksha: 'Food cost computed automatically from recipes + stock' },
+  { manual: 'Chase a CA every month for GST numbers', pratyeksha: 'Invoice register and GST summary, one tap away' },
+  { manual: 'Find out a dish is unpopular after months', pratyeksha: 'Menu Intelligence flags dead items and low-margin dishes' },
+];
+
+const GrowthPage = () => {
+  const { tenantId } = useOwner();
+  const navigate = useNavigate();
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 18 }}>
+      {/* Hero */}
+      <Card interactive style={{
+        padding: '30px 26px', position: 'relative', overflow: 'hidden',
+        background: `linear-gradient(135deg, ${T.surfaceRaised} 0%, ${T.surface} 55%, rgba(211,191,162,0.07) 100%)`
+      }}>
+        <div style={{
+          position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: '50%',
+          background: `radial-gradient(circle, ${T.primarySoft} 0%, transparent 70%)`, pointerEvents: 'none'
+        }} />
+        <Badge tone="gold">Built for growth</Badge>
+        <div className="pown-gradient-text" style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5, margin: '12px 0 8px', maxWidth: 480, position: 'relative' }}>
+          A restaurant runs on decisions. Pratyeksha makes sure you're never guessing.
+        </div>
+        <div style={{ fontSize: 13, color: T.textMed, lineHeight: 1.7, maxWidth: 480, position: 'relative' }}>
+          Every module in this app exists to answer one question fast — "is {tenantId} doing well right now?" — without you having to piece it together from memory, a notebook, or three different apps.
+        </div>
+      </Card>
+
+      {/* Pillars */}
+      <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+        {GROWTH_PILLARS.map((p, i) => (
+          <Card key={i} interactive>
+            <div style={{
+              width: 36, height: 36, borderRadius: 11, background: T.primarySoft,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14
+            }}><p.icon size={17} color={T.primary} /></div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>{p.title}</div>
+            <div style={{ fontSize: 12, color: T.textLow, lineHeight: 1.6 }}>{p.body}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Old way vs Pratyeksha */}
+      <Card padded={false}>
+        <div style={{ padding: '22px 22px 6px' }}>
+          <SectionHeading icon={Rocket} title="The old way, vs. this app" />
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '10px 22px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>WITHOUT PRATYEKSHA</th>
+                <th style={{ textAlign: 'left', padding: '10px 22px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.primary }}>WITH PRATYEKSHA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {GROWTH_COMPARISON.map((row, i) => (
+                <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
+                  <td style={{ padding: '13px 22px', fontSize: 12.5, color: T.textLow, display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                    <X size={14} color={T.danger} style={{ marginTop: 2, flexShrink: 0 }} />{row.manual}
+                  </td>
+                  <td style={{ padding: '13px 22px', fontSize: 12.5, color: T.textHigh, fontWeight: 500 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                      <CheckCircle2 size={14} color={T.primary} style={{ marginTop: 2, flexShrink: 0 }} />{row.pratyeksha}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Explore modules */}
+      <div>
+        <SectionHeading icon={LayoutGrid} title="Everything included, in one app" />
+        <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+          {NAV_ITEMS.filter(i => !['growth', 'settings'].includes(i.key)).map(item => (
+            <button key={item.key} onClick={() => navigate(`/owner/${tenantId}/${item.key}`)} className="pown-btn pown-row-hover" style={{
+              display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '13px 14px',
+              background: T.surface, border: `1px solid ${T.border}`, borderRadius: 13, color: T.textHigh
+            }}>
+              <div style={{ width: 30, height: 30, borderRadius: 9, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <item.icon size={14} color={T.primary} />
+              </div>
+              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{item.label}</span>
+              <ChevronRight size={14} color={T.textLow} style={{ marginLeft: 'auto' }} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* What's next */}
+      <Card style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 12, background: T.primarySoft,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        }}><PlayCircle size={19} color={T.primary} /></div>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Always improving</div>
+          <div style={{ fontSize: 11.5, color: T.textLow, marginTop: 2, lineHeight: 1.6 }}>
+            This app updates on the same account you're already logged into — new modules and refinements just show up here, no re-install needed.
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
    MODULE 12 — SETTINGS & REMOTE CONTROLS
    ════════════════════════════════════════════════════════════ */
 const SettingsPage = () => {
@@ -1915,6 +2455,7 @@ const SettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [announceOpen, setAnnounceOpen] = useState(false);
   const [eightySixOpen, setEightySixOpen] = useState(false);
+  const [changePwOpen, setChangePwOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
 
@@ -1956,6 +2497,16 @@ const SettingsPage = () => {
                 <GhostBtn icon={EyeOff} onClick={() => setEightySixOpen(true)}>Emergency 86 a Dish</GhostBtn>
               </div>
               <div style={{ fontSize: 11, color: T.textLow, marginTop: 10 }}>Use the Menu Intelligence tab to hide dishes or change prices instantly.</div>
+            </Card>
+
+            <Card>
+              <SectionHeading icon={Lock} title="Security" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.6, maxWidth: 320 }}>
+                  Your owner login is separate from any staff or kitchen accounts and only works for {tenantId}.
+                </div>
+                <GhostBtn icon={Lock} onClick={() => setChangePwOpen(true)}>Change Password</GhostBtn>
+              </div>
             </Card>
 
             <Card>
@@ -2030,6 +2581,9 @@ const SettingsPage = () => {
       </Modal>
       <Modal open={eightySixOpen} onClose={() => setEightySixOpen(false)} title="Emergency 86 a Dish" width={460}>
         <EightySixForm tenantId={tenantId} onDone={(msg) => { setEightySixOpen(false); flash(msg); }} />
+      </Modal>
+      <Modal open={changePwOpen} onClose={() => setChangePwOpen(false)} title="Change Password" width={380}>
+        <ChangePasswordForm tenantId={tenantId} onDone={(msg) => { setChangePwOpen(false); flash(msg); }} />
       </Modal>
       <Toast message={toast} />
     </div>
@@ -2106,6 +2660,38 @@ const EightySixForm = ({ tenantId, onDone }) => {
   );
 };
 
+const ChangePasswordForm = ({ tenantId, onDone }) => {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const canSubmit = current && next.length >= 6 && next === confirm;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true); setError(null);
+    try {
+      await api.put(`/api/owner/auth/change-password/${tenantId}`, { currentPassword: current, newPassword: next });
+      onDone('Password updated');
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Could not update password');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <Field label="CURRENT PASSWORD"><input type="password" value={current} onChange={e => setCurrent(e.target.value)} style={inputStyle} autoFocus /></Field>
+      <Field label="NEW PASSWORD"><input type="password" value={next} onChange={e => setNext(e.target.value)} style={inputStyle} /></Field>
+      <Field label="CONFIRM NEW PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} /></Field>
+      {next && next.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Needs at least 6 characters.</div>}
+      {confirm && next !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
+      {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
+      <PrimaryBtn icon={saving ? Loader2 : Check} onClick={submit} disabled={saving || !canSubmit}>{saving ? 'Updating…' : 'Update Password'}</PrimaryBtn>
+    </div>
+  );
+};
+
 /* ════════════════════════════════════════════════════════════
    ROOT — OwnerApp (mount at /owner/:tenantId/*)
    ════════════════════════════════════════════════════════════ */
@@ -2123,6 +2709,7 @@ const OwnerAppInner = () => (
       <Route path="alerts" element={<AlertsPage />} />
       <Route path="compliance" element={<CompliancePage />} />
       <Route path="reports" element={<ReportsPage />} />
+      <Route path="growth" element={<GrowthPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="dashboard" replace />} />
     </Routes>
@@ -2135,7 +2722,9 @@ export default function OwnerApp() {
     <>
       <GlobalStyles />
       <OwnerProvider tenantId={tenantId}>
-        <OwnerAppInner />
+        <AuthGate>
+          <OwnerAppInner />
+        </AuthGate>
       </OwnerProvider>
     </>
   );
