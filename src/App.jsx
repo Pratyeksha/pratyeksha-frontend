@@ -2552,6 +2552,9 @@ const placeReservation = async () => {
     return;
   }
 
+  if (isPlacingOrder) return;           // ← prevent double-submit (same guard as the other two order paths)
+  setIsPlacingOrder(true);
+
   const summary = {};
   Object.entries(cart).forEach(([key, qty]) => {
     const isMulti = key.includes('-');
@@ -2621,6 +2624,8 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
   } catch (err) {
     console.error(err);
     triggerAlert('orderError', 'error');
+  } finally {
+    setIsPlacingOrder(false);
   }
 };
 
@@ -3786,7 +3791,12 @@ if (registrationStep === 'confirm' && waitlistEntry) {
   type="text"
   placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
   defaultValue={customerInfo.name}
-  onInput={e => { /* nothing — allow free typing */ }}
+  onInput={e => {
+    // Same fix as the phone field: keep state live while typing so the Confirm
+    // button's enabled state (which reads customerInfo.name) doesn't stay frozen
+    // until the person taps away from the field.
+    setCustomerInfo(prev => ({ ...prev, name: e.target.value }));
+  }}
   onBlur={e => {
     setCustomerInfo(prev => ({ ...prev, name: e.target.value.trim() }));
     e.target.style.borderColor = 'rgba(211,191,162,0.12)';
@@ -3827,7 +3837,13 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     placeholder="9876543210"
     defaultValue={customerInfo.phone}
     onInput={e => {
-      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+      e.target.value = digits;
+      // Keep state in sync live — the "X more digits needed" hint and the
+      // Confirm button's enabled state both read customerInfo.phone, and used
+      // to only update on blur, which left them frozen while the customer
+      // was actively typing (looked like the button was stuck/broken).
+      setCustomerInfo(prev => ({ ...prev, phone: digits }));
     }}
     onBlur={e => {
       const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -4014,7 +4030,21 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         const h = reservationTime ? parseInt(reservationTime.split(':')[0]) : null;
         const isLunch  = h !== null && h >= 13 && h <= 16;
         const isDinner = h !== null && h >= 19;
-        const slots = isLunch ? lunchSlots : isDinner ? dinnerSlots : [];
+        let slots = isLunch ? lunchSlots : isDinner ? dinnerSlots : [];
+
+        // A reservation for today can't be for a time that's already passed (or is
+        // about to, with no lead time for the kitchen/floor to prepare) — filter
+        // those out rather than silently accepting a booking that's already gone.
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (reservationDate === todayStr) {
+          const earliestBookable = new Date(Date.now() + 45 * 60000); // 45-min lead time
+          slots = slots.filter(slot => {
+            const [hr, mn] = slot.split(':').map(Number);
+            const slotDate = new Date();
+            slotDate.setHours(hr, mn, 0, 0);
+            return slotDate >= earliestBookable;
+          });
+        }
 
         const fmt = (slot) => {
           const [hr, mn] = slot.split(':').map(Number);
@@ -4024,9 +4054,18 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         };
 
         if (slots.length === 0) return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '18px', color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', fontWeight: '600' }}>
-            <ArrowUp size={14} />
-            {language === 'mr' ? 'वेळ निवडा' : 'Select a meal period above'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '18px', color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', fontWeight: '600', textAlign: 'center' }}>
+            {reservationDate === todayStr && h !== null ? (
+              <>
+                <Clock3 size={14} />
+                {language === 'mr' ? 'आजसाठी ही वेळ संपली आहे — दुसरी निवडा' : "That's passed for today — pick another slot"}
+              </>
+            ) : (
+              <>
+                <ArrowUp size={14} />
+                {language === 'mr' ? 'वेळ निवडा' : 'Select a meal period above'}
+              </>
+            )}
           </div>
         );
 
@@ -8949,9 +8988,9 @@ contentWrapper: {
   priceContainer: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' },
   priceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   priceLabel: { fontSize: '0.75rem', fontWeight: '600' },
-  counterRowSmall: { display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 8px', borderRadius: '8px', background: 'rgba(211, 191, 162, 0.15)' },
-  qtyBtnSmall: { background: 'none', border: 'none', color: '#d3bfa2', fontWeight: 'bold' },
-  addBtnSmall: { background: 'none', border: '1px solid', fontSize: '0.6rem', fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', color: '#d3bfa2' },
+  counterRowSmall: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 10px', borderRadius: '10px', background: 'rgba(211, 191, 162, 0.12)', border: '1px solid rgba(211,191,162,0.25)' },
+  qtyBtnSmall: { background: 'rgba(211,191,162,0.14)', border: 'none', color: '#d3bfa2', fontWeight: '900', width: '22px', height: '22px', borderRadius: '6px', fontSize: '0.85rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' },
+  addBtnSmall: { background: 'rgba(211,191,162,0.1)', border: '1.5px solid rgba(211,191,162,0.5)', fontSize: '0.64rem', fontWeight: '900', padding: '8px 16px', borderRadius: '8px', color: '#d3bfa2', letterSpacing: '0.4px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', transition: 'transform 0.1s, background 0.15s' },
   view3dBtn: { color: '#1a1a1a', width: '40px', height: '40px', borderRadius: '50%', border: 'none', fontSize: '0.6rem', fontWeight: '900' },
   rightFabContainer: { position: 'fixed', bottom: '30px', right: '25px', display: 'flex', flexDirection: 'column', gap: '15px', zIndex: 1000 },
   fabBase: { width: '65px', height: '65px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' },

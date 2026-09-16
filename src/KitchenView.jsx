@@ -1485,9 +1485,9 @@ const KDSOrderCard = ({
 
         {/* Right — timer */}
         <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1px solid ${urgency!=='low' ? accentColor[urgency+'_border']||'rgba(211,191,162,0.25)' : 'rgba(211,191,162,0.08)'}`, background: urgency==='high' ? 'rgba(211,191,162,0.07)' : '#080809' }}>
-            <Clock size={12} color={urgency==='high'?'#d3bfa2':urgency==='medium'?'#bda88a':'#333'} />
-            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#d3bfa2':urgency==='medium'?'#8a704d':'#555', letterSpacing:'-0.3px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1.5px solid ${urgency==='high' ? '#BA7517' : urgency==='medium' ? 'rgba(211,191,162,0.3)' : 'rgba(211,191,162,0.08)'}`, background: urgency==='high' ? 'rgba(186,117,23,0.16)' : urgency==='medium' ? 'rgba(211,191,162,0.06)' : '#080809' }}>
+            <Clock size={12} color={urgency==='high'?'#e0a250':urgency==='medium'?'#bda88a':'#333'} />
+            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#e0a250':urgency==='medium'?'#8a704d':'#555', letterSpacing:'-0.3px' }}>
               {fmt(seconds)}
             </span>
           </div>

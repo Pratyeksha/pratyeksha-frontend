@@ -1195,14 +1195,18 @@ const pendingOrders = orders.filter(o =>
     const criticalStock    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 1);
     const outOfStockItems  = (procurementData || []).filter(p => p.daysRemaining === 0);
 
+    // Only dishes with a real recipe mapped have a genuine, non-fabricated margin —
+    // a dish with no recipe defaults to 0 ingredient cost, i.e. a fake 100% margin,
+    // and would otherwise win "highest margin" and skew the average every time.
+    const costedProfitData = (profitabilityData || []).filter(d => d.hasRecipe);
     const sortedByQty     = [...(profitabilityData || [])].sort((a, b) => (b.totalQtySold || 0) - (a.totalQtySold || 0));
-    const sortedByMargin  = [...(profitabilityData || [])].sort((a, b) => (b.marginPct    || 0) - (a.marginPct    || 0));
+    const sortedByMargin  = [...costedProfitData].sort((a, b) => (b.marginPct    || 0) - (a.marginPct    || 0));
     const sortedByRev     = [...(profitabilityData || [])].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
     const topDish         = sortedByQty[0];
     const bestMarginDish  = sortedByMargin[0];
     const topRevDish      = sortedByRev[0];
-    const avgMarginAll    = profitabilityData?.length
-      ? (profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length).toFixed(1)
+    const avgMarginAll    = costedProfitData.length
+      ? (costedProfitData.reduce((a, b) => a + (b.marginPct || 0), 0) / costedProfitData.length).toFixed(1)
       : null;
 
     const hiddenDishes    = menuItems.filter(m => m.isAvailable === false);
@@ -3960,7 +3964,11 @@ const salaryForSlip = monthRec?.baseSalary || Number(member.baseSalary);
     (l.staffId===member._id || l.staffId?.toString()===member._id?.toString()) &&
     l.date?.startsWith(monthPrefix)
   ).length;
-  const workingDays = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
+  // ── Pay days, not calendar days: every staff member gets a weekly day off, and this
+  // codebase already treats 26 as the standard expected-working-days baseline elsewhere
+  // (attendance %). Using calendar days (30/31) here was silently deducting a day's pay
+  // for every legitimate weekly off, every single month, for every employee. ──
+  const workingDays = 26;
 const dailyRate = Math.round(salaryForSlip / workingDays);
 
   const absences = Math.max(0, workingDays - daysPresent);
@@ -7392,9 +7400,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <div style={{display:'flex',gap:'7px',flexWrap:'wrap'}}>
             {[
               {id:'all',     label:'All Customers',    icon:<Users size={11}/>,       desc:'Everyone who opted in'},
-              {id:'loyal',   label:'Loyal',            icon:<Star size={11}/>,        desc:'6+ visits'},
-              {id:'at-risk', label:'At Risk',          icon:<AlertTriangle size={11}/>,desc:'No visit in 30 days'},
-              {id:'new',     label:'New',              icon:<UserPlus size={11}/>,    desc:'1–2 visits'},
+              {id:'loyal',   label:'Loyal',            icon:<Star size={11}/>,        desc:'10+ visits'},
+              {id:'at-risk', label:'At Risk',          icon:<AlertTriangle size={11}/>,desc:'2+ visits, none in the last 21 days'},
+              {id:'new',     label:'New',              icon:<UserPlus size={11}/>,    desc:'Exactly 1 visit'},
             ].map(seg=>{
               const isActive=newCampaign.segment===seg.id;
               return(
@@ -8010,11 +8018,16 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 1. MENU ENGINEERING ──
       if (profitabilityData.length > 0) {
-        const avgSold = profitabilityData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / profitabilityData.length;
-        const avgMargin = profitabilityData.reduce((a, b) => a + (b.marginPct || 0), 0) / profitabilityData.length;
-        const puzzles = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) >= avgMargin && d.hasRecipe);
-        const plowhorses = profitabilityData.filter(d => (d.totalQtySold || 0) >= avgSold && (d.marginPct || 0) < avgMargin);
-        const dogs = profitabilityData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) < avgMargin && d.hasRecipe);
+        // Dishes with no recipe mapped default to a fabricated 100% margin (their true
+        // ingredient cost is unknown, not actually zero) — including them here would
+        // inflate the average-margin benchmark that every other dish gets judged against,
+        // and could get a completely uncosted dish flagged as a high-margin "star".
+        const costedData = profitabilityData.filter(d => d.hasRecipe);
+        const avgSold = costedData.length > 0 ? costedData.reduce((a, b) => a + (b.totalQtySold || 0), 0) / costedData.length : 0;
+        const avgMargin = costedData.length > 0 ? costedData.reduce((a, b) => a + (b.marginPct || 0), 0) / costedData.length : 0;
+        const puzzles = costedData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) >= avgMargin);
+        const plowhorses = costedData.filter(d => (d.totalQtySold || 0) >= avgSold && (d.marginPct || 0) < avgMargin);
+        const dogs = costedData.filter(d => (d.totalQtySold || 0) < avgSold && (d.marginPct || 0) < avgMargin);
 
         if (puzzles.length > 0) {
           const topPuzzle = puzzles.sort((a, b) => b.marginPct - a.marginPct)[0];
@@ -13157,11 +13170,18 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     </div>
 
                     {/* Qty */}
-                    <input
-                      type="number" placeholder="Qty" min="0" step="0.01"
-                      value={row.quantityUsed}
-                      onChange={e => { const u = [...recipeIngredientRows]; u[idx].quantityUsed = e.target.value; setRecipeIngredientRows(u); }}
-                      style={{ padding: '9px 10px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace' }} />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="number" placeholder="Qty" min="0" step="0.01"
+                        value={row.quantityUsed}
+                        onChange={e => { const u = [...recipeIngredientRows]; u[idx].quantityUsed = e.target.value; setRecipeIngredientRows(u); }}
+                        style={{ padding: inv ? '9px 40px 9px 10px' : '9px 10px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                      {inv && (
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.6rem', fontWeight: '800', color: 'rgba(211,191,162,0.5)', pointerEvents: 'none' }}>
+                          {inv.unit}
+                        </span>
+                      )}
+                    </div>
 
                     {/* Line cost */}
                     <div style={{ height: '37px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: lineCost > 0 ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${lineCost > 0 ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.06)'}`, borderRadius: '9px' }}>
