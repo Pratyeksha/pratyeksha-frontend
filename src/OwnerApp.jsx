@@ -29,7 +29,7 @@ import {
   Search, Filter, MoreVertical, Plus, Minus, Check, ShoppingBag, Truck, CreditCard, Banknote,
   Smartphone, UserCheck, UserX, Award, ThumbsUp, PackageX, PackageCheck, Zap, Activity,
   Receipt, ExternalLink, WifiOff, Loader2, BarChart3, Rocket, Shield, PlayCircle, Quote,
-  Lock
+  Lock, ArrowLeftRight
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -143,6 +143,39 @@ const GlobalStyles = () => (
     .pown-page-transition { animation: pownPageIn .38s cubic-bezier(.4,0,.2,1) both; }
     @keyframes pownPageIn { from { opacity: 0; transform: translateY(8px) scale(0.994); } to { opacity: 1; transform: translateY(0) scale(1); } }
     @media (max-width: 640px) { .pown-hide-mobile { display: none !important; } }
+
+    /* ── Responsive grid utilities — fixed-column grids that would otherwise
+       squash illegibly on phones instead collapse to fewer columns. ── */
+    .pown-split-main { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 14px; }
+    @media (max-width: 860px) { .pown-split-main { grid-template-columns: 1fr; } }
+    .pown-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 520px) { .pown-grid-2 { grid-template-columns: 1fr; } }
+    .pown-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 480px) { .pown-grid-3 { grid-template-columns: 1fr; } }
+    .pown-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    @media (max-width: 560px) { .pown-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+
+    /* ── Tables: force a real horizontal scroll instead of squashing columns
+       into illegibility, with a visible cue that there's more off-screen. ── */
+    .pown-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .pown-scroll-hint { display: none; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; color: ${T.textLow}; padding: 0 20px 10px; }
+    @media (max-width: 780px) { .pown-scroll-hint { display: flex; } }
+
+    /* ── Sticky footers inside <main> must clear the fixed mobile bottom nav. ── */
+    .pown-sticky-footer { position: sticky; bottom: 14px; z-index: 10; }
+    @media (max-width: 1023px) { .pown-sticky-footer { bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 14px); } }
+
+    /* Soft fade at the top/bottom edge of the sidebar's scrollable tab list,
+       so it reads as its own independent scroll region. */
+    .pown-sidebar-fade { mask-image: linear-gradient(to bottom, transparent 0, black 14px, black calc(100% - 14px), transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 14px, black calc(100% - 14px), transparent 100%); }
+
+    /* Soft drifting glow orbs behind the auth screens */
+    .pown-auth-glow {
+      position: absolute; width: 320px; height: 320px; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, rgba(211,191,162,0.16) 0%, transparent 70%);
+      filter: blur(10px); animation: pownDrift 12s ease-in-out infinite alternate;
+    }
+    @keyframes pownDrift { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(18px,-14px) scale(1.08); } }
   `}</style>
 );
 
@@ -704,10 +737,17 @@ const Toast = ({ message }) => {
    AUTH SCREENS — first-time setup, login, splash
    ════════════════════════════════════════════════════════════ */
 const AuthShell = ({ children }) => (
-  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: 20 }}>
+  <div className="pown" style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh',
+    overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+    padding: 'max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left))',
+    position: 'relative'
+  }}>
     <GlobalStyles />
-    <div className="pown-fade-in" style={{ width: 400, maxWidth: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
+    <div className="pown-auth-glow" style={{ top: '8%', left: '12%' }} />
+    <div className="pown-auth-glow" style={{ bottom: '6%', right: '10%', animationDelay: '-4s' }} />
+    <div className="pown-fade-in" style={{ width: 400, maxWidth: '100%', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 26 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 24px -6px rgba(211,191,162,0.5)'
@@ -723,7 +763,7 @@ const AuthShell = ({ children }) => (
 );
 
 const AuthSplash = () => (
-  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
     <GlobalStyles />
     <div className="pown-pulse" style={{
       width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
@@ -736,14 +776,14 @@ const AuthErrorScreen = () => {
   const { authErrorDetail, retryAuth, tenantId } = useOwner();
   return (
     <AuthShell>
-      <Card style={{ borderColor: 'rgba(248,113,113,0.35)' }}>
+      <Card style={{ borderColor: T.dangerSoft.replace('0.14', '0.4') }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: T.dangerSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <WifiOff size={16} color={T.danger} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 800 }}>Couldn't reach the server</div>
         </div>
-        <div style={{ fontSize: 12, color: T.textMed, marginBottom: 18, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 12, color: T.textMed, marginBottom: 18, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}
         </div>
         <PrimaryBtn icon={RefreshCcw} onClick={retryAuth} style={{ width: '100%', justifyContent: 'center' }}>Retry</PrimaryBtn>
@@ -779,7 +819,7 @@ const LoginScreen = () => {
         <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>Signing in to <b style={{ color: T.primary }}>{tenantId}</b></div>
         <form onSubmit={submit}>
           <Field label="USERNAME">
-            <input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoFocus autoComplete="username" />
+            <input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
           </Field>
           <Field label="PASSWORD">
             <div style={{ position: 'relative' }}>
@@ -789,7 +829,7 @@ const LoginScreen = () => {
               </button>
             </div>
           </Field>
-          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
+          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
           <PrimaryBtn icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
             {loading ? 'Signing in…' : 'Sign In'}
           </PrimaryBtn>
@@ -830,12 +870,12 @@ const SetupScreen = () => {
         <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>First time here for <b style={{ color: T.primary }}>{tenantId}</b> — create your credentials. You'll only do this once.</div>
         <form onSubmit={submit}>
           <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" autoFocus /></Field>
-          <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" /></Field>
+          <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" /></Field>
           <Field label="CHOOSE A PASSWORD"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
           <Field label="CONFIRM PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
           {password && password.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Password needs at least 6 characters.</div>}
           {confirm && password !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
-          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
+          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
           <PrimaryBtn icon={loading ? Loader2 : CheckCircle2} disabled={loading || !canSubmit} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
             {loading ? 'Setting up…' : 'Create Login & Continue'}
           </PrimaryBtn>
@@ -948,13 +988,14 @@ const InstallBanner = () => {
 const Sidebar = () => {
   const { tenantId, ownerName, logout } = useOwner();
   return (
-    <aside className="pown-scroll pown-scrollpane" style={{
+    <aside style={{
       width: 262, flexShrink: 0,
       borderRight: `1px solid ${T.border}`,
       background: `linear-gradient(180deg, ${T.surfaceRaised} 0%, ${T.bg} 100%)`,
-      display: 'flex', flexDirection: 'column', height: '100%'
+      display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden'
     }}>
-      <div style={{ padding: '26px 22px 20px' }}>
+      {/* Pinned header — logo + owner chip, never scrolls */}
+      <div style={{ padding: '26px 22px 18px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
@@ -977,7 +1018,9 @@ const Sidebar = () => {
           </div>
         )}
       </div>
-      <nav style={{ padding: '6px 14px', flex: '1 0 auto' }}>
+
+      {/* Only the tab list scrolls — header and footer stay put */}
+      <nav className="pown-scroll pown-scrollpane pown-sidebar-fade" style={{ padding: '6px 14px', flex: '1 1 auto', minHeight: 0 }}>
         {NAV_ITEMS.map(item => (
           <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
             display: 'flex', alignItems: 'center', gap: 12, padding: '10.5px 13px', borderRadius: 12,
@@ -992,7 +1035,9 @@ const Sidebar = () => {
           </NavLink>
         ))}
       </nav>
-      <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10 }}>
+
+      {/* Pinned footer — install / logout, never scrolls */}
+      <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10, flexShrink: 0 }}>
         <InstallAppButton />
         <button onClick={logout} className="pown-btn" style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
@@ -1021,7 +1066,7 @@ const MobileDrawer = ({ open, onClose }) => {
         transform: open ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform .32s cubic-bezier(.4,0,.2,1)',
         display: 'flex', flexDirection: 'column', boxShadow: open ? '20px 0 60px -20px rgba(0,0,0,0.6)' : 'none'
       }}>
-        <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 32, height: 32, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
@@ -1042,7 +1087,7 @@ const MobileDrawer = ({ open, onClose }) => {
             <div style={{ fontSize: 12, fontWeight: 700 }}>{ownerName}</div>
           </div>
         )}
-        <nav className="pown-scrollpane" style={{ padding: '4px 14px', flex: 1 }}>
+        <nav className="pown-scrollpane pown-sidebar-fade" style={{ padding: '4px 14px', flex: '1 1 auto', minHeight: 0 }}>
           {NAV_ITEMS.map(item => (
             <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 12,
@@ -1057,7 +1102,7 @@ const MobileDrawer = ({ open, onClose }) => {
             </NavLink>
           ))}
         </nav>
-        <div style={{ padding: 16, borderTop: `1px solid ${T.border}` }}>
+        <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={logout} className="pown-btn" style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
             borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
@@ -1307,7 +1352,7 @@ const DashboardPage = () => {
         <StripItem icon={UserCheck} label="Staff" value={`${data.staffPresent} / ${data.staffTotal} present`} />
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: 14 }}>
+      <div className="pown-split-main">
         {/* Hourly sparkline */}
         <Card>
           <SectionHeading icon={BarChart3} title="Today's Hourly Revenue" />
@@ -1600,7 +1645,7 @@ const MenuPage = () => {
         {data && (
           <>
             {data.deadItemsCount > 0 && (
-              <Card style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderColor: 'rgba(248,113,113,0.3)' }}>
+              <Card style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderColor: T.dangerSoft.replace('0.14', '0.35') }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <AlertTriangle size={16} color={T.danger} />
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{data.deadItemsCount} dishes had zero orders this month</span>
@@ -1621,19 +1666,20 @@ const MenuPage = () => {
 
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading icon={ClipboardList} title="Dish Performance" /></div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
+              <div className="pown-table-scroll pown-scrollpane">
+                <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
                       {['Dish', 'Sold', 'Revenue', 'Margin', 'Category', ''].map(h => (
-                        <th key={h} style={{ textAlign: h === 'Dish' ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                        <th key={h} style={{ textAlign: h === 'Dish' ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.dishTable.slice(0, 30).map(d => (
                       <tr key={d._id} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
-                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{d.name}</td>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.name}</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{d.sold}</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }}><Money value={d.revenue} size={12.5} /></td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{d.marginPct}%</td>
@@ -1693,7 +1739,7 @@ const InventoryPage = () => {
                 <span className="pown-mono" style={{ fontSize: 26, fontWeight: 800 }}>{data.healthScorePct}%</span>
               </div>
               <ProgressBar pct={data.healthScorePct} height={9} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16 }}>
+              <div className="pown-grid-4" style={{ marginTop: 16 }}>
                 <StatBlock label="Healthy" value={data.counts.healthy} tone="gold" />
                 <StatBlock label="Low" value={data.counts.low} tone="warning" />
                 <StatBlock label="Critical" value={data.counts.critical} tone="danger" />
@@ -1877,15 +1923,16 @@ const StaffPage = () => {
 
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Today's Attendance" /></div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
+              <div className="pown-table-scroll pown-scrollpane">
+                <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse' }}>
                   <thead><tr>{['Name', 'Role', 'Status', 'Clock In', 'Hours'].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
                     {data.attendanceToday.list.map((s, i) => (
                       <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
-                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{s.name}</td>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{s.name}</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right', fontSize: 12, color: T.textLow }}>{s.role}</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }}>
                           <Badge tone={s.status === 'Present' ? 'gold' : s.status === 'Late' ? 'warning' : 'danger'}>{s.status}</Badge>
@@ -1962,7 +2009,7 @@ const CustomersPage = () => {
               <KpiCard icon={Star} label="AVG VISITS" value={data.overview.avgVisits} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <div className="pown-grid-4">
               <StatBlock label="VIP" value={data.segments.vip} tone="gold" />
               <StatBlock label="Regular" value={data.segments.regular} />
               <StatBlock label="One-time" value={data.segments.oneTime} />
@@ -1982,15 +2029,16 @@ const CustomersPage = () => {
 
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Top Customers" /></div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
+              <div className="pown-table-scroll pown-scrollpane">
+                <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse' }}>
                   <thead><tr>{['Customer', 'Visits', 'Lifetime Spend', 'Last Visit', 'Favourite'].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow }}>{h}</th>
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
                     {data.topCustomers.map((c, i) => (
                       <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
-                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600 }}>{c.name} <span className="pown-mono" style={{ color: T.textLow, fontSize: 11 }}>{c.phone}</span></td>
+                        <td style={{ padding: '11px 20px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.name} <span className="pown-mono" style={{ color: T.textLow, fontSize: 11 }}>{c.phone}</span></td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{c.visits}</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }}><Money value={c.lifetimeSpend} size={12.5} /></td>
                         <td style={{ padding: '11px 20px', textAlign: 'right', fontSize: 11.5, color: T.textLow }}>{c.lastVisit != null ? `${c.lastVisit}d ago` : '\u2014'}</td>
@@ -2031,7 +2079,7 @@ const AlertsPage = () => {
         emptyProps={{ icon: Bell, title: 'No alerts yet', subtitle: 'You\u2019ll see stock, revenue and kitchen alerts here in real time' }}>
         {data && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            <div className="pown-grid-3">
               <StatBlock label="Urgent" value={data.counts.urgent} tone="danger" />
               <StatBlock label="Attention" value={data.counts.attention} tone="warning" />
               <StatBlock label="Info" value={data.counts.info} tone="gold" />
@@ -2158,10 +2206,11 @@ const CompliancePage = () => {
 
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Invoice Register" /></div>
-              <div style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
+              <div className="pown-scrollpane" style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse' }}>
                   <thead><tr>{['Bill No', 'Date', 'Table', 'Amount', 'GST', 'Payment'].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, position: 'sticky', top: 0, background: T.surface }}>{h}</th>
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '10px 20px', fontSize: 10.5, fontWeight: 800, letterSpacing: 1, color: T.textLow, position: 'sticky', top: 0, background: T.surface, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
                     {data.invoiceRegister.slice(0, 200).map((r, i) => (
@@ -2511,7 +2560,7 @@ const SettingsPage = () => {
 
             <Card>
               <SectionHeading icon={Target} title="Revenue Targets" />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="pown-grid-2">
                 <Field label="DAILY TARGET (\u20B9)">
                   <input type="number" value={form.dailyTarget} onChange={e => setForm(f => ({ ...f, dailyTarget: Number(e.target.value) }))} style={inputStyle} />
                 </Field>
@@ -2523,7 +2572,7 @@ const SettingsPage = () => {
 
             <Card>
               <SectionHeading icon={Clock} title="Operating Hours" />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="pown-grid-2">
                 <Field label="MON–FRI">
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input type="time" value={form.operatingHours.weekday.open} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekday: { ...f.operatingHours.weekday, open: e.target.value } } }))} style={inputStyle} />
@@ -2569,7 +2618,7 @@ const SettingsPage = () => {
               </div>
             </Card>
 
-            <div style={{ position: 'sticky', bottom: 14, display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="pown-sticky-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</PrimaryBtn>
             </div>
           </>

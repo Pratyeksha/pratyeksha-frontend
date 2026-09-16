@@ -2138,11 +2138,12 @@ const SectionHeader = ({ icon, title, subtitle }) => (
 
 const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
   <div style={{
-    background: urgent ? 'rgba(211,191,162,0.04)' : '#0d0d0d',
-    border: `1px solid ${urgent ? 'rgba(211,191,162,0.2)' : 'rgba(211,191,162,0.07)'}`,
+    background: urgent ? 'linear-gradient(165deg, rgba(211,191,162,0.07) 0%, rgba(211,191,162,0.02) 100%)' : 'linear-gradient(165deg, #0f0f10 0%, #0a0a0a 100%)',
+    border: `1px solid ${urgent ? 'rgba(211,191,162,0.22)' : 'rgba(211,191,162,0.08)'}`,
     borderLeft: `3px solid ${rec.color}`,
     borderRadius: '14px', padding: '18px 20px',
-    display: 'flex', flexDirection: 'column', gap: '12px'
+    display: 'flex', flexDirection: 'column', gap: '12px',
+    boxShadow: urgent ? `0 8px 24px ${rec.color}0f, inset 0 1px 0 rgba(255,255,255,0.03)` : '0 6px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.02)'
   }}>
     {/* Top row: icon + category + title */}
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
@@ -2170,8 +2171,8 @@ const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
     {rec.stat && (
       <div style={{
         display: 'flex', alignItems: 'center', gap: '14px',
-        background: '#000', borderRadius: '10px', padding: '12px 14px',
-        border: '1px solid rgba(255,255,255,0.04)'
+        background: 'linear-gradient(165deg, #050505 0%, #000 100%)', borderRadius: '10px', padding: '12px 14px',
+        border: '1px solid rgba(255,255,255,0.05)'
       }}>
         <div style={{
           fontSize: '1.6rem', fontWeight: '900', color: rec.color,
@@ -6469,9 +6470,9 @@ const totalRevenueAllTime = canonicalMonthRevenue;
         { label:'CHAMPION',        val: customerDir.summary?.champion || 0, color:'#d3bfa2' },
       ].map(({label,val,color}) => (
         <div key={label} style={{
-          background:'#0d0d0d', border:'1px solid #1c1f26',
+          background:'linear-gradient(165deg, #0f0f10 0%, #0a0a0a 100%)', border:'1px solid rgba(255,255,255,0.06)',
           borderTop:`2px solid ${color}`, borderRadius:'12px',
-          padding:'14px 14px 12px'
+          padding:'14px 14px 12px', boxShadow:'0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02)'
         }}>
           <div style={{fontSize:'1.4rem',fontWeight:'900',color,fontFamily:'monospace'}}>{val}</div>
           <div style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
@@ -6481,9 +6482,10 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 
     {/* ── LIFETIME REVENUE ── */}
     <div style={{
-      background:'#090909', border:'1px solid rgba(211,191,162,0.15)',
-      borderRadius:'12px', padding:'16px 20px',
-      display:'flex', alignItems:'center', justifyContent:'space-between'
+      background:'linear-gradient(165deg, rgba(211,191,162,0.07) 0%, rgba(211,191,162,0.02) 100%)', border:'1px solid rgba(211,191,162,0.18)',
+      borderRadius:'14px', padding:'20px 24px',
+      display:'flex', alignItems:'center', justifyContent:'space-between',
+      boxShadow:'0 10px 28px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03)'
     }}>
       <div>
         <div style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>LIFETIME CUSTOMER REVENUE</div>
@@ -7095,11 +7097,13 @@ const totalRevenueAllTime = canonicalMonthRevenue;
           return (
             <motion.div key={a._id} initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
               style={{
+                position:'relative',
                 background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(186,117,23,0.03)':'#080808',
                 border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(186,117,23,0.15)':'#111'}`,
                 borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(186,117,23,0.45)':'#1a1a1a'}`,
                 borderRadius:'13px',padding:'16px 18px',
-                opacity:isEnded?0.42:1,transition:'all 0.2s'
+                boxShadow: isLive ? '0 8px 22px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.02)' : '0 4px 12px rgba(0,0,0,0.15)',
+                opacity:isEnded?0.42:1,transition:'all 0.2s',overflow:'hidden'
               }}>
               {isLive&&<div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.3),transparent)'}}/>}
  
@@ -9334,21 +9338,23 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
   // Reusable stat card
   const SC = ({ label, value, sub, c = '#fff', accent = false }) => (
     <div style={{
-      background: accent ? 'rgba(211,191,162,0.07)' : '#070707',
-      border: `1px solid ${accent ? 'rgba(211,191,162,0.25)' : 'rgba(255,255,255,0.07)'}`,
-      borderRadius: '13px', padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: '4px'
+      background: accent ? 'linear-gradient(165deg, rgba(211,191,162,0.1) 0%, rgba(211,191,162,0.04) 100%)' : 'linear-gradient(165deg, #0a0a0a 0%, #070707 100%)',
+      border: `1px solid ${accent ? 'rgba(211,191,162,0.28)' : 'rgba(255,255,255,0.07)'}`,
+      borderRadius: '13px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '5px',
+      boxShadow: accent ? '0 6px 18px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.03)' : 'inset 0 1px 0 rgba(255,255,255,0.02)',
+      transition: 'transform 0.15s, border-color 0.15s'
     }}>
-      <div style={{ fontSize: '0.46rem', fontWeight: '900', color: 'rgba(255,255,255,0.22)', letterSpacing: '2px', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: '1.25rem', fontWeight: '900', color: c, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1.05 }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', fontWeight: '500' }}>{sub}</div>}
+      <div style={{ fontSize: '0.46rem', fontWeight: '900', color: 'rgba(255,255,255,0.24)', letterSpacing: '2px', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: '1.32rem', fontWeight: '900', color: c, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1.05 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.22)', fontWeight: '500' }}>{sub}</div>}
     </div>
   );
 
   // Reusable biCard container
   const BC = ({ children, style = {} }) => (
     <div style={{
-      background: '#080808', border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: '16px', padding: '20px', ...style
+      background: 'linear-gradient(165deg, #0a0a0a 0%, #060606 100%)', border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: '16px', padding: '20px', boxShadow: '0 8px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02)', ...style
     }}>{children}</div>
   );
 
@@ -13780,13 +13786,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       {l:'Available',v:extraItems.filter(i=>i.isAvailable).length,c:'#4ade80',icon:<CheckCircle2 size={14}/>},
       {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#555',icon:<EyeOff size={14}/>},
       {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:'#BA7517',icon:<AlertTriangle size={14}/>},
-      {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
+      {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||i.price)),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
     ].map((s,i)=>(
       <div key={i} style={{
-        background:'#080808',border:'1px solid #161616',
-        borderTop:`2px solid ${s.c}22`,
+        background:'linear-gradient(165deg, #0d0d0e 0%, #080808 100%)',border:'1px solid rgba(255,255,255,0.06)',
+        borderTop:`2px solid ${s.c}33`,
         borderRadius:'13px',padding:'16px 18px',
-        display:'flex',alignItems:'center',gap:'12px'
+        display:'flex',alignItems:'center',gap:'12px',
+        boxShadow:'0 6px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.02)'
       }}>
         <div style={{
           width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,
@@ -16022,7 +16029,7 @@ const styles = {
   insightsWrapper:{maxWidth:'1000px',margin:'0 auto'},
   statsRow:{display:'flex',gap:'20px',marginBottom:'40px'},
   glassStat:{flex:1,padding:'30px',background:'#0d0d0d',borderRadius:'24px',border:'1px solid #1a1a1a'},
-  statLabel:{color:'#333',fontWeight:'bold',fontSize:'0.65rem'},
+  statLabel:{color:'#3a3a3a',fontWeight:'800',fontSize:'0.65rem',letterSpacing:'0.4px'},
   statVal:{fontSize:'2rem',fontWeight:'900',margin:'8px 0 0'},
   heatmapCard:{background:'#080808',padding:'40px',borderRadius:'30px',border:'1px solid #1a1a1a'},
   calendarGridHeader:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',marginBottom:'25px'},
@@ -16037,14 +16044,14 @@ const styles = {
   qrContainer:{marginTop:'30px',padding:'30px',background:'#fff',borderRadius:'20px',display:'inline-block'},
   loginOverlay:{width:'100vw',height:'100vh',background:'#000',display:'flex',justifyContent:'center',alignItems:'center'},
   loginBox:{width:'450px',background:'#080808',padding:'60px',borderRadius:'40px',textAlign:'center',border:'1px solid #1a1a1a'},
-  input:{width:'100%',padding:'18px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'14px',marginBottom:'20px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box'},
+  input:{width:'100%',padding:'16px 18px',background:'linear-gradient(165deg, #0d0d0d 0%, #0a0a0a 100%)',border:'1px solid rgba(255,255,255,0.09)',color:'#fff',borderRadius:'14px',marginBottom:'20px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s, box-shadow 0.15s'},
   mainBtn:{width:'100%',padding:'20px',background:'#d3bfa2',color:'#000',border:'none',borderRadius:'14px',fontWeight:'900',cursor:'pointer'},
-  toast:{position:'fixed',bottom:'40px',right:'40px',background:'#111',padding:'18px 30px',borderRadius:'16px',border:'1px solid #222',display:'flex',alignItems:'center',gap:'15px',zIndex:9999,fontWeight:'900',fontSize:'0.85rem',color:'#d3bfa2'},
-  modalBackdrop:{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.95)',backdropFilter:'blur(10px)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:9000},
-  confirmBox:{width:'380px',background:'#0d0d0d',padding:'50px',borderRadius:'35px',textAlign:'center',border:'1px solid #1a1a1a'},
-  confirmBtn:{flex:1,padding:'18px',background:'#d3bfa2',color:'#000',border:'none',borderRadius:'12px',fontWeight:'900',cursor:'pointer'},
-  cancelBtn:{flex:1,padding:'18px',background:'#111',color:'#444',border:'none',borderRadius:'12px',fontWeight:'bold',cursor:'pointer'},
-  premiumCard:{background:'#0d0d0d',padding:'30px',borderRadius:'24px',border:'1px solid #1a1a1a'},
+  toast:{position:'fixed',bottom:'40px',right:'40px',background:'#111',padding:'18px 30px',borderRadius:'16px',border:'1px solid #222',display:'flex',alignItems:'center',gap:'15px',zIndex:9999,fontWeight:'900',fontSize:'0.85rem',color:'#d3bfa2',boxShadow:'0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02)'},
+  modalBackdrop:{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.95)',backdropFilter:'blur(10px)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:9000,padding:'20px',overflowY:'auto',boxSizing:'border-box'},
+  confirmBox:{width:'380px',maxWidth:'100%',background:'linear-gradient(165deg, #111112 0%, #0a0a0a 100%)',padding:'50px',borderRadius:'35px',textAlign:'center',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'},
+  confirmBtn:{flex:1,padding:'18px',background:'linear-gradient(165deg, #ddc9a8 0%, #d3bfa2 100%)',color:'#000',border:'none',borderRadius:'12px',fontWeight:'900',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',boxShadow:'0 8px 20px rgba(211,191,162,0.18)',transition:'transform 0.1s'},
+  cancelBtn:{flex:1,padding:'18px',background:'#111',color:'#666',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'12px',fontWeight:'800',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',transition:'color 0.15s, border-color 0.15s'},
+  premiumCard:{background:'linear-gradient(165deg, #101011 0%, #0a0a0a 100%)',padding:'26px',borderRadius:'22px',border:'1px solid rgba(255,255,255,0.07)',boxShadow:'0 10px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)'},
   ghostBtn:{flex:1,padding:'12px',background:'transparent',border:'1px solid #222',color:'#444',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
   toggleShowBtn:{flex:1,padding:'12px',background:'#d3bfa2',color:'#000',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
   toggleHideBtn:{flex:1,padding:'12px',background:'#1a1a1a',color:'#333',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
@@ -16056,8 +16063,8 @@ const styles = {
   waiterRequestRow:{display:'flex',alignItems:'center',gap:'20px',background:'#111',padding:'15px 20px',borderRadius:'15px',border:'1px solid #d4af37',marginBottom:'12px'},
   goldCircle:{width:'40px',height:'40px',background:'#d4af3715',borderRadius:'10px',border:'1px solid #d4af37',display:'flex',alignItems:'center',justifyContent:'center',color:'#d4af37'},
   doneBtn:{background:'#d3bfa2',color:'#000',border:'none',padding:'8px 15px',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
-  biCard:{background:'#0d0d0d',padding:'25px',borderRadius:'20px',border:'1px solid #1a1a1a'},
-  biTitle:{fontSize:'0.75rem',fontWeight:'900',color:'#444',marginBottom:'20px',display:'flex',alignItems:'center',gap:'10px',letterSpacing:'1px'},
+  biCard:{background:'linear-gradient(165deg, #0f0f10 0%, #0a0a0a 100%)',padding:'26px',borderRadius:'20px',border:'1px solid rgba(211,191,162,0.09)',boxShadow:'0 12px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.02)'},
+  biTitle:{fontSize:'0.75rem',fontWeight:'900',color:'#666',marginBottom:'20px',display:'flex',alignItems:'center',gap:'10px',letterSpacing:'1.2px',textTransform:'uppercase'},
   sourceRow:{display:'flex',alignItems:'center',gap:'15px',marginBottom:'12px',fontSize:'0.8rem',color:'#999'},
   progressBg:{flex:1,height:'6px',background:'#111',borderRadius:'10px',overflow:'hidden'},
   progressFill:{height:'100%',background:'linear-gradient(90deg,#8a704d,#d3bfa2)',borderRadius:'10px'},
