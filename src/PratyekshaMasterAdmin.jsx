@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,10 +7,12 @@ import {
   CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2,
   Clock, Layers, X, Menu, Plus, Power, RotateCcw, UserPlus,
   IndianRupee, AlertTriangle, Calendar, Store, ChefHat,
-  BarChart3, Eye, EyeOff, Copy, Check, Wallet
+  BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
+  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+const API_ORIGIN = BASE_URL.replace(/\/api$/, '');
 
 /* ─────────────────────────────────────────
    DESIGN TOKENS
@@ -106,9 +108,10 @@ const GLOBAL_CSS = `
   .p-row { transition: background 0.1s; }
   .p-row:hover { background: #141414 !important; }
 
-  /* Card hover — light gold border */
-  .p-card { transition: border-color 0.18s; }
+  /* Card hover — light gold border + gentle lift */
+  .p-card { transition: border-color 0.18s, transform 0.2s cubic-bezier(.4,0,.2,1), box-shadow 0.2s; }
   .p-card:hover { border-color: rgba(211,191,162,0.22) !important; }
+  .p-card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -14px rgba(0,0,0,0.55); }
 
   .p-demo-card { transition: background 0.1s, border-color 0.1s; cursor: pointer; }
   .p-demo-card:hover { background: #141414 !important; }
@@ -118,6 +121,28 @@ const GLOBAL_CSS = `
 
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes pulse-slow { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
+  @keyframes p-fade-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .p-fade-in { animation: p-fade-in .3s cubic-bezier(.4,0,.2,1) both; }
+  .p-stagger > * { animation: p-fade-in .4s cubic-bezier(.4,0,.2,1) both; }
+  .p-stagger > *:nth-child(1){animation-delay:.02s} .p-stagger > *:nth-child(2){animation-delay:.06s}
+  .p-stagger > *:nth-child(3){animation-delay:.1s} .p-stagger > *:nth-child(4){animation-delay:.14s}
+
+  /* Modal overlay */
+  .p-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .p-modal { background: #111111; border: 1px solid #252525; border-radius: 16px; padding: 22px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; }
+
+  /* Table horizontal scroll + hint */
+  .p-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .p-scroll-hint { display: none; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; color: #606060; padding: 8px 32px 0; }
+  @media (max-width: 780px) { .p-scroll-hint { display: flex; } }
+
+  /* Dropzone */
+  .p-dropzone { border: 1.5px dashed #252525; border-radius: 12px; transition: border-color .15s, background .15s; cursor: pointer; }
+  .p-dropzone:hover, .p-dropzone.drag { border-color: rgba(211,191,162,0.45); background: rgba(211,191,162,0.03); }
+
+  .p-btn-shimmer { position: relative; overflow: hidden; }
+  .p-btn-shimmer::after { content:''; position:absolute; top:0; left:-60%; width:40%; height:100%; background:linear-gradient(120deg,transparent,rgba(255,255,255,0.35),transparent); transform:skewX(-20deg); transition:left .6s cubic-bezier(.4,0,.2,1); }
+  .p-btn-shimmer:hover::after { left:130%; }
 
   @media (max-width: 1100px) {
     .p-stat-grid { grid-template-columns: repeat(2,1fr); }
@@ -244,6 +269,358 @@ const inp = {
   outline: 'none', boxSizing: 'border-box',
 };
 
+/* ─────────────────────────────────────────
+   PWA — installable app support
+   Needs /admin-manifest.webmanifest, /admin-sw.js and /admin-pwa/*.png
+   placed in the frontend project's /public folder (see deployment notes).
+───────────────────────────────────────── */
+function usePwaInstall() {
+  const [installEvent, setInstallEvent] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+
+  useEffect(() => {
+    if (!document.querySelector('link[rel="manifest"]')) {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/admin-manifest.webmanifest';
+      document.head.appendChild(link);
+    }
+    if (!document.querySelector('meta[name="theme-color"]')) {
+      const meta = document.createElement('meta');
+      meta.name = 'theme-color'; meta.content = '#0a0a0a';
+      document.head.appendChild(meta);
+    }
+    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+      const link = document.createElement('link');
+      link.rel = 'apple-touch-icon';
+      link.href = '/admin-pwa/apple-touch-icon.png';
+      document.head.appendChild(link);
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/admin-sw.js', { scope: '/master-admin' }).catch(() => {});
+    }
+    setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone);
+    setInstalled(window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true);
+
+    const onBeforeInstall = (e) => { e.preventDefault(); setInstallEvent(e); };
+    const onInstalled = () => { setInstalled(true); setInstallEvent(null); };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const promptInstall = async () => {
+    if (!installEvent) return 'unavailable';
+    installEvent.prompt();
+    const { outcome } = await installEvent.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+    setInstallEvent(null);
+    return outcome;
+  };
+
+  return { canInstall: !!installEvent, installed, isIos, promptInstall };
+}
+
+/** Animates a number counting up to its new value. */
+function useCountUp(target, duration = 700) {
+  const numericTarget = Number(target) || 0;
+  const [display, setDisplay] = useState(numericTarget);
+  const prevRef = useRef(numericTarget);
+  useEffect(() => {
+    const start = prevRef.current, end = numericTarget;
+    if (start === end) return;
+    let startTime = null, raf;
+    const step = (ts) => {
+      if (!startTime) startTime = ts;
+      const progress = Math.min(1, (ts - startTime) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (progress < 1) raf = requestAnimationFrame(step); else prevRef.current = end;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [numericTarget, duration]);
+  return display;
+}
+
+const CountUp = (props) => {
+  const val = useCountUp(props.value);
+  return <>{val.toLocaleString()}</>;
+};
+
+const IosInstallSteps = () => (
+  <div style={{ display: 'grid', gap: 12 }}>
+    {[
+      <>Tap the <b>Share</b> icon in Safari's toolbar</>,
+      <>Scroll down and tap <b>"Add to Home Screen"</b></>,
+      <>Tap <b>Add</b> — the admin icon appears on your home screen</>,
+    ].map((text, i) => (
+      <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
+        <div style={{ fontSize: 12.5, color: C.textMid, lineHeight: 1.6, paddingTop: 2 }}>{text}</div>
+      </div>
+    ))}
+  </div>
+);
+
+const InstallButton = ({ compact }) => {
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [showIos, setShowIos] = useState(false);
+  if (installed) return compact ? null : (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: C.textDim, fontWeight: 600, padding: '9px 2px' }}>
+      <CheckCircle2 size={13} color="#d3bfa2" /> App installed
+    </div>
+  );
+  if (!canInstall && !isIos) return null;
+  return (
+    <>
+      <button onClick={() => isIos ? setShowIos(true) : promptInstall()} className="p-btn-shimmer" style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px',
+        borderRadius: 9, background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a',
+        border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
+      }}><Download size={13} /> Install App</button>
+      <AnimatePresence>
+        {showIos && (
+          <ModalShell title="Install on iPhone / iPad" onClose={() => setShowIos(false)} icon={Smartphone}>
+            <IosInstallSteps />
+          </ModalShell>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+/* ─────────────────────────────────────────
+   SHARED: modal shell, toast, confirm/renew/import dialogs
+───────────────────────────────────────── */
+const ModalShell = ({ title, icon: Icon, onClose, children, width }) => (
+  <motion.div className="p-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.div className="p-modal" style={width ? { width } : undefined}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }}
+      transition={{ duration: 0.2 }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {Icon && <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} color="#d3bfa2" /></div>}
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
+        </div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex', padding: 4 }}><X size={17} /></button>
+      </div>
+      {children}
+    </motion.div>
+  </motion.div>
+);
+
+const Toast = ({ toast }) => (
+  <AnimatePresence>
+    {toast && (
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+        style={{
+          position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 400,
+          background: '#151515', border: `1px solid ${toast.tone === 'error' ? 'rgba(192,96,64,0.4)' : 'rgba(211,191,162,0.3)'}`,
+          borderRadius: 11, padding: '11px 18px', fontSize: 12.5, fontWeight: 600, color: C.text,
+          display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 16px 40px -12px rgba(0,0,0,0.6)', maxWidth: '90vw'
+        }}>
+        {toast.tone === 'error' ? <AlertTriangle size={15} color={C.danger} /> : <CheckCircle2 size={15} color="#d3bfa2" />}
+        <span style={{ wordBreak: 'break-word' }}>{toast.msg}</span>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const ConfirmModal = ({ data, onClose, onConfirm }) => {
+  const [busy, setBusy] = useState(false);
+  if (!data) return null;
+  const run = async () => { setBusy(true); await onConfirm(); setBusy(false); };
+  return (
+    <ModalShell title={data.title} icon={data.icon || AlertTriangle} onClose={onClose} width={380}>
+      <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.6, marginBottom: 20 }}>{data.message}</div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={run} disabled={busy} style={{
+          flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
+          background: data.tone === 'danger' ? C.danger : '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
+        }}>{busy ? <Loader2 size={14} className="p-spin" style={{ animation: 'spin 0.8s linear infinite' }} /> : null}{busy ? 'Working…' : (data.confirmLabel || 'Confirm')}</button>
+        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </ModalShell>
+  );
+};
+
+const RenewModal = ({ client, onClose, onSubmit }) => {
+  const [months, setMonths] = useState('12');
+  const [amount, setAmount] = useState('1200');
+  const [busy, setBusy] = useState(false);
+  if (!client) return null;
+  const submit = async () => { setBusy(true); await onSubmit(Number(months), Number(amount)); setBusy(false); };
+  return (
+    <ModalShell title={`Renew — ${client.name}`} icon={RotateCcw} onClose={onClose} width={380}>
+      <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+        <LabeledInput label="Plan Duration (months)">
+          <input className="p-inp" style={inp} type="number" value={months} onChange={e => setMonths(e.target.value)} autoFocus />
+        </LabeledInput>
+        <LabeledInput label="Amount Received (₹)">
+          <input className="p-inp" style={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+        </LabeledInput>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={submit} disabled={busy || !months || !amount} style={{
+          flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
+          background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: busy ? 0.6 : 1
+        }}>{busy ? 'Renewing…' : 'Confirm Renewal'}</button>
+        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </ModalShell>
+  );
+};
+
+/* ── JSON menu import ── */
+const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
+  const [file, setFile] = useState(null);
+  const [parsed, setParsed] = useState(null);
+  const [parseError, setParseError] = useState('');
+  const [mode, setMode] = useState('append');
+  const [dragging, setDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
+  if (!target) return null;
+
+  const handleFile = (f) => {
+    if (!f) return;
+    setFile(f); setParseError(''); setParsed(null); setResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target.result);
+        const categories = Array.isArray(json.categories) ? json.categories : [];
+        const menuItems = Array.isArray(json.menuItems) ? json.menuItems : [];
+        if (categories.length === 0 && menuItems.length === 0) {
+          setParseError('No "categories" or "menuItems" arrays found in this file.');
+          return;
+        }
+        setParsed({ categories, menuItems, raw: json });
+      } catch (err) {
+        setParseError('This isn\u2019t valid JSON — check the file and try again.');
+      }
+    };
+    reader.readAsText(f);
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/admin/master/menu-template`);
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pratyeksha-menu-template.json'; a.click();
+    } catch (e) { flash('Could not download template', 'error'); }
+  };
+
+  const runImport = async () => {
+    if (!parsed) return;
+    setImporting(true);
+    try {
+      const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${target.tenantId}?mode=${mode}`, parsed.raw);
+      setResult(res.data);
+      flash(`Imported ${res.data.counts.categories} categories, ${res.data.counts.menuItems} items for ${target.tenantName}`);
+      onDone && onDone();
+    } catch (err) {
+      const details = err?.response?.data?.details;
+      setParseError(details ? details.join('\n') : (err?.response?.data?.error || 'Import failed'));
+    } finally { setImporting(false); }
+  };
+
+  return (
+    <ModalShell title={`Import Menu — ${target.tenantName}`} icon={FileJson} onClose={onClose} width={460}>
+      {result ? (
+        <div style={{ textAlign: 'center', padding: '10px 0 4px' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            <CheckCircle2 size={22} color="#d3bfa2" />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Import complete</div>
+          <div style={{ fontSize: 12.5, color: C.textMid, marginBottom: 20 }}>
+            {result.counts.categories} categories &middot; {result.counts.menuItems} menu items written ({mode})
+          </div>
+          <button onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+        </div>
+      ) : (
+        <>
+          <div
+            className={`p-dropzone${dragging ? ' drag' : ''}`}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
+            style={{ padding: '26px 16px', textAlign: 'center', marginBottom: 14 }}
+          >
+            <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0])} />
+            <Upload size={22} color={C.textDim} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 12.5, color: C.textMid, fontWeight: 600 }}>{file ? file.name : 'Click or drop a .json file here'}</div>
+            <div style={{ fontSize: 11, color: C.textFaint, marginTop: 3 }}>categories[] and menuItems[] — see template</div>
+          </div>
+
+          {parseError && (
+            <div style={{ background: 'rgba(192,96,64,0.06)', border: '1px solid rgba(192,96,64,0.2)', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 11.5, color: C.danger, whiteSpace: 'pre-wrap', maxHeight: 140, overflowY: 'auto' }}>
+              {parseError}
+            </div>
+          )}
+
+          {parsed && !parseError && (
+            <div className="p-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+              <div style={{ background: C.bgDark, border: `1px solid ${C.border}`, borderRadius: 9, padding: '10px 12px', textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{parsed.categories.length}</div>
+                <div style={{ fontSize: 10.5, color: C.textDim, marginTop: 2 }}>Categories</div>
+              </div>
+              <div style={{ background: C.bgDark, border: `1px solid ${C.border}`, borderRadius: 9, padding: '10px 12px', textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{parsed.menuItems.length}</div>
+                <div style={{ fontSize: 10.5, color: C.textDim, marginTop: 2 }}>Menu Items</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Import Mode</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setMode('append')} style={{
+                flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: mode === 'append' ? 'rgba(211,191,162,0.1)' : 'transparent',
+                border: `1px solid ${mode === 'append' ? 'rgba(211,191,162,0.4)' : C.border}`,
+                color: mode === 'append' ? '#d3bfa2' : C.textDim
+              }}>Append / Update</button>
+              <button onClick={() => setMode('replace')} style={{
+                flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: mode === 'replace' ? 'rgba(192,96,64,0.1)' : 'transparent',
+                border: `1px solid ${mode === 'replace' ? 'rgba(192,96,64,0.4)' : C.border}`,
+                color: mode === 'replace' ? C.danger : C.textDim
+              }}>Replace Entire Menu</button>
+            </div>
+            {mode === 'replace' && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 8, fontSize: 11, color: C.danger }}>
+                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> This deletes every existing category and menu item for this client first. Cannot be undone.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <button onClick={runImport} disabled={!parsed || importing || !!parseError} className="p-btn-shimmer" style={{
+              flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!parsed || importing) ? 'not-allowed' : 'pointer',
+              background: (!parsed || importing) ? C.bgCard2 : '#d3bfa2', color: (!parsed || importing) ? C.textDim : '#0a0a0a',
+              fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
+            }}>{importing ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Importing…</> : <><Upload size={14} /> Import</>}</button>
+            <button onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          </div>
+          <button onClick={downloadTemplate} style={{ width: '100%', padding: '9px', background: 'transparent', border: 'none', color: C.textDim, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <FileDown size={12} /> Download example template
+          </button>
+        </>
+      )}
+    </ModalShell>
+  );
+};
+
 /* ════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════ */
@@ -274,6 +651,15 @@ export default function PratyekshaMasterAdmin() {
   const [onboardError,   setOnboardError]   = useState('');
   const [showPassword,   setShowPassword]   = useState(false);
   const [copied,         setCopied]         = useState('');
+
+  const [toast, setToast] = useState(null);
+  const flash = useCallback((msg, tone = 'success') => {
+    setToast({ msg, tone });
+    setTimeout(() => setToast(null), 3400);
+  }, []);
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [renewClient,  setRenewClient]  = useState(null);
+  const [importTarget, setImportTarget] = useState(null);
 
   const now = new Date();
 
@@ -319,24 +705,33 @@ export default function PratyekshaMasterAdmin() {
     return Math.ceil((new Date(exp) - now) / (1000*60*60*24));
   };
 
-  const handleRenew = async (client) => {
-    const months = prompt(`Renew "${client.name}" — plan months:`, '12');
-    if (!months) return;
-    const amt = prompt(`Amount received (₹):`, '1200');
-    if (!amt) return;
+  const submitRenew = async (client, months, amount) => {
     try {
-      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths:Number(months), paidAmount:Number(amt) });
-      fetchData();
-    } catch { alert('Renewal failed.'); }
+      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: months, paidAmount: amount });
+      await fetchData();
+      setRenewClient(null);
+      flash(`${client.name} renewed for ${months} month${months === 1 ? '' : 's'}`);
+    } catch { flash('Renewal failed.', 'error'); }
   };
 
-  const handleToggle = async (client) => {
-    if (!window.confirm(`${client.isActive ? 'DISABLE' : 'ENABLE'} account for "${client.name}"?`)) return;
+  const submitToggle = async (client) => {
     try {
       await axios.patch(`${BASE_URL}/admin/master/toggle-tenant/${client._id}`);
-      fetchData();
-    } catch { alert('Toggle failed.'); }
+      await fetchData();
+      setConfirmModal(null);
+      flash(`${client.name} ${client.isActive ? 'disabled' : 'enabled'}`);
+    } catch { flash('Action failed.', 'error'); }
   };
+
+  const handleRenew = (client) => setRenewClient(client);
+
+  const handleToggle = (client) => setConfirmModal({
+    title: client.isActive ? 'Disable Client' : 'Enable Client',
+    icon: Power, tone: client.isActive ? 'danger' : 'default',
+    message: `${client.isActive ? 'Disable' : 'Enable'} account access for "${client.name}"? ${client.isActive ? 'Their staff and customers will lose access immediately.' : ''}`,
+    confirmLabel: client.isActive ? 'Disable' : 'Enable',
+    onConfirm: () => submitToggle(client),
+  });
 
   const markDone = async (id) => {
     try {
@@ -563,13 +958,16 @@ export default function PratyekshaMasterAdmin() {
           </div>
 
           <Div />
-          <button onClick={refresh} style={{
-            width:'100%', padding:'9px', background:C.bgCard, border:`1px solid ${C.border}`,
-            color:C.textDim, borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-          }}>
-            <RefreshCcw size={12} /> Refresh
-          </button>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <InstallButton />
+            <button onClick={refresh} style={{
+              width:'100%', padding:'9px', background:C.bgCard, border:`1px solid ${C.border}`,
+              color:C.textDim, borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+            }}>
+              <RefreshCcw size={12} /> Refresh
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -849,19 +1247,19 @@ export default function PratyekshaMasterAdmin() {
                   Active  → light gold accent
                   others  → their own status color
               */}
-              <div className="p-stat-grid" style={{ marginBottom:20 }}>
+              <div className="p-stat-grid p-stagger" style={{ marginBottom:20 }}>
                 {[
-                  { icon:IndianRupee, label:'Total Revenue', val:`₹${(stats.totalRevenue||0).toLocaleString()}`, sub:'All time',        accent:'#d3bfa2' },
-                  { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,                         sub:'Live subscriptions', accent:'#d3bfa2' },
-                  { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,                         sub:'Need renewal',    accent:C.warning },
-                  { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,                         sub:'Within 30 days',  accent:'#8a704d' },
+                  { icon:IndianRupee, label:'Total Revenue', val:stats.totalRevenue||0, prefix:'₹', sub:'All time',        accent:'#d3bfa2' },
+                  { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:'#d3bfa2' },
+                  { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:C.warning },
+                  { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:'#8a704d' },
                 ].map(k => (
-                  <div key={k.label} className="p-card" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px 16px' }}>
+                  <div key={k.label} className="p-card p-card-lift" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px 16px' }}>
                     <div style={{ width:32, height:32, borderRadius:8, background:`${k.accent}14`, border:`1px solid ${k.accent}22`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
                       <k.icon size={15} color={k.accent} strokeWidth={1.5} />
                     </div>
                     <div style={{ fontSize:11, color:C.textDim, fontWeight:500, marginBottom:4 }}>{k.label}</div>
-                    <div style={{ fontSize:24, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.val}</div>
+                    <div style={{ fontSize:24, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}<CountUp value={k.val} /></div>
                     <div style={{ fontSize:11, color:C.textDim }}>{k.sub}</div>
                   </div>
                 ))}
@@ -1066,6 +1464,14 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
+                            <button onClick={()=>setImportTarget({ tenantId: client.tenantId, tenantName: client.name })} title="Import menu (JSON)" style={{
+                              padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
+                              cursor:'pointer', background:'transparent',
+                              border:`1px solid ${C.border}`, color: C.textDim,
+                              display:'flex', alignItems:'center', gap:4,
+                            }}>
+                              <FileJson size={12} />
+                            </button>
                             <button onClick={()=>handleToggle(client)} style={{
                               padding:'5px 10px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
@@ -1147,9 +1553,14 @@ export default function PratyekshaMasterAdmin() {
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize:11, color:C.textDim, display:'flex', alignItems:'center', gap:6 }}>
+                    <div style={{ fontSize:11, color:C.textDim, display:'flex', alignItems:'center', gap:6, marginBottom:14 }}>
                       <AlertCircle size={11}/> Save credentials — password cannot be recovered after closing.
                     </div>
+                    <button onClick={() => setImportTarget({ tenantId: onboardSuccess.tenantId, tenantName: onboardSuccess.name })} className="p-btn-shimmer" style={{
+                      width: '100%', padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                      background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                    }}><FileJson size={14} /> Import Menu for {onboardSuccess.name} (JSON)</button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1288,6 +1699,19 @@ export default function PratyekshaMasterAdmin() {
         )}
 
       </main>
+
+      <AnimatePresence>
+        {confirmModal && (
+          <ConfirmModal data={confirmModal} onClose={() => setConfirmModal(null)} onConfirm={confirmModal.onConfirm} />
+        )}
+        {renewClient && (
+          <RenewModal client={renewClient} onClose={() => setRenewClient(null)} onSubmit={(m, a) => submitRenew(renewClient, m, a)} />
+        )}
+        {importTarget && (
+          <ImportMenuModal target={importTarget} onClose={() => setImportTarget(null)} onDone={fetchData} flash={flash} />
+        )}
+      </AnimatePresence>
+      <Toast toast={toast} />
     </div>
   );
 }
