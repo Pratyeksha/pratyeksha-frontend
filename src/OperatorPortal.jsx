@@ -1603,6 +1603,17 @@ const fetchReservationNoShowData = useCallback(async () => {
   } catch { setReservationNoShowData(null); }
 }, [tenantId]);
 
+const [dailyCostData, setDailyCostData] = useState({}); // { 'YYYY-MM-DD': { revenue, cost, profit } }
+const fetchDailyCostData = useCallback(async () => {
+  try {
+    const monthStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}`;
+    const res = await axios.get(`${BASE_URL}/admin/analytics/daily-cost/${tenantId}?month=${monthStr}`);
+    const map = {};
+    (res.data?.days || []).forEach(d => { map[d.date] = d; });
+    setDailyCostData(map);
+  } catch { setDailyCostData({}); }
+}, [tenantId, viewDate]);
+
 // ── Build the working floor layout: saved layout if it exists, else an auto-arranged
 // grid from tableCount so the heatmap is usable on day one with zero setup ──
 const floorLayout = useMemo(() => {
@@ -2093,7 +2104,7 @@ useEffect(() => {
     if (activeTab === 'customers') fetchCustomerDir(customerSegFilter, customerSearch);
     if (activeTab === 'marketing') { fetchOffers(); fetchCampaigns(); fetchAnnouncements(); }
     if (activeTab === 'extras') fetchExtraItems();
-    if (activeTab === 'insights') fetchAnalytics();
+    if (activeTab === 'insights') { fetchAnalytics(); fetchDailyCostData(); }
     if (activeTab === 'audit') fetchAuditLogs();
     if (activeTab === 'recipes') fetchRecipes();
 }, [
@@ -4855,7 +4866,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 // Only JSX and style improvements.
 // ═══════════════════════════════════════════════════════════════════════
 
-<motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+<motion.div key="pending" initial={false} animate={{ opacity: 1 }}
   style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
 
 
@@ -6075,7 +6086,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 
 {/* ── MENU ── */}
 {activeTab === 'menu' && (
-  <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+  <motion.div key="menu" initial={false} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
     {/* ── INGREDIENT OUT-OF-STOCK ALERTS (real-time banner) ── */}
     <AnimatePresence>
@@ -6541,7 +6552,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 )}
 
 {activeTab === 'customers' && (
-  <motion.div key="customers" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+  <motion.div key="customers" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
 
     {/* ── SUMMARY STRIP ── */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>
@@ -6846,7 +6857,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
 
 
 {activeTab === 'marketing' && (
-<motion.div key="marketing" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}}
+<motion.div key="marketing" initial={false} animate={{opacity:1,y:0}}
   style={{display:'flex',flexDirection:'column',gap:'0px',paddingBottom:'80px'}}>
  
   {/* ── SUB-TAB SWITCHER ── */}
@@ -6915,7 +6926,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
       SUB-TAB: ANNOUNCEMENTS (MENU BANNERS)
   ══════════════════════════════════════════════════ */}
   {marketingSubTab === 'announcements' && (
-  <motion.div key="ann-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+  <motion.div key="ann-tab" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
  
     {/* KPI row */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
@@ -7268,7 +7279,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
       SUB-TAB: OFFERS
   ══════════════════════════════════════════════════ */}
   {marketingSubTab === 'offers' && (
-  <motion.div key="offers-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+  <motion.div key="offers-tab" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
  
     {/* KPI */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
@@ -7452,7 +7463,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       SUB-TAB: CAMPAIGNS
   ══════════════════════════════════════════════════ */}
   {marketingSubTab === 'campaigns' && (
-  <motion.div key="campaigns-tab" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+  <motion.div key="campaigns-tab" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
  
     {/* KPI */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px'}}>
@@ -7615,7 +7626,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
           {/* ── BILLING ── */}
           {activeTab==='billing' && (
-            <motion.div key="billing" initial={{opacity:0}} animate={{opacity:1}} style={{display:'flex',gap:'50px'}}>
+            <motion.div key="billing" initial={false} animate={{opacity:1}} style={{display:'flex',gap:'50px'}}>
               <div style={{flex:1}}>
                 <div style={styles.specialModeRow}>
                   <button onClick={()=>generateBill('Takeaway')} style={selectedTable==='Takeaway'?styles.activeSpecBtn:styles.specBtn}><ShoppingBag size={16}/> DIRECT TAKEAWAY</button>
@@ -8092,7 +8103,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
           {/* ── INTELLIGENCE ── */}
 {activeTab === 'intelligence' && (
-  <motion.div key="marketing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
+  <motion.div key="marketing" initial={false} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
 
     {(() => {
       // ── Gold-only tone palette — no green/blue/red anywhere ──
@@ -9390,7 +9401,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 {activeTab === 'insights' && (
 <motion.div
   key="insights"
-  initial={{ opacity: 0, y: 14 }}
+  initial={false}
   animate={{ opacity: 1, y: 0 }}
   transition={{ duration: 0.3 }}
   style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '100px', width: '100%' }}
@@ -10769,7 +10780,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 {/* ── PREMIUM AUDIT TRAIL TAB ── */}
 {/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
 {activeTab === 'audit' && (
-  <motion.div key="audit" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+  <motion.div key="audit" initial={false} animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
     style={{ maxWidth: '960px', margin: '0 auto', paddingBottom: '100px', width: '100%' }}>
 
@@ -11287,7 +11298,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
           {/* ── MANAGEMENT ── */}
 {activeTab==='management' && (
-<motion.div key="management" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{duration:0.4}}
+<motion.div key="management" initial={false} animate={{opacity:1,y:0}} transition={{duration:0.4}}
   style={{display:'flex',flexDirection:'column',gap:'32px',paddingBottom:'100px',width:'100%'}}>
  
   {/* ── LIVE FLOOR INTELLIGENCE HUD ── */}
@@ -13021,7 +13032,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               RECIPES — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
 {activeTab === 'recipes' && (
-  <motion.div key="recipes" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+  <motion.div key="recipes" initial={false} animate={{ opacity: 1, y: 0 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '22px', paddingBottom: '100px', width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
 
     {/* ══════════ HEADER ══════════ */}
@@ -13523,7 +13534,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
 {/* ── RESERVATIONS TAB (FULL PAGE) ── */}
 {activeTab === 'reservations' && (
-  <motion.div key="reservations" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
+  <motion.div key="reservations" initial={false} animate={{opacity:1,y:0}}
     style={{display:'flex',flexDirection:'column',gap:'24px',paddingBottom:'100px',width:'100%'}}>
 
     {/* Header */}
@@ -13695,7 +13706,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     ════════════════════════════════════════════ */}
 
 {activeTab==='extras' && (
-<motion.div key="extras" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
+<motion.div key="extras" initial={false} animate={{opacity:1,y:0}}
   style={{display:'flex',flexDirection:'column',gap:'24px',paddingBottom:'100px',width:'100%'}}>
  
   {/* ── EDIT MODAL ── */}
