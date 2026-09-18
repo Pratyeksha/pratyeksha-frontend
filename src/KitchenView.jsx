@@ -298,18 +298,30 @@ const KitchenView = () => {
   }, [tenantId]);
 
   /* ── actions ── */
+  const [processingOrderIds, setProcessingOrderIds] = useState(new Set());
   const markAsReady = async orderId => {
+    if (processingOrderIds.has(orderId)) return; // block a double-tap while the request is in flight
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
+    setProcessingOrderIds(prev => new Set(prev).add(orderId));
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
     const dur = Math.floor((Date.now() - new Date(order.createdAt)) / 1000);
     setTotalProcessingTime(prev  => { const n = prev + dur;  localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
     setCompletedTicketsCount(prev => { const n = prev + 1;   localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
     if (mobileCardIndex > 0) setMobileCardIndex(i => i - 1);
+    // Remove it from the board immediately — instant feedback, and the card can no
+    // longer be tapped again while the save is still in flight. Restore it on failure.
+    setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
-await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
-      setOrders(prev => prev.filter(o => o._id !== orderId));
-    } catch (err) { console.error(err); }
+      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
+    } catch (err) {
+      console.error(err);
+      setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
+      setRecallQueue(prev => prev.filter(o => o._id !== orderId));
+      setCompletedTicketsCount(prev => Math.max(0, prev - 1));
+    } finally {
+      setProcessingOrderIds(prev => { const next = new Set(prev); next.delete(orderId); return next; });
+    }
   };
 
   const handleRecall = () => {

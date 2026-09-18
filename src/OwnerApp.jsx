@@ -224,6 +224,7 @@ function OwnerProvider({ tenantId, children }) {
   const [liveAlert, setLiveAlert] = useState(null);
   const [liveAdminNotification, setLiveAdminNotification] = useState(null);
   const [liveOrderEvent, setLiveOrderEvent] = useState(null);
+  const [liveStockEvent, setLiveStockEvent] = useState(null);
   const [outlet, setOutlet] = useState(tenantId);
 
   // authStatus: 'checking' | 'needsSetup' | 'needsLogin' | 'authed' | 'error'
@@ -330,6 +331,19 @@ function OwnerProvider({ tenantId, children }) {
     // disagree with a kitchen that had already cleared.
     s.on('new_order', () => setLiveOrderEvent({ type: 'new_order', _t: Date.now() }));
     s.on('order_status_updated', (order) => setLiveOrderEvent({ type: 'order_status_updated', order, _t: Date.now() }));
+    // Stock/menu events — same idea: these already fire from the backend
+    // (inventory deduction, low-stock threshold, 86'd dish), the Owner App
+    // just never listened. Wired to Inventory + Menu pages below.
+    s.on('low_stock_alert', () => setLiveStockEvent({ type: 'low_stock_alert', _t: Date.now() }));
+    s.on('ingredient_out_of_stock', () => setLiveStockEvent({ type: 'ingredient_out_of_stock', _t: Date.now() }));
+    s.on('menu_updated', () => setLiveStockEvent({ type: 'menu_updated', _t: Date.now() }));
+    // Service requests, reservations, wastage — same treatment: the backend
+    // already broadcasts these, the app just wasn't listening.
+    s.on('new_waiter_request', () => setLiveOrderEvent({ type: 'new_waiter_request', _t: Date.now() }));
+    s.on('waiter_request_resolved', () => setLiveOrderEvent({ type: 'waiter_request_resolved', _t: Date.now() }));
+    s.on('new_reservation', () => setLiveOrderEvent({ type: 'new_reservation', _t: Date.now() }));
+    s.on('reservation_updated', () => setLiveOrderEvent({ type: 'reservation_updated', _t: Date.now() }));
+    s.on('wastage_logged', () => setLiveStockEvent({ type: 'wastage_logged', _t: Date.now() }));
     setSocket(s);
     return () => s.disconnect();
   }, [outlet, authStatus, authToken]);
@@ -341,9 +355,9 @@ function OwnerProvider({ tenantId, children }) {
   }, [outlet, authStatus]);
 
   const value = useMemo(() => ({
-    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent,
+    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent,
     authStatus, ownerName, completeAuth, logout, authErrorDetail, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
@@ -1653,7 +1667,8 @@ const QUADRANT_META = {
 const MenuPage = () => {
   const { data, loading, error, refetch } = useOwnerData('/api/owner/menu/insights/:tenantId', { refreshMs: 60000 });
   const [priceModal, setPriceModal] = useState(null);
-  const { tenantId } = useOwner();
+  const { tenantId, liveStockEvent } = useOwner();
+  useEffect(() => { if (liveStockEvent?.type === 'menu_updated') refetch(); }, [liveStockEvent]); // eslint-disable-line
 
   const savePrice = async (itemId, price) => {
     await api.patch(`/api/owner/menu/price/${tenantId}/${itemId}`, { price: Number(price) });
@@ -1749,6 +1764,8 @@ const RepriceForm = ({ item, onSave }) => {
    ════════════════════════════════════════════════════════════ */
 const InventoryPage = () => {
   const { data, loading, error, refetch } = useOwnerData('/api/owner/inventory/health/:tenantId', { refreshMs: 60000 });
+  const { liveStockEvent } = useOwner();
+  useEffect(() => { if (liveStockEvent) refetch(); }, [liveStockEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
