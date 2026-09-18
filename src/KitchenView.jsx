@@ -277,10 +277,19 @@ const KitchenView = () => {
       fetchActiveOrders();
     });
 
-
+    // ── Keep menu availability live — an item 86'd or restored from the
+    // Operator Portal (or auto-hidden by stock depletion) used to only reach
+    // this screen's dish list whenever something else happened to trigger a
+    // refetch, so the 86 modal could show stale availability in the meantime. ──
+    socket.on('menu_updated', updatedItem => {
+      if (!updatedItem || updatedItem.tenantId !== tenantId) return;
+      setMenuItems(prev => prev.map(item =>
+        item._id === updatedItem._id ? { ...item, ...updatedItem } : item
+      ));
+    });
 
     return () => {
-      ['new_order','kds_item_cross_sync','order_modification_detected']
+      ['new_order','kds_item_cross_sync','order_modification_detected','menu_updated']
         .forEach(ev => socket.off(ev));
       socket.disconnect();
       window.removeEventListener('online',  onOnline);

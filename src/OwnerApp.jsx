@@ -222,6 +222,8 @@ function OwnerProvider({ tenantId, children }) {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [liveAlert, setLiveAlert] = useState(null);
+  const [liveAdminNotification, setLiveAdminNotification] = useState(null);
+  const [liveOrderEvent, setLiveOrderEvent] = useState(null);
   const [outlet, setOutlet] = useState(tenantId);
 
   // authStatus: 'checking' | 'needsSetup' | 'needsLogin' | 'authed' | 'error'
@@ -320,6 +322,14 @@ function OwnerProvider({ tenantId, children }) {
     s.on('connect', () => { setConnected(true); s.emit('join_owner_room', outlet); s.emit('join_restaurant', outlet); });
     s.on('disconnect', () => setConnected(false));
     s.on('owner_alert', (payload) => setLiveAlert({ ...payload, _t: Date.now() }));
+    s.on('admin_notification', (payload) => setLiveAdminNotification({ ...payload, _t: Date.now() }));
+    // Real-time order lifecycle events — the same ones the Kitchen/Operator
+    // views already listen for. Without these, every order-dependent number
+    // (live tables, kitchen queue, today's revenue) only ever updated on the
+    // next poll — up to 60s stale, which is exactly what made the dashboard
+    // disagree with a kitchen that had already cleared.
+    s.on('new_order', () => setLiveOrderEvent({ type: 'new_order', _t: Date.now() }));
+    s.on('order_status_updated', (order) => setLiveOrderEvent({ type: 'order_status_updated', order, _t: Date.now() }));
     setSocket(s);
     return () => s.disconnect();
   }, [outlet, authStatus, authToken]);
@@ -331,9 +341,9 @@ function OwnerProvider({ tenantId, children }) {
   }, [outlet, authStatus]);
 
   const value = useMemo(() => ({
-    tenantId: outlet, setOutlet, socket, connected, liveAlert,
+    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent,
     authStatus, ownerName, completeAuth, logout, authErrorDetail, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
@@ -1308,10 +1318,15 @@ const chartTooltipStyle = {
    ════════════════════════════════════════════════════════════ */
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const { tenantId } = useOwner();
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/dashboard/:tenantId', { refreshMs: 60000 });
+  const { tenantId, liveOrderEvent } = useOwner();
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/dashboard/:tenantId', { refreshMs: 45000 });
   const animatedRevenue = useCountUp(data?.revenue?.today || 0);
   const animatedProfit = useCountUp(data?.liveProfit?.estimatedGrossProfit || 0);
+
+  // Refetch the instant a new order comes in or any order's status changes
+  // (kitchen marks ready, waiter serves, bill settles) — the 45s poll above
+  // is now just a safety net, not the primary way this page stays current.
+  useEffect(() => { if (liveOrderEvent) refetch(); }, [liveOrderEvent]); // eslint-disable-line
 
   if (loading) return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -1343,7 +1358,9 @@ const DashboardPage = () => {
 
       {/* Live activity strip */}
       <Card style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
-        <StripItem icon={ChefHat} label="Kitchen" value={`${data.orders.pendingInKDS} pending`} />
+        <StripItem icon={ChefHat} label="Kitchen" value={`${data.orders.pendingInKDS} cooking`} tone={data.orders.pendingInKDS > 0 ? 'warning' : 'default'} />
+        <Divider />
+        <StripItem icon={PackageCheck} label="Ready" value={`${data.orders.readyForPickup} for pickup`} tone={data.orders.readyForPickup > 0 ? 'warning' : 'default'} />
         <Divider />
         <StripItem icon={Bell} label="Service" value={`${data.serviceRequests} requests`} tone={data.serviceRequests > 0 ? 'warning' : 'default'} />
         <Divider />
@@ -1426,7 +1443,12 @@ const dateRangeFor = (key) => {
 const RevenuePage = () => {
   const [range, setRange] = useState('today');
   const dates = useMemo(() => dateRangeFor(range), [range]);
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/revenue/summary/:tenantId', { params: dates });
+  const { liveOrderEvent } = useOwner();
+  // No refreshMs was set here before — meaning this page only ever fetched
+  // once and then sat stale indefinitely if left open. Now it polls as a
+  // backstop AND refetches instantly whenever an order settles.
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/revenue/summary/:tenantId', { params: dates, refreshMs: 45000 });
+  useEffect(() => { if (liveOrderEvent?.type === 'order_status_updated' && liveOrderEvent.order?.status === 'settled') refetch(); }, [liveOrderEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1537,7 +1559,7 @@ const foodCostTone = (pct) => {
 
 const PnlPage = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/pnl/:tenantId', { params: { month } });
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/pnl/:tenantId', { params: { month }, refreshMs: 60000 });
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1629,7 +1651,7 @@ const QUADRANT_META = {
 };
 
 const MenuPage = () => {
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/menu/insights/:tenantId');
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/menu/insights/:tenantId', { refreshMs: 60000 });
   const [priceModal, setPriceModal] = useState(null);
   const { tenantId } = useOwner();
 
@@ -1803,7 +1825,9 @@ const StatBlock = ({ label, value, tone }) => (
    MODULE 6 — KITCHEN PERFORMANCE (read-only KDS view)
    ════════════════════════════════════════════════════════════ */
 const KitchenPage = () => {
+  const { liveOrderEvent } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/kitchen/summary/:tenantId', { refreshMs: 20000 });
+  useEffect(() => { if (liveOrderEvent) refetch(); }, [liveOrderEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1904,7 +1928,7 @@ const ScoreLine = ({ label, value, pass, target }) => (
    ════════════════════════════════════════════════════════════ */
 const StaffPage = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/staff/summary/:tenantId', { params: { month } });
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/staff/summary/:tenantId', { params: { month }, refreshMs: 45000 });
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1982,7 +2006,7 @@ const StaffPage = () => {
    MODULE 8 — CUSTOMERS
    ════════════════════════════════════════════════════════════ */
 const CustomersPage = () => {
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/customers/insights/:tenantId');
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/customers/insights/:tenantId', { refreshMs: 90000 });
   const { tenantId } = useOwner();
   const [sending, setSending] = useState(false);
 
@@ -2067,15 +2091,49 @@ const SEVERITY_META = {
 
 const AlertsPage = () => {
   const { data, loading, error, refetch } = useOwnerData('/api/owner/alerts/:tenantId', { refreshMs: 30000 });
-  const { liveAlert } = useOwner();
+  const { data: notifData, loading: notifLoading, refetch: refetchNotifs } = useOwnerData('/api/owner/notifications/:tenantId', { refreshMs: 30000 });
+  const { liveAlert, liveAdminNotification } = useOwner();
 
   useEffect(() => { if (liveAlert) refetch(); }, [liveAlert]); // eslint-disable-line
+  useEffect(() => { if (liveAdminNotification) refetchNotifs(); }, [liveAdminNotification]); // eslint-disable-line
 
   const markRead = async (id) => { await api.post(`/api/owner/alerts/read/${id}`); refetch(); };
+  const markNotifRead = async (id) => { await api.post(`/api/owner/notifications/${id}/read`); refetchNotifs(); };
+
+  const NOTIF_SEVERITY = {
+    urgent: { tone: 'danger' }, important: { tone: 'warning' }, info: { tone: 'gold' }
+  };
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0}
+      {!notifLoading && notifData && notifData.length > 0 && (
+        <Card padded={false}>
+          <div style={{ padding: '18px 20px 4px' }}>
+            <SectionHeading icon={Megaphone} title="From Pratyeksha" />
+          </div>
+          {notifData.map((n, i) => {
+            const meta = NOTIF_SEVERITY[n.severity] || NOTIF_SEVERITY.info;
+            return (
+              <div key={n._id} className="pown-row-hover" style={{
+                display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 20px',
+                borderTop: i > 0 ? `1px solid ${T.border}` : 'none', opacity: n.isRead ? 0.55 : 1
+              }}>
+                <Megaphone size={16} color={n.severity === 'urgent' ? T.danger : n.severity === 'important' ? T.warning : T.primary} style={{ marginTop: 2, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{n.title}</div>
+                  <div style={{ fontSize: 12, color: T.textMed, marginTop: 3, lineHeight: 1.5 }}>{n.message}</div>
+                  <div className="pown-mono" style={{ fontSize: 10.5, color: T.textLow, marginTop: 5 }}>
+                    {new Date(n.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
+                  </div>
+                </div>
+                {!n.isRead && <button onClick={() => markNotifRead(n._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11, flexShrink: 0 }}>Mark read</button>}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0 && (!notifData || notifData.length === 0)}
         emptyProps={{ icon: Bell, title: 'No alerts yet', subtitle: 'You\u2019ll see stock, revenue and kitchen alerts here in real time' }}>
         {data && (
           <>
@@ -2084,6 +2142,7 @@ const AlertsPage = () => {
               <StatBlock label="Attention" value={data.counts.attention} tone="warning" />
               <StatBlock label="Info" value={data.counts.info} tone="gold" />
             </div>
+            {data.alerts.length > 0 && (
             <Card padded={false}>
               {data.alerts.map((a, i) => {
                 const meta = SEVERITY_META[a.severity] || SEVERITY_META.info;
@@ -2104,6 +2163,7 @@ const AlertsPage = () => {
                 );
               })}
             </Card>
+            )}
           </>
         )}
       </DataBoundary>
@@ -2116,7 +2176,7 @@ const AlertsPage = () => {
    ════════════════════════════════════════════════════════════ */
 const CompliancePage = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month } });
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month }, refreshMs: 120000 });
   const { tenantId } = useOwner();
   const [toast, setToast] = useState(null);
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };

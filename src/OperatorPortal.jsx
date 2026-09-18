@@ -339,6 +339,9 @@ const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: '
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
 
   const [isSettling, setIsSettling] = useState(false);
+const [isSubmittingRestock, setIsSubmittingRestock] = useState(false);
+const [isSubmittingExtraRestock, setIsSubmittingExtraRestock] = useState(false);
+const [isSettlingPickup, setIsSettlingPickup] = useState(false);
 
   const [inventorySuggestions, setInventorySuggestions] = useState([]);
 const [showSuggestions, setShowSuggestions] = useState(false);
@@ -701,6 +704,20 @@ const fetchExtraItems = useCallback(async () => {
   finally { setExtraItemsLoading(false); }
 }, [tenantId]);
 
+const submitExtraRestock = async () => {
+  if (isSubmittingExtraRestock) return; // block the Enter-key path and the button click from both firing
+  if (!extraRestockQty || Number(extraRestockQty) <= 0) return showNotif('Enter a valid quantity', 'error');
+  setIsSubmittingExtraRestock(true);
+  try {
+    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
+    showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
+    setExtraRestockModal(null);
+    setExtraRestockQty('');
+    fetchExtraItems();
+  } catch { showNotif('Restock failed', 'error'); }
+  finally { setIsSubmittingExtraRestock(false); }
+};
+
 
 const deductExtraItemStock = useCallback(async (itemId, qty) => {
   try {
@@ -736,6 +753,7 @@ fetchAuditLogs();
       fetchManagementData();
       fetchTurnTimeData();
       fetchTableRevenueData();
+      fetchReservationNoShowData();
 
       socket.on("new_order", (order) => { 
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{}); 
@@ -1577,6 +1595,14 @@ const fetchTableRevenueData = useCallback(async () => {
   } catch { setTableRevenueData({ revenueByTable: {}, maxRevenue: 0 }); }
 }, [tenantId]);
 
+const [reservationNoShowData, setReservationNoShowData] = useState(null); // { total, noShows, noShowPct, windowDays }
+const fetchReservationNoShowData = useCallback(async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/admin/analytics/reservation-noshow/${tenantId}`);
+    setReservationNoShowData(res.data);
+  } catch { setReservationNoShowData(null); }
+}, [tenantId]);
+
 // ── Build the working floor layout: saved layout if it exists, else an auto-arranged
 // grid from tableCount so the heatmap is usable on day one with zero setup ──
 const floorLayout = useMemo(() => {
@@ -1584,12 +1610,12 @@ const floorLayout = useMemo(() => {
   const saved = tenantConfig?.floorLayout;
   if (saved && saved.length > 0) return saved;
   const count = tenantConfig?.tableCount || 12;
-  const perRow = Math.ceil(Math.sqrt(count * 1.6));
+  const perRow = Math.max(3, Math.ceil(Math.sqrt(count * 2.4)));
   const rows = Math.ceil(count / perRow);
   return Array.from({ length: count }, (_, i) => ({
     tableNumber: String(i + 1),
-    x: 10 + (i % perRow) * (80 / Math.max(1, perRow - 1 || 1)),
-    y: 12 + Math.floor(i / perRow) * (76 / Math.max(1, rows - 1 || 1)),
+    x: 8 + (i % perRow) * (84 / Math.max(1, perRow - 1 || 1)),
+    y: 12 + Math.floor(i / perRow) * (72 / Math.max(1, rows - 1 || 1)),
     seats: 4,
     groupId: ''
   }));
@@ -1668,13 +1694,21 @@ const unjoinTable = async (tableNumber) => {
   showNotif(`Table ${tableNumber} unjoined`);
 };
 
+const cancelReservation = async (reservationId) => {
+  try {
+    await axios.patch(`${BASE_URL}/reservations/${reservationId}`, { status: 'cancelled' });
+    showNotif('Reservation cancelled');
+    fetchCounterQueue();
+  } catch { showNotif('Could not cancel reservation', 'error'); }
+};
+
 const submitQuickReserve = async () => {
   try {
     await axios.post(`${BASE_URL}/admin/tables/${tenantId}/${quickReserveTable}/quick-reserve`, quickReserveDraft);
     showNotif(`Table ${quickReserveTable} reserved`);
     setQuickReserveTable(null);
     setQuickReserveDraft({ customerName: '', customerPhone: '', partySize: 2 });
-    fetchInitialData();
+    fetchCounterQueue();   // ← this is what actually populates reservationEntries (fetchInitialData does not touch it)
   } catch { showNotif('Could not reserve table', 'error'); }
 };
 
@@ -2021,12 +2055,18 @@ const generateOnlineBill = async () => {
 
 const settleBill = () => {
     if (isSettling) return;
-const discountedSub = discountType === 'flat'
-  ? Math.round(Math.max(0, tableBill.subtotal - Number(discount)) * 100) / 100
-  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * 100) / 100;
 const cgstPct        = parseFloat(tableBill.cgstPct) / 100;
 const sgstPct        = parseFloat(tableBill.sgstPct) / 100;
-const finalAmt       = Math.round(discountedSub + discountedSub * cgstPct + discountedSub * sgstPct);
+const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
+// A flat ₹ discount comes straight off the final bill (what a cashier actually means
+// by "₹50 off") — NOT off the pre-tax subtotal with tax then recalculated on what's
+// left, which silently produces a different, smaller final number than the ₹ amount
+// the operator actually typed in. A % discount is mathematically identical either way,
+// so it's still computed off the subtotal for a clean line-item breakdown.
+const finalAmt = discountType === 'flat'
+  ? Math.max(0, Math.round(preDiscountTotal - Number(discount || 0)))
+  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct));
+const discountedSub  = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 
 if (activePaymentType === 'split') {
         const total = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
@@ -2220,14 +2260,19 @@ const handleFinalSettle = async () => {
     if (isSettling) return;
     setIsSettling(true);
     
-const discountedSub = discountType === 'flat'
-  ? Math.round(Math.max(0, tableBill.subtotal - Number(discount)) * 100) / 100
-  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * 100) / 100;
 const cgstPct         = parseFloat(tableBill.cgstPct) / 100;  // e.g. 2.5% → 0.025
 const sgstPct         = parseFloat(tableBill.sgstPct) / 100;
+const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
+// Same fix as settleBill(): a flat ₹ discount comes off the final bill directly, not
+// off the pre-tax subtotal with tax then recomputed on the reduced amount — those two
+// approaches give different final numbers, and only the first matches what "₹50 off"
+// actually means to an operator typing it in.
+const finalAmt = discountType === 'flat'
+  ? Math.max(0, Math.round(preDiscountTotal - Number(discount || 0)))
+  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct));
+const discountedSub   = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 const discountedCgst  = Math.round(discountedSub * cgstPct * 100) / 100;
 const discountedSgst  = Math.round(discountedSub * sgstPct * 100) / 100;
-const finalAmt        = Math.round(discountedSub + discountedCgst + discountedSgst);
 
 const paymentMethodDetails = activePaymentType === 'split'
         ? { type: 'split', breakdown: { cash: Number(paymentModes.cash || 0), upi: Number(paymentModes.upi || 0), card: Number(paymentModes.card || 0) } }
@@ -2297,9 +2342,15 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
   const updateMenu = async (itemId, updateData) => {
     try {
       const res = await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData);
-      socket.emit("menu_change_detected", { tenantId, itemId, updateData:res.data });
-      fetchInitialData();
+      // The socket 'menu_updated' broadcast (which fires the instant this PATCH saves,
+      // and reaches this same browser since it's in the tenant room) is what keeps
+      // menuItems in sync — it carries the full authoritative document. Calling
+      // fetchInitialData() here as well kicked off a second, independent refetch that
+      // could resolve out of order against it and the caller's own optimistic update,
+      // which is what was causing a dish to visibly hide then flash back to visible.
+      socket.emit("menu_change_detected", { tenantId, itemId, updateData: res.data });
       showNotif("Price/Visibility Synced Live");
+      return res.data;
     } catch { showNotif("Sync Failed","error"); }
   };
 
@@ -3865,6 +3916,11 @@ const downloadAllTodaysInvoices = useCallback(async () => {
             <div style="display:flex;justify-content:space-between;padding:4px 0;">
               <span>SGST @ ${bill.sgstPct ?? '—'}%</span><span>₹${Number(bill.sgst || 0).toFixed(2)}</span>
             </div>
+            ${bill.discountValue > 0 ? `
+            <div style="display:flex;justify-content:space-between;padding:4px 0;color:#8a704d;">
+              <span>Discount${bill.discountReason ? ` · ${bill.discountReason}` : ''}</span>
+              <span>- ${bill.discountType === 'percent' ? `${bill.discountValue}%` : `₹${Number(bill.discountValue).toFixed(2)}`}</span>
+            </div>` : ''}
             <p style="font-size:9px;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
           </div>
 
@@ -5017,6 +5073,11 @@ const totalRevenueAllTime = canonicalMonthRevenue;
             <Link2 size={11} color="#d3bfa2" style={{ position:'absolute', top:-6, left:-6, background:'#080809', borderRadius:'50%', padding:2 }} />
           )}
           <span style={{ fontSize:'1.05rem', fontWeight:'900', color: colors.text, lineHeight:1 }}>{t.tableNumber}</span>
+          {isReserved && !orderStatus && (
+            <span style={{ fontSize:'0.4rem', fontWeight:'900', color:'#8a704d', letterSpacing:'0.3px', marginTop:'1px', display:'flex', alignItems:'center', gap:'2px' }}>
+              <CalendarClock size={8}/> RESERVED
+            </span>
+          )}
           {t.seats > 0 && (
             <span style={{ fontSize:'0.56rem', fontWeight:'800', color: colors.text, opacity:0.75, display:'flex', alignItems:'center', gap:'2px', marginTop:'2px' }}>
               <Users size={9}/> {t.seats}
@@ -5063,7 +5124,8 @@ const totalRevenueAllTime = canonicalMonthRevenue;
     const t = floorLayout.find(f => f.tableNumber === activeTableTicket);
     const group = t ? getJoinedGroup(activeTableTicket, floorLayout) : [activeTableTicket];
     const groupOrders = group.flatMap(tn => getTableOrders(tn));
-    const isReserved = (reservationEntries || []).some(r => r.status === 'confirmed' && r.assignedTable?.toString() === activeTableTicket);
+    const activeReservation = (reservationEntries || []).find(r => r.status === 'confirmed' && r.assignedTable?.toString() === activeTableTicket);
+    const isReserved = !!activeReservation;
     return (
       <>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
@@ -5115,6 +5177,18 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(211,191,162,0.15)', background:'transparent', color:'#888', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
                     <Link2 size={12}/> UNJOIN TABLE
                   </button>
+                )}
+                {isReserved && activeReservation && (
+                  <div style={{ padding:'10px 12px', borderRadius:9, border:'1px solid rgba(138,112,77,0.25)', background:'rgba(138,112,77,0.06)', display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:'0.6rem', fontWeight:900, color:'#8a704d' }}>
+                      <CalendarClock size={11}/> RESERVED · {activeReservation.customerName || 'Walk-in'}
+                      {activeReservation.partySize ? ` · ${activeReservation.partySize} guests` : ''}
+                    </div>
+                    <button onClick={() => { cancelReservation(activeReservation._id); setActiveTableTicket(null); }}
+                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 0', borderRadius:8, border:'1px solid rgba(200,114,114,0.3)', background:'rgba(200,114,114,0.08)', color:'#c87272', fontSize:'0.58rem', fontWeight:900, cursor:'pointer' }}>
+                      <X size={11}/> CANCEL RESERVATION
+                    </button>
+                  </div>
                 )}
                 {!isReserved && groupOrders.length === 0 && (
                   <button onClick={() => { setQuickReserveTable(activeTableTicket); setActiveTableTicket(null); }}
@@ -5758,7 +5832,10 @@ const totalRevenueAllTime = canonicalMonthRevenue;
           CANCEL
         </button>
         <button
+          disabled={isSettlingPickup}
           onClick={async () => {
+            if (isSettlingPickup) return;
+            setIsSettlingPickup(true);
             try {
               await axios.patch(
                 `${BASE_URL}/waitlist/${pickupPaymentModal._id}/settle`,
@@ -5770,6 +5847,8 @@ const totalRevenueAllTime = canonicalMonthRevenue;
               showNotif(`${pickupPaymentModal.customerName} — settled via ${pickupPaymentMethod.toUpperCase()}`);
             } catch (err) {
               showNotif(err.response?.data?.error || 'Settlement failed', 'error');
+            } finally {
+              setIsSettlingPickup(false);
             }
           }}
           style={{
@@ -5777,13 +5856,13 @@ const totalRevenueAllTime = canonicalMonthRevenue;
             background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
             border: 'none', color: '#0a0a0a',
             fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px',
-            cursor: 'pointer', outline: 'none',
-            fontFamily: 'Poppins, sans-serif',
+            cursor: isSettlingPickup ? 'not-allowed' : 'pointer', outline: 'none',
+            fontFamily: 'Poppins, sans-serif', opacity: isSettlingPickup ? 0.55 : 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
           }}
         >
           <Store size={13} strokeWidth={2} />
-          CONFIRM SETTLEMENT
+          {isSettlingPickup ? 'SAVING…' : 'CONFIRM SETTLEMENT'}
         </button>
       </div>
     </div>
@@ -5830,7 +5909,7 @@ const totalRevenueAllTime = canonicalMonthRevenue;
               {/* Stats pills */}
               <div style={{ display: 'flex', gap: '6px' }}>
                 {[
-                  { label: 'TOTAL', val: reservationEntries.length, c: '#d3bfa2' },
+                  { label: 'BOOKINGS (DAY)', val: reservationEntries.length, c: '#d3bfa2' },
                   { label: 'CONFIRMED', val: reservationEntries.filter(r => r.status === 'confirmed').length, c: '#8a704d' },
                   { label: 'PENDING', val: reservationEntries.filter(r => r.status === 'pending').length, c: '#555' },
                 ].map(s => (
@@ -6434,9 +6513,14 @@ const totalRevenueAllTime = canonicalMonthRevenue;
                     <div style={{ display: 'flex', gap: '7px' }}>
                       <button onClick={async () => {
                         const newVal = !item.isAvailable;
-                        await updateMenu(item._id, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '' });
-                        // Clear the local auto-hidden flag immediately for instant feedback
+                        // Update instantly for a stable, non-flickering tap response,
+                        // then reconcile with the server. Roll back only if the save fails.
                         setMenuItems(prev => prev.map(i => i._id === item._id ? { ...i, isAvailable: newVal, _autoHiddenByIngredient: null } : i));
+                        try {
+                          await updateMenu(item._id, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '' });
+                        } catch {
+                          setMenuItems(prev => prev.map(i => i._id === item._id ? { ...i, isAvailable: !newVal } : i));
+                        }
                       }} style={{ flex: 1, padding: '9px 8px', background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)', border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)', color: item.isAvailable ? '#444' : '#d3bfa2', borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}>
                         {item.isAvailable ? 'HIDE' : 'SHOW'}
                       </button>
@@ -7830,12 +7914,13 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       </div>
       <p style={{fontSize:'0.58rem', fontStyle:'italic', marginTop:'8px', fontWeight:'700', color:'#888'}}>
         {numberToWords(Math.round((() => {
-          const discSub = discountType === 'flat'
-            ? Math.max(0, tableBill.subtotal - Number(discount || 0))
-            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100);
           const cgstPct = parseFloat(tableBill.cgstPct) / 100;
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
-          return discSub + discSub * cgstPct + discSub * sgstPct;
+          const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
+          // Flat ₹ discount comes off the final bill directly — see settleBill() for why.
+          return discountType === 'flat'
+            ? Math.max(0, preDiscountTotal - Number(discount || 0))
+            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct);
         })()))}
       </p>
     </div>
@@ -7971,15 +8056,17 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
         <span style={{fontSize:'0.68rem', fontWeight:'900', color:'#333', letterSpacing:'1.5px'}}>GRAND TOTAL</span>
         <span style={{fontSize:'1.65rem', fontWeight:'900', color:'#000', letterSpacing:'-0.5px', fontFamily:'monospace'}}>₹{(() => {
-          // Must match the real settlement math in handleFinalSettle: discount is applied
-          // to the pre-tax subtotal, then tax is recomputed on what's left — and, critically,
-          // a flat ₹ discount is a rupee amount, never a percentage of the bill.
-          const discSub = discountType === 'flat'
-            ? Math.max(0, tableBill.subtotal - Number(discount || 0))
-            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100);
+          // Must match the real settlement math in handleFinalSettle: a flat ₹ discount
+          // comes straight off the final (post-tax) bill — that's what an operator means
+          // by "₹50 off" — not off the pre-tax subtotal with tax then recomputed on the
+          // reduced amount, which silently produces a different, smaller number.
           const cgstPct = parseFloat(tableBill.cgstPct) / 100;
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
-          return Math.round(discSub + discSub * cgstPct + discSub * sgstPct).toLocaleString('en-IN');
+          const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
+          const total = discountType === 'flat'
+            ? Math.max(0, preDiscountTotal - Number(discount || 0))
+            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct);
+          return Math.round(total).toLocaleString('en-IN');
         })()}</span>
       </div>
       <div style={{fontSize:'0.56rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'6px', letterSpacing:'0.5px'}}>
@@ -8439,19 +8526,15 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 20. INGREDIENT COST DRIFT (WAC vs last purchase) ──
       if (inventory.length > 0) {
-        const drifting = inventory.filter(i => {
+        const driftPctOf = (i) => {
           const wac = i.weightedAvgCost || i.costPrice || 0;
           const last = i.lastPurchasePrice || wac;
-          if (wac <= 0) return false;
-          return ((last - wac) / wac) * 100 > 15;
-        });
+          return wac > 0 ? ((last - wac) / wac) * 100 : 0;
+        };
+        const drifting = inventory.filter(i => driftPctOf(i) > 15);
         if (drifting.length > 0) {
-          const worst = drifting.sort((a, b) => {
-            const da = ((a.lastPurchasePrice - a.weightedAvgCost) / a.weightedAvgCost) * 100;
-            const db = ((b.lastPurchasePrice - b.weightedAvgCost) / b.weightedAvgCost) * 100;
-            return db - da;
-          })[0];
-          const driftPct = Math.round(((worst.lastPurchasePrice - worst.weightedAvgCost) / worst.weightedAvgCost) * 100);
+          const worst = drifting.sort((a, b) => driftPctOf(b) - driftPctOf(a))[0];
+          const driftPct = Math.round(driftPctOf(worst));
           recs.push({
             id: 'cost-drift', priority: 2, category: 'COST CONTROL',
             icon: <TrendingUp size={16} />, color: tone.warning,
@@ -8492,17 +8575,18 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         }
       }
 
-      // ── 23. RESERVATION NO-SHOW (separate from waitlist) ──
-      if (reservationEntries?.length > 0) {
-        const total = reservationEntries.length;
-        const noShows = reservationEntries.filter(r => r.status === 'no-show').length;
-        const noShowPct = total > 0 ? Math.round((noShows / total) * 100) : 0;
-        if (noShowPct > 20 && total >= 5) {
+      // ── 23. RESERVATION NO-SHOW (separate from waitlist) — uses a real trailing
+      // 30-day aggregate from the backend, NOT reservationEntries, which is scoped to
+      // whatever single day the Reservations tab's date picker currently happens to be
+      // on (unrelated navigation state from a different tab entirely). ──
+      if (reservationNoShowData && reservationNoShowData.total >= 5) {
+        const { total, noShowPct } = reservationNoShowData;
+        if (noShowPct > 20) {
           recs.push({
             id: 'reservation-noshow', priority: 3, category: 'CUSTOMER EXPERIENCE',
             icon: <CalendarClock size={16} />, color: tone.warning,
             title: `High no-show rate on table reservations`,
-            stat: { value: `${noShowPct}%`, label: `of ${total} reservations today didn't arrive`, bar: noShowPct },
+            stat: { value: `${noShowPct}%`, label: `of ${total} reservations in the last 30 days didn't arrive`, bar: noShowPct },
             tag: `Send a confirmation SMS reminder 2 hours before booking`,
           });
         }
@@ -9030,16 +9114,16 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         }
       }
 
-      // ── 54. RESERVATION PRE-ORDER ADOPTION ──
-      if (reservationEntries?.length > 0) {
-        const withPreorder = reservationEntries.filter(r => (r.items || []).length > 0).length;
-        const preorderPct = Math.round((withPreorder / reservationEntries.length) * 100);
-        if (preorderPct < 20 && reservationEntries.length >= 5) {
+      // ── 54. RESERVATION PRE-ORDER ADOPTION — same trailing-30-day aggregate as
+      // the no-show recommendation above, not the day-scoped reservationEntries. ──
+      if (reservationNoShowData && reservationNoShowData.total >= 5) {
+        const { preorderPct, total } = reservationNoShowData;
+        if (preorderPct < 20) {
           recs.push({
             id: 'reservation-preorder-low', priority: 5, category: 'CUSTOMER EXPERIENCE',
             icon: <CalendarClock size={16} />, color: tone.neutral,
             title: `Few reservations include a pre-order`,
-            stat: { value: `${preorderPct}%`, label: `of bookings pre-ordered — pre-orders speed up kitchen prep` },
+            stat: { value: `${preorderPct}%`, label: `of the last ${total} bookings pre-ordered — pre-orders speed up kitchen prep` },
             tag: `Prompt pre-ordering during the reservation flow`,
           });
         }
@@ -9373,7 +9457,12 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     </div>
   );
 
-  const todayRev = currentMonthAnalytics.find(d => d._id === istTodayStr)?.revenue || 0;
+  // "Today" is a fixed, unambiguous concept — it must never move just because the
+  // operator is browsing a different month elsewhere (e.g. picking a payroll month).
+  // Computed directly from the full analytics array, not the viewDate-filtered one.
+  const todayRev = (analytics || [])
+    .filter(d => d._id === istTodayStr)
+    .reduce((a, b) => a + (b.revenue || 0), 0);
   const monthOrders = currentMonthAnalytics.reduce((a, b) => a + (b.count || 0), 0);
 
   return (
@@ -9470,7 +9559,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px,1fr))', gap: '10px', marginBottom: '24px' }}>
       <SC label="Monthly Revenue"  value={`₹${stats.revenue.toLocaleString()}`}   sub={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})} accent c="#d3bfa2" />
       <SC label="Today Revenue"    value={`₹${todayRev.toLocaleString()}`}         sub="Live settlements" />
-      <SC label="Total Orders"     value={monthOrders.toLocaleString()}             sub="Settled bills this month" />
+      <SC label="Total Orders"     value={monthOrders.toLocaleString()}             sub={`Settled bills · ${viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})}`} />
       <SC label="Avg Order Value"  value={`₹${stats.avg}`}                         sub="Per settled bill" />
       <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
     </div>
@@ -12271,9 +12360,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     {/* ADD / RESTOCK BUTTON */}
     <div>
       <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
-      <button onClick={async () => {
+      <button disabled={isSubmittingRestock} onClick={async () => {
+        if (isSubmittingRestock) return;
         if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif("Name and quantity are required", "error");
         if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
+        setIsSubmittingRestock(true);
         try {
           const payload = {
             itemName: newInventoryItem.itemName,
@@ -12304,8 +12395,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           setShowSuggestions(false);
           fetchManagementData();
         } catch { showNotif("Failed to add ingredient", "error"); }
-      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        {selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
+        finally { setIsSubmittingRestock(false); }
+      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: isSubmittingRestock ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isSubmittingRestock ? 0.55 : 1 }}>
+        {isSubmittingRestock ? 'SAVING…' : selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
       </button>
     </div>
   </div>
@@ -13476,7 +13568,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     {/* KPI strip */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
       {[
-        { l:'TOTAL BOOKINGS',  v: reservationEntries.length,                                           c:'#d3bfa2' },
+        { l:'BOOKINGS THIS DAY',  v: reservationEntries.length,                                           c:'#d3bfa2' },
         { l:'CONFIRMED',       v: reservationEntries.filter(r=>r.status==='confirmed').length,          c:'#d3bfa2' },
         { l:'PENDING',         v: reservationEntries.filter(r=>r.status==='pending').length,            c:'#8a704d' },
         { l:'TOTAL COVERS',    v: reservationEntries.filter(r=>!['cancelled','no-show'].includes(r.status)).reduce((a,r)=>a+(r.partySize||0),0), c:'#fff' },
@@ -13743,11 +13835,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Quantity to Add</div>
             <input type="number" min="1" autoFocus
               value={extraRestockQty} onChange={e=>setExtraRestockQty(e.target.value)}
-              onKeyDown={async e=>{
+              onKeyDown={e=>{
                 if(e.key==='Enter'&&extraRestockQty&&Number(extraRestockQty)>0){
-                  await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`,{addQty:Number(extraRestockQty)});
-                  showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
-                  setExtraRestockModal(null);setExtraRestockQty('');fetchExtraItems();
+                  submitExtraRestock();
                 }
               }}
               placeholder="e.g. 24"
@@ -13759,15 +13849,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             )}
           </div>
           <div style={{display:'flex',gap:'8px'}}>
-            <button onClick={async()=>{
-              if(!extraRestockQty||Number(extraRestockQty)<=0)return showNotif('Enter a valid quantity','error');
-              try {
-                await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`,{addQty:Number(extraRestockQty)});
-                showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
-                setExtraRestockModal(null);setExtraRestockQty('');fetchExtraItems();
-              } catch{showNotif('Restock failed','error');}
-            }} style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
-              + ADD STOCK
+            <button disabled={isSubmittingExtraRestock} onClick={submitExtraRestock}
+              style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:isSubmittingExtraRestock?'not-allowed':'pointer',letterSpacing:'0.5px',opacity:isSubmittingExtraRestock?0.55:1}}>
+              {isSubmittingExtraRestock ? 'SAVING…' : '+ ADD STOCK'}
             </button>
             <button onClick={()=>{setExtraRestockModal(null);setExtraRestockQty('');}}
               style={{padding:'11px 16px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>

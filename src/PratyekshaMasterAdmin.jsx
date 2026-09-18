@@ -8,7 +8,7 @@ import {
   Clock, Layers, X, Menu, Plus, Power, RotateCcw, UserPlus,
   IndianRupee, AlertTriangle, Calendar, Store, ChefHat,
   BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
-  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info
+  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
@@ -479,37 +479,86 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
 };
 
 /* ── JSON menu import ── */
-const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
+/** One dropzone that parses a single JSON file into an array under `arrayKey` (e.g. "categories"). */
+const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) => {
   const [file, setFile] = useState(null);
-  const [parsed, setParsed] = useState(null);
-  const [parseError, setParseError] = useState('');
-  const [mode, setMode] = useState('append');
+  const [count, setCount] = useState(null);
+  const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState(null);
   const fileInputRef = useRef(null);
-  if (!target) return null;
 
   const handleFile = (f) => {
     if (!f) return;
-    setFile(f); setParseError(''); setParsed(null); setResult(null);
+    setFile(f); setError(''); setCount(null);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const json = JSON.parse(e.target.result);
-        const categories = Array.isArray(json.categories) ? json.categories : [];
-        const menuItems = Array.isArray(json.menuItems) ? json.menuItems : [];
-        if (categories.length === 0 && menuItems.length === 0) {
-          setParseError('No "categories" or "menuItems" arrays found in this file.');
-          return;
-        }
-        setParsed({ categories, menuItems, raw: json });
-      } catch (err) {
-        setParseError('This isn\u2019t valid JSON — check the file and try again.');
-      }
+        const arr = Array.isArray(json) ? json : Array.isArray(json[arrayKey]) ? json[arrayKey] : null;
+        if (!arr) { setError(`No array found (expected either a bare [...] array, or {"${arrayKey}": [...]})`); onParsed(null); return; }
+        setCount(arr.length);
+        onParsed(arr);
+      } catch (err) { setError('Not valid JSON.'); onParsed(null); }
     };
     reader.readAsText(f);
   };
+
+  const clear = () => { setFile(null); setCount(null); setError(''); onParsed(null); if (fileInputRef.current) fileInputRef.current.value = ''; };
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+      <div
+        className={`p-dropzone${dragging ? ' drag' : ''}`}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
+        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 12 }}
+      >
+        <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0])} />
+        <Upload size={17} color={file ? '#d3bfa2' : C.textDim} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: file ? C.text : C.textMid, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : `Click or drop ${label.toLowerCase()} JSON`}</div>
+          <div style={{ fontSize: 10.5, color: error ? C.danger : C.textFaint, marginTop: 2 }}>{error || hint}</div>
+        </div>
+        {count !== null && !error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{count}</span>
+            <button onClick={e => { e.stopPropagation(); clear(); }} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex' }}><X size={13} /></button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/** Two independent JSON uploads — categories and menu items are separate files, as requested. */
+const DualJsonUpload = ({ onChange }) => {
+  const [categories, setCategoriesArr] = useState(null);
+  const [menuItems, setMenuItemsArr] = useState(null);
+  const update = (cats, items) => onChange({ categories: cats, menuItems: items });
+  return (
+    <div>
+      <SingleJsonDropzone
+        label="Categories JSON" arrayKey="categories" hint="e.g. Starters, Main Course, Desserts…"
+        onParsed={(arr) => { setCategoriesArr(arr); update(arr, menuItems); }}
+      />
+      <SingleJsonDropzone
+        label="Menu Items JSON" arrayKey="menuItems" hint="Each item needs categoryId, name, price"
+        onParsed={(arr) => { setMenuItemsArr(arr); update(categories, arr); }}
+      />
+    </div>
+  );
+};
+
+const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
+  const [pending, setPending] = useState({ categories: null, menuItems: null });
+  const [mode, setMode] = useState('append');
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  if (!target) return null;
 
   const downloadTemplate = async () => {
     try {
@@ -519,17 +568,21 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
     } catch (e) { flash('Could not download template', 'error'); }
   };
 
+  const hasContent = (pending.categories?.length > 0) || (pending.menuItems?.length > 0);
+
   const runImport = async () => {
-    if (!parsed) return;
-    setImporting(true);
+    if (!hasContent) return;
+    setImporting(true); setError('');
     try {
-      const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${target.tenantId}?mode=${mode}`, parsed.raw);
+      const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${target.tenantId}?mode=${mode}`, {
+        categories: pending.categories || [], menuItems: pending.menuItems || []
+      });
       setResult(res.data);
       flash(`Imported ${res.data.counts.categories} categories, ${res.data.counts.menuItems} items for ${target.tenantName}`);
       onDone && onDone();
     } catch (err) {
       const details = err?.response?.data?.details;
-      setParseError(details ? details.join('\n') : (err?.response?.data?.error || 'Import failed'));
+      setError(details ? details.join('\n') : (err?.response?.data?.error || 'Import failed'));
     } finally { setImporting(false); }
   };
 
@@ -548,36 +601,11 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
         </div>
       ) : (
         <>
-          <div
-            className={`p-dropzone${dragging ? ' drag' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
-            style={{ padding: '26px 16px', textAlign: 'center', marginBottom: 14 }}
-          >
-            <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0])} />
-            <Upload size={22} color={C.textDim} style={{ marginBottom: 8 }} />
-            <div style={{ fontSize: 12.5, color: C.textMid, fontWeight: 600 }}>{file ? file.name : 'Click or drop a .json file here'}</div>
-            <div style={{ fontSize: 11, color: C.textFaint, marginTop: 3 }}>categories[] and menuItems[] — see template</div>
-          </div>
+          <DualJsonUpload onChange={setPending} />
 
-          {parseError && (
+          {error && (
             <div style={{ background: 'rgba(192,96,64,0.06)', border: '1px solid rgba(192,96,64,0.2)', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 11.5, color: C.danger, whiteSpace: 'pre-wrap', maxHeight: 140, overflowY: 'auto' }}>
-              {parseError}
-            </div>
-          )}
-
-          {parsed && !parseError && (
-            <div className="p-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-              <div style={{ background: C.bgDark, border: `1px solid ${C.border}`, borderRadius: 9, padding: '10px 12px', textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{parsed.categories.length}</div>
-                <div style={{ fontSize: 10.5, color: C.textDim, marginTop: 2 }}>Categories</div>
-              </div>
-              <div style={{ background: C.bgDark, border: `1px solid ${C.border}`, borderRadius: 9, padding: '10px 12px', textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{parsed.menuItems.length}</div>
-                <div style={{ fontSize: 10.5, color: C.textDim, marginTop: 2 }}>Menu Items</div>
-              </div>
+              {error}
             </div>
           )}
 
@@ -605,9 +633,9 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <button onClick={runImport} disabled={!parsed || importing || !!parseError} className="p-btn-shimmer" style={{
-              flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!parsed || importing) ? 'not-allowed' : 'pointer',
-              background: (!parsed || importing) ? C.bgCard2 : '#d3bfa2', color: (!parsed || importing) ? C.textDim : '#0a0a0a',
+            <button onClick={runImport} disabled={!hasContent || importing} className="p-btn-shimmer" style={{
+              flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!hasContent || importing) ? 'not-allowed' : 'pointer',
+              background: (!hasContent || importing) ? C.bgCard2 : '#d3bfa2', color: (!hasContent || importing) ? C.textDim : '#0a0a0a',
               fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
             }}>{importing ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Importing…</> : <><Upload size={14} /> Import</>}</button>
             <button onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -617,6 +645,37 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           </button>
         </>
       )}
+    </ModalShell>
+  );
+};
+
+/** Serious destructive-action modal — requires typing the exact tenant ID to proceed. */
+const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!client) return null;
+  const matches = typed === client.tenantId;
+  const run = async () => { if (!matches) return; setBusy(true); try { await onConfirm(typed); } finally { setBusy(false); } };
+  return (
+    <ModalShell title="Delete Client — Permanent" icon={Trash2} onClose={onClose} width={420}>
+      <div style={{ background: 'rgba(192,96,64,0.06)', border: '1px solid rgba(192,96,64,0.25)', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10 }}>
+        <AlertTriangle size={16} color={C.danger} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.6 }}>
+          This permanently deletes <b style={{ color: C.text }}>{client.name}</b> and every record tied to it — orders, menu, inventory, staff, customers, everything. There is no undo.
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.textDim, marginBottom: 8 }}>
+        Type <span style={{ fontFamily: 'JetBrains Mono, monospace', color: C.text, background: C.bgDark, padding: '1px 6px', borderRadius: 4 }}>{client.tenantId}</span> to confirm:
+      </div>
+      <input className="p-inp" style={{ ...inp, marginBottom: 18 }} value={typed} onChange={e => setTyped(e.target.value)} placeholder={client.tenantId} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck="false" />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={run} disabled={!matches || busy} style={{
+          flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!matches || busy) ? 'not-allowed' : 'pointer',
+          background: matches ? C.danger : C.bgCard2, color: matches ? '#fff' : C.textDim, fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
+        }}>{busy ? 'Deleting…' : 'Delete Permanently'}</button>
+        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+      </div>
     </ModalShell>
   );
 };
@@ -651,6 +710,8 @@ export default function PratyekshaMasterAdmin() {
   const [onboardError,   setOnboardError]   = useState('');
   const [showPassword,   setShowPassword]   = useState(false);
   const [copied,         setCopied]         = useState('');
+  const [onboardCategories, setOnboardCategories] = useState(null); // parsed array | null
+  const [onboardMenuItems,  setOnboardMenuItems]  = useState(null);
 
   const [toast, setToast] = useState(null);
   const flash = useCallback((msg, tone = 'success') => {
@@ -660,6 +721,15 @@ export default function PratyekshaMasterAdmin() {
   const [confirmModal, setConfirmModal] = useState(null);
   const [renewClient,  setRenewClient]  = useState(null);
   const [importTarget, setImportTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const [notifications,     setNotifications]     = useState([]);
+  const [notifLoading,      setNotifLoading]       = useState(false);
+  const [notifCompose,      setNotifCompose]      = useState({
+    target: 'single', tenantId: '', title: '', message: '',
+    audience: ['owner', 'operator'], severity: 'info', sendMode: 'now', scheduledAt: ''
+  });
+  const [notifSending, setNotifSending] = useState(false);
 
   const now = new Date();
 
@@ -685,7 +755,7 @@ export default function PratyekshaMasterAdmin() {
     finally{ setDemoLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(); fetchDemos(); }, []);
+  useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); }, []);
 
   /* ── helpers ── */
   const getClientStatus = (c) => {
@@ -777,13 +847,62 @@ export default function PratyekshaMasterAdmin() {
         taxPercentage:Number(onboarding.taxPercentage),
         planMonths:Number(onboarding.planMonths),
         paidAmount:Number(onboarding.paidAmount),
+        categories: onboardCategories || undefined,
+        menuItems: onboardMenuItems || undefined,
       });
-      setOnboardSuccess({ tenantId:res.data.tenantId, username:onboarding.username, password:onboarding.password, name:onboarding.name });
+      setOnboardSuccess({
+        tenantId:res.data.tenantId, username:onboarding.username, password:onboarding.password, name:onboarding.name,
+        categoriesWritten: res.data.categoriesWritten, menuItemsWritten: res.data.menuItemsWritten
+      });
       setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' });
+      setOnboardCategories(null); setOnboardMenuItems(null);
       fetchData();
     } catch(err) {
       setOnboardError(err.response?.data?.error || 'Onboarding failed.');
     } finally{ setOnboardLoading(false); }
+  };
+
+  const runDeleteTenant = async (client, confirmText) => {
+    const res = await axios.delete(`${BASE_URL}/admin/master/tenant/${client.tenantId}`, { data: { confirm: confirmText } });
+    await fetchData();
+    setDeleteTarget(null);
+    flash(`${client.name} deleted — ${res.data.totalDocumentsDeleted} records removed across ${Object.keys(res.data.collections).length} collections`);
+  };
+
+  const fetchNotifications = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const r = await axios.get(`${BASE_URL}/admin/master/notifications`);
+      setNotifications(r.data || []);
+    } catch (e) { console.error(e); }
+    finally { setNotifLoading(false); }
+  }, []);
+
+  const sendNotification = async () => {
+    if (!notifCompose.title || !notifCompose.message) { flash('Title and message are required', 'error'); return; }
+    let tenantIds;
+    if (notifCompose.target === 'all') tenantIds = 'ALL';
+    else if (!notifCompose.tenantId) { flash('Pick a client to notify', 'error'); return; }
+    else tenantIds = notifCompose.tenantId;
+
+    setNotifSending(true);
+    try {
+      const scheduledAt = notifCompose.sendMode === 'schedule' && notifCompose.scheduledAt
+        ? new Date(notifCompose.scheduledAt).toISOString() : undefined;
+      await axios.post(`${BASE_URL}/admin/master/notifications`, {
+        tenantIds, title: notifCompose.title, message: notifCompose.message,
+        audience: notifCompose.audience, severity: notifCompose.severity, scheduledAt
+      });
+      flash(scheduledAt ? 'Notification scheduled' : 'Notification sent');
+      setNotifCompose(c => ({ ...c, title: '', message: '' }));
+      fetchNotifications();
+    } catch (e) { flash(e?.response?.data?.error || 'Could not send notification', 'error'); }
+    finally { setNotifSending(false); }
+  };
+
+  const cancelNotification = async (id) => {
+    try { await axios.delete(`${BASE_URL}/admin/master/notifications/${id}`); fetchNotifications(); flash('Notification cancelled'); }
+    catch (e) { flash('Could not cancel', 'error'); }
   };
 
   /* ── derived ── */
@@ -936,6 +1055,7 @@ export default function PratyekshaMasterAdmin() {
             <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
+            <NavItem id="notifications" label="Notifications" icon={Bell} />
           </div>
 
           <Div />
@@ -1472,6 +1592,14 @@ export default function PratyekshaMasterAdmin() {
                             }}>
                               <FileJson size={12} />
                             </button>
+                            <button onClick={()=>setDeleteTarget(client)} title="Delete client permanently" style={{
+                              padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
+                              cursor:'pointer', background:'transparent',
+                              border:`1px solid ${C.border}`, color: C.textDim,
+                              display:'flex', alignItems:'center', gap:4,
+                            }}>
+                              <Trash2 size={12} />
+                            </button>
                             <button onClick={()=>handleToggle(client)} style={{
                               padding:'5px 10px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
@@ -1556,11 +1684,16 @@ export default function PratyekshaMasterAdmin() {
                     <div style={{ fontSize:11, color:C.textDim, display:'flex', alignItems:'center', gap:6, marginBottom:14 }}>
                       <AlertCircle size={11}/> Save credentials — password cannot be recovered after closing.
                     </div>
+                    {(onboardSuccess.categoriesWritten || onboardSuccess.menuItemsWritten) ? (
+                      <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.2)', borderRadius:9, padding:'10px 12px', marginBottom:14, fontSize:11.5, color:'#d3bfa2' }}>
+                        <CheckCircle2 size={14} /> {onboardSuccess.categoriesWritten || 0} categories &middot; {onboardSuccess.menuItemsWritten || 0} menu items imported
+                      </div>
+                    ) : null}
                     <button onClick={() => setImportTarget({ tenantId: onboardSuccess.tenantId, tenantName: onboardSuccess.name })} className="p-btn-shimmer" style={{
                       width: '100%', padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
                       background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                    }}><FileJson size={14} /> Import Menu for {onboardSuccess.name} (JSON)</button>
+                    }}><FileJson size={14} /> {(onboardSuccess.categoriesWritten || onboardSuccess.menuItemsWritten) ? 'Import More Menu Items' : `Import Menu for ${onboardSuccess.name}`} (JSON)</button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1673,6 +1806,21 @@ export default function PratyekshaMasterAdmin() {
                   </div>
                 </div>
 
+                {/* Menu setup — optional JSON uploads instead of manual entry */}
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:4 }}>
+                    <FileJson size={15} color="#d3bfa2" />
+                    <div style={{ fontSize:13.5, fontWeight:700, color:C.text }}>Menu Setup (optional)</div>
+                  </div>
+                  <div style={{ fontSize:11.5, color:C.textDim, marginBottom:16, lineHeight:1.6 }}>
+                    Upload the client's categories and menu items as JSON instead of typing them in by hand — both are optional and independent. Skip this and the client starts with 5 default categories and no dishes.
+                  </div>
+                  <DualJsonUpload onChange={({ categories, menuItems }) => { setOnboardCategories(categories); setOnboardMenuItems(menuItems); }} />
+                  <a href={`${BASE_URL}/admin/master/menu-template`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:C.textDim, display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none' }}>
+                    <FileDown size={12} /> View example template
+                  </a>
+                </div>
+
                 {/* Submit — primary: light gold solid; secondary: ghost */}
                 <div style={{ display:'flex', gap:10, paddingBottom:20 }}>
                   <button onClick={handleOnboard} disabled={onboardLoading} style={{
@@ -1688,13 +1836,141 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button onClick={()=>setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' })}
+                  <button onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeSection==='notifications' && (
+          <div className="p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900 }}>
+            <div style={{ marginBottom:22 }}>
+              <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Notifications</div>
+              <div style={{ fontSize:12.5, color:C.textDim }}>Send a message to one client, several, or everyone — shows up inside their Owner App and Operator Portal only.</div>
+            </div>
+
+            <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:24 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+                <LabeledInput label="Send To">
+                  <select className="p-inp" style={inp} value={notifCompose.target} onChange={e=>setNotifCompose(c=>({...c, target:e.target.value, tenantId:''}))}>
+                    <option value="single">One client</option>
+                    <option value="all">All active clients</option>
+                  </select>
+                </LabeledInput>
+                {notifCompose.target === 'single' ? (
+                  <LabeledInput label="Client">
+                    <select className="p-inp" style={inp} value={notifCompose.tenantId} onChange={e=>setNotifCompose(c=>({...c, tenantId:e.target.value}))}>
+                      <option value="">Select a client…</option>
+                      {clients.map(c => <option key={c.tenantId} value={c.tenantId}>{c.name}</option>)}
+                    </select>
+                  </LabeledInput>
+                ) : (
+                  <LabeledInput label="Severity">
+                    <select className="p-inp" style={inp} value={notifCompose.severity} onChange={e=>setNotifCompose(c=>({...c, severity:e.target.value}))}>
+                      <option value="info">Info</option>
+                      <option value="important">Important</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </LabeledInput>
+                )}
+              </div>
+              {notifCompose.target === 'single' && (
+                <div style={{ marginBottom:14 }}>
+                  <LabeledInput label="Severity">
+                    <select className="p-inp" style={inp} value={notifCompose.severity} onChange={e=>setNotifCompose(c=>({...c, severity:e.target.value}))}>
+                      <option value="info">Info</option>
+                      <option value="important">Important</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </LabeledInput>
+                </div>
+              )}
+              <div style={{ marginBottom:14 }}>
+                <LabeledInput label="Title">
+                  <input className="p-inp" style={inp} placeholder="e.g. Scheduled maintenance tonight" value={notifCompose.title} onChange={e=>setNotifCompose(c=>({...c, title:e.target.value}))} />
+                </LabeledInput>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <LabeledInput label="Message">
+                  <textarea className="p-inp" style={{ ...inp, minHeight:80, resize:'vertical', fontFamily:'inherit' }} placeholder="What do you want them to know?" value={notifCompose.message} onChange={e=>setNotifCompose(c=>({...c, message:e.target.value}))} />
+                </LabeledInput>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, fontWeight:600, color:C.textDim, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.4px' }}>Visible To</div>
+                <div style={{ display:'flex', gap:16 }}>
+                  {['owner','operator'].map(a => (
+                    <label key={a} style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, color:C.textMid, cursor:'pointer' }}>
+                      <input type="checkbox" checked={notifCompose.audience.includes(a)} onChange={e=>{
+                        setNotifCompose(c=>({...c, audience: e.target.checked ? [...c.audience, a] : c.audience.filter(x=>x!==a)}));
+                      }} />
+                      {a === 'owner' ? 'Owner App' : 'Operator Portal'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns: notifCompose.sendMode==='schedule' ? '1fr 1fr' : '1fr', gap:14, marginBottom:18 }}>
+                <LabeledInput label="When">
+                  <select className="p-inp" style={inp} value={notifCompose.sendMode} onChange={e=>setNotifCompose(c=>({...c, sendMode:e.target.value}))}>
+                    <option value="now">Send immediately</option>
+                    <option value="schedule">Schedule for later</option>
+                  </select>
+                </LabeledInput>
+                {notifCompose.sendMode === 'schedule' && (
+                  <LabeledInput label="Date &amp; Time">
+                    <input className="p-inp" style={inp} type="datetime-local" value={notifCompose.scheduledAt} onChange={e=>setNotifCompose(c=>({...c, scheduledAt:e.target.value}))} />
+                  </LabeledInput>
+                )}
+              </div>
+              <button onClick={sendNotification} disabled={notifSending} className="p-btn-shimmer" style={{
+                padding:'11px 20px', borderRadius:9, border:'none', cursor: notifSending ? 'not-allowed' : 'pointer',
+                background: notifSending ? C.bgCard2 : '#d3bfa2', color: notifSending ? C.textDim : '#0a0a0a',
+                fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
+              }}>
+                {notifSending ? <><Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }} /> Sending…</> : <><Send size={14} /> {notifCompose.sendMode==='schedule' ? 'Schedule Notification' : 'Send Now'}</>}
+              </button>
+            </div>
+
+            <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>History</div>
+            {notifLoading ? (
+              <div style={{ fontSize:12.5, color:C.textDim }}>Loading…</div>
+            ) : notifications.length === 0 ? (
+              <div style={{ fontSize:12.5, color:C.textDim, padding:'20px 0' }}>No notifications sent yet.</div>
+            ) : (
+              <div style={{ display:'grid', gap:8 }} className="p-stagger">
+                {notifications.map(n => {
+                  const client = clients.find(c => c.tenantId === n.tenantId);
+                  const pending = !n.delivered;
+                  return (
+                    <div key={n._id} style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:12 }}>
+                      <div style={{
+                        width:8, height:8, borderRadius:'50%', marginTop:5, flexShrink:0,
+                        background: n.severity==='urgent' ? C.danger : n.severity==='important' ? '#8a704d' : '#d3bfa2'
+                      }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{n.title}</div>
+                        <div style={{ fontSize:12, color:C.textMid, marginTop:2, lineHeight:1.5 }}>{n.message}</div>
+                        <div style={{ fontSize:10.5, color:C.textFaint, marginTop:6, display:'flex', gap:10, flexWrap:'wrap' }}>
+                          <span>{client?.name || n.tenantId}</span>
+                          <span>&middot;</span>
+                          <span>{n.audience.join(' + ')}</span>
+                          <span>&middot;</span>
+                          <span>{pending ? `Scheduled ${new Date(n.scheduledAt).toLocaleString()}` : `Delivered ${new Date(n.scheduledAt).toLocaleString()}`}</span>
+                        </div>
+                      </div>
+                      {pending && (
+                        <button onClick={()=>cancelNotification(n._id)} title="Cancel" style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer', flexShrink:0 }}>
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1709,6 +1985,9 @@ export default function PratyekshaMasterAdmin() {
         )}
         {importTarget && (
           <ImportMenuModal target={importTarget} onClose={() => setImportTarget(null)} onDone={fetchData} flash={flash} />
+        )}
+        {deleteTarget && (
+          <DeleteTenantModal client={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={(text) => runDeleteTenant(deleteTarget, text)} />
         )}
       </AnimatePresence>
       <Toast toast={toast} />
