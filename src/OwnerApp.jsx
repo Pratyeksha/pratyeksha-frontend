@@ -225,6 +225,7 @@ function OwnerProvider({ tenantId, children }) {
   const [liveAdminNotification, setLiveAdminNotification] = useState(null);
   const [liveOrderEvent, setLiveOrderEvent] = useState(null);
   const [liveStockEvent, setLiveStockEvent] = useState(null);
+  const [liveStaffEvent, setLiveStaffEvent] = useState(null);
   const [outlet, setOutlet] = useState(tenantId);
 
   // authStatus: 'checking' | 'needsSetup' | 'needsLogin' | 'authed' | 'error'
@@ -344,6 +345,10 @@ function OwnerProvider({ tenantId, children }) {
     s.on('new_reservation', () => setLiveOrderEvent({ type: 'new_reservation', _t: Date.now() }));
     s.on('reservation_updated', () => setLiveOrderEvent({ type: 'reservation_updated', _t: Date.now() }));
     s.on('wastage_logged', () => setLiveStockEvent({ type: 'wastage_logged', _t: Date.now() }));
+    // Staff attendance — backend fix (separate patch) adds these emits;
+    // without them clock-in/out had literally no real-time path at all.
+    s.on('staff_clocked_in', () => setLiveStaffEvent({ type: 'staff_clocked_in', _t: Date.now() }));
+    s.on('staff_clocked_out', () => setLiveStaffEvent({ type: 'staff_clocked_out', _t: Date.now() }));
     setSocket(s);
     return () => s.disconnect();
   }, [outlet, authStatus, authToken]);
@@ -355,9 +360,9 @@ function OwnerProvider({ tenantId, children }) {
   }, [outlet, authStatus]);
 
   const value = useMemo(() => ({
-    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent,
+    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent,
     authStatus, ownerName, completeAuth, logout, authErrorDetail, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
@@ -1332,7 +1337,7 @@ const chartTooltipStyle = {
    ════════════════════════════════════════════════════════════ */
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const { tenantId, liveOrderEvent } = useOwner();
+  const { tenantId, liveOrderEvent, liveStaffEvent } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/dashboard/:tenantId', { refreshMs: 45000 });
   const animatedRevenue = useCountUp(data?.revenue?.today || 0);
   const animatedProfit = useCountUp(data?.liveProfit?.estimatedGrossProfit || 0);
@@ -1341,6 +1346,7 @@ const DashboardPage = () => {
   // (kitchen marks ready, waiter serves, bill settles) — the 45s poll above
   // is now just a safety net, not the primary way this page stays current.
   useEffect(() => { if (liveOrderEvent) refetch(); }, [liveOrderEvent]); // eslint-disable-line
+  useEffect(() => { if (liveStaffEvent) refetch(); }, [liveStaffEvent]); // eslint-disable-line
 
   if (loading) return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -1946,6 +1952,8 @@ const ScoreLine = ({ label, value, pass, target }) => (
 const StaffPage = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/staff/summary/:tenantId', { params: { month }, refreshMs: 45000 });
+  const { liveStaffEvent } = useOwner();
+  useEffect(() => { if (liveStaffEvent) refetch(); }, [liveStaffEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
