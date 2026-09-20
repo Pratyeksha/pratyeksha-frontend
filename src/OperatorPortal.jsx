@@ -4154,24 +4154,23 @@ const renderMonthHeatmap = () => {
   const daysInMonth=new Date(year,month+1,0).getDate(), firstDay=new Date(year,month,1).getDay();
   const maxRev=Math.max(...currentMonthAnalytics.map(a=>a.revenue||0),1);
 
-  // ── Breakeven: estimate daily ingredient cost from profitabilityData
-const totalRevenueAllTime = canonicalMonthRevenue;
-  const totalCostAllTime = profitabilityData.reduce((a,b) => a+(b.totalIngredientCost||0), 0);
-  const costRatio = totalRevenueAllTime > 0 ? totalCostAllTime / totalRevenueAllTime : 0.4;
-
   const grid=[];
   for(let x=0;x<firstDay;x++) grid.push(<div key={`p${x}`} style={styles.heatSquareEmpty}/>);
   for(let i=1;i<=daysInMonth;i++){
     const dateStr=`${year}-${(month+1).toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
     const dayData = currentMonthAnalytics.find(d=>d._id===dateStr);
     const rev = dayData?.revenue || 0;
-    const estimatedCost = rev * costRatio;
-    const isProfitable = rev > 0 && rev > estimatedCost;
-    const isBreakeven  = rev > 0 && !isProfitable;
+    // Real per-day ingredient cost from actual orders/recipes — see /api/admin/analytics/daily-cost.
+    // Falls back to 0 (shown as "cost data unavailable") rather than a fake ratio guess if the
+    // backend hasn't returned data for this day yet (e.g. still loading, or genuinely no orders).
+    const realCost = dailyCostData[dateStr]?.cost;
+    const hasCostData = realCost != null;
+    const isProfitable = rev > 0 && (!hasCostData || rev > realCost);
+    const isBreakeven  = rev > 0 && hasCostData && !isProfitable;
 
     grid.push(
       <motion.div key={i} whileHover={{scale:1.1,zIndex:10}}
-        title={rev > 0 ? `₹${rev.toLocaleString()} revenue · Est. cost ₹${Math.round(estimatedCost).toLocaleString()} · ${isProfitable?'PROFITABLE':'BREAK-EVEN'}` : 'No revenue'}
+        title={rev > 0 ? `₹${rev.toLocaleString()} revenue${hasCostData ? ` · Cost ₹${realCost.toLocaleString()} · Profit ₹${(rev-realCost).toLocaleString()}` : ' · Cost data unavailable'}${hasCostData ? (isProfitable?' · PROFITABLE':' · BREAK-EVEN') : ''}` : 'No revenue'}
         style={{
           ...styles.heatSquare,
           background: rev > 0
@@ -9571,6 +9570,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <SC label="Monthly Revenue"  value={`₹${stats.revenue.toLocaleString()}`}   sub={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})} accent c="#d3bfa2" />
       <SC label="Today Revenue"    value={`₹${todayRev.toLocaleString()}`}         sub="Live settlements" />
       <SC label="Total Orders"     value={monthOrders.toLocaleString()}             sub={`Settled bills · ${viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})}`} />
+      <SC label="Total Discount"   value={`₹${currentMonthAnalytics.reduce((a,b)=>a+(b.discount||0),0).toLocaleString()}`} sub={`Given · ${viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})}`} />
       <SC label="Avg Order Value"  value={`₹${stats.avg}`}                         sub="Per settled bill" />
       <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
     </div>

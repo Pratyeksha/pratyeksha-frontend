@@ -1,4357 +1,3866 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUpRight,
+  BarChart3,
+  Bell,
+  Boxes,
+  Brain,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  Coffee,
+  ConciergeBell,
+  Flame,
+  Globe2,
+  Headphones,
+  Layers3,
+  LayoutGrid,
+  Menu,
+  MessageCircle,
+  MoreHorizontal,
+  MoveUpRight,
+  Package,
+  Play,
+  Plus,
+  QrCode,
+  ReceiptIndianRupee,
+  RefreshCcw,
+  Search,
+  Send,
+  Settings2,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  Store,
+  TabletSmartphone,
+  Target,
+  TrendingUp,
+  Users,
+  Utensils,
+  WalletCards,
+  X,
+  Zap,
+} from "lucide-react";
 
-/*
-  PRATYEKSHa
-  Single-file landing website
-  React + CSS inside App.jsx
-*/
-
-const API = "https://pratyeksha-backend.onrender.com/api";
-
-/* =========================================================
-   ICON SYSTEM
-========================================================= */
-
-const Icon = ({ children, size = 20, stroke = 1.5, className = "" }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={stroke}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    {children}
-  </svg>
-);
-
-const icons = {
-  spark: (
-    <>
-      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z" />
-      <path d="M19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" />
-    </>
-  ),
-  arrow: (
-    <>
-      <path d="M5 12h14" />
-      <path d="m13 6 6 6-6 6" />
-    </>
-  ),
-  play: <path d="m9 6 9 6-9 6V6Z" />,
-  menu: (
-    <>
-      <path d="M4 6h16" />
-      <path d="M4 12h16" />
-      <path d="M4 18h16" />
-    </>
-  ),
-  close: (
-    <>
-      <path d="M6 6l12 12" />
-      <path d="M18 6 6 18" />
-    </>
-  ),
-  layers: (
-    <>
-      <path d="m12 2 9 5-9 5-9-5 9-5Z" />
-      <path d="m3 12 9 5 9-5" />
-      <path d="m3 17 9 5 9-5" />
-    </>
-  ),
-  kitchen: (
-    <>
-      <rect x="3" y="3" width="18" height="13" rx="2" />
-      <path d="M8 21h8" />
-      <path d="M12 16v5" />
-    </>
-  ),
-  billing: (
-    <>
-      <path d="M6 2h9l4 4v16H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
-      <path d="M14 2v5h5" />
-      <path d="M8 12h8" />
-      <path d="M8 16h6" />
-    </>
-  ),
-  inventory: (
-    <>
-      <path d="m12 2 9 5-9 5-9-5 9-5Z" />
-      <path d="m3 12 9 5 9-5" />
-      <path d="m3 17 9 5 9-5" />
-    </>
-  ),
-  chart: (
-    <>
-      <path d="M4 19V5" />
-      <path d="M4 19h17" />
-      <path d="m7 15 4-4 3 2 5-6" />
-    </>
-  ),
-  users: (
-    <>
-      <circle cx="9" cy="7" r="4" />
-      <path d="M2 21v-2a5 5 0 0 1 10 0v2" />
-      <path d="M16 3.5a4 4 0 0 1 0 7.5" />
-      <path d="M22 21v-2a5 5 0 0 0-4-4.8" />
-    </>
-  ),
-  mic: (
-    <>
-      <rect x="9" y="2" width="6" height="12" rx="3" />
-      <path d="M19 10a7 7 0 0 1-14 0" />
-      <path d="M12 17v5" />
-      <path d="M8 22h8" />
-    </>
-  ),
-  box: (
-    <>
-      <path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z" />
-      <path d="m3 7 9 5 9-5" />
-      <path d="M12 12v10" />
-    </>
-  ),
-  globe: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18" />
-      <path d="M12 3c3 3 3 15 0 18" />
-      <path d="M12 3c-3 3-3 15 0 18" />
-    </>
-  ),
-  phone: (
-    <path d="M6.5 3.5 9 3l2 5-2.2 1.7a16 16 0 0 0 5.5 5.5L16 13l5 2 .5 2.5a2 2 0 0 1-2.2 2.3C10.8 18.7 5.3 13.2 4.2 4.7A2 2 0 0 1 6.5 3.5Z" />
-  ),
-  mail: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="m3 7 9 6 9-6" />
-    </>
-  ),
-  map: (
-    <>
-      <path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
-      <path d="M9 3v15" />
-      <path d="M15 6v15" />
-    </>
-  ),
-  check: <path d="m5 12 4 4L19 6" />,
-  clock: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </>
-  ),
-  shield: (
-    <>
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-      <path d="m9 12 2 2 4-4" />
-    </>
-  ),
-  qr: (
-    <>
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-      <path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2" />
-    </>
-  ),
-};
-
-const I = ({ name, size = 20, stroke = 1.5 }) => (
-  <Icon size={size} stroke={stroke}>
-    {icons[name]}
-  </Icon>
-);
-
-/* =========================================================
-   DATA
-========================================================= */
-
-const modules = [
-  {
-    id: "experience",
+const PRODUCTS = {
+  experience: {
     number: "01",
     eyebrow: "CUSTOMER EXPERIENCE",
-    title: "A digital menu guests actually want to use.",
-    text:
-      "Turn a simple table QR into a premium ordering experience. Guests explore dishes, view 3D food, hear dish descriptions, switch languages and order directly from their phone.",
-    icon: "layers",
-    color: "cream",
-    features: [
-      "3D / AR dish visualization",
-      "Bilingual English + Marathi menu",
-      "Voice “Hear About This Dish”",
-      "Bestseller and Chef Special badges",
-      "Live order status",
-      "Waitlist, reservation and pickup",
-      "Service requests from table",
-      "Remembered dishes and reorder",
-    ],
+    title: "A menu people actually want to explore.",
+    description:
+      "Turn a QR scan into a premium digital dining experience with rich dishes, intelligent suggestions, 3D views and effortless ordering.",
   },
-  {
-    id: "operations",
+  kitchen: {
     number: "02",
-    eyebrow: "KITCHEN + OPERATIONS",
-    title: "Connect the floor, kitchen and counter.",
-    text:
-      "Every order moves through one connected operational layer. Kitchen teams see live tickets while operators see tables, orders, inventory and billing in real time.",
-    icon: "kitchen",
-    color: "dark",
-    features: [
-      "Real-time Kitchen Display System",
-      "FIFO ticket queue",
-      "Per-item cooking timers",
-      "Voice-enabled kitchen controls",
-      "Live floor / table map",
-      "Takeaway and online orders",
-      "Instant sold-out controls",
-      "Real-time multi-device sync",
-    ],
+    eyebrow: "KITCHEN FLOW",
+    title: "Every order. One calm kitchen.",
+    description:
+      "Give the kitchen a live operating surface that keeps tickets, timers, priorities and preparation states visible.",
   },
-  {
-    id: "billing",
+  operations: {
     number: "03",
-    eyebrow: "SMART BILLING",
-    title: "Billing without the end-of-day headache.",
-    text:
-      "Bring every order round into one settlement flow with GST calculations, split payments and audit-ready invoices.",
-    icon: "billing",
-    color: "cream",
-    features: [
-      "CGST + SGST calculation",
-      "Cash / UPI / Card / split payments",
-      "GSTIN and FSSAI details",
-      "Sequential invoice numbering",
-      "Digital PDF invoices",
-      "Takeaway billing",
-      "Settlement protection",
-      "Daily billing summary",
-    ],
+    eyebrow: "OPERATIONS",
+    title: "See the restaurant as it moves.",
+    description:
+      "Connect tables, orders, billing, menu availability and daily operations into one visual operating layer.",
   },
-  {
-    id: "inventory",
+  intelligence: {
     number: "04",
-    eyebrow: "INVENTORY + RECIPES",
-    title: "Know what every dish actually costs.",
-    text:
-      "Map dishes to ingredients once. Pratyeksha can connect recipe usage with sales and inventory so operators understand stock, wastage and real dish costs.",
-    icon: "inventory",
-    color: "dark",
-    features: [
-      "Recipe-to-ingredient mapping",
-      "Automatic stock deduction",
-      "Weighted Average Cost",
-      "Purchase history",
-      "Low-stock monitoring",
-      "Wastage tracking",
-      "Dish availability controls",
-      "Ingredient-based profitability",
-    ],
+    eyebrow: "RESTAURANT INTELLIGENCE",
+    title: "Turn everyday orders into useful signals.",
+    description:
+      "Understand what customers choose, when they return, what performs and where opportunities are hiding.",
   },
-  {
-    id: "intelligence",
+  marketing: {
     number: "05",
-    eyebrow: "BUSINESS INTELLIGENCE",
-    title: "From restaurant data to useful decisions.",
-    text:
-      "See the patterns hidden inside daily operations — menu performance, peak hours, customer behaviour, profitability and business trends.",
-    icon: "chart",
-    color: "cream",
-    features: [
-      "Menu performance analysis",
-      "Peak-hour analytics",
-      "Revenue trends",
-      "Dish profitability",
-      "Customer retention",
-      "GST / business reporting",
-      "Exportable reports",
-      "Operational recommendations",
-    ],
+    eyebrow: "RETENTION & MARKETING",
+    title: "Make the second visit easier to earn.",
+    description:
+      "Remember preferences, understand customer behavior and create campaigns around real restaurant interactions.",
   },
-  {
-    id: "marketing",
-    number: "06",
-    eyebrow: "CUSTOMER + MARKETING",
-    title: "Keep the relationship alive after the bill.",
-    text:
-      "Turn customer interactions into useful marketing signals. Understand returning customers, feedback, favourite dishes and opportunities for re-engagement.",
-    icon: "users",
-    color: "dark",
-    features: [
-      "Customer feedback",
-      "Favourite / remembered dishes",
-      "Repeat customer signals",
-      "WhatsApp marketing workflows",
-      "Review prompts",
-      "Customer segmentation",
-      "Campaign insights",
-      "Marketing intelligence",
-    ],
-  },
+};
+
+const FEATURE_ITEMS = [
+  "Smart digital menu",
+  "3D dish experience",
+  "Kitchen display",
+  "Live order tracking",
+  "Smart inventory",
+  "GST billing",
+  "Customer memory",
+  "Marketing intelligence",
+  "Feedback intelligence",
+  "WhatsApp campaigns",
+  "Table management",
+  "Restaurant analytics",
 ];
 
-const useCases = [
-  {
-    title: "Cafés",
-    desc: "For fast-moving cafés, coffee shops, bakeries and modern bistros.",
-    points: ["QR ordering", "Quick billing", "Table service", "Customer retention"],
-  },
-  {
-    title: "Restaurants",
-    desc: "For dine-in restaurants, QSRs, family restaurants and premium dining.",
-    points: ["Kitchen operations", "GST billing", "Inventory", "Analytics"],
-  },
-  {
-    title: "Multi-outlet",
-    desc: "For growing food businesses that need consistency across locations.",
-    points: ["Central intelligence", "Outlet operations", "Menu control", "Reporting"],
-  },
-];
-
-/* =========================================================
-   APP
-========================================================= */
-
-export default function App() {
-  const [loading, setLoading] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [activeSection, setActiveSection] = useState("home");
-  const [cursorActive, setCursorActive] = useState(false);
-
-  const dotRef = useRef(null);
-  const ringRef = useRef(null);
-
-  const [form, setForm] = useState({
-    name: "",
-    business: "",
-    phone: "",
-    email: "",
-    type: "",
-    message: "",
-  });
-
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-
-  /* -------------------------------------------------------
-     6 SECOND LOADER
-  ------------------------------------------------------- */
+function Reveal({ children, className = "", delay = 0 }) {
+  const ref = useRef(null);
 
   useEffect(() => {
-    document.body.classList.add("pratyeksha-page");
-
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 6000);
-
-    return () => {
-      clearTimeout(timer);
-      document.body.classList.remove("pratyeksha-page");
-    };
-  }, []);
-
-  /* -------------------------------------------------------
-     SCROLL
-  ------------------------------------------------------- */
-
-  useEffect(() => {
-    const sectionIds = ["home", "system", "experience", "operations", "intelligence", "marketing", "demo"];
-
-    const onScroll = () => {
-      const y = window.scrollY;
-      setScrolled(y > 40);
-
-      const doc = document.documentElement;
-      const total = Math.max(0, doc.scrollHeight - window.innerHeight);
-      setProgress(total > 0 ? Math.min(100, (y / total) * 100) : 0);
-
-      let current = "home";
-      for (const id of sectionIds) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.34) {
-          current = id;
-        }
-      }
-      setActiveSection(current);
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-    onScroll();
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-
-  /* -------------------------------------------------------
-     REVEAL ON SCROLL
-  ------------------------------------------------------- */
-
-  useEffect(() => {
-    const elements = document.querySelectorAll(".reveal");
+    const node = ref.current;
+    if (!node) return;
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
-            observer.unobserve(entry.target);
-          }
-        });
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          node.classList.add("is-visible");
+          observer.unobserve(node);
+        }
       },
-      {
-        threshold: 0.12,
-        rootMargin: "0px 0px -60px 0px",
-      }
+      { threshold: 0.12 }
     );
 
-    elements.forEach((el) => observer.observe(el));
+    observer.observe(node);
 
     return () => observer.disconnect();
-  }, [loading]);
-
-  /* -------------------------------------------------------
-     CURSOR
-  ------------------------------------------------------- */
-
-  useEffect(() => {
-    if (window.matchMedia("(pointer: coarse)").matches) return;
-
-    let mx = -100;
-    let my = -100;
-    let rx = -100;
-    let ry = -100;
-    let raf;
-
-    const move = (e) => {
-      mx = e.clientX;
-      my = e.clientY;
-    };
-
-    const animate = () => {
-      rx += (mx - rx) * 0.16;
-      ry += (my - ry) * 0.16;
-
-      if (dotRef.current) {
-        dotRef.current.style.transform = `translate3d(${mx}px,${my}px,0)`;
-      }
-
-      if (ringRef.current) {
-        ringRef.current.style.transform = `translate3d(${rx}px,${ry}px,0)`;
-      }
-
-      raf = requestAnimationFrame(animate);
-    };
-
-    const activate = () => setCursorActive(true);
-    const deactivate = () => setCursorActive(false);
-
-    window.addEventListener("mousemove", move);
-    document.addEventListener("mouseenter", activate);
-    document.addEventListener("mouseleave", deactivate);
-
-    animate();
-
-    return () => {
-      window.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseenter", activate);
-      document.removeEventListener("mouseleave", deactivate);
-      cancelAnimationFrame(raf);
-    };
   }, []);
 
-  /* -------------------------------------------------------
-     CURSOR HOVER TARGETS
-  ------------------------------------------------------- */
-
-  useEffect(() => {
-    const targets = document.querySelectorAll(
-      "a,button,.feature-card,.module-visual,.use-card"
-    );
-
-    const enter = () => {
-      document.body.classList.add("cursor-large");
-    };
-
-    const leave = () => {
-      document.body.classList.remove("cursor-large");
-    };
-
-    targets.forEach((el) => {
-      el.addEventListener("mouseenter", enter);
-      el.addEventListener("mouseleave", leave);
-    });
-
-    return () => {
-      targets.forEach((el) => {
-        el.removeEventListener("mouseenter", enter);
-        el.removeEventListener("mouseleave", leave);
-      });
-    };
-  }, [loading, mobileOpen]);
-
-  /* -------------------------------------------------------
-     HELPERS
-  ------------------------------------------------------- */
-
-  const scrollTo = (id) => {
-    setMobileOpen(false);
-
-    requestAnimationFrame(() => {
-      const target = document.getElementById(id);
-      if (!target) return;
-
-      target.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-        inline: "nearest",
-      });
-    });
-  };
-
-  const updateForm = (e) => {
-    setForm((p) => ({
-      ...p,
-      [e.target.name]: e.target.value,
-    }));
-  };
-
-  const submitDemo = async (e) => {
-    e.preventDefault();
-
-    setSending(true);
-
-    try {
-      await fetch(`${API}/demo-request`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(form),
-      });
-
-      setSent(true);
-
-      setForm({
-        name: "",
-        business: "",
-        phone: "",
-        email: "",
-        type: "",
-        message: "",
-      });
-    } catch {
-      /*
-        Keep the landing page usable even if backend
-        is unavailable.
-      */
-      setSent(true);
-    }
-
-    setSending(false);
-  };
-
-  /* =======================================================
-     LOADING SCREEN
-  ======================================================= */
-
-  if (loading) {
-    return (
-      <>
-        <style>{CSS}</style>
-
-        <div className="loading-screen">
-          <div className="loading-orbit orbit-one" />
-          <div className="loading-orbit orbit-two" />
-
-          <div className="loading-center">
-            <div className="loading-mark">
-              <I name="spark" size={24} />
-            </div>
-
-            <div className="loading-brand">PRATYEKSHa</div>
-
-            <div className="loading-line">
-              <span />
-            </div>
-
-            <div className="loading-label">
-              RESTAURANT EXPERIENCE SYSTEM
-            </div>
-
-            <div className="loading-status">
-              Preparing your experience
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  /* =======================================================
-     WEBSITE
-  ======================================================= */
-
   return (
-    <div className="site">
-      <style>{CSS}</style>
-
-      {/* CURSOR */}
-      <div
-        ref={dotRef}
-        className={`cursor-dot ${cursorActive ? "active" : ""}`}
-      />
-
-      <div
-        ref={ringRef}
-        className={`cursor-ring ${cursorActive ? "active" : ""}`}
-      />
-
-      {/* SCROLL PROGRESS */}
-      <div
-        className="scroll-progress"
-        style={{ width: `${progress}%` }}
-      />
-
-      {/* ===================================================
-          NAVIGATION
-      =================================================== */}
-
-      <header className={`nav ${scrolled ? "nav-scrolled" : ""}`}>
-        <button
-          className="brand"
-          onClick={() => scrollTo("home")}
-          aria-label="PRATYEKSHa home"
-        >
-          <span className="brand-mark">
-            <I name="spark" size={16} />
-          </span>
-
-          <span className="brand-name">PRATYEKSHa</span>
-        </button>
-
-        <nav className="desktop-nav">
-          <button
-            className={activeSection === "system" ? "active" : ""}
-            onClick={() => scrollTo("system")}
-          >
-            System
-          </button>
-          <button
-            className={activeSection === "experience" ? "active" : ""}
-            onClick={() => scrollTo("experience")}
-          >
-            Experience
-          </button>
-          <button
-            className={activeSection === "operations" ? "active" : ""}
-            onClick={() => scrollTo("operations")}
-          >
-            Operations
-          </button>
-          <button
-            className={activeSection === "intelligence" ? "active" : ""}
-            onClick={() => scrollTo("intelligence")}
-          >
-            Intelligence
-          </button>
-          <button onClick={() => scrollTo("demo")} className="nav-demo">
-            Book Demo
-          </button>
-        </nav>
-
-        <button
-          className="mobile-menu-button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-        >
-          <I name="menu" size={22} />
-        </button>
-      </header>
-
-      {/* MOBILE MENU */}
-
-      <div className={`mobile-menu ${mobileOpen ? "open" : ""}`}>
-        <button
-          className="mobile-close"
-          onClick={() => setMobileOpen(false)}
-        >
-          <I name="close" size={24} />
-        </button>
-
-        <div className="mobile-menu-inner">
-          <span>PRATYEKSHa</span>
-
-          {[
-            ["home", "Home"],
-            ["system", "System"],
-            ["experience", "Experience"],
-            ["operations", "Operations"],
-            ["intelligence", "Intelligence"],
-            ["marketing", "Marketing"],
-            ["demo", "Book a Demo"],
-          ].map(([id, label]) => (
-            <button key={id} onClick={() => scrollTo(id)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ===================================================
-          HERO
-      =================================================== */}
-
-      <main>
-        <section id="home" className="hero">
-          <div className="hero-left">
-            <div className="hero-eyebrow reveal">
-              <span />
-              BUILT FOR CAFÉS + RESTAURANTS
-            </div>
-
-            <h1 className="hero-title reveal delay-1">
-              The digital layer
-              <br />
-              behind a{" "}
-              <em>
-                better
-                <br />
-                food experience.
-              </em>
-            </h1>
-
-            <p className="hero-description reveal delay-2">
-              PRATYEKSHa connects your customer menu, kitchen,
-              billing, inventory, analytics and marketing into one
-              intelligent restaurant experience system.
-            </p>
-
-            <div className="hero-actions reveal delay-3">
-              <button
-                className="button primary"
-                onClick={() => scrollTo("demo")}
-              >
-                Book a Private Demo
-                <I name="arrow" size={16} />
-              </button>
-
-              <button
-                className="button secondary"
-                onClick={() => scrollTo("system")}
-              >
-                Explore the System
-              </button>
-            </div>
-
-            <div className="hero-meta reveal delay-4">
-              <div>
-                <strong>01</strong>
-                <span>Customer</span>
-              </div>
-
-              <div>
-                <strong>02</strong>
-                <span>Operations</span>
-              </div>
-
-              <div>
-                <strong>03</strong>
-                <span>Intelligence</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="hero-right">
-            <div className="hero-glow" />
-
-            <div className="hero-orbit orbit-a" />
-            <div className="hero-orbit orbit-b" />
-
-            <div className="restaurant-card">
-              <div className="restaurant-top">
-                <div>
-                  <small>LIVE RESTAURANT</small>
-                  <strong>PRATYEKSHa</strong>
-                </div>
-
-                <span className="live">
-                  <i />
-                  LIVE
-                </span>
-              </div>
-
-              <div className="table-scene">
-                <div className="table-circle">
-                  <div className="dish dish-one" />
-                  <div className="dish dish-two" />
-                  <div className="dish dish-three" />
-                  <div className="glass" />
-                </div>
-
-                <div className="scene-label">
-                  <span>TABLE 12</span>
-                  <strong>Order Experience</strong>
-                </div>
-              </div>
-
-              <div className="restaurant-stats">
-                <div>
-                  <small>ORDERS</small>
-                  <strong>24</strong>
-                </div>
-
-                <div>
-                  <small>KITCHEN</small>
-                  <strong>08</strong>
-                </div>
-
-                <div>
-                  <small>TABLES</small>
-                  <strong>17</strong>
-                </div>
-              </div>
-
-              <div className="mini-order">
-                <div className="mini-icon">
-                  <I name="qr" size={16} />
-                </div>
-
-                <div>
-                  <strong>Smart Menu Active</strong>
-                  <span>3D · Voice · Bilingual</span>
-                </div>
-
-                <div className="mini-arrow">
-                  <I name="arrow" size={15} />
-                </div>
-              </div>
-            </div>
-
-            <div className="floating-note note-one">
-              <I name="mic" size={15} />
-              <div>
-                <small>VOICE MENU</small>
-                <strong>English · मराठी</strong>
-              </div>
-            </div>
-
-            <div className="floating-note note-two">
-              <I name="chart" size={15} />
-              <div>
-                <small>INTELLIGENCE</small>
-                <strong>+24.8% insight</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="hero-scroll">
-            <span>SCROLL TO EXPLORE</span>
-            <i />
-          </div>
-        </section>
-
-        {/* =================================================
-            INTRO BAND
-        ================================================= */}
-
-        <section className="intro-band" id="system">
-          <div className="intro-label reveal">
-            <span>THE SYSTEM</span>
-            <i />
-          </div>
-
-          <div className="intro-content">
-            <h2 className="reveal">
-              One platform.
-              <br />
-              <em>Every moving part.</em>
-            </h2>
-
-            <p className="reveal delay-1">
-              From the moment a guest scans a QR code to the moment
-              the kitchen completes an order — and from inventory
-              deduction to the next marketing interaction —
-              PRATYEKSHa keeps the entire experience connected.
-            </p>
-          </div>
-
-          <div className="system-line reveal">
-            {[
-              ["01", "Guest"],
-              ["02", "Order"],
-              ["03", "Kitchen"],
-              ["04", "Billing"],
-              ["05", "Inventory"],
-              ["06", "Intelligence"],
-            ].map(([n, t]) => (
-              <div key={n}>
-                <span>{n}</span>
-                <strong>{t}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* =================================================
-            CAFE + RESTAURANT
-        ================================================= */}
-
-        <section className="use-section">
-          <div className="section-heading reveal">
-            <div className="eyebrow">ONE PLATFORM / MANY FORMATS</div>
-
-            <h2>
-              Designed for the way
-              <br />
-              <em>you actually operate.</em>
-            </h2>
-
-            <p>
-              Whether you run a compact café, a busy restaurant,
-              a QSR or multiple outlets, the same connected
-              foundation adapts around your operation.
-            </p>
-          </div>
-
-          <div className="use-grid">
-            {useCases.map((item, index) => (
-              <article
-                className="use-card reveal"
-                key={item.title}
-                style={{ transitionDelay: `${index * 80}ms` }}
-              >
-                <div className="use-number">0{index + 1}</div>
-
-                <h3>{item.title}</h3>
-
-                <p>{item.desc}</p>
-
-                <div className="use-points">
-                  {item.points.map((point) => (
-                    <span key={point}>
-                      <I name="check" size={12} />
-                      {point}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="use-arrow">
-                  <I name="arrow" size={17} />
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* =================================================
-            FEATURE / MODULE SECTIONS
-        ================================================= */}
-
-        {modules.map((module, index) => (
-          <section
-            id={module.id}
-            className={`module-section ${module.color}`}
-            key={module.id}
-          >
-            <div className="module-grid">
-              <div className="module-copy">
-                <div className="module-number reveal">
-                  {module.number}
-                </div>
-
-                <div className="eyebrow reveal">
-                  {module.eyebrow}
-                </div>
-
-                <h2 className="reveal delay-1">
-                  {module.title}
-                </h2>
-
-                <p className="module-description reveal delay-2">
-                  {module.text}
-                </p>
-
-                <div className="module-features reveal delay-3">
-                  {module.features.map((feature) => (
-                    <div key={feature}>
-                      <span className="feature-check">
-                        <I name="check" size={12} />
-                      </span>
-
-                      <span>{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  className="module-link reveal delay-4"
-                  onClick={() => scrollTo("demo")}
-                >
-                  Explore this capability
-                  <I name="arrow" size={15} />
-                </button>
-              </div>
-
-              <div className="module-visual reveal">
-                <div className="visual-grid" />
-
-                <div className="visual-window">
-                  <div className="visual-header">
-                    <div>
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-
-                    <small>PRATYEKSHa / {module.eyebrow}</small>
-                  </div>
-
-                  <div className="visual-body">
-                    <div className="visual-symbol">
-                      <I name={module.icon} size={38} stroke={1.2} />
-                    </div>
-
-                    <div className="visual-title">
-                      <small>CONNECTED MODULE</small>
-                      <strong>{module.title}</strong>
-                    </div>
-
-                    <div className="visual-bars">
-                      <i style={{ width: "88%" }} />
-                      <i style={{ width: "62%" }} />
-                      <i style={{ width: "76%" }} />
-                      <i style={{ width: "45%" }} />
-                    </div>
-
-                    <div className="visual-status">
-                      <span>
-                        <i />
-                        REAL-TIME
-                      </span>
-
-                      <span>
-                        <I name="shield" size={12} />
-                        SECURE
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="visual-float float-top">
-                  <I name={module.icon} size={15} />
-                  LIVE MODULE
-                </div>
-
-                <div className="visual-float float-bottom">
-                  <span />
-                  Connected
-                </div>
-              </div>
-            </div>
-          </section>
-        ))}
-
-        {/* =================================================
-            FEATURE MATRIX
-        ================================================= */}
-
-        <section className="matrix-section">
-          <div className="section-heading center reveal">
-            <div className="eyebrow">THE COMPLETE LAYER</div>
-
-            <h2>
-              More than a menu.
-              <br />
-              <em>More than a POS.</em>
-            </h2>
-
-            <p>
-              PRATYEKSHa sits between the customer experience
-              and the operational engine of your café or restaurant.
-            </p>
-          </div>
-
-          <div className="matrix">
-            {[
-              {
-                icon: "qr",
-                title: "Smart QR Menu",
-                desc: "Beautiful digital menus without forcing customers to install another app.",
-              },
-              {
-                icon: "layers",
-                title: "3D Dish Experience",
-                desc: "Let guests understand the dish before they order it.",
-              },
-              {
-                icon: "mic",
-                title: "Voice Experience",
-                desc: "Dish narration and kitchen interaction through voice.",
-              },
-              {
-                icon: "kitchen",
-                title: "Live KDS",
-                desc: "Kitchen tickets, timers, routing and queue management.",
-              },
-              {
-                icon: "map",
-                title: "Live Floor",
-                desc: "See table state, orders and service activity together.",
-              },
-              {
-                icon: "billing",
-                title: "GST Billing",
-                desc: "Connected settlement with GST and payment handling.",
-              },
-              {
-                icon: "box",
-                title: "Smart Inventory",
-                desc: "Connect ingredients, recipes and availability.",
-              },
-              {
-                icon: "chart",
-                title: "Business Intelligence",
-                desc: "Understand what is happening instead of only seeing numbers.",
-              },
-              {
-                icon: "users",
-                title: "Customer Intelligence",
-                desc: "Learn what returning guests actually prefer.",
-              },
-              {
-                icon: "globe",
-                title: "Multilingual",
-                desc: "Designed for real Indian café and restaurant environments.",
-              },
-              {
-                icon: "shield",
-                title: "Operational Controls",
-                desc: "Permissions, availability, billing and workflow safeguards.",
-              },
-              {
-                icon: "spark",
-                title: "Marketing Layer",
-                desc: "Turn restaurant interactions into future customer relationships.",
-              },
-            ].map((item, index) => (
-              <article
-                className="feature-card reveal"
-                key={item.title}
-                style={{ transitionDelay: `${(index % 4) * 70}ms` }}
-              >
-                <div className="feature-icon">
-                  <I name={item.icon} size={19} />
-                </div>
-
-                <div className="feature-index">
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-
-                <h3>{item.title}</h3>
-                <p>{item.desc}</p>
-
-                <div className="feature-line" />
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* =================================================
-            EXPERIENCE FLOW
-        ================================================= */}
-
-        <section className="flow-section">
-          <div className="flow-heading reveal">
-            <div className="eyebrow">ONE CUSTOMER JOURNEY</div>
-
-            <h2>
-              From scan
-              <br />
-              <em>to loyalty.</em>
-            </h2>
-          </div>
-
-          <div className="flow-track">
-            {[
-              ["01", "SCAN", "Guest scans your table QR."],
-              ["02", "DISCOVER", "Explores menu and 3D dishes."],
-              ["03", "ORDER", "Places order directly."],
-              ["04", "PREPARE", "Kitchen receives live ticket."],
-              ["05", "SETTLE", "Billing consolidates everything."],
-              ["06", "REMEMBER", "Customer relationship continues."],
-            ].map(([number, title, text], index) => (
-              <div className="flow-step reveal" key={number}>
-                <div className="flow-number">{number}</div>
-
-                <div className="flow-dot">
-                  <span />
-                </div>
-
-                <h3>{title}</h3>
-
-                <p>{text}</p>
-
-                {index < 5 && <div className="flow-connector" />}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* =================================================
-            STATS / BRAND MOMENT
-        ================================================= */}
-
-        <section className="brand-moment">
-          <div className="brand-moment-glow" />
-
-          <div className="brand-moment-inner">
-            <div className="eyebrow reveal">
-              RESTAURANT EXPERIENCE SYSTEM
-            </div>
-
-            <h2 className="reveal delay-1">
-              Make every part of the
-              <br />
-              <em>experience feel connected.</em>
-            </h2>
-
-            <p className="reveal delay-2">
-              Better menus. Faster operations. Smarter decisions.
-              Stronger customer relationships.
-            </p>
-
-            <div className="moment-stats reveal delay-3">
-              <div>
-                <strong>6+</strong>
-                <span>Connected layers</span>
-              </div>
-
-              <div>
-                <strong>24/7</strong>
-                <span>Digital availability</span>
-              </div>
-
-              <div>
-                <strong>1</strong>
-                <span>Unified system</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =================================================
-            DEMO
-        ================================================= */}
-
-        <section id="demo" className="demo-section">
-          <div className="demo-grid">
-            <div className="demo-copy">
-              <div className="eyebrow reveal">
-                PRIVATE DEMONSTRATION
-              </div>
-
-              <h2 className="reveal delay-1">
-                See what
-                <br />
-                <em>PRATYEKSHa</em>
-                <br />
-                can do for you.
-              </h2>
-
-              <p className="reveal delay-2">
-                Tell us about your café or restaurant. We will
-                walk you through the parts of the platform that
-                matter to your operation.
-              </p>
-
-              <div className="contact-details reveal delay-3">
-                <a href="tel:+918767622654">
-                  <span>
-                    <I name="phone" size={15} />
-                  </span>
-                  +91 87676 22654
-                </a>
-
-                <a href="tel:+918605015294">
-                  <span>
-                    <I name="phone" size={15} />
-                  </span>
-                  +91 86050 15294
-                </a>
-
-                <a href="mailto:hello.pratyeksha@gmail.com">
-                  <span>
-                    <I name="mail" size={15} />
-                  </span>
-                  hello.pratyeksha@gmail.com
-                </a>
-              </div>
-            </div>
-
-            <div className="demo-form-wrap reveal">
-              {sent ? (
-                <div className="success-state">
-                  <div className="success-icon">
-                    <I name="check" size={28} />
-                  </div>
-
-                  <small>REQUEST RECEIVED</small>
-
-                  <h3>We'll be in touch.</h3>
-
-                  <p>
-                    Your demo request has been received. Our team
-                    will contact you shortly.
-                  </p>
-
-                  <button
-                    className="button primary"
-                    onClick={() => setSent(false)}
-                  >
-                    Send another request
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={submitDemo}>
-                  <div className="form-top">
-                    <small>BOOK A DEMO</small>
-                    <span>01 / 01</span>
-                  </div>
-
-                  <div className="form-grid">
-                    <label>
-                      <span>Your Name *</span>
-                      <input
-                        name="name"
-                        required
-                        value={form.name}
-                        onChange={updateForm}
-                        placeholder="Enter your name"
-                      />
-                    </label>
-
-                    <label>
-                      <span>Café / Restaurant *</span>
-                      <input
-                        name="business"
-                        required
-                        value={form.business}
-                        onChange={updateForm}
-                        placeholder="Business name"
-                      />
-                    </label>
-
-                    <label>
-                      <span>Phone *</span>
-                      <input
-                        name="phone"
-                        required
-                        value={form.phone}
-                        onChange={updateForm}
-                        placeholder="+91"
-                      />
-                    </label>
-
-                    <label>
-                      <span>Email</span>
-                      <input
-                        name="email"
-                        type="email"
-                        value={form.email}
-                        onChange={updateForm}
-                        placeholder="you@example.com"
-                      />
-                    </label>
-
-                    <label className="full">
-                      <span>Business Type</span>
-
-                      <select
-                        name="type"
-                        value={form.type}
-                        onChange={updateForm}
-                      >
-                        <option value="">Select type</option>
-                        <option>Café / Coffee Shop</option>
-                        <option>Restaurant</option>
-                        <option>QSR / Fast Food</option>
-                        <option>Bakery / Bistro</option>
-                        <option>Cloud Kitchen</option>
-                        <option>Multi-outlet Business</option>
-                      </select>
-                    </label>
-
-                    <label className="full">
-                      <span>What would you like to improve?</span>
-
-                      <textarea
-                        name="message"
-                        value={form.message}
-                        onChange={updateForm}
-                        placeholder="Tell us briefly about your current setup..."
-                        rows={4}
-                      />
-                    </label>
-                  </div>
-
-                  <button
-                    className="submit-button"
-                    type="submit"
-                    disabled={sending}
-                  >
-                    {sending ? "Sending..." : "Request Private Demo"}
-
-                    <I name="arrow" size={17} />
-                  </button>
-
-                  <p className="form-note">
-                    No spam. No pressure. Just a walkthrough of
-                    the platform.
-                  </p>
-                </form>
-              )}
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* ===================================================
-          FOOTER
-      =================================================== */}
-
-      <footer className="footer">
-        <div className="footer-top">
-          <div className="footer-brand">
-            <button
-              className="footer-logo"
-              onClick={() => scrollTo("home")}
-            >
-              <span>
-                <I name="spark" size={17} />
-              </span>
-
-              PRATYEKSHa
-            </button>
-
-            <p>
-              The digital layer behind better café and restaurant
-              experiences.
-            </p>
-
-            <div className="footer-tag">
-              VISUALIZE <i /> ORDER <i /> RELISH
-            </div>
-          </div>
-
-          <div className="footer-column">
-            <h4>Platform</h4>
-
-            <button onClick={() => scrollTo("experience")}>
-              Customer Experience
-            </button>
-
-            <button onClick={() => scrollTo("operations")}>
-              Kitchen & Operations
-            </button>
-
-            <button onClick={() => scrollTo("billing")}>
-              Smart Billing
-            </button>
-
-            <button onClick={() => scrollTo("inventory")}>
-              Inventory
-            </button>
-
-            <button onClick={() => scrollTo("intelligence")}>
-              Intelligence
-            </button>
-          </div>
-
-          <div className="footer-column">
-            <h4>For Business</h4>
-
-            <button onClick={() => scrollTo("system")}>
-              Cafés
-            </button>
-
-            <button onClick={() => scrollTo("system")}>
-              Restaurants
-            </button>
-
-            <button onClick={() => scrollTo("system")}>
-              QSRs
-            </button>
-
-            <button onClick={() => scrollTo("system")}>
-              Multi-outlet
-            </button>
-
-            <button onClick={() => scrollTo("demo")}>
-              Book Demo
-            </button>
-          </div>
-
-          <div className="footer-column">
-            <h4>Contact</h4>
-
-            <a href="tel:+918767622654">+91 87676 22654</a>
-            <a href="tel:+918605015294">+91 86050 15294</a>
-            <a href="mailto:hello.pratyeksha@gmail.com">
-              hello.pratyeksha@gmail.com
-            </a>
-
-            <span className="footer-location">
-              <I name="map" size={13} />
-              Maharashtra, India
-            </span>
-          </div>
-        </div>
-
-        <div className="footer-middle">
-          <div>
-            <span>RESTAURANT EXPERIENCE SYSTEM</span>
-          </div>
-
-          <button onClick={() => scrollTo("home")}>
-            Back to top
-            <I name="arrow" size={14} />
-          </button>
-        </div>
-
-        <div className="footer-bottom">
-          <span>
-            © {new Date().getFullYear()} PRATYEKSHa. All rights
-            reserved.
-          </span>
-
-          <span>Built for cafés & restaurants.</span>
-        </div>
-      </footer>
+    <div
+      ref={ref}
+      className={`reveal ${className}`}
+      style={{ "--delay": `${delay}ms` }}
+    >
+      {children}
     </div>
   );
 }
 
-/* =========================================================
-   CSS
-========================================================= */
-
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400&display=swap');
-
-:root{
-  --ink:#11100d;
-  --ink2:#181713;
-  --ink3:#222019;
-
-  --cream:#f4ecdc;
-  --cream2:#ebe0ca;
-  --cream3:#faf6ee;
-
-  --gold:#c7a269;
-  --gold2:#dfc18d;
-  --gold3:#a98248;
-
-  --sage:#a6b09a;
-
-  --darkText:#201d17;
-  --bodyText:#675e4e;
-  --muted:#928775;
-
-  --border:rgba(39,31,20,.12);
-  --darkBorder:rgba(255,255,255,.09);
-
-  --radius:18px;
-  --max:1480px;
-}
-
-/* =========================================================
-   RESET / SCROLL
-========================================================= */
-
-*,
-*::before,
-*::after{
-  box-sizing:border-box;
-  margin:0;
-  padding:0;
-}
-
-html{
-  width:100%;
-  min-height:100%;
-  overflow-x:hidden;
-  overflow-y:scroll;
-  scroll-behavior:smooth;
-  -webkit-overflow-scrolling:touch;
-}
-
-body{
-  width:100%;
-  min-height:100vh;
-  overflow-x:hidden;
-  overflow-y:auto;
-  background:var(--cream3);
-  color:var(--darkText);
-  font-family:'DM Sans',sans-serif;
-  line-height:1.6;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
-}
-
-#root{
-  width:100%;
-  min-height:100vh;
-  overflow:visible;
-}
-
-button,
-input,
-textarea,
-select{
-  font:inherit;
-}
-
-button{
-  border:0;
-}
-
-a{
-  color:inherit;
-}
-
-button,
-a{
-  -webkit-tap-highlight-color:transparent;
-}
-
-.site{
-  width:100%;
-  min-height:100vh;
-  overflow:visible;
-}
-
-section{
-  scroll-margin-top:90px;
-}
-
-::selection{
-  background:var(--gold);
-  color:var(--ink);
-}
-
-/* =========================================================
-   CURSOR
-========================================================= */
-
-.cursor-dot,
-.cursor-ring{
-  position:fixed;
-  left:0;
-  top:0;
-  pointer-events:none;
-  z-index:99999;
-  transform:translate3d(-100px,-100px,0);
-  transition:
-    width .25s ease,
-    height .25s ease,
-    border-color .25s ease,
-    background .25s ease;
-}
-
-.cursor-dot{
-  width:7px;
-  height:7px;
-  border-radius:50%;
-  background:var(--gold);
-  margin-left:-3px;
-  margin-top:-3px;
-}
-
-.cursor-ring{
-  width:32px;
-  height:32px;
-  border:1px solid rgba(199,162,105,.7);
-  border-radius:50%;
-  margin-left:-16px;
-  margin-top:-16px;
-}
-
-body.cursor-large .cursor-dot{
-  width:10px;
-  height:10px;
-  margin-left:-5px;
-  margin-top:-5px;
-}
-
-body.cursor-large .cursor-ring{
-  width:52px;
-  height:52px;
-  margin-left:-26px;
-  margin-top:-26px;
-  background:rgba(199,162,105,.06);
-  border-color:var(--gold);
-}
-
-/* =========================================================
-   LOADING
-========================================================= */
-
-.loading-screen{
-  position:fixed;
-  inset:0;
-  z-index:100000;
-  background:#11100d;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-}
-
-.loading-center{
-  position:relative;
-  z-index:2;
-  display:flex;
-  align-items:center;
-  flex-direction:column;
-}
-
-.loading-mark{
-  width:58px;
-  height:58px;
-  border:1px solid rgba(199,162,105,.45);
-  color:var(--gold);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:16px;
-  margin-bottom:25px;
-  animation:loaderPulse 2s ease-in-out infinite;
-}
-
-.loading-brand{
-  font-family:'DM Serif Display',serif;
-  color:#f1e4ce;
-  font-size:2.2rem;
-  letter-spacing:2px;
-}
-
-.loading-line{
-  width:170px;
-  height:1px;
-  background:rgba(255,255,255,.08);
-  margin-top:24px;
-  overflow:hidden;
-}
-
-.loading-line span{
-  display:block;
-  width:0;
-  height:100%;
-  background:var(--gold);
-  animation:loaderLine 5.7s cubic-bezier(.65,0,.35,1) forwards;
-}
-
-.loading-label{
-  margin-top:22px;
-  color:rgba(199,162,105,.7);
-  font-size:.55rem;
-  letter-spacing:4px;
-}
-
-.loading-status{
-  margin-top:10px;
-  color:rgba(255,255,255,.25);
-  font-size:.65rem;
-  letter-spacing:1px;
-}
-
-.loading-orbit{
-  position:absolute;
-  width:520px;
-  height:520px;
-  border:1px solid rgba(199,162,105,.07);
-  border-radius:50%;
-}
-
-.orbit-one{
-  animation:orbit 16s linear infinite;
-}
-
-.orbit-two{
-  width:760px;
-  height:760px;
-  border-color:rgba(166,176,154,.05);
-  animation:orbitReverse 22s linear infinite;
-}
-
-@keyframes loaderLine{
-  to{width:100%;}
-}
-
-@keyframes loaderPulse{
-  0%,100%{transform:scale(1);box-shadow:0 0 0 rgba(199,162,105,0);}
-  50%{transform:scale(1.05);box-shadow:0 0 45px rgba(199,162,105,.12);}
-}
-
-@keyframes orbit{
-  to{transform:rotate(360deg);}
-}
-
-@keyframes orbitReverse{
-  to{transform:rotate(-360deg);}
-}
-
-/* =========================================================
-   PROGRESS
-========================================================= */
-
-.scroll-progress{
-  position:fixed;
-  top:0;
-  left:0;
-  height:2px;
-  background:var(--gold);
-  z-index:10000;
-  transition:width .08s linear;
-}
-
-/* =========================================================
-   NAV
-========================================================= */
-
-.nav{
-  position:fixed;
-  top:0;
-  left:0;
-  right:0;
-  height:78px;
-  z-index:500;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 5vw;
-  transition:.35s ease;
-}
-
-.nav-scrolled{
-  background:rgba(244,236,220,.92);
-  backdrop-filter:blur(20px);
-  -webkit-backdrop-filter:blur(20px);
-  border-bottom:1px solid rgba(39,31,20,.09);
-  box-shadow:0 10px 35px rgba(30,23,12,.06);
-}
-
-.brand{
-  background:none;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  gap:11px;
-  color:var(--darkText);
-}
-
-.brand-mark{
-  width:34px;
-  height:34px;
-  border:1px solid rgba(199,162,105,.6);
-  background:var(--ink);
-  color:var(--gold2);
-  border-radius:9px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.brand-name{
-  font-family:'DM Serif Display',serif;
-  font-size:1.35rem;
-  letter-spacing:.2px;
-}
-
-.desktop-nav{
-  display:flex;
-  align-items:center;
-  gap:28px;
-}
-
-.desktop-nav button{
-  background:none;
-  color:#665d4e;
-  cursor:pointer;
-  font-size:.74rem;
-  transition:.2s;
-}
-
-.desktop-nav button:hover{
-  color:var(--gold3);
-}
-
-.desktop-nav .nav-demo{
-  background:var(--ink);
-  color:var(--gold2);
-  padding:10px 19px;
-  border-radius:6px;
-}
-
-.desktop-nav .nav-demo:hover{
-  background:var(--gold);
-  color:var(--ink);
-}
-
-.mobile-menu-button{
-  display:none;
-  background:none;
-  color:var(--darkText);
-  cursor:pointer;
-}
-
-/* =========================================================
-   MOBILE MENU
-========================================================= */
-
-.mobile-menu{
-  position:fixed;
-  inset:0;
-  z-index:900;
-  background:var(--cream);
-  transform:translateY(-100%);
-  transition:transform .5s cubic-bezier(.7,0,.2,1);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.mobile-menu.open{
-  transform:translateY(0);
-}
-
-.mobile-close{
-  position:absolute;
-  right:24px;
-  top:23px;
-  background:none;
-  color:var(--darkText);
-  cursor:pointer;
-}
-
-.mobile-menu-inner{
-  display:flex;
-  flex-direction:column;
-  gap:23px;
-  align-items:center;
-}
-
-.mobile-menu-inner > span{
-  color:var(--gold3);
-  font-size:.58rem;
-  letter-spacing:3px;
-  margin-bottom:15px;
-}
-
-.mobile-menu-inner button{
-  background:none;
-  color:var(--darkText);
-  font-family:'DM Serif Display',serif;
-  font-size:2rem;
-  cursor:pointer;
-}
-
-/* =========================================================
-   HERO
-========================================================= */
-
-.hero{
-  width:100%;
-  min-height:100svh;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  position:relative;
-  overflow:hidden;
-  background:var(--cream);
-}
-
-.hero-left{
-  min-height:100svh;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  padding:140px 6vw 100px;
-  position:relative;
-  z-index:2;
-}
-
-.hero-right{
-  min-height:100svh;
-  position:relative;
-  background:var(--ink2);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-}
-
-.hero-glow{
-  position:absolute;
-  width:70%;
-  height:70%;
-  border-radius:50%;
-  background:radial-gradient(
-    circle,
-    rgba(199,162,105,.13),
-    transparent 65%
+function GoldLine({ className = "" }) {
+  return (
+    <div className={`gold-line ${className}`}>
+      <span />
+      <span />
+      <span />
+    </div>
   );
-  filter:blur(10px);
 }
 
-.hero-eyebrow,
-.eyebrow{
-  display:flex;
-  align-items:center;
-  gap:9px;
-  color:var(--gold3);
-  font-size:.57rem;
-  letter-spacing:3px;
-  font-weight:500;
-  text-transform:uppercase;
+function ProductVisual({ type }) {
+  if (type === "experience") {
+    return (
+      <div className="visual-stage experience-stage">
+        <div className="stage-glow stage-glow-one" />
+        <div className="stage-glow stage-glow-two" />
+
+        <div className="phone-shell">
+          <div className="phone-top">
+            <span>12:42</span>
+            <span className="phone-signal">● ● ●</span>
+          </div>
+
+          <div className="menu-brand">
+            <div>
+              <span className="mini-kicker">JAY AMBE</span>
+              <strong>Multi Fusion</strong>
+            </div>
+            <div className="mini-avatar">JA</div>
+          </div>
+
+          <div className="menu-search">
+            <Search size={13} />
+            <span>Search dishes</span>
+          </div>
+
+          <div className="menu-tabs">
+            <span className="active">Popular</span>
+            <span>Starters</span>
+            <span>Main</span>
+            <span>Drinks</span>
+          </div>
+
+          <div className="dish-large">
+            <div className="dish-image dish-one">
+              <div className="dish-ring">
+                <Utensils size={26} />
+              </div>
+            </div>
+
+            <div className="dish-info">
+              <div>
+                <strong>Paneer Tikka</strong>
+                <span>Smoky • Chef special</span>
+              </div>
+              <button>
+                <Plus size={15} />
+              </button>
+            </div>
+          </div>
+
+          <div className="dish-row">
+            <div className="mini-dish">
+              <div className="mini-dish-image">🍽</div>
+              <span>Veg Momos</span>
+              <b>₹180</b>
+            </div>
+            <div className="mini-dish">
+              <div className="mini-dish-image">✦</div>
+              <span>Masala Pasta</span>
+              <b>₹220</b>
+            </div>
+          </div>
+
+          <div className="phone-bottom">
+            <span>Table 12</span>
+            <button>
+              View order <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
+
+        <div className="floating-note note-one">
+          <QrCode size={16} />
+          <div>
+            <small>SCAN → EXPLORE</small>
+            <strong>Table 12 active</strong>
+          </div>
+        </div>
+
+        <div className="floating-note note-two">
+          <Sparkles size={15} />
+          <div>
+            <small>SMART SUGGESTION</small>
+            <strong>Pairs well with this dish</strong>
+          </div>
+        </div>
+
+        <div className="orbit orbit-one" />
+        <div className="orbit orbit-two" />
+      </div>
+    );
+  }
+
+  if (type === "kitchen") {
+    return (
+      <div className="visual-stage kitchen-stage">
+        <div className="kitchen-header">
+          <div>
+            <span className="mini-kicker">KITCHEN DISPLAY</span>
+            <h3>Service flow</h3>
+          </div>
+          <div className="live-status">
+            <span />
+            LIVE
+          </div>
+        </div>
+
+        <div className="kitchen-columns">
+          <div className="kitchen-column">
+            <span className="column-title">NEW</span>
+
+            <div className="ticket ticket-gold">
+              <div className="ticket-top">
+                <b>#1048</b>
+                <span>02:18</span>
+              </div>
+              <strong>Table 12</strong>
+              <p>Paneer Tikka × 2</p>
+              <p>Veg Momos × 1</p>
+              <div className="ticket-footer">
+                <span>4 items</span>
+                <button>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+
+            <div className="ticket">
+              <div className="ticket-top">
+                <b>#1049</b>
+                <span>00:54</span>
+              </div>
+              <strong>Table 04</strong>
+              <p>Masala Pasta × 2</p>
+              <p>Cold Coffee × 2</p>
+              <div className="ticket-footer">
+                <span>4 items</span>
+                <button>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="kitchen-column preparing">
+            <span className="column-title">PREPARING</span>
+
+            <div className="ticket active-ticket">
+              <div className="ticket-top">
+                <b>#1043</b>
+                <span>08:24</span>
+              </div>
+              <strong>Table 08</strong>
+              <p>Paneer Biryani × 2</p>
+              <p>Butter Naan × 4</p>
+              <div className="timer-line">
+                <span />
+              </div>
+              <div className="ticket-footer">
+                <span>Chef: Rahul</span>
+                <button>
+                  <Check size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="kitchen-column">
+            <span className="column-title">READY</span>
+
+            <div className="ticket ready-ticket">
+              <div className="ticket-top">
+                <b>#1039</b>
+                <span>12:02</span>
+              </div>
+              <strong>Table 03</strong>
+              <p>Veg Burger × 2</p>
+              <p>French Fries × 1</p>
+              <div className="ready-label">
+                <Check size={12} /> Ready for pickup
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="kitchen-bottom">
+          <div>
+            <Clock3 size={16} />
+            <span>Average prep time</span>
+            <b>11m 42s</b>
+          </div>
+          <div>
+            <Flame size={16} />
+            <span>Active tickets</span>
+            <b>07</b>
+          </div>
+          <div>
+            <Bell size={16} />
+            <span>Priority orders</span>
+            <b>02</b>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "operations") {
+    return (
+      <div className="visual-stage operations-stage">
+        <div className="operations-top">
+          <div>
+            <span className="mini-kicker">LIVE FLOOR</span>
+            <h3>Restaurant overview</h3>
+          </div>
+          <div className="date-pill">TODAY · 12 SEP</div>
+        </div>
+
+        <div className="operations-grid">
+          <div className="floor-map">
+            <div className="floor-label">MAIN FLOOR</div>
+
+            {[
+              ["01", "occupied"],
+              ["02", "available"],
+              ["03", "occupied"],
+              ["04", "occupied"],
+              ["05", "available"],
+              ["06", "occupied"],
+              ["07", "available"],
+              ["08", "occupied"],
+              ["09", "available"],
+              ["10", "occupied"],
+              ["11", "available"],
+              ["12", "occupied"],
+            ].map(([table, status]) => (
+              <div
+                key={table}
+                className={`floor-table ${status}`}
+                style={{
+                  "--x": `${((Number(table) - 1) % 4) * 23 + 5}%`,
+                  "--y": `${Math.floor((Number(table) - 1) / 4) * 28 + 12}%`,
+                }}
+              >
+                <span>{table}</span>
+                <small>{status === "occupied" ? "₹" : "+"}</small>
+              </div>
+            ))}
+
+            <div className="floor-legend">
+              <span>
+                <i className="occupied-dot" /> Occupied
+              </span>
+              <span>
+                <i className="available-dot" /> Available
+              </span>
+            </div>
+          </div>
+
+          <div className="operation-side">
+            <div className="metric-box">
+              <span>Live revenue</span>
+              <strong>₹48,920</strong>
+              <small>
+                <TrendingUp size={12} /> +18.4%
+              </small>
+            </div>
+
+            <div className="metric-box">
+              <span>Active orders</span>
+              <strong>18</strong>
+              <small>6 preparing</small>
+            </div>
+
+            <div className="mini-order">
+              <div>
+                <span className="mini-dot" />
+                <strong>Table 12</strong>
+              </div>
+              <span>₹1,840</span>
+            </div>
+
+            <div className="mini-order">
+              <div>
+                <span className="mini-dot muted" />
+                <strong>Table 08</strong>
+              </div>
+              <span>₹2,260</span>
+            </div>
+
+            <div className="mini-order">
+              <div>
+                <span className="mini-dot" />
+                <strong>Table 03</strong>
+              </div>
+              <span>₹920</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "intelligence") {
+    return (
+      <div className="visual-stage intelligence-stage">
+        <div className="intelligence-top">
+          <div>
+            <span className="mini-kicker">RESTAURANT INTELLIGENCE</span>
+            <h3>What is happening?</h3>
+          </div>
+          <div className="insight-period">
+            <span>7D</span>
+            <span className="active">30D</span>
+            <span>90D</span>
+          </div>
+        </div>
+
+        <div className="intelligence-metrics">
+          <div>
+            <span>Returning customers</span>
+            <strong>38.6%</strong>
+            <small>+7.2%</small>
+          </div>
+          <div>
+            <span>Avg. order value</span>
+            <strong>₹684</strong>
+            <small>+12.8%</small>
+          </div>
+          <div>
+            <span>Top dish</span>
+            <strong>Paneer Tikka</strong>
+            <small>214 orders</small>
+          </div>
+        </div>
+
+        <div className="chart-panel">
+          <div className="chart-y">
+            <span>60k</span>
+            <span>40k</span>
+            <span>20k</span>
+            <span>0</span>
+          </div>
+
+          <div className="chart">
+            <svg viewBox="0 0 700 240" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="goldFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#c9a96a" stopOpacity=".32" />
+                  <stop offset="100%" stopColor="#c9a96a" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+
+              <path
+                d="M0,190 C65,178 75,156 125,166 S190,130 230,142 S290,92 340,108 S400,125 450,83 S520,105 555,65 S620,76 700,30 L700,240 L0,240 Z"
+                fill="url(#goldFill)"
+              />
+
+              <path
+                d="M0,190 C65,178 75,156 125,166 S190,130 230,142 S290,92 340,108 S400,125 450,83 S520,105 555,65 S620,76 700,30"
+                fill="none"
+                stroke="#c9a96a"
+                strokeWidth="3"
+              />
+
+              <circle cx="555" cy="65" r="5" fill="#e7d3a6" />
+            </svg>
+
+            <div className="chart-labels">
+              <span>SEP 01</span>
+              <span>SEP 07</span>
+              <span>SEP 14</span>
+              <span>SEP 21</span>
+              <span>SEP 30</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="ai-insight">
+          <div className="ai-icon">
+            <Brain size={17} />
+          </div>
+          <div>
+            <span>PRATYEKSHa SIGNAL</span>
+            <strong>
+              Weekend dinner orders are trending toward premium combos.
+            </strong>
+          </div>
+          <ArrowUpRight size={17} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="visual-stage marketing-stage">
+      <div className="marketing-top">
+        <div>
+          <span className="mini-kicker">CUSTOMER RELATIONSHIP</span>
+          <h3>Make the next visit personal.</h3>
+        </div>
+        <div className="campaign-status">
+          <span /> Campaign live
+        </div>
+      </div>
+
+      <div className="customer-profile">
+        <div className="profile-avatar">A</div>
+        <div>
+          <span>RETURNING CUSTOMER</span>
+          <strong>Akshay Patil</strong>
+        </div>
+        <div className="profile-score">
+          <small>RETURN SCORE</small>
+          <b>84</b>
+        </div>
+      </div>
+
+      <div className="marketing-grid">
+        <div className="preference-panel">
+          <span className="panel-kicker">REMEMBERED</span>
+
+          <div className="preference">
+            <Utensils size={16} />
+            <div>
+              <strong>Paneer dishes</strong>
+              <span>Ordered 8 times</span>
+            </div>
+          </div>
+
+          <div className="preference">
+            <Coffee size={16} />
+            <div>
+              <strong>Cold Coffee</strong>
+              <span>Often ordered with dinner</span>
+            </div>
+          </div>
+
+          <div className="preference">
+            <Star size={16} />
+            <div>
+              <strong>Chef specials</strong>
+              <span>High engagement</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="campaign-card">
+          <div className="campaign-visual">
+            <Sparkles size={25} />
+          </div>
+
+          <div>
+            <span>PERSONALISED CAMPAIGN</span>
+            <strong>“Something familiar?”</strong>
+            <p>Invite Akshay back with a dish he already loves.</p>
+          </div>
+
+          <button>
+            Send campaign <Send size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="marketing-footer">
+        <div>
+          <MessageCircle size={15} />
+          WhatsApp ready
+        </div>
+        <span>1,284 reachable customers</span>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [activeProduct, setActiveProduct] = useState("experience");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [demoStatus, setDemoStatus] = useState("");
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+
+  const productRef = useRef(null);
+
+  const product = PRODUCTS[activeProduct];
+
+  useEffect(() => {
+    document.documentElement.classList.add("pratyeksha-html");
+
+    const onScroll = () => {
+      const scrollTop = window.scrollY;
+      const height =
+        document.documentElement.scrollHeight - window.innerHeight;
+
+      setScrollProgress(height > 0 ? scrollTop / height : 0);
+    };
+
+    const onMouseMove = (event) => {
+      setMouse({
+        x: (event.clientX / window.innerWidth - 0.5) * 2,
+        y: (event.clientY / window.innerHeight - 0.5) * 2,
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("mousemove", onMouseMove);
+
+    onScroll();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("mousemove", onMouseMove);
+      document.documentElement.classList.remove("pratyeksha-html");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      document.body.style.overflow = "";
+      return;
+    }
+
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
+
+  const scrollTo = (id) => {
+    setMenuOpen(false);
+
+    requestAnimationFrame(() => {
+      const element = document.getElementById(id);
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    });
+  };
+
+  const submitDemo = async (event) => {
+    event.preventDefault();
+
+    if (!email.trim()) {
+      setDemoStatus("Please enter your email.");
+      return;
+    }
+
+    setDemoStatus("Request received. We'll be in touch.");
+
+    try {
+      await fetch("/api/demo-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          source: "pratyeksha-landing",
+        }),
+      });
+    } catch {
+      // Frontend fallback intentionally keeps the experience usable
+      // even when the API is not running locally.
+    }
+  };
+
+  const activeIndex = Object.keys(PRODUCTS).indexOf(activeProduct);
+
+  const productIcons = useMemo(
+    () => ({
+      experience: TabletSmartphone,
+      kitchen: Flame,
+      operations: LayoutGrid,
+      intelligence: BarChart3,
+      marketing: Target,
+    }),
+    []
+  );
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
+
+        :root {
+          --black: #11120f;
+          --charcoal: #191a16;
+          --charcoal-2: #20211c;
+          --charcoal-3: #292a24;
+          --cream: #f3ead7;
+          --cream-2: #e7d6b8;
+          --gold: #c8a86b;
+          --gold-light: #dfc78f;
+          --gold-dark: #927542;
+          --sage: #aab59d;
+          --sage-dark: #7d8973;
+          --white: #fffaf0;
+          --muted: #9f9a8c;
+          --border: rgba(231,214,184,.16);
+          --border-light: rgba(17,18,15,.12);
+          --shadow: 0 30px 100px rgba(0,0,0,.32);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        html {
+          scroll-behavior: smooth;
+          scroll-padding-top: 100px;
+          min-height: 100%;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100%;
+          background: var(--black);
+          color: var(--cream);
+          font-family: "DM Sans", sans-serif;
+          overflow-x: hidden;
+          overflow-y: auto !important;
+        }
+
+        body,
+        button,
+        input {
+          font-family: "DM Sans", sans-serif;
+        }
+
+        button,
+        a {
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        button {
+          cursor: pointer;
+        }
+
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+
+        #root {
+          min-height: 100%;
+          overflow: visible !important;
+        }
+
+        .site {
+          min-height: 100vh;
+          width: 100%;
+          overflow: visible !important;
+          position: relative;
+          background:
+            radial-gradient(circle at 90% 4%, rgba(200,168,107,.11), transparent 24%),
+            radial-gradient(circle at 10% 30%, rgba(170,181,157,.07), transparent 22%),
+            var(--black);
+        }
+
+        .site::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          opacity: .035;
+          z-index: 100;
+          background-image:
+            url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+        }
+
+        .scroll-progress {
+          position: fixed;
+          z-index: 200;
+          top: 0;
+          left: 0;
+          height: 2px;
+          background: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--sage));
+          width: ${scrollProgress * 100}%;
+          transition: width .08s linear;
+        }
+
+        .nav {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 120;
+          height: 82px;
+          display: flex;
+          align-items: center;
+          padding: 0 5vw;
+          border-bottom: 1px solid rgba(231,214,184,.08);
+          background: rgba(17,18,15,.72);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+        }
+
+        .nav-inner {
+          width: 100%;
+          max-width: 1500px;
+          margin: auto;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .logo {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          font-size: 18px;
+          letter-spacing: -.04em;
+          font-weight: 700;
+        }
+
+        .logo-mark {
+          width: 28px;
+          height: 28px;
+          border: 1px solid var(--gold);
+          display: grid;
+          place-items: center;
+          transform: rotate(45deg);
+          position: relative;
+        }
+
+        .logo-mark::before {
+          content: "";
+          width: 9px;
+          height: 9px;
+          background: var(--gold);
+        }
+
+        .logo-text {
+          color: var(--cream);
+        }
+
+        .logo-text span {
+          color: var(--gold-light);
+        }
+
+        .nav-links {
+          display: flex;
+          align-items: center;
+          gap: 34px;
+        }
+
+        .nav-links button {
+          background: none;
+          border: 0;
+          color: #aaa698;
+          font-size: 12px;
+          letter-spacing: .05em;
+          text-transform: uppercase;
+          transition: color .25s ease;
+        }
+
+        .nav-links button:hover {
+          color: var(--gold-light);
+        }
+
+        .nav-demo {
+          border: 1px solid rgba(200,168,107,.55);
+          background: rgba(200,168,107,.08);
+          color: var(--cream);
+          padding: 11px 17px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          letter-spacing: .04em;
+          transition: .25s ease;
+        }
+
+        .nav-demo:hover {
+          background: var(--gold);
+          color: var(--black);
+        }
+
+        .mobile-toggle {
+          display: none;
+          border: 0;
+          background: transparent;
+          color: var(--cream);
+        }
+
+        .mobile-menu {
+          position: fixed;
+          inset: 82px 0 auto 0;
+          z-index: 115;
+          padding: 24px 6vw 32px;
+          background: rgba(20,20,17,.98);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .mobile-menu button {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: 17px 0;
+          color: var(--cream);
+          border: 0;
+          border-bottom: 1px solid rgba(231,214,184,.1);
+          background: transparent;
+          font-size: 17px;
+        }
+
+        .mobile-menu .mobile-cta {
+          margin-top: 20px;
+          background: var(--gold);
+          color: var(--black);
+          padding: 16px;
+          text-align: center;
+        }
+
+        section {
+          position: relative;
+          scroll-margin-top: 100px;
+        }
+
+        .hero {
+          min-height: 100svh;
+          padding: 150px 5vw 90px;
+          display: flex;
+          align-items: center;
+          overflow: hidden;
+        }
+
+        .hero-grid {
+          width: 100%;
+          max-width: 1500px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: .9fr 1.1fr;
+          gap: 5vw;
+          align-items: center;
+        }
+
+        .hero-copy {
+          position: relative;
+          z-index: 3;
+        }
+
+        .eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          color: var(--gold-light);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: .2em;
+          text-transform: uppercase;
+          margin-bottom: 28px;
+        }
+
+        .eyebrow::before {
+          content: "";
+          width: 28px;
+          height: 1px;
+          background: var(--gold);
+        }
+
+        .hero h1 {
+          margin: 0;
+          max-width: 780px;
+          font-family: "Playfair Display", serif;
+          font-weight: 500;
+          font-size: clamp(54px, 6.4vw, 108px);
+          line-height: .92;
+          letter-spacing: -.065em;
+          color: var(--cream);
+        }
+
+        .hero h1 em {
+          color: var(--gold-light);
+          font-style: normal;
+        }
+
+        .hero-description {
+          max-width: 520px;
+          color: #a9a497;
+          font-size: 16px;
+          line-height: 1.75;
+          margin: 34px 0;
+        }
+
+        .hero-actions {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+
+        .gold-button {
+          border: 1px solid var(--gold);
+          background: var(--gold);
+          color: var(--black);
+          padding: 15px 21px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          font-weight: 700;
+          font-size: 12px;
+          letter-spacing: .02em;
+          transition: transform .25s ease, background .25s ease;
+        }
+
+        .gold-button:hover {
+          transform: translateY(-3px);
+          background: var(--gold-light);
+        }
+
+        .ghost-button {
+          border: 1px solid rgba(231,214,184,.22);
+          background: transparent;
+          color: var(--cream);
+          padding: 15px 21px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          font-size: 12px;
+          transition: .25s ease;
+        }
+
+        .ghost-button:hover {
+          border-color: var(--gold);
+          color: var(--gold-light);
+        }
+
+        .hero-meta {
+          margin-top: 50px;
+          display: flex;
+          align-items: center;
+          gap: 25px;
+          color: #77756c;
+          font-size: 10px;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+        }
+
+        .hero-meta span {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .hero-meta i {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: var(--gold);
+        }
+
+        .hero-visual {
+          min-height: 620px;
+          position: relative;
+          display: grid;
+          place-items: center;
+          transform: translate(
+            ${mouse.x * -5}px,
+            ${mouse.y * -5}px
+          );
+          transition: transform .4s ease-out;
+        }
+
+        .hero-frame {
+          width: min(100%, 690px);
+          aspect-ratio: 1 / .86;
+          position: relative;
+          border: 1px solid rgba(200,168,107,.25);
+          background:
+            linear-gradient(135deg, rgba(200,168,107,.11), transparent 35%),
+            linear-gradient(45deg, rgba(170,181,157,.07), transparent 50%),
+            #1d1d18;
+          box-shadow: var(--shadow);
+          overflow: hidden;
+        }
+
+        .hero-frame::before {
+          content: "";
+          position: absolute;
+          inset: 17px;
+          border: 1px solid rgba(231,214,184,.08);
+          pointer-events: none;
+        }
+
+        .hero-frame::after {
+          content: "";
+          position: absolute;
+          width: 480px;
+          height: 480px;
+          right: -170px;
+          top: -180px;
+          border-radius: 50%;
+          border: 1px solid rgba(200,168,107,.12);
+          box-shadow:
+            0 0 0 60px rgba(200,168,107,.02),
+            0 0 0 120px rgba(200,168,107,.015);
+        }
+
+        .restaurant-table {
+          position: absolute;
+          width: 70%;
+          height: 64%;
+          left: 15%;
+          top: 19%;
+          background: radial-gradient(
+            ellipse,
+            #494237 0%,
+            #292820 48%,
+            #1b1b17 70%
+          );
+          border-radius: 50%;
+          box-shadow:
+            0 45px 70px rgba(0,0,0,.45),
+            inset 0 0 50px rgba(0,0,0,.3);
+          transform: rotate(-8deg);
+        }
+
+        .table-edge {
+          position: absolute;
+          inset: -9px;
+          border-radius: 50%;
+          border: 1px solid rgba(200,168,107,.35);
+        }
+
+        .plate {
+          position: absolute;
+          width: 155px;
+          height: 155px;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          background: #dfd0b5;
+          box-shadow:
+            0 10px 25px rgba(0,0,0,.35),
+            inset 0 0 0 8px #c7b899,
+            inset 0 0 0 13px #eee2cb;
+        }
+
+        .plate-food {
+          position: absolute;
+          width: 80px;
+          height: 80px;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          background:
+            radial-gradient(circle at 35% 30%, #c4a45d, transparent 13%),
+            radial-gradient(circle at 65% 35%, #8d6c3f, transparent 17%),
+            radial-gradient(circle at 40% 65%, #a78950, transparent 17%),
+            radial-gradient(circle at 70% 70%, #725637, transparent 14%),
+            #5b4930;
+          box-shadow: 0 8px 20px rgba(0,0,0,.35);
+        }
+
+        .table-phone {
+          position: absolute;
+          width: 160px;
+          height: 280px;
+          right: 12%;
+          top: 22%;
+          background: #11120f;
+          border: 2px solid #4d4b42;
+          border-radius: 23px;
+          transform: rotate(12deg);
+          box-shadow: 20px 30px 60px rgba(0,0,0,.45);
+          padding: 7px;
+        }
+
+        .table-phone-inner {
+          width: 100%;
+          height: 100%;
+          border-radius: 17px;
+          background: linear-gradient(150deg, #302c24, #171813);
+          padding: 15px 10px;
+          overflow: hidden;
+        }
+
+        .phone-mini-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 7px;
+          color: #aaa18e;
+        }
+
+        .phone-mini-title {
+          margin-top: 18px;
+          color: var(--cream);
+          font-family: "Playfair Display", serif;
+          font-size: 22px;
+          line-height: .95;
+        }
+
+        .phone-mini-image {
+          margin-top: 15px;
+          height: 85px;
+          border-radius: 10px;
+          background:
+            radial-gradient(circle at center, #aa8750 0 15%, transparent 16%),
+            radial-gradient(circle at 40% 40%, #6d5738 0 12%, transparent 13%),
+            radial-gradient(circle at 62% 60%, #947548 0 12%, transparent 13%),
+            #29261f;
+        }
+
+        .phone-mini-price {
+          margin-top: 10px;
+          color: var(--gold-light);
+          font-size: 11px;
+          display: flex;
+          justify-content: space-between;
+        }
+
+        .hero-badge {
+          position: absolute;
+          left: 6%;
+          bottom: 8%;
+          padding: 13px 15px;
+          background: rgba(18,18,15,.88);
+          border: 1px solid rgba(200,168,107,.3);
+          backdrop-filter: blur(15px);
+          display: flex;
+          gap: 11px;
+          align-items: center;
+        }
+
+        .hero-badge-icon {
+          width: 30px;
+          height: 30px;
+          background: rgba(200,168,107,.13);
+          color: var(--gold-light);
+          display: grid;
+          place-items: center;
+        }
+
+        .hero-badge small {
+          display: block;
+          color: #7d7a6e;
+          font-size: 8px;
+          letter-spacing: .14em;
+          margin-bottom: 4px;
+        }
+
+        .hero-badge strong {
+          font-size: 11px;
+          color: var(--cream);
+        }
+
+        .scroll-cue {
+          position: absolute;
+          bottom: 34px;
+          left: 5vw;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #68675f;
+          font-size: 9px;
+          letter-spacing: .2em;
+          text-transform: uppercase;
+          writing-mode: vertical-rl;
+        }
+
+        .scroll-cue svg {
+          color: var(--gold);
+          animation: scrollArrow 1.8s ease-in-out infinite;
+        }
+
+        @keyframes scrollArrow {
+          0%,100% { transform: translateY(0); }
+          50% { transform: translateY(8px); }
+        }
+
+        .marquee-wrap {
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          overflow: hidden;
+          background: #161713;
+        }
+
+        .marquee {
+          display: flex;
+          width: max-content;
+          animation: marquee 35s linear infinite;
+        }
+
+        .marquee-item {
+          display: flex;
+          align-items: center;
+          gap: 28px;
+          padding: 22px 28px;
+          color: #aaa18e;
+          font-size: 10px;
+          letter-spacing: .15em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .marquee-item b {
+          color: var(--gold);
+          font-weight: 400;
+        }
+
+        @keyframes marquee {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+
+        .intro {
+          padding: 150px 5vw;
+          background: var(--cream);
+          color: var(--black);
+          overflow: hidden;
+        }
+
+        .intro-grid {
+          max-width: 1500px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: .4fr 1.6fr;
+          gap: 8vw;
+        }
+
+        .section-number {
+          font-size: 10px;
+          letter-spacing: .2em;
+          color: var(--gold-dark);
+          font-weight: 700;
+        }
+
+        .intro h2 {
+          margin: 0;
+          max-width: 950px;
+          font-family: "Playfair Display", serif;
+          font-size: clamp(45px, 6vw, 94px);
+          line-height: .98;
+          letter-spacing: -.06em;
+          font-weight: 500;
+        }
+
+        .intro h2 em {
+          color: var(--gold-dark);
+          font-style: normal;
+        }
+
+        .intro-bottom {
+          max-width: 1500px;
+          margin: 100px auto 0;
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .intro-bottom p {
+          max-width: 500px;
+          margin: 0;
+          font-size: 15px;
+          line-height: 1.8;
+          color: #666052;
+        }
+
+        .product-section {
+          padding: 150px 5vw;
+          background:
+            radial-gradient(circle at 70% 20%, rgba(200,168,107,.08), transparent 30%),
+            var(--charcoal);
+        }
+
+        .section-head {
+          max-width: 1500px;
+          margin: auto;
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 40px;
+        }
+
+        .section-head h2 {
+          margin: 12px 0 0;
+          max-width: 800px;
+          font-family: "Playfair Display", serif;
+          font-size: clamp(45px, 5.4vw, 82px);
+          line-height: .96;
+          letter-spacing: -.06em;
+          font-weight: 500;
+        }
+
+        .section-head p {
+          max-width: 400px;
+          color: #8f8b7e;
+          font-size: 14px;
+          line-height: 1.7;
+          margin: 0;
+        }
+
+        .product-tabs {
+          max-width: 1500px;
+          margin: 80px auto 35px;
+          display: flex;
+          gap: 7px;
+          border-bottom: 1px solid var(--border);
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .product-tabs::-webkit-scrollbar {
+          display: none;
+        }
+
+        .product-tab {
+          min-width: 180px;
+          padding: 18px 16px;
+          border: 0;
+          border-bottom: 2px solid transparent;
+          background: transparent;
+          color: #77766d;
+          text-align: left;
+          transition: .3s ease;
+        }
+
+        .product-tab:hover {
+          color: var(--cream);
+        }
+
+        .product-tab.active {
+          color: var(--cream);
+          border-bottom-color: var(--gold);
+        }
+
+        .product-tab-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+
+        .product-tab-number {
+          color: var(--gold);
+          font-size: 9px;
+        }
+
+        .product-tab-icon {
+          color: #66665e;
+        }
+
+        .product-tab.active .product-tab-icon {
+          color: var(--gold-light);
+        }
+
+        .product-tab strong {
+          display: block;
+          font-size: 11px;
+          letter-spacing: .06em;
+          text-transform: uppercase;
+        }
+
+        .product-detail {
+          max-width: 1500px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: .62fr 1.38fr;
+          gap: 50px;
+          align-items: stretch;
+        }
+
+        .product-copy {
+          padding: 30px 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+
+        .product-copy-top h3 {
+          margin: 14px 0 20px;
+          max-width: 520px;
+          font-family: "Playfair Display", serif;
+          font-weight: 500;
+          font-size: clamp(40px, 4.2vw, 68px);
+          line-height: .98;
+          letter-spacing: -.055em;
+        }
+
+        .product-copy-top p {
+          max-width: 470px;
+          color: #8f8c82;
+          line-height: 1.8;
+          font-size: 14px;
+        }
+
+        .feature-list {
+          margin-top: 35px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .feature-list div {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #a5a092;
+          font-size: 11px;
+        }
+
+        .feature-list svg {
+          color: var(--gold);
+        }
+
+        .product-nav {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          margin-top: 55px;
+        }
+
+        .product-nav button {
+          width: 40px;
+          height: 40px;
+          display: grid;
+          place-items: center;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--cream);
+          transition: .25s ease;
+        }
+
+        .product-nav button:hover {
+          background: var(--gold);
+          color: var(--black);
+          border-color: var(--gold);
+        }
+
+        .product-counter {
+          margin-left: 9px;
+          color: #69685f;
+          font-size: 10px;
+          letter-spacing: .12em;
+        }
+
+        .visual-stage {
+          min-height: 650px;
+          position: relative;
+          overflow: hidden;
+          background: #20211c;
+          border: 1px solid rgba(231,214,184,.12);
+          box-shadow: var(--shadow);
+        }
+
+        .experience-stage {
+          background:
+            radial-gradient(circle at 70% 25%, rgba(200,168,107,.14), transparent 28%),
+            radial-gradient(circle at 20% 70%, rgba(170,181,157,.1), transparent 30%),
+            #20211c;
+        }
+
+        .stage-glow {
+          position: absolute;
+          width: 400px;
+          height: 400px;
+          border-radius: 50%;
+          filter: blur(80px);
+          opacity: .16;
+        }
+
+        .stage-glow-one {
+          background: var(--gold);
+          right: -100px;
+          top: -100px;
+        }
+
+        .stage-glow-two {
+          background: var(--sage);
+          left: -140px;
+          bottom: -100px;
+        }
+
+        .phone-shell {
+          position: absolute;
+          width: 285px;
+          height: 570px;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%) rotate(-4deg);
+          border: 7px solid #0d0e0c;
+          border-radius: 40px;
+          background: #f3ead7;
+          box-shadow:
+            35px 45px 80px rgba(0,0,0,.42),
+            0 0 0 1px rgba(231,214,184,.15);
+          padding: 14px;
+          color: var(--black);
+        }
+
+        .phone-top {
+          display: flex;
+          justify-content: space-between;
+          color: #716b5d;
+          font-size: 8px;
+        }
+
+        .phone-signal {
+          font-size: 5px;
+          letter-spacing: 2px;
+        }
+
+        .menu-brand {
+          margin-top: 21px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .mini-kicker {
+          display: block;
+          font-size: 8px;
+          letter-spacing: .16em;
+          color: var(--gold-light);
+          text-transform: uppercase;
+        }
+
+        .phone-shell .mini-kicker {
+          color: #86704a;
+        }
+
+        .menu-brand strong {
+          display: block;
+          margin-top: 3px;
+          font-family: "Playfair Display", serif;
+          font-size: 19px;
+        }
+
+        .mini-avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: #20211c;
+          color: var(--gold-light);
+          font-size: 8px;
+        }
+
+        .menu-search {
+          margin-top: 18px;
+          height: 35px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 10px;
+          border-radius: 8px;
+          background: #e5dbc7;
+          color: #837c6e;
+          font-size: 8px;
+        }
+
+        .menu-tabs {
+          display: flex;
+          gap: 10px;
+          overflow: hidden;
+          margin: 16px 0;
+          white-space: nowrap;
+        }
+
+        .menu-tabs span {
+          color: #81796a;
+          font-size: 8px;
+        }
+
+        .menu-tabs .active {
+          color: #181913;
+          font-weight: 700;
+        }
+
+        .dish-large {
+          border-radius: 12px;
+          overflow: hidden;
+          background: #e8deca;
+        }
+
+        .dish-image {
+          height: 170px;
+          display: grid;
+          place-items: center;
+        }
+
+        .dish-one {
+          background:
+            radial-gradient(circle at 50% 50%, #9d7d49 0 18%, transparent 19%),
+            radial-gradient(circle at 38% 42%, #b8995e 0 9%, transparent 10%),
+            radial-gradient(circle at 63% 60%, #6c5132 0 11%, transparent 12%),
+            radial-gradient(circle at 30% 68%, #8b6a40 0 10%, transparent 11%),
+            #302d25;
+        }
+
+        .dish-ring {
+          width: 92px;
+          height: 92px;
+          border-radius: 50%;
+          border: 1px solid rgba(243,234,215,.45);
+          display: grid;
+          place-items: center;
+          color: var(--cream);
+        }
+
+        .dish-info {
+          padding: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .dish-info strong {
+          display: block;
+          font-size: 11px;
+        }
+
+        .dish-info span {
+          display: block;
+          margin-top: 4px;
+          font-size: 7px;
+          color: #817b6f;
+        }
+
+        .dish-info button {
+          width: 27px;
+          height: 27px;
+          border: 0;
+          background: #24251f;
+          color: var(--gold-light);
+          display: grid;
+          place-items: center;
+        }
+
+        .dish-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-top: 8px;
+        }
+
+        .mini-dish {
+          padding: 7px;
+          background: #e8deca;
+          border-radius: 8px;
+        }
+
+        .mini-dish-image {
+          height: 54px;
+          border-radius: 6px;
+          display: grid;
+          place-items: center;
+          background: #302e27;
+          color: var(--gold-light);
+          font-size: 18px;
+        }
+
+        .mini-dish span {
+          display: block;
+          margin-top: 7px;
+          font-size: 7px;
+        }
+
+        .mini-dish b {
+          display: block;
+          margin-top: 3px;
+          color: #876f47;
+          font-size: 7px;
+        }
+
+        .phone-bottom {
+          margin-top: 14px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 7px;
+          color: #777064;
+        }
+
+        .phone-bottom button {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          border: 0;
+          background: transparent;
+          color: #846b40;
+          font-size: 7px;
+          font-weight: 700;
+        }
+
+        .floating-note {
+          position: absolute;
+          z-index: 5;
+          padding: 12px;
+          background: rgba(17,18,15,.86);
+          border: 1px solid rgba(200,168,107,.28);
+          backdrop-filter: blur(16px);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-shadow: 0 20px 45px rgba(0,0,0,.3);
+        }
+
+        .floating-note svg {
+          color: var(--gold-light);
+        }
+
+        .floating-note small {
+          display: block;
+          color: #757268;
+          font-size: 7px;
+          letter-spacing: .13em;
+        }
+
+        .floating-note strong {
+          display: block;
+          margin-top: 4px;
+          font-size: 9px;
+          color: var(--cream);
+        }
+
+        .note-one {
+          left: 7%;
+          top: 24%;
+          animation: float 5s ease-in-out infinite;
+        }
+
+        .note-two {
+          right: 5%;
+          bottom: 20%;
+          animation: float 6s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+          0%,100% { transform: translateY(0); }
+          50% { transform: translateY(-9px); }
+        }
+
+        .orbit {
+          position: absolute;
+          border: 1px solid rgba(200,168,107,.13);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .orbit-one {
+          width: 520px;
+          height: 520px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(25deg);
+        }
+
+        .orbit-two {
+          width: 420px;
+          height: 420px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-25deg);
+        }
+
+        .kitchen-stage,
+        .operations-stage,
+        .intelligence-stage,
+        .marketing-stage {
+          padding: 35px;
+        }
+
+        .kitchen-header,
+        .operations-top,
+        .intelligence-top,
+        .marketing-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
+
+        .visual-stage h3 {
+          margin: 6px 0 0;
+          font-family: "Playfair Display", serif;
+          font-size: 29px;
+          font-weight: 500;
+          letter-spacing: -.04em;
+        }
+
+        .live-status,
+        .campaign-status {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          color: var(--sage);
+          font-size: 8px;
+          letter-spacing: .13em;
+          text-transform: uppercase;
+        }
+
+        .live-status span,
+        .campaign-status span {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--sage);
+          box-shadow: 0 0 0 5px rgba(170,181,157,.08);
+        }
+
+        .kitchen-columns {
+          margin-top: 35px;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+        }
+
+        .kitchen-column {
+          min-width: 0;
+        }
+
+        .column-title {
+          display: block;
+          margin-bottom: 10px;
+          color: #68675f;
+          font-size: 8px;
+          letter-spacing: .16em;
+        }
+
+        .ticket {
+          padding: 15px;
+          margin-bottom: 10px;
+          background: #282923;
+          border: 1px solid rgba(231,214,184,.08);
+          transition: transform .25s ease, border-color .25s ease;
+        }
+
+        .ticket:hover {
+          transform: translateY(-3px);
+          border-color: rgba(200,168,107,.35);
+        }
+
+        .ticket-gold {
+          border-top: 2px solid var(--gold);
+        }
+
+        .ticket-top {
+          display: flex;
+          justify-content: space-between;
+          color: #7d7a70;
+          font-size: 8px;
+        }
+
+        .ticket-top b {
+          color: var(--gold-light);
+        }
+
+        .ticket > strong {
+          display: block;
+          margin: 14px 0 11px;
+          font-size: 12px;
+        }
+
+        .ticket p {
+          margin: 5px 0;
+          color: #99958a;
+          font-size: 9px;
+        }
+
+        .ticket-footer {
+          border-top: 1px solid rgba(231,214,184,.08);
+          margin-top: 13px;
+          padding-top: 11px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          color: #77756b;
+          font-size: 8px;
+        }
+
+        .ticket-footer button {
+          width: 24px;
+          height: 24px;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(200,168,107,.2);
+          background: transparent;
+          color: var(--gold-light);
+        }
+
+        .active-ticket {
+          background: linear-gradient(145deg, rgba(200,168,107,.13), #282923);
+        }
+
+        .timer-line {
+          height: 3px;
+          background: #33342d;
+          margin-top: 16px;
+        }
+
+        .timer-line span {
+          display: block;
+          width: 72%;
+          height: 100%;
+          background: var(--gold);
+        }
+
+        .ready-ticket {
+          border-color: rgba(170,181,157,.22);
+        }
+
+        .ready-label {
+          margin-top: 14px;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--sage);
+          font-size: 8px;
+        }
+
+        .kitchen-bottom {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          border-top: 1px solid rgba(231,214,184,.08);
+          background: rgba(17,18,15,.3);
+        }
+
+        .kitchen-bottom > div {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          align-items: center;
+          gap: 9px;
+          padding: 15px 20px;
+          border-right: 1px solid rgba(231,214,184,.08);
+          color: #747268;
+          font-size: 8px;
+        }
+
+        .kitchen-bottom svg {
+          color: var(--gold);
+        }
+
+        .kitchen-bottom b {
+          color: var(--cream);
+          font-size: 10px;
+        }
+
+        .date-pill {
+          border: 1px solid rgba(231,214,184,.12);
+          padding: 8px 10px;
+          color: #77756b;
+          font-size: 8px;
+          letter-spacing: .08em;
+        }
+
+        .operations-grid {
+          display: grid;
+          grid-template-columns: 1.35fr .65fr;
+          gap: 16px;
+          margin-top: 30px;
+        }
+
+        .floor-map {
+          min-height: 450px;
+          position: relative;
+          background:
+            linear-gradient(rgba(231,214,184,.045) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(231,214,184,.045) 1px, transparent 1px),
+            #191a16;
+          background-size: 35px 35px;
+          border: 1px solid rgba(231,214,184,.07);
+        }
+
+        .floor-label {
+          position: absolute;
+          left: 15px;
+          top: 13px;
+          color: #5f5e57;
+          font-size: 7px;
+          letter-spacing: .18em;
+        }
+
+        .floor-table {
+          position: absolute;
+          left: var(--x);
+          top: var(--y);
+          width: 60px;
+          height: 42px;
+          transform: translate(-50%, -50%);
+          border: 1px solid rgba(231,214,184,.16);
+          display: grid;
+          place-items: center;
+          color: #9d988b;
+          font-size: 9px;
+          transition: .3s ease;
+        }
+
+        .floor-table:hover {
+          transform: translate(-50%, -50%) scale(1.08);
+        }
+
+        .floor-table.occupied {
+          background: rgba(200,168,107,.15);
+          border-color: rgba(200,168,107,.55);
+          color: var(--gold-light);
+        }
+
+        .floor-table small {
+          position: absolute;
+          right: 5px;
+          top: 3px;
+          font-size: 7px;
+        }
+
+        .floor-legend {
+          position: absolute;
+          left: 15px;
+          bottom: 14px;
+          display: flex;
+          gap: 15px;
+          font-size: 7px;
+          color: #77756b;
+        }
+
+        .floor-legend span {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .floor-legend i {
+          width: 6px;
+          height: 6px;
+          display: block;
+        }
+
+        .occupied-dot {
+          background: var(--gold);
+        }
+
+        .available-dot {
+          background: #585951;
+        }
+
+        .operation-side {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .metric-box {
+          padding: 18px;
+          border: 1px solid rgba(231,214,184,.09);
+          background: #282923;
+        }
+
+        .metric-box span {
+          display: block;
+          color: #727068;
+          font-size: 8px;
+        }
+
+        .metric-box strong {
+          display: block;
+          margin-top: 8px;
+          color: var(--cream);
+          font-size: 24px;
+          font-family: "Playfair Display", serif;
+        }
+
+        .metric-box small {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: var(--sage);
+          margin-top: 5px;
+          font-size: 8px;
+        }
+
+        .mini-order {
+          padding: 12px 13px;
+          border-bottom: 1px solid rgba(231,214,184,.08);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          color: #89867b;
+          font-size: 8px;
+        }
+
+        .mini-order > div {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .mini-order strong {
+          color: #aaa597;
+          font-size: 9px;
+        }
+
+        .mini-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: var(--gold);
+        }
+
+        .mini-dot.muted {
+          background: var(--sage);
+        }
+
+        .insight-period {
+          display: flex;
+          border: 1px solid rgba(231,214,184,.1);
+        }
+
+        .insight-period span {
+          padding: 7px 10px;
+          font-size: 7px;
+          color: #68675f;
+        }
+
+        .insight-period .active {
+          background: rgba(200,168,107,.15);
+          color: var(--gold-light);
+        }
+
+        .intelligence-metrics {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          margin-top: 35px;
+        }
+
+        .intelligence-metrics > div {
+          padding: 17px;
+          border: 1px solid rgba(231,214,184,.08);
+          background: #282923;
+        }
+
+        .intelligence-metrics span,
+        .intelligence-metrics small {
+          display: block;
+          color: #747268;
+          font-size: 8px;
+        }
+
+        .intelligence-metrics strong {
+          display: block;
+          margin: 10px 0 4px;
+          color: var(--cream);
+          font-family: "Playfair Display", serif;
+          font-size: 22px;
+        }
+
+        .intelligence-metrics small {
+          color: var(--sage);
+        }
+
+        .chart-panel {
+          margin-top: 13px;
+          height: 270px;
+          display: grid;
+          grid-template-columns: 45px 1fr;
+          padding: 18px 12px 12px;
+          background: #191a16;
+          border: 1px solid rgba(231,214,184,.07);
+        }
+
+        .chart-y {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          color: #5e5d56;
+          font-size: 7px;
+          padding-bottom: 25px;
+        }
+
+        .chart {
+          position: relative;
+          height: 100%;
+          background:
+            linear-gradient(rgba(231,214,184,.045) 1px, transparent 1px);
+          background-size: 100% 25%;
+        }
+
+        .chart svg {
+          width: 100%;
+          height: calc(100% - 25px);
+        }
+
+        .chart-labels {
+          display: flex;
+          justify-content: space-between;
+          color: #5f5e57;
+          font-size: 6px;
+        }
+
+        .ai-insight {
+          margin-top: 12px;
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 12px;
+          align-items: center;
+          padding: 14px;
+          background: rgba(200,168,107,.09);
+          border: 1px solid rgba(200,168,107,.18);
+        }
+
+        .ai-icon {
+          width: 31px;
+          height: 31px;
+          display: grid;
+          place-items: center;
+          background: rgba(200,168,107,.12);
+          color: var(--gold-light);
+        }
+
+        .ai-insight span {
+          display: block;
+          color: var(--gold-light);
+          font-size: 7px;
+          letter-spacing: .14em;
+        }
+
+        .ai-insight strong {
+          display: block;
+          margin-top: 5px;
+          color: #b4afa2;
+          font-size: 9px;
+          font-weight: 500;
+        }
+
+        .customer-profile {
+          margin-top: 35px;
+          padding: 15px;
+          background: #282923;
+          border: 1px solid rgba(231,214,184,.08);
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .profile-avatar {
+          width: 42px;
+          height: 42px;
+          display: grid;
+          place-items: center;
+          background: rgba(200,168,107,.16);
+          color: var(--gold-light);
+          font-family: "Playfair Display", serif;
+          font-size: 17px;
+        }
+
+        .customer-profile span,
+        .profile-score small {
+          display: block;
+          color: #747268;
+          font-size: 7px;
+          letter-spacing: .1em;
+        }
+
+        .customer-profile strong {
+          display: block;
+          margin-top: 4px;
+          color: var(--cream);
+          font-size: 12px;
+        }
+
+        .profile-score {
+          text-align: right;
+        }
+
+        .profile-score b {
+          display: block;
+          color: var(--gold-light);
+          font-family: "Playfair Display", serif;
+          font-size: 23px;
+          margin-top: 2px;
+        }
+
+        .marketing-grid {
+          display: grid;
+          grid-template-columns: .9fr 1.1fr;
+          gap: 12px;
+          margin-top: 12px;
+        }
+
+        .preference-panel {
+          padding: 18px;
+          border: 1px solid rgba(231,214,184,.08);
+          background: #191a16;
+        }
+
+        .panel-kicker {
+          display: block;
+          color: #6e6c64;
+          font-size: 7px;
+          letter-spacing: .14em;
+          margin-bottom: 15px;
+        }
+
+        .preference {
+          display: flex;
+          gap: 9px;
+          padding: 11px 0;
+          border-top: 1px solid rgba(231,214,184,.07);
+          color: var(--gold);
+        }
+
+        .preference div {
+          flex: 1;
+        }
+
+        .preference strong {
+          display: block;
+          color: #aaa598;
+          font-size: 9px;
+          font-weight: 500;
+        }
+
+        .preference span {
+          display: block;
+          color: #69685f;
+          font-size: 7px;
+          margin-top: 4px;
+        }
+
+        .campaign-card {
+          padding: 18px;
+          background:
+            linear-gradient(145deg, rgba(200,168,107,.15), transparent 55%),
+            #282923;
+          border: 1px solid rgba(200,168,107,.17);
+        }
+
+        .campaign-visual {
+          width: 48px;
+          height: 48px;
+          display: grid;
+          place-items: center;
+          color: var(--gold-light);
+          background: rgba(200,168,107,.1);
+        }
+
+        .campaign-card span {
+          display: block;
+          margin-top: 20px;
+          color: #77746b;
+          font-size: 7px;
+          letter-spacing: .13em;
+        }
+
+        .campaign-card strong {
+          display: block;
+          margin-top: 7px;
+          font-family: "Playfair Display", serif;
+          color: var(--cream);
+          font-size: 21px;
+          font-weight: 500;
+        }
+
+        .campaign-card p {
+          color: #878379;
+          font-size: 8px;
+          line-height: 1.6;
+          max-width: 220px;
+        }
+
+        .campaign-card button {
+          margin-top: 12px;
+          padding: 10px 12px;
+          border: 1px solid rgba(200,168,107,.3);
+          background: transparent;
+          color: var(--gold-light);
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 8px;
+        }
+
+        .marketing-footer {
+          margin-top: 12px;
+          padding: 11px 13px;
+          display: flex;
+          justify-content: space-between;
+          color: #77746b;
+          font-size: 8px;
+        }
+
+        .marketing-footer div {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--sage);
+        }
+
+        .story {
+          padding: 150px 5vw;
+          background: #12130f;
+        }
+
+        .story-inner {
+          max-width: 1500px;
+          margin: auto;
+        }
+
+        .story-title {
+          max-width: 850px;
+        }
+
+        .story-title h2 {
+          margin: 14px 0 0;
+          font-family: "Playfair Display", serif;
+          font-weight: 500;
+          font-size: clamp(45px, 5.5vw, 85px);
+          line-height: .97;
+          letter-spacing: -.06em;
+        }
+
+        .story-title h2 span {
+          color: var(--gold-light);
+        }
+
+        .story-flow {
+          margin-top: 100px;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1px;
+          background: rgba(231,214,184,.1);
+          border: 1px solid rgba(231,214,184,.1);
+        }
+
+        .story-step {
+          min-height: 300px;
+          padding: 25px;
+          background: #171813;
+          position: relative;
+        }
+
+        .story-step-number {
+          color: var(--gold);
+          font-size: 10px;
+        }
+
+        .story-step svg {
+          position: absolute;
+          right: 22px;
+          top: 23px;
+          color: #4e4d46;
+        }
+
+        .story-step h3 {
+          margin: 110px 0 12px;
+          font-family: "Playfair Display", serif;
+          font-weight: 500;
+          font-size: 25px;
+        }
+
+        .story-step p {
+          margin: 0;
+          color: #77746b;
+          font-size: 11px;
+          line-height: 1.7;
+        }
+
+        .feature-section {
+          padding: 130px 5vw;
+          background: var(--cream);
+          color: var(--black);
+        }
+
+        .feature-section-inner {
+          max-width: 1500px;
+          margin: auto;
+        }
+
+        .feature-head {
+          display: grid;
+          grid-template-columns: 1fr .8fr;
+          gap: 60px;
+          align-items: end;
+        }
+
+        .feature-head h2 {
+          margin: 0;
+          max-width: 800px;
+          font-family: "Playfair Display", serif;
+          font-size: clamp(45px, 5.5vw, 84px);
+          line-height: .95;
+          letter-spacing: -.06em;
+          font-weight: 500;
+        }
+
+        .feature-head h2 em {
+          color: var(--gold-dark);
+          font-style: normal;
+        }
+
+        .feature-head p {
+          color: #706a5e;
+          font-size: 14px;
+          line-height: 1.8;
+          margin: 0;
+        }
+
+        .feature-grid {
+          margin-top: 80px;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          border-top: 1px solid var(--border-light);
+          border-left: 1px solid var(--border-light);
+        }
+
+        .feature-card {
+          min-height: 260px;
+          padding: 25px;
+          border-right: 1px solid var(--border-light);
+          border-bottom: 1px solid var(--border-light);
+          position: relative;
+          transition: background .3s ease, transform .3s ease;
+        }
+
+        .feature-card:hover {
+          background: #e9ddc7;
+          transform: translateY(-4px);
+        }
+
+        .feature-card-icon {
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          color: var(--gold-dark);
+          border: 1px solid rgba(146,117,66,.2);
+        }
+
+        .feature-card h3 {
+          margin: 80px 0 10px;
+          font-family: "Playfair Display", serif;
+          font-size: 25px;
+          font-weight: 500;
+        }
+
+        .feature-card p {
+          margin: 0;
+          color: #777063;
+          font-size: 10px;
+          line-height: 1.7;
+          max-width: 280px;
+        }
+
+        .feature-card-index {
+          position: absolute;
+          right: 20px;
+          top: 20px;
+          color: #a69b87;
+          font-size: 8px;
+        }
+
+        .numbers {
+          padding: 110px 5vw;
+          background: #1d1e19;
+        }
+
+        .numbers-grid {
+          max-width: 1500px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .number {
+          padding: 38px 25px;
+          border-right: 1px solid var(--border);
+        }
+
+        .number:last-child {
+          border-right: 0;
+        }
+
+        .number strong {
+          display: block;
+          color: var(--gold-light);
+          font-family: "Playfair Display", serif;
+          font-size: clamp(38px, 4vw, 58px);
+          font-weight: 500;
+          letter-spacing: -.05em;
+        }
+
+        .number span {
+          display: block;
+          margin-top: 8px;
+          color: #77746a;
+          font-size: 9px;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+        }
+
+        .cta {
+          padding: 170px 5vw;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(200,168,107,.2), transparent 34%),
+            #10110e;
+          text-align: center;
+          overflow: hidden;
+        }
+
+        .cta-decoration {
+          position: absolute;
+          width: 800px;
+          height: 800px;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          border: 1px solid rgba(200,168,107,.1);
+          border-radius: 50%;
+          box-shadow:
+            0 0 0 100px rgba(200,168,107,.018),
+            0 0 0 200px rgba(200,168,107,.014),
+            0 0 0 300px rgba(200,168,107,.01);
+        }
+
+        .cta-content {
+          position: relative;
+          z-index: 2;
+          max-width: 850px;
+          margin: auto;
+        }
+
+        .cta h2 {
+          margin: 15px 0 25px;
+          font-family: "Playfair Display", serif;
+          font-size: clamp(50px, 7vw, 105px);
+          line-height: .9;
+          letter-spacing: -.065em;
+          font-weight: 500;
+        }
+
+        .cta h2 em {
+          color: var(--gold-light);
+          font-style: normal;
+        }
+
+        .cta p {
+          max-width: 500px;
+          margin: auto auto 35px;
+          color: #817e73;
+          line-height: 1.8;
+          font-size: 14px;
+        }
+
+        .footer {
+          padding: 35px 5vw;
+          border-top: 1px solid var(--border);
+          background: #10110e;
+        }
+
+        .footer-inner {
+          max-width: 1500px;
+          margin: auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .footer-copy {
+          color: #5e5c55;
+          font-size: 9px;
+        }
+
+        .footer-links {
+          display: flex;
+          gap: 20px;
+        }
+
+        .footer-links button {
+          border: 0;
+          background: transparent;
+          color: #77746a;
+          font-size: 9px;
+        }
+
+        .footer-links button:hover {
+          color: var(--gold-light);
+        }
+
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 500;
+          display: grid;
+          place-items: center;
+          padding: 25px;
+          background: rgba(8,9,7,.82);
+          backdrop-filter: blur(15px);
+        }
+
+        .modal {
+          width: min(100%, 550px);
+          padding: 38px;
+          background:
+            linear-gradient(145deg, rgba(200,168,107,.1), transparent 35%),
+            #20211c;
+          border: 1px solid rgba(200,168,107,.28);
+          box-shadow: 0 40px 100px rgba(0,0,0,.5);
+          position: relative;
+        }
+
+        .modal-close {
+          position: absolute;
+          right: 18px;
+          top: 18px;
+          width: 34px;
+          height: 34px;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: #88857a;
+          display: grid;
+          place-items: center;
+        }
+
+        .modal h2 {
+          margin: 12px 0;
+          font-family: "Playfair Display", serif;
+          font-size: 42px;
+          font-weight: 500;
+          line-height: .98;
+        }
+
+        .modal p {
+          color: #858278;
+          font-size: 12px;
+          line-height: 1.7;
+          max-width: 400px;
+        }
+
+        .demo-form {
+          margin-top: 28px;
+          display: flex;
+          gap: 8px;
+        }
+
+        .demo-form input {
+          flex: 1;
+          min-width: 0;
+          border: 1px solid rgba(231,214,184,.15);
+          background: #171813;
+          color: var(--cream);
+          padding: 14px;
+          outline: none;
+        }
+
+        .demo-form input:focus {
+          border-color: var(--gold);
+        }
+
+        .demo-form button {
+          border: 0;
+          background: var(--gold);
+          color: var(--black);
+          padding: 0 18px;
+          font-weight: 700;
+        }
+
+        .demo-status {
+          margin-top: 14px;
+          color: var(--sage);
+          font-size: 10px;
+        }
+
+        .gold-line {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .gold-line span {
+          display: block;
+          height: 1px;
+          background: var(--gold);
+        }
+
+        .gold-line span:nth-child(1) { width: 36px; }
+        .gold-line span:nth-child(2) { width: 8px; opacity: .6; }
+        .gold-line span:nth-child(3) { width: 3px; opacity: .3; }
+
+        .reveal {
+          opacity: 0;
+          transform: translateY(35px);
+          transition:
+            opacity .9s cubic-bezier(.2,.8,.2,1) var(--delay),
+            transform .9s cubic-bezier(.2,.8,.2,1) var(--delay);
+        }
+
+        .reveal.is-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        @media (max-width: 1100px) {
+          .hero-grid,
+          .product-detail {
+            grid-template-columns: 1fr;
+          }
+
+          .hero {
+            padding-top: 140px;
+          }
+
+          .hero-visual {
+            min-height: 570px;
+          }
+
+          .product-copy {
+            padding-bottom: 0;
+          }
+
+          .product-detail {
+            gap: 30px;
+          }
+
+          .story-flow {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .feature-head {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 850px) {
+          .nav-links,
+          .nav-demo {
+            display: none;
+          }
+
+          .mobile-toggle {
+            display: grid;
+            place-items: center;
+          }
+
+          .hero {
+            min-height: auto;
+            padding-top: 140px;
+          }
+
+          .hero-grid {
+            gap: 40px;
+          }
+
+          .hero-visual {
+            min-height: 500px;
+          }
+
+          .hero-frame {
+            width: 100%;
+          }
+
+          .intro-grid {
+            grid-template-columns: 1fr;
+            gap: 30px;
+          }
+
+          .section-head {
+            display: block;
+          }
+
+          .section-head p {
+            margin-top: 25px;
+          }
+
+          .operations-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .operation-side {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .marketing-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .feature-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .numbers-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .number:nth-child(2) {
+            border-right: 0;
+          }
+
+          .number:nth-child(-n+2) {
+            border-bottom: 1px solid var(--border);
+          }
+        }
+
+        @media (max-width: 650px) {
+          .nav {
+            height: 72px;
+            padding: 0 6vw;
+          }
+
+          .mobile-menu {
+            inset: 72px 0 auto 0;
+          }
+
+          section {
+            scroll-margin-top: 80px;
+          }
+
+          .hero {
+            padding: 120px 6vw 70px;
+          }
+
+          .hero h1 {
+            font-size: clamp(48px, 14vw, 75px);
+          }
+
+          .hero-description {
+            font-size: 14px;
+          }
+
+          .hero-meta {
+            flex-wrap: wrap;
+            margin-top: 35px;
+          }
+
+          .hero-visual {
+            min-height: 420px;
+          }
+
+          .hero-frame {
+            aspect-ratio: .86 / 1;
+          }
+
+          .restaurant-table {
+            width: 92%;
+            height: 48%;
+            left: 4%;
+            top: 29%;
+          }
+
+          .table-phone {
+            width: 125px;
+            height: 220px;
+            right: 4%;
+            top: 15%;
+          }
+
+          .plate {
+            width: 115px;
+            height: 115px;
+          }
+
+          .plate-food {
+            width: 60px;
+            height: 60px;
+          }
+
+          .hero-badge {
+            left: 4%;
+            bottom: 9%;
+          }
+
+          .scroll-cue {
+            display: none;
+          }
+
+          .intro,
+          .product-section,
+          .story,
+          .feature-section {
+            padding: 100px 6vw;
+          }
+
+          .numbers,
+          .cta {
+            padding: 90px 6vw;
+          }
+
+          .product-tabs {
+            margin-top: 50px;
+          }
+
+          .product-tab {
+            min-width: 150px;
+          }
+
+          .visual-stage {
+            min-height: 570px;
+          }
+
+          .kitchen-stage,
+          .operations-stage,
+          .intelligence-stage,
+          .marketing-stage {
+            padding: 22px;
+          }
+
+          .phone-shell {
+            width: 240px;
+            height: 485px;
+          }
+
+          .dish-image {
+            height: 130px;
+          }
+
+          .note-one {
+            left: 3%;
+            top: 15%;
+          }
+
+          .note-two {
+            right: 3%;
+            bottom: 11%;
+          }
+
+          .kitchen-columns {
+            grid-template-columns: 1fr;
+            max-height: 430px;
+            overflow: hidden;
+          }
+
+          .kitchen-column:nth-child(3) {
+            display: none;
+          }
+
+          .kitchen-bottom {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .kitchen-bottom > div:last-child {
+            display: none;
+          }
+
+          .floor-map {
+            min-height: 380px;
+          }
+
+          .intelligence-metrics {
+            grid-template-columns: 1fr;
+          }
+
+          .intelligence-metrics > div:nth-child(3) {
+            display: none;
+          }
+
+          .chart-panel {
+            height: 230px;
+          }
+
+          .story-flow {
+            grid-template-columns: 1fr;
+          }
+
+          .story-step {
+            min-height: 220px;
+          }
+
+          .story-step h3 {
+            margin-top: 70px;
+          }
+
+          .feature-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .feature-card {
+            min-height: 220px;
+          }
+
+          .numbers-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .number {
+            padding: 28px 16px;
+          }
+
+          .number strong {
+            font-size: 37px;
+          }
+
+          .cta h2 {
+            font-size: clamp(48px, 15vw, 75px);
+          }
+
+          .footer-inner {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .demo-form {
+            flex-direction: column;
+          }
+
+          .demo-form button {
+            padding: 14px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          html {
+            scroll-behavior: auto;
+          }
+
+          *,
+          *::before,
+          *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .01ms !important;
+          }
+        }
+      `}</style>
+
+      <div className="site">
+        <div className="scroll-progress" />
+
+        <header className="nav">
+          <div className="nav-inner">
+            <button
+              className="logo"
+              onClick={() => scrollTo("top")}
+              aria-label="PRATYEKSHa home"
+              style={{ background: "transparent", border: 0 }}
+            >
+              <span className="logo-mark" />
+              <span className="logo-text">
+                PRATYEKSH<span>a</span>
+              </span>
+            </button>
+
+            <nav className="nav-links">
+              <button onClick={() => scrollTo("system")}>System</button>
+              <button onClick={() => scrollTo("experience")}>Experience</button>
+              <button onClick={() => scrollTo("features")}>Features</button>
+              <button onClick={() => scrollTo("intelligence")}>
+                Intelligence
+              </button>
+            </nav>
+
+            <button className="nav-demo" onClick={() => setDemoOpen(true)}>
+              Book a demo <ArrowUpRight size={14} />
+            </button>
+
+            <button
+              className="mobile-toggle"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Toggle navigation"
+            >
+              {menuOpen ? <X size={23} /> : <Menu size={23} />}
+            </button>
+          </div>
+        </header>
+
+        {menuOpen && (
+          <div className="mobile-menu">
+            <button onClick={() => scrollTo("system")}>The system</button>
+            <button onClick={() => scrollTo("experience")}>
+              Customer experience
+            </button>
+            <button onClick={() => scrollTo("features")}>Features</button>
+            <button onClick={() => scrollTo("intelligence")}>
+              Intelligence
+            </button>
+            <button
+              className="mobile-cta"
+              onClick={() => {
+                setMenuOpen(false);
+                setDemoOpen(true);
+              }}
+            >
+              Book a private demo
+            </button>
+          </div>
+        )}
+
+        <main>
+          <section id="top" className="hero">
+            <div className="hero-grid">
+              <Reveal className="hero-copy">
+                <div className="eyebrow">Restaurant experience system</div>
+
+                <h1>
+                  The digital layer behind{" "}
+                  <em>better</em> restaurant experiences.
+                </h1>
+
+                <p className="hero-description">
+                  PRATYEKSHa brings the menu, customer experience, kitchen,
+                  operations, intelligence and marketing layer together —
+                  without making the restaurant feel complicated.
+                </p>
+
+                <div className="hero-actions">
+                  <button
+                    className="gold-button"
+                    onClick={() => setDemoOpen(true)}
+                  >
+                    Book a private demo <ArrowUpRight size={15} />
+                  </button>
+
+                  <button
+                    className="ghost-button"
+                    onClick={() => scrollTo("system")}
+                  >
+                    Explore the system <ArrowDown size={14} />
+                  </button>
+                </div>
+
+                <div className="hero-meta">
+                  <span>
+                    <i /> Built for cafés
+                  </span>
+                  <span>
+                    <i /> Restaurants
+                  </span>
+                  <span>
+                    <i /> Modern dining
+                  </span>
+                </div>
+              </Reveal>
+
+              <Reveal className="hero-visual" delay={120}>
+                <div className="hero-frame">
+                  <div className="restaurant-table">
+                    <div className="table-edge" />
+                    <div className="plate">
+                      <div className="plate-food" />
+                    </div>
+                  </div>
+
+                  <div className="table-phone">
+                    <div className="table-phone-inner">
+                      <div className="phone-mini-header">
+                        <span>12:42</span>
+                        <span>PRATYEKSHa</span>
+                      </div>
+
+                      <div className="phone-mini-title">
+                        What are
+                        <br />
+                        you craving?
+                      </div>
+
+                      <div className="phone-mini-image" />
+
+                      <div className="phone-mini-price">
+                        <span>Paneer Tikka</span>
+                        <strong>₹240</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="hero-badge">
+                    <div className="hero-badge-icon">
+                      <Sparkles size={14} />
+                    </div>
+                    <div>
+                      <small>SMART MENU</small>
+                      <strong>Built around the guest</strong>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            </div>
+
+            <div className="scroll-cue">
+              Scroll to explore
+              <ArrowDown size={13} />
+            </div>
+          </section>
+
+          <div className="marquee-wrap">
+            <div className="marquee">
+              {[...FEATURE_ITEMS, ...FEATURE_ITEMS].map((item, index) => (
+                <div className="marquee-item" key={`${item}-${index}`}>
+                  <b>✦</b> {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <section className="intro">
+            <div className="intro-grid">
+              <Reveal>
+                <span className="section-number">THE IDEA / 00</span>
+              </Reveal>
+
+              <Reveal delay={100}>
+                <h2>
+                  Restaurants don't need{" "}
+                  <em>more software.</em>
+                  <br />
+                  They need a better digital experience.
+                </h2>
+              </Reveal>
+            </div>
+
+            <Reveal className="intro-bottom" delay={150}>
+              <p>
+                PRATYEKSHa is designed around the restaurant itself — the
+                guest sitting at the table, the kitchen preparing the order,
+                the operator watching the floor and the customer who might
+                return tomorrow.
+              </p>
+            </Reveal>
+          </section>
+
+          <section id="system" className="product-section" ref={productRef}>
+            <Reveal>
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">The PRATYEKSHa system</span>
+                  <h2>Five layers. One restaurant experience.</h2>
+                </div>
+
+                <p>
+                  Instead of forcing every part of the restaurant into one
+                  dashboard, each layer gets an interface designed around the
+                  job it needs to perform.
+                </p>
+              </div>
+            </Reveal>
+
+            <Reveal delay={100}>
+              <div className="product-tabs">
+                {Object.entries(PRODUCTS).map(([key, item]) => {
+                  const Icon = productIcons[key];
+
+                  return (
+                    <button
+                      key={key}
+                      className={`product-tab ${
+                        activeProduct === key ? "active" : ""
+                      }`}
+                      onClick={() => setActiveProduct(key)}
+                    >
+                      <div className="product-tab-top">
+                        <span className="product-tab-number">
+                          {item.number}
+                        </span>
+                        <Icon className="product-tab-icon" size={15} />
+                      </div>
+                      <strong>{item.eyebrow}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </Reveal>
+
+            <div className="product-detail">
+              <Reveal className="product-copy">
+                <div className="product-copy-top" key={activeProduct}>
+                  <span className="section-number">{product.number}</span>
+
+                  <h3>{product.title}</h3>
+
+                  <p>{product.description}</p>
+
+                  <div className="feature-list">
+                    <div>
+                      <Check size={13} /> Live data
+                    </div>
+                    <div>
+                      <Check size={13} /> Mobile ready
+                    </div>
+                    <div>
+                      <Check size={13} /> Smart actions
+                    </div>
+                    <div>
+                      <Check size={13} /> Real-time flow
+                    </div>
+                    <div>
+                      <Check size={13} /> Restaurant aware
+                    </div>
+                    <div>
+                      <Check size={13} /> Connected system
+                    </div>
+                  </div>
+                </div>
+
+                <div className="product-nav">
+                  <button
+                    onClick={() => {
+                      const keys = Object.keys(PRODUCTS);
+                      setActiveProduct(
+                        keys[
+                          (activeIndex - 1 + keys.length) % keys.length
+                        ]
+                      );
+                    }}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const keys = Object.keys(PRODUCTS);
+                      setActiveProduct(
+                        keys[(activeIndex + 1) % keys.length]
+                      );
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+
+                  <span className="product-counter">
+                    0{activeIndex + 1} / 05
+                  </span>
+                </div>
+              </Reveal>
+
+              <Reveal delay={100}>
+                <ProductVisual type={activeProduct} />
+              </Reveal>
+            </div>
+          </section>
+
+          <section id="experience" className="story">
+            <div className="story-inner">
+              <Reveal>
+                <div className="story-title">
+                  <span className="eyebrow">From scan to return</span>
+                  <h2>
+                    A restaurant experience that feels{" "}
+                    <span>connected.</span>
+                  </h2>
+                </div>
+              </Reveal>
+
+              <div className="story-flow">
+                <Reveal delay={80}>
+                  <div className="story-step">
+                    <span className="story-step-number">01</span>
+                    <QrCode size={19} />
+                    <h3>Scan</h3>
+                    <p>
+                      The guest scans the table QR and enters a branded
+                      digital menu designed for exploration.
+                    </p>
+                  </div>
+                </Reveal>
+
+                <Reveal delay={130}>
+                  <div className="story-step">
+                    <span className="story-step-number">02</span>
+                    <ShoppingBag size={19} />
+                    <h3>Explore</h3>
+                    <p>
+                      Dishes become richer through descriptions, suggestions,
+                      3D experiences and intelligent discovery.
+                    </p>
+                  </div>
+                </Reveal>
+
+                <Reveal delay={180}>
+                  <div className="story-step">
+                    <span className="story-step-number">03</span>
+                    <Flame size={19} />
+                    <h3>Prepare</h3>
+                    <p>
+                      Orders move directly into a visual kitchen flow with
+                      clear priorities and preparation timers.
+                    </p>
+                  </div>
+                </Reveal>
+
+                <Reveal delay={230}>
+                  <div className="story-step">
+                    <span className="story-step-number">04</span>
+                    <RefreshCcw size={19} />
+                    <h3>Return</h3>
+                    <p>
+                      Preferences and interactions become signals that help
+                      the restaurant build stronger repeat relationships.
+                    </p>
+                  </div>
+                </Reveal>
+              </div>
+            </div>
+          </section>
+
+          <section id="features" className="feature-section">
+            <div className="feature-section-inner">
+              <Reveal>
+                <div className="feature-head">
+                  <h2>
+                    Everything important,
+                    <br />
+                    <em>beautifully connected.</em>
+                  </h2>
+
+                  <p>
+                    PRATYEKSHa is not one giant screen full of controls. It is
+                    a collection of focused experiences that share the same
+                    restaurant data.
+                  </p>
+                </div>
+              </Reveal>
+
+              <div className="feature-grid">
+                {[
+                  {
+                    icon: QrCode,
+                    title: "Smart QR Menu",
+                    text: "A branded digital menu built for fast discovery and easy ordering.",
+                  },
+                  {
+                    icon: Sparkles,
+                    title: "3D Dish Experience",
+                    text: "Let guests understand a dish before they decide to order it.",
+                  },
+                  {
+                    icon: Flame,
+                    title: "Kitchen Display",
+                    text: "Live tickets, preparation states, priorities and timers in one flow.",
+                  },
+                  {
+                    icon: Boxes,
+                    title: "Smart Inventory",
+                    text: "Connect ingredients, recipes and availability without hiding useful menu data.",
+                  },
+                  {
+                    icon: ReceiptIndianRupee,
+                    title: "GST Billing",
+                    text: "GST-ready billing with flexible payment and settlement flows.",
+                  },
+                  {
+                    icon: Users,
+                    title: "Customer Memory",
+                    text: "Remember meaningful ordering behavior to make future visits more personal.",
+                  },
+                  {
+                    icon: MessageCircle,
+                    title: "WhatsApp Marketing",
+                    text: "Reach customers with campaigns based on actual restaurant interactions.",
+                  },
+                  {
+                    icon: Brain,
+                    title: "Intelligence",
+                    text: "Convert restaurant activity into useful patterns and actionable signals.",
+                  },
+                  {
+                    icon: Settings2,
+                    title: "Operator Control",
+                    text: "A focused operating layer for menus, staff, tables and daily workflows.",
+                  },
+                ].map((feature, index) => {
+                  const Icon = feature.icon;
+
+                  return (
+                    <Reveal key={feature.title} delay={(index % 3) * 70}>
+                      <div className="feature-card">
+                        <span className="feature-card-index">
+                          0{index + 1}
+                        </span>
+
+                        <div className="feature-card-icon">
+                          <Icon size={17} />
+                        </div>
+
+                        <h3>{feature.title}</h3>
+
+                        <p>{feature.text}</p>
+                      </div>
+                    </Reveal>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section id="intelligence" className="numbers">
+            <Reveal>
+              <div className="numbers-grid">
+                <div className="number">
+                  <strong>01</strong>
+                  <span>Connected restaurant system</span>
+                </div>
+
+                <div className="number">
+                  <strong>05</strong>
+                  <span>Core digital layers</span>
+                </div>
+
+                <div className="number">
+                  <strong>24/7</strong>
+                  <span>Restaurant visibility</span>
+                </div>
+
+                <div className="number">
+                  <strong>360°</strong>
+                  <span>Customer journey view</span>
+                </div>
+              </div>
+            </Reveal>
+          </section>
+
+          <section className="cta">
+            <div className="cta-decoration" />
+
+            <Reveal>
+              <div className="cta-content">
+                <span className="eyebrow">Ready when you are</span>
+
+                <h2>
+                  Your restaurant
+                  <br />
+                  deserves a <em>better layer.</em>
+                </h2>
+
+                <p>
+                  See how PRATYEKSHa can fit into your restaurant's existing
+                  workflow without turning the experience into another
+                  complicated system.
+                </p>
+
+                <button
+                  className="gold-button"
+                  onClick={() => setDemoOpen(true)}
+                >
+                  Book a private demo <ArrowUpRight size={15} />
+                </button>
+              </div>
+            </Reveal>
+          </section>
+        </main>
+
+        <footer className="footer">
+          <div className="footer-inner">
+            <div className="logo">
+              <span className="logo-mark" />
+              <span className="logo-text">
+                PRATYEKSH<span>a</span>
+              </span>
+            </div>
+
+            <div className="footer-links">
+              <button onClick={() => scrollTo("system")}>System</button>
+              <button onClick={() => scrollTo("features")}>Features</button>
+              <button onClick={() => setDemoOpen(true)}>Demo</button>
+            </div>
+
+            <div className="footer-copy">
+              © 2026 PRATYEKSHa. Restaurant experience system.
+            </div>
+          </div>
+        </footer>
+
+        {demoOpen && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setDemoOpen(false);
+              }
+            }}
+          >
+            <div className="modal">
+              <button
+                className="modal-close"
+                onClick={() => setDemoOpen(false)}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+
+              <span className="eyebrow">Private demonstration</span>
+
+              <h2>Let's show you the system.</h2>
+
+              <p>
+                Leave your email and the PRATYEKSHa team can connect with you
+                for a walkthrough of the restaurant experience platform.
+              </p>
+
+              <form className="demo-form" onSubmit={submitDemo}>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+
+                <button type="submit">
+                  <Send size={15} />
+                </button>
+              </form>
+
+              {demoStatus && <div className="demo-status">{demoStatus}</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
 
-.hero-eyebrow span{
-  width:28px;
-  height:1px;
-  background:var(--gold);
-}
-
-.hero-title{
-  margin-top:22px;
-  color:var(--darkText);
-  font-family:'DM Serif Display',serif;
-  font-weight:400;
-  font-size:clamp(3rem,4.6vw,5.1rem);
-  line-height:1.02;
-  letter-spacing:-1.6px;
-  max-width:720px;
-}
-
-.hero-title em{
-  color:var(--gold3);
-  font-style:italic;
-}
-
-.hero-description{
-  margin-top:26px;
-  max-width:520px;
-  color:var(--bodyText);
-  font-size:.91rem;
-  line-height:1.85;
-}
-
-.hero-actions{
-  display:flex;
-  gap:11px;
-  flex-wrap:wrap;
-  margin-top:35px;
-}
-
-.button{
-  min-height:46px;
-  padding:0 21px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:9px;
-  border-radius:6px;
-  cursor:pointer;
-  font-size:.74rem;
-  transition:.25s ease;
-}
-
-.button.primary{
-  background:var(--ink);
-  color:var(--gold2);
-}
-
-.button.primary:hover{
-  background:var(--gold);
-  color:var(--ink);
-  transform:translateY(-2px);
-}
-
-.button.secondary{
-  background:transparent;
-  border:1px solid rgba(39,31,20,.15);
-  color:var(--darkText);
-}
-
-.button.secondary:hover{
-  border-color:var(--gold);
-  color:var(--gold3);
-}
-
-.hero-meta{
-  margin-top:48px;
-  display:flex;
-  gap:30px;
-}
-
-.hero-meta div{
-  display:flex;
-  flex-direction:column;
-  gap:3px;
-}
-
-.hero-meta strong{
-  font-family:'DM Mono',monospace;
-  color:var(--gold3);
-  font-size:.65rem;
-}
-
-.hero-meta span{
-  font-size:.58rem;
-  color:var(--muted);
-  text-transform:uppercase;
-  letter-spacing:1.5px;
-}
-
-.hero-scroll{
-  position:absolute;
-  left:6vw;
-  bottom:30px;
-  display:flex;
-  align-items:center;
-  gap:12px;
-  z-index:4;
-}
-
-.hero-scroll span{
-  font-size:.5rem;
-  letter-spacing:2.5px;
-  color:rgba(39,31,20,.42);
-}
-
-.hero-scroll i{
-  width:42px;
-  height:1px;
-  background:rgba(39,31,20,.2);
-}
-
-/* HERO VISUAL */
-
-.hero-orbit{
-  position:absolute;
-  border:1px solid rgba(199,162,105,.1);
-  border-radius:50%;
-}
-
-.orbit-a{
-  width:620px;
-  height:620px;
-}
-
-.orbit-b{
-  width:850px;
-  height:850px;
-  border-color:rgba(166,176,154,.06);
-}
-
-.restaurant-card{
-  width:min(390px,72%);
-  position:relative;
-  z-index:4;
-  background:#211f19;
-  border:1px solid rgba(199,162,105,.2);
-  border-radius:22px;
-  box-shadow:0 35px 90px rgba(0,0,0,.55);
-  overflow:hidden;
-  transform:rotate(-3deg);
-  animation:cardFloat 7s ease-in-out infinite;
-}
-
-@keyframes cardFloat{
-  0%,100%{transform:rotate(-3deg) translateY(0);}
-  50%{transform:rotate(-2deg) translateY(-14px);}
-}
-
-.restaurant-top{
-  padding:19px 21px;
-  display:flex;
-  justify-content:space-between;
-  border-bottom:1px solid rgba(255,255,255,.07);
-}
-
-.restaurant-top small{
-  display:block;
-  color:rgba(199,162,105,.45);
-  font-size:.48rem;
-  letter-spacing:2px;
-}
-
-.restaurant-top strong{
-  display:block;
-  margin-top:4px;
-  color:#f3e7d2;
-  font-family:'DM Serif Display',serif;
-  font-size:1.15rem;
-  font-weight:400;
-}
-
-.live{
-  display:flex;
-  gap:5px;
-  align-items:center;
-  color:#a6b09a;
-  font-size:.5rem;
-  letter-spacing:1px;
-}
-
-.live i{
-  width:5px;
-  height:5px;
-  border-radius:50%;
-  background:#a6b09a;
-  box-shadow:0 0 10px #a6b09a;
-}
-
-.table-scene{
-  height:280px;
-  position:relative;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:
-    radial-gradient(circle at 50% 40%,rgba(199,162,105,.1),transparent 55%),
-    #181713;
-}
-
-.table-circle{
-  width:205px;
-  height:205px;
-  border-radius:50%;
-  border:1px solid rgba(199,162,105,.3);
-  position:relative;
-  box-shadow:
-    0 0 0 18px rgba(199,162,105,.025),
-    0 0 0 42px rgba(199,162,105,.012);
-}
-
-.dish{
-  position:absolute;
-  border-radius:50%;
-  border:1px solid rgba(255,255,255,.13);
-  background:radial-gradient(circle at 40% 30%,#d7c8a9,#625643 55%,#25211a);
-}
-
-.dish-one{
-  width:70px;
-  height:70px;
-  left:28px;
-  top:35px;
-}
-
-.dish-two{
-  width:57px;
-  height:57px;
-  right:27px;
-  bottom:35px;
-}
-
-.dish-three{
-  width:43px;
-  height:43px;
-  right:34px;
-  top:30px;
-}
-
-.glass{
-  position:absolute;
-  width:31px;
-  height:58px;
-  left:30px;
-  bottom:30px;
-  border:1px solid rgba(220,230,220,.35);
-  border-radius:7px 7px 10px 10px;
-  background:rgba(166,176,154,.06);
-}
-
-.scene-label{
-  position:absolute;
-  bottom:17px;
-  left:20px;
-}
-
-.scene-label span{
-  display:block;
-  color:rgba(199,162,105,.45);
-  font-size:.45rem;
-  letter-spacing:2px;
-}
-
-.scene-label strong{
-  color:#eee3cf;
-  font-size:.66rem;
-  font-weight:400;
-}
-
-.restaurant-stats{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  border-top:1px solid rgba(255,255,255,.06);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-
-.restaurant-stats div{
-  padding:15px;
-  border-right:1px solid rgba(255,255,255,.06);
-}
-
-.restaurant-stats div:last-child{
-  border:0;
-}
-
-.restaurant-stats small{
-  display:block;
-  color:rgba(255,255,255,.25);
-  font-size:.43rem;
-  letter-spacing:1.5px;
-}
-
-.restaurant-stats strong{
-  color:var(--gold2);
-  font-family:'DM Serif Display',serif;
-  font-size:1.35rem;
-}
-
-.mini-order{
-  margin:13px;
-  padding:12px;
-  border:1px solid rgba(199,162,105,.1);
-  background:rgba(255,255,255,.025);
-  display:flex;
-  align-items:center;
-  gap:10px;
-  border-radius:9px;
-}
-
-.mini-icon{
-  width:31px;
-  height:31px;
-  border-radius:7px;
-  background:rgba(199,162,105,.1);
-  color:var(--gold2);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.mini-order strong,
-.mini-order span{
-  display:block;
-}
-
-.mini-order strong{
-  color:#eee4d1;
-  font-size:.59rem;
-}
-
-.mini-order span{
-  margin-top:2px;
-  color:rgba(255,255,255,.27);
-  font-size:.48rem;
-}
-
-.mini-arrow{
-  margin-left:auto;
-  color:var(--gold);
-}
-
-.floating-note{
-  position:absolute;
-  z-index:5;
-  display:flex;
-  align-items:center;
-  gap:9px;
-  padding:10px 13px;
-  background:rgba(32,30,24,.88);
-  backdrop-filter:blur(12px);
-  border:1px solid rgba(199,162,105,.15);
-  border-radius:9px;
-  box-shadow:0 15px 35px rgba(0,0,0,.25);
-}
-
-.floating-note > svg{
-  color:var(--gold);
-}
-
-.floating-note small,
-.floating-note strong{
-  display:block;
-}
-
-.floating-note small{
-  color:rgba(255,255,255,.27);
-  font-size:.4rem;
-  letter-spacing:1.4px;
-}
-
-.floating-note strong{
-  color:#eee4d1;
-  font-size:.57rem;
-  font-weight:400;
-}
-
-.note-one{
-  top:25%;
-  left:8%;
-  animation:noteOne 6s ease-in-out infinite;
-}
-
-.note-two{
-  right:7%;
-  bottom:24%;
-  animation:noteTwo 7s ease-in-out infinite;
-}
-
-@keyframes noteOne{
-  0%,100%{transform:translateY(0);}
-  50%{transform:translateY(-9px);}
-}
-
-@keyframes noteTwo{
-  0%,100%{transform:translateY(0);}
-  50%{transform:translateY(9px);}
-}
-
-/* =========================================================
-   INTRO
-========================================================= */
-
-.intro-band{
-  background:var(--ink);
-  color:#f4ecdc;
-  width:100%;
-  padding:120px 7vw 100px;
-}
-
-.intro-label{
-  display:flex;
-  align-items:center;
-  gap:15px;
-  color:rgba(199,162,105,.7);
-  font-size:.54rem;
-  letter-spacing:3px;
-}
-
-.intro-label i{
-  width:50px;
-  height:1px;
-  background:rgba(199,162,105,.35);
-}
-
-.intro-content{
-  display:grid;
-  grid-template-columns:1.1fr .9fr;
-  gap:8vw;
-  margin-top:42px;
-}
-
-.intro-content h2{
-  font-family:'DM Serif Display',serif;
-  font-size:clamp(2.6rem,5vw,5.3rem);
-  font-weight:400;
-  line-height:1.03;
-  letter-spacing:-1px;
-}
-
-.intro-content h2 em{
-  color:var(--gold2);
-  font-style:italic;
-}
-
-.intro-content p{
-  max-width:570px;
-  color:rgba(255,255,255,.42);
-  font-size:.91rem;
-  line-height:1.95;
-  align-self:end;
-}
-
-.system-line{
-  margin-top:90px;
-  border-top:1px solid rgba(255,255,255,.09);
-  display:grid;
-  grid-template-columns:repeat(6,1fr);
-}
-
-.system-line div{
-  padding:19px 15px 0;
-  border-right:1px solid rgba(255,255,255,.07);
-}
-
-.system-line div:last-child{
-  border-right:0;
-}
-
-.system-line span{
-  display:block;
-  color:rgba(199,162,105,.45);
-  font-size:.48rem;
-  font-family:'DM Mono',monospace;
-}
-
-.system-line strong{
-  display:block;
-  color:rgba(255,255,255,.58);
-  font-size:.65rem;
-  font-weight:400;
-  margin-top:5px;
-}
-
-/* =========================================================
-   USE CASE
-========================================================= */
-
-.use-section{
-  background:var(--cream);
-  padding:120px 7vw;
-}
-
-.section-heading{
-  max-width:700px;
-}
-
-.section-heading.center{
-  margin-left:auto;
-  margin-right:auto;
-  text-align:center;
-}
-
-.section-heading h2{
-  color:var(--darkText);
-  font-family:'DM Serif Display',serif;
-  font-size:clamp(2.5rem,4.5vw,4.5rem);
-  font-weight:400;
-  line-height:1.04;
-  letter-spacing:-1px;
-  margin-top:16px;
-}
-
-.section-heading h2 em{
-  color:var(--gold3);
-  font-style:italic;
-}
-
-.section-heading p{
-  color:var(--bodyText);
-  font-size:.88rem;
-  line-height:1.85;
-  max-width:600px;
-  margin-top:20px;
-}
-
-.section-heading.center p{
-  margin-left:auto;
-  margin-right:auto;
-}
-
-.use-grid{
-  margin-top:65px;
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:15px;
-}
-
-.use-card{
-  min-height:390px;
-  padding:34px;
-  border:1px solid var(--border);
-  background:var(--cream3);
-  position:relative;
-  overflow:hidden;
-  transition:.4s ease;
-}
-
-.use-card:hover{
-  transform:translateY(-8px);
-  border-color:rgba(199,162,105,.45);
-  box-shadow:0 25px 55px rgba(40,30,15,.08);
-}
-
-.use-card::after{
-  content:"";
-  position:absolute;
-  width:180px;
-  height:180px;
-  border-radius:50%;
-  right:-90px;
-  bottom:-90px;
-  background:rgba(199,162,105,.07);
-}
-
-.use-number{
-  color:var(--gold3);
-  font-family:'DM Mono',monospace;
-  font-size:.6rem;
-}
-
-.use-card h3{
-  font-family:'DM Serif Display',serif;
-  color:var(--darkText);
-  font-size:2rem;
-  font-weight:400;
-  margin-top:55px;
-}
-
-.use-card p{
-  margin-top:13px;
-  color:var(--bodyText);
-  font-size:.75rem;
-  line-height:1.75;
-  max-width:330px;
-}
-
-.use-points{
-  margin-top:28px;
-  display:grid;
-  gap:8px;
-}
-
-.use-points span{
-  display:flex;
-  align-items:center;
-  gap:7px;
-  color:#625947;
-  font-size:.62rem;
-}
-
-.use-points svg{
-  color:var(--gold3);
-}
-
-.use-arrow{
-  position:absolute;
-  right:28px;
-  bottom:25px;
-  color:var(--gold3);
-}
-
-/* =========================================================
-   MODULES
-========================================================= */
-
-.module-section{
-  width:100%;
-  padding:125px 7vw;
-}
-
-.module-section.cream{
-  background:var(--cream3);
-  color:var(--darkText);
-}
-
-.module-section.dark{
-  background:var(--ink2);
-  color:#f5eddf;
-}
-
-.module-grid{
-  width:100%;
-  max-width:var(--max);
-  margin:auto;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:8vw;
-  align-items:center;
-}
-
-.module-copy{
-  max-width:650px;
-}
-
-.module-number{
-  color:var(--gold3);
-  font-family:'DM Mono',monospace;
-  font-size:.58rem;
-  margin-bottom:25px;
-}
-
-.dark .module-number{
-  color:var(--gold2);
-}
-
-.module-section .eyebrow{
-  color:var(--gold3);
-}
-
-.dark .module-section .eyebrow{
-  color:var(--gold2);
-}
-
-.module-copy h2{
-  font-family:'DM Serif Display',serif;
-  font-size:clamp(2.5rem,4.2vw,4.6rem);
-  font-weight:400;
-  line-height:1.03;
-  letter-spacing:-1px;
-  margin-top:17px;
-  color:var(--darkText);
-}
-
-.dark .module-copy h2{
-  color:#f4ecdc;
-}
-
-.module-description{
-  margin-top:23px;
-  color:var(--bodyText);
-  font-size:.86rem;
-  line-height:1.9;
-  max-width:580px;
-}
-
-.dark .module-description{
-  color:rgba(255,255,255,.43);
-}
-
-.module-features{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:11px 24px;
-  margin-top:32px;
-}
-
-.module-features > div{
-  display:flex;
-  align-items:flex-start;
-  gap:9px;
-  color:#655c4d;
-  font-size:.66rem;
-  line-height:1.5;
-}
-
-.dark .module-features > div{
-  color:rgba(255,255,255,.47);
-}
-
-.feature-check{
-  width:19px;
-  height:19px;
-  min-width:19px;
-  border:1px solid rgba(199,162,105,.3);
-  color:var(--gold3);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-}
-
-.module-link{
-  margin-top:36px;
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  background:none;
-  color:var(--gold3);
-  cursor:pointer;
-  font-size:.67rem;
-  border-bottom:1px solid rgba(199,162,105,.3);
-  padding-bottom:7px;
-}
-
-.dark .module-link{
-  color:var(--gold2);
-}
-
-.module-visual{
-  min-height:510px;
-  position:relative;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.cream .module-visual{
-  background:var(--cream2);
-}
-
-.dark .module-visual{
-  background:#12110e;
-}
-
-.visual-grid{
-  position:absolute;
-  inset:0;
-  opacity:.5;
-  background-image:
-    linear-gradient(rgba(199,162,105,.08) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(199,162,105,.08) 1px,transparent 1px);
-  background-size:38px 38px;
-}
-
-.visual-window{
-  width:78%;
-  min-height:370px;
-  position:relative;
-  z-index:2;
-  background:#1c1a15;
-  border:1px solid rgba(199,162,105,.18);
-  border-radius:17px;
-  overflow:hidden;
-  box-shadow:0 35px 80px rgba(0,0,0,.25);
-  transform:rotate(-2deg);
-  transition:.5s;
-}
-
-.module-visual:hover .visual-window{
-  transform:rotate(0deg) translateY(-7px);
-}
-
-.visual-header{
-  height:42px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 15px;
-  border-bottom:1px solid rgba(255,255,255,.07);
-}
-
-.visual-header div{
-  display:flex;
-  gap:5px;
-}
-
-.visual-header div span{
-  width:6px;
-  height:6px;
-  border-radius:50%;
-  background:rgba(255,255,255,.2);
-}
-
-.visual-header small{
-  color:rgba(255,255,255,.27);
-  font-size:.43rem;
-  letter-spacing:1px;
-}
-
-.visual-body{
-  min-height:328px;
-  padding:42px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-}
-
-.visual-symbol{
-  width:62px;
-  height:62px;
-  border:1px solid rgba(199,162,105,.25);
-  color:var(--gold2);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:14px;
-  background:rgba(199,162,105,.05);
-}
-
-.visual-title{
-  margin-top:22px;
-}
-
-.visual-title small{
-  display:block;
-  color:rgba(199,162,105,.55);
-  font-size:.46rem;
-  letter-spacing:2px;
-}
-
-.visual-title strong{
-  display:block;
-  color:#eee5d4;
-  font-family:'DM Serif Display',serif;
-  font-size:1.7rem;
-  line-height:1.1;
-  margin-top:6px;
-  max-width:330px;
-  font-weight:400;
-}
-
-.visual-bars{
-  margin-top:30px;
-  display:grid;
-  gap:9px;
-}
-
-.visual-bars i{
-  height:4px;
-  display:block;
-  border-radius:20px;
-  background:linear-gradient(90deg,var(--gold),rgba(199,162,105,.15));
-}
-
-.visual-status{
-  display:flex;
-  gap:17px;
-  margin-top:28px;
-}
-
-.visual-status span{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  color:rgba(255,255,255,.32);
-  font-size:.45rem;
-  letter-spacing:1px;
-}
-
-.visual-status i{
-  width:5px;
-  height:5px;
-  background:var(--sage);
-  border-radius:50%;
-}
-
-.visual-float{
-  position:absolute;
-  z-index:5;
-  background:#25221b;
-  color:#e9ddc8;
-  border:1px solid rgba(199,162,105,.18);
-  box-shadow:0 15px 35px rgba(0,0,0,.22);
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:10px 13px;
-  border-radius:7px;
-  font-size:.5rem;
-  letter-spacing:1px;
-}
-
-.visual-float svg{
-  color:var(--gold);
-}
-
-.float-top{
-  top:13%;
-  right:3%;
-}
-
-.float-bottom{
-  bottom:12%;
-  left:4%;
-}
-
-.float-bottom span{
-  width:5px;
-  height:5px;
-  border-radius:50%;
-  background:var(--sage);
-}
-
-/* =========================================================
-   MATRIX
-========================================================= */
-
-.matrix-section{
-  padding:125px 7vw;
-  background:var(--cream);
-}
-
-.matrix{
-  max-width:var(--max);
-  margin:70px auto 0;
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:1px;
-  background:rgba(39,31,20,.11);
-  border:1px solid rgba(39,31,20,.11);
-}
-
-.feature-card{
-  min-height:245px;
-  background:var(--cream3);
-  padding:28px;
-  position:relative;
-  transition:.35s;
-}
-
-.feature-card:hover{
-  background:#f0e5d0;
-  transform:translateY(-4px);
-  z-index:2;
-  box-shadow:0 20px 35px rgba(40,30,15,.08);
-}
-
-.feature-icon{
-  width:42px;
-  height:42px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--gold3);
-  background:rgba(199,162,105,.08);
-  border:1px solid rgba(199,162,105,.17);
-  border-radius:10px;
-}
-
-.feature-index{
-  position:absolute;
-  top:29px;
-  right:28px;
-  color:rgba(39,31,20,.22);
-  font-family:'DM Mono',monospace;
-  font-size:.5rem;
-}
-
-.feature-card h3{
-  margin-top:28px;
-  color:var(--darkText);
-  font-family:'DM Serif Display',serif;
-  font-weight:400;
-  font-size:1.3rem;
-}
-
-.feature-card p{
-  margin-top:8px;
-  color:var(--bodyText);
-  font-size:.65rem;
-  line-height:1.7;
-}
-
-.feature-line{
-  position:absolute;
-  left:28px;
-  right:28px;
-  bottom:24px;
-  height:1px;
-  background:rgba(39,31,20,.08);
-}
-
-/* =========================================================
-   FLOW
-========================================================= */
-
-.flow-section{
-  background:var(--ink);
-  color:#f4ecdc;
-  padding:125px 7vw;
-}
-
-.flow-heading{
-  max-width:650px;
-}
-
-.flow-heading h2{
-  font-family:'DM Serif Display',serif;
-  font-size:clamp(3rem,5vw,5.3rem);
-  line-height:1;
-  font-weight:400;
-  margin-top:15px;
-}
-
-.flow-heading h2 em{
-  color:var(--gold2);
-  font-style:italic;
-}
-
-.flow-track{
-  max-width:var(--max);
-  margin:100px auto 0;
-  display:grid;
-  grid-template-columns:repeat(6,1fr);
-  position:relative;
-}
-
-.flow-step{
-  position:relative;
-  padding-right:30px;
-}
-
-.flow-number{
-  color:rgba(199,162,105,.5);
-  font-family:'DM Mono',monospace;
-  font-size:.55rem;
-}
-
-.flow-dot{
-  width:28px;
-  height:28px;
-  margin-top:20px;
-  border:1px solid rgba(199,162,105,.4);
-  border-radius:50%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  position:relative;
-  z-index:2;
-  background:var(--ink);
-}
-
-.flow-dot span{
-  width:6px;
-  height:6px;
-  background:var(--gold);
-  border-radius:50%;
-}
-
-.flow-step h3{
-  margin-top:19px;
-  color:#eee5d5;
-  font-family:'DM Serif Display',serif;
-  font-size:1.15rem;
-  font-weight:400;
-}
-
-.flow-step p{
-  margin-top:7px;
-  color:rgba(255,255,255,.34);
-  font-size:.62rem;
-  line-height:1.65;
-  max-width:150px;
-}
-
-.flow-connector{
-  position:absolute;
-  left:28px;
-  right:-20px;
-  top:68px;
-  height:1px;
-  background:rgba(199,162,105,.15);
-}
-
-/* =========================================================
-   BRAND MOMENT
-========================================================= */
-
-.brand-moment{
-  min-height:650px;
-  position:relative;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  background:
-    radial-gradient(circle at 50% 40%,rgba(199,162,105,.13),transparent 32%),
-    var(--ink2);
-  text-align:center;
-}
-
-.brand-moment::before,
-.brand-moment::after{
-  content:"";
-  position:absolute;
-  border:1px solid rgba(199,162,105,.09);
-  border-radius:50%;
-}
-
-.brand-moment::before{
-  width:500px;
-  height:500px;
-}
-
-.brand-moment::after{
-  width:800px;
-  height:800px;
-  border-color:rgba(166,176,154,.05);
-}
-
-.brand-moment-inner{
-  position:relative;
-  z-index:2;
-  padding:50px 25px;
-}
-
-.brand-moment-inner .eyebrow{
-  justify-content:center;
-  color:var(--gold2);
-}
-
-.brand-moment h2{
-  margin-top:20px;
-  font-family:'DM Serif Display',serif;
-  font-weight:400;
-  font-size:clamp(3rem,5.7vw,6rem);
-  line-height:.98;
-  letter-spacing:-1.5px;
-  color:#f4ecdc;
-}
-
-.brand-moment h2 em{
-  color:var(--gold2);
-  font-style:italic;
-}
-
-.brand-moment p{
-  max-width:530px;
-  margin:25px auto 0;
-  color:rgba(255,255,255,.4);
-  font-size:.85rem;
-}
-
-.moment-stats{
-  margin:55px auto 0;
-  display:flex;
-  justify-content:center;
-  gap:1px;
-}
-
-.moment-stats div{
-  min-width:170px;
-  padding:16px 30px;
-  border-right:1px solid rgba(255,255,255,.08);
-}
-
-.moment-stats div:last-child{
-  border-right:0;
-}
-
-.moment-stats strong{
-  display:block;
-  color:var(--gold2);
-  font-family:'DM Serif Display',serif;
-  font-size:1.9rem;
-  font-weight:400;
-}
-
-.moment-stats span{
-  display:block;
-  margin-top:3px;
-  color:rgba(255,255,255,.28);
-  font-size:.52rem;
-  letter-spacing:1px;
-  text-transform:uppercase;
-}
-
-/* =========================================================
-   DEMO
-========================================================= */
-
-.demo-section{
-  background:var(--cream);
-  padding:130px 7vw;
-}
-
-.demo-grid{
-  max-width:var(--max);
-  margin:auto;
-  display:grid;
-  grid-template-columns:.8fr 1.2fr;
-  gap:8vw;
-  align-items:start;
-}
-
-.demo-copy h2{
-  margin-top:18px;
-  font-family:'DM Serif Display',serif;
-  font-weight:400;
-  font-size:clamp(3rem,5vw,5.4rem);
-  line-height:.98;
-  letter-spacing:-1.3px;
-  color:var(--darkText);
-}
-
-.demo-copy h2 em{
-  color:var(--gold3);
-  font-style:italic;
-}
-
-.demo-copy > p{
-  margin-top:25px;
-  max-width:430px;
-  color:var(--bodyText);
-  font-size:.86rem;
-  line-height:1.85;
-}
-
-.contact-details{
-  margin-top:42px;
-  display:grid;
-  gap:11px;
-}
-
-.contact-details a{
-  text-decoration:none;
-  color:#554d40;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-size:.68rem;
-}
-
-.contact-details a:hover{
-  color:var(--gold3);
-}
-
-.contact-details span{
-  width:29px;
-  height:29px;
-  border:1px solid rgba(199,162,105,.22);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--gold3);
-  border-radius:7px;
-}
-
-.demo-form-wrap{
-  background:#211f19;
-  border:1px solid rgba(199,162,105,.16);
-  padding:35px;
-  box-shadow:0 30px 70px rgba(30,22,10,.14);
-}
-
-.form-top{
-  display:flex;
-  justify-content:space-between;
-  color:var(--gold2);
-  font-size:.52rem;
-  letter-spacing:2px;
-  padding-bottom:21px;
-  border-bottom:1px solid rgba(255,255,255,.08);
-}
-
-.form-top span{
-  color:rgba(255,255,255,.25);
-}
-
-.form-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:17px;
-  margin-top:25px;
-}
-
-.form-grid label{
-  display:block;
-}
-
-.form-grid label.full{
-  grid-column:1/-1;
-}
-
-.form-grid label span{
-  display:block;
-  margin-bottom:7px;
-  color:rgba(255,255,255,.35);
-  font-size:.52rem;
-  letter-spacing:1.3px;
-  text-transform:uppercase;
-}
-
-.form-grid input,
-.form-grid select,
-.form-grid textarea{
-  width:100%;
-  border:1px solid rgba(255,255,255,.1);
-  background:rgba(255,255,255,.035);
-  color:#eee5d4;
-  outline:none;
-  padding:13px 14px;
-  border-radius:5px;
-  font-size:.68rem;
-  transition:.2s;
-}
-
-.form-grid input::placeholder,
-.form-grid textarea::placeholder{
-  color:rgba(255,255,255,.2);
-}
-
-.form-grid select{
-  color:rgba(255,255,255,.55);
-}
-
-.form-grid input:focus,
-.form-grid select:focus,
-.form-grid textarea:focus{
-  border-color:rgba(199,162,105,.65);
-  background:rgba(199,162,105,.035);
-}
-
-.form-grid textarea{
-  resize:vertical;
-  min-height:105px;
-}
-
-.submit-button{
-  margin-top:22px;
-  width:100%;
-  min-height:50px;
-  background:var(--gold);
-  color:var(--ink);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  cursor:pointer;
-  font-size:.7rem;
-  border-radius:5px;
-  transition:.25s;
-}
-
-.submit-button:hover{
-  background:var(--gold2);
-}
-
-.submit-button:disabled{
-  opacity:.6;
-  cursor:wait;
-}
-
-.form-note{
-  text-align:center;
-  color:rgba(255,255,255,.2);
-  font-size:.5rem;
-  margin-top:14px;
-}
-
-.success-state{
-  min-height:480px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-}
-
-.success-icon{
-  width:65px;
-  height:65px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-  color:var(--gold);
-  border:1px solid rgba(199,162,105,.3);
-}
-
-.success-state small{
-  margin-top:25px;
-  color:var(--gold);
-  font-size:.5rem;
-  letter-spacing:2px;
-}
-
-.success-state h3{
-  margin-top:10px;
-  color:#f1e5d1;
-  font-family:'DM Serif Display',serif;
-  font-size:2.4rem;
-  font-weight:400;
-}
-
-.success-state p{
-  max-width:350px;
-  margin:12px auto 25px;
-  color:rgba(255,255,255,.35);
-  font-size:.7rem;
-}
-
-.success-state .button{
-  margin-top:5px;
-}
-
-/* =========================================================
-   FOOTER
-========================================================= */
-
-.footer{
-  width:100%;
-  background:#0e0d0b;
-  color:#eee4d1;
-  padding:80px 7vw 25px;
-}
-
-.footer-top{
-  max-width:var(--max);
-  margin:auto;
-  display:grid;
-  grid-template-columns:1.5fr 1fr 1fr 1.2fr;
-  gap:70px;
-  padding-bottom:70px;
-}
-
-.footer-logo{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  background:none;
-  color:#f2e7d3;
-  font-family:'DM Serif Display',serif;
-  font-size:1.4rem;
-  cursor:pointer;
-}
-
-.footer-logo span{
-  width:34px;
-  height:34px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--gold);
-  border:1px solid rgba(199,162,105,.3);
-  border-radius:8px;
-}
-
-.footer-brand p{
-  margin-top:19px;
-  max-width:330px;
-  color:rgba(255,255,255,.3);
-  font-size:.68rem;
-  line-height:1.8;
-}
-
-.footer-tag{
-  margin-top:25px;
-  color:rgba(199,162,105,.55);
-  font-size:.48rem;
-  letter-spacing:2px;
-}
-
-.footer-tag i{
-  display:inline-block;
-  width:3px;
-  height:3px;
-  background:var(--gold);
-  border-radius:50%;
-  margin:0 7px 2px;
-}
-
-.footer-column{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:10px;
-}
-
-.footer-column h4{
-  color:var(--gold2);
-  font-size:.55rem;
-  letter-spacing:2px;
-  font-weight:500;
-  text-transform:uppercase;
-  margin-bottom:7px;
-}
-
-.footer-column button,
-.footer-column a{
-  color:rgba(255,255,255,.37);
-  background:none;
-  text-decoration:none;
-  font-size:.63rem;
-  cursor:pointer;
-  text-align:left;
-  transition:.2s;
-}
-
-.footer-column button:hover,
-.footer-column a:hover{
-  color:var(--gold2);
-}
-
-.footer-location{
-  margin-top:10px;
-  display:flex;
-  align-items:center;
-  gap:7px;
-  color:rgba(255,255,255,.25);
-  font-size:.58rem;
-}
-
-.footer-middle{
-  max-width:var(--max);
-  margin:auto;
-  padding:22px 0;
-  border-top:1px solid rgba(255,255,255,.07);
-  border-bottom:1px solid rgba(255,255,255,.07);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-}
-
-.footer-middle span{
-  color:rgba(199,162,105,.38);
-  font-size:.48rem;
-  letter-spacing:2.5px;
-}
-
-.footer-middle button{
-  background:none;
-  color:rgba(255,255,255,.4);
-  display:flex;
-  align-items:center;
-  gap:8px;
-  font-size:.57rem;
-  cursor:pointer;
-}
-
-.footer-middle button:hover{
-  color:var(--gold2);
-}
-
-.footer-bottom{
-  max-width:var(--max);
-  margin:0 auto;
-  padding-top:24px;
-  display:flex;
-  justify-content:space-between;
-  gap:20px;
-  color:rgba(255,255,255,.2);
-  font-size:.5rem;
-}
-
-/* =========================================================
-   REVEAL
-========================================================= */
-
-.reveal{
-  opacity:0;
-  transform:translateY(35px);
-  transition:
-    opacity .8s ease,
-    transform .8s cubic-bezier(.2,.8,.2,1);
-}
-
-.reveal.visible{
-  opacity:1;
-  transform:translateY(0);
-}
-
-.delay-1{transition-delay:.08s;}
-.delay-2{transition-delay:.16s;}
-.delay-3{transition-delay:.24s;}
-.delay-4{transition-delay:.32s;}
-
-/* =========================================================
-   RESPONSIVE
-========================================================= */
-
-@media(max-width:1100px){
-
-  .desktop-nav{
-    gap:18px;
-  }
-
-  .hero-left{
-    padding-left:5vw;
-  }
-
-  .module-grid{
-    gap:5vw;
-  }
-
-  .matrix{
-    grid-template-columns:repeat(3,1fr);
-  }
-
-  .footer-top{
-    gap:40px;
-  }
-}
-
-@media(max-width:900px){
-
-  body{
-    cursor:auto;
-  }
-
-  .cursor-dot,
-  .cursor-ring{
-    display:none;
-  }
-
-  .desktop-nav{
-    display:none;
-  }
-
-  .mobile-menu-button{
-    display:flex;
-  }
-
-  .hero{
-    grid-template-columns:1fr;
-  }
-
-  .hero-left{
-    min-height:auto;
-    padding-top:145px;
-    padding-bottom:85px;
-  }
-
-  .hero-right{
-    min-height:650px;
-  }
-
-  .hero-scroll{
-    bottom:20px;
-  }
-
-  .intro-content{
-    grid-template-columns:1fr;
-    gap:35px;
-  }
-
-  .system-line{
-    grid-template-columns:repeat(3,1fr);
-  }
-
-  .system-line div{
-    padding-bottom:20px;
-  }
-
-  .use-grid{
-    grid-template-columns:1fr;
-  }
-
-  .use-card{
-    min-height:320px;
-  }
-
-  .module-grid{
-    grid-template-columns:1fr;
-  }
-
-  .module-visual{
-    min-height:480px;
-  }
-
-  .matrix{
-    grid-template-columns:repeat(2,1fr);
-  }
-
-  .flow-track{
-    grid-template-columns:repeat(3,1fr);
-    row-gap:65px;
-  }
-
-  .flow-connector{
-    display:none;
-  }
-
-  .demo-grid{
-    grid-template-columns:1fr;
-  }
-
-  .footer-top{
-    grid-template-columns:1fr 1fr;
-  }
-}
-
-@media(max-width:600px){
-
-  .nav{
-    height:68px;
-    padding:0 20px;
-  }
-
-  .brand-name{
-    font-size:1.15rem;
-  }
-
-  .hero-left{
-    padding:125px 23px 80px;
-  }
-
-  .hero-title{
-    font-size:clamp(2.8rem,13vw,4rem);
-    letter-spacing:-.8px;
-  }
-
-  .hero-description{
-    font-size:.8rem;
-  }
-
-  .hero-actions{
-    flex-direction:column;
-    align-items:stretch;
-  }
-
-  .button{
-    width:100%;
-  }
-
-  .hero-meta{
-    gap:20px;
-  }
-
-  .hero-right{
-    min-height:540px;
-  }
-
-  .restaurant-card{
-    width:78%;
-  }
-
-  .floating-note{
-    transform:scale(.82);
-  }
-
-  .note-one{
-    left:-2%;
-  }
-
-  .note-two{
-    right:-2%;
-  }
-
-  .hero-scroll{
-    left:23px;
-  }
-
-  .intro-band,
-  .use-section,
-  .matrix-section,
-  .flow-section,
-  .demo-section{
-    padding-left:23px;
-    padding-right:23px;
-  }
-
-  .module-section{
-    padding:90px 23px;
-  }
-
-  .intro-band{
-    padding-top:90px;
-    padding-bottom:85px;
-  }
-
-  .intro-content h2{
-    font-size:2.8rem;
-  }
-
-  .system-line{
-    grid-template-columns:repeat(2,1fr);
-    margin-top:65px;
-  }
-
-  .section-heading h2{
-    font-size:2.8rem;
-  }
-
-  .module-copy h2{
-    font-size:2.8rem;
-  }
-
-  .module-features{
-    grid-template-columns:1fr;
-  }
-
-  .module-visual{
-    min-height:390px;
-  }
-
-  .visual-window{
-    width:90%;
-  }
-
-  .visual-body{
-    padding:28px;
-  }
-
-  .visual-title strong{
-    font-size:1.35rem;
-  }
-
-  .float-top{
-    right:0;
-  }
-
-  .float-bottom{
-    left:0;
-  }
-
-  .matrix{
-    grid-template-columns:1fr;
-    margin-top:45px;
-  }
-
-  .feature-card{
-    min-height:210px;
-  }
-
-  .flow-heading h2{
-    font-size:3.1rem;
-  }
-
-  .flow-track{
-    grid-template-columns:1fr 1fr;
-    margin-top:65px;
-  }
-
-  .brand-moment{
-    min-height:570px;
-  }
-
-  .brand-moment h2{
-    font-size:3.1rem;
-  }
-
-  .moment-stats{
-    flex-direction:column;
-    gap:0;
-  }
-
-  .moment-stats div{
-    border-right:0;
-    border-bottom:1px solid rgba(255,255,255,.08);
-    padding:14px;
-  }
-
-  .moment-stats div:last-child{
-    border-bottom:0;
-  }
-
-  .demo-form-wrap{
-    padding:23px;
-  }
-
-  .form-grid{
-    grid-template-columns:1fr;
-  }
-
-  .form-grid label.full{
-    grid-column:auto;
-  }
-
-  .footer{
-    padding:65px 23px 22px;
-  }
-
-  .footer-top{
-    grid-template-columns:1fr;
-    gap:42px;
-    padding-bottom:50px;
-  }
-
-  .footer-middle{
-    align-items:flex-start;
-    flex-direction:column;
-    gap:15px;
-  }
-
-  .footer-bottom{
-    flex-direction:column;
-  }
-}
-
-@media(max-width:390px){
-
-  .hero-title{
-    font-size:2.65rem;
-  }
-
-  .hero-right{
-    min-height:500px;
-  }
-
-  .restaurant-card{
-    width:84%;
-  }
-
-  .hero-meta{
-    gap:13px;
-  }
-
-  .hero-meta span{
-    font-size:.5rem;
-  }
-
-  .flow-track{
-    grid-template-columns:1fr;
-  }
-}
-
-/* =========================================================
-   REDUCED MOTION
-========================================================= */
-
-
-@media(prefers-reduced-motion:reduce){
-
-  *,
-  *::before,
-  *::after{
-    scroll-behavior:auto!important;
-    animation-duration:.01ms!important;
-    animation-iteration-count:1!important;
-    transition-duration:.01ms!important;
-  }
-
-  .reveal{
-    opacity:1!important;
-    transform:none!important;
-  }
-}
-
-/* =========================================================
-   PREMIUM UX POLISH + HARDENED NATIVE PAGE SCROLL
-========================================================= */
-
-html,
-body{
-  overflow-x:hidden!important;
-  overflow-y:auto!important;
-  height:auto!important;
-  min-height:100%!important;
-  overscroll-behavior-y:auto;
-  scrollbar-gutter:stable;
-}
-
-html{
-  scroll-behavior:smooth!important;
-  scroll-padding-top:96px;
-}
-
-body{
-  position:relative;
-}
-
-#root,
-.site{
-  min-height:100vh!important;
-  height:auto!important;
-  overflow:visible!important;
-}
-
-/* Keep one real browser scrollbar — never create a fixed scroll shell. */
-.site{
-  position:relative;
-  isolation:isolate;
-  background:
-    radial-gradient(circle at 82% 8%, rgba(199,162,105,.07), transparent 28rem),
-    radial-gradient(circle at 12% 38%, rgba(166,176,154,.045), transparent 26rem);
-}
-
-.site::before{
-  content:"";
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:900;
-  opacity:.055;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
-  mix-blend-mode:soft-light;
-}
-
-/* Premium scrollbar */
-html::-webkit-scrollbar{
-  width:12px;
-}
-html::-webkit-scrollbar-track{
-  background:#15130f;
-}
-html::-webkit-scrollbar-thumb{
-  background:linear-gradient(180deg,#dfc18d,#a98248);
-  border:3px solid #15130f;
-  border-radius:999px;
-}
-html::-webkit-scrollbar-thumb:hover{
-  background:#f0d39e;
-}
-html{
-  scrollbar-width:auto;
-  scrollbar-color:#c7a269 #15130f;
-}
-
-/* Navigation */
-.nav{
-  transition:
-    background .45s ease,
-    border-color .45s ease,
-    box-shadow .45s ease,
-    transform .45s cubic-bezier(.2,.8,.2,1);
-}
-.nav-scrolled{
-  background:rgba(17,16,13,.84)!important;
-  border-bottom-color:rgba(223,193,141,.13)!important;
-  box-shadow:0 14px 50px rgba(0,0,0,.18);
-}
-.desktop-nav button{
-  position:relative;
-  transition:color .25s ease, transform .25s ease;
-}
-.desktop-nav button::after{
-  content:"";
-  position:absolute;
-  left:50%;
-  bottom:-8px;
-  width:5px;
-  height:5px;
-  border-radius:50%;
-  background:var(--gold2);
-  transform:translateX(-50%) scale(0);
-  transition:transform .25s ease;
-}
-.desktop-nav button:hover{
-  color:var(--cream3);
-  transform:translateY(-1px);
-}
-.desktop-nav button.active{
-  color:var(--cream3);
-}
-.desktop-nav button.active::after{
-  transform:translateX(-50%) scale(1);
-}
-.nav-demo{
-  box-shadow:0 0 0 0 rgba(199,162,105,.0);
-}
-.nav-demo:hover{
-  box-shadow:0 0 0 5px rgba(199,162,105,.08);
-}
 
-/* Hero depth */
-.hero{
-  position:relative;
-  overflow:hidden;
-}
-.hero::before{
-  content:"";
-  position:absolute;
-  width:min(42vw,620px);
-  height:min(42vw,620px);
-  right:-15vw;
-  top:8%;
-  border-radius:50%;
-  border:1px solid rgba(199,162,105,.08);
-  box-shadow:
-    0 0 100px rgba(199,162,105,.035),
-    inset 0 0 100px rgba(199,162,105,.025);
-  pointer-events:none;
-}
-.hero-title{
-  text-wrap:balance;
-}
-.hero-actions .button{
-  box-shadow:0 12px 35px rgba(0,0,0,.12);
-}
-.hero-actions .button.primary{
-  box-shadow:
-    0 12px 35px rgba(100,75,35,.16),
-    inset 0 1px 0 rgba(255,255,255,.2);
-}
-.restaurant-card{
-  box-shadow:
-    0 45px 100px rgba(0,0,0,.34),
-    0 0 0 1px rgba(255,255,255,.025);
-  transition:transform .6s cubic-bezier(.2,.8,.2,1), box-shadow .6s ease;
-}
-.restaurant-card:hover{
-  transform:translateY(-8px) rotateX(1deg) rotateY(-1deg);
-  box-shadow:
-    0 55px 120px rgba(0,0,0,.42),
-    0 0 0 1px rgba(223,193,141,.08);
-}
-
-/* Section rhythm */
-.intro-band,
-.use-section,
-.module-section,
-.matrix-section,
-.flow-section,
-.brand-moment,
-.demo-section,
-.footer{
-  position:relative;
-  isolation:isolate;
-}
-.section-heading h2,
-.flow-heading h2,
-.brand-moment h2,
-.demo-copy h2{
-  text-wrap:balance;
-}
-
-/* Module cards */
-.module-section{
-  overflow:hidden;
-}
-.module-grid{
-  position:relative;
-}
-.module-visual{
-  transition:
-    transform .6s cubic-bezier(.2,.8,.2,1),
-    box-shadow .6s ease,
-    border-color .4s ease;
-}
-.module-visual:hover{
-  transform:translateY(-7px);
-}
-.feature-card,
-.use-card,
-.matrix-card{
-  transition:
-    transform .45s cubic-bezier(.2,.8,.2,1),
-    box-shadow .45s ease,
-    border-color .35s ease,
-    background .35s ease;
-}
-.feature-card:hover,
-.use-card:hover,
-.matrix-card:hover{
-  transform:translateY(-6px);
-  box-shadow:0 24px 55px rgba(25,20,12,.11);
-  border-color:rgba(199,162,105,.28);
-}
-.dark .feature-card:hover,
-.dark .use-card:hover,
-.module-section.dark .feature-card:hover{
-  box-shadow:0 24px 55px rgba(0,0,0,.24);
-}
-
-/* Flow becomes visually connected */
-.flow-step{
-  position:relative;
-}
-.flow-step::before{
-  content:"";
-  position:absolute;
-  inset:8px;
-  border:1px solid rgba(199,162,105,.07);
-  border-radius:inherit;
-  pointer-events:none;
-}
-
-/* Form UX */
-.demo-form-wrap{
-  position:relative;
-  overflow:hidden;
-  border-radius:24px!important;
-}
-.demo-form-wrap::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(223,193,141,.09), transparent 30%),
-    linear-gradient(135deg,rgba(255,255,255,.025),transparent 45%);
-}
-.form-grid input,
-.form-grid textarea,
-.form-grid select{
-  transition:
-    border-color .25s ease,
-    background .25s ease,
-    box-shadow .25s ease,
-    transform .25s ease;
-}
-.form-grid input:focus,
-.form-grid textarea:focus,
-.form-grid select:focus{
-  outline:none;
-  border-color:rgba(223,193,141,.65)!important;
-  background:rgba(255,255,255,.065)!important;
-  box-shadow:0 0 0 4px rgba(199,162,105,.08);
-}
-.form-grid label:focus-within > span{
-  color:var(--gold2);
-}
-
-/* Buttons */
-.button{
-  position:relative;
-  overflow:hidden;
-}
-.button::before,
-.button-primary::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:linear-gradient(110deg,transparent 20%,rgba(255,255,255,.18) 48%,transparent 76%);
-  transform:translateX(-120%);
-  transition:transform .65s ease;
-  pointer-events:none;
-}
-.button:hover::before,
-.button-primary:hover::before{
-  transform:translateX(120%);
-}
-
-/* Reveal polish */
-.reveal{
-  will-change:transform,opacity;
-}
-
-/* Mobile: preserve native vertical scrolling and improve touch targets */
-@media(max-width:900px){
-  html,
-  body{
-    overflow-y:auto!important;
-  }
-
-  .desktop-nav{
-    display:none!important;
-  }
-
-  .mobile-menu-button{
-    min-width:46px;
-    min-height:46px;
-  }
-
-  .hero{
-    min-height:100svh;
-  }
-
-  .hero-actions{
-    width:100%;
-  }
-
-  .hero-actions .button{
-    min-height:52px;
-  }
-
-  .demo-grid{
-    gap:48px!important;
-  }
-
-  .demo-form-wrap{
-    border-radius:20px!important;
-  }
-}
-
-@media(max-width:600px){
-  html{
-    scrollbar-width:auto;
-  }
-
-  .hero-title{
-    font-size:clamp(3.2rem,16vw,5.2rem)!important;
-  }
-
-  .section-heading h2,
-  .flow-heading h2,
-  .brand-moment h2,
-  .demo-copy h2{
-    letter-spacing:-1.7px;
-  }
-
-  .form-grid{
-    grid-template-columns:1fr!important;
-  }
-
-  .form-grid label.full{
-    grid-column:auto!important;
-  }
-
-  .contact-details a{
-    min-height:42px;
-  }
-}
-
-/* Prevent accidental horizontal overflow from animated visual layers */
-img,
-svg,
-canvas,
-video{
-  max-width:100%;
-}
 
-`;
