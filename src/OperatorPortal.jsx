@@ -13844,7 +13844,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           </div>
           <div style={{marginBottom:'18px'}}>
             <div style={{fontSize:'0.5rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Quantity to Add</div>
-            <input type="number" min="1" autoFocus
+            <input type="number" min="1"
               value={extraRestockQty} onChange={e=>setExtraRestockQty(e.target.value)}
               onKeyDown={e=>{
                 if(e.key==='Enter'&&extraRestockQty&&Number(extraRestockQty)>0){

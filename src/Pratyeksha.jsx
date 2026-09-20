@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /*
-  PRATYEKSHa
+  Pratyeksha
   Single-file landing website
   React + CSS inside App.jsx
 */
@@ -397,14 +397,14 @@ const useCases = [
 
 
 const faqs = [
-  { q: "Is PRATYEKSHa a POS replacement?", a: "PRATYEKSHa is designed as a connected restaurant experience and intelligence layer, bringing customer experience, kitchen workflows, billing, inventory and marketing signals into one connected journey." },
+  { q: "Is Pratyeksha a POS replacement?", a: "Pratyeksha is designed as a connected restaurant experience and intelligence layer, bringing customer experience, kitchen workflows, billing, inventory and marketing signals into one connected journey." },
   { q: "Can customers order directly from a QR menu?", a: "Yes. The customer journey can connect QR discovery with menu browsing, dish information, ordering and configured order-status experiences." },
   { q: "Can operators control menu visibility?", a: "Yes. Menu visibility and availability can be managed as part of the restaurant's operational workflow, while keeping the customer-facing menu connected." },
   { q: "Does the platform support GST billing?", a: "The platform includes GST-oriented billing workflows with CGST and SGST calculations, invoice sequencing and configured payment methods." },
   { q: "Can recipes connect with inventory?", a: "Yes. Recipe and ingredient relationships can connect dish availability, stock movement and operational inventory information." },
-  { q: "Can it support multiple outlets?", a: "PRATYEKSHa is designed with multi-outlet workflows in mind, allowing menu, operational and reporting structures to extend across locations." },
+  { q: "Can it support multiple outlets?", a: "Pratyeksha is designed with multi-outlet workflows in mind, allowing menu, operational and reporting structures to extend across locations." },
   { q: "Does it support multilingual experiences?", a: "The customer experience can support English, Marathi and Hindi-oriented menu and voice experiences where configured." },
-  { q: "How can I see it for my restaurant?", a: "Use the private demonstration form and share the parts of your current restaurant setup you want to improve. The walkthrough can then focus on the relevant PRATYEKSHa workflows." },
+  { q: "How can I see it for my restaurant?", a: "Use the private demonstration form and share the parts of your current restaurant setup you want to improve. The walkthrough can then focus on the relevant Pratyeksha workflows." },
 ];
 
 /* =========================================================
@@ -794,7 +794,7 @@ function ProductVisual({ type }) {
             <I name="brain" size={17} />
           </div>
           <div>
-            <span>PRATYEKSHa SIGNAL</span>
+            <span>Pratyeksha SIGNAL</span>
             <strong>
               Weekend dinner orders are trending toward premium combos.
             </strong>
@@ -1152,7 +1152,7 @@ export default function App() {
               <I name="spark" size={24} />
             </div>
 
-            <div className="loading-brand">PRATYEKSHa</div>
+            <div className="loading-brand">Pratyeksha</div>
 
             <div className="loading-line">
               <span />
@@ -1204,13 +1204,13 @@ export default function App() {
         <button
           className="brand"
           onClick={() => scrollTo("home")}
-          aria-label="PRATYEKSHa home"
+          aria-label="Pratyeksha home"
         >
           <span className="brand-mark">
             <I name="spark" size={16} />
           </span>
 
-          <span className="brand-name">PRATYEKSHa</span>
+          <span className="brand-name">Pratyeksha</span>
         </button>
 
         <nav className="desktop-nav">
@@ -1263,7 +1263,7 @@ export default function App() {
         </button>
 
         <div className="mobile-menu-inner">
-          <span>PRATYEKSHa</span>
+          <span>Pratyeksha</span>
 
           {[
             ["home", "Home"],
@@ -1305,7 +1305,7 @@ export default function App() {
             </h1>
 
             <p className="hero-description reveal delay-2">
-              PRATYEKSHa connects your customer menu, kitchen,
+              Pratyeksha connects your customer menu, kitchen,
               billing, inventory, analytics and marketing into one
               intelligent restaurant experience system.
             </p>
@@ -1355,7 +1355,7 @@ export default function App() {
               <div className="restaurant-top">
                 <div>
                   <small>LIVE RESTAURANT</small>
-                  <strong>PRATYEKSHa</strong>
+                  <strong>Pratyeksha</strong>
                 </div>
 
                 <span className="live">
@@ -1442,7 +1442,7 @@ export default function App() {
           <div className="product-section-inner">
             <div className="section-head">
               <div>
-                <span className="eyebrow">The PRATYEKSHa system</span>
+                <span className="eyebrow">The Pratyeksha system</span>
                 <h2>Five layers. One restaurant experience.</h2>
               </div>
               <p>Instead of forcing every part of the restaurant into one dashboard, each layer gets an interface designed around the job it needs to perform.</p>
@@ -1601,7 +1601,7 @@ export default function App() {
                       <span />
                     </div>
 
-                    <small>PRATYEKSHa / {module.eyebrow}</small>
+                    <small>Pratyeksha / {module.eyebrow}</small>
                   </div>
 
                   <div className="visual-body">
@@ -1664,7 +1664,7 @@ export default function App() {
             </h2>
 
             <p>
-              PRATYEKSHa sits between the customer experience
+              Pratyeksha sits between the customer experience
               and the operational engine of your café or restaurant.
             </p>
           </div>
@@ -1851,7 +1851,7 @@ export default function App() {
               <h2 className="reveal delay-1">
                 See what
                 <br />
-                <em>PRATYEKSHa</em>
+                <em>Pratyeksha</em>
                 <br />
                 can do for you.
               </h2>
@@ -2014,9 +2014,9 @@ export default function App() {
       <section id="signature" className="signature-section">
         <div className="signature-shell">
           <div className="signature-heading reveal">
-            <div className="eyebrow">THE PRATYEKSHa DIFFERENCE</div>
+            <div className="eyebrow">THE Pratyeksha DIFFERENCE</div>
             <h2>One experience.<br /><em>Many intelligent layers.</em></h2>
-            <p>Editorial typography, cinematic dark surfaces, warm beige panels and quiet sage signals bring the earlier PRATYEKSHa visual language into the new landing experience.</p>
+            <p>Editorial typography, cinematic dark surfaces, warm beige panels and quiet sage signals bring the earlier Pratyeksha visual language into the new landing experience.</p>
           </div>
           <div className="signature-grid">
             <article className="signature-card reveal"><span className="signature-number">01</span><I name="spark" size={22} /><div className="signature-rule" /><h3>Discovery</h3><p>A menu should feel like an experience before it becomes an order.</p><small>MENU / CUSTOMER EXPERIENCE</small></article>
@@ -2033,7 +2033,7 @@ export default function App() {
           <div className="journey-copy reveal">
             <div className="eyebrow">DESIGNED AROUND THE GUEST</div>
             <h2>From the first <em>scan</em><br />to the last impression.</h2>
-            <p>A premium restaurant experience is made from small moments. PRATYEKSHa connects those moments without making the customer feel like they are navigating software.</p>
+            <p>A premium restaurant experience is made from small moments. Pratyeksha connects those moments without making the customer feel like they are navigating software.</p>
             <div className="journey-note"><span className="journey-dot" /> QUIET TECHNOLOGY / VISIBLE EXPERIENCE</div>
           </div>
           <div className="journey-visual reveal delay-1">
@@ -2073,7 +2073,7 @@ export default function App() {
             <span className="live-pill"><i /> LIVE OPERATIONS / CONNECTED</span>
           </div>
           <div className="command-board reveal delay-1">
-            <div className="board-top"><span>PRATYEKSHa</span><span>OPERATOR / TODAY</span><span>10:42 PM</span></div>
+            <div className="board-top"><span>Pratyeksha</span><span>OPERATOR / TODAY</span><span>10:42 PM</span></div>
             <div className="board-body">
               <aside className="board-sidebar">
                 <div className="board-nav active"><I name="spark" size={14} />Overview</div>
@@ -2120,23 +2120,22 @@ export default function App() {
       <section id="fusion" className="fusion-section">
         <div className="fusion-orb fusion-orb-one"/><div className="fusion-orb fusion-orb-two"/>
         <div className="fusion-inner">
-          <div className="fusion-heading reveal"><div className="eyebrow">THE COMPLETE PRODUCT VIEW</div><div className="fusion-kicker">09 / EXPERIENCE × OPERATIONS × INTELLIGENCE</div><h2>Three design directions.<br/><em>One PRATYEKSHa system.</em></h2><p>The strongest visual language from the earlier concepts is brought together here: the warm editorial restaurant feel, the dark operational dashboard aesthetic, and the refined premium landing experience.</p></div>
+          <div className="fusion-heading reveal"><div className="eyebrow">THE COMPLETE PRODUCT VIEW</div><div className="fusion-kicker">09 / EXPERIENCE × OPERATIONS × INTELLIGENCE</div><h2>Three design directions.<br/><em>One Pratyeksha system.</em></h2><p>The strongest visual language from the earlier concepts is brought together here: the warm editorial restaurant feel, the dark operational dashboard aesthetic, and the refined premium landing experience.</p></div>
           <div className="fusion-grid">
-            <article className="fusion-panel fusion-menu-panel reveal"><div className="fusion-panel-top"><span>01 / GUEST EXPERIENCE</span><I name="qr" size={18}/></div><div className="fusion-phone"><div className="fusion-phone-top"><span>PRATYEKSHa</span><span>TABLE 12</span></div><div className="fusion-phone-brand">Multi Fusion Food</div><div className="fusion-phone-search"><I name="globe" size={14}/> Explore the menu <span>⌕</span></div><div className="fusion-dish-hero"><div className="fusion-dish-orbit"/><div className="fusion-dish-core">✦</div><span>CHEF SPECIAL</span></div><div className="fusion-phone-title">Signature dish</div><div className="fusion-phone-copy">Discover dishes, ingredients and recommendations before you order.</div><div className="fusion-phone-tabs"><b>Popular</b><span>Chaat</span><span>Pizza</span><span>Shakes</span></div></div><div className="fusion-panel-note"><strong>QR → Explore → Understand → Order</strong><span>Premium customer-facing layer</span></div></article>
+            <article className="fusion-panel fusion-menu-panel reveal"><div className="fusion-panel-top"><span>01 / GUEST EXPERIENCE</span><I name="qr" size={18}/></div><div className="fusion-phone"><div className="fusion-phone-top"><span>Pratyeksha</span><span>TABLE 12</span></div><div className="fusion-phone-brand">Multi Fusion Food</div><div className="fusion-phone-search"><I name="globe" size={14}/> Explore the menu <span>⌕</span></div><div className="fusion-dish-hero"><div className="fusion-dish-orbit"/><div className="fusion-dish-core">✦</div><span>CHEF SPECIAL</span></div><div className="fusion-phone-title">Signature dish</div><div className="fusion-phone-copy">Discover dishes, ingredients and recommendations before you order.</div><div className="fusion-phone-tabs"><b>Popular</b><span>Chaat</span><span>Pizza</span><span>Shakes</span></div></div><div className="fusion-panel-note"><strong>QR → Explore → Understand → Order</strong><span>Premium customer-facing layer</span></div></article>
             <article className="fusion-panel fusion-kitchen-panel reveal delay-1"><div className="fusion-panel-top"><span>02 / KITCHEN FLOW</span><I name="kitchen" size={18}/></div><div className="fusion-board"><div className="fusion-board-head"><strong>Kitchen Display</strong><span className="fusion-live">LIVE</span></div><div className="fusion-columns"><div><small>NEW</small><div className="fusion-ticket"><b>#1048</b><strong>Paneer Tikka</strong><span>Table 12 · 2 items</span><i>00:48</i></div><div className="fusion-ticket"><b>#1049</b><strong>Veg Momos</strong><span>Takeaway · 1 item</span><i>01:12</i></div></div><div><small>PREPARING</small><div className="fusion-ticket active"><b>#1045</b><strong>Special Combo</strong><span>Table 08 · 4 items</span><i>04:28</i></div><div className="fusion-ticket"><b>#1046</b><strong>Fresh Fruit Shake</strong><span>Table 03 · 2 items</span><i>02:06</i></div></div><div><small>READY</small><div className="fusion-ticket ready"><b>#1041</b><strong>Masala Maggi</strong><span>Table 05 · 1 item</span><i>READY</i></div></div></div></div><div className="fusion-panel-note"><strong>Order state stays visible.</strong><span>FIFO tickets · timers · live sync</span></div></article>
             <article className="fusion-panel fusion-command-panel reveal delay-2"><div className="fusion-panel-top"><span>03 / OPERATOR COMMAND</span><I name="chart" size={18}/></div><div className="fusion-command-window"><div className="fusion-command-head"><div><small>RESTAURANT OVERVIEW</small><strong>Today at a glance</strong></div><span>20 SEP 2026</span></div><div className="fusion-metrics"><div><small>REVENUE</small><b>₹48.2K</b><span>+12.8%</span></div><div><small>ORDERS</small><b>184</b><span>+8.4%</span></div><div><small>AVG. BILL</small><b>₹842</b><span>+4.1%</span></div></div><div className="fusion-chart"><div className="fusion-chart-line"><span/><span/><span/><span/><span/><span/><span/></div><div className="fusion-chart-fill"/></div><div className="fusion-floor"><span className="occupied">●</span><span className="occupied">●</span><span>●</span><span className="occupied">●</span><span>●</span><span className="occupied">●</span><span>●</span><span className="occupied">●</span></div><div className="fusion-command-foot"><span>6 occupied</span><span>2 available</span><span>Inventory synced</span></div></div><div className="fusion-panel-note"><strong>Signals, not software noise.</strong><span>Billing · floor · inventory · analytics</span></div></article>
           </div>
-          <div className="fusion-bottom reveal delay-3"><span>CHARCOAL / BEIGE / GOLD / DIM SAGE</span><div className="fusion-swatches"><i/><i/><i/><i/></div><strong>One premium visual system across every touchpoint.</strong></div>
         </div>
       </section>
 
       <section id="faq" className="faq-section">
         <div className="faq-orbit faq-orbit-one"/><div className="faq-orbit faq-orbit-two"/>
         <div className="faq-inner">
-          <div className="faq-intro reveal"><div className="eyebrow">QUESTIONS / ANSWERS</div><div className="faq-kicker">08 / CLARITY BEFORE COMMITMENT</div><h2>Everything you need to know, <em>before the first demo.</em></h2><p>A concise look at how PRATYEKSHa fits into a real café or restaurant without the usual software-sales noise.</p><div className="faq-side-card"><span><I name="spark" size={17}/></span><div><small>STILL CURIOUS?</small><strong>Let's show you the actual experience.</strong></div><button onClick={()=>scrollTo("demo")}>Book demo <I name="arrow" size={14}/></button></div></div>
+          <div className="faq-intro reveal"><div className="eyebrow">QUESTIONS / ANSWERS</div><div className="faq-kicker">08 / CLARITY BEFORE COMMITMENT</div><h2>Everything you need to know, <em>before the first demo.</em></h2><p>A concise look at how Pratyeksha fits into a real café or restaurant without the usual software-sales noise.</p><div className="faq-side-card"><span><I name="spark" size={17}/></span><div><small>STILL CURIOUS?</small><strong>Let's show you the actual experience.</strong></div><button onClick={()=>scrollTo("demo")}>Book demo <I name="arrow" size={14}/></button></div></div>
           <div className="faq-list reveal delay-1">{faqs.map((item,index)=>{const open=openFaq===index;return <article className={`faq-item ${open?'is-open':''}`} key={item.q}><button className="faq-question" onClick={()=>setOpenFaq(open?-1:index)} aria-expanded={open}><span className="faq-index">{String(index+1).padStart(2,"0")}</span><span className="faq-question-text">{item.q}</span><span className="faq-toggle"><i/><i/></span></button><div className="faq-answer-wrap"><div className="faq-answer">{item.a}</div></div></article>})}</div>
         </div>
-        <div className="faq-bottom-line"><span>PRATYEKSHa / RESTAURANT EXPERIENCE SYSTEM</span><span>DESIGNED AROUND THE WAY PEOPLE DINE</span></div>
+        <div className="faq-bottom-line"><span>Pratyeksha / RESTAURANT EXPERIENCE SYSTEM</span><span>DESIGNED AROUND THE WAY PEOPLE DINE</span></div>
       </section>
 
       </main>
@@ -2156,7 +2155,7 @@ export default function App() {
                 <I name="spark" size={17} />
               </span>
 
-              PRATYEKSHa
+              Pratyeksha
             </button>
 
             <p>
@@ -2246,7 +2245,7 @@ export default function App() {
 
         <div className="footer-bottom">
           <span>
-            © {new Date().getFullYear()} PRATYEKSHa. All rights
+            © {new Date().getFullYear()} Pratyeksha. All rights
             reserved.
           </span>
 
