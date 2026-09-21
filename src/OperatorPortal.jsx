@@ -4205,7 +4205,7 @@ const renderMonthHeatmap = () => {
   // ─────────────────────────────────────────────────────
   if (!isAuthenticated) return (
     <div style={styles.loginOverlay}>
-      <motion.div initial={{opacity:0}} animate={{opacity:1}} style={styles.loginBox}>
+      <motion.div initial={false} animate={{opacity:1}} style={styles.loginBox}>
         <img src={logoPath} alt="Logo" style={styles.sidebarLogo}/>
         <h2 style={{fontSize:'1.2rem',marginBottom:'30px',fontWeight:'900'}}>ADMIN COMMAND CENTER</h2>
         <form onSubmit={handleLogin}>
@@ -4252,7 +4252,7 @@ const renderMonthHeatmap = () => {
 
     return (
       <motion.div
-        initial={{ x: 340, opacity: 0, scale: 0.96 }}
+        initial={false}
         animate={{ x: 0, opacity: 1, scale: 1 }}
         exit={{ x: 340, opacity: 0, scale: 0.96 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
@@ -4717,7 +4717,7 @@ const renderMonthHeatmap = () => {
         {ingredientAlerts.filter(a => !a.dismissed).map(alert => (
             <motion.div
                 key={alert.id}
-                initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 340, damping: 28 }}
@@ -5138,13 +5138,13 @@ const renderMonthHeatmap = () => {
     const isReserved = !!activeReservation;
     return (
       <>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+        <motion.div initial={false} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
           onClick={() => setActiveTableTicket(null)}
           style={{ position:'fixed', inset:0, background:'#000', zIndex:9300 }} />
         <div onClick={() => setActiveTableTicket(null)}
           style={{ position:'fixed', inset:0, zIndex:9301, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
           <motion.div onClick={e => e.stopPropagation()}
-            initial={{ scale:0.94, opacity:0, y:12 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
+            initial={false} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
             transition={{ type:'spring', stiffness:320, damping:28 }}
             style={{ width:400, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#0a0b0e', border:'1px solid rgba(211,191,162,0.15)', borderRadius:16, margin:'auto', boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
             <div style={{ padding:'16px 18px', borderBottom:'1px solid rgba(211,191,162,0.08)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -5225,13 +5225,13 @@ const renderMonthHeatmap = () => {
 <AnimatePresence>
   {quickReserveTable && (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+      <motion.div initial={false} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
         onClick={() => setQuickReserveTable(null)}
         style={{ position:'fixed', inset:0, background:'#000', zIndex:9400 }} />
       <div onClick={() => setQuickReserveTable(null)}
         style={{ position:'fixed', inset:0, zIndex:9401, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
         <motion.div onClick={e => e.stopPropagation()}
-          initial={{ scale:0.94, opacity:0, y:12 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
+          initial={false} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.94, opacity:0, y:12 }}
           transition={{ type:'spring', stiffness:320, damping:28 }}
           style={{ width:360, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#0a0b0e', border:'1px solid rgba(138,112,77,0.3)', borderRadius:16, margin:'auto', padding:20, boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
           <div style={{ fontSize:'0.8rem', fontWeight:900, color:'#fff', marginBottom:4 }}>Reserve Table {quickReserveTable}</div>
@@ -6126,12 +6126,12 @@ const renderMonthHeatmap = () => {
     <AnimatePresence>
       {editDishModal && (
         <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={e => { if (e.target === e.currentTarget) setEditDishModal(null); }}
         >
           <motion.div
-            initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+            initial={false} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
             style={{ background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '580px', maxHeight: '88vh', overflowY: 'auto' }}
             className="custom-scroll"
           >
@@ -6732,12 +6732,12 @@ const renderMonthHeatmap = () => {
       {customerProfile && (
         <>
           <motion.div
-            initial={{opacity:0}} animate={{opacity:0.6}} exit={{opacity:0}}
+            initial={false} animate={{opacity:0.6}} exit={{opacity:0}}
             onClick={() => setCustomerProfile(null)}
             style={{position:'fixed',inset:0,background:'#000',zIndex:3000}}
           />
           <motion.div
-            initial={{x:'100%'}} animate={{x:0}} exit={{x:'100%'}}
+            initial={false} animate={{x:0}} exit={{x:'100%'}}
             transition={{type:'spring',stiffness:300,damping:32}}
             style={{
               position:'fixed',right:0,top:0,bottom:0,width:'420px',
@@ -7846,7 +7846,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 </div>
               </div>
 {tableBill && (
-  <motion.div initial={{x:20,opacity:0}} animate={{x:0,opacity:1}} style={styles.receipt}>
+  <motion.div initial={false} animate={{x:0,opacity:1}} style={styles.receipt}>
 
     {/* ── HEADER ── */}
     <div style={{textAlign:'center', marginBottom:'16px'}}>
@@ -12781,7 +12781,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {purchaseHistoryItem && (
     <div style={styles.modalBackdrop} onClick={() => setPurchaseHistoryItem(null)}>
       <motion.div
-        initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }}
+        initial={false} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }}
         transition={{ type: 'tween', duration: 0.25 }}
         onClick={e => e.stopPropagation()}
         style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '420px', background: '#080808', borderLeft: '1px solid #151515', display: 'flex', flexDirection: 'column', zIndex: 9100 }}
@@ -13712,10 +13712,10 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {/* ── EDIT MODAL ── */}
   <AnimatePresence>
     {extraItemEditModal&&(
-      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+      <motion.div initial={false} animate={{opacity:1}} exit={{opacity:0}}
         style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
         onClick={e=>{if(e.target===e.currentTarget)setExtraItemEditModal(null);}}>
-        <motion.div initial={{scale:0.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
+        <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
           style={{background:'#0a0a0a',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.35)',borderRadius:'20px',padding:'28px',width:'100%',maxWidth:'540px',maxHeight:'88vh',overflowY:'auto'}}
           className="custom-scroll">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'24px'}}>
@@ -13833,10 +13833,10 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {/* ── RESTOCK MODAL ── */}
   <AnimatePresence>
     {extraRestockModal&&(
-      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+      <motion.div initial={false} animate={{opacity:1}} exit={{opacity:0}}
         style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.82)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
         onClick={e=>{if(e.target===e.currentTarget){setExtraRestockModal(null);setExtraRestockQty('');}}}>
-        <motion.div initial={{scale:0.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
+        <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.96,opacity:0}}
           style={{background:'#0a0a0a',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.3)',borderRadius:'16px',padding:'26px',width:'100%',maxWidth:'340px'}}>
           <div style={{marginBottom:'20px'}}>
             <h3 style={{margin:'0 0 4px',fontSize:'0.9rem',fontWeight:'900',color:'#d3bfa2'}}>RESTOCK</h3>
@@ -14242,7 +14242,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {reservationEditModal && (
     <div style={styles.modalBackdrop} className="p-modal-backdrop">
       <motion.div
-        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
         style={{...styles.confirmBox, width:'480px', textAlign:'left', padding:'36px 28px', maxHeight:'85vh', overflowY:'auto'}}
         className="p-modal-box custom-scroll">
 
@@ -14327,7 +14327,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {extraItemEditModal && (
     <div style={styles.modalBackdrop}>
       <motion.div
-        initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
+        initial={false} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
         style={{ ...styles.confirmBox, width: '520px', textAlign: 'left', maxHeight: '85vh', overflowY: 'auto', padding: '40px' }}
         className="custom-scroll"
       >
@@ -14462,7 +14462,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <AnimatePresence>
         {confirmModal.show && (
           <div style={styles.modalBackdrop}>
-            <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
+            <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>{confirmModal.title}</h3>
               <p style={{color:'#666',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>{confirmModal.subtitle}</p>
               <div style={{display:'flex',gap:'12px'}}>
@@ -14478,7 +14478,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <AnimatePresence>
         {activePriceEditItem && (
           <div style={styles.modalBackdrop}>
-            <motion.div initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+            <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
               style={{...styles.confirmBox,width:'420px',textAlign:'left'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'20px'}}>
                 <UtensilsCrossed size={20} color="#d3bfa2"/>
@@ -14523,7 +14523,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   {showAddDishModal && (
     <div style={styles.modalBackdrop}>
       <motion.div
-        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
         style={{
           ...styles.confirmBox,
           width:'560px',textAlign:'left',
@@ -14853,7 +14853,7 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
 <AnimatePresence>
   {pendingDeleteDish && (
     <div style={styles.modalBackdrop}>
-      <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
+      <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
         <div style={{display:'flex',justifyContent:'center',marginBottom:'20px'}}>
           <div style={{width:'50px',height:'50px',borderRadius:'50%',background:'rgba(138,112,77,0.1)',border:'1px solid rgba(138,112,77,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <UtensilsCrossed size={22} color="#8a704d"/>
@@ -14893,7 +14893,7 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
       <AnimatePresence>
         {pendingDeleteStaff && (
           <div style={styles.modalBackdrop}>
-            <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
+            <motion.div initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}} style={styles.confirmBox}>
               <div style={{display:'flex',justifyContent:'center',color:'#ff4d4d',marginBottom:'15px'}}><AlertTriangle size={32}/></div>
               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>PERMANENT WIPEOUT</h3>
               <p style={{color:'#666',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>
@@ -14934,7 +14934,7 @@ style={{
   {assignTableModal && (
     <div style={styles.modalBackdrop}>
       <motion.div
-        initial={{ scale: 0.94, opacity: 0, y: 10 }}
+        initial={false}
         animate={{ scale: 1,    opacity: 1, y: 0  }}
         exit={{   scale: 0.94, opacity: 0, y: 10  }}
         style={{ ...styles.confirmBox, width: '480px', textAlign: 'left', padding: '0', overflow: 'hidden' }}
@@ -15106,11 +15106,11 @@ onClick={async () => {
 <AnimatePresence>
   {activeAggregatorPopup && (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
     >
       <motion.div
-        initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+        initial={false} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
         style={{
           background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.25)',
           borderTop: `4px solid ${activeAggregatorPopup.platform === 'zomato' ? '#cb202d' : '#fc8019'}`,
@@ -15200,7 +15200,7 @@ onClick={async () => {
   {salaryEditModal && (
     <div style={styles.modalBackdrop}>
       <motion.div
-        initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
+        initial={false} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
         style={{...styles.confirmBox, width:'400px', textAlign:'left'}}
       >
         {/* HEADER */}
@@ -15312,7 +15312,7 @@ onClick={async () => {
     <>
       {/* Backdrop */}
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
+        initial={false} animate={{ opacity: 0.65 }} exit={{ opacity: 0 }}
         onClick={() => setPurchaseOrderModal(null)}
         style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9200 }}
       />
@@ -15329,7 +15329,7 @@ onClick={async () => {
       {/* Modal */}
       <motion.div
         onClick={e => e.stopPropagation()}
-        initial={{ scale: 0.93, opacity: 0, y: 12 }}
+        initial={false}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.93, opacity: 0, y: 12 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}

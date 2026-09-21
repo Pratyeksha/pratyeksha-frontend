@@ -896,6 +896,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("home");
   const [activeProduct, setActiveProduct] = useState("experience");
   const [cursorActive, setCursorActive] = useState(false);
+  const [legalPage, setLegalPage] = useState(null);
   const activeProductIndex = Object.keys(PRODUCTS).indexOf(activeProduct);
   const activeProductData = PRODUCTS[activeProduct];
 
@@ -967,6 +968,19 @@ export default function App() {
   }, []);
 
   /* -------------------------------------------------------
+     LEGAL PAGE / ESCAPE
+  ------------------------------------------------------- */
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setLegalPage(null);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  /* -------------------------------------------------------
      REVEAL ON SCROLL
   ------------------------------------------------------- */
 
@@ -991,7 +1005,31 @@ export default function App() {
     elements.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
-  }, [loading]);
+  }, [loading, legalPage]);
+
+  /* -------------------------------------------------------
+     LEGAL / WEBSITE VIEW RESTORE
+  ------------------------------------------------------- */
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    if (!legalPage && !loading) {
+      requestAnimationFrame(() => {
+        document.querySelectorAll(".site .reveal").forEach((el) => {
+          el.classList.remove("visible");
+        });
+
+        requestAnimationFrame(() => {
+          document.querySelectorAll(".site .reveal").forEach((el) => {
+            const rect = el.getBoundingClientRect();
+            if (rect.top < window.innerHeight * 0.95) el.classList.add("visible");
+          });
+          window.dispatchEvent(new Event("scroll"));
+        });
+      });
+    }
+  }, [legalPage, loading]);
 
   /* -------------------------------------------------------
      CURSOR
@@ -1172,8 +1210,101 @@ export default function App() {
   }
 
   /* =======================================================
-     WEBSITE
+     WEBSITE / LEGAL PAGES
   ======================================================= */
+
+  if (legalPage) {
+    const isPrivacy = legalPage === "privacy";
+
+    return (
+      <div className="legal-page-shell">
+        <style>{CSS}</style>
+
+        <header className="legal-nav">
+          <button className="legal-brand" onClick={() => setLegalPage(null)} aria-label="Back to Pratyeksha home">
+            <span><I name="spark" size={17} /></span>
+            Pratyeksha
+          </button>
+          <button className="legal-close" onClick={() => setLegalPage(null)}>
+            <span>Back to website</span><I name="arrow" size={15} />
+          </button>
+        </header>
+
+        <main className="legal-main">
+          <section className="legal-hero">
+            <div className="legal-hero-orbit orbit-a" />
+            <div className="legal-hero-orbit orbit-b" />
+            <div className="legal-hero-copy">
+              <div className="eyebrow">PRATYEKSHa / LEGAL</div>
+              <div className="legal-index">{isPrivacy ? "01 / PRIVACY" : "02 / TERMS"}</div>
+              <h1>{isPrivacy ? <>Privacy <em>Policy</em></> : <>Terms of <em>Use</em></>}</h1>
+              <p>
+                {isPrivacy
+                  ? "A clear explanation of how Pratyeksha handles information across its website, product enquiries and customer-facing experiences."
+                  : "The terms that govern access to the Pratyeksha website, platform information, demos and related services."}
+              </p>
+              <div className="legal-meta">
+                <span>Last updated: 21 September 2026</span>
+                <span>India</span>
+              </div>
+            </div>
+            <div className="legal-hero-card">
+              <div className="legal-card-mark"><I name={isPrivacy ? "shield" : "layers"} size={22} /></div>
+              <span>{isPrivacy ? "YOUR INFORMATION" : "YOUR USE"}</span>
+              <strong>{isPrivacy ? "Clear, purposeful, responsible." : "Simple rules. Clear expectations."}</strong>
+              <small>{isPrivacy ? "We collect and use information only for defined business and product purposes." : "Use Pratyeksha responsibly and respect the people, systems and businesses connected to it."}</small>
+            </div>
+          </section>
+
+          <section className="legal-layout">
+            <aside className="legal-toc">
+              <span>ON THIS PAGE</span>
+              {(isPrivacy ? ["Information we collect","How we use information","Sharing & service providers","Cookies & analytics","Security & retention","Your choices","Children's privacy","Changes & contact"] : ["Acceptance","Using the website","Accounts & enquiries","Intellectual property","Third-party services","Availability","Disclaimers","Liability","Governing law","Changes & contact"]).map((item, i) => (
+                <a key={item} href={`#legal-${i + 1}`}>{String(i + 1).padStart(2,"0")} <span>{item}</span></a>
+              ))}
+            </aside>
+
+            <article className="legal-document">
+              {isPrivacy ? (
+                <>
+                  <section id="legal-1" className="legal-block"><span className="legal-num">01</span><div><h2>Information we collect</h2><p>Pratyeksha may receive information you voluntarily provide when you contact us, request a demo, communicate with our team or use a product feature. This can include your name, business name, phone number, email address, outlet information and the contents of your enquiry.</p><p>When the platform is used by a restaurant or café, operational information may also be processed on behalf of that business, such as menu, order, inventory, billing or customer-experience data configured by the business.</p></div></section>
+                  <section id="legal-2" className="legal-block"><span className="legal-num">02</span><div><h2>How we use information</h2><p>We use information to respond to enquiries, arrange demonstrations, provide and improve Pratyeksha services, support customers, maintain security, troubleshoot issues and communicate service-related information.</p><p>Where marketing communications are sent, you can ask us to stop receiving them. We do not use information for purposes materially different from those described here without an appropriate notice or legal basis.</p></div></section>
+                  <section id="legal-3" className="legal-block"><span className="legal-num">03</span><div><h2>Sharing & service providers</h2><p>We may share information with trusted technology and service providers that help us operate the website or platform, such as hosting, database, analytics, communication and infrastructure providers. They receive only the information reasonably necessary for the service they provide.</p><p>We may also disclose information where required by law, to protect rights and safety, prevent abuse or fraud, or as part of a business transfer such as a merger, acquisition or restructuring.</p></div></section>
+                  <section id="legal-4" className="legal-block"><span className="legal-num">04</span><div><h2>Cookies & analytics</h2><p>Pratyeksha may use cookies, local storage or similar technologies to keep the website functional, remember preferences, understand usage and improve the experience. Third-party analytics or embedded services may use their own technologies subject to their respective policies.</p><p>You can control cookies through your browser settings. Disabling some technologies may affect certain website functions.</p></div></section>
+                  <section id="legal-5" className="legal-block"><span className="legal-num">05</span><div><h2>Security & retention</h2><p>We use reasonable technical and organisational safeguards designed to protect information against unauthorised access, loss, misuse or alteration. No internet service can guarantee absolute security.</p><p>Information is retained only for as long as reasonably necessary for the purpose for which it was collected, contractual or operational needs, dispute resolution, legal obligations and legitimate business requirements.</p></div></section>
+                  <section id="legal-6" className="legal-block"><span className="legal-num">06</span><div><h2>Your choices</h2><p>Depending on the information and applicable law, you may ask us to access, correct, update or delete information we hold about you, or to stop certain communications. Requests can be made using the contact details below. We may need to verify a request before acting on it.</p></div></section>
+                  <section id="legal-7" className="legal-block"><span className="legal-num">07</span><div><h2>Children's privacy</h2><p>Pratyeksha is designed for businesses and general audiences and is not directed at children. We do not knowingly request personal information from children for independent account creation. If you believe a child has provided information to us, contact us so we can review and take appropriate action.</p></div></section>
+                  <section id="legal-8" className="legal-block"><span className="legal-num">08</span><div><h2>Changes & contact</h2><p>We may update this policy when our services, technology or legal obligations change. The latest version will be posted on this page with its updated date.</p><div className="legal-contact"><strong>Privacy questions?</strong><a href="mailto:hello.pratyeksha@gmail.com">hello.pratyeksha@gmail.com</a><span>+91 87676 22654 · +91 86050 15294</span></div></div></section>
+                </>
+              ) : (
+                <>
+                  <section id="legal-1" className="legal-block"><span className="legal-num">01</span><div><h2>Acceptance</h2><p>By accessing the Pratyeksha website or requesting and using its services, you agree to these Terms of Use. If you are using Pratyeksha for a business, you confirm that you are authorised to act for that business.</p></div></section>
+                  <section id="legal-2" className="legal-block"><span className="legal-num">02</span><div><h2>Using the website</h2><p>You may use the website for lawful purposes, including learning about Pratyeksha, contacting our team and requesting a product demonstration. You must not misuse the website, interfere with its operation, attempt unauthorised access, introduce malicious code or use automated activity that places unreasonable load on our systems.</p></div></section>
+                  <section id="legal-3" className="legal-block"><span className="legal-num">03</span><div><h2>Accounts & enquiries</h2><p>Information submitted through a demo or contact form should be accurate and current. A demo request does not by itself create a customer contract, subscription or guarantee of service availability.</p><p>Any paid service, subscription, implementation, support level or commercial commitment is governed by the applicable order form, proposal, agreement or service terms provided to the customer.</p></div></section>
+                  <section id="legal-4" className="legal-block"><span className="legal-num">04</span><div><h2>Intellectual property</h2><p>The Pratyeksha name, branding, website design, visual system, original content, software, interfaces and related materials are owned by or licensed to Pratyeksha and are protected by applicable intellectual-property laws. You may not copy, modify, distribute or commercially exploit them without permission.</p></div></section>
+                  <section id="legal-5" className="legal-block"><span className="legal-num">05</span><div><h2>Third-party services</h2><p>Pratyeksha may integrate with or link to third-party services. Those services are governed by their own terms and privacy policies. We are not responsible for third-party services outside our control.</p></div></section>
+                  <section id="legal-6" className="legal-block"><span className="legal-num">06</span><div><h2>Availability</h2><p>We aim to keep the website and platform reliable, but services may occasionally be unavailable because of maintenance, updates, infrastructure issues, network conditions or circumstances beyond our reasonable control.</p></div></section>
+                  <section id="legal-7" className="legal-block"><span className="legal-num">07</span><div><h2>Disclaimers</h2><p>Website content is provided for general informational purposes. Features, integrations, pricing, availability and product capabilities may change. Nothing on the website constitutes financial, legal, tax, accounting or other professional advice.</p></div></section>
+                  <section id="legal-8" className="legal-block"><span className="legal-num">08</span><div><h2>Liability</h2><p>To the extent permitted by applicable law, Pratyeksha will not be responsible for indirect, incidental, special or consequential losses arising from use of the website or information on it. Nothing in these terms excludes liability that cannot lawfully be excluded.</p></div></section>
+                  <section id="legal-9" className="legal-block"><span className="legal-num">09</span><div><h2>Governing law</h2><p>These terms are intended to be governed by the laws applicable in India, subject to any mandatory rights or protections available to you under applicable law. Any contractual dispute will be handled in the jurisdiction agreed in the applicable customer agreement.</p></div></section>
+                  <section id="legal-10" className="legal-block"><span className="legal-num">10</span><div><h2>Changes & contact</h2><p>We may update these terms as the website or services evolve. Continued use after an updated version is published constitutes acceptance of the updated terms to the extent permitted by law.</p><div className="legal-contact"><strong>Questions about these terms?</strong><a href="mailto:hello.pratyeksha@gmail.com">hello.pratyeksha@gmail.com</a><span>+91 87676 22654 · +91 86050 15294</span></div></div></section>
+                </>
+              )}
+            </article>
+          </section>
+        </main>
+
+        <footer className="legal-footer">
+          <span>© {new Date().getFullYear()} Pratyeksha</span>
+          <span>Built for cafés & restaurants.</span>
+          <div>
+            <button onClick={() => setLegalPage("privacy")}>Privacy Policy</button>
+            <button onClick={() => setLegalPage("terms")}>Terms of Use</button>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="site">
@@ -2250,6 +2381,11 @@ export default function App() {
           </span>
 
           <span>Built for cafés & restaurants.</span>
+
+          <div className="footer-legal-links">
+            <button onClick={() => setLegalPage("privacy")}>Privacy Policy</button>
+            <button onClick={() => setLegalPage("terms")}>Terms of Use</button>
+          </div>
         </div>
       </footer>
     </div>
@@ -7154,4 +7290,651 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
   .product-section::after,.product-section .stage-glow{animation:none !important;}
 }
 
+
+/* =========================================================
+   TYPOGRAPHY + RESPONSIVE LAYOUT REFINEMENT
+   Purpose-driven alignment, predictable spacing and
+   automatic contrast for every existing surface.
+========================================================= */
+
+html{
+  font-size:16px;
+  text-size-adjust:100%;
+  -webkit-text-size-adjust:100%;
+  scroll-behavior:smooth;
+}
+
+body{
+  margin:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+*,*::before,*::after{box-sizing:border-box;}
+
+img,svg,video,canvas{max-width:100%;}
+
+h1,h2,h3,h4,h5,h6,p,span,strong,small,a,button,label{
+  overflow-wrap:anywhere;
+}
+
+h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
+
+/* -------------------------
+   ALIGNMENT SYSTEM
+------------------------- */
+.hero-left,
+.product-copy,
+.section-heading,
+.module-copy,
+.journey-copy,
+.signature-heading,
+.command-heading,
+.fusion-heading,
+.faq-intro,
+.demo-copy,
+.footer-brand,
+.footer-column{
+  text-align:left;
+}
+
+.hero-actions,
+.hero-meta,
+.module-features,
+.contact-details,
+.footer-column{
+  justify-content:flex-start;
+}
+
+.section-heading.center{
+  text-align:center;
+}
+
+.section-heading.center p{
+  margin-inline:auto;
+}
+
+/* Headings use a controlled reading measure instead of stretching
+   across the entire viewport. */
+.hero-title,
+.section-heading h2,
+.product-copy-top h3,
+.module-copy h2,
+.journey-copy h2,
+.signature-heading h2,
+.command-heading h2,
+.fusion-heading h2,
+.demo-copy h2,
+.faq-intro h2{
+  text-wrap:balance;
+}
+
+.hero-description,
+.section-heading p,
+.product-copy-top p,
+.module-description,
+.journey-copy p,
+.signature-heading p,
+.demo-copy > p,
+.faq-intro p{
+  text-wrap:pretty;
+}
+
+/* -------------------------
+   LIGHT-SURFACE CONTRAST
+------------------------- */
+.hero,
+.use-section,
+.module-section.cream,
+.signature-section,
+.command-section,
+.demo-section{
+  color:var(--darkText);
+}
+
+.hero h1,
+.hero h2,
+.hero h3,
+.hero p,
+.use-section h1,
+.use-section h2,
+.use-section h3,
+.use-section p,
+.module-section.cream h1,
+.module-section.cream h2,
+.module-section.cream h3,
+.module-section.cream p,
+.signature-section h1,
+.signature-section h2,
+.signature-section h3,
+.signature-section p,
+.command-section h1,
+.command-section h2,
+.command-section h3,
+.command-section p,
+.demo-section h1,
+.demo-section h2,
+.demo-section h3,
+.demo-section p{
+  color:inherit;
+}
+
+.hero-title,
+.section-heading h2,
+.module-section.cream .module-copy h2,
+.signature-heading h2,
+.command-heading h2,
+.demo-copy h2{
+  color:var(--darkText);
+}
+
+.hero-description,
+.section-heading p,
+.module-section.cream .module-description,
+.module-section.cream .module-features > div,
+.signature-heading p,
+.command-section p,
+.demo-copy > p{
+  color:var(--bodyText);
+}
+
+/* -------------------------
+   DARK-SURFACE CONTRAST
+------------------------- */
+.product-section,
+.module-section.dark,
+.journey-section,
+.fusion-section,
+.faq-section,
+.footer{
+  color:#f4ecdc;
+}
+
+.product-section h1,
+.product-section h2,
+.product-section h3,
+.product-section h4,
+.product-section p,
+.module-section.dark h1,
+.module-section.dark h2,
+.module-section.dark h3,
+.module-section.dark p,
+.journey-section h1,
+.journey-section h2,
+.journey-section h3,
+.journey-section p,
+.fusion-section h1,
+.fusion-section h2,
+.fusion-section h3,
+.fusion-section p,
+.faq-section h1,
+.faq-section h2,
+.faq-section h3,
+.faq-section p,
+.footer h1,
+.footer h2,
+.footer h3,
+.footer h4,
+.footer p{
+  color:inherit;
+}
+
+.product-section .section-head p,
+.product-copy-top p,
+.module-section.dark .module-description,
+.module-section.dark .module-features > div,
+.journey-copy p,
+.faq-intro p,
+.footer-brand p{
+  color:rgba(244,236,220,.70);
+}
+
+/* Existing cards/visuals deliberately keep their own surfaces.
+   These rules only stop parent text colors from leaking into them. */
+.use-card,
+.demo-form-wrap,
+.visual-window,
+.visual-stage,
+.phone-shell,
+.ticket,
+.metric-box,
+.mini-order,
+.customer-profile,
+.preference-panel,
+.campaign-card{
+  color:initial;
+}
+
+/* -------------------------
+   USE-CASE CARD CONTRAST
+   Cafe / Restaurant / Multi-outlet cards
+------------------------- */
+.use-section .use-card{
+  color:var(--darkText) !important;
+  background:var(--cream3);
+}
+.use-section .use-card h3{
+  color:var(--darkText) !important;
+}
+.use-section .use-card p{
+  color:var(--bodyText) !important;
+}
+.use-section .use-card .use-points span{
+  color:#4f493e !important;
+}
+.use-section .use-card .use-number,
+.use-section .use-card .use-arrow,
+.use-section .use-card .use-points svg{
+  color:var(--gold3) !important;
+}
+
+/* -------------------------
+   CONSISTENT SPACING
+------------------------- */
+.hero-left{padding-inline:clamp(28px,6vw,96px);}
+.use-section,
+.module-section,
+.demo-section,
+.signature-section,
+.journey-section,
+.command-section,
+.fusion-section,
+.faq-section{
+  padding-inline:clamp(22px,6vw,96px);
+}
+
+.product-section{padding-inline:clamp(22px,6vw,96px);}
+
+.section-heading,
+.section-head,
+.module-grid,
+.demo-grid,
+.signature-shell,
+.journey-shell,
+.command-shell,
+.fusion-inner,
+.faq-inner,
+.footer-top{
+  width:100%;
+  max-width:1480px;
+  margin-inline:auto;
+}
+
+/* Avoid accidental full-width text lines on large screens. */
+.section-heading p{max-width:620px;}
+.product-copy-top p{max-width:600px;}
+.module-description{max-width:600px;}
+
+/* -------------------------
+   DESKTOP BALANCE
+------------------------- */
+@media (min-width:1201px){
+  .hero-title{font-size:clamp(3.4rem,4.25vw,5rem);}
+  .hero-description{max-width:620px;}
+  .section-heading h2{max-width:760px;}
+  .module-copy h2{max-width:680px;}
+  .demo-copy h2{max-width:620px;}
+}
+
+/* -------------------------
+   TABLET
+------------------------- */
+@media (max-width:1100px){
+  .hero{
+    grid-template-columns:1fr;
+    min-height:auto;
+  }
+
+  .hero-left{
+    min-height:auto;
+    padding-top:125px;
+    padding-bottom:80px;
+  }
+
+  .hero-right{
+    min-height:620px;
+  }
+
+  .module-grid,
+  .demo-grid,
+  .journey-shell,
+  .faq-inner{
+    grid-template-columns:1fr;
+    gap:55px;
+  }
+
+  .faq-intro{position:static;}
+
+  .command-heading{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .use-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+
+  .footer-top{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:45px;
+  }
+}
+
+/* -------------------------
+   MOBILE
+------------------------- */
+@media (max-width:700px){
+  html,body,#root{width:100%;min-height:100%;}
+
+  body{
+    overflow-x:hidden;
+    overflow-y:auto;
+    touch-action:pan-y;
+  }
+
+  .hero-left,
+  .use-section,
+  .module-section,
+  .product-section,
+  .demo-section,
+  .signature-section,
+  .journey-section,
+  .command-section,
+  .fusion-section,
+  .faq-section{
+    padding-inline:18px;
+  }
+
+  .hero-left{padding-top:105px;padding-bottom:64px;}
+  .hero-right{min-height:540px;}
+
+  .hero-title{
+    font-size:clamp(2.7rem,11vw,4rem);
+    line-height:1.02;
+    letter-spacing:-1.2px;
+    max-width:100%;
+  }
+
+  .hero-description,
+  .section-heading p,
+  .product-copy-top p,
+  .module-description,
+  .journey-copy p,
+  .signature-heading p,
+  .demo-copy > p,
+  .faq-intro p{
+    font-size:.9rem;
+    line-height:1.72;
+  }
+
+  .section-heading h2,
+  .product-copy-top h3,
+  .module-copy h2,
+  .journey-copy h2,
+  .signature-heading h2,
+  .command-heading h2,
+  .fusion-heading h2,
+  .demo-copy h2,
+  .faq-intro h2{
+    font-size:clamp(2.35rem,10vw,4rem);
+    line-height:1.02;
+    letter-spacing:-1.1px;
+  }
+
+  .hero-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+
+  .hero-actions .button{min-height:46px;}
+
+  .hero-meta{
+    gap:22px;
+    flex-wrap:wrap;
+  }
+
+  .use-grid{grid-template-columns:1fr;gap:12px;}
+
+  .module-grid{gap:42px;}
+  .module-features{grid-template-columns:1fr;gap:10px;}
+
+  .demo-grid{gap:40px;}
+  .demo-form-wrap{padding:24px;}
+
+  .product-section .section-head{
+    display:block;
+  }
+
+  .product-section .section-head p{margin-top:18px;}
+
+  .product-tabs{
+    overflow-x:auto;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  .product-tabs::-webkit-scrollbar{display:none;}
+
+  .product-detail{min-width:0;}
+  .product-visual-wrap{min-width:0;}
+
+  .signature-heading,
+  .journey-copy,
+  .faq-intro,
+  .demo-copy{max-width:100%;}
+
+  .footer-top{
+    grid-template-columns:1fr;
+    gap:36px;
+  }
+
+  .footer-column{align-items:flex-start;}
+}
+
+@media (max-width:480px){
+  .hero-left,
+  .use-section,
+  .module-section,
+  .product-section,
+  .demo-section,
+  .signature-section,
+  .journey-section,
+  .command-section,
+  .fusion-section,
+  .faq-section{
+    padding-inline:16px;
+  }
+
+  .hero-title{font-size:clamp(2.45rem,12vw,3.35rem);}
+
+  .hero-right{min-height:470px;}
+
+  .hero-actions .button{
+    width:100%;
+    justify-content:center;
+  }
+
+  .use-card{padding:26px;}
+  .module-section{padding-block:88px;}
+  .demo-section{padding-block:90px;}
+
+  .demo-form-wrap{padding:20px;}
+
+  .footer{padding-inline:16px;}
+}
+
+/* Keep the visual language intact when the OS is in dark mode.
+   Section surfaces, rather than browser preference, determine contrast. */
+@media (prefers-color-scheme:dark){
+  .hero,
+  .use-section,
+  .module-section.cream,
+  .signature-section,
+  .command-section,
+  .demo-section{
+    color:var(--darkText);
+  }
+
+  .hero-title,
+  .section-heading h2,
+  .module-section.cream .module-copy h2,
+  .signature-heading h2,
+  .command-heading h2,
+  .demo-copy h2{
+    color:var(--darkText);
+  }
+
+  .hero-description,
+  .section-heading p,
+  .module-section.cream .module-description,
+  .module-section.cream .module-features > div,
+  .signature-heading p,
+  .command-section p,
+  .demo-copy > p{
+    color:var(--bodyText);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto;}
+}
+
+
+
+/* =========================================================
+   CREATIVE LEGAL PAGES — PRIVACY / TERMS
+========================================================= */
+.legal-page-shell{
+  min-height:100vh;
+  background:var(--cream3);
+  color:var(--darkText);
+  overflow:visible;
+  position:relative;
+  z-index:1;
+}
+.legal-page-shell .legal-nav,
+.legal-page-shell .legal-main,
+.legal-page-shell .legal-footer{
+  opacity:1!important;
+  visibility:visible!important;
+}
+.legal-nav{
+  position:sticky;
+  top:0;
+  z-index:100;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  padding:18px clamp(20px,5vw,72px);
+  background:rgba(250,246,238,.88);
+  border-bottom:1px solid rgba(39,31,20,.1);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.legal-brand,.legal-close{
+  border:0;
+  background:transparent;
+  color:var(--darkText);
+  cursor:pointer;
+  font:500 .84rem/1 DM Sans,sans-serif;
+}
+.legal-brand{display:flex;align-items:center;gap:10px;font-size:1.05rem;letter-spacing:-.02em}
+.legal-brand span{width:34px;height:34px;border:1px solid rgba(167,130,72,.35);display:grid;place-items:center;border-radius:9px;background:#171612;color:var(--gold2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.035)}
+.legal-close{display:flex;align-items:center;gap:10px;text-transform:uppercase;letter-spacing:.12em;font-size:.68rem}
+.legal-close svg{transition:transform .25s ease}
+.legal-close:hover svg{transform:translateX(4px)}
+.legal-main{width:100%;}
+.legal-hero{
+  position:relative;
+  min-height:clamp(520px,68vh,760px);
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);
+  align-items:end;
+  gap:clamp(40px,8vw,130px);
+  padding:clamp(72px,10vw,140px) clamp(22px,7vw,110px) clamp(64px,8vw,110px);
+  background:linear-gradient(135deg,#f8f1e4 0%,#eee1ca 55%,#d9c7a7 100%);
+  overflow:hidden;
+}
+.legal-hero::after{content:"";position:absolute;inset:auto -8% -42% 34%;height:500px;background:radial-gradient(circle,rgba(255,255,255,.58),transparent 65%);pointer-events:none}
+.legal-hero-copy,.legal-hero-card{position:relative;z-index:2}
+.legal-hero-copy{max-width:900px}
+.legal-hero-copy .eyebrow{margin-bottom:20px;color:#675e4e}
+.legal-index{font:400 .67rem/1 DM Mono,monospace;letter-spacing:.18em;color:#8a7049;margin-bottom:18px}
+.legal-hero h1{margin:0;max-width:850px;font:400 clamp(4rem,8.8vw,9rem)/.9 "DM Serif Display",serif;letter-spacing:-.055em;color:#201d17}
+.legal-hero h1 em{color:#967343;font-style:italic}
+.legal-hero-copy>p{max-width:670px;margin:32px 0 26px;font:400 clamp(1rem,1.35vw,1.18rem)/1.7 DM Sans,sans-serif;color:#5e5548}
+.legal-meta{display:flex;flex-wrap:wrap;gap:10px 24px;font:400 .66rem/1.4 DM Mono,monospace;letter-spacing:.08em;text-transform:uppercase;color:#786c5b}
+.legal-meta span+span{position:relative;padding-left:24px}
+.legal-meta span+span::before{content:"";position:absolute;left:0;top:50%;width:5px;height:5px;border-radius:50%;background:#a98248;transform:translateY(-50%)}
+.legal-hero-card{justify-self:end;width:min(100%,360px);padding:28px;border:1px solid rgba(70,52,26,.16);background:rgba(250,246,238,.62);box-shadow:0 25px 70px rgba(60,45,24,.12);backdrop-filter:blur(12px);border-radius:24px}
+.legal-card-mark{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:#201d17;color:#dfc18d;margin-bottom:40px}
+.legal-hero-card>span{display:block;font:400 .62rem/1 DM Mono,monospace;letter-spacing:.15em;color:#8b7149;margin-bottom:12px}
+.legal-hero-card strong{display:block;font:500 1.45rem/1.15 DM Sans,sans-serif;letter-spacing:-.03em;color:#201d17;margin-bottom:12px}
+.legal-hero-card small{display:block;font:400 .86rem/1.65 DM Sans,sans-serif;color:#6a604f}
+.legal-hero-orbit{position:absolute;border:1px solid rgba(111,85,46,.16);border-radius:50%;pointer-events:none}
+.legal-hero-orbit.orbit-a{width:500px;height:500px;right:-120px;top:80px}
+.legal-hero-orbit.orbit-b{width:280px;height:280px;right:45px;top:190px}
+.legal-layout{display:grid;grid-template-columns:minmax(190px,270px) minmax(0,900px);gap:clamp(45px,8vw,120px);max-width:1320px;margin:0 auto;padding:clamp(70px,9vw,120px) clamp(22px,5vw,60px) 130px}
+.legal-toc{position:sticky;top:100px;align-self:start;display:flex;flex-direction:column;gap:15px;padding-top:5px}
+.legal-toc>span{font:400 .62rem/1 DM Mono,monospace;letter-spacing:.16em;color:#9a8060;margin-bottom:8px}
+.legal-toc a{display:grid;grid-template-columns:24px 1fr;gap:8px;text-decoration:none;color:#766b5b;font:400 .76rem/1.35 DM Sans,sans-serif;transition:color .2s ease,transform .2s ease}
+.legal-toc a::first-letter{color:#a98248}
+.legal-toc a:hover{color:#201d17;transform:translateX(3px)}
+.legal-document{min-width:0}
+.legal-block{display:grid;grid-template-columns:55px minmax(0,1fr);gap:28px;padding:0 0 62px;margin-bottom:62px;border-bottom:1px solid rgba(39,31,20,.1);scroll-margin-top:110px}
+.legal-num{font:400 .68rem/1 DM Mono,monospace;letter-spacing:.12em;color:#a98248;padding-top:9px}
+.legal-block h2{margin:0 0 18px;font:500 clamp(1.45rem,2.2vw,2rem)/1.15 DM Sans,sans-serif;letter-spacing:-.035em;color:#201d17}
+.legal-block p{margin:0 0 17px;max-width:760px;font:400 .98rem/1.85 DM Sans,sans-serif;color:#655c4d}
+.legal-block p:last-child{margin-bottom:0}
+.legal-contact{margin-top:26px;padding:22px;border-left:2px solid #a98248;background:#f2eadb;display:flex;flex-direction:column;gap:7px}
+.legal-contact strong{font:500 .86rem/1.3 DM Sans,sans-serif;color:#201d17}
+.legal-contact a,.legal-contact span{font:400 .82rem/1.5 DM Sans,sans-serif;color:#756954;text-decoration:none}
+.legal-contact a:hover{text-decoration:underline;color:#8d6b38}
+.legal-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:25px clamp(20px,5vw,72px);background:#171612;color:rgba(244,236,220,.64);font:400 .67rem/1.4 DM Mono,monospace;letter-spacing:.04em}
+.legal-footer>div{display:flex;gap:18px}
+.legal-footer button{border:0;background:none;color:rgba(244,236,220,.72);font:400 .67rem/1.4 DM Mono,monospace;cursor:pointer;padding:0}
+.legal-footer button:hover{color:#dfc18d}
+.footer-legal-links{display:flex;gap:18px;align-items:center}
+.footer-legal-links button{border:0;background:none;color:inherit;cursor:pointer;font:inherit;padding:0;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px;transition:color .2s ease,text-decoration-color .2s ease}
+.footer-legal-links button:hover{color:var(--gold2);text-decoration-color:currentColor}
+@media(max-width:900px){
+  .legal-hero{grid-template-columns:1fr;align-items:start;min-height:auto;padding-top:75px}
+  .legal-hero-card{justify-self:start;max-width:420px}
+  .legal-layout{grid-template-columns:1fr;gap:45px}
+  .legal-toc{position:relative;top:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px;padding:20px 0;border-top:1px solid rgba(39,31,20,.1);border-bottom:1px solid rgba(39,31,20,.1)}
+  .legal-toc>span{grid-column:1/-1}
+}
+@media(max-width:600px){
+  .legal-nav{padding:15px 18px}
+  .legal-close span{display:none}
+  .legal-hero{padding:65px 20px 55px}
+  .legal-hero h1{font-size:clamp(3.25rem,16vw,5rem)}
+  .legal-hero-copy>p{font-size:.92rem;margin-top:25px}
+  .legal-hero-orbit.orbit-a{width:320px;height:320px;right:-170px;top:100px}
+  .legal-hero-orbit.orbit-b{width:190px;height:190px;right:-10px;top:165px}
+  .legal-layout{padding:58px 20px 80px}
+  .legal-toc{grid-template-columns:1fr}
+  .legal-block{grid-template-columns:32px minmax(0,1fr);gap:12px;padding-bottom:42px;margin-bottom:42px}
+  .legal-block p{font-size:.9rem;line-height:1.75}
+  .legal-footer{flex-direction:column;align-items:flex-start}
+  .footer-legal-links{flex-wrap:wrap}
+}
+
+
+/* =========================================================
+   LEGAL NAV + RETURN-TO-WEBSITE HARDENING
+========================================================= */
+.legal-nav{position:sticky!important;top:0!important;z-index:5000!important;}
+.legal-page-shell .legal-brand span{width:34px!important;height:34px!important;border-radius:9px!important;background:#171612!important;color:#dfc18d!important;}
+.legal-page-shell .legal-brand,
+.legal-page-shell .legal-close,
+.legal-page-shell .legal-toc a,
+.legal-page-shell .legal-block h2,
+.legal-page-shell .legal-block p,
+.legal-page-shell .legal-contact strong,
+.legal-page-shell .legal-contact a,
+.legal-page-shell .legal-contact span{opacity:1!important;visibility:visible!important;}
+.site .reveal.visible{opacity:1;visibility:visible;}
 `;
