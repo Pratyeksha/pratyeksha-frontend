@@ -1,16 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 
-/*
-  Pratyeksha
-  Single-file landing website
-  React + CSS inside App.jsx
-*/
 
-const API = "https://pratyeksha-backend.onrender.com/api";
 
-/* =========================================================
-   ICON SYSTEM
-========================================================= */
+
+
 
 const Icon = ({ children, size = 20, stroke = 1.5, className = "" }) => (
   <svg
@@ -240,9 +233,7 @@ const I = ({ name, size = 20, stroke = 1.5, className = "" }) => (
   </Icon>
 );
 
-/* =========================================================
-   DATA
-========================================================= */
+
 
 const modules = [
   {
@@ -407,9 +398,579 @@ const faqs = [
   { q: "How can I see it for my restaurant?", a: "Use the private demonstration form and share the parts of your current restaurant setup you want to improve. The walkthrough can then focus on the relevant Pratyeksha workflows." },
 ];
 
-/* =========================================================
-   APP
-========================================================= */
+
+const CHATBOT_KNOWLEDGE = {
+  brand: "Pratyeksha",
+  positioning: "Pratyeksha is a premium restaurant experience system for cafes and restaurants. It is a connected customer-experience and intelligence layer rather than a simple POS replacement.",
+  audience: ["cafes", "coffee shops", "bakeries", "bistros", "restaurants", "QSRs", "family restaurants", "cloud kitchens", "multi-outlet food businesses"],
+  capabilities: [
+    "QR menu and customer ordering journeys",
+    "rich dish information and recommendations",
+    "3D dish experiences where configured",
+    "kitchen display and live order flow",
+    "billing with GST-oriented CGST/SGST workflows",
+    "inventory and recipe/ingredient relationships",
+    "menu visibility and availability controls",
+    "analytics and restaurant intelligence",
+    "customer feedback and remembered/favourite dishes",
+    "WhatsApp marketing workflows",
+    "English, Marathi and Hindi-oriented customer/voice experiences where configured",
+    "multi-outlet operational and reporting workflows"
+  ],
+  contact: { email: "hello.pratyeksha@gmail.com", phone: "+91 87676 22654", alternatePhone: "+91 86050 15294", location: "Maharashtra, India" },
+  faq: faqs,
+  bookingAnchor: "demo"
+};
+
+
+const CHATBOT_INTENTS = [
+  {
+    id: "identity", title: "What is Pratyeksha?", icon: "spark",
+    terms: ["pratyeksha", "what is", "what does it do", "platform", "system", "software", "solution", "app", "website"],
+    answer: "Pratyeksha is a premium restaurant experience system for cafés and restaurants. It connects the customer journey with menu, ordering, kitchen flow, billing, inventory, intelligence and marketing workflows instead of treating each part as a separate system."
+  },
+  {
+    id: "positioning", title: "Is Pratyeksha a POS?", icon: "layers",
+    terms: ["pos", "point of sale", "replacement", "replace pos", "instead of pos", "pos software", "cash counter"],
+    answer: "Pratyeksha is positioned as a connected restaurant experience and intelligence layer rather than simply a POS replacement. It can connect customer experience, kitchen operations, billing, inventory and marketing signals into one journey."
+  },
+  {
+    id: "businesses", title: "Who is it for?", icon: "users",
+    terms: ["cafe", "café", "restaurant", "coffee shop", "bakery", "bistro", "qsr", "fast food", "family restaurant", "cloud kitchen", "business type", "suitable", "for whom"],
+    answer: "Pratyeksha is designed for cafés, coffee shops, bakeries, bistros, restaurants, QSRs, family restaurants, cloud kitchens and growing multi-outlet food businesses. The exact workflow can be configured around the business model."
+  },
+  {
+    id: "qr", title: "How does QR ordering work?", icon: "qr",
+    terms: ["qr", "qr code", "scan", "scan menu", "table qr", "digital menu", "online menu", "qr ordering", "order from table", "order using qr"],
+    answer: "A customer can scan a table QR, explore the digital menu, open rich dish information, use configured recommendations and place an order through the connected customer journey."
+  },
+  {
+    id: "menu", title: "How does the digital menu work?", icon: "search",
+    terms: ["menu", "digital menu", "categories", "dish", "item", "food item", "menu design", "menu update", "menu edit", "menu management"],
+    answer: "The customer-facing menu is designed to make discovery easier through categories, search/filter experiences, dish details, availability and ordering. Operators can manage menu information through the connected operational workflow."
+  },
+  {
+    id: "visibility", title: "Can I hide or disable dishes?", icon: "eye",
+    terms: ["hide dish", "hide item", "disable dish", "disable item", "sold out", "unavailable", "availability", "visible", "visibility", "menu visibility", "out of stock"],
+    answer: "Yes. Pratyeksha supports menu visibility and availability controls so an operator can control what customers can see/order according to the configured operational state."
+  },
+  {
+    id: "dish", title: "What information can a dish show?", icon: "utensils",
+    terms: ["dish details", "description", "ingredients", "spice", "serving", "bestseller", "chef special", "suggestion", "recommendation", "dish information"],
+    answer: "A configured dish experience can present rich information such as description, serving information, spice context, ingredients, bestseller or chef-special signals and matching suggestions."
+  },
+  {
+    id: "threeD", title: "Does it have 3D dishes?", icon: "box",
+    terms: ["3d", "three d", "3d dish", "3d food", "ar", "augmented reality", "model", "dish model", "visualize food"],
+    answer: "Yes, Pratyeksha can support 3D dish experiences where the relevant dish model and configuration are available. The 3D view is intended to make dish discovery more visual and engaging."
+  },
+  {
+    id: "ordering", title: "What happens after a customer orders?", icon: "arrow",
+    terms: ["after order", "order flow", "order process", "place order", "customer order", "order status", "track order", "order journey"],
+    answer: "The customer order can move into the connected restaurant workflow, where kitchen preparation, status handling and downstream billing/operational steps can be coordinated according to the configured setup."
+  },
+  {
+    id: "kitchen", title: "How does the kitchen work?", icon: "kitchen",
+    terms: ["kitchen", "kitchen display", "kds", "ticket", "tickets", "preparation", "cook", "chef", "order queue", "kitchen screen"],
+    answer: "Pratyeksha includes a kitchen-facing workflow for live tickets, preparation states and timers. The goal is to keep incoming orders and kitchen priorities visible without relying only on paper or disconnected screens."
+  },
+  {
+    id: "timers", title: "Does the kitchen have timers?", icon: "clock",
+    terms: ["timer", "timers", "prep time", "preparation time", "waiting time", "ticket timer", "cooking time", "late order"],
+    answer: "Yes. The kitchen workflow can use live ticket timers and preparation states so the team can see how long orders have been waiting or progressing."
+  },
+  {
+    id: "billing", title: "What does billing support?", icon: "billing",
+    terms: ["billing", "bill", "invoice", "checkout", "settlement", "cash", "card", "upi", "split payment", "payment methods"],
+    answer: "Pratyeksha includes connected billing workflows with configured payment methods such as UPI, cash and card, plus split-payment handling where enabled."
+  },
+  {
+    id: "gst", title: "Does it support GST, CGST and SGST?", icon: "billing",
+    terms: ["gst", "cgst", "sgst", "tax", "gst invoice", "tax invoice", "gst billing", "gst calculation"],
+    answer: "Yes. The platform includes GST-oriented billing workflows with CGST and SGST calculations and invoice sequencing as configured for the business."
+  },
+  {
+    id: "invoice", title: "How are invoices handled?", icon: "billing",
+    terms: ["invoice number", "invoice sequence", "invoice numbering", "pdf invoice", "receipt", "bill pdf", "invoice pdf", "invoice reset"],
+    answer: "Pratyeksha supports configured invoice workflows, including invoice sequencing and invoice/receipt generation. Exact numbering rules depend on the production configuration and business requirements."
+  },
+  {
+    id: "inventory", title: "How does inventory work?", icon: "inventory",
+    terms: ["inventory", "stock", "stock management", "store stock", "quantity", "wac", "weighted average", "stock movement", "ingredient stock"],
+    answer: "Inventory can connect ingredients, recipes, stock movement and dish availability. The operational model is intended to help the restaurant understand what is available and how ingredient usage affects dish availability."
+  },
+  {
+    id: "stock", title: "Can stock prevent over-ordering?", icon: "shield",
+    terms: ["over order", "overordering", "oversell", "stock limit", "stock restriction", "quantity limit", "available quantity", "inventory limit"],
+    answer: "A properly configured inventory workflow can use current stock and availability rules to prevent customers from ordering unavailable quantities. Final enforcement must happen server-side as well as in the customer UI for production safety."
+  },
+  {
+    id: "recipes", title: "Can recipes connect to ingredients?", icon: "utensils",
+    terms: ["recipe", "recipes", "recipe mapping", "ingredient mapping", "ingredient", "ingredients", "dish recipe", "recipe stock"],
+    answer: "Yes. Recipes can connect dishes with their ingredients so operational inventory information can be related to dish availability and stock movement."
+  },
+  {
+    id: "analytics", title: "What analytics are available?", icon: "chart",
+    terms: ["analytics", "reports", "reporting", "dashboard", "sales report", "performance", "insights", "metrics", "restaurant analytics"],
+    answer: "Pratyeksha is designed to turn restaurant activity into useful operational and customer signals, including configured reporting, performance views, order trends and intelligence workflows. Exact reports depend on the enabled modules."
+  },
+  {
+    id: "intelligence", title: "What is restaurant intelligence?", icon: "brain",
+    terms: ["intelligence", "smart", "ai", "insight", "intelligent", "recommend", "prediction", "signals", "restaurant intelligence"],
+    answer: "Restaurant intelligence means turning everyday customer and operational activity into useful signals—such as what customers choose, returning-customer behavior, feedback, menu performance and opportunities for action."
+  },
+  {
+    id: "feedback", title: "Can customers leave feedback?", icon: "message",
+    terms: ["feedback", "review", "rating", "complaint", "customer feedback", "customer review", "feedback form", "experience feedback"],
+    answer: "Yes. Customer feedback is part of the platform's customer-experience and intelligence layer, helping the business capture useful signals after interactions."
+  },
+  {
+    id: "marketing", title: "How does marketing work?", icon: "trending",
+    terms: ["marketing", "campaign", "campaigns", "retention", "customer retention", "re engagement", "promotion", "marketing intelligence", "repeat customer"],
+    answer: "Pratyeksha can turn customer interactions into marketing signals, including remembered/favourite dishes, repeat-customer signals, segmentation, campaign insights and re-engagement workflows."
+  },
+  {
+    id: "whatsapp", title: "Does it support WhatsApp marketing?", icon: "message",
+    terms: ["whatsapp", "whatsapp marketing", "whatsapp campaign", "whatsapp message", "message customer", "customer messaging"],
+    answer: "WhatsApp marketing workflows are part of the Pratyeksha direction. Availability and the exact messaging integration depend on the production configuration and connected services."
+  },
+  {
+    id: "remember", title: "Can it remember customer preferences?", icon: "star",
+    terms: ["remember", "remembered dishes", "favourite", "favorite", "preferences", "customer preference", "last order", "order again", "repeat order"],
+    answer: "The customer-experience layer can use remembered or favourite-dish signals and repeat-customer information to make future visits more relevant, where the business has enabled those workflows."
+  },
+  {
+    id: "multioutlet", title: "Can it manage multiple outlets?", icon: "layers",
+    terms: ["multi outlet", "multiple outlets", "multiple branches", "branch", "branches", "chain", "locations", "outlets", "franchise"],
+    answer: "Yes. Pratyeksha is designed with multi-outlet operational and reporting workflows in mind, allowing menu, operational and reporting structures to extend across locations."
+  },
+  {
+    id: "language", title: "Does it support Marathi and Hindi?", icon: "globe",
+    terms: ["marathi", "hindi", "english", "language", "multilingual", "multiple language", "regional language", "मराठी", "हिंदी"],
+    answer: "The customer experience can support English, Marathi and Hindi-oriented menu and voice experiences where configured."
+  },
+  {
+    id: "voice", title: "Does the menu have voice features?", icon: "mic",
+    terms: ["voice", "voice assistant", "listen", "speech", "speak", "audio", "read aloud", "hear about dish", "voice menu"],
+    answer: "Pratyeksha can support configured voice experiences for dish information, including English, Marathi and Hindi-oriented speech flows where browser/device support is available."
+  },
+  {
+    id: "security", title: "Is customer and restaurant data secure?", icon: "shield",
+    terms: ["security", "secure", "privacy", "data security", "customer data", "database security", "encryption", "access", "permissions", "safe"],
+    answer: "Pratyeksha should keep secrets and database credentials server-side, use authenticated/authorized backend access, HTTPS, validation and restricted database access in production. The exact security controls depend on the deployed backend and hosting configuration."
+  },
+  {
+    id: "integrations", title: "Can it integrate with other systems?", icon: "layers",
+    terms: ["integration", "integrations", "api", "connect", "connected", "third party", "external system", "webhook", "software integration"],
+    answer: "Pratyeksha is designed as a connected platform and can expose or consume integrations where supported by the deployed backend. Specific third-party integrations should be confirmed during a demo rather than assumed."
+  },
+  {
+    id: "implementation", title: "How does setup work?", icon: "check",
+    terms: ["setup", "install", "implementation", "onboarding", "getting started", "configuration", "configure", "launch", "go live"],
+    answer: "Setup is business-specific. A demo can be used to understand your current workflow, decide which Pratyeksha modules are relevant and confirm the implementation/configuration path before launch."
+  },
+  {
+    id: "pricing", title: "What is the pricing?", icon: "star",
+    terms: ["price", "pricing", "cost", "fee", "fees", "subscription", "monthly", "yearly", "per day", "99", "₹", "rupee", "plan", "plans", "offer", "discount"],
+    answer: "I don't want to invent a commercial figure because pricing and offers can change by business, modules and current commercial terms. For the current applicable price, contact the Pratyeksha team or book a private demo and the team can confirm the exact details."
+  },
+  {
+    id: "demo", title: "How do I book a demo?", icon: "arrowUpRight",
+    terms: ["demo", "book demo", "booking", "book", "schedule", "appointment", "meeting", "walkthrough", "presentation", "trial", "see it", "show me", "contact sales"],
+    answer: "You can use the private demo section on this website. Share your business type and what you want to improve, and the walkthrough can focus on the relevant Pratyeksha workflows."
+  },
+  {
+    id: "contact", title: "How can I contact Pratyeksha?", icon: "phone",
+    terms: ["contact", "phone", "call", "email", "mail", "reach", "number", "support", "talk to someone", "sales team"],
+    answer: `You can contact Pratyeksha at ${CHATBOT_KNOWLEDGE.contact.email}, ${CHATBOT_KNOWLEDGE.contact.phone} or ${CHATBOT_KNOWLEDGE.contact.alternatePhone}. For a detailed discussion, use the Book a private demo action.`
+  },
+  {
+    id: "difference", title: "How is it different from a normal restaurant app?", icon: "spark",
+    terms: ["difference", "different", "unique", "why pratyeksha", "advantage", "better", "normal app", "restaurant software", "traditional software"],
+    answer: "The core idea is connection: customer experience, menu discovery, ordering, kitchen flow, billing, inventory, intelligence and marketing are treated as one restaurant journey instead of isolated tools."
+  },
+  {
+    id: "customerexperience", title: "How does it improve customer experience?", icon: "star",
+    terms: ["customer experience", "guest experience", "customer journey", "dining experience", "customer satisfaction", "faster ordering", "easy ordering", "discover dishes"],
+    answer: "Pratyeksha focuses on a richer digital customer journey: QR discovery, visual dish information, recommendations, configured 3D/voice experiences, ordering, feedback and remembered preferences."
+  },
+  {
+    id: "operations", title: "What restaurant operations does it connect?", icon: "layers",
+    terms: ["operations", "restaurant operations", "daily operations", "workflow", "operator", "floor", "tables", "staff", "daily management"],
+    answer: "The platform is designed to connect customer orders with operational workflows such as menu availability, kitchen flow, billing, inventory and reporting. Some operational modules depend on the deployed configuration."
+  },
+  {
+    id: "staff", title: "Does it help restaurant staff?", icon: "users",
+    terms: ["staff", "employee", "employees", "team", "waiter", "waiters", "manager", "chef", "cashier", "staff workflow"],
+    answer: "Yes. Different operational surfaces can give kitchen, billing and management teams the information relevant to their workflow, reducing the need to coordinate everything manually."
+  },
+  {
+    id: "payments", title: "Which payment methods can be used?", icon: "billing",
+    terms: ["payment", "upi", "cash", "card", "credit card", "debit card", "split", "split bill", "payment mode"],
+    answer: "The billing workflow supports configured payment methods including UPI, cash and card, with split-payment handling where enabled. Exact payment-gateway integrations should be confirmed for your deployment."
+  },
+  {
+    id: "languagevoice", title: "Can customers hear dish information in their language?", icon: "mic",
+    terms: ["hear dish", "dish voice", "spoken dish", "marathi voice", "hindi voice", "english voice", "voice language"],
+    answer: "Where configured and supported by the device/browser, dish information can be presented through English, Marathi and Hindi-oriented voice experiences."
+  },
+  {
+    id: "availability", title: "What if an item becomes unavailable?", icon: "bell",
+    terms: ["unavailable item", "item unavailable", "dish unavailable", "sold out item", "stock finished", "no stock", "out of stock", "disable ordering"],
+    answer: "Menu availability can be connected to operational and inventory information so unavailable dishes can be controlled. Production enforcement should always be server-side so multiple customers cannot bypass stock rules."
+  },
+
+  {
+    id: "benefits", title: "What are the main benefits?", icon: "star",
+    terms: ["benefit", "benefits", "advantage", "advantages", "value", "why should i use", "why use pratyeksha", "how can it help", "help my restaurant", "help my cafe"],
+    answer: "The main value is connection: customers get an easier digital journey, while the business can connect menu, ordering, kitchen flow, billing, inventory, intelligence and marketing signals in one system. The exact business impact depends on how your current workflow is configured."
+  },
+  {
+    id: "features", title: "What features are included?", icon: "layers",
+    terms: ["features", "feature list", "included", "modules", "module", "what do i get", "what is included", "full feature list", "capabilities", "everything included"],
+    answer: "Core capabilities include QR menu and ordering journeys, rich dish information, configured 3D and voice experiences, kitchen display workflows, billing with GST-oriented CGST/SGST flows, inventory and recipe relationships, analytics, feedback, customer signals, marketing workflows and multi-outlet operations where configured."
+  },
+  {
+    id: "waitlist", title: "Can I manage a waitlist?", icon: "clock",
+    terms: ["waitlist", "waiting list", "queue", "waiting queue", "walk in queue", "guest queue"],
+    answer: "Yes. Waitlist functionality is part of the customer-experience feature set. The exact workflow can be configured around the restaurant's operating process."
+  },
+  {
+    id: "reservation", title: "Can customers make reservations?", icon: "calendar",
+    terms: ["reservation", "reservations", "reserve table", "table reservation", "booking table", "book a table", "table booking"],
+    answer: "Yes. Reservation workflows are part of the platform direction. The exact reservation rules and availability should be confirmed for your deployed setup."
+  },
+  {
+    id: "pickup", title: "Does it support pickup orders?", icon: "arrowUpRight",
+    terms: ["pickup", "pick up", "takeaway", "take away", "pickup order", "takeaway order", "collect order"],
+    answer: "Yes. Pickup and takeaway journeys are included in the platform's customer and operational workflows, with the exact flow depending on the configured business setup."
+  },
+  {
+    id: "service", title: "Can guests request service from the table?", icon: "bell",
+    terms: ["service request", "call waiter", "call staff", "request service", "table service", "waiter call", "need assistance", "ask waiter"],
+    answer: "Yes. Service requests from the table are part of the customer-experience feature set, allowing configured restaurant teams to receive and handle guest requests through the connected workflow."
+  },
+  {
+    id: "reorder", title: "Can returning customers reorder easily?", icon: "star",
+    terms: ["reorder", "re order", "order again", "repeat order", "last order", "previous order", "returning customer", "repeat customer"],
+    answer: "Yes. Remembered or favourite dishes and repeat-customer signals can support easier future ordering where those workflows are enabled."
+  },
+  {
+    id: "customization", title: "Can the system fit my restaurant workflow?", icon: "layers",
+    terms: ["customize", "customise", "customization", "customisation", "tailor", "tailored", "configured", "configuration", "fit my workflow", "my workflow"],
+    answer: "Pratyeksha is designed around configured restaurant workflows. A private demo is the best way to map your current menu, ordering, kitchen, billing, inventory and customer processes to the relevant modules."
+  },
+  {
+    id: "reports", title: "Can I export business reports?", icon: "chart",
+    terms: ["export reports", "export report", "download report", "download reports", "csv report", "report export", "exportable reports", "business report"],
+    answer: "Exportable reports are part of the intelligence feature set. The exact report formats and exports depend on the enabled production modules."
+  },
+  {
+    id: "workload", title: "Can it reduce manual coordination?", icon: "users",
+    terms: ["reduce manual work", "manual coordination", "less manual", "save staff time", "staff time", "reduce waiter work", "waiter workload", "manual workload"],
+    answer: "Pratyeksha connects digital menu discovery, ordering, kitchen flow, billing, availability and customer signals, which can reduce some manual coordination. The actual time or staffing impact depends on the restaurant's workflow and adoption."
+  },
+];
+
+const CHATBOT_QUERY_VARIANTS = [
+  "what is", "tell me about", "explain", "how does", "how can", "can i", "can we", "does it", "do you support", "is there", "is it possible", "what about", "where can i", "why use", "how much", "how many", "who is it for", "is pratyeksha", "does pratyeksha", "can pratyeksha", "could you explain", "tell me whether", "i want to know", "give me details on", "is support available for"
+];
+
+const CHATBOT_TOPIC_VARIANTS = [
+  "the platform", "the system", "the software", "this feature", "this workflow", "for my cafe", "for my restaurant", "for my business", "for my outlet", "for multiple outlets"
+];
+
+const CHATBOT_COVERAGE_ESTIMATE = CHATBOT_INTENTS.length * CHATBOT_QUERY_VARIANTS.length * CHATBOT_TOPIC_VARIANTS.length;
+
+const CHATBOT_VERIFIED_INTENTS = CHATBOT_INTENTS.map(({ id, title, terms, answer }) => ({ id, title, terms, answer }));
+
+const CHAT_TOPIC_SETS = {
+  Discover: [
+    ["✨ What is Pratyeksha?", "spark"],
+    ["👥 Who is it for?", "users"],
+    ["💡 What are the main benefits?", "star"],
+    ["🧩 What features are included?", "layers"],
+    ["🔗 How is it different from a normal restaurant app?", "spark"],
+    ["☕ Is it suitable for my café?", "coffee"],
+    ["🍽️ Is it suitable for my restaurant?", "utensils"],
+    ["🏢 Can it support multiple outlets?", "layers"]
+  ],
+  Experience: [
+    ["📱 How does QR ordering work?", "qr"],
+    ["🍽️ What can a dish show?", "utensils"],
+    ["✨ Can customers see 3D dishes?", "box"],
+    ["🎙️ Can customers hear dish information?", "mic"],
+    ["🌐 Does it support Marathi and Hindi?", "globe"],
+    ["⭐ Can it remember favourite dishes?", "star"],
+    ["🔔 Can guests request service from the table?", "bell"],
+    ["🛍️ Does it support pickup or takeaway?", "arrowUpRight"]
+  ],
+  Operations: [
+    ["👨‍🍳 How does the kitchen work?", "kitchen"],
+    ["⏱️ Does the kitchen have timers?", "clock"],
+    ["🧾 Does it support GST billing?", "billing"],
+    ["💳 Which payment methods can be used?", "billing"],
+    ["📦 How does inventory work?", "inventory"],
+    ["🥘 Can recipes connect to ingredients?", "utensils"],
+    ["🚫 Can unavailable dishes be controlled?", "shield"],
+    ["🗺️ What restaurant operations does it connect?", "layers"]
+  ],
+  Business: [
+    ["📊 What analytics are available?", "chart"],
+    ["📈 What is restaurant intelligence?", "brain"],
+    ["📣 How does marketing work?", "trending"],
+    ["💬 Does it support WhatsApp marketing?", "message"],
+    ["💰 What is the pricing?", "star"],
+    ["🎯 How can I book a demo?", "arrowUpRight"],
+    ["🔌 Can it integrate with other systems?", "layers"],
+    ["🔐 How is customer data handled?", "shield"]
+  ]
+};
+
+const CHAT_TOPIC_META = {
+  Discover: ["spark", "Discover"],
+  Experience: ["star", "Customer experience"],
+  Operations: ["kitchen", "Operations"],
+  Business: ["chart", "Business value"]
+};
+
+const normalizeChatText = (value) => String(value || "")
+  .toLowerCase()
+  .normalize("NFKC")
+  .replace(/[^\p{L}\p{N}\s₹+]/gu, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const scoreChatIntent = (question, intent) => {
+  const q = normalizeChatText(question);
+  let score = 0;
+  for (const term of intent.terms) {
+    const t = normalizeChatText(term);
+    if (!t) continue;
+    if (q.includes(t)) score += t.length >= 8 ? 5 : t.length >= 4 ? 3 : 2;
+  }
+  return score;
+};
+
+const findLocalChatIntent = (question) => {
+  const ranked = CHATBOT_INTENTS
+    .map((intent) => ({ intent, score: scoreChatIntent(question, intent) }))
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.score >= 3 ? ranked[0].intent : null;
+};
+
+function PratyekshaChatbot() {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [activeTopic, setActiveTopic] = useState("Discover");
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      text: "✨ Welcome to PRATYEKSHa. I can help you explore the system — from QR ordering and customer experience to kitchen, billing, inventory, intelligence and marketing.",
+      meta: "PRATYEKSHa knowledge assistant"
+    }
+  ]);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const openDemo = () => {
+    setOpen(false);
+    window.setTimeout(() => {
+      document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
+  const fallbackAnswer = (question) => {
+    const intent = findLocalChatIntent(question);
+    if (intent) return { text: intent.answer, intent: intent.id };
+    return {
+      text: `I don't have enough verified information to answer that accurately without guessing.\n\n📩 ${CHATBOT_KNOWLEDGE.contact.email}\n📞 ${CHATBOT_KNOWLEDGE.contact.phone}\n📞 ${CHATBOT_KNOWLEDGE.contact.alternatePhone}\n\nFor feature, integration, implementation or commercial details, book a private demo and the team can confirm the exact answer for your business.`,
+      intent: "unknown"
+    };
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [open]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [messages, sending]);
+
+  const send = async (forcedText) => {
+    const question = String(forcedText ?? input).trim().slice(0, 1200);
+    if (!question || sending) return;
+
+    setInput("");
+    const userMessage = { role: "user", text: question };
+    setMessages((prev) => [...prev, userMessage]);
+    setSending(true);
+
+    const local = fallbackAnswer(question);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(`${API}/chat`, {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({
+          message: question,
+          history: [...messages, userMessage].slice(-10).map((m) => ({ role: m.role, content: m.text })),
+          knowledge: CHATBOT_KNOWLEDGE,
+          verifiedIntents: CHATBOT_VERIFIED_INTENTS,
+          answerPolicy: {
+            coverage: `Use verified PRATYEKSHa information. The local intent matrix represents ${CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ practical question variations.`,
+            neverInvent: ["pricing", "features not listed", "integrations", "availability", "contracts", "performance guarantees", "security certifications"],
+            unknownAction: `If the answer is not supported, clearly say so, provide ${CHATBOT_KNOWLEDGE.contact.email}, ${CHATBOT_KNOWLEDGE.contact.phone} and ${CHATBOT_KNOWLEDGE.contact.alternatePhone}, and encourage a private demo.`,
+            style: "Premium, warm, concise, left-aligned, factual and helpful. Use short paragraphs or bullets when useful. Never pretend certainty when information is insufficient."
+          }
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || typeof data?.answer !== "string" || !data.answer.trim()) throw new Error("chat_unavailable");
+
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: data.answer.trim().slice(0, 5000),
+        meta: data?.source === "knowledge" ? "Verified PRATYEKSHa information" : "PRATYEKSHa assistant",
+        needsContact: Boolean(data?.needsContact)
+      }]);
+    } catch {
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: local.text,
+        fallback: true,
+        intent: local.intent,
+        meta: local.intent === "unknown" ? "A team member can confirm this" : "Verified PRATYEKSHa information"
+      }]);
+    } finally {
+      window.clearTimeout(timeout);
+      setSending(false);
+    }
+  };
+
+  const suggestions = CHAT_TOPIC_SETS[activeTopic] || CHAT_TOPIC_SETS.Discover;
+  const [topicIcon, topicLabel] = CHAT_TOPIC_META[activeTopic] || CHAT_TOPIC_META.Discover;
+
+  return (
+    <>
+      {open && <div className="chat-backdrop is-open" onClick={() => setOpen(false)} aria-hidden="true" />}
+      <button className={`chat-launcher ${open ? "is-open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label={open ? "Close PRATYEKSHa assistant" : "Open PRATYEKSHa assistant"}>
+        <span className="chat-launcher-glow" />
+        <span className="chat-launcher-icon"><I name={open ? "close" : "spark"} size={21} /></span>
+        {!open && <span className="chat-launcher-copy"><small>PRATYEKSHa</small><strong>Ask the system</strong></span>}
+      </button>
+
+      <aside className={`chat-panel ${open ? "is-open" : ""}`} aria-hidden={!open} aria-label="PRATYEKSHa AI assistant">
+        <div className="chat-header">
+          <div className="chat-agent-mark"><I name="spark" size={18} /></div>
+          <div className="chat-agent-title">
+            <span>PRATYEKSHa / AI ASSISTANT</span>
+            <strong>Ask. Explore. Understand.</strong>
+            <small><span className="chat-status-dot" /> {CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ question variations covered</small>
+          </div>
+          <button className="chat-close" onClick={() => setOpen(false)} aria-label="Close assistant"><I name="close" size={17} /></button>
+        </div>
+
+        <div className="chat-trust">
+          <span className="chat-live-dot" /> Grounded in PRATYEKSHa information <span>•</span> No invented pricing
+        </div>
+
+        <div className="chat-topic-bar" aria-label="Question categories">
+          {Object.keys(CHAT_TOPIC_SETS).map((topic) => {
+            const [icon] = CHAT_TOPIC_META[topic];
+            return (
+              <button key={topic} className={activeTopic === topic ? "active" : ""} onClick={() => setActiveTopic(topic)}>
+                <I name={icon} size={11} /> {topic}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="chat-messages">
+          {messages.map((message, index) => (
+            <div className={`chat-message-row ${message.role}`} key={`${message.role}-${index}`}>
+              {message.role === "assistant" && <span className="chat-mini-mark"><I name="spark" size={11} /></span>}
+              <div className="chat-message-stack">
+                <div className="chat-bubble">{message.text}</div>
+                {message.role === "assistant" && message.meta && <span className="chat-meta">{message.meta}</span>}
+                {message.role === "assistant" && (message.needsContact || (message.fallback && message.intent === "unknown")) && (
+                  <div className="chat-escalation">
+                    <div className="chat-contact-title">
+                      <span><I name="phone" size={13} /></span>
+                      <div>
+                        <strong>Need a precise answer?</strong>
+                        <small>Talk directly with the PRATYEKSHa team</small>
+                      </div>
+                    </div>
+                    <div className="chat-contact-links">
+                      <a href={`mailto:${CHATBOT_KNOWLEDGE.contact.email}`}><I name="mail" size={12} /> {CHATBOT_KNOWLEDGE.contact.email}</a>
+                      <a href={`tel:${CHATBOT_KNOWLEDGE.contact.phone.replace(/[^\d+]/g, "")}`}><I name="phone" size={12} /> {CHATBOT_KNOWLEDGE.contact.phone}</a>
+                    </div>
+                    <button onClick={openDemo}>Book a private demo <I name="arrowUpRight" size={13} /></button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {sending && (
+            <div className="chat-message-row assistant">
+              <span className="chat-mini-mark"><I name="spark" size={11} /></span>
+              <div className="chat-message-stack">
+                <div className="chat-bubble chat-typing"><i /><i /><i /><span>Thinking from PRATYEKSHa knowledge</span></div>
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <div className="chat-suggestions-wrap">
+          <div className="chat-suggestion-label">
+            <span><I name={topicIcon} size={11} /> {topicLabel}</span>
+            <small>Questions you can ask</small>
+          </div>
+          <div className="chat-suggestions">
+            {suggestions.map(([item, icon]) => (
+              <button key={item} onClick={() => send(item)}>
+                <span><I name={icon} size={13} /></span>
+                <b>{item}</b>
+                <I name="arrow" size={11} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form className="chat-input-wrap" onSubmit={(e) => { e.preventDefault(); send(); }}>
+          <span className="chat-input-icon"><I name="search" size={15} /></span>
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value.slice(0, 1200))} placeholder="Ask your own question…" aria-label="Ask PRATYEKSHa assistant" maxLength={1200} />
+          <span className="chat-counter">{input.length > 900 ? `${input.length}/1200` : ""}</span>
+          <button type="submit" disabled={!input.trim() || sending} aria-label="Send question"><I name="arrow" size={17} /></button>
+        </form>
+
+        <div className="chat-footer-row">
+          <span><I name="shield" size={10} /> Grounded answers</span>
+          <span>•</span>
+          <span><I name="users" size={10} /> Human confirmation for unknowns</span>
+          <span>•</span>
+          <button onClick={openDemo}>Book demo <I name="arrowUpRight" size={11} /></button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+
 
 function ProductVisual({ type }) {
   if (type === "experience") {
@@ -887,7 +1448,83 @@ function ProductVisual({ type }) {
 }
 
 
-export default function App() {
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+
+    
+    if (typeof console !== "undefined" && console.error) {
+      console.error("Pratyeksha frontend error", error, info);
+    }
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        padding: "32px",
+        background: "#11100d",
+        color: "#f5efe3",
+        fontFamily: "Inter, system-ui, sans-serif",
+        textAlign: "center",
+      }}>
+        <div style={{ maxWidth: 520 }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            margin: "0 auto 22px",
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid rgba(211,191,162,.35)",
+            borderRadius: 12,
+            color: "#d3bfa2",
+          }}>
+            <I name="spark" size={20} />
+          </div>
+          <h1 style={{ margin: "0 0 12px", fontSize: "clamp(28px,5vw,42px)", lineHeight: 1.08 }}>
+            Something needs a refresh.
+          </h1>
+          <p style={{ margin: "0 0 24px", color: "rgba(245,239,227,.68)", lineHeight: 1.7 }}>
+            The website encountered an unexpected error. Your information has not been displayed here.
+          </p>
+          <button
+            type="button"
+            onClick={this.handleReload}
+            style={{
+              border: "1px solid rgba(211,191,162,.45)",
+              background: "#d3bfa2",
+              color: "#11100d",
+              borderRadius: 999,
+              padding: "12px 20px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Reload website
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
+function App() {
   const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -910,14 +1547,14 @@ export default function App() {
     email: "",
     type: "",
     message: "",
+    website: "", 
   });
 
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [formError, setFormError] = useState("");
 
-  /* -------------------------------------------------------
-     6 SECOND LOADER
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     document.body.classList.add("pratyeksha-page");
@@ -932,9 +1569,93 @@ export default function App() {
     };
   }, []);
 
-  /* -------------------------------------------------------
-     SCROLL
-  ------------------------------------------------------- */
+
+
+  useEffect(() => {
+    document.documentElement.lang = "en";
+    document.documentElement.dir = "ltr";
+
+    const title = legalPage === "privacy"
+      ? "Privacy Policy | Pratyeksha"
+      : legalPage === "terms"
+        ? "Terms of Use | Pratyeksha"
+        : "Pratyeksha | Restaurant Experience System";
+
+    document.title = title;
+
+    const description = legalPage
+      ? legalPage === "privacy"
+        ? "Read the Pratyeksha Privacy Policy."
+        : "Read the Pratyeksha Terms of Use."
+      : "Pratyeksha is a restaurant experience system for cafés and restaurants, connecting customer experience, operations, billing, inventory and intelligence.";
+
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "description";
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", description);
+
+    let theme = document.querySelector('meta[name="theme-color"]');
+    if (!theme) {
+      theme = document.createElement("meta");
+      theme.name = "theme-color";
+      document.head.appendChild(theme);
+    }
+    theme.setAttribute("content", legalPage ? "#faf6ee" : "#11100d");
+
+    let referrer = document.querySelector('meta[name="referrer"]');
+    if (!referrer) { referrer = document.createElement("meta"); referrer.name = "referrer"; document.head.appendChild(referrer); }
+    referrer.setAttribute("content", "strict-origin-when-cross-origin");
+
+    let robots = document.querySelector('meta[name="robots"]');
+    if (!robots) { robots = document.createElement("meta"); robots.name = "robots"; document.head.appendChild(robots); }
+    robots.setAttribute("content", "index,follow,max-image-preview:large");
+
+    const canonicalUrl = window.location.origin + window.location.pathname;
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+
+    const setMeta = (property, content) => {
+      let tag = document.querySelector(`meta[property="${property}"]`);
+      if (!tag) {
+        tag = document.createElement("meta");
+        tag.setAttribute("property", property);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute("content", content);
+    };
+
+    setMeta("og:title", title);
+    setMeta("og:description", description);
+    setMeta("og:type", "website");
+    setMeta("og:url", canonicalUrl);
+
+    let structuredData = document.getElementById("pratyeksha-structured-data");
+    if (!structuredData) {
+      structuredData = document.createElement("script");
+      structuredData.id = "pratyeksha-structured-data";
+      structuredData.type = "application/ld+json";
+      document.head.appendChild(structuredData);
+    }
+    structuredData.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Pratyeksha",
+      url: canonicalUrl,
+      email: "hello.pratyeksha@gmail.com",
+      telephone: "+91 87676 22654",
+      description: "Restaurant experience system for cafés and restaurants."
+    });
+  }, [legalPage]);
+
+
 
   useEffect(() => {
     const sectionIds = ["home", "system", "experience", "operations", "intelligence", "marketing", "signature", "journey", "command", "fusion", "faq", "demo"];
@@ -967,9 +1688,7 @@ export default function App() {
     };
   }, []);
 
-  /* -------------------------------------------------------
-     LEGAL PAGE / ESCAPE
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -980,9 +1699,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  /* -------------------------------------------------------
-     REVEAL ON SCROLL
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     const elements = document.querySelectorAll(".reveal");
@@ -1007,9 +1724,7 @@ export default function App() {
     return () => observer.disconnect();
   }, [loading, legalPage]);
 
-  /* -------------------------------------------------------
-     LEGAL / WEBSITE VIEW RESTORE
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -1031,9 +1746,7 @@ export default function App() {
     }
   }, [legalPage, loading]);
 
-  /* -------------------------------------------------------
-     CURSOR
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     if (window.matchMedia("(pointer: coarse)").matches) return;
@@ -1081,9 +1794,7 @@ export default function App() {
     };
   }, []);
 
-  /* -------------------------------------------------------
-     CURSOR HOVER TARGETS
-  ------------------------------------------------------- */
+
 
   useEffect(() => {
     const targets = document.querySelectorAll(
@@ -1109,11 +1820,9 @@ export default function App() {
         el.removeEventListener("mouseleave", leave);
       });
     };
-  }, [loading, mobileOpen]);
+  }, [loading, mobileOpen, legalPage]);
 
-  /* -------------------------------------------------------
-     HELPERS
-  ------------------------------------------------------- */
+
 
   const scrollTo = (id) => {
     setMobileOpen(false);
@@ -1131,28 +1840,104 @@ export default function App() {
   };
 
   const updateForm = (e) => {
-    setForm((p) => ({
-      ...p,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value } = e.target;
+    if (name === "type" && !ALLOWED_BUSINESS_TYPES.has(value)) return;
+    const max = MAX_FORM[name];
+    const safeValue = typeof max === "number" ? value.slice(0, max) : value;
+    setForm((p) => ({ ...p, [name]: safeValue }));
+    if (formError) setFormError("");
   };
 
   const submitDemo = async (e) => {
     e.preventDefault();
+    if (sending) return;
+
+    const name = form.name.trim();
+    const business = form.business.trim();
+    const phone = form.phone.trim();
+    const email = form.email.trim();
+    const website = form.website.trim();
+
+
+    if (website) {
+      setSent(true);
+      setFormError("");
+      return;
+    }
+
+    if (!name || !business || !phone) {
+      setFormError("Please fill in your name, business name and phone number.");
+      return;
+    }
+
+    if (!/^[+0-9()\-\s]{8,20}$/.test(phone)) {
+      setFormError("Please enter a valid phone number.");
+      return;
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!ALLOWED_BUSINESS_TYPES.has(form.type)) {
+      setFormError("Please select a valid business type.");
+      return;
+    }
+
+    if (name.length > MAX_FORM.name || business.length > MAX_FORM.business || phone.length > MAX_FORM.phone || email.length > MAX_FORM.email || form.message.trim().length > MAX_FORM.message) {
+      setFormError("One or more fields are too long.");
+      return;
+    }
 
     setSending(true);
+    setFormError("");
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
 
     try {
-      await fetch(`${API}/demo-request`, {
+      const response = await fetch(`${API}/demo-request`, {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        referrerPolicy: "same-origin",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name,
+          business,
+          phone,
+          email,
+          type: form.type,
+          message: form.message.trim(),
+          website,
+        }),
+        signal: controller.signal,
       });
 
-      setSent(true);
+      let result = null;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        try {
+          result = await response.json();
+        } catch {
+          result = null;
+        }
+      }
 
+      if (!response.ok) {
+        throw new Error(
+          result && typeof result.message === "string" && result.message.length < 180
+            ? result.message
+            : `Demo request failed with ${response.status}`
+        );
+      }
+
+      setSent(true);
       setForm({
         name: "",
         business: "",
@@ -1160,21 +1945,21 @@ export default function App() {
         email: "",
         type: "",
         message: "",
+        website: "",
       });
-    } catch {
-      /*
-        Keep the landing page usable even if backend
-        is unavailable.
-      */
-      setSent(true);
+    } catch (error) {
+      setFormError(
+        error?.name === "AbortError"
+          ? "The request took too long. Please check your connection and try again."
+          : "We couldn't send your request right now. Please try again or contact us directly."
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setSending(false);
     }
-
-    setSending(false);
   };
 
-  /* =======================================================
-     LOADING SCREEN
-  ======================================================= */
+
 
   if (loading) {
     return (
@@ -1209,9 +1994,7 @@ export default function App() {
     );
   }
 
-  /* =======================================================
-     WEBSITE / LEGAL PAGES
-  ======================================================= */
+
 
   if (legalPage) {
     const isPrivacy = legalPage === "privacy";
@@ -1235,7 +2018,7 @@ export default function App() {
             <div className="legal-hero-orbit orbit-a" />
             <div className="legal-hero-orbit orbit-b" />
             <div className="legal-hero-copy">
-              <div className="eyebrow">PRATYEKSHa / LEGAL</div>
+              <div className="eyebrow">Pratyeksha / LEGAL</div>
               <div className="legal-index">{isPrivacy ? "01 / PRIVACY" : "02 / TERMS"}</div>
               <h1>{isPrivacy ? <>Privacy <em>Policy</em></> : <>Terms of <em>Use</em></>}</h1>
               <p>
@@ -1310,7 +2093,7 @@ export default function App() {
     <div className="site">
       <style>{CSS}</style>
 
-      {/* CURSOR */}
+      {}
       <div
         ref={dotRef}
         className={`cursor-dot ${cursorActive ? "active" : ""}`}
@@ -1321,15 +2104,13 @@ export default function App() {
         className={`cursor-ring ${cursorActive ? "active" : ""}`}
       />
 
-      {/* SCROLL PROGRESS */}
+      {}
       <div
         className="scroll-progress"
         style={{ width: `${progress}%` }}
       />
 
-      {/* ===================================================
-          NAVIGATION
-      =================================================== */}
+      {}
 
       <header className={`nav ${scrolled ? "nav-scrolled" : ""}`}>
         <button
@@ -1383,7 +2164,7 @@ export default function App() {
         </button>
       </header>
 
-      {/* MOBILE MENU */}
+      {}
 
       <div className={`mobile-menu ${mobileOpen ? "open" : ""}`}>
         <button
@@ -1412,9 +2193,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ===================================================
-          HERO
-      =================================================== */}
+      {}
 
       <main>
         <section id="home" className="hero">
@@ -1565,9 +2344,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            INTRO BAND
-        ================================================= */}
+        {}
 
         <section id="system" className="product-section">
           <div className="product-section-inner">
@@ -1621,9 +2398,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            CAFE + RESTAURANT
-        ================================================= */}
+        {}
 
         <section className="use-section">
           <div className="section-heading reveal">
@@ -1672,9 +2447,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            FEATURE / MODULE SECTIONS
-        ================================================= */}
+        {}
 
         {modules.map((module, index) => (
           <section
@@ -1780,9 +2553,7 @@ export default function App() {
           </section>
         ))}
 
-        {/* =================================================
-            FEATURE MATRIX
-        ================================================= */}
+        {}
 
         <section className="matrix-section">
           <div className="section-heading center reveal">
@@ -1885,9 +2656,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            EXPERIENCE FLOW
-        ================================================= */}
+        {}
 
         <section className="flow-section">
           <div className="flow-heading reveal">
@@ -1926,9 +2695,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            STATS / BRAND MOMENT
-        ================================================= */}
+        {}
 
         <section className="brand-moment">
           <div className="brand-moment-glow" />
@@ -1968,9 +2735,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* =================================================
-            DEMO
-        ================================================= */}
+        {}
 
         <section id="demo" className="demo-section">
           <div className="demo-grid">
@@ -2041,10 +2806,23 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={submitDemo}>
+                <form onSubmit={submitDemo} aria-busy={sending}>
                   <div className="form-top">
                     <small>BOOK A DEMO</small>
                     <span>01 / 01</span>
+                  </div>
+
+                  <div className="hp-field" aria-hidden="true">
+                    <label htmlFor="website">Website</label>
+                    <input
+                      id="website"
+                      name="website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.website}
+                      onChange={updateForm}
+                    />
                   </div>
 
                   <div className="form-grid">
@@ -2053,6 +2831,8 @@ export default function App() {
                       <input
                         name="name"
                         required
+                        autoComplete="name"
+                        maxLength={80}
                         value={form.name}
                         onChange={updateForm}
                         placeholder="Enter your name"
@@ -2064,6 +2844,8 @@ export default function App() {
                       <input
                         name="business"
                         required
+                        autoComplete="organization"
+                        maxLength={120}
                         value={form.business}
                         onChange={updateForm}
                         placeholder="Business name"
@@ -2075,6 +2857,11 @@ export default function App() {
                       <input
                         name="phone"
                         required
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        pattern="[0-9+()\-\s]{8,20}"
+                        maxLength={20}
                         value={form.phone}
                         onChange={updateForm}
                         placeholder="+91"
@@ -2086,6 +2873,9 @@ export default function App() {
                       <input
                         name="email"
                         type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        maxLength={160}
                         value={form.email}
                         onChange={updateForm}
                         placeholder="you@example.com"
@@ -2115,6 +2905,7 @@ export default function App() {
 
                       <textarea
                         name="message"
+                        maxLength={1000}
                         value={form.message}
                         onChange={updateForm}
                         placeholder="Tell us briefly about your current setup..."
@@ -2122,6 +2913,12 @@ export default function App() {
                       />
                     </label>
                   </div>
+
+                  {formError && (
+                    <p className="form-error" role="alert" aria-live="polite">
+                      {formError}
+                    </p>
+                  )}
 
                   <button
                     className="submit-button"
@@ -2245,9 +3042,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* =====================================================
-          FAQ / PREMIUM CLARITY
-      ===================================================== */}
+      {}
       <section id="fusion" className="fusion-section">
         <div className="fusion-orb fusion-orb-one"/><div className="fusion-orb fusion-orb-two"/>
         <div className="fusion-inner">
@@ -2271,9 +3066,7 @@ export default function App() {
 
       </main>
 
-      {/* ===================================================
-          FOOTER
-      =================================================== */}
+      {}
 
       <footer className="footer">
         <div className="footer-top">
@@ -2388,13 +3181,13 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <PratyekshaChatbot />
     </div>
   );
 }
 
-/* =========================================================
-   CSS
-========================================================= */
+
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400&display=swap');
@@ -2425,9 +3218,7 @@ const CSS = `
   --max:1480px;
 }
 
-/* =========================================================
-   RESET / SCROLL
-========================================================= */
+
 
 *,
 *::before,
@@ -2500,9 +3291,7 @@ section{
   color:var(--ink);
 }
 
-/* =========================================================
-   CURSOR
-========================================================= */
+
 
 .cursor-dot,
 .cursor-ring{
@@ -2553,9 +3342,7 @@ body.cursor-large .cursor-ring{
   border-color:var(--gold);
 }
 
-/* =========================================================
-   LOADING
-========================================================= */
+
 
 .loading-screen{
   position:fixed;
@@ -2662,9 +3449,7 @@ body.cursor-large .cursor-ring{
   to{transform:rotate(-360deg);}
 }
 
-/* =========================================================
-   PROGRESS
-========================================================= */
+
 
 .scroll-progress{
   position:fixed;
@@ -2676,9 +3461,7 @@ body.cursor-large .cursor-ring{
   transition:width .08s linear;
 }
 
-/* =========================================================
-   NAV
-========================================================= */
+
 
 .nav{
   position:fixed;
@@ -2766,9 +3549,7 @@ body.cursor-large .cursor-ring{
   cursor:pointer;
 }
 
-/* =========================================================
-   MOBILE MENU
-========================================================= */
+
 
 .mobile-menu{
   position:fixed;
@@ -2817,9 +3598,7 @@ body.cursor-large .cursor-ring{
   cursor:pointer;
 }
 
-/* =========================================================
-   HERO
-========================================================= */
+
 
 .hero{
   width:100%;
@@ -2995,7 +3774,7 @@ body.cursor-large .cursor-ring{
   background:rgba(39,31,20,.2);
 }
 
-/* HERO VISUAL */
+
 
 .hero-orbit{
   position:absolute;
@@ -3281,9 +4060,7 @@ body.cursor-large .cursor-ring{
   50%{transform:translateY(9px);}
 }
 
-/* =========================================================
-   INTRO
-========================================================= */
+
 
 .intro-band{
   background:var(--ink);
@@ -3366,9 +4143,7 @@ body.cursor-large .cursor-ring{
   margin-top:5px;
 }
 
-/* =========================================================
-   USE CASE
-========================================================= */
+
 
 .use-section{
   background:var(--cream);
@@ -3494,9 +4269,7 @@ body.cursor-large .cursor-ring{
   color:var(--gold3);
 }
 
-/* =========================================================
-   MODULES
-========================================================= */
+
 
 .module-section{
   width:100%;
@@ -3806,9 +4579,7 @@ body.cursor-large .cursor-ring{
   background:var(--sage);
 }
 
-/* =========================================================
-   MATRIX
-========================================================= */
+
 
 .matrix-section{
   padding:125px 7vw;
@@ -3885,9 +4656,7 @@ body.cursor-large .cursor-ring{
   background:rgba(39,31,20,.08);
 }
 
-/* =========================================================
-   FLOW
-========================================================= */
+
 
 .flow-section{
   background:var(--ink);
@@ -3977,9 +4746,7 @@ body.cursor-large .cursor-ring{
   background:rgba(199,162,105,.15);
 }
 
-/* =========================================================
-   BRAND MOMENT
-========================================================= */
+
 
 .brand-moment{
   min-height:650px;
@@ -4080,9 +4847,7 @@ body.cursor-large .cursor-ring{
   text-transform:uppercase;
 }
 
-/* =========================================================
-   DEMO
-========================================================= */
+
 
 .demo-section{
   background:var(--cream);
@@ -4309,9 +5074,7 @@ body.cursor-large .cursor-ring{
   margin-top:5px;
 }
 
-/* =========================================================
-   FOOTER
-========================================================= */
+
 
 .footer{
   width:100%;
@@ -4458,9 +5221,7 @@ body.cursor-large .cursor-ring{
   font-size:.5rem;
 }
 
-/* =========================================================
-   REVEAL
-========================================================= */
+
 
 .reveal{
   opacity:0;
@@ -4480,9 +5241,7 @@ body.cursor-large .cursor-ring{
 .delay-3{transition-delay:.24s;}
 .delay-4{transition-delay:.32s;}
 
-/* =========================================================
-   RESPONSIVE
-========================================================= */
+
 
 @media(max-width:1100px){
 
@@ -4820,9 +5579,7 @@ body.cursor-large .cursor-ring{
   }
 }
 
-/* =========================================================
-   REDUCED MOTION
-========================================================= */
+
 
 
 @media(prefers-reduced-motion:reduce){
@@ -4842,9 +5599,7 @@ body.cursor-large .cursor-ring{
   }
 }
 
-/* =========================================================
-   PREMIUM UX POLISH + HARDENED NATIVE PAGE SCROLL
-========================================================= */
+
 
 html,
 body{
@@ -4872,7 +5627,7 @@ body{
   overflow:visible!important;
 }
 
-/* Keep one real browser scrollbar — never create a fixed scroll shell. */
+
 .site{
   position:relative;
   isolation:isolate;
@@ -4892,7 +5647,7 @@ body{
   mix-blend-mode:soft-light;
 }
 
-/* Premium scrollbar */
+
 html::-webkit-scrollbar{
   width:12px;
 }
@@ -4912,7 +5667,7 @@ html{
   scrollbar-color:#c7a269 #15130f;
 }
 
-/* Navigation */
+
 .nav{
   transition:
     background .45s ease,
@@ -4958,7 +5713,7 @@ html{
   box-shadow:0 0 0 5px rgba(199,162,105,.08);
 }
 
-/* Hero depth */
+
 .hero{
   position:relative;
   overflow:hidden;
@@ -5001,7 +5756,7 @@ html{
     0 0 0 1px rgba(223,193,141,.08);
 }
 
-/* Section rhythm */
+
 .intro-band,
 .use-section,
 .module-section,
@@ -5020,7 +5775,7 @@ html{
   text-wrap:balance;
 }
 
-/* Module cards */
+
 .module-section{
   overflow:hidden;
 }
@@ -5058,7 +5813,7 @@ html{
   box-shadow:0 24px 55px rgba(0,0,0,.24);
 }
 
-/* Flow becomes visually connected */
+
 .flow-step{
   position:relative;
 }
@@ -5071,7 +5826,7 @@ html{
   pointer-events:none;
 }
 
-/* Form UX */
+
 .demo-form-wrap{
   position:relative;
   overflow:hidden;
@@ -5107,7 +5862,7 @@ html{
   color:var(--gold2);
 }
 
-/* Buttons */
+
 .button{
   position:relative;
   overflow:hidden;
@@ -5127,12 +5882,12 @@ html{
   transform:translateX(120%);
 }
 
-/* Reveal polish */
+
 .reveal{
   will-change:transform,opacity;
 }
 
-/* Mobile: preserve native vertical scrolling and improve touch targets */
+
 @media(max-width:900px){
   html,
   body{
@@ -5198,7 +5953,7 @@ html{
   }
 }
 
-/* Prevent accidental horizontal overflow from animated visual layers */
+
 img,
 svg,
 canvas,
@@ -5207,9 +5962,7 @@ video{
 }
 
 
-/* =========================================================
-   SIGNATURE / JOURNEY / COMMAND / FAQ SYSTEM
-========================================================= */
+
 .signature-section{position:relative;overflow:hidden;padding:150px 6vw 120px;background:radial-gradient(circle at 15% 18%,rgba(199,162,105,.15),transparent 25%),radial-gradient(circle at 88% 78%,rgba(166,176,154,.14),transparent 26%),linear-gradient(145deg,#f0e5d2,#e3d3ba 55%,#f5ecdf);color:var(--darkText);isolation:isolate;}
 .signature-shell{max-width:1480px;margin:auto;position:relative;z-index:2;}
 .signature-orbit{position:absolute;border:1px solid rgba(39,31,20,.08);border-radius:50%;pointer-events:none;animation:premiumOrbit 26s linear infinite;}
@@ -5224,7 +5977,7 @@ video{
 
 .faq-section{position:relative;overflow:hidden;padding:150px 6vw 45px;background:#11100d;color:#f4ecdc;isolation:isolate;}.faq-section::before{content:"";position:absolute;inset:0;z-index:-2;background:radial-gradient(circle at 12% 20%,rgba(199,162,105,.14),transparent 30%),radial-gradient(circle at 88% 78%,rgba(166,176,154,.08),transparent 28%),linear-gradient(135deg,#11100d,#1b1914 55%,#11100d);}.faq-inner{max-width:1480px;margin:auto;display:grid;grid-template-columns:minmax(320px,.78fr) minmax(520px,1.22fr);gap:9vw;position:relative;z-index:2;}.faq-intro{position:sticky;top:120px;align-self:start;}.faq-kicker{font:400 .58rem/1 'DM Mono',monospace;letter-spacing:2px;color:rgba(244,236,220,.34);margin-top:28px;}.faq-intro h2{font-family:'DM Serif Display',serif;font-weight:400;font-size:clamp(2.8rem,4.8vw,5.5rem);line-height:.98;letter-spacing:-2px;margin:18px 0 25px;}.faq-intro h2 em{color:#d1b27e;font-style:italic;}.faq-intro>p{max-width:500px;color:rgba(244,236,220,.56);font-size:.9rem;line-height:1.85;}.faq-side-card{margin-top:52px;padding:18px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.035);backdrop-filter:blur(14px);display:grid;grid-template-columns:auto 1fr;gap:13px;align-items:center;max-width:500px;}.faq-side-card>span{width:40px;height:40px;border:1px solid rgba(199,162,105,.45);display:grid;place-items:center;color:#d1b27e;background:rgba(199,162,105,.06);}.faq-side-card small{display:block;color:#b99968;font:400 .52rem/1 'DM Mono',monospace;letter-spacing:2px;margin-bottom:5px;}.faq-side-card strong{font-size:.76rem;font-weight:500;color:rgba(244,236,220,.8);}.faq-side-card button{grid-column:1/-1;justify-self:start;background:transparent;color:#d1b27e;font-size:.67rem;display:flex;align-items:center;gap:9px;padding:7px 0;cursor:pointer;}.faq-list{border-top:1px solid rgba(255,255,255,.13);}.faq-item{border-bottom:1px solid rgba(255,255,255,.13);position:relative;}.faq-item::before{content:"";position:absolute;left:0;top:0;width:1px;height:0;background:#c7a269;transition:height .45s ease;}.faq-item.is-open::before{height:100%;}.faq-question{width:100%;background:none;color:#f4ecdc;display:grid;grid-template-columns:44px 1fr 38px;gap:18px;text-align:left;align-items:center;padding:27px 0;cursor:pointer;}.faq-index{font:400 .56rem/1 'DM Mono',monospace;color:rgba(199,162,105,.7);letter-spacing:1px;}.faq-question-text{font-family:'DM Serif Display',serif;font-size:clamp(1.05rem,1.55vw,1.45rem);font-weight:400;line-height:1.25;transition:color .25s ease;}.faq-question:hover .faq-question-text,.faq-item.is-open .faq-question-text{color:#d1b27e;}.faq-toggle{width:32px;height:32px;border:1px solid rgba(255,255,255,.14);border-radius:50%;position:relative;display:block;transition:.35s ease;}.faq-toggle i{position:absolute;left:9px;top:15px;width:12px;height:1px;background:#d1b27e;transition:.35s ease;}.faq-toggle i+i{transform:rotate(90deg);}.faq-item.is-open .faq-toggle{background:#b99968;border-color:#b99968;transform:rotate(45deg);}.faq-item.is-open .faq-toggle i{background:#11100d;}.faq-answer-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .45s cubic-bezier(.2,.8,.2,1);}.faq-item.is-open .faq-answer-wrap{grid-template-rows:1fr;}.faq-answer{overflow:hidden;min-height:0;color:rgba(244,236,220,.52);font-size:.81rem;line-height:1.85;padding:0 70px 0 62px;opacity:0;transition:padding .45s ease,opacity .35s ease;}.faq-item.is-open .faq-answer{padding-bottom:29px;opacity:1;}.faq-orbit{position:absolute;border:1px solid rgba(199,162,105,.08);border-radius:50%;pointer-events:none;z-index:-1;}.faq-orbit-one{width:650px;height:650px;right:-330px;top:90px;}.faq-orbit-two{width:430px;height:430px;left:-300px;bottom:-220px;border-color:rgba(166,176,154,.06);}.faq-bottom-line{max-width:1480px;margin:100px auto 0;padding-top:18px;border-top:1px solid rgba(255,255,255,.1);display:flex;justify-content:space-between;color:rgba(244,236,220,.25);font:400 .5rem/1 'DM Mono',monospace;letter-spacing:2px;}
 
-/* hard scroll ownership: no nested wrapper captures page scrolling */
+
 html,body,#root{height:auto!important;min-height:100%!important;overflow-x:hidden!important;}.site{height:auto!important;min-height:100vh!important;max-height:none!important;overflow:visible!important;}.site>main{height:auto!important;max-height:none!important;overflow:visible!important;}html{overflow-y:scroll!important;scroll-behavior:smooth!important;scrollbar-gutter:stable;}body{overflow-y:auto!important;overscroll-behavior-y:auto!important;}section[id]{scroll-margin-top:92px;}
 body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollbar{width:11px;}body::-webkit-scrollbar-track{background:#11100d;}body::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#d1b27e,#a88758);border:3px solid #11100d;border-radius:999px;}
 @keyframes premiumOrbit{to{transform:rotate(360deg);}}@keyframes premiumMarquee{to{transform:translateX(-50%);}}
@@ -5235,9 +5988,7 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
 @media(max-width:520px){.signature-section,.journey-section,.command-section,.faq-section{padding-left:20px;padding-right:20px;}.journey-visual{transform:scale(.72);margin-bottom:-130px;}.journey-steps{grid-template-columns:1fr;}.journey-step{border-right:0!important;min-height:120px;}.board-main{padding:20px;}.faq-side-card{padding:15px;}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important;}.signature-orbit,.signature-marquee-track{animation:none!important;}.reveal{transition:none!important;transform:none!important;opacity:1!important;}}
 
-/* =========================================================
-   EXTENDED RESPONSIVE DETAIL TOKENS
-========================================================= */
+
 .pratyeksha-detail-1{
   box-sizing:border-box;
   -webkit-font-smoothing:antialiased;
@@ -5838,73 +6589,70 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
   text-rendering:optimizeLegibility;
 }
 
-/* MAINTENANCE NOTES */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
-/* Keep vertical scrolling owned by the document; avoid fixed-height page wrappers. */
 
 
-/* =========================================================
-   FINAL POLISH — ALIGNMENT / SPACING / VISIBILITY
-   Keeps the existing design language and functionality intact.
-========================================================= */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 *,*::before,*::after{box-sizing:border-box;}
 .signature-section,.journey-section,.command-section,.faq-section,.signature-section h2,.signature-section h3,.journey-section h2,.journey-section h3,.command-section h2,.command-section h3,.faq-section h2,.faq-section h3,.signature-section p,.journey-section p,.command-section p,.faq-section p{overflow-wrap:anywhere;}
 .signature-section{padding-top:132px;padding-bottom:112px;}.signature-heading{width:100%;max-width:760px;}.signature-heading .eyebrow{margin-bottom:18px;}.signature-heading h2{max-width:760px;margin:0 0 25px;line-height:.96;}.signature-heading p{max-width:650px;margin:0;color:rgba(32,29,23,.72);}.signature-grid{margin-top:72px;}.signature-card{padding:30px 28px 68px;min-height:355px;}.signature-card>svg{right:28px;top:30px;opacity:.9;}.signature-rule{margin:68px 0 32px;}.signature-card h3{max-width:210px;line-height:1.05;margin:0 0 12px;}.signature-card p{max-width:235px;margin:0;color:rgba(32,29,23,.66);line-height:1.75;}.signature-card small{left:28px;bottom:27px;color:rgba(32,29,23,.46);}.signature-marquee{margin-top:62px;padding:20px 0;}.signature-marquee-track{color:rgba(32,29,23,.55);}.signature-marquee-track i{color:#806a48;}
@@ -5918,7 +6666,7 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
 @media(max-width:520px){.signature-section,.journey-section,.command-section,.faq-section{padding-left:18px;padding-right:18px;}.signature-grid{grid-template-columns:1fr;}.signature-card{min-height:300px;}.journey-visual{min-height:540px;}.journey-float{right:-2px;max-width:190px;}.board-main{padding:19px;}.faq-side-card{padding:15px;}}
 .signature-number{color:#765f3e;}.signature-card small{color:rgba(32,29,23,.50);}.journey-note{color:rgba(238,229,213,.48);}.board-top,.board-metrics small,.board-panel header small,.activity small,.activity em,.board-panel footer{color:rgba(233,223,207,.48);}.faq-index{color:rgba(209,178,126,.86);}.faq-answer{color:rgba(244,236,220,.70);}.faq-bottom-line{color:rgba(244,236,220,.38);}
 
-/* THREE-VERSION FUSION LAYER */
+
 .fusion-section{position:relative;overflow:hidden;background:linear-gradient(135deg,#171712 0%,#211f19 52%,#171814 100%);color:#f7efdf;padding:150px 6vw 120px;border-top:1px solid rgba(231,214,184,.12)}
 .fusion-inner{position:relative;z-index:2;max-width:1480px;margin:auto}.fusion-orb{position:absolute;border-radius:50%;pointer-events:none}.fusion-orb-one{width:420px;height:420px;left:-180px;top:90px;background:radial-gradient(circle,rgba(199,162,105,.16),transparent 68%)}.fusion-orb-two{width:520px;height:520px;right:-250px;bottom:-200px;background:radial-gradient(circle,rgba(166,176,154,.13),transparent 68%)}
 .fusion-heading{max-width:850px}.fusion-kicker{font:10px/1.4 'DM Mono',monospace;letter-spacing:.2em;color:#a6b09a;margin:18px 0 25px}.fusion-heading h2{font:clamp(42px,5.5vw,82px)/.96 'DM Sans',sans-serif;letter-spacing:-.055em;font-weight:500}.fusion-heading h2 em{font-family:'DM Serif Display',serif;color:#dfc18d;font-weight:400}.fusion-heading p{max-width:700px;color:#b7af9f;font-size:15px;line-height:1.9;margin-top:28px}
@@ -7063,9 +7811,7 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
   color: var(--sage);
 }
 
-/* =========================================================
-   FIVE LAYERS / INTERACTIVE SYSTEM — SOURCE DESIGN ADAPTED
-========================================================= */
+
 .product-section{
   --black:var(--ink);
   --charcoal:var(--ink2);
@@ -7135,9 +7881,7 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
 }
 
 
-/* =========================================================
-   FIVE LAYERS — REFINED BACKGROUND / STANDARD UI PASS
-========================================================= */
+
 .product-section{
   position:relative;
   isolation:isolate;
@@ -7291,11 +8035,7 @@ body{scrollbar-width:thin;scrollbar-color:#c7a269 #11100d;}body::-webkit-scrollb
 }
 
 
-/* =========================================================
-   TYPOGRAPHY + RESPONSIVE LAYOUT REFINEMENT
-   Purpose-driven alignment, predictable spacing and
-   automatic contrast for every existing surface.
-========================================================= */
+
 
 html{
   font-size:16px;
@@ -7323,9 +8063,7 @@ h1,h2,h3,h4,h5,h6,p,span,strong,small,a,button,label{
 
 h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
 
-/* -------------------------
-   ALIGNMENT SYSTEM
-------------------------- */
+
 .hero-left,
 .product-copy,
 .section-heading,
@@ -7357,8 +8095,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   margin-inline:auto;
 }
 
-/* Headings use a controlled reading measure instead of stretching
-   across the entire viewport. */
+
 .hero-title,
 .section-heading h2,
 .product-copy-top h3,
@@ -7383,9 +8120,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   text-wrap:pretty;
 }
 
-/* -------------------------
-   LIGHT-SURFACE CONTRAST
-------------------------- */
+
 .hero,
 .use-section,
 .module-section.cream,
@@ -7441,9 +8176,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   color:var(--bodyText);
 }
 
-/* -------------------------
-   DARK-SURFACE CONTRAST
-------------------------- */
+
 .product-section,
 .module-section.dark,
 .journey-section,
@@ -7492,8 +8225,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   color:rgba(244,236,220,.70);
 }
 
-/* Existing cards/visuals deliberately keep their own surfaces.
-   These rules only stop parent text colors from leaking into them. */
+
 .use-card,
 .demo-form-wrap,
 .visual-window,
@@ -7508,10 +8240,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   color:initial;
 }
 
-/* -------------------------
-   USE-CASE CARD CONTRAST
-   Cafe / Restaurant / Multi-outlet cards
-------------------------- */
+
 .use-section .use-card{
   color:var(--darkText) !important;
   background:var(--cream3);
@@ -7531,9 +8260,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   color:var(--gold3) !important;
 }
 
-/* -------------------------
-   CONSISTENT SPACING
-------------------------- */
+
 .hero-left{padding-inline:clamp(28px,6vw,96px);}
 .use-section,
 .module-section,
@@ -7563,14 +8290,12 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   margin-inline:auto;
 }
 
-/* Avoid accidental full-width text lines on large screens. */
+
 .section-heading p{max-width:620px;}
 .product-copy-top p{max-width:600px;}
 .module-description{max-width:600px;}
 
-/* -------------------------
-   DESKTOP BALANCE
-------------------------- */
+
 @media (min-width:1201px){
   .hero-title{font-size:clamp(3.4rem,4.25vw,5rem);}
   .hero-description{max-width:620px;}
@@ -7579,9 +8304,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   .demo-copy h2{max-width:620px;}
 }
 
-/* -------------------------
-   TABLET
-------------------------- */
+
 @media (max-width:1100px){
   .hero{
     grid-template-columns:1fr;
@@ -7621,9 +8344,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   }
 }
 
-/* -------------------------
-   MOBILE
-------------------------- */
+
 @media (max-width:700px){
   html,body,#root{width:100%;min-height:100%;}
 
@@ -7764,8 +8485,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   .footer{padding-inline:16px;}
 }
 
-/* Keep the visual language intact when the OS is in dark mode.
-   Section surfaces, rather than browser preference, determine contrast. */
+
 @media (prefers-color-scheme:dark){
   .hero,
   .use-section,
@@ -7802,9 +8522,7 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
 
 
 
-/* =========================================================
-   CREATIVE LEGAL PAGES — PRIVACY / TERMS
-========================================================= */
+
 .legal-page-shell{
   min-height:100vh;
   background:var(--cream3);
@@ -7923,9 +8641,84 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
 }
 
 
-/* =========================================================
-   LEGAL NAV + RETURN-TO-WEBSITE HARDENING
-========================================================= */
+
+html{
+  background:#15130f!important;
+  scrollbar-gutter:auto!important;
+}
+
+body{
+  background:var(--cream3);
+  scrollbar-gutter:auto!important;
+}
+
+
+#root,
+.site,
+.legal-page-shell{
+  width:100%;
+  max-width:100%;
+}
+
+
+.nav .brand-name{
+  color:var(--darkText);
+  transition:color .35s ease;
+}
+
+.nav.nav-scrolled .brand-name{
+  color:var(--gold2)!important;
+}
+
+.nav.nav-scrolled .brand{
+  color:var(--gold2)!important;
+}
+
+.nav.nav-scrolled .brand-mark{
+  border-color:rgba(223,193,141,.58);
+}
+
+
+.legal-page-shell{
+  overflow:visible!important;
+  position:relative!important;
+  isolation:isolate;
+}
+
+.legal-nav{
+  position:sticky!important;
+  top:0!important;
+  left:auto!important;
+  right:auto!important;
+  width:100%!important;
+  min-height:70px;
+  z-index:10000!important;
+  flex-shrink:0;
+  background:rgba(250,246,238,.94)!important;
+  border-bottom:1px solid rgba(39,31,20,.12)!important;
+  box-shadow:0 8px 30px rgba(39,31,20,.055);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+
+.legal-page-shell .legal-brand span{
+  border-radius:9px!important;
+  background:#171612!important;
+  color:#dfc18d!important;
+}
+
+@media(max-width:700px){
+  .nav{
+    width:100%;
+  }
+
+  .legal-nav{
+    min-height:64px;
+    padding:14px 18px!important;
+  }
+}
+
+
 .legal-nav{position:sticky!important;top:0!important;z-index:5000!important;}
 .legal-page-shell .legal-brand span{width:34px!important;height:34px!important;border-radius:9px!important;background:#171612!important;color:#dfc18d!important;}
 .legal-page-shell .legal-brand,
@@ -7937,4 +8730,311 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
 .legal-page-shell .legal-contact a,
 .legal-page-shell .legal-contact span{opacity:1!important;visibility:visible!important;}
 .site .reveal.visible{opacity:1;visibility:visible;}
+
+
+
+html, body, #root {
+  width:100%;
+  max-width:100%;
+  margin:0;
+  padding:0;
+  overflow-x:clip !important;
+}
+
+@supports not (overflow: clip) {
+  html, body, #root { overflow-x:hidden !important; }
+}
+
+.site,
+.site main,
+.site section,
+.legal-page-shell,
+.legal-page-shell .legal-main {
+  width:100%;
+  max-width:100%;
+  overflow-x:clip;
+}
+
+
+.hero,
+.use-section,
+.module-section,
+.product-section,
+.signature-section,
+.journey-section,
+.command-section,
+.fusion-section,
+.faq-section,
+.demo-section,
+.footer {
+  max-width:100%;
+  overflow:hidden;
+}
+
+
+.nav {
+  z-index:6000 !important;
+  max-width:100vw;
+}
+
+.nav.nav-scrolled .brand-name,
+.nav.nav-scrolled .brand-name strong,
+.nav.nav-scrolled .brand-text,
+.nav.nav-scrolled .brand {
+  color:var(--gold2) !important;
+}
+
+.nav.nav-scrolled .nav-links a {
+  color:rgba(244,236,220,.86) !important;
+}
+
+.nav.nav-scrolled .nav-links a:hover {
+  color:var(--gold2) !important;
+}
+
+.nav.nav-scrolled .brand-mark {
+  background:#171612 !important;
+  border-color:rgba(223,193,141,.72) !important;
+  color:var(--gold2) !important;
+}
+
+.nav.nav-scrolled .nav-demo,
+.nav.nav-scrolled .nav-cta,
+.nav.nav-scrolled button {
+  color:var(--gold2) !important;
+}
+
+
+.legal-page-shell {
+  min-height:100vh;
+  overflow-x:clip !important;
+}
+
+.legal-page-shell .legal-nav {
+  position:sticky !important;
+  top:0 !important;
+  z-index:10000 !important;
+  width:100%;
+  max-width:100vw;
+  box-sizing:border-box;
+}
+
+.legal-page-shell .legal-main,
+.legal-page-shell .legal-layout,
+.legal-page-shell .legal-block {
+  scroll-margin-top:96px;
+}
+
+.legal-page-shell .legal-toc {
+  top:96px !important;
+  z-index:20;
+}
+
+.legal-page-shell .legal-brand span {
+  border-radius:9px !important;
+  background:#171612 !important;
+  color:var(--gold2) !important;
+  border-color:rgba(223,193,141,.58) !important;
+}
+
+
+.legal-page-shell * {
+  visibility:visible;
+}
+
+@media (max-width:900px) {
+  .legal-page-shell .legal-nav {
+    padding-left:18px !important;
+    padding-right:18px !important;
+  }
+
+  .legal-page-shell .legal-toc {
+    position:relative !important;
+    top:auto !important;
+  }
+}
+
+@media (max-width:600px) {
+  .nav.nav-scrolled .nav-links a {
+    color:var(--gold2) !important;
+  }
+
+  .legal-page-shell .legal-nav {
+    min-height:68px;
+    gap:12px;
+  }
+
+  .legal-page-shell .legal-close span {
+    display:none;
+  }
+}
+
+
+html, body {
+  overscroll-behavior-x:none;
+}
+
+body {
+  min-width:320px;
+}
+
+
+.site *, .legal-page-shell * {
+  max-width:100%;
+}
+
+.nav {
+  padding-left:clamp(18px,5vw,80px);
+  padding-right:clamp(18px,5vw,80px);
+}
+
+.nav .brand,
+.nav .brand-name,
+.nav .brand-text {
+  flex-shrink:0;
+}
+
+.form-error {
+  margin:14px 0 0;
+  padding:12px 14px;
+  border:1px solid rgba(142,75,56,.28);
+  background:rgba(142,75,56,.07);
+  color:#7b4638;
+  font-size:.82rem;
+  line-height:1.55;
+  border-radius:10px;
+}
+
+.submit-button:disabled {
+  cursor:wait;
+  opacity:.65;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline:2px solid var(--gold3);
+  outline-offset:3px;
+}
+
+@media (pointer:coarse) {
+  .cursor-dot,
+  .cursor-ring {
+    display:none !important;
+  }
+}
+
+@media (max-width:600px) {
+  .nav {
+    padding-left:16px;
+    padding-right:16px;
+  }
+
+  .legal-nav {
+    padding-left:16px !important;
+    padding-right:16px !important;
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html {
+    scroll-behavior:auto !important;
+  }
+
+  *, *::before, *::after {
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+
+
+
+.hp-field{
+  position:absolute!important;
+  left:-10000px!important;
+  top:auto!important;
+  width:1px!important;
+  height:1px!important;
+  overflow:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+.hp-field input{
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+}
+
+
+html,body,#root,.site,.legal-page-shell{
+  max-width:100%;
+  overflow-x:clip;
+}
+@supports not (overflow: clip){
+  html,body,#root,.site,.legal-page-shell{overflow-x:hidden;}
+}
+
+@media (pointer:coarse){
+  .cursor-dot,.cursor-ring{display:none!important;}
+}
+
+
+
+.chat-backdrop{position:fixed;inset:0;background:rgba(10,9,7,.46);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:7990;opacity:0;pointer-events:none;transition:opacity .3s ease}
+.chat-backdrop.is-open{opacity:1;pointer-events:auto}
+.chat-launcher{position:fixed;right:28px;bottom:28px;z-index:8002;border:1px solid rgba(220,193,145,.38);background:linear-gradient(135deg,#2b271f,#14130f);color:#f8f1e4;display:flex;align-items:center;gap:11px;padding:8px 16px 8px 8px;border-radius:999px;box-shadow:0 18px 55px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.08);cursor:pointer;transition:transform .3s ease,box-shadow .3s ease,border-color .3s ease}
+.chat-launcher:hover{transform:translateY(-3px);border-color:rgba(220,193,145,.65);box-shadow:0 24px 70px rgba(0,0,0,.4),0 0 0 1px rgba(220,193,145,.08)}
+.chat-launcher-glow{position:absolute;inset:-5px;border-radius:inherit;border:1px solid rgba(180,153,101,.16);animation:chatPulse 2.8s ease-in-out infinite;pointer-events:none}
+.chat-launcher-icon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#dfc38d,#a6814b);color:#17130e;box-shadow:0 6px 20px rgba(183,146,83,.28)}
+.chat-launcher-copy{display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;padding-right:2px}.chat-launcher-copy small{font:400 8px/1.2 'DM Mono',monospace;letter-spacing:.16em;color:#c8ad7b}.chat-launcher-copy strong{font:500 12px/1.25 'DM Sans',sans-serif;margin-top:3px}
+.chat-panel{position:fixed;right:28px;bottom:92px;width:min(500px,calc(100vw - 32px));height:min(770px,calc(100vh - 118px));z-index:8001;background:#f8f3e9;color:#25221c;border:1px solid rgba(168,135,82,.38);box-shadow:0 35px 100px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.3) inset;display:flex;flex-direction:column;border-radius:27px;overflow:hidden;transform:translateY(22px) scale(.965);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .28s ease,transform .34s cubic-bezier(.22,1,.36,1),visibility .28s ease}
+.chat-panel.is-open{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0) scale(1)}
+.chat-header{display:flex;align-items:center;gap:11px;padding:17px 17px 14px;background:linear-gradient(135deg,#171510,#1d1a14);color:#f7f0e3;border-bottom:1px solid rgba(218,190,140,.15);position:relative}
+.chat-header:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(215,182,123,.55),transparent)}
+.chat-agent-mark{width:43px;height:43px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#dec18a,#b28c51);color:#17130e;box-shadow:0 8px 25px rgba(210,179,122,.2);flex:0 0 auto}
+.chat-agent-title{display:flex;flex-direction:column;min-width:0;flex:1;text-align:left}.chat-agent-title span{font:400 8px/1.2 'DM Mono',monospace;letter-spacing:.13em;color:#bba273}.chat-agent-title strong{font:600 14px/1.3 'DM Sans',sans-serif;margin-top:3px;color:#f7f0e3}.chat-agent-title small{display:flex;align-items:center;gap:5px;margin-top:5px;color:#8f897d;font:400 8px/1.25 'DM Mono',monospace}.chat-status-dot{width:5px;height:5px;border-radius:50%;background:#a5ad83;box-shadow:0 0 0 3px rgba(165,173,131,.1)}
+.chat-close{width:34px;height:34px;border:1px solid rgba(255,255,255,.1);border-radius:50%;display:grid;place-items:center;background:transparent;color:#e9dfce;cursor:pointer;transition:.2s ease}.chat-close:hover{background:rgba(255,255,255,.06);border-color:rgba(220,193,145,.3);transform:rotate(4deg)}
+.chat-trust{padding:9px 17px;background:#eee6d8;border-bottom:1px solid rgba(110,91,61,.1);font:400 9px/1.3 'DM Mono',monospace;letter-spacing:.02em;color:#6f6049;text-align:left}.chat-trust span{margin:0 4px}.chat-live-dot{display:inline-block!important;width:6px;height:6px;border-radius:50%;background:#8e9b72;box-shadow:0 0 0 4px rgba(142,155,114,.12);vertical-align:middle}
+.chat-topic-bar{display:flex;gap:6px;padding:9px 12px 8px;background:#f3ecdf;border-bottom:1px solid rgba(110,91,61,.09);overflow:auto;scrollbar-width:none;touch-action:pan-x}.chat-topic-bar::-webkit-scrollbar{display:none}.chat-topic-bar button{flex:0 0 auto;border:1px solid rgba(133,106,67,.14);background:rgba(255,255,255,.5);color:#75634a;border-radius:999px;padding:7px 10px;font:500 9px/1 'DM Sans',sans-serif;cursor:pointer;transition:.2s ease;display:inline-flex;align-items:center;gap:5px}.chat-topic-bar button:hover{background:#fffaf0;border-color:rgba(169,136,80,.35)}.chat-topic-bar button.active{background:#29251d;color:#f8efe0;border-color:#29251d;box-shadow:0 4px 12px rgba(35,29,20,.1)}
+.chat-messages{flex:1;min-height:115px;overflow:auto;padding:17px 16px 9px;scroll-behavior:smooth;background:radial-gradient(circle at 85% 5%,rgba(202,178,136,.14),transparent 30%),radial-gradient(circle at 5% 90%,rgba(157,171,126,.08),transparent 25%),#f8f3e9;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.chat-message-row{display:flex;gap:8px;margin:0 0 14px;align-items:flex-end;text-align:left}.chat-message-row.user{justify-content:flex-end}
+.chat-mini-mark{flex:0 0 23px;width:23px;height:23px;border-radius:7px;background:#d3b37a;color:#17130e;display:grid;place-items:center}
+.chat-message-stack{max-width:88%;display:flex;flex-direction:column;align-items:flex-start;text-align:left}.chat-bubble{max-width:100%;padding:12px 14px;border:1px solid rgba(93,77,52,.12);border-radius:16px 16px 16px 5px;background:rgba(255,253,248,.96);color:#322d25;font:400 12.5px/1.6 'DM Sans',sans-serif;box-shadow:0 6px 22px rgba(49,40,28,.045);white-space:pre-wrap;overflow-wrap:anywhere;text-align:left!important}.chat-message-row.user .chat-bubble{border-radius:16px 16px 5px 16px;background:#29251d;color:#f7efe2;border-color:#29251d}
+.chat-meta{font:400 7.5px/1.3 'DM Mono',monospace;color:#9a8d78;margin:5px 3px 0;text-align:left}.chat-typing{display:flex;gap:4px;align-items:center;padding:12px 14px}.chat-typing i{width:5px;height:5px;border-radius:50%;background:#9c8053;animation:chatTyping 1.1s infinite ease-in-out}.chat-typing i:nth-child(2){animation-delay:.15s}.chat-typing i:nth-child(3){animation-delay:.3s}.chat-typing span{margin-left:5px;color:#8f8068;font:400 8px/1.2 'DM Mono',monospace}
+.chat-escalation{margin-top:8px;width:min(100%,390px);border:1px solid rgba(153,123,74,.2);background:linear-gradient(135deg,#f0e7d7,#fbf7ee);border-radius:14px;padding:10px;text-align:left}.chat-contact-title{display:flex;align-items:center;gap:8px}.chat-contact-title>span{width:28px;height:28px;border-radius:8px;background:#d4b579;color:#211b12;display:grid;place-items:center}.chat-contact-title strong{display:block;font:600 10px/1.2 'DM Sans',sans-serif;color:#443a2d}.chat-contact-title small{display:block;margin-top:2px;font:400 8px/1.25 'DM Mono',monospace;color:#88775e}.chat-contact-links{display:grid;gap:4px;margin-top:8px}.chat-contact-links a{display:flex;align-items:center;gap:6px;color:#765d38;text-decoration:none;font:500 8px/1.35 'DM Sans',sans-serif;overflow-wrap:anywhere}.chat-contact-links a:hover{text-decoration:underline;color:#4c3b24}.chat-escalation button{width:100%;margin-top:9px;border:1px solid #2b271f;background:#2b271f;color:#f8efe1;border-radius:10px;padding:9px;display:flex;justify-content:center;align-items:center;gap:5px;font:600 9px/1.1 'DM Sans',sans-serif;cursor:pointer;transition:.2s ease}.chat-escalation button:hover{background:#a27e4d;border-color:#a27e4d;transform:translateY(-1px)}
+.chat-suggestions-wrap{flex:0 0 auto;padding:9px 13px 10px;background:linear-gradient(180deg,#f8f3e9,#f5eee2);border-top:1px solid rgba(110,91,61,.08);max-height:205px;overflow:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.chat-suggestion-label{display:flex;align-items:center;justify-content:space-between;margin:0 2px 7px}.chat-suggestion-label span{text-transform:uppercase;letter-spacing:.1em;color:#8b714b;font:500 7.5px/1.2 'DM Mono',monospace;display:inline-flex;align-items:center;gap:5px}.chat-suggestion-label small{color:#a09482;font:400 7.5px/1.2 'DM Mono',monospace}
+.chat-suggestions{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:transparent;padding:0}.chat-suggestions button{min-width:0;text-align:left;border:1px solid rgba(133,106,67,.17);background:rgba(255,250,240,.72);color:#5d4d37;border-radius:12px;padding:8px 8px;font:500 9px/1.3 'DM Sans',sans-serif;cursor:pointer;display:grid;grid-template-columns:23px 1fr 12px;align-items:center;gap:7px;transition:.2s ease}.chat-suggestions button>span{width:23px;height:23px;border-radius:7px;background:#eadcc5;color:#81653c;display:grid;place-items:center}.chat-suggestions button b{font-weight:600;text-align:left}.chat-suggestions button:hover{border-color:#ad8d59;background:#fffaf0;transform:translateY(-1px);box-shadow:0 5px 14px rgba(62,48,29,.06)}
+.chat-input-wrap{margin:0 13px 8px;padding:6px 7px 6px 10px;background:#fffdf8;border:1px solid rgba(100,80,51,.2);border-radius:16px;display:flex;align-items:center;gap:5px;box-shadow:0 8px 25px rgba(44,35,23,.055);flex:0 0 auto}.chat-input-icon{color:#9d8d75;display:grid;place-items:center}.chat-input-wrap input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:#28241e;padding:9px 4px;font:400 12px/1.3 'DM Sans',sans-serif}.chat-input-wrap input::placeholder{color:#aa9b85}.chat-counter{min-width:34px;text-align:right;color:#a89982;font:400 7px/1 'DM Mono',monospace}.chat-input-wrap button{width:36px;height:36px;border:0;border-radius:11px;background:#2b271f;color:#f6eddd;display:grid;place-items:center;cursor:pointer;transition:.2s ease}.chat-input-wrap button:not(:disabled):hover{background:#a98551;transform:translateX(1px)}.chat-input-wrap button:disabled{opacity:.35;cursor:not-allowed}
+.chat-footer-row{padding:0 16px 12px;color:#9a8d78;display:flex;justify-content:flex-start;align-items:center;gap:6px;flex-wrap:wrap;font:400 7px/1.3 'DM Mono',monospace;text-align:left;flex:0 0 auto}.chat-footer-row span{display:inline-flex;align-items:center;gap:3px}.chat-footer-row button{border:0;background:transparent;color:#8b6a3f;font:600 7px/1.3 'DM Mono',monospace;padding:0;cursor:pointer;display:inline-flex;align-items:center;gap:3px}.chat-footer-row button:hover{text-decoration:underline}
+@media (max-width:640px){.chat-launcher{right:16px;bottom:16px;padding:7px}.chat-launcher-copy{display:none}.chat-launcher-icon{width:45px;height:45px}.chat-panel{right:8px;bottom:76px;width:calc(100vw - 16px);height:min(720px,calc(100vh - 94px));border-radius:21px}.chat-header{padding:14px}.chat-agent-title strong{font-size:13px}.chat-messages{padding:13px 13px 8px}.chat-bubble{font-size:12px;line-height:1.55}.chat-message-stack{max-width:91%}.chat-suggestions-wrap{max-height:188px}.chat-suggestions{grid-template-columns:1fr}.chat-topic-bar{padding-left:10px;padding-right:10px}.chat-footer-row{padding-bottom:10px}}
+@media (max-height:720px) and (min-width:641px){.chat-panel{height:calc(100vh - 100px)}.chat-suggestions-wrap{max-height:175px}.chat-messages{padding-top:11px}.chat-footer-row{padding-bottom:8px}}
+@keyframes chatPulse{0%,100%{transform:scale(.98);opacity:.4}50%{transform:scale(1.025);opacity:1}}
+@keyframes chatTyping{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-3px);opacity:1}}
+
+html, body, #root { width:100%; max-width:100%; overflow-x:clip; }
+@supports not (overflow: clip) { html, body, #root { overflow-x:hidden; } }
+body { overscroll-behavior-x:none; -webkit-tap-highlight-color:transparent; }
+button, a, input, select, textarea { -webkit-tap-highlight-color:transparent; }
+:focus-visible { outline:2px solid var(--gold2); outline-offset:3px; }
+@media (pointer: coarse) { .cursor-dot, .cursor-ring { display:none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+.legal-page-shell .legal-block { scroll-margin-top:92px; }
+.legal-page-shell .legal-nav { min-height:72px; }
+.legal-page-shell, .legal-page-shell * { visibility:visible; }
 `;
+
+export default function Pratyeksha() {
+  return (
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  );
+}
