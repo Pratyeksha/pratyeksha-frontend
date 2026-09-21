@@ -687,43 +687,43 @@ const CHATBOT_VERIFIED_INTENTS = CHATBOT_INTENTS.map(({ id, title, terms, answer
 const CHAT_TOPIC_SETS = {
   Discover: [
     ["✨ What is Pratyeksha?", "spark"],
-    ["👥 Who is it for?", "users"],
-    ["💡 What are the main benefits?", "star"],
-    ["🧩 What features are included?", "layers"],
-    ["🔗 How is it different from a normal restaurant app?", "spark"],
+    ["Who is PRATYEKSHa for?", "users"],
+    ["What are the main benefits?", "spark"],
+    ["What features are included?", "layers"],
+    ["How is it different from a normal restaurant app?", "spark"],
     ["☕ Is it suitable for my café?", "coffee"],
-    ["🍽️ Is it suitable for my restaurant?", "utensils"],
-    ["🏢 Can it support multiple outlets?", "layers"]
+    ["Is it suitable for my restaurant?", "utensils"],
+    ["Can it support multiple outlets?", "layers"]
   ],
   Experience: [
-    ["📱 How does QR ordering work?", "qr"],
-    ["🍽️ What can a dish show?", "utensils"],
+    ["How does QR ordering work?", "qr"],
+    ["What can a dish show?", "utensils"],
     ["✨ Can customers see 3D dishes?", "box"],
-    ["🎙️ Can customers hear dish information?", "mic"],
-    ["🌐 Does it support Marathi and Hindi?", "globe"],
+    ["Can customers hear dish information?", "mic"],
+    ["Does it support Marathi and Hindi?", "globe"],
     ["⭐ Can it remember favourite dishes?", "star"],
-    ["🔔 Can guests request service from the table?", "bell"],
-    ["🛍️ Does it support pickup or takeaway?", "arrowUpRight"]
+    ["Can guests request service from the table?", "bell"],
+    ["Does it support pickup or takeaway?", "arrowUpRight"]
   ],
   Operations: [
-    ["👨‍🍳 How does the kitchen work?", "kitchen"],
+    ["How does the kitchen work?", "kitchen"],
     ["⏱️ Does the kitchen have timers?", "clock"],
-    ["🧾 Does it support GST billing?", "billing"],
-    ["💳 Which payment methods can be used?", "billing"],
-    ["📦 How does inventory work?", "inventory"],
-    ["🥘 Can recipes connect to ingredients?", "utensils"],
-    ["🚫 Can unavailable dishes be controlled?", "shield"],
-    ["🗺️ What restaurant operations does it connect?", "layers"]
+    ["Does it support GST billing?", "billing"],
+    ["Which payment methods can be used?", "billing"],
+    ["How does inventory work?", "inventory"],
+    ["Can recipes connect to ingredients?", "utensils"],
+    ["Can unavailable dishes be controlled?", "shield"],
+    ["What restaurant operations does it connect?", "layers"]
   ],
   Business: [
-    ["📊 What analytics are available?", "chart"],
-    ["📈 What is restaurant intelligence?", "brain"],
-    ["📣 How does marketing work?", "trending"],
-    ["💬 Does it support WhatsApp marketing?", "message"],
-    ["💰 What is the pricing?", "star"],
-    ["🎯 How can I book a demo?", "arrowUpRight"],
-    ["🔌 Can it integrate with other systems?", "layers"],
-    ["🔐 How is customer data handled?", "shield"]
+    ["What analytics are available?", "chart"],
+    ["What is restaurant intelligence?", "brain"],
+    ["How does marketing work?", "trending"],
+    ["Does it support WhatsApp marketing?", "message"],
+    ["What is the pricing?", "star"],
+    ["How can I book a demo?", "arrowUpRight"],
+    ["Can it integrate with other systems?", "layers"],
+    ["How is customer data handled?", "shield"]
   ]
 };
 
@@ -767,7 +767,7 @@ function PratyekshaChatbot() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "✨ Welcome to PRATYEKSHa. I can help you explore the system — from QR ordering and customer experience to kitchen, billing, inventory, intelligence and marketing.",
+      text: "Welcome to PRATYEKSHa. I can help you explore the system — from QR ordering and customer experience to kitchen, billing, inventory, intelligence and marketing.",
       meta: "PRATYEKSHa knowledge assistant"
     }
   ]);
@@ -785,7 +785,7 @@ function PratyekshaChatbot() {
     const intent = findLocalChatIntent(question);
     if (intent) return { text: intent.answer, intent: intent.id };
     return {
-      text: `I don't have enough verified information to answer that accurately without guessing.\n\n📩 ${CHATBOT_KNOWLEDGE.contact.email}\n📞 ${CHATBOT_KNOWLEDGE.contact.phone}\n📞 ${CHATBOT_KNOWLEDGE.contact.alternatePhone}\n\nFor feature, integration, implementation or commercial details, book a private demo and the team can confirm the exact answer for your business.`,
+      text: `I don't have enough verified information to answer that accurately without guessing.\n\n${CHATBOT_KNOWLEDGE.contact.email}\n${CHATBOT_KNOWLEDGE.contact.phone}\n${CHATBOT_KNOWLEDGE.contact.alternatePhone}\n\nFor feature, integration, implementation or commercial details, book a private demo and the team can confirm the exact answer for your business.`,
       intent: "unknown"
     };
   };
