@@ -67,6 +67,7 @@ const BrandLogo = ({ className = "", alt = "Pratyeksha" }) => (
     src={LOGO_SRC}
     alt={alt}
     loading="eager"
+    fetchPriority="high"
     decoding="async"
   />
 );
@@ -1597,11 +1598,28 @@ function App() {
   const [fieldErrors, setFieldErrors] = useState({});
   useEffect(() => {
     document.body.classList.add("pratyeksha-page");
+
+    // Warm the logo cache immediately so the 7-second opening screen never waits on the brand asset.
+    let logoPreload = null;
+    try {
+      logoPreload = document.createElement("link");
+      logoPreload.rel = "preload";
+      logoPreload.as = "image";
+      logoPreload.href = LOGO_SRC;
+      logoPreload.fetchPriority = "high";
+      document.head.appendChild(logoPreload);
+      const logoWarmup = new Image();
+      logoWarmup.fetchPriority = "high";
+      logoWarmup.src = LOGO_SRC;
+    } catch {}
+
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 900);
+    }, 7000);
+
     return () => {
       clearTimeout(timer);
+      if (logoPreload?.parentNode) logoPreload.parentNode.removeChild(logoPreload);
       document.body.classList.remove("pratyeksha-page");
     };
   }, []);
@@ -3295,7 +3313,7 @@ body.cursor-large .cursor-ring{
   width:0;
   height:100%;
   background:var(--gold);
-  animation:loaderLine 5.7s cubic-bezier(.65,0,.35,1) forwards;
+  animation:loaderLine 6.7s cubic-bezier(.65,0,.35,1) forwards;
 }
 .loading-label{
   margin-top:22px;
@@ -7566,33 +7584,6 @@ h1,h2,h3,h4,h5,h6,p{margin-block-start:0;}
   .demo-form-wrap{padding:20px;}
   .footer{padding-inline:16px;}
 }
-@media (prefers-color-scheme:dark){
-  .hero,
-  .use-section,
-  .module-section.cream,
-  .signature-section,
-  .command-section,
-  .demo-section{
-    color:var(--darkText);
-  }
-  .hero-title,
-  .section-heading h2,
-  .module-section.cream .module-copy h2,
-  .signature-heading h2,
-  .command-heading h2,
-  .demo-copy h2{
-    color:var(--darkText);
-  }
-  .hero-description,
-  .section-heading p,
-  .module-section.cream .module-description,
-  .module-section.cream .module-features > div,
-  .signature-heading p,
-  .command-section p,
-  .demo-copy > p{
-    color:var(--bodyText);
-  }
-}
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;}
 }
@@ -8078,7 +8069,78 @@ button, a, input, select, textarea { -webkit-tap-highlight-color:transparent; }
 }
 @media(max-width:360px){.mobile-sticky-cta button{font-size:.66rem}.hero-cta-note{align-items:flex-start}.cookie-copy p{font-size:.64rem}}
 /* Final launch polish */
-.special-page{text-align:center;align-items:center}
+/* The site intentionally stays light on light-capable surfaces even when the phone OS uses dark mode. */
+html, body, #root{
+  color-scheme:light;
+}
+input, select, textarea, button{
+  color-scheme:light;
+}
+.form-grid input,
+.form-grid select,
+.form-grid textarea{
+  -webkit-text-fill-color:#eee5d4;
+}
+.form-grid select{
+  -webkit-text-fill-color:rgba(255,255,255,.72);
+}
+.form-grid label.full select[name="type"]{
+  -webkit-text-fill-color:#25221c!important;
+}
+.form-privacy-notice{
+  display:block!important;
+  width:100%!important;
+  max-width:none!important;
+  margin:16px 0 0!important;
+  text-align:left!important;
+  text-align-last:left!important;
+  color:rgba(255,255,255,.68)!important;
+  font-size:.68rem!important;
+  line-height:1.6!important;
+}
+.form-privacy-notice strong{
+  color:#dfc18d!important;
+  font-weight:600!important;
+}
+.form-consent{
+  color:rgba(255,255,255,.70)!important;
+}
+.form-consent,
+.form-consent > span{
+  text-align:left!important;
+  text-align-last:left!important;
+}
+.form-consent button{
+  color:#dfc18d!important;
+}
+.form-consent button:hover{
+  color:#f4ecdc!important;
+}
+/* On phones the sticky demo action occupies the bottom edge, so the assistant always sits clearly above it. */
+@media(max-width:767px){
+  .chat-launcher{
+    right:16px!important;
+    bottom:calc(76px + env(safe-area-inset-bottom))!important;
+    z-index:10060!important;
+  }
+  .chat-panel{
+    right:8px!important;
+    bottom:calc(136px + env(safe-area-inset-bottom))!important;
+    z-index:10059!important;
+    height:min(680px,calc(100svh - 158px - env(safe-area-inset-bottom)))!important;
+  }
+  .chat-backdrop{
+    z-index:10058!important;
+  }
+  .mobile-sticky-cta{
+    bottom:calc(9px + env(safe-area-inset-bottom))!important;
+    z-index:9997!important;
+  }
+  .cookie-banner{
+    z-index:10050!important;
+  }
+}
+
 .special-page p{margin-left:auto;margin-right:auto}
 .special-actions{justify-content:center}
 .special-page .special-logo{margin-left:auto;margin-right:auto}
