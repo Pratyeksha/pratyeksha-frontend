@@ -1,4 +1,75 @@
 import React, { useEffect, useRef, useState } from "react";
+
+const API = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || "";
+const GA_MEASUREMENT_ID = (typeof import.meta !== "undefined" && import.meta.env?.VITE_GA_MEASUREMENT_ID) || "";
+const LOGO_SRC = "/pratyeksha-logo.png";
+const CONSENT_STORAGE_KEY = "pratyeksha-consent-v2";
+const CONSENT_VERSION = "2026-09-24";
+const SITE_PATHS = ["/", "/landing", "/thank-you"];
+const PAGE_META = {
+  home: {
+    title: "Pratyeksha | Restaurant Experience System",
+    description: "Pratyeksha connects customer experience, menu, kitchen, billing, inventory, intelligence and marketing workflows for cafés and restaurants.",
+  },
+  privacy: {
+    title: "Privacy Policy | Pratyeksha",
+    description: "Learn how Pratyeksha collects, uses, protects, retains and handles personal data across its website, enquiries and services.",
+  },
+  terms: {
+    title: "Terms of Use | Pratyeksha",
+    description: "Read the terms governing access to the Pratyeksha website, product information, demonstrations and related services.",
+  },
+  thankYou: {
+    title: "Demo Request Received | Pratyeksha",
+    description: "Your Pratyeksha private demo request has been received. We will contact you using the details you provided.",
+  },
+  notFound: {
+    title: "Page Not Found | Pratyeksha",
+    description: "The Pratyeksha page you requested could not be found.",
+  },
+};
+const ALLOWED_BUSINESS_TYPES = new Set([
+  "Café / Coffee Shop",
+  "Restaurant",
+  "QSR / Fast Food",
+  "Bakery / Bistro",
+  "Cloud Kitchen",
+  "Multi-outlet Business",
+]);
+const MAX_FORM = { name: 80, business: 120, phone: 20, email: 160, message: 1000 };
+const getPath = () => {
+  if (typeof window === "undefined") return "/landing";
+  return window.location.pathname.replace(/\/+$/, "") || "/";
+};
+const pushPath = (path) => {
+  if (typeof window === "undefined") return;
+  window.history.pushState({}, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+};
+const readConsent = () => {
+  try {
+    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.version === CONSENT_VERSION ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+const saveConsent = (analytics) => {
+  const value = { version: CONSENT_VERSION, analytics: Boolean(analytics), timestamp: new Date().toISOString() };
+  try { window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(value)); } catch {}
+  return value;
+};
+const BrandLogo = ({ className = "", alt = "Pratyeksha" }) => (
+  <img
+    className={`brand-logo-image ${className}`.trim()}
+    src={LOGO_SRC}
+    alt={alt}
+    loading="eager"
+    decoding="async"
+  />
+);
 const Icon = ({ children, size = 20, stroke = 1.5, className = "" }) => (
   <svg
     width={size}
@@ -1363,6 +1434,62 @@ function ProductVisual({ type }) {
     </div>
   );
 }
+function NotFoundPage({ onHome }) {
+  useEffect(() => {
+    document.title = PAGE_META.notFound.title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", PAGE_META.notFound.description);
+  }, []);
+  return (
+    <div className="special-page special-page-404">
+      <style>{CSS}</style>
+      <div className="special-page-glow" />
+      <BrandLogo className="special-logo" alt="Pratyeksha logo" />
+      <span className="special-kicker">404 / PAGE NOT FOUND</span>
+      <h1>This page took a<br /><em>wrong turn.</em></h1>
+      <p>The page you requested does not exist or may have moved. Return to the restaurant experience system and continue exploring.</p>
+      <button className="button primary" onClick={onHome}>Back to Pratyeksha <I name="arrow" size={16} /></button>
+    </div>
+  );
+}
+function ThankYouPage({ onHome, onDemo }) {
+  useEffect(() => {
+    document.title = PAGE_META.thankYou.title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", PAGE_META.thankYou.description);
+  }, []);
+  return (
+    <div className="special-page special-page-thanks">
+      <style>{CSS}</style>
+      <BrandLogo className="special-logo" alt="Pratyeksha logo" />
+      <div className="thank-icon"><I name="check" size={28} /></div>
+      <span className="special-kicker">REQUEST RECEIVED</span>
+      <h1>Your next restaurant<br /><em>conversation starts here.</em></h1>
+      <p>Thanks for requesting a private demo. Our team will review the details and contact you using the information you provided.</p>
+      <div className="special-actions">
+        <button className="button primary" onClick={onHome}>Back to website <I name="arrow" size={16} /></button>
+        <button className="button secondary" onClick={onDemo}>Send another request</button>
+      </div>
+      <small className="special-note">If you need us sooner: hello.pratyeksha@gmail.com</small>
+    </div>
+  );
+}
+function CookieBanner({ consent, onAccept, onReject, onManage }) {
+  if (consent) return null;
+  return (
+    <aside className="cookie-banner" role="dialog" aria-label="Privacy and analytics preferences" aria-live="polite">
+      <div className="cookie-copy">
+        <strong>Privacy first.</strong>
+        <p>We use essential storage to run this website. Optional analytics help us understand visits and improve the experience. Analytics stays off until you choose it.</p>
+        <span>Read our <button type="button" onClick={onManage}>Privacy Policy</button>. You can change analytics consent later from Privacy Settings.</span>
+      </div>
+      <div className="cookie-actions">
+        <button type="button" className="cookie-secondary" onClick={onReject}>Essential only</button>
+        <button type="button" className="cookie-secondary" onClick={onManage}>Privacy Policy</button>
+        <button type="button" className="cookie-primary" onClick={onAccept}>Allow analytics</button>
+      </div>
+    </aside>
+  );
+}
+
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -1440,7 +1567,16 @@ function App() {
   const [activeSection, setActiveSection] = useState("home");
   const [activeProduct, setActiveProduct] = useState("experience");
   const [cursorActive, setCursorActive] = useState(false);
-  const [legalPage, setLegalPage] = useState(null);
+  const [legalPage, setLegalPage] = useState(() => {
+    const path = getPath();
+    return path === "/privacy" ? "privacy" : path === "/terms" ? "terms" : null;
+  });
+  const [currentPath, setCurrentPath] = useState(() => {
+    const path = getPath();
+    return path === "/privacy" || path === "/terms" ? "/landing" : path;
+  });
+  const [cookieConsent, setCookieConsent] = useState(() => readConsent());
+  const [showConsentSettings, setShowConsentSettings] = useState(false);
   const activeProductIndex = Object.keys(PRODUCTS).indexOf(activeProduct);
   const activeProductData = PRODUCTS[activeProduct];
   const dotRef = useRef(null);
@@ -1453,34 +1589,89 @@ function App() {
     type: "",
     message: "",
     website: "",
+    privacyConsent: false,
   });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   useEffect(() => {
     document.body.classList.add("pratyeksha-page");
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 6000);
+    }, 900);
     return () => {
       clearTimeout(timer);
       document.body.classList.remove("pratyeksha-page");
     };
   }, []);
   useEffect(() => {
+    const handlePopState = () => {
+      const path = getPath();
+      if (path === "/privacy" || path === "/terms") {
+        setCurrentPath("/landing");
+        setLegalPage(path.slice(1));
+        window.history.replaceState({}, "", "/landing");
+      } else {
+        setCurrentPath(path);
+        setLegalPage(null);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+  useEffect(() => {
+    const path = getPath();
+    if (path === "/privacy" || path === "/terms") {
+      setLegalPage(path.slice(1));
+      setCurrentPath("/landing");
+      window.history.replaceState({}, "", "/landing");
+    }
+    if (path === "/thank-you") setSent(true);
+  }, []);
+  useEffect(() => {
+    if (!cookieConsent?.analytics || !GA_MEASUREMENT_ID) return;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+    window.gtag("consent", "update", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+    });
+    if (!document.querySelector(`script[data-pratyeksha-ga="${GA_MEASUREMENT_ID}"]`)) {
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_MEASUREMENT_ID)}`;
+      script.dataset.pratyekshaGa = GA_MEASUREMENT_ID;
+      document.head.appendChild(script);
+      window.gtag("js", new Date());
+      window.gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true, send_page_view: true });
+    } else {
+      window.gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true, send_page_view: true });
+    }
+  }, [cookieConsent]);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.gtag && GA_MEASUREMENT_ID) {
+      window.gtag("event", "page_view", { page_title: document.title, page_location: window.location.href });
+    }
+  }, [currentPath, legalPage, sent]);
+  useEffect(() => {
+    if (cookieConsent || !showConsentSettings) return;
+  }, [cookieConsent, showConsentSettings]);
+  useEffect(() => {
     document.documentElement.lang = "en";
     document.documentElement.dir = "ltr";
-    const title = legalPage === "privacy"
-      ? "Privacy Policy | Pratyeksha"
-      : legalPage === "terms"
-        ? "Terms of Use | Pratyeksha"
-        : "Pratyeksha | Restaurant Experience System";
+    const pageKey = currentPath === "/privacy" || legalPage === "privacy"
+      ? "privacy"
+      : currentPath === "/terms" || legalPage === "terms"
+        ? "terms"
+        : currentPath === "/thank-you" || sent
+          ? "thankYou"
+          : SITE_PATHS.includes(currentPath) ? "home" : "notFound";
+    const title = PAGE_META[pageKey].title;
+    const description = PAGE_META[pageKey].description;
     document.title = title;
-    const description = legalPage
-      ? legalPage === "privacy"
-        ? "Read the Pratyeksha Privacy Policy."
-        : "Read the Pratyeksha Terms of Use."
-      : "Pratyeksha is a restaurant experience system for cafés and restaurants, connecting customer experience, operations, billing, inventory and intelligence.";
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {
       meta = document.createElement("meta");
@@ -1522,6 +1713,8 @@ function App() {
     setMeta("og:description", description);
     setMeta("og:type", "website");
     setMeta("og:url", canonicalUrl);
+    setMeta("og:image", `${window.location.origin}/og-image.png`);
+    setMeta("og:image:alt", "Pratyeksha restaurant experience system logo");
     let structuredData = document.getElementById("pratyeksha-structured-data");
     if (!structuredData) {
       structuredData = document.createElement("script");
@@ -1538,7 +1731,7 @@ function App() {
       telephone: "+91 87676 22654",
       description: "Restaurant experience system for cafés and restaurants."
     });
-  }, [legalPage]);
+  }, [legalPage, currentPath, sent]);
   useEffect(() => {
     const sectionIds = ["home", "system", "experience", "operations", "intelligence", "marketing", "signature", "journey", "command", "fusion", "faq", "demo"];
     const onScroll = () => {
@@ -1566,7 +1759,7 @@ function App() {
   }, []);
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === "Escape") setLegalPage(null);
+      if (e.key === "Escape") closeLegal();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1663,6 +1856,37 @@ function App() {
       });
     };
   }, [loading, mobileOpen, legalPage]);
+  const openLegal = (page) => {
+    setMobileOpen(false);
+    setLegalPage(page);
+    setCurrentPath("/landing");
+    // Privacy Policy and Terms intentionally stay on the main URL.
+  };
+  const closeLegal = () => {
+    setLegalPage(null);
+    setCurrentPath("/landing");
+  };
+  const goHome = () => {
+    setSent(false);
+    setLegalPage(null);
+    setCurrentPath("/landing");
+    pushPath("/landing");
+    window.setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: "smooth" }), 20);
+  };
+  const goDemoAgain = () => {
+    setSent(false);
+    setCurrentPath("/landing");
+    pushPath("/landing");
+    window.setTimeout(() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+  };
+  const updateConsent = (analytics) => {
+    const next = saveConsent(analytics);
+    setCookieConsent(next);
+    setShowConsentSettings(false);
+    if (typeof window !== "undefined" && window.gtag) {
+      window.gtag("consent", "update", { analytics_storage: analytics ? "granted" : "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+    }
+  };
   const scrollTo = (id) => {
     setMobileOpen(false);
     requestAnimationFrame(() => {
@@ -1676,12 +1900,41 @@ function App() {
     });
   };
   const updateForm = (e) => {
-    const { name, value } = e.target;
-    if (name === "type" && !ALLOWED_BUSINESS_TYPES.has(value)) return;
-    const max = MAX_FORM[name];
-    const safeValue = typeof max === "number" ? value.slice(0, max) : value;
-    setForm((p) => ({ ...p, [name]: safeValue }));
+    const { name, value, type, checked } = e.target;
+    if (name === "type" && value && !ALLOWED_BUSINESS_TYPES.has(value)) return;
+    if (type === "checkbox") {
+      setForm((p) => ({ ...p, [name]: checked }));
+    } else {
+      const max = MAX_FORM[name];
+      const safeValue = typeof max === "number" ? value.slice(0, max) : value;
+      setForm((p) => ({ ...p, [name]: safeValue }));
+    }
+    setFieldErrors((p) => ({ ...p, [name]: "" }));
     if (formError) setFormError("");
+  };
+  const validateDemo = () => {
+    const errors = {};
+    const name = form.name.trim();
+    const business = form.business.trim();
+    const phone = form.phone.trim();
+    const email = form.email.trim();
+    if (!name) errors.name = "Your name is required.";
+    if (!business) errors.business = "Business name is required.";
+    if (!phone) errors.phone = "Phone number is required.";
+    else if (!/^[+0-9()\-\s]{8,20}$/.test(phone)) errors.phone = "Enter a valid phone number.";
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
+    if (!ALLOWED_BUSINESS_TYPES.has(form.type)) errors.type = "Select a business type.";
+    if (!form.privacyConsent) errors.privacyConsent = "Please confirm the privacy notice before submitting.";
+    if (name.length > MAX_FORM.name || business.length > MAX_FORM.business || phone.length > MAX_FORM.phone || email.length > MAX_FORM.email || form.message.trim().length > MAX_FORM.message) {
+      errors.form = "One or more fields are too long.";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setFormError(errors.form || "Please review the highlighted fields.");
+      return false;
+    }
+    setFormError("");
+    return true;
   };
   const submitDemo = async (e) => {
     e.preventDefault();
@@ -1696,26 +1949,7 @@ function App() {
       setFormError("");
       return;
     }
-    if (!name || !business || !phone) {
-      setFormError("Please fill in your name, business name and phone number.");
-      return;
-    }
-    if (!/^[+0-9()\-\s]{8,20}$/.test(phone)) {
-      setFormError("Please enter a valid phone number.");
-      return;
-    }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormError("Please enter a valid email address.");
-      return;
-    }
-    if (!ALLOWED_BUSINESS_TYPES.has(form.type)) {
-      setFormError("Please select a valid business type.");
-      return;
-    }
-    if (name.length > MAX_FORM.name || business.length > MAX_FORM.business || phone.length > MAX_FORM.phone || email.length > MAX_FORM.email || form.message.trim().length > MAX_FORM.message) {
-      setFormError("One or more fields are too long.");
-      return;
-    }
+    if (!validateDemo()) return;
     setSending(true);
     setFormError("");
     const controller = new AbortController();
@@ -1739,6 +1973,8 @@ function App() {
           type: form.type,
           message: form.message.trim(),
           website,
+          privacyConsent: true,
+          consentVersion: CONSENT_VERSION,
         }),
         signal: controller.signal,
       });
@@ -1759,6 +1995,8 @@ function App() {
         );
       }
       setSent(true);
+      setCurrentPath("/thank-you");
+      pushPath("/thank-you");
       setForm({
         name: "",
         business: "",
@@ -1767,6 +2005,7 @@ function App() {
         type: "",
         message: "",
         website: "",
+        privacyConsent: false,
       });
     } catch (error) {
       setFormError(
@@ -1786,11 +2025,8 @@ function App() {
         <div className="loading-screen">
           <div className="loading-orbit orbit-one" />
           <div className="loading-orbit orbit-two" />
-          <div className="loading-center">
-            <div className="loading-mark">
-              <I name="spark" size={24} />
-            </div>
-            <div className="loading-brand">Pratyeksha</div>
+          <div className="loading-center" role="status" aria-live="polite" aria-label="Loading Pratyeksha">
+            <BrandLogo className="loading-brand-image" alt="Pratyeksha logo" />
             <div className="loading-line">
               <span />
             </div>
@@ -1805,17 +2041,22 @@ function App() {
       </>
     );
   }
+  if (!SITE_PATHS.includes(currentPath)) {
+    return <NotFoundPage onHome={goHome} />;
+  }
+  if (currentPath === "/thank-you" || sent) {
+    return <ThankYouPage onHome={goHome} onDemo={goDemoAgain} />;
+  }
   if (legalPage) {
     const isPrivacy = legalPage === "privacy";
     return (
       <div className="legal-page-shell">
         <style>{CSS}</style>
         <header className="legal-nav">
-          <button className="legal-brand" onClick={() => setLegalPage(null)} aria-label="Back to Pratyeksha home">
-            <span><I name="spark" size={17} /></span>
-            Pratyeksha
+          <button className="legal-brand" onClick={closeLegal} aria-label="Back to Pratyeksha home">
+            <BrandLogo className="legal-brand-image" alt="Pratyeksha logo" />
           </button>
-          <button className="legal-close" onClick={() => setLegalPage(null)}>
+          <button className="legal-close" onClick={closeLegal}>
             <span>Back to website</span><I name="arrow" size={15} />
           </button>
         </header>
@@ -1833,7 +2074,7 @@ function App() {
                   : "The terms that govern access to the Pratyeksha website, platform information, demos and related services."}
               </p>
               <div className="legal-meta">
-                <span>Last updated: 21 September 2026</span>
+                <span>Last updated: 24 September 2026</span>
                 <span>India</span>
               </div>
             </div>
@@ -1847,7 +2088,7 @@ function App() {
           <section className="legal-layout">
             <aside className="legal-toc">
               <span>ON THIS PAGE</span>
-              {(isPrivacy ? ["Information we collect","How we use information","Sharing & service providers","Cookies & analytics","Security & retention","Your choices","Children's privacy","Changes & contact"] : ["Acceptance","Using the website","Accounts & enquiries","Intellectual property","Third-party services","Availability","Disclaimers","Liability","Governing law","Changes & contact"]).map((item, i) => (
+              {(isPrivacy ? ["Information we collect","Purpose & lawful processing","Sharing & service providers","Cookies & analytics","Security & retention","Your rights & grievances","Children's privacy","Changes & contact"] : ["Acceptance","Using the website","Accounts & enquiries","Intellectual property","Third-party services","Availability","Disclaimers","Liability","Governing law","Changes & contact"]).map((item, i) => (
                 <a key={item} href={`#legal-${i + 1}`}>{String(i + 1).padStart(2,"0")} <span>{item}</span></a>
               ))}
             </aside>
@@ -1855,11 +2096,11 @@ function App() {
               {isPrivacy ? (
                 <>
                   <section id="legal-1" className="legal-block"><span className="legal-num">01</span><div><h2>Information we collect</h2><p>Pratyeksha may receive information you voluntarily provide when you contact us, request a demo, communicate with our team or use a product feature. This can include your name, business name, phone number, email address, outlet information and the contents of your enquiry.</p><p>When the platform is used by a restaurant or café, operational information may also be processed on behalf of that business, such as menu, order, inventory, billing or customer-experience data configured by the business.</p></div></section>
-                  <section id="legal-2" className="legal-block"><span className="legal-num">02</span><div><h2>How we use information</h2><p>We use information to respond to enquiries, arrange demonstrations, provide and improve Pratyeksha services, support customers, maintain security, troubleshoot issues and communicate service-related information.</p><p>Where marketing communications are sent, you can ask us to stop receiving them. We do not use information for purposes materially different from those described here without an appropriate notice or legal basis.</p></div></section>
+                  <section id="legal-2" className="legal-block"><span className="legal-num">02</span><div><h2>Purpose, notice & lawful processing</h2><p>We collect only the information reasonably needed for the stated purpose, such as responding to a demo request, arranging a walkthrough, providing requested services, maintaining security or meeting legal obligations. Where consent is the basis for processing, the notice explains the purpose before the information is submitted and consent is requested through a clear affirmative action.</p><p>You may withdraw consent where processing is based on consent. Withdrawal will not affect processing already carried out lawfully before withdrawal, and some services may no longer be available where the information is necessary for the requested service.</p></div></section>
                   <section id="legal-3" className="legal-block"><span className="legal-num">03</span><div><h2>Sharing & service providers</h2><p>We may share information with trusted technology and service providers that help us operate the website or platform, such as hosting, database, analytics, communication and infrastructure providers. They receive only the information reasonably necessary for the service they provide.</p><p>We may also disclose information where required by law, to protect rights and safety, prevent abuse or fraud, or as part of a business transfer such as a merger, acquisition or restructuring.</p></div></section>
                   <section id="legal-4" className="legal-block"><span className="legal-num">04</span><div><h2>Cookies & analytics</h2><p>Pratyeksha may use cookies, local storage or similar technologies to keep the website functional, remember preferences, understand usage and improve the experience. Third-party analytics or embedded services may use their own technologies subject to their respective policies.</p><p>You can control cookies through your browser settings. Disabling some technologies may affect certain website functions.</p></div></section>
-                  <section id="legal-5" className="legal-block"><span className="legal-num">05</span><div><h2>Security & retention</h2><p>We use reasonable technical and organisational safeguards designed to protect information against unauthorised access, loss, misuse or alteration. No internet service can guarantee absolute security.</p><p>Information is retained only for as long as reasonably necessary for the purpose for which it was collected, contractual or operational needs, dispute resolution, legal obligations and legitimate business requirements.</p></div></section>
-                  <section id="legal-6" className="legal-block"><span className="legal-num">06</span><div><h2>Your choices</h2><p>Depending on the information and applicable law, you may ask us to access, correct, update or delete information we hold about you, or to stop certain communications. Requests can be made using the contact details below. We may need to verify a request before acting on it.</p></div></section>
+                  <section id="legal-5" className="legal-block"><span className="legal-num">05</span><div><h2>Security, retention & incidents</h2><p>We use reasonable technical and organisational safeguards designed to protect personal data against unauthorised access, loss, misuse or alteration. If a personal-data breach occurs, we will follow the notification and response obligations applicable to us under the DPDP framework and other applicable law.</p><p>Personal data is retained only for as long as reasonably necessary for the stated purpose, contractual or operational needs, dispute resolution, legal obligations and applicable retention requirements, after which it is deleted or anonymised where appropriate.</p></div></section>
+                  <section id="legal-6" className="legal-block"><span className="legal-num">06</span><div><h2>Your rights & grievance redressal</h2><p>Subject to applicable law, you may request access to information about your personal data, correction or updating of inaccurate data, erasure where retention is not required, withdrawal of consent where consent is the processing basis, and grievance redressal. Requests can be made using the contact details below. We may verify a request before acting on it.</p><p>For privacy questions or grievances, contact hello.pratyeksha@gmail.com. We will maintain a readily available channel for privacy-related requests and respond within the period required by applicable law.</p></div></section>
                   <section id="legal-7" className="legal-block"><span className="legal-num">07</span><div><h2>Children's privacy</h2><p>Pratyeksha is designed for businesses and general audiences and is not directed at children. We do not knowingly request personal information from children for independent account creation. If you believe a child has provided information to us, contact us so we can review and take appropriate action.</p></div></section>
                   <section id="legal-8" className="legal-block"><span className="legal-num">08</span><div><h2>Changes & contact</h2><p>We may update this policy when our services, technology or legal obligations change. The latest version will be posted on this page with its updated date.</p><div className="legal-contact"><strong>Privacy questions?</strong><a href="mailto:hello.pratyeksha@gmail.com">hello.pratyeksha@gmail.com</a><span>+91 87676 22654 · +91 86050 15294</span></div></div></section>
                 </>
@@ -1884,8 +2125,9 @@ function App() {
           <span>© {new Date().getFullYear()} Pratyeksha</span>
           <span>Built for cafés & restaurants.</span>
           <div>
-            <button onClick={() => setLegalPage("privacy")}>Privacy Policy</button>
-            <button onClick={() => setLegalPage("terms")}>Terms of Use</button>
+            <button onClick={() => openLegal("privacy")}>Privacy Policy</button>
+            <button onClick={() => openLegal("terms")}>Terms of Use</button>
+            <button onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
           </div>
         </footer>
       </div>
@@ -1915,10 +2157,9 @@ function App() {
           onClick={() => scrollTo("home")}
           aria-label="Pratyeksha home"
         >
-          <span className="brand-mark">
-            <I name="spark" size={16} />
+          <span className="brand-logo-wrap">
+            <BrandLogo className="nav-brand-image" alt="Pratyeksha logo" />
           </span>
-          <span className="brand-name">Pratyeksha</span>
         </button>
         <nav className="desktop-nav">
           <button
@@ -1966,7 +2207,7 @@ function App() {
           <I name="close" size={24} />
         </button>
         <div className="mobile-menu-inner">
-          <span>Pratyeksha</span>
+          <BrandLogo className="mobile-brand-image" alt="Pratyeksha logo" />
           {[
             ["home", "Home"],
             ["system", "System"],
@@ -2020,6 +2261,7 @@ function App() {
                 Explore the System
               </button>
             </div>
+            <div className="hero-cta-note"><I name="shield" size={13} /> Private walkthrough · no pressure · built around your workflow</div>
             <div className="hero-meta reveal delay-4">
               <div>
                 <strong>01</strong>
@@ -2043,7 +2285,7 @@ function App() {
               <div className="restaurant-top">
                 <div>
                   <small>LIVE RESTAURANT</small>
-                  <strong>Pratyeksha</strong>
+                  <BrandLogo className="restaurant-brand-image" alt="Pratyeksha logo" />
                 </div>
                 <span className="live">
                   <i />
@@ -2522,10 +2764,12 @@ function App() {
                     />
                   </div>
                   <div className="form-grid">
-                    <label>
+                    <label className={fieldErrors.name ? "has-error" : ""}>
                       <span>Your Name *</span>
                       <input
                         name="name"
+                        aria-invalid={Boolean(fieldErrors.name)}
+                        aria-describedby={fieldErrors.name ? "name-error" : undefined}
                         required
                         autoComplete="name"
                         maxLength={80}
@@ -2533,11 +2777,14 @@ function App() {
                         onChange={updateForm}
                         placeholder="Enter your name"
                       />
+                      {fieldErrors.name && <span id="name-error" className="field-error">{fieldErrors.name}</span>}
                     </label>
-                    <label>
+                    <label className={fieldErrors.business ? "has-error" : ""}>
                       <span>Café / Restaurant *</span>
                       <input
                         name="business"
+                        aria-invalid={Boolean(fieldErrors.business)}
+                        aria-describedby={fieldErrors.business ? "business-error" : undefined}
                         required
                         autoComplete="organization"
                         maxLength={120}
@@ -2545,11 +2792,14 @@ function App() {
                         onChange={updateForm}
                         placeholder="Business name"
                       />
+                      {fieldErrors.business && <span id="business-error" className="field-error">{fieldErrors.business}</span>}
                     </label>
-                    <label>
+                    <label className={fieldErrors.phone ? "has-error" : ""}>
                       <span>Phone *</span>
                       <input
                         name="phone"
+                        aria-invalid={Boolean(fieldErrors.phone)}
+                        aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
                         required
                         type="tel"
                         inputMode="tel"
@@ -2560,11 +2810,14 @@ function App() {
                         onChange={updateForm}
                         placeholder="+91"
                       />
+                      {fieldErrors.phone && <span id="phone-error" className="field-error">{fieldErrors.phone}</span>}
                     </label>
-                    <label>
+                    <label className={fieldErrors.email ? "has-error" : ""}>
                       <span>Email</span>
                       <input
                         name="email"
+                        aria-invalid={Boolean(fieldErrors.email)}
+                        aria-describedby={fieldErrors.email ? "email-error" : undefined}
                         type="email"
                         inputMode="email"
                         autoComplete="email"
@@ -2573,11 +2826,14 @@ function App() {
                         onChange={updateForm}
                         placeholder="you@example.com"
                       />
+                      {fieldErrors.email && <span id="email-error" className="field-error">{fieldErrors.email}</span>}
                     </label>
                     <label className="full">
                       <span>Business Type</span>
                       <select
                         name="type"
+                        aria-invalid={Boolean(fieldErrors.type)}
+                        aria-describedby={fieldErrors.type ? "type-error" : undefined}
                         value={form.type}
                         onChange={updateForm}
                       >
@@ -2589,6 +2845,7 @@ function App() {
                         <option>Cloud Kitchen</option>
                         <option>Multi-outlet Business</option>
                       </select>
+                      {fieldErrors.type && <span id="type-error" className="field-error">{fieldErrors.type}</span>}
                     </label>
                     <label className="full">
                       <span>What would you like to improve?</span>
@@ -2602,6 +2859,19 @@ function App() {
                       />
                     </label>
                   </div>
+                  <p className="form-privacy-notice"><strong>How we use these details:</strong> We collect the information you provide here to respond to your demo request, arrange the walkthrough and communicate about that request. Required fields are marked *. Analytics consent is separate and optional.</p>
+                  <label className={`form-consent ${fieldErrors.privacyConsent ? "has-error" : ""}`}>
+                    <input
+                      name="privacyConsent"
+                      type="checkbox"
+                      checked={form.privacyConsent}
+                      onChange={updateForm}
+                      aria-invalid={Boolean(fieldErrors.privacyConsent)}
+                      aria-describedby="privacy-consent-note"
+                    />
+                    <span id="privacy-consent-note">I confirm that I have read the <button type="button" onClick={() => openLegal("privacy")}>Privacy Policy</button> and agree that Pratyeksha may use the details I submit to respond to my demo request.</span>
+                  </label>
+                  {fieldErrors.privacyConsent && <span className="field-error" role="alert">{fieldErrors.privacyConsent}</span>}
                   {formError && (
                     <p className="form-error" role="alert" aria-live="polite">
                       {formError}
@@ -2612,7 +2882,7 @@ function App() {
                     type="submit"
                     disabled={sending}
                   >
-                    {sending ? "Sending..." : "Request Private Demo"}
+                    {sending ? "Sending securely…" : "Book a Private Demo"}
                     <I name="arrow" size={17} />
                   </button>
                   <p className="form-note">
@@ -2753,10 +3023,7 @@ function App() {
               className="footer-logo"
               onClick={() => scrollTo("home")}
             >
-              <span>
-                <I name="spark" size={17} />
-              </span>
-              Pratyeksha
+              <BrandLogo className="footer-brand-image" alt="Pratyeksha logo" />
             </button>
             <p>
               The digital layer behind better café and restaurant
@@ -2831,12 +3098,28 @@ function App() {
           </span>
           <span>Built for cafés & restaurants.</span>
           <div className="footer-legal-links">
-            <button onClick={() => setLegalPage("privacy")}>Privacy Policy</button>
-            <button onClick={() => setLegalPage("terms")}>Terms of Use</button>
+            <button onClick={() => openLegal("privacy")}>Privacy Policy</button>
+            <button onClick={() => openLegal("terms")}>Terms of Use</button>
+            <button onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
           </div>
         </div>
       </footer>
       <PratyekshaChatbot />
+      <div className="mobile-sticky-cta" aria-label="Book a private demo">
+        <button onClick={() => scrollTo("demo")}><span>Book a Private Demo</span><I name="arrow" size={15} /></button>
+      </div>
+      <CookieBanner
+        consent={cookieConsent}
+        onAccept={() => updateConsent(true)}
+        onReject={() => updateConsent(false)}
+        onManage={() => { setShowConsentSettings(true); }}
+      />
+      {showConsentSettings && cookieConsent && (
+        <div className="consent-settings-toast" role="status">
+          <span>Analytics preference: {cookieConsent.analytics ? "allowed" : "off"}.</span>
+          <button onClick={() => updateConsent(!cookieConsent.analytics)}>{cookieConsent.analytics ? "Turn off analytics" : "Allow analytics"}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -5090,6 +5373,8 @@ html{
 .form-grid label:focus-within > span{
   color:var(--gold2);
 }
+.form-grid label.full select[name="type"]{background:#fff!important;color:#25221c!important;border:1px solid rgba(255,255,255,.9)!important;font-weight:500!important;appearance:auto!important;-webkit-appearance:auto!important}.form-grid label.full select[name="type"] option{background:#fff!important;color:#25221c!important;font-weight:500!important}.form-grid label.full select[name="type"]:focus{background:#fff!important;color:#25221c!important;border-color:#d3bfa2!important;box-shadow:0 0 0 4px rgba(211,191,162,.18)!important}.form-grid label.full:has(select[name="type"]) > span{color:#fff!important}.form-grid label.full:has(select[name="type"]) > span::after{content:""}.form-grid label.full select[name="type"] option[value=""]{color:#777168!important}
+
 .button{
   position:relative;
   overflow:hidden;
@@ -7745,6 +8030,66 @@ button, a, input, select, textarea { -webkit-tap-highlight-color:transparent; }
 .legal-page-shell .legal-block { scroll-margin-top:92px; }
 .legal-page-shell .legal-nav { min-height:72px; }
 .legal-page-shell, .legal-page-shell * { visibility:visible; }
+
+/* Launch-readiness additions */
+.brand-logo-image{display:block;object-fit:contain;max-width:100%;height:auto}
+.brand-logo-wrap{display:flex;align-items:center;justify-content:flex-start;width:128px;height:48px;padding:4px 8px;background:#f4ecdc;border:1px solid rgba(199,162,105,.35);border-radius:9px;overflow:hidden}
+.nav-brand-image{width:116px;height:43px}
+.nav .brand{justify-content:flex-start;text-align:left}
+.mobile-brand-image{width:150px;height:62px;margin-bottom:16px;padding:7px 10px;background:#f4ecdc;border-radius:10px}
+.restaurant-brand-image{width:102px;height:38px;object-fit:contain;margin-top:5px;padding:2px 5px;background:#f4ecdc;border-radius:6px}
+.footer-brand-image{width:165px;height:68px;object-fit:contain;padding:7px 10px;background:#f4ecdc;border-radius:10px}
+.loading-brand-image{width:min(270px,70vw);height:92px;object-fit:contain;padding:9px 14px;background:#f4ecdc;border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+.legal-brand-image{width:135px;height:55px;object-fit:contain;padding:4px 7px;background:#f4ecdc;border-radius:8px}
+.hero-cta-note{display:flex;align-items:center;gap:7px;margin-top:12px;color:rgba(244,236,220,.55);font:400 .55rem/1.4 'DM Mono',monospace;letter-spacing:.04em}
+.form-grid label.has-error input,.form-grid label.has-error select,.form-grid label.has-error textarea,.form-consent.has-error input{border-color:#9a5544;box-shadow:0 0 0 3px rgba(154,85,68,.08)}
+.field-error{display:block;margin-top:6px;color:#9a5544;font:500 .68rem/1.4 'DM Sans',sans-serif}
+.form-privacy-notice{margin:16px 0 0;color:rgba(32,29,23,.58);font:400 .68rem/1.55 'DM Sans',sans-serif}.form-privacy-notice strong{font-weight:600;color:#4d4232}.form-consent{display:flex!important;flex-direction:row!important;align-items:flex-start!important;justify-content:flex-start!important;gap:10px!important;margin-top:16px!important;font-size:.66rem!important;line-height:1.55!important;color:rgba(32,29,23,.62)!important;text-align:left!important;width:100%!important}.form-consent > span{display:block!important;flex:1!important;text-align:left!important;margin:0!important}
+.form-consent input{width:17px!important;height:17px!important;flex:0 0 17px!important;margin-top:1px!important;accent-color:#8e7752}
+.form-consent button{border:0;background:none;padding:0;color:#705b3d;text-decoration:underline;cursor:pointer;font:inherit}
+.form-consent button:hover{color:#2d271e}
+.special-page{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:32px 24px;text-align:center;background:#11100d;color:#f5efe3}
+.special-page-glow{position:absolute;width:65vw;height:65vw;max-width:760px;max-height:760px;border-radius:50%;background:radial-gradient(circle,rgba(211,191,162,.12),transparent 65%);pointer-events:none}
+.special-logo{position:relative;width:min(250px,72vw);height:86px;object-fit:contain;padding:8px 12px;background:#f4ecdc;border-radius:12px;margin-bottom:38px}
+.special-kicker{position:relative;font:500 .58rem/1 'DM Mono',monospace;letter-spacing:.22em;color:#b99b6c;margin-bottom:16px}
+.special-page h1{position:relative;margin:0;max-width:800px;font:400 clamp(3rem,7vw,6.6rem)/.95 'DM Serif Display',serif;letter-spacing:-2px}
+.special-page h1 em{color:#d3bfa2;font-style:italic}
+.special-page p{position:relative;max-width:560px;margin:24px auto 30px;color:rgba(245,239,227,.64);font-size:.9rem;line-height:1.8}
+.special-actions{position:relative;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.special-note{position:relative;margin-top:25px;color:rgba(245,239,227,.4);font:400 .62rem/1.4 'DM Mono',monospace}
+.thank-icon{position:relative;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;margin-bottom:22px;background:#d3bfa2;color:#17130e;box-shadow:0 20px 55px rgba(211,191,162,.16)}
+.mobile-sticky-cta{display:none}
+.cookie-banner{position:fixed;left:18px;right:18px;bottom:18px;z-index:10050;display:flex;align-items:center;justify-content:space-between;gap:22px;padding:15px 17px;background:rgba(249,244,235,.98);color:#2c271f;border:1px solid rgba(124,99,62,.2);border-radius:16px;box-shadow:0 22px 70px rgba(0,0,0,.25);backdrop-filter:blur(18px)}
+.cookie-copy{min-width:0;max-width:760px;text-align:left}.cookie-copy strong{display:block;font:600 .78rem/1.2 'DM Sans',sans-serif}.cookie-copy p{margin:4px 0 3px;font:400 .68rem/1.5 'DM Sans',sans-serif;color:#665b4b}.cookie-copy span{font:400 .58rem/1.4 'DM Mono',monospace;color:#8a7b65}.cookie-copy button{border:0;background:none;padding:0;color:#705b3d;text-decoration:underline;cursor:pointer;font:inherit}
+.cookie-actions{display:flex;gap:7px;flex:0 0 auto}.cookie-actions button{min-height:38px;padding:9px 13px;border-radius:9px;cursor:pointer;font:600 .62rem/1 'DM Sans',sans-serif}.cookie-secondary{background:transparent;border:1px solid rgba(89,72,48,.25);color:#554735}.cookie-primary{background:#29251d;border:1px solid #29251d;color:#f8efe1}.cookie-primary:hover{background:#8d724a;border-color:#8d724a}.consent-settings-toast{position:fixed;right:18px;bottom:18px;z-index:10051;display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid rgba(124,99,62,.22);background:#f8f2e7;color:#4f4435;border-radius:12px;box-shadow:0 15px 45px rgba(0,0,0,.18);font:500 .65rem/1.3 'DM Sans',sans-serif}.consent-settings-toast button{border:0;background:#29251d;color:#f8efe1;border-radius:8px;padding:8px 10px;cursor:pointer;font:600 .62rem/1 'DM Sans',sans-serif}
+@media(max-width:767px){
+  .brand-logo-wrap{width:110px;height:42px;padding:3px 6px}.nav-brand-image{width:100px;height:37px}
+  .hero-cta-note{font-size:.53rem;line-height:1.5}
+  .mobile-sticky-cta{display:block;position:fixed;left:12px;right:12px;bottom:12px;z-index:9997;padding-bottom:env(safe-area-inset-bottom)}
+  .mobile-sticky-cta button{width:100%;min-height:50px;border:1px solid #2b271f;background:#2b271f;color:#f8efe1;border-radius:12px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font:600 .72rem/1 'DM Sans',sans-serif;box-shadow:0 15px 38px rgba(0,0,0,.28)}
+  .mobile-sticky-cta button:active{transform:translateY(1px)}
+  .cookie-banner{left:10px;right:10px;bottom:76px;display:block;padding:14px;border-radius:14px}.cookie-actions{margin-top:11px;display:grid;grid-template-columns:1fr 1fr 1fr}.cookie-actions button{padding:9px 7px}.cookie-copy span{display:block}.consent-settings-toast{left:10px;right:10px;bottom:74px;justify-content:space-between}
+  .special-page{padding:26px 18px}.special-logo{width:210px;height:72px;margin-bottom:28px}.special-page h1{font-size:clamp(2.7rem,13vw,4.4rem);letter-spacing:-1px}.special-page p{font-size:.82rem;line-height:1.7}
+}
+@media(max-width:480px){
+  .footer-brand-image{width:145px;height:62px}.loading-brand-image{height:78px}.legal-brand-image{width:118px;height:48px}
+  .mobile-sticky-cta{left:9px;right:9px;bottom:9px}.mobile-sticky-cta button{min-height:48px}
+  .cookie-actions{grid-template-columns:1fr 1fr}.cookie-actions .cookie-primary{grid-column:1/-1}.cookie-banner{bottom:68px}
+}
+@media(max-width:360px){.mobile-sticky-cta button{font-size:.66rem}.hero-cta-note{align-items:flex-start}.cookie-copy p{font-size:.64rem}}
+/* Final launch polish */
+.special-page{text-align:center;align-items:center}
+.special-page p{margin-left:auto;margin-right:auto}
+.special-actions{justify-content:center}
+.special-page .special-logo{margin-left:auto;margin-right:auto}
+.legal-page-shell .legal-nav{text-align:left}
+.legal-page-shell .legal-brand{text-align:left}
+@media(max-width:767px){
+  .nav .brand-logo-wrap{width:110px;height:42px}
+  .nav .nav-brand-image{width:100px;height:37px}
+}
+
+@media(prefers-reduced-motion:reduce){.special-page-glow{display:none}.mobile-sticky-cta button{transition:none}}
 `;
 export default function Pratyeksha() {
   return (

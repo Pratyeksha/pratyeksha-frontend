@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /thank-you
+Disallow: /api/
+
+# Replace YOUR-PRODUCTION-DOMAIN.com with the live canonical hostname before launch.
+Sitemap: https://YOUR-PRODUCTION-DOMAIN.com/sitemap.xml
