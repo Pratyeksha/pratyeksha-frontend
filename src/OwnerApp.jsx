@@ -101,6 +101,7 @@ const GlobalStyles = () => (
     @keyframes pownFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .pown-pulse { animation: pownPulse 1.8s ease-in-out infinite; }
     @keyframes pownPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+    @keyframes pownSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .pown-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.04) 63%); background-size: 400% 100%; animation: pownShimmer 1.6s ease infinite; border-radius: 10px; }
     @keyframes pownShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
     .pown-btn { cursor: pointer; border: none; font-family: inherit; transition: transform .15s ${T.ease}, opacity .15s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease; }
@@ -1231,6 +1232,11 @@ const OwnerShell = ({ children }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const mainRef = useRef(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [pullDist, setPullDist] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const touchStartY = useRef(null);
+  const PULL_THRESHOLD = 70;
 
   useEffect(() => {
     const onResize = () => setIsDesktop(window.innerWidth >= 1024);
@@ -1241,17 +1247,55 @@ const OwnerShell = ({ children }) => {
   // Reset scroll position to the top whenever the tab (route) changes.
   useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [location.pathname]);
 
+  // Pull-to-refresh (mobile) — only activates when already scrolled to the
+  // top, so it never fights with normal scrolling. Releasing past the
+  // threshold remounts the current page, which re-runs its data fetch.
+  const onTouchStart = (e) => {
+    if (isDesktop || refreshing) return;
+    if (mainRef.current && mainRef.current.scrollTop <= 0) touchStartY.current = e.touches[0].clientY;
+    else touchStartY.current = null;
+  };
+  const onTouchMove = (e) => {
+    if (touchStartY.current == null) return;
+    const dist = e.touches[0].clientY - touchStartY.current;
+    if (dist > 0) setPullDist(Math.min(dist * 0.5, 110));
+  };
+  const onTouchEnd = () => {
+    if (pullDist >= PULL_THRESHOLD) {
+      setRefreshing(true);
+      setTimeout(() => { setRefreshKey(k => k + 1); setRefreshing(false); }, 550);
+    }
+    setPullDist(0);
+    touchStartY.current = null;
+  };
+
   return (
     <div className="pown" style={{ display: 'flex', width: '100%', height: '100vh' }}>
       {isDesktop && <Sidebar />}
       {!isDesktop && <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <TopBar onMenu={!isDesktop ? () => setDrawerOpen(true) : undefined} />
-        <main ref={mainRef} className="pown-scroll pown-scrollpane" style={{
-          flex: '1 1 auto', minHeight: 0, width: '100%',
-          padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
-        }}>
-          <div key={location.pathname} className="pown-page-transition">
+        {!isDesktop && (pullDist > 0 || refreshing) && (
+          <div style={{
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            height: refreshing ? 44 : pullDist, transition: refreshing ? 'height .2s ease' : 'none',
+            overflow: 'hidden', flexShrink: 0
+          }}>
+            <RefreshCcw size={16} color={T.primary} style={{
+              transform: `rotate(${refreshing ? 0 : pullDist * 3.2}deg)`,
+              animation: refreshing ? 'pownSpin .7s linear infinite' : 'none',
+              opacity: refreshing ? 1 : Math.min(pullDist / PULL_THRESHOLD, 1)
+            }} />
+          </div>
+        )}
+        <main
+          ref={mainRef} className="pown-scroll pown-scrollpane"
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          style={{
+            flex: '1 1 auto', minHeight: 0, width: '100%',
+            padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
+          }}>
+          <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
             {children}
           </div>
         </main>

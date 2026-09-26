@@ -8,10 +8,17 @@ import {
   Clock, Layers, X, Menu, Plus, Power, RotateCcw, UserPlus,
   IndianRupee, AlertTriangle, Calendar, Store, ChefHat,
   BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
-  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send
+  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send, Receipt,
+  Globe, Server, MessageSquare, QrCode, CreditCard, Wrench, Megaphone as MegaphoneIcon,
+  TrendingDown, PlusCircle, Edit3
 } from 'lucide-react';
 
 const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+const EXPENSE_CATEGORY_LABELS_FRONTEND = {
+  domain: 'Domain', hosting: 'Hosting / Server', email: 'Email Service',
+  sms_whatsapp: 'SMS / WhatsApp API', qr_stands: 'QR Stands', payment_gateway: 'Payment Gateway',
+  software: 'Software / Tools', marketing: 'Marketing', other: 'Other'
+};
 const API_ORIGIN = BASE_URL.replace(/\/api$/, '');
 
 /* ─────────────────────────────────────────
@@ -731,6 +738,16 @@ export default function PratyekshaMasterAdmin() {
   });
   const [notifSending, setNotifSending] = useState(false);
 
+  const [expenses, setExpenses] = useState([]);
+  const [expenseSummary, setExpenseSummary] = useState(null);
+  const [expenseLoading, setExpenseLoading] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    category: 'domain', label: '', amount: '', date: new Date().toISOString().slice(0, 10),
+    recurring: false, recurringInterval: 'monthly', vendor: '', notes: ''
+  });
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+
   const now = new Date();
 
   /* ── fetch ── */
@@ -755,7 +772,7 @@ export default function PratyekshaMasterAdmin() {
     finally{ setDemoLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); }, []);
+  useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); fetchExpenses(); }, []);
 
   /* ── helpers ── */
   const getClientStatus = (c) => {
@@ -903,6 +920,55 @@ export default function PratyekshaMasterAdmin() {
   const cancelNotification = async (id) => {
     try { await axios.delete(`${BASE_URL}/admin/master/notifications/${id}`); fetchNotifications(); flash('Notification cancelled'); }
     catch (e) { flash('Could not cancel', 'error'); }
+  };
+
+  const fetchExpenses = useCallback(async () => {
+    setExpenseLoading(true);
+    try {
+      const [expRes, sumRes] = await Promise.all([
+        axios.get(`${BASE_URL}/admin/master/expenses`),
+        axios.get(`${BASE_URL}/admin/master/expenses/summary`)
+      ]);
+      setExpenses(expRes.data || []);
+      setExpenseSummary(sumRes.data || null);
+    } catch (e) { console.error(e); }
+    finally { setExpenseLoading(false); }
+  }, []);
+
+  const resetExpenseForm = () => {
+    setExpenseForm({ category: 'domain', label: '', amount: '', date: new Date().toISOString().slice(0, 10), recurring: false, recurringInterval: 'monthly', vendor: '', notes: '' });
+    setEditingExpenseId(null);
+  };
+
+  const submitExpense = async () => {
+    if (!expenseForm.label || !expenseForm.amount) { flash('Label and amount are required', 'error'); return; }
+    setExpenseSaving(true);
+    try {
+      if (editingExpenseId) {
+        await axios.put(`${BASE_URL}/admin/master/expenses/${editingExpenseId}`, expenseForm);
+        flash('Expense updated');
+      } else {
+        await axios.post(`${BASE_URL}/admin/master/expenses`, expenseForm);
+        flash('Expense added');
+      }
+      resetExpenseForm();
+      fetchExpenses();
+    } catch (e) { flash(e?.response?.data?.error || 'Could not save expense', 'error'); }
+    finally { setExpenseSaving(false); }
+  };
+
+  const editExpense = (exp) => {
+    setExpenseForm({
+      category: exp.category, label: exp.label, amount: String(exp.amount),
+      date: new Date(exp.date).toISOString().slice(0, 10), recurring: !!exp.recurring,
+      recurringInterval: exp.recurringInterval || 'monthly', vendor: exp.vendor || '', notes: exp.notes || ''
+    });
+    setEditingExpenseId(exp._id);
+  };
+
+  const deleteExpense = async (id) => {
+    try { await axios.delete(`${BASE_URL}/admin/master/expenses/${id}`); fetchExpenses(); flash('Expense removed'); }
+    catch (e) { flash('Could not remove expense', 'error'); }
   };
 
   /* ── derived ── */
@@ -1056,6 +1122,7 @@ export default function PratyekshaMasterAdmin() {
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
             <NavItem id="notifications" label="Notifications" icon={Bell} />
+            <NavItem id="expenses" label="Operating Costs" icon={Receipt} />
           </div>
 
           <Div />
@@ -1369,7 +1436,7 @@ export default function PratyekshaMasterAdmin() {
               */}
               <div className="p-stat-grid p-stagger" style={{ marginBottom:20 }}>
                 {[
-                  { icon:IndianRupee, label:'Total Revenue', val:stats.totalRevenue||0, prefix:'₹', sub:'All time',        accent:'#d3bfa2' },
+                  { icon:IndianRupee, label:'Total Revenue', val:stats.totalRevenue||0, prefix:'₹', sub:'All time (gross)',        accent:'#d3bfa2' },
                   { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:'#d3bfa2' },
                   { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:C.warning },
                   { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:'#8a704d' },
@@ -1384,6 +1451,33 @@ export default function PratyekshaMasterAdmin() {
                   </div>
                 ))}
               </div>
+
+              {/* Net revenue strip — gross revenue minus operating costs */}
+              {expenseSummary && (
+                <div className="p-card p-card-lift" onClick={()=>navTo('expenses')} style={{
+                  background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'16px 20px',
+                  marginBottom:18, cursor:'pointer', display:'flex', alignItems:'center', gap:20, flexWrap:'wrap'
+                }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ width:32, height:32, borderRadius:8, background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Wallet size={15} color="#d3bfa2" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:11, color:C.textDim, fontWeight:500 }}>Net Revenue</div>
+                      <div style={{ fontSize:18, fontWeight:700, color: expenseSummary.netRevenue>=0 ? '#d3bfa2' : C.danger, fontFamily:'JetBrains Mono, monospace' }}>
+                        ₹{Math.abs(expenseSummary.netRevenue).toLocaleString()}{expenseSummary.netRevenue<0 ? ' (loss)' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11.5, color:C.textDim, display:'flex', gap:14, flexWrap:'wrap' }}>
+                    <span>Gross ₹{expenseSummary.totalRevenue.toLocaleString()}</span>
+                    <span style={{ color:C.danger }}>− Costs ₹{expenseSummary.totalExpenses.toLocaleString()}</span>
+                  </div>
+                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:5, color:C.textDim, fontSize:11.5, fontWeight:600 }}>
+                    View Operating Costs <ChevronRight size={13} />
+                  </div>
+                </div>
+              )}
 
               {/* Warning banner */}
               {(stats.expiringSoon||0)>0 && (
@@ -1969,6 +2063,155 @@ export default function PratyekshaMasterAdmin() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeSection==='expenses' && (
+          <div className="p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 980 }}>
+            <div style={{ marginBottom:22 }}>
+              <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Operating Costs</div>
+              <div style={{ fontSize:12.5, color:C.textDim }}>Domain, hosting, email, QR stands, SMS/WhatsApp — everything it costs us to run Pratyeksha, netted against platform revenue.</div>
+            </div>
+
+            {expenseSummary && (
+              <div className="p-stat-grid p-stagger" style={{ marginBottom:22 }}>
+                {[
+                  { icon:IndianRupee, label:'Platform Revenue', val:expenseSummary.totalRevenue, prefix:'₹', accent:'#d3bfa2' },
+                  { icon:TrendingDown, label:'Total Operating Costs', val:expenseSummary.totalExpenses, prefix:'₹', accent:C.danger },
+                  { icon:Wallet, label:'Net Revenue', val:expenseSummary.netRevenue, prefix:'₹', accent: expenseSummary.netRevenue >= 0 ? '#d3bfa2' : C.danger },
+                  { icon:Receipt, label:'Monthly Run-Rate', val:expenseSummary.monthlyRunRate, prefix:'₹', accent:'#8a704d', sub:'committed recurring costs' },
+                ].map(k => (
+                  <div key={k.label} className="p-card p-card-lift" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px 16px' }}>
+                    <div style={{ width:32, height:32, borderRadius:8, background:`${k.accent}14`, border:`1px solid ${k.accent}22`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
+                      <k.icon size={15} color={k.accent} strokeWidth={1.5} />
+                    </div>
+                    <div style={{ fontSize:11, color:C.textDim, fontWeight:500, marginBottom:4 }}>{k.label}</div>
+                    <div style={{ fontSize:22, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}{Math.abs(k.val).toLocaleString()}{k.val < 0 ? ' (loss)' : ''}</div>
+                    {k.sub && <div style={{ fontSize:10.5, color:C.textDim }}>{k.sub}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
+                {editingExpenseId ? <Edit3 size={14} color="#d3bfa2" /> : <PlusCircle size={14} color="#d3bfa2" />}
+                {editingExpenseId ? 'Edit Cost' : 'Add a Cost'}
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+                <LabeledInput label="Category">
+                  <select className="p-inp" style={inp} value={expenseForm.category} onChange={e=>setExpenseForm(f=>({...f, category:e.target.value}))}>
+                    {Object.entries({domain:'Domain', hosting:'Hosting / Server', email:'Email Service', sms_whatsapp:'SMS / WhatsApp API', qr_stands:'QR Stands', payment_gateway:'Payment Gateway', software:'Software / Tools', marketing:'Marketing', other:'Other'}).map(([k,v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </LabeledInput>
+                <LabeledInput label="Amount (₹)">
+                  <input className="p-inp" style={inp} type="number" value={expenseForm.amount} onChange={e=>setExpenseForm(f=>({...f, amount:e.target.value}))} placeholder="999" />
+                </LabeledInput>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <LabeledInput label="Label">
+                  <input className="p-inp" style={inp} value={expenseForm.label} onChange={e=>setExpenseForm(f=>({...f, label:e.target.value}))} placeholder="e.g. pratyeksha.app domain renewal" />
+                </LabeledInput>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+                <LabeledInput label="Vendor (optional)">
+                  <input className="p-inp" style={inp} value={expenseForm.vendor} onChange={e=>setExpenseForm(f=>({...f, vendor:e.target.value}))} placeholder="e.g. GoDaddy, Twilio" />
+                </LabeledInput>
+                <LabeledInput label="Date">
+                  <input className="p-inp" style={inp} type="date" value={expenseForm.date} onChange={e=>setExpenseForm(f=>({...f, date:e.target.value}))} />
+                </LabeledInput>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, color:C.textMid, cursor:'pointer' }}>
+                  <input type="checkbox" checked={expenseForm.recurring} onChange={e=>setExpenseForm(f=>({...f, recurring:e.target.checked}))} />
+                  Recurring cost
+                </label>
+                {expenseForm.recurring && (
+                  <select className="p-inp" style={{ ...inp, width:140 }} value={expenseForm.recurringInterval} onChange={e=>setExpenseForm(f=>({...f, recurringInterval:e.target.value}))}>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                )}
+              </div>
+              <div style={{ display:'flex', gap:10 }}>
+                <button onClick={submitExpense} disabled={expenseSaving} className="p-btn-shimmer" style={{
+                  padding:'11px 20px', borderRadius:9, border:'none', cursor: expenseSaving ? 'not-allowed' : 'pointer',
+                  background: expenseSaving ? C.bgCard2 : '#d3bfa2', color: expenseSaving ? C.textDim : '#0a0a0a',
+                  fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
+                }}>
+                  {expenseSaving ? <Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }} /> : (editingExpenseId ? <Check size={14} /> : <Plus size={14} />)}
+                  {expenseSaving ? 'Saving…' : (editingExpenseId ? 'Update Cost' : 'Add Cost')}
+                </button>
+                {editingExpenseId && (
+                  <button onClick={resetExpenseForm} style={{ padding:'11px 18px', borderRadius:9, background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel Edit</button>
+                )}
+              </div>
+            </div>
+
+            {expenseSummary?.categoryBreakdown?.length > 0 && (
+              <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:14 }}>By Category</div>
+                <div style={{ display:'grid', gap:10 }}>
+                  {expenseSummary.categoryBreakdown.map(c => {
+                    const pct = expenseSummary.totalExpenses > 0 ? Math.round((c.amount / expenseSummary.totalExpenses) * 100) : 0;
+                    return (
+                      <div key={c.category}>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, fontSize:12 }}>
+                          <span style={{ color:C.textMid, fontWeight:600 }}>{c.label}</span>
+                          <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{c.amount.toLocaleString()} <span style={{ color:C.textDim }}>({pct}%)</span></span>
+                        </div>
+                        <div style={{ height:6, borderRadius:100, background:C.bgDark, overflow:'hidden' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', background:'#d3bfa2', borderRadius:100 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>All Costs</div>
+            {expenseLoading ? (
+              <div style={{ fontSize:12.5, color:C.textDim }}>Loading…</div>
+            ) : expenses.length === 0 ? (
+              <div style={{ fontSize:12.5, color:C.textDim, padding:'20px 0' }}>No costs logged yet.</div>
+            ) : (
+              <div className="p-table-scroll">
+                <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:'0 4px', minWidth:640 }}>
+                  <thead>
+                    <tr style={{ fontSize:11, color:C.textDim, textTransform:'uppercase', letterSpacing:'0.8px' }}>
+                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Cost</th>
+                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Category</th>
+                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Date</th>
+                      <th style={{ textAlign:'right', padding:'0 12px 8px' }}>Amount</th>
+                      <th style={{ textAlign:'right', padding:'0 12px 8px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses.map(e => (
+                      <tr key={e._id} style={{ background:C.bgCard }}>
+                        <td style={{ padding:'12px', borderRadius:'10px 0 0 10px' }}>
+                          <div style={{ fontSize:12.5, fontWeight:600, color:C.text }}>{e.label}</div>
+                          {e.vendor && <div style={{ fontSize:11, color:C.textDim, marginTop:2 }}>{e.vendor}{e.recurring ? ` · ${e.recurringInterval}` : ''}</div>}
+                        </td>
+                        <td style={{ padding:'12px', fontSize:12, color:C.textMid }}>{EXPENSE_CATEGORY_LABELS_FRONTEND[e.category] || e.category}</td>
+                        <td style={{ padding:'12px', fontSize:12, color:C.textDim }}>{new Date(e.date).toLocaleDateString()}</td>
+                        <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString()}</td>
+                        <td style={{ padding:'12px', borderRadius:'0 10px 10px 0', textAlign:'right' }}>
+                          <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
+                            <button onClick={()=>editExpense(e)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Edit3 size={11} /></button>
+                            <button onClick={()=>deleteExpense(e._id)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.danger, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Trash2 size={11} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
