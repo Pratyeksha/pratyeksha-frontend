@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
+import PwaInstallButton from './PwaInstallButton.jsx';
 import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,ChevronDown ,
@@ -13,7 +14,10 @@ import {
   Sun, Moon, ArrowUp, WifiOff
 } from 'lucide-react'; 
 
-const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+
+const BASE_URL = API_BASE_URL;
+const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
 const PratyekshaPremiumMenu = () => {
   const { tenantId: urlTenantId } = useParams();
@@ -143,6 +147,7 @@ const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 // ── COUNTER / WAITLIST MODE ──
 const [counterMode, setCounterMode] = useState(null); // null | 'dine-in' | 'pickup'
 const [isCounterScan, setIsCounterScan] = useState(false);
+const [hasQrSession, setHasQrSession] = useState(false);
 // REPLACE the existing sessionId useState:
 const [sessionId, setSessionId] = useState(() => {
   // Always generate fresh — session validity checked against backend
@@ -183,13 +188,15 @@ const [reorderConfirmPending, setReorderConfirmPending] = useState(false);
 
 const [waitlistEntry, setWaitlistEntry] = useState(null);
 const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
+  const customerInfoDraftRef = useRef({ name: '', phone: '' });
+const [savedCustomer, setSavedCustomer] = useState(null);
 const [partySize, setPartySize] = useState(1);
 const [scheduledPickupTime, setScheduledPickupTime] = useState('');
 const [registrationStep, setRegistrationStep] = useState('mode'); // 'mode' | 'register' | 'menu' | 'confirm'
 const [avgWaitData, setAvgWaitData] = useState(null);
 const [notificationBanner, setNotificationBanner] = useState(null); // { type: 'table'|'pickup', tableNumber, restaurantName }
 const [pushPermissionAsked, setPushPermissionAsked] = useState(false);
-const [waitlistSocket] = useState(() => io("https://pratyeksha-backend.onrender.com"));
+const waitlistSocket = useMemo(() => io(SOCKET_BASE_URL, { transports: ['websocket', 'polling'], reconnection: true }), []);
   const t = {
     en: {
       all: "ALL",
@@ -349,7 +356,9 @@ const globalSearchResults = useMemo(() => {
 
   useEffect(() => {
     if (!isCounterScan || !sessionId) return;
-    waitlistSocket.emit('join_session', sessionId);
+    const joinSession = () => waitlistSocket.emit('join_session', sessionId);
+    waitlistSocket.on('connect', joinSession);
+    if (waitlistSocket.connected) joinSession();
 
     waitlistSocket.on('table_assigned', (data) => {
       setNotificationBanner({ type: 'table', tableNumber: data.tableNumber, restaurantName: data.restaurantName });
@@ -391,8 +400,8 @@ waitlistSocket.on('operator_notify', (data) => {
     if (Notification.permission === 'granted') {
       new Notification(title, {
         body,
-        icon: '/logo.png',
-        badge: '/logo.png',
+        icon: '/pratyeksha-logo.png',
+        badge: '/pratyeksha-logo.png',
         tag: tag || 'operator-notify',
         renotify: true,
         vibrate: [200, 100, 200]
@@ -403,8 +412,8 @@ waitlistSocket.on('operator_notify', (data) => {
         if (perm === 'granted') {
           new Notification(title, {
             body,
-            icon: '/logo.png',
-            badge: '/logo.png',
+            icon: '/pratyeksha-logo.png',
+            badge: '/pratyeksha-logo.png',
             tag: tag || 'operator-notify',
             renotify: true,
           });
@@ -436,12 +445,16 @@ return () => {
   waitlistSocket.off('pickup_reminder');
   waitlistSocket.off('reservation_confirmed');
   waitlistSocket.off('operator_notify');
+  waitlistSocket.off('announcement_updated');
+  waitlistSocket.off('announcement_ended');
+  waitlistSocket.off('connect', joinSession);
 };  }, [isCounterScan, sessionId, waitlistSocket]);
 
 // REPLACE the existing useEffect that has:
 // "axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)"
 
 useEffect(() => {
+  let cancelled = false;
   const activeTenant = urlTenantId || 'jay_ambe_fusion';
   setTenantId(activeTenant);
   const params = new URLSearchParams(window.location.search);
@@ -450,51 +463,128 @@ useEffect(() => {
   if (tableParam) {
     setTableNumber(tableParam);
     setIsCounterScan(false);
+    setHasQrSession(true);
+    try {
+      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, startedAt: Date.now() }));
+    } catch {}
   } else {
     setTableNumber('Counter');
     setIsCounterScan(true);
+    setHasQrSession(false);
+    try { sessionStorage.removeItem('pratyeksha_qr_session'); } catch {}
 
-    // Fetch avg wait data
     axios.get(`${BASE_URL}/waitlist/avg-wait/${activeTenant}`)
-      .then(r => setAvgWaitData(r.data))
+      .then(r => { if (!cancelled) setAvgWaitData(r.data); })
       .catch(() => {});
 
-    // Try to resume existing session
     axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)
-.then(r => {
-  if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
-    setWaitlistEntry(r.data);
-    setCounterMode(r.data.mode);
-    setRegistrationStep('confirm');
-  } else {
-    // Also check for active reservation
-    axios.get(`${BASE_URL}/reservations/session/${activeTenant}/${sessionId}`)
-      .then(rr => {
-        if (rr.data && ['pending','confirmed'].includes(rr.data.status)) {
-setWaitlistEntry({ ...rr.data, mode: 'reservation' });
-setCounterMode('reservation');
-setRegistrationStep('confirm');
-        } else {
-          sessionStorage.removeItem('pratyeksha_session');
-          const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          sessionStorage.setItem('pratyeksha_session', newId);
-          setWaitlistEntry(null); setCounterMode(null); setRegistrationStep('mode');
-          setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
-          setScheduledPickupTime('');
+      .then(r => {
+        if (cancelled) return;
+        if (r.data && ['waiting', 'pickup-ready'].includes(r.data.status)) {
+          setWaitlistEntry(r.data);
+          setCounterMode(r.data.mode);
+          setRegistrationStep('confirm');
+          return;
         }
+
+        return axios.get(`${BASE_URL}/reservations/session/${activeTenant}/${sessionId}`)
+          .then(rr => {
+            if (cancelled) return;
+            if (rr.data && ['pending','confirmed'].includes(rr.data.status)) {
+              setWaitlistEntry({ ...rr.data, mode: 'reservation' });
+              setCounterMode('reservation');
+              setRegistrationStep('confirm');
+              return;
+            }
+
+            // Never wipe a registration that the customer has already started.
+            if (customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
+
+            sessionStorage.removeItem('pratyeksha_session');
+            const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('pratyeksha_session', newId);
+            setWaitlistEntry(null);
+            setCounterMode(null);
+            setRegistrationStep('mode');
+            customerInfoDraftRef.current = { name: '', phone: '' };
+            setCustomerInfo({ name: '', phone: '' });
+            setPartySize(1);
+            setScheduledPickupTime('');
+          })
+          .catch(() => {
+            if (cancelled || customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
+            sessionStorage.removeItem('pratyeksha_session');
+            const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('pratyeksha_session', newId);
+            setWaitlistEntry(null);
+            setCounterMode(null);
+            setRegistrationStep('mode');
+            customerInfoDraftRef.current = { name: '', phone: '' };
+            setCustomerInfo({ name: '', phone: '' });
+            setPartySize(1);
+            setScheduledPickupTime('');
+          });
       })
       .catch(() => {
+        if (cancelled || customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
         sessionStorage.removeItem('pratyeksha_session');
         const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         sessionStorage.setItem('pratyeksha_session', newId);
-        setWaitlistEntry(null); setCounterMode(null); setRegistrationStep('mode');
-        setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
+        setWaitlistEntry(null);
+        setCounterMode(null);
+        setRegistrationStep('mode');
+        customerInfoDraftRef.current = { name: '', phone: '' };
+        setCustomerInfo({ name: '', phone: '' });
+        setPartySize(1);
         setScheduledPickupTime('');
       });
   }
-})
-  }
-}, [urlTenantId]); 
+
+  return () => { cancelled = true; };
+}, [urlTenantId, sessionId]); 
+
+// ── RETURNING CUSTOMER HISTORY ──
+// Keep the existing backend customer record as the source of truth, while storing
+// the last confirmed identity locally so a returning guest can view a bill without
+// typing their name/phone again. This is scoped per tenant and never grants ordering.
+useEffect(() => {
+  if (!tenantId) return;
+  try {
+    const raw = localStorage.getItem(`pratyeksha_customer_history_${tenantId}`);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const phone = String(parsed?.phone || '').replace(/\D/g, '');
+    if (parsed?.name && phone.length === 10) {
+      const customer = { name: parsed.name, phone };
+      setSavedCustomer(customer);
+      setCustomerInfo(prev => (prev.name || prev.phone) ? prev : customer);
+      setCustomerPhone(phone);
+    }
+  } catch {}
+}, [tenantId]);
+
+useEffect(() => {
+  const phone = String(customerInfo.phone || '').replace(/\D/g, '');
+  const name = String(customerInfo.name || '').trim();
+  if (!tenantId || !name || phone.length !== 10) return;
+  const customer = { name, phone };
+  setSavedCustomer(customer);
+  setCustomerPhone(phone);
+  try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify(customer)); } catch {}
+}, [tenantId, customerInfo.name, customerInfo.phone]);
+
+useEffect(() => {
+  if (!isBillOpen || !savedCustomer || customerInfo.name || customerInfo.phone) return;
+  setCustomerInfo(savedCustomer);
+  setCustomerPhone(savedCustomer.phone);
+}, [isBillOpen, savedCustomer]);
+
+useEffect(() => {
+  if (!tenantId || !savedCustomer?.phone) return;
+  // Existing notification permission is enough to silently refresh the subscription.
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  registerCustomerPushSubscription(savedCustomer.phone);
+}, [tenantId, savedCustomer?.phone]);
 
 useEffect(() => {
   if (!tenantId) return;
@@ -531,8 +621,8 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           body: isTable
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/logo.png',
-          badge: '/logo.png',
+          icon: '/pratyeksha-logo.png',
+          badge: '/pratyeksha-logo.png',
           vibrate: [300, 100, 300],
           tag: 'pratyeksha-ready',
           renotify: true
@@ -656,7 +746,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
       </div>
 
       {/* CTA button */}
-      <button
+      <button type="button"
 onClick={() => {
   const nameVal  = nameInputRef.current?.value?.trim() || customerInfo.name;
   const phoneVal = (phoneInputRef.current?.value || customerInfo.phone || '').replace(/\D/g,'');
@@ -1273,10 +1363,12 @@ const fetchMenuContent = async () => {
     fetchMenuContent();
 
     // 2. PHASE B: SPIN UP LONG-LIVED WEB SOCKET CHANNELS FOR LIVE DATA SYNCING
-    const socket = io("https://pratyeksha-backend.onrender.com");
+    const socket = io(SOCKET_BASE_URL, { transports: ['websocket', 'polling'], reconnection: true });
     
-    // Join the unique restaurant multi-tenant data stream room footprint
-    socket.emit("join_restaurant", tenantId);
+    // Join the tenant room on initial connect and every reconnect. Socket.IO rooms are lost on reconnect.
+    const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
+    socket.on('connect', joinRestaurant);
+    if (socket.connected) joinRestaurant();
 
 socket.on("menu_updated", (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -1362,6 +1454,11 @@ socket.on('announcement_ended', () => {
   setActiveAnnouncement(null);
 });
     // ── Live order status updates for customer ──
+socket.on('order_voided', ({ orderId } = {}) => {
+  if (!orderId) return;
+  setLiveOrderStatuses(prev => ({ ...prev, [orderId]: 'voided' }));
+});
+
 socket.on("order_status_updated", (data) => {
   if (data.tableNumber?.toString() !== tableNumber?.toString()) return;
   const orderId = data._id || data.orderId;
@@ -1377,13 +1474,17 @@ return () => {
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
   socket.off("order_status_updated");
+  socket.off('order_voided');
   socket.off('announcement_updated');
 socket.off('announcement_ended');
 socket.off('menu_item_deleted');
+  socket.off('connect', joinRestaurant);
   if (window.speechSynthesis) window.speechSynthesis.cancel(); // ← ADD
   socket.disconnect();
 };
-  }, [tenantId, language]);
+  }, [tenantId, tableNumber]);
+
+  useEffect(() => { waitlistSocket.connect(); return () => waitlistSocket.disconnect(); }, [waitlistSocket]);
 
   // ── Dynamic ETA polling — now correctly at top level ──
 useEffect(() => {
@@ -1781,7 +1882,7 @@ const footerHTML = () => `
   <div class="footer-rule"></div>
   <div class="footer">
     <div>
-      <div class="footer-brand-sub">Powered by Pratyeksha</div>
+      <div class="footer-brand-sub"><img src="${window.location.origin}${PRATYEKSHAA_LOGO}" alt="Pratyeksha" style="width:120px;height:auto;background:#f7f3eb;border-radius:5px;padding:3px 6px;display:block"/></div>
     </div>
     <div class="footer-date">${nowStamp()}</div>
   </div>
@@ -1855,7 +1956,7 @@ const downloadWaitlistToken = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('chair','#7a5a20',13)}&nbsp; Dine-In Waitlist</div>
-      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
       ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
     </div>
     ${headerRight(rd)}
@@ -1956,7 +2057,7 @@ const downloadPickupToken = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('bag','#7a5a20',13)}&nbsp; Pickup &amp; Takeaway</div>
-      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
       ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
     </div>
     ${headerRight(rd)}
@@ -2073,7 +2174,7 @@ const downloadReservationPDF = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('calendar','#7a5a20',13)}&nbsp; ${hasPreOrder ? 'Reservation + Pre-Order' : 'Table Reservation'}</div>
-      <div class="rest-name">${rd?.name || 'PRATYEKSHA'}</div>
+      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
       ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
     </div>
     ${headerRight(rd)}
@@ -2305,6 +2406,12 @@ if (r.data?.lastOrderItems?.length > 0) {
 
 
 const sendBatchToKitchen = async () => {
+  // Direct dine-in ordering remains tied to a QR/table session. Directory,
+  // notification and install routes never flip this flag on their own.
+  if (!isCounterScan && !hasQrSession) {
+    triggerAlert('Please scan the restaurant QR code to start table ordering.', 'error');
+    return;
+  }
   if (isPlacingOrder) return;           // ← ADD: block re-entry
   setIsPlacingOrder(true);      
   try {
@@ -2474,6 +2581,7 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
         })),
         visitAmount: total,
       }).catch(() => {});
+      await registerCustomerPushSubscription(phone);
     }
 
     // ── Request push notification permission after order placed ──
@@ -2490,8 +2598,8 @@ const askNotificationPermission = async () => {
           body: counterMode === 'dine-in'
             ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
             : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
-          icon: '/logo.png',
-          badge: '/logo.png',
+          icon: '/pratyeksha-logo.png',
+          badge: '/pratyeksha-logo.png',
         }
       );
     }
@@ -2502,7 +2610,7 @@ const askNotificationPermission = async () => {
         body: counterMode === 'dine-in'
           ? `Hi ${customerInfo.name}! You're in the queue.`
           : `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}.`,
-        icon: '/logo.png',
+        icon: '/pratyeksha-logo.png',
       }
     );
   }
@@ -2615,9 +2723,9 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
         ? await Notification.requestPermission()
         : Notification.permission;
       if (perm === 'granted') {
-        new Notification('📅 Reservation Requested!', {
+        new Notification('Reservation Requested!', {
           body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
-          icon: '/logo.png',
+          icon: '/pratyeksha-logo.png',
         });
       }
     }
@@ -2904,7 +3012,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   <!-- FOOTER -->
   <div class="footer">
     <div class="footer-msg">Thank you for dining with us! Please visit again.</div>
-    <div class="footer-brand">Powered by Pratyeksha</div>
+    <div class="footer-brand"><img src="${window.location.origin}${PRATYEKSHAA_LOGO}" alt="Pratyeksha" style="width:120px;height:auto;background:#f7f3eb;border-radius:5px;padding:3px 6px;display:block"/></div>
   </div>
 
 </div>
@@ -2948,9 +3056,9 @@ useEffect(() => {
 }, [isCounterScan]);
 const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
+  try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify({ name: customerInfo.name.trim(), phone: customerInfo.phone.replace(/\D/g,'') })); } catch {}
   try {
-    const socket = io("https://pratyeksha-backend.onrender.com");
-    socket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
+    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
 
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
@@ -2975,6 +3083,7 @@ const requestFinalBill = async () => {
 
     const phoneDigits = customerInfo.phone.replace(/\D/g, '');
     if (phoneDigits.length === 10) {
+      await registerCustomerPushSubscription(phoneDigits);
       setTimeout(() => {
         axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phoneDigits}`)
           .then(r => {
@@ -3030,37 +3139,34 @@ const requestFinalBill = async () => {
 const reservationValid = counterMode !== 'reservation' || (reservationDate && reservationTime);
 const ctaEnabled = customerInfo.name.trim() && reservationValid;
 
-// Add this function in your customer menu component:
-const registerPushSubscription = async () => {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+// ── Customer Web Push subscription ──
+// Uses the server's existing VAPID endpoint and stores the subscription against
+// the existing customer record. Push delivery is handled by /sw.js, so it also
+// works while the installed PWA is closed.
+const registerCustomerPushSubscription = async (phoneOverride) => {
+  const phone = String(phoneOverride || customerInfo.phone || '').replace(/\D/g, '');
+  if (!tenantId || phone.length !== 10 || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
+    const keyRes = await axios.get(`${BASE_URL}/waitlist/vapid-public-key`);
+    const vapidKey = keyRes.data?.publicKey;
+    if (!vapidKey) return;
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          'YOUR_VAPID_PUBLIC_KEY_HERE' // same VAPID key you already use for waitlist notifications
-        )
-      });
+      if (typeof Notification === 'undefined') return;
+      const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      const pad = '='.repeat((4 - vapidKey.length % 4) % 4);
+      const raw = window.atob((vapidKey + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      const arr = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: arr });
     }
-    // Save subscription to backend tied to this customer's phone
-    if (customerPhone && sub) {
-      await axios.post(`${BASE_URL}/customers/push-subscription`, {
-        tenantId,
-        phone: customerPhone,
-        subscription: sub
-      });
-    }
+    await axios.post(`${BASE_URL}/customers/push-subscription`, { tenantId, phone, subscription: sub.toJSON?.() || sub });
   } catch (err) {
-    console.log('Push subscription failed:', err.message);
+    console.warn('Push subscription failed:', err?.message || err);
   }
 };
-
-// Call it after customer identifies themselves (phone entry or CRM welcome)
-useEffect(() => {
-  if (customerPhone) registerPushSubscription();
-}, [customerPhone]);
 
 
 // ── Persist cart to localStorage so it survives browser close ──
@@ -3168,8 +3274,12 @@ useEffect(() => {
   setShowComboStrip(suggestions.length > 0);
 }, [cart, allMenuItems]);
 
-// REPLACE with:
-// ── COUNTER SCAN FLOW — early return (all hooks already declared above) ──
+// ── Tenant-specific guest services. Defaults stay enabled to preserve every
+// existing restaurant workflow unless the tenant explicitly disables a service.
+const customerFeatures = restaurantData?.config?.customerFeatures || {};
+const featureEnabled = key => customerFeatures[key] !== false;
+
+// ── COUNTER / DIRECTORY FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
 
 const Shell = ({ children, centered = true }) => (
@@ -3190,6 +3300,9 @@ const Shell = ({ children, centered = true }) => (
 );
   const RestaurantBadge = () => (
     <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+      <div style={{ display:'flex', justifyContent:'flex-end', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
+        <PwaInstallButton kind="customer" compact />
+      </div>
       <div style={{
         width: '56px', height: '56px', borderRadius: '16px',
         background: 'rgba(211,191,162,0.07)',
@@ -3200,17 +3313,11 @@ const Shell = ({ children, centered = true }) => (
       }}>
         <UtensilsCrossed size={22} color="#d3bfa2" strokeWidth={1.5} />
       </div>
-      <h1 style={{
-        fontSize: '1.35rem', fontWeight: '900', color: '#d3bfa2',
-        margin: '0 0 6px', letterSpacing: '-0.4px'
-      }}>
-        {restaurantData?.name || 'PRATYEKSHA'}
-      </h1>
-      <div style={{
-        fontSize: '0.52rem', letterSpacing: '3.5px',
-        color: 'rgba(211,191,162,0.2)', textTransform: 'uppercase', fontWeight: '800'
-      }}>
-        POWERED BY PRATYEKSHA
+      <div style={{ background:'#f7f3eb', borderRadius:12, padding:'7px 10px', display:'inline-flex', marginBottom:10 }}>
+        <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:150, maxWidth:'68vw', height:'auto', display:'block' }} />
+      </div>
+      <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#d3bfa2', margin: '0 0 6px' }}>
+        {restaurantData?.name || 'Restaurant'}
       </div>
     </div>
   );
@@ -3392,7 +3499,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           </div>
 
           {/* ── DOWNLOAD PDF — always shown ── */}
-          <button onClick={downloadReservationPDF} style={{
+          <button type="button" onClick={downloadReservationPDF} style={{
             width: '100%', padding: '17px',
             background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
             border: 'none', borderRadius: '14px',
@@ -3408,7 +3515,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
 {/* ── PRE-ORDER CTA — only when NO items AND user didn't explicitly skip ── */}
 {!hasItems && !waitlistEntry._noPreorder && (
-  <button onClick={() => setRegistrationStep('menu')} style={{
+  <button type="button" onClick={() => setRegistrationStep('menu')} style={{
     width: '100%', padding: '15px',
     background: 'rgba(211,191,162,0.07)',
     border: '1px solid rgba(211,191,162,0.18)',
@@ -3424,13 +3531,13 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 )}
 
           {/* ── CANCEL ── */}
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             if (waitlistEntry?._id) axios.delete(`${BASE_URL}/reservations/${waitlistEntry._id}`).catch(() => {});
             sessionStorage.removeItem('pratyeksha_session');
             const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
             sessionStorage.setItem('pratyeksha_session', newId);
             setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
-            setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
+            customerInfoDraftRef.current = { name: '', phone: '' }; setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
             setReservationDate(''); setReservationTime(''); setSpecialRequests(''); setTablePreference('');
             setCart({}); setSuggestions({});setRecommendedDishes([]);
           }} style={{
@@ -3607,7 +3714,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           </p>
         </div>
 
-<button onClick={isDineIn ? downloadWaitlistToken : downloadPickupToken} style={{
+<button type="button" onClick={isDineIn ? downloadWaitlistToken : downloadPickupToken} style={{
   width: '100%', padding: '17px',
   background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
   border: 'none', borderRadius: '14px',
@@ -3628,13 +3735,13 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 </button>
 
         {/* Cancel / Leave Queue */}
-        <button onClick={() => {
+        <button type="button" onClick={() => {
           axios.delete(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}`).catch(() => {});
           sessionStorage.removeItem('pratyeksha_session');
           const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           sessionStorage.setItem('pratyeksha_session', newId);
           setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
-          setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
+          customerInfoDraftRef.current = { name: '', phone: '' }; setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
           setScheduledPickupTime(''); setReservationDate(''); setReservationTime('');
           setSpecialRequests(''); setTablePreference('');
           setCart({}); setSuggestions({});setRecommendedDishes([]);
@@ -3668,7 +3775,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 {language === 'mr' ? 'तुम्ही येण्यापूर्वीच ऑर्डर तयार असेल — प्रतीक्षा नाही!' : 'Your food will be ready when you arrive — no waiting!'}
               </p>
 
-              <button onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '13px', color: 'rgba(255,255,255,0.2)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
+              <button type="button" onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '13px', color: 'rgba(255,255,255,0.2)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; }}>
                 {language === 'mr' ? 'नाही, नंतर ठरवतो' : "No, I'll decide later"}
@@ -3709,7 +3816,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           padding: '14px 20px',
           display: 'flex', alignItems: 'center', gap: '14px'
         }}>
-          <button onClick={() => setRegistrationStep('mode')} style={{
+          <button type="button" onClick={() => setRegistrationStep('mode')} style={{
             width: '36px', height: '36px', borderRadius: '10px',
             background: 'rgba(211,191,162,0.05)',
             border: '1px solid rgba(211,191,162,0.1)',
@@ -3790,12 +3897,11 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             <input
   type="text"
   placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
-  defaultValue={customerInfo.name}
-  onInput={e => {
-    // Same fix as the phone field: keep state live while typing so the Confirm
-    // button's enabled state (which reads customerInfo.name) doesn't stay frozen
-    // until the person taps away from the field.
-    setCustomerInfo(prev => ({ ...prev, name: e.target.value }));
+  value={customerInfo.name}
+  onChange={e => {
+    const name = e.target.value;
+    customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name };
+    setCustomerInfo(prev => ({ ...prev, name }));
   }}
   onBlur={e => {
     setCustomerInfo(prev => ({ ...prev, name: e.target.value.trim() }));
@@ -3835,14 +3941,10 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     inputMode="numeric"
     maxLength={10}
     placeholder="9876543210"
-    defaultValue={customerInfo.phone}
-    onInput={e => {
+    value={customerInfo.phone}
+    onChange={e => {
       const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-      e.target.value = digits;
-      // Keep state in sync live — the "X more digits needed" hint and the
-      // Confirm button's enabled state both read customerInfo.phone, and used
-      // to only update on blur, which left them frozen while the customer
-      // was actively typing (looked like the button was stuck/broken).
+      customerInfoDraftRef.current = { ...customerInfoDraftRef.current, phone: digits };
       setCustomerInfo(prev => ({ ...prev, phone: digits }));
     }}
     onBlur={e => {
@@ -4173,7 +4275,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               {hint}
             </div>
           )}
-          <button
+          <button type="button"
             disabled={!allOk}
             onClick={() => { if (allOk) setReservationAskOrder(true); }}
             style={{
@@ -4259,7 +4361,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                     {hint}
                   </div>
                 )}
-                <button
+                <button type="button"
                   disabled={!allOk}
                   onClick={() => { if (allOk) setRegistrationStep('menu'); }}
                   style={{
@@ -4381,7 +4483,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   </p>
 
                   {/* YES — browse menu */}
-                  <button
+                  <button type="button"
                     onClick={() => { setReservationAskOrder(false); setRegistrationStep('menu'); }}
                     style={{
                       width: '100%', padding: '16px',
@@ -4400,7 +4502,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   </button>
 
                   {/* NO — just reserve, place with empty items, go to confirm */}
-                  <button
+                  <button type="button"
                     onClick={async () => {
                       const [hours, minutes] = reservationTime.split(':').map(Number);
                       const resDateTime = new Date(reservationDate);
@@ -4433,9 +4535,9 @@ if (phone.length === 10) {
   }).catch(() => {});
 }
                         if ('Notification' in window && Notification.permission === 'granted') {
-                          new Notification('📅 Reservation Requested!', {
+                          new Notification('Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
-                            icon: '/logo.png'
+                            icon: '/pratyeksha-logo.png'
                           });
                         }
                       } catch(err) {
@@ -4522,8 +4624,9 @@ if (phone.length === 10) {
       {/* Mode cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '400px' }}>
 
+        {featureEnabled('waitlist') && <>
         {/* WAITLIST card */}
-        <button
+        <button type="button"
           onClick={() => { setCounterMode('dine-in'); setRegistrationStep('register'); }}
           style={{
             background: '#121212',
@@ -4579,10 +4682,11 @@ if (phone.length === 10) {
             </div>
             <ChevronRight size={16} color="rgba(211,191,162,0.2)" style={{ marginTop: '4px', flexShrink: 0 }} />
           </div>
-        </button>
+        </button></>}
 
+        {featureEnabled('pickup') && <>
         {/* PICKUP card */}
-        <button
+        <button type="button"
           onClick={() => { setCounterMode('pickup'); setRegistrationStep('register'); }}
           style={{
             background: '#0f0f0f',
@@ -4625,10 +4729,11 @@ if (phone.length === 10) {
             </div>
             <ChevronRight size={16} color="rgba(211,191,162,0.15)" style={{ marginTop: '4px', flexShrink: 0 }} />
           </div>
-        </button>
+        </button></>}
 
+        {featureEnabled('reservation') && <>
         {/* RESERVATION card */}
-<button
+<button type="button"
   onClick={() => { setCounterMode('reservation'); setRegistrationStep('register'); }}
   style={{
     background: '#0f0f0f',
@@ -4661,12 +4766,12 @@ if (phone.length === 10) {
     </div>
     <ChevronRight size={16} color="rgba(211,191,162,0.12)" style={{ marginTop: '4px', flexShrink: 0 }} />
   </div>
-</button>
+</button></>}
 
       </div>
 
       {/* Language toggle */}
-      <button
+      <button type="button"
         onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}
         style={{
           marginTop: '32px', background: 'transparent',
@@ -4695,7 +4800,7 @@ if (phone.length === 10) {
 
 
 // ── LOADER ──
-if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRATYEKSHA...</div>;
+if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:190, maxWidth:'70vw', background:'#f7f3eb', borderRadius:12, padding:'8px 12px' }} /></div>;
 
   return (
     <div style={{...styles.body, backgroundColor: secondaryColor}}>
@@ -4815,7 +4920,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </div>
 
       {/* RIGHT: back */}
-      <button
+      <button type="button"
         onClick={() => setRegistrationStep('register')}
         style={{
           display: 'flex', alignItems: 'center', gap: '5px',
@@ -4844,8 +4949,9 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 )}
 
       <header style={styles.header}>
+        <div style={{ position:'absolute', top:'14px', right:'14px', zIndex:6 }}><PwaInstallButton kind="customer" compact /></div>
         <div style={styles.langToggleBox}>
-          <button style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
+          <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
           </button>
         </div>
@@ -4862,7 +4968,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     zIndex: 5
   }}>
     {/* VEG */}
-    <button
+    <button type="button"
       onClick={() => setFilterVegOnly(true)}
       style={{
         display: 'flex', alignItems: 'center', gap: '6px',
@@ -4896,7 +5002,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     </button>
 
     {/* NON-VEG */}
-    <button
+    <button type="button"
       onClick={() => setFilterVegOnly(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: '6px',
@@ -4932,8 +5038,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     </button>
   </div>
 )}
-        <h1 style={{...styles.cafeName, color: primaryColor}}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
-        <div style={styles.poweredBy}>{t[language].poweredBy} <span>PRATYEKSHA</span> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
+        <h1 style={{...styles.cafeName, color: primaryColor}}>{restaurantData?.name || 'Restaurant'}</h1>
+        <div style={styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -5108,7 +5214,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                   </span>
                 </div>
 
-                <button
+                <button type="button"
                   onClick={() => setAnnouncementDismissed(true)}
                   style={{
                     width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
@@ -5238,7 +5344,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         onChange={e => setSearchQuery(e.target.value)}
       />
       {searchQuery.length > 0 && (
-        <button
+        <button type="button"
           onClick={() => setSearchQuery('')}
           style={{
             background: 'none', border: 'none',
@@ -5459,7 +5565,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       {/* CATEGORY NAV */}
       <div style={{...styles.navContainer, backgroundColor: secondaryColor}}>
         <nav ref={navRef} style={styles.navScroll} className="no-scrollbar">
-          <button ref={selectedCategoryId === 'all' ? activeTabRef : null} onClick={() => setSelectedCategoryId('all')} style={{...styles.navItem, color: selectedCategoryId === 'all' ? primaryColor : '#888'}}>
+          <button type="button" ref={selectedCategoryId === 'all' ? activeTabRef : null} onClick={() => setSelectedCategoryId('all')} style={{...styles.navItem, color: selectedCategoryId === 'all' ? primaryColor : '#888'}}>
             {t[language].all} {selectedCategoryId === 'all' && <motion.div layoutId="underline" style={styles.activeUnderline} />}
           </button>
 {categoryList
@@ -5472,7 +5578,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     )
   )
 .map(cat => (
-    <button key={cat.categoryId} ref={selectedCategoryId === cat.categoryId ? activeTabRef : null} onClick={() => setSelectedCategoryId(cat.categoryId)} style={{...styles.navItem, color: selectedCategoryId === cat.categoryId ? primaryColor : '#888'}}>
+    <button type="button" key={cat.categoryId} ref={selectedCategoryId === cat.categoryId ? activeTabRef : null} onClick={() => setSelectedCategoryId(cat.categoryId)} style={{...styles.navItem, color: selectedCategoryId === cat.categoryId ? primaryColor : '#888'}}>
       {(language === 'mr' ? (cat.name_mr || cat.name || '') : (cat.name || '')).toUpperCase()} {selectedCategoryId === cat.categoryId && <motion.div layoutId="underline" style={styles.activeUnderline} />}
     </button>
   ))
@@ -5718,12 +5824,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         </div>
         {cart[item._id] ? (
           <div style={styles.counterRowSmall}>
-            <button onClick={() => removeFromCart(item._id)} style={styles.qtyBtnSmall}>-</button>
+            <button type="button" onClick={() => removeFromCart(item._id)} style={styles.qtyBtnSmall}>-</button>
             <span style={{ fontSize: '0.8rem' }}>{cart[item._id]}</span>
-            <button onClick={() => addToCart(item, 'Single')} style={styles.qtyBtnSmall}>+</button>
+            <button type="button" onClick={() => addToCart(item, 'Single')} style={styles.qtyBtnSmall}>+</button>
           </div>
         ) : (
-          <button onClick={() => addToCart(item, 'Single')} style={styles.addBtnSmall}>{t[language].add}</button>
+          <button type="button" onClick={() => addToCart(item, 'Single')} style={styles.addBtnSmall}>{t[language].add}</button>
         )}
       </div>
     ) : (
@@ -5736,12 +5842,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           </span>
           {cart[`${item._id}-Half`] ? (
             <div style={styles.counterRowSmall}>
-              <button onClick={() => removeFromCart(`${item._id}-Half`)} style={styles.qtyBtnSmall}>-</button>
+              <button type="button" onClick={() => removeFromCart(`${item._id}-Half`)} style={styles.qtyBtnSmall}>-</button>
               <span>{cart[`${item._id}-Half`]}</span>
-              <button onClick={() => addToCart(item, 'Half')} style={styles.qtyBtnSmall}>+</button>
+              <button type="button" onClick={() => addToCart(item, 'Half')} style={styles.qtyBtnSmall}>+</button>
             </div>
           ) : (
-            <button onClick={() => addToCart(item, 'Half')} style={styles.addBtnSmall}>{t[language].addHalf}</button>
+            <button type="button" onClick={() => addToCart(item, 'Half')} style={styles.addBtnSmall}>{t[language].addHalf}</button>
           )}
         </div>
         <div style={styles.priceRow}>
@@ -5752,19 +5858,19 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           </span>
           {cart[`${item._id}-Full`] ? (
             <div style={styles.counterRowSmall}>
-              <button onClick={() => removeFromCart(`${item._id}-Full`)} style={styles.qtyBtnSmall}>-</button>
+              <button type="button" onClick={() => removeFromCart(`${item._id}-Full`)} style={styles.qtyBtnSmall}>-</button>
               <span>{cart[`${item._id}-Full`]}</span>
-              <button onClick={() => addToCart(item, 'Full')} style={styles.qtyBtnSmall}>+</button>
+              <button type="button" onClick={() => addToCart(item, 'Full')} style={styles.qtyBtnSmall}>+</button>
             </div>
           ) : (
-            <button onClick={() => addToCart(item, 'Full')} style={styles.addBtnSmall}>{t[language].addFull}</button>
+            <button type="button" onClick={() => addToCart(item, 'Full')} style={styles.addBtnSmall}>{t[language].addFull}</button>
           )}
         </div>
       </>
     )}
   </div>
                </div>
-                <button style={{...styles.view3dBtn, background: primaryColor}} onClick={() => setActiveModel(item)}>{t[language].view3d}</button>
+                <button type="button" style={{...styles.view3dBtn, background: primaryColor}} onClick={() => setActiveModel(item)}>{t[language].view3d}</button>
               </div>
             ))}
           </motion.div>
@@ -5914,7 +6020,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                     {language === 'mr' ? `टेबल ${tableNumber}` : `Table ${tableNumber}`}
                   </div>
                 </div>
-                <button onClick={() => setOrderTrackingPanelOpen(false)} style={{
+                <button type="button" onClick={() => setOrderTrackingPanelOpen(false)} style={{
                   width: '30px', height: '30px', borderRadius: '9px',
                   background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
                   color: '#555', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -6126,17 +6232,17 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
     </div>
     <p style={styles.waiterLabel}>{t[language][id]}</p>
                     <div style={styles.countControls}>
-                      <button style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={16}/></button>
+                      <button type="button" style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={16}/></button>
                       <span style={styles.countDisplay}>{convertToMrNumber(waiterCounts[id])}</span>
-                      <button style={styles.countBtn} onClick={() => updateWaiterCount(id, 1)}><Plus size={16}/></button>
+                      <button type="button" style={styles.countBtn} onClick={() => updateWaiterCount(id, 1)}><Plus size={16}/></button>
                     </div>
                   </div>
                 ))}
               </div>
               <div style={{ padding: '0 25px' }}>
-                <button style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.clean)}><Trash2 size={20} color={primaryColor}/> <span>{t[language].clean}</span></button>
-                <button style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.other)}><HelpCircle size={20} color={primaryColor}/> <span>{t[language].other}</span></button>
-                <button style={{...styles.kitchenBtn, background: primaryColor, marginTop: '20px'}} onClick={() => notifyWaiter("Custom")}>{t[language].sendRequest}</button>
+                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.clean)}><Trash2 size={20} color={primaryColor}/> <span>{t[language].clean}</span></button>
+                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.other)}><HelpCircle size={20} color={primaryColor}/> <span>{t[language].other}</span></button>
+                <button type="button" style={{...styles.kitchenBtn, background: primaryColor, marginTop: '20px'}} onClick={() => notifyWaiter("Custom")}>{t[language].sendRequest}</button>
               </div>
             </div>
           </motion.div>
@@ -6243,7 +6349,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             )}
 
             {/* Close button */}
-            <button
+            <button type="button"
               onClick={() => {
                 setIsExtraItemsOpen(false);
                 setExtraItemCart({});
@@ -6412,7 +6518,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                 </div>
               </div>
               {extraItemSearchQuery && (
-                <button onClick={() => setExtraItemSearchQuery('')}
+                <button type="button" onClick={() => setExtraItemSearchQuery('')}
                   style={{ padding: '8px 18px', borderRadius: '20px', background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer' }}>
                   CLEAR SEARCH
                 </button>
@@ -6786,7 +6892,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                   }}>
                     <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace' }}>×{qty}</span>
                     <span style={{ fontSize: '0.58rem', fontWeight: '700', color: 'rgba(211,191,162,0.7)', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <button
+                    <button type="button"
                       onClick={() => setExtraItemCart(prev => { const n = { ...prev }; delete n[id]; return n; })}
                       style={{ background: 'none', border: 'none', color: 'rgba(201,168,76,0.4)', cursor: 'pointer', padding: '0', display: 'flex', marginLeft: '2px' }}>
                       <X size={10}/>
@@ -6903,6 +7009,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 {!billRequested ? (
   <div style={styles.formContainer}>
     <p style={styles.instructionText}>{t[language].enterDetails}</p>
+    {savedCustomer && customerInfo.phone === savedCustomer.phone && customerInfo.name === savedCustomer.name && (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'10px 12px', marginBottom:12, border:'1px solid rgba(211,191,162,0.14)', borderRadius:10, background:'rgba(211,191,162,0.05)' }}>
+        <div style={{ fontSize:11, color:'rgba(211,191,162,0.72)', lineHeight:1.4 }}>Returning customer · saved details restored</div>
+        <button type="button" onClick={() => setCustomerInfo({ name:'', phone:'' })} style={{ border:0, background:'transparent', color:'#d3bfa2', fontSize:10, fontWeight:900, cursor:'pointer' }}>CHANGE</button>
+      </div>
+    )}
 
     {/* Name field */}
     <input
@@ -6910,7 +7022,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       placeholder={t[language].fullName}
       style={styles.input}
       value={customerInfo.name}
-      onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+      onChange={e => { const name = e.target.value; customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name }; setCustomerInfo(prev => ({ ...prev, name })); }}
     />
 
     {/* Phone — 10-digit enforced */}
@@ -6946,7 +7058,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       </div>
     )}
 
-    <button
+    <button type="button"
       disabled={!customerInfo.name.trim() || customerInfo.phone.length !== 10}
       style={{
         ...styles.kitchenBtn,
@@ -7058,10 +7170,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         {/* 1. Header */}
         <div style={{ textAlign: 'center', marginBottom: '25px' }}>
           <h4 style={{ margin: 0, fontSize: '0.7rem', fontWeight: '800', color: '#888' }}>TAX INVOICE</h4>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: '900', margin: '8px 0', color:"black" }}>{restaurantData?.name || 'PRATYEKSHA'}</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: '900', margin: '8px 0', color:"black" }}>{restaurantData?.name || 'Restaurant'}</h1>
           <p style={{ fontSize: '0.7rem', color: '#333', margin: 0 }}>{restaurantData?.address?.street}, {restaurantData?.address?.city}</p>
 <p style={{ fontSize: '0.75rem', fontWeight: '800', marginTop: '4px' }}>GSTIN: {restaurantData?.gstin || "GSTIN PENDING"}</p>
-          <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '2px' }}>SAC Code: 996331 · GST Rate: 5% (CGST 2.5% + SGST 2.5%)</p>        </div>
+          <p style={{ fontSize: '0.65rem', color: '#888', marginTop: '2px' }}>SAC Code: 996331 · GST Rate: {(Number((restaurantData?.config?.cgstPercentage ?? 2.5)) + Number((restaurantData?.config?.sgstPercentage ?? 2.5))).toFixed(1)}% (CGST {(restaurantData?.config?.cgstPercentage ?? 2.5)}% + SGST {(restaurantData?.config?.sgstPercentage ?? 2.5)}%)</p>        </div>
 
         {/* 2. Bill & Customer Meta Info */}
         <div style={{ borderTop: '2px solid #000', borderBottom: '2px solid #000', padding: '10px 0', marginBottom: '20px' }}>
@@ -7107,9 +7219,9 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 
 {/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
 <div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{(calculateGrandTotal() / 1.05).toFixed(2)}</span></div>
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
-  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST (2.5%)</span><span>₹{(calculateGrandTotal() * 0.025).toFixed(2)}</span></div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{(() => { const r=(restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5); return (calculateGrandTotal() / (1+r/100)).toFixed(2); })()}</span></div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST ({restaurantData?.config?.cgstPercentage ?? 2.5}%)</span><span>₹{(calculateGrandTotal() / (1+((restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5)) / 100) * ((restaurantData?.config?.cgstPercentage ?? 2.5) / 100)).toFixed(2)}</span></div>
+  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST ({restaurantData?.config?.sgstPercentage ?? 2.5}%)</span><span>₹{(calculateGrandTotal() / (1+((restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5)) / 100) * ((restaurantData?.config?.sgstPercentage ?? 2.5) / 100)).toFixed(2)}</span></div>
 </div>
 
 <div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
@@ -7118,7 +7230,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 </div>
 {/* 6. Branding Footer */}
         <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '0.6rem', fontWeight: '900', color: '#888', borderTop: '1px dashed #ccc', paddingTop: '15px' }}>
-          POWERED BY PRATYEKSHA
+          <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
         </div>
       
       </div>
@@ -7130,7 +7242,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>
 
                      {/* WHITE — Download Invoice */}
-                     <button
+                     <button type="button"
                        onClick={() => autoDownloadInvoicePDF()}
                        style={{
                          width: '100%', padding: '18px', borderRadius: '15px',
@@ -7147,7 +7259,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                      </button>
 
                      {/* GOLD — Continue to Feedback */}
-                     <button
+                     <button type="button"
                        style={{
                          ...styles.professionalContinueBtn,
                          background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
@@ -7288,7 +7400,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       {/* Divider */}
       <div style={{ height: '1px', background: 'rgba(211,191,162,0.08)', margin: '4px 0' }} />
 {/* Close billing */}
-      <button
+      <button type="button"
         style={{
           width: '100%', padding: '17px',
           background: 'rgba(211,191,162,0.07)',
@@ -7310,7 +7422,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
       {/* Powered by */}
       <div style={{ textAlign: 'center', paddingTop: '8px' }}>
         <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.1)', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
-          POWERED BY PRATYEKSHA
+          <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
         </span>
       </div>
     </div>
@@ -7376,7 +7488,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                   </div>
 
                   {/* Remove button — X icon, gold dim */}
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setCart(prev => {
                         const next = { ...prev };
@@ -7413,7 +7525,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                     borderRadius: '10px', overflow: 'hidden'
                   }}>
                     {/* MINUS */}
-                    <button
+                    <button type="button"
                       onClick={() => {
                         if (qty <= 1) {
                           setCart(prev => { const n = {...prev}; delete n[key]; return n; });
@@ -7450,7 +7562,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                     </div>
 
                     {/* PLUS */}
-                    <button
+                    <button type="button"
                       onClick={() => setCart(prev => ({ ...prev, [key]: prev[key] + 1 }))}
                       style={{
                         width: '34px', height: '34px',
@@ -7502,7 +7614,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         <Sparkles size={9} color="rgba(201,168,76,0.4)" strokeWidth={1.5}/>
         {language==='mr' ? 'यांसोबत छान लागेल' : 'GOES WELL WITH YOUR ORDER'}
       </div>
-      <button onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.2)', cursor:'pointer', padding:0, display:'flex' }}>
+      <button type="button" onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.2)', cursor:'pointer', padding:0, display:'flex' }}>
         <X size={11}/>
       </button>
     </div>
@@ -7567,7 +7679,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
 )}
 
         {totalItemsInCart > 0 && (
-<button
+<button type="button"
   style={{
     ...styles.kitchenBtn,
     background: isPlacingOrder ? '#555' : primaryColor,
@@ -7594,7 +7706,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           </button>
         )}
         {!isCounterScan && (
-          <button
+          <button type="button"
             style={styles.billLinkBtn}
             onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}
           >
@@ -7999,7 +8111,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         {/* Gold shimmer top line */}
         <div style={{ height: '2px', background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.7), transparent)', flexShrink: 0 }} />
 
-        <button onClick={() => setWelcomeDismissed(true)} style={{
+        <button type="button" onClick={() => setWelcomeDismissed(true)} style={{
           position: 'absolute', top: '14px', right: '14px', zIndex: 2,
           width: '26px', height: '26px', borderRadius: '8px',
           background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
@@ -8395,7 +8507,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
         )}
 
         {/* Add button */}
-        <button
+        <button type="button"
           onClick={() => {
             setCart(prev => ({ ...prev, [dish._id]: (prev[dish._id] || 0) + 1 }));
           }}
@@ -8418,7 +8530,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
   </div>
 )}
           {/* ── CTA ── */}
-          <button
+          <button type="button"
             onClick={() => { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
             style={{
               width: '100%', padding: '14px',
@@ -8487,7 +8599,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
                   : 'Enter your number and we\'ll show your last order.'}
               </p>
             </div>
-            <button onClick={() => { setShowPhonePrompt(false); setWelcomeDismissed(true); }} style={{
+            <button type="button" onClick={() => { setShowPhonePrompt(false); setWelcomeDismissed(true); }} style={{
               width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
               background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
               color: '#444', cursor: 'pointer',
@@ -8522,7 +8634,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             />
           </div>
 
-          <button
+          <button type="button"
             id="recognize-btn"
             disabled={welcomePhoneInput.length !== 10 || welcomeLoading}
             onClick={async () => {
@@ -8564,7 +8676,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
             {!welcomeLoading && <ChevronRight size={15} />}
           </button>
 
-          <button
+          <button type="button"
             onClick={() => { setShowPhonePrompt(false); setWelcomeDismissed(true); }}
             style={{
               width: '100%', marginTop: '10px', padding: '11px',
@@ -8900,7 +9012,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}>PRA
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2 }}
         >
-          <button
+          <button type="button"
             onClick={() => setOrderPlacedScreen(false)}
             style={{
               width: '100%', padding: '16px',

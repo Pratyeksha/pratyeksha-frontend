@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
+import API_BASE_URL from './apiBase.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, RefreshCcw, Search, TrendingUp, Users, Trophy,
@@ -13,13 +14,13 @@ import {
   TrendingDown, PlusCircle, Edit3
 } from 'lucide-react';
 
-const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+const BASE_URL = API_BASE_URL;
+const BRAND_LOGO = '/pratyeksha-logo.png';
 const EXPENSE_CATEGORY_LABELS_FRONTEND = {
   domain: 'Domain', hosting: 'Hosting / Server', email: 'Email Service',
   sms_whatsapp: 'SMS / WhatsApp API', qr_stands: 'QR Stands', payment_gateway: 'Payment Gateway',
   software: 'Software / Tools', marketing: 'Marketing', other: 'Other'
 };
-const API_ORIGIN = BASE_URL.replace(/\/api$/, '');
 
 /* ─────────────────────────────────────────
    DESIGN TOKENS
@@ -88,7 +89,7 @@ const GLOBAL_CSS = `
     transition: transform 0.26s cubic-bezier(.4,0,.2,1);
     position: relative; z-index: 149;
   }
-  .p-sidebar-inner { display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding: 22px 14px; }
+  .p-sidebar-inner { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 22px 14px; }
 
   .p-topbar {
     display: none; position: fixed; top: 0; left: 0; right: 0;
@@ -109,7 +110,9 @@ const GLOBAL_CSS = `
   .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .p-filterbar { display: flex; border-bottom: 1px solid #1a1a1a; flex-shrink: 0; background: #060606; overflow-x: auto; }
   .p-filterbar::-webkit-scrollbar { display: none; }
-  .p-scroll { flex: 1; overflow-y: auto; }
+  .p-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .p-main { min-height: 0; }
+  .p-main > .p-scroll { min-height: 0; width: 100%; }
   .p-pad { padding: 24px 32px 48px; }
 
   .p-row { transition: background 0.1s; }
@@ -159,6 +162,11 @@ const GLOBAL_CSS = `
   }
   @media (max-width: 768px) {
     .p-topbar { display: flex; }
+    .p-scroll { min-height: 0; }
+    .p-pad { padding-left: 14px !important; padding-right: 14px !important; }
+    .p-header { padding-left: 14px !important; padding-right: 14px !important; }
+    .p-form-grid { grid-template-columns: 1fr !important; }
+    .p-form-grid > * { grid-column: auto !important; }
     .p-sidebar {
       position: fixed; top: 0; left: 0; bottom: 0;
       width: 80vw; max-width: 260px;
@@ -385,7 +393,7 @@ const InstallButton = ({ compact }) => {
   if (!canInstall && !isIos) return null;
   return (
     <>
-      <button onClick={() => isIos ? setShowIos(true) : promptInstall()} className="p-btn-shimmer" style={{
+      <button type="button" onClick={() => isIos ? setShowIos(true) : promptInstall()} className="p-btn-shimmer" style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px',
         borderRadius: 9, background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a',
         border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
@@ -414,7 +422,7 @@ const ModalShell = ({ title, icon: Icon, onClose, children, width }) => (
           {Icon && <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} color="#d3bfa2" /></div>}
           <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex', padding: 4 }}><X size={17} /></button>
+        <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex', padding: 4 }}><X size={17} /></button>
       </div>
       {children}
     </motion.div>
@@ -446,12 +454,12 @@ const ConfirmModal = ({ data, onClose, onConfirm }) => {
     <ModalShell title={data.title} icon={data.icon || AlertTriangle} onClose={onClose} width={380}>
       <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.6, marginBottom: 20 }}>{data.message}</div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={run} disabled={busy} style={{
+        <button type="button" onClick={run} disabled={busy} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
           background: data.tone === 'danger' ? C.danger : '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
         }}>{busy ? <Loader2 size={14} className="p-spin" style={{ animation: 'spin 0.8s linear infinite' }} /> : null}{busy ? 'Working…' : (data.confirmLabel || 'Confirm')}</button>
-        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
       </div>
     </ModalShell>
   );
@@ -474,12 +482,12 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
         </LabeledInput>
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={submit} disabled={busy || !months || !amount} style={{
+        <button type="button" onClick={submit} disabled={busy || !months || !amount} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
           background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: busy ? 0.6 : 1
         }}>{busy ? 'Renewing…' : 'Confirm Renewal'}</button>
-        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
       </div>
     </ModalShell>
   );
@@ -532,7 +540,7 @@ const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) =
         {count !== null && !error && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#d3bfa2', fontFamily: 'JetBrains Mono, monospace' }}>{count}</span>
-            <button onClick={e => { e.stopPropagation(); clear(); }} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex' }}><X size={13} /></button>
+            <button type="button" onClick={e => { e.stopPropagation(); clear(); }} style={{ background: 'transparent', border: 'none', color: C.textDim, cursor: 'pointer', display: 'flex' }}><X size={13} /></button>
           </div>
         )}
       </div>
@@ -581,7 +589,7 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
     if (!hasContent) return;
     setImporting(true); setError('');
     try {
-      const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${target.tenantId}?mode=${mode}`, {
+      const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${encodeURIComponent(target.tenantId)}?mode=${encodeURIComponent(mode)}`, {
         categories: pending.categories || [], menuItems: pending.menuItems || []
       });
       setResult(res.data);
@@ -604,7 +612,7 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           <div style={{ fontSize: 12.5, color: C.textMid, marginBottom: 20 }}>
             {result.counts.categories} categories &middot; {result.counts.menuItems} menu items written ({mode})
           </div>
-          <button onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <button type="button" onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
       ) : (
         <>
@@ -619,13 +627,13 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Import Mode</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setMode('append')} style={{
+              <button type="button" onClick={() => setMode('append')} style={{
                 flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
                 background: mode === 'append' ? 'rgba(211,191,162,0.1)' : 'transparent',
                 border: `1px solid ${mode === 'append' ? 'rgba(211,191,162,0.4)' : C.border}`,
                 color: mode === 'append' ? '#d3bfa2' : C.textDim
               }}>Append / Update</button>
-              <button onClick={() => setMode('replace')} style={{
+              <button type="button" onClick={() => setMode('replace')} style={{
                 flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
                 background: mode === 'replace' ? 'rgba(192,96,64,0.1)' : 'transparent',
                 border: `1px solid ${mode === 'replace' ? 'rgba(192,96,64,0.4)' : C.border}`,
@@ -640,14 +648,14 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <button onClick={runImport} disabled={!hasContent || importing} className="p-btn-shimmer" style={{
+            <button type="button" onClick={runImport} disabled={!hasContent || importing} className="p-btn-shimmer" style={{
               flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!hasContent || importing) ? 'not-allowed' : 'pointer',
               background: (!hasContent || importing) ? C.bgCard2 : '#d3bfa2', color: (!hasContent || importing) ? C.textDim : '#0a0a0a',
               fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
             }}>{importing ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Importing…</> : <><Upload size={14} /> Import</>}</button>
-            <button onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+            <button type="button" onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
           </div>
-          <button onClick={downloadTemplate} style={{ width: '100%', padding: '9px', background: 'transparent', border: 'none', color: C.textDim, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <button type="button" onClick={downloadTemplate} style={{ width: '100%', padding: '9px', background: 'transparent', border: 'none', color: C.textDim, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <FileDown size={12} /> Download example template
           </button>
         </>
@@ -676,12 +684,12 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
       </div>
       <input className="p-inp" style={{ ...inp, marginBottom: 18 }} value={typed} onChange={e => setTyped(e.target.value)} placeholder={client.tenantId} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck="false" />
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={run} disabled={!matches || busy} style={{
+        <button type="button" onClick={run} disabled={!matches || busy} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!matches || busy) ? 'not-allowed' : 'pointer',
           background: matches ? C.danger : C.bgCard2, color: matches ? '#fff' : C.textDim, fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
         }}>{busy ? 'Deleting…' : 'Delete Permanently'}</button>
-        <button onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+        <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
       </div>
     </ModalShell>
   );
@@ -693,7 +701,7 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
 export default function PratyekshaMasterAdmin() {
   const [activeSection, setActiveSection] = useState('demos');
   const [clients,       setClients]       = useState([]);
-  const [stats,         setStats]         = useState({ totalRevenue:0, activeCount:0, expiredCount:0, disabledCount:0, expiringSoon:0, topClients:[], totalClients:0 });
+  const [stats,         setStats]         = useState({ totalRevenue:0, grossRevenue:0, totalExpenses:0, netRevenue:0, activeCount:0, expiredCount:0, disabledCount:0, expiringSoon:0, topClients:[], totalClients:0 });
   const [loading,       setLoading]       = useState(true);
   const [searchTerm,    setSearchTerm]    = useState('');
   const [sidebarOpen,   setSidebarOpen]   = useState(false);
@@ -1017,7 +1025,7 @@ export default function PratyekshaMasterAdmin() {
   const NavItem = ({ id, label, icon:Icon, count, urgent }) => {
     const isActive = activeSection===id;
     return (
-      <button onClick={()=>navTo(id)} className="p-nav-item" style={{
+      <button type="button" onClick={()=>navTo(id)} className="p-nav-item" style={{
         width:'100%', display:'flex', alignItems:'center', gap:9,
         padding:'9px 10px', borderRadius:8, cursor:'pointer', border:'none',
         background: isActive ? 'rgba(211,191,162,0.06)' : 'transparent',
@@ -1062,12 +1070,12 @@ export default function PratyekshaMasterAdmin() {
 
       {/* Mobile topbar */}
       <div className="p-topbar">
-        <button onClick={()=>setSidebarOpen(true)} style={{ background:'none', border:'none', cursor:'pointer', padding:6, display:'flex', color:C.textMid }}>
+        <button type="button" onClick={()=>setSidebarOpen(true)} style={{ background:'none', border:'none', cursor:'pointer', padding:6, display:'flex', color:C.textMid }}>
           <Menu size={18} />
         </button>
         {/* brand name in light gold */}
-        <span style={{ fontSize:13, fontWeight:600, color:'#d3bfa2', letterSpacing:'0.5px' }}>Pratyeksha</span>
-        <button onClick={refresh} style={{ background:'none', border:'none', cursor:'pointer', padding:6, display:'flex', color:C.textDim }}>
+        <span style={{ width:72, height:28, background:'#fff', borderRadius:8, padding:4, display:'inline-flex', alignItems:'center' }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></span>
+        <button type="button" onClick={refresh} style={{ background:'none', border:'none', cursor:'pointer', padding:6, display:'flex', color:C.textDim }}>
           <RefreshCcw size={15} />
         </button>
       </div>
@@ -1080,8 +1088,8 @@ export default function PratyekshaMasterAdmin() {
 
           {/* Brand — icon bg is light gold, text is near-white */}
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:28, paddingBottom:18, borderBottom:`1px solid ${C.border}` }}>
-            <div style={{ width:30, height:30, borderRadius:8, background:'#d3bfa2', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <Zap size={15} color="#0a0a0a" fill="#0a0a0a" />
+            <div style={{ width:58, height:34, borderRadius:9, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:5, flexShrink:0 }}>
+              <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
             <div>
               <div style={{ fontSize:13, fontWeight:700, color:C.text, letterSpacing:'0.3px', lineHeight:1.2 }}>Pratyeksha</div>
@@ -1095,10 +1103,11 @@ export default function PratyekshaMasterAdmin() {
               sub-grid → status-colored numbers, dark bg
           */}
           <div style={{ marginBottom:20, padding:'14px', background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10 }}>
-            <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'0.8px', textTransform:'uppercase', marginBottom:6 }}>Total Revenue</div>
-            <div style={{ fontSize:22, fontWeight:700, color:'#d3bfa2', lineHeight:1, marginBottom:12, fontFamily:'JetBrains Mono, monospace' }}>
-              ₹{(stats.totalRevenue||0).toLocaleString()}
+            <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'0.8px', textTransform:'uppercase', marginBottom:6 }}>Net Platform Revenue</div>
+            <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#d3bfa2' : C.danger, lineHeight:1, marginBottom:6, fontFamily:'JetBrains Mono, monospace' }}>
+              ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString()}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
             </div>
+            <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString()}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString()}</span></div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
               {[
                 { val:stats.activeCount   ||0, lbl:'Active',   c:'#d3bfa2' },   /* light gold */
@@ -1115,8 +1124,8 @@ export default function PratyekshaMasterAdmin() {
           </div>
 
           {/* Nav */}
-          <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6, paddingLeft:10 }}>Navigation</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:16 }}>
+          <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6, paddingLeft:10, flexShrink:0 }}>Navigation</div>
+          <div className="no-sb" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, overflowY:'auto', minHeight:0, flex:'0 1 auto', maxHeight:190, paddingRight:2 }}>
             <NavItem id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
             <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
@@ -1127,27 +1136,27 @@ export default function PratyekshaMasterAdmin() {
 
           <Div />
 
-          {/* Top clients */}
+          {/* Client list — scrollable and visible at the bottom of the control centre */}
           <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:10, paddingLeft:4, display:'flex', alignItems:'center', gap:5 }}>
-            <Trophy size={10} color={C.textFaint} /> Top Clients
+            <Trophy size={10} color={C.textFaint} /> Clients
           </div>
-          <div className="no-sb" style={{ flex:1, overflowY:'auto' }}>
-            {(stats.topClients||[]).map((c,i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard }}>
-                <div style={{ fontSize:10, fontWeight:700, color:C.textFaint, width:14 }}>{i+1}</div>
+          <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
+            {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).map(c => (
+              <div key={c._id || c.tenantId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard, border:`1px solid ${C.border}` }}>
+                <div style={{ width:7, height:7, borderRadius:'50%', background:c.isActive ? '#d3bfa2' : C.danger, flexShrink:0 }} />
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:500, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
-                  {/* revenue in dark amber — readable, not overpowering */}
-                  <div style={{ fontSize:11, color:'#8a704d', fontWeight:600, fontFamily:'JetBrains Mono, monospace' }}>₹{(c.revenue||0).toLocaleString()}</div>
+                  <div style={{ fontSize:11.5, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize:10, color:C.textDim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.tenantId}</div>
                 </div>
+                <div style={{ fontSize:10.5, color:'#8a704d', fontWeight:700, fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString()}</div>
               </div>
             ))}
+            {clients.length === 0 && <div style={{ fontSize:11, color:C.textDim, padding:'12px 4px' }}>No clients yet.</div>}
           </div>
-
           <Div />
           <div style={{ display: 'grid', gap: 8 }}>
             <InstallButton />
-            <button onClick={refresh} style={{
+            <button type="button" onClick={refresh} style={{
               width:'100%', padding:'9px', background:C.bgCard, border:`1px solid ${C.border}`,
               color:C.textDim, borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer',
               display:'flex', alignItems:'center', justifyContent:'center', gap:6,
@@ -1196,7 +1205,7 @@ export default function PratyekshaMasterAdmin() {
                   { id:'Contacted',  label:'Contacted', count:demoCounts.Contacted },
                   { id:'Demo Given', label:'Done',      count:demoCounts['Demo Given'] },
                 ].map(f => (
-                  <button key={f.id} onClick={()=>setDemoFilter(f.id)} style={filterTab(demoFilter===f.id)}>
+                  <button type="button" key={f.id} onClick={()=>setDemoFilter(f.id)} style={filterTab(demoFilter===f.id)}>
                     {f.label}
                     {f.count>0 && (
                       <span style={{
@@ -1245,7 +1254,7 @@ export default function PratyekshaMasterAdmin() {
                         </div>
                         <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
                           {req.status!=='Demo Given' && (
-                            <button onClick={e=>{ e.stopPropagation(); markDone(req._id); }} style={{
+                            <button type="button" onClick={e=>{ e.stopPropagation(); markDone(req._id); }} style={{
                               display:'flex', alignItems:'center', gap:5, padding:'5px 10px',
                               /* Done button: dark amber outline */
                               background:'rgba(138,112,77,0.07)', border:`1px solid rgba(138,112,77,0.22)`,
@@ -1293,7 +1302,7 @@ export default function PratyekshaMasterAdmin() {
                         <div style={{ fontSize:15, fontWeight:700, color:C.text }}>{selectedDemo.name}</div>
                         <div style={{ fontSize:12, color:C.textDim, marginTop:3 }}>{selectedDemo.restaurant}</div>
                       </div>
-                      <button onClick={()=>setSelectedDemo(null)} style={{ background:C.bgCard, border:`1px solid ${C.border}`, color:C.textDim, padding:7, borderRadius:7, cursor:'pointer', display:'flex' }}>
+                      <button type="button" onClick={()=>setSelectedDemo(null)} style={{ background:C.bgCard, border:`1px solid ${C.border}`, color:C.textDim, padding:7, borderRadius:7, cursor:'pointer', display:'flex' }}>
                         <X size={13} />
                       </button>
                     </div>
@@ -1311,7 +1320,7 @@ export default function PratyekshaMasterAdmin() {
                           const colorMap = { 'Pending':'#d3bfa2', 'Contacted':'#8a704d', 'Demo Given':C.textMid };
                           const c = colorMap[s];
                           return (
-                            <button key={s} onClick={()=>updateStatus(selectedDemo._id, s)} style={{
+                            <button type="button" key={s} onClick={()=>updateStatus(selectedDemo._id, s)} style={{
                               padding:'8px 4px', borderRadius:7,
                               border: `1px solid ${isActive ? c+'55' : C.border}`,
                               background: isActive ? `${c}12` : 'transparent',
@@ -1383,7 +1392,7 @@ export default function PratyekshaMasterAdmin() {
                       }}>
                         <Phone size={13} /> Call Now
                       </a>
-                      <button onClick={()=>{ setOnboarding(p=>({...p, name:selectedDemo.restaurant||'', contact:selectedDemo.phone||'', tableCount:selectedDemo.tables||'12'})); navTo('onboard'); }} style={{
+                      <button type="button" onClick={()=>{ setOnboarding(p=>({...p, name:selectedDemo.restaurant||'', contact:selectedDemo.phone||'', tableCount:selectedDemo.tables||'12'})); navTo('onboard'); }} style={{
                         padding:'11px', background:'rgba(138,112,77,0.07)',
                         border:`1px solid rgba(138,112,77,0.25)`, color:'#8a704d',
                         borderRadius:9, fontSize:13, fontWeight:500, cursor:'pointer',
@@ -1392,7 +1401,7 @@ export default function PratyekshaMasterAdmin() {
                         <UserPlus size={13} /> Onboard This Client
                       </button>
                       {selectedDemo.status!=='Demo Given' && (
-                        <button onClick={()=>markDone(selectedDemo._id)} style={{
+                        <button type="button" onClick={()=>markDone(selectedDemo._id)} style={{
                           padding:'11px', background:C.bgCard, border:`1px solid ${C.border}`,
                           color:C.textMid, borderRadius:9, fontSize:13, fontWeight:400, cursor:'pointer',
                           display:'flex', alignItems:'center', justifyContent:'center', gap:7,
@@ -1418,7 +1427,7 @@ export default function PratyekshaMasterAdmin() {
                   <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:'-0.3px', lineHeight:1 }}>Dashboard</h1>
                 </div>
                 {/* primary CTA: light gold bg */}
-                <button onClick={()=>navTo('onboard')} style={{
+                <button type="button" onClick={()=>navTo('onboard')} style={{
                   display:'flex', alignItems:'center', gap:7, padding:'9px 16px',
                   background:'#d3bfa2', color:'#0a0a0a', border:'none', borderRadius:9,
                   fontSize:13, fontWeight:600, cursor:'pointer',
@@ -1436,7 +1445,7 @@ export default function PratyekshaMasterAdmin() {
               */}
               <div className="p-stat-grid p-stagger" style={{ marginBottom:20 }}>
                 {[
-                  { icon:IndianRupee, label:'Total Revenue', val:stats.totalRevenue||0, prefix:'₹', sub:'All time (gross)',        accent:'#d3bfa2' },
+                  { icon:Wallet, label:'Net Revenue', val:stats.netRevenue ?? stats.totalRevenue ?? 0, prefix:'₹', sub:`Gross ₹${(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString()} − costs ₹${(stats.totalExpenses||0).toLocaleString()}`, accent:'#d3bfa2' },
                   { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:'#d3bfa2' },
                   { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:C.warning },
                   { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:'#8a704d' },
@@ -1487,7 +1496,7 @@ export default function PratyekshaMasterAdmin() {
                     <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{stats.expiringSoon} subscription{stats.expiringSoon>1?'s':''} expiring within 30 days</div>
                     <div style={{ fontSize:12, color:C.textDim, marginTop:2 }}>Reach out proactively before expiry</div>
                   </div>
-                  <button onClick={()=>{ setClientFilter('active'); navTo('clients'); }} style={{
+                  <button type="button" onClick={()=>{ setClientFilter('active'); navTo('clients'); }} style={{
                     padding:'6px 12px', background:'rgba(138,112,77,0.08)', border:`1px solid rgba(138,112,77,0.22)`,
                     color:'#8a704d', borderRadius:7, fontSize:12, fontWeight:500, cursor:'pointer',
                   }}>View</button>
@@ -1501,7 +1510,7 @@ export default function PratyekshaMasterAdmin() {
                     <Trophy size={13} color={C.textDim} strokeWidth={1.5} />
                     <span style={{ fontSize:12, fontWeight:600, color:C.textMid }}>Top Revenue Clients</span>
                   </div>
-                  {clients.sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).slice(0,6).map((c,i) => (
+                  {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).slice(0,6).map((c,i) => (
                     <div key={c._id} style={{ marginBottom:12 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, alignItems:'center' }}>
                         <div style={{ display:'flex', alignItems:'center', gap:7 }}>
@@ -1546,7 +1555,7 @@ export default function PratyekshaMasterAdmin() {
                   <Div />
                   <div style={{ display:'flex', gap:8, marginTop:'auto' }}>
                     {/* primary action: light gold */}
-                    <button onClick={()=>navTo('onboard')} style={{
+                    <button type="button" onClick={()=>navTo('onboard')} style={{
                       flex:1, padding:'10px', background:'#d3bfa2', border:'none', color:'#0a0a0a',
                       borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
                       display:'flex', alignItems:'center', justifyContent:'center', gap:6,
@@ -1554,7 +1563,7 @@ export default function PratyekshaMasterAdmin() {
                       <UserPlus size={12} /> Onboard
                     </button>
                     {/* secondary: dark amber outline */}
-                    <button onClick={()=>navTo('clients')} style={{
+                    <button type="button" onClick={()=>navTo('clients')} style={{
                       flex:1, padding:'10px', background:'transparent',
                       border:`1px solid rgba(138,112,77,0.3)`, color:'#8a704d',
                       borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer',
@@ -1586,7 +1595,7 @@ export default function PratyekshaMasterAdmin() {
                       onChange={e=>setSearchTerm(e.target.value)}
                       style={{ ...inp, paddingLeft:34, width:180, fontSize:13 }} />
                   </div>
-                  <button onClick={()=>navTo('onboard')} style={{
+                  <button type="button" onClick={()=>navTo('onboard')} style={{
                     display:'flex', alignItems:'center', gap:6, padding:'9px 14px',
                     background:'#d3bfa2', border:'none', color:'#0a0a0a',
                     borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap',
@@ -1605,7 +1614,7 @@ export default function PratyekshaMasterAdmin() {
                 { id:'expired',  label:'Expired',  count:stats.expiredCount ||0 },
                 { id:'disabled', label:'Disabled', count:stats.disabledCount||0 },
               ].map(f => (
-                <button key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(clientFilter===f.id)}>
+                <button type="button" key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(clientFilter===f.id)}>
                   {f.label}
                   <span style={{
                     fontSize:11, fontWeight:600, padding:'1px 7px', borderRadius:99,
@@ -1678,7 +1687,7 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
-                            <button onClick={()=>setImportTarget({ tenantId: client.tenantId, tenantName: client.name })} title="Import menu (JSON)" style={{
+                            <button type="button" onClick={()=>setImportTarget({ tenantId: client.tenantId, tenantName: client.name })} title="Import menu (JSON)" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
                               border:`1px solid ${C.border}`, color: C.textDim,
@@ -1686,7 +1695,7 @@ export default function PratyekshaMasterAdmin() {
                             }}>
                               <FileJson size={12} />
                             </button>
-                            <button onClick={()=>setDeleteTarget(client)} title="Delete client permanently" style={{
+                            <button type="button" onClick={()=>setDeleteTarget(client)} title="Delete client permanently" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
                               border:`1px solid ${C.border}`, color: C.textDim,
@@ -1694,7 +1703,7 @@ export default function PratyekshaMasterAdmin() {
                             }}>
                               <Trash2 size={12} />
                             </button>
-                            <button onClick={()=>handleToggle(client)} style={{
+                            <button type="button" onClick={()=>handleToggle(client)} style={{
                               padding:'5px 10px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
                               border:`1px solid ${client.isActive ? `${C.danger}35` : 'rgba(211,191,162,0.25)'}`,
@@ -1704,7 +1713,7 @@ export default function PratyekshaMasterAdmin() {
                               <Power size={10} />
                               <span className="hide-sm">{client.isActive ? 'Disable' : 'Enable'}</span>
                             </button>
-                            <button onClick={()=>handleRenew(client)} style={{
+                            <button type="button" onClick={()=>handleRenew(client)} style={{
                               padding:'5px 11px', borderRadius:7, fontSize:12, fontWeight:600,
                               cursor:'pointer', whiteSpace:'nowrap',
                               /* expired/disabled → solid light gold; active → dark amber outline */
@@ -1752,7 +1761,7 @@ export default function PratyekshaMasterAdmin() {
                         <div style={{ fontSize:11, color:'#8a704d', fontWeight:600, letterSpacing:'0.5px', marginBottom:4 }}>Client Onboarded ✓</div>
                         <div style={{ fontSize:15, fontWeight:700, color:C.text }}>{onboardSuccess.name}</div>
                       </div>
-                      <button onClick={()=>setOnboardSuccess(null)} style={{ background:C.bgCard, border:`1px solid ${C.border}`, color:C.textDim, padding:7, borderRadius:7, cursor:'pointer', display:'flex' }}>
+                      <button type="button" onClick={()=>setOnboardSuccess(null)} style={{ background:C.bgCard, border:`1px solid ${C.border}`, color:C.textDim, padding:7, borderRadius:7, cursor:'pointer', display:'flex' }}>
                         <X size={13} />
                       </button>
                     </div>
@@ -1768,7 +1777,7 @@ export default function PratyekshaMasterAdmin() {
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
                             <code style={{ fontSize:12, color:C.text, fontFamily:'JetBrains Mono, monospace', wordBreak:'break-all' }}>{r.val}</code>
                             {/* copy icon: light gold when copied */}
-                            <button onClick={()=>copyText(r.val, r.key)} style={{ background:'transparent', border:'none', cursor:'pointer', flexShrink:0, color: copied===r.key ? '#d3bfa2' : C.textDim }}>
+                            <button type="button" onClick={()=>copyText(r.val, r.key)} style={{ background:'transparent', border:'none', cursor:'pointer', flexShrink:0, color: copied===r.key ? '#d3bfa2' : C.textDim }}>
                               {copied===r.key ? <Check size={13}/> : <Copy size={13}/>}
                             </button>
                           </div>
@@ -1783,7 +1792,7 @@ export default function PratyekshaMasterAdmin() {
                         <CheckCircle2 size={14} /> {onboardSuccess.categoriesWritten || 0} categories &middot; {onboardSuccess.menuItemsWritten || 0} menu items imported
                       </div>
                     ) : null}
-                    <button onClick={() => setImportTarget({ tenantId: onboardSuccess.tenantId, tenantName: onboardSuccess.name })} className="p-btn-shimmer" style={{
+                    <button type="button" onClick={() => setImportTarget({ tenantId: onboardSuccess.tenantId, tenantName: onboardSuccess.name })} className="p-btn-shimmer" style={{
                       width: '100%', padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
                       background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
@@ -1917,7 +1926,7 @@ export default function PratyekshaMasterAdmin() {
 
                 {/* Submit — primary: light gold solid; secondary: ghost */}
                 <div style={{ display:'flex', gap:10, paddingBottom:20 }}>
-                  <button onClick={handleOnboard} disabled={onboardLoading} style={{
+                  <button type="button" onClick={handleOnboard} disabled={onboardLoading} style={{
                     flex:2, padding:'13px', borderRadius:10, border:'none',
                     background: onboardLoading ? C.bgCard2 : '#d3bfa2',
                     color: onboardLoading ? C.textDim : '#0a0a0a',
@@ -1930,7 +1939,7 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
+                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>
@@ -1941,7 +1950,7 @@ export default function PratyekshaMasterAdmin() {
         )}
 
         {activeSection==='notifications' && (
-          <div className="p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900 }}>
+          <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900, width:'100%' }}>
             <div style={{ marginBottom:22 }}>
               <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Notifications</div>
               <div style={{ fontSize:12.5, color:C.textDim }}>Send a message to one client, several, or everyone — shows up inside their Owner App and Operator Portal only.</div>
@@ -2019,7 +2028,7 @@ export default function PratyekshaMasterAdmin() {
                   </LabeledInput>
                 )}
               </div>
-              <button onClick={sendNotification} disabled={notifSending} className="p-btn-shimmer" style={{
+              <button type="button" onClick={sendNotification} disabled={notifSending} className="p-btn-shimmer" style={{
                 padding:'11px 20px', borderRadius:9, border:'none', cursor: notifSending ? 'not-allowed' : 'pointer',
                 background: notifSending ? C.bgCard2 : '#d3bfa2', color: notifSending ? C.textDim : '#0a0a0a',
                 fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
@@ -2056,7 +2065,7 @@ export default function PratyekshaMasterAdmin() {
                         </div>
                       </div>
                       {pending && (
-                        <button onClick={()=>cancelNotification(n._id)} title="Cancel" style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer', flexShrink:0 }}>
+                        <button type="button" onClick={()=>cancelNotification(n._id)} title="Cancel" style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer', flexShrink:0 }}>
                           <X size={12} />
                         </button>
                       )}
@@ -2069,10 +2078,20 @@ export default function PratyekshaMasterAdmin() {
         )}
 
         {activeSection==='expenses' && (
-          <div className="p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 980 }}>
+          <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 980, width:'100%' }}>
             <div style={{ marginBottom:22 }}>
               <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Operating Costs</div>
-              <div style={{ fontSize:12.5, color:C.textDim }}>Domain, hosting, email, QR stands, SMS/WhatsApp — everything it costs us to run Pratyeksha, netted against platform revenue.</div>
+              <div style={{ fontSize:12.5, color:C.textDim }}>Domain, hosting, email, QR stands, SMS/WhatsApp — every platform cost is deducted from gross collections to show the real net position.</div>
+              <div style={{ display:'flex', gap:7, flexWrap:'wrap', marginTop:12 }}>
+                {[
+                  ['domain','Domain renewal'], ['email','Email / SMTP'], ['qr_stands','QR stand supply'],
+                  ['hosting','Hosting / Render'], ['sms_whatsapp','SMS / WhatsApp']
+                ].map(([category,label]) => (
+                  <button type="button" key={category} onClick={()=>setExpenseForm(f=>({...f, category, label: f.label || label}))} className="p-nav-item" style={{ padding:'7px 10px', borderRadius:8, background:C.bgCard, border:`1px solid ${C.border}`, color:C.textMid, fontSize:11.5, fontWeight:600, cursor:'pointer' }}>
+                    <Plus size={11} /> {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {expenseSummary && (
@@ -2139,7 +2158,7 @@ export default function PratyekshaMasterAdmin() {
                 )}
               </div>
               <div style={{ display:'flex', gap:10 }}>
-                <button onClick={submitExpense} disabled={expenseSaving} className="p-btn-shimmer" style={{
+                <button type="button" onClick={submitExpense} disabled={expenseSaving} className="p-btn-shimmer" style={{
                   padding:'11px 20px', borderRadius:9, border:'none', cursor: expenseSaving ? 'not-allowed' : 'pointer',
                   background: expenseSaving ? C.bgCard2 : '#d3bfa2', color: expenseSaving ? C.textDim : '#0a0a0a',
                   fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
@@ -2148,7 +2167,7 @@ export default function PratyekshaMasterAdmin() {
                   {expenseSaving ? 'Saving…' : (editingExpenseId ? 'Update Cost' : 'Add Cost')}
                 </button>
                 {editingExpenseId && (
-                  <button onClick={resetExpenseForm} style={{ padding:'11px 18px', borderRadius:9, background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel Edit</button>
+                  <button type="button" onClick={resetExpenseForm} style={{ padding:'11px 18px', borderRadius:9, background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel Edit</button>
                 )}
               </div>
             </div>
@@ -2204,8 +2223,8 @@ export default function PratyekshaMasterAdmin() {
                         <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString()}</td>
                         <td style={{ padding:'12px', borderRadius:'0 10px 10px 0', textAlign:'right' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
-                            <button onClick={()=>editExpense(e)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Edit3 size={11} /></button>
-                            <button onClick={()=>deleteExpense(e._id)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.danger, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Trash2 size={11} /></button>
+                            <button type="button" onClick={()=>editExpense(e)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Edit3 size={11} /></button>
+                            <button type="button" onClick={()=>deleteExpense(e._id)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.danger, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Trash2 size={11} /></button>
                           </div>
                         </td>
                       </tr>

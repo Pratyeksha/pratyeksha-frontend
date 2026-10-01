@@ -184,7 +184,8 @@ const GlobalStyles = () => (
    API + SOCKET CONTEXT
    ════════════════════════════════════════════════════════════ */
 // Point this at your deployed backend (matches server.js CORS origins).
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:10000';
+const API_BASE = (((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:10000').replace(/\/api\/?$/, ''));
+const BRAND_LOGO = '/pratyeksha-logo.png';
 
 const api = axios.create({ baseURL: API_BASE });
 
@@ -333,6 +334,7 @@ function OwnerProvider({ tenantId, children }) {
     // disagree with a kitchen that had already cleared.
     s.on('new_order', () => setLiveOrderEvent({ type: 'new_order', _t: Date.now() }));
     s.on('order_status_updated', (order) => setLiveOrderEvent({ type: 'order_status_updated', order, _t: Date.now() }));
+    s.on('order_voided', (payload) => setLiveOrderEvent({ type: 'order_voided', order: payload, _t: Date.now() }));
     // Stock/menu events — same idea: these already fire from the backend
     // (inventory deduction, low-stock threshold, 86'd dish), the Owner App
     // just never listened. Wired to Inventory + Menu pages below.
@@ -346,6 +348,7 @@ function OwnerProvider({ tenantId, children }) {
     s.on('new_reservation', () => setLiveOrderEvent({ type: 'new_reservation', _t: Date.now() }));
     s.on('reservation_updated', () => setLiveOrderEvent({ type: 'reservation_updated', _t: Date.now() }));
     s.on('wastage_logged', () => setLiveStockEvent({ type: 'wastage_logged', _t: Date.now() }));
+    s.on('inventory_updated', () => setLiveStockEvent({ type: 'inventory_updated', _t: Date.now() }));
     // Staff attendance — backend fix (separate patch) adds these emits;
     // without them clock-in/out had literally no real-time path at all.
     s.on('staff_clocked_in', () => setLiveStaffEvent({ type: 'staff_clocked_in', _t: Date.now() }));
@@ -652,7 +655,7 @@ const ErrorState = ({ message, onRetry }) => (
     <WifiOff size={22} color={T.danger} style={{ marginBottom: 10 }} />
     <div style={{ fontSize: 13, color: T.textMed, marginBottom: 14 }}>{message || 'Could not load this data.'}</div>
     {onRetry && (
-      <button onClick={onRetry} className="pown-btn" style={{
+      <button type="button" onClick={onRetry} className="pown-btn" style={{
         background: T.primarySoft, color: T.primary, border: `1px solid ${T.borderStrong}`,
         borderRadius: 10, padding: '8px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex', gap: 6, alignItems: 'center'
       }}><RefreshCcw size={13} /> Retry</button>
@@ -669,7 +672,7 @@ const DataBoundary = ({ loading, error, empty, emptyProps, onRetry, skeleton, ch
 };
 
 const IconBtn = ({ icon: Icon, onClick, active, title }) => (
-  <button onClick={onClick} title={title} className="pown-btn" style={{
+  <button type="button" onClick={onClick} title={title} className="pown-btn" style={{
     width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: active ? T.primarySoft : 'transparent', border: `1px solid ${active ? T.borderStrong : T.border}`,
     color: active ? T.primary : T.textMed
@@ -679,7 +682,7 @@ const IconBtn = ({ icon: Icon, onClick, active, title }) => (
 const PillTabs = ({ options, value, onChange }) => (
   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
     {options.map(opt => (
-      <button key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
+      <button type="button" key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
         padding: '7px 13px', borderRadius: 100, fontSize: 12, fontWeight: 700,
         background: value === opt.value ? T.primary : 'transparent',
         color: value === opt.value ? '#0a0a0a' : T.textMed,
@@ -690,7 +693,7 @@ const PillTabs = ({ options, value, onChange }) => (
 );
 
 const Toggle = ({ checked, onChange }) => (
-  <button onClick={() => onChange(!checked)} className="pown-btn" style={{
+  <button type="button" onClick={() => onChange(!checked)} className="pown-btn" style={{
     width: 40, height: 23, borderRadius: 100, background: checked ? T.primary : 'rgba(255,255,255,0.12)',
     position: 'relative', flexShrink: 0
   }}>
@@ -714,7 +717,7 @@ const Modal = ({ open, onClose, title, children, width = 420 }) => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h3>
-          <button onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
+          <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -735,7 +738,7 @@ const inputStyle = {
 };
 
 const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style }) => (
-  <button onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
+  <button type="button" onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
     background: disabled ? 'rgba(211,191,162,0.35)' : `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`,
     color: '#0a0a0a', border: 'none', boxShadow: disabled ? 'none' : '0 8px 20px -8px rgba(211,191,162,0.55)',
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 800, display: 'inline-flex',
@@ -744,7 +747,7 @@ const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style }) => (
 );
 
 const GhostBtn = ({ children, onClick, icon: Icon, style }) => (
-  <button onClick={onClick} className="pown-btn" style={{
+  <button type="button" onClick={onClick} className="pown-btn" style={{
     background: 'transparent', color: T.textMed, border: `1px solid ${T.border}`,
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex',
     alignItems: 'center', gap: 7, ...style
@@ -781,7 +784,7 @@ const AuthShell = ({ children }) => (
         <div style={{
           width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 24px -6px rgba(211,191,162,0.5)'
-        }}><Store size={19} color="#0a0a0a" strokeWidth={2.25} /></div>
+        }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:6, background:'#fff', borderRadius:10 }} /></div>
         <div>
           <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
@@ -798,7 +801,7 @@ const AuthSplash = () => (
     <div className="pown-pulse" style={{
       width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}><Store size={19} color="#0a0a0a" strokeWidth={2.25} /></div>
+    }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:6, background:'#fff', borderRadius:10 }} /></div>
   </div>
 );
 
@@ -927,6 +930,7 @@ const NAV_ITEMS = [
   { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat },
   { key: 'staff', label: 'Staff & Payroll', icon: Users },
   { key: 'customers', label: 'Customers', icon: UserCircle2 },
+  { key: 'insights', label: 'Executive Insights', icon: Gauge, badge: true },
   { key: 'alerts', label: 'Alerts', icon: Bell },
   { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck },
   { key: 'reports', label: 'Reports & Exports', icon: ClipboardList },
@@ -970,7 +974,7 @@ const InstallAppButton = () => {
 
   return (
     <>
-      <button onClick={() => isIos ? setShowIosHelp(true) : promptInstall()} className="pown-btn pown-shimmer-btn" style={{
+      <button type="button" onClick={() => isIos ? setShowIosHelp(true) : promptInstall()} className="pown-btn pown-shimmer-btn" style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, padding: '11px 12px',
         borderRadius: 12, background: `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`, color: '#0a0a0a',
         border: 'none', fontSize: 12.5, fontWeight: 800, boxShadow: '0 8px 20px -8px rgba(211,191,162,0.55)'
@@ -1008,7 +1012,7 @@ const InstallBanner = () => {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <PrimaryBtn icon={Download} onClick={() => isIos ? setShowIosHelp(true) : promptInstall()}>Install</PrimaryBtn>
-        <button onClick={dismiss} className="pown-btn" style={{ background: 'transparent', color: T.textLow, padding: 6 }}><X size={16} /></button>
+        <button type="button" onClick={dismiss} className="pown-btn" style={{ background: 'transparent', color: T.textLow, padding: 6 }}><X size={16} /></button>
       </div>
       <IosInstallModal open={showIosHelp} onClose={() => setShowIosHelp(false)} />
     </Card>
@@ -1027,12 +1031,8 @@ const Sidebar = () => {
       {/* Pinned header — logo + owner chip, never scrolls */}
       <div style={{ padding: '26px 22px 18px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 6px 18px -4px rgba(211,191,162,0.5)`
-          }}>
-            <Store size={17} color="#0a0a0a" strokeWidth={2.5} />
+          <div style={{ width: 42, height: 34, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5, boxShadow: `0 6px 18px -4px rgba(211,191,162,0.28)`, flexShrink: 0 }}>
+            <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
@@ -1069,7 +1069,7 @@ const Sidebar = () => {
       {/* Pinned footer — install / logout, never scrolls */}
       <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10, flexShrink: 0 }}>
         <InstallAppButton />
-        <button onClick={logout} className="pown-btn" style={{
+        <button type="button" onClick={logout} className="pown-btn" style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
           borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
         }}><LogOut size={14} /> Log out</button>
@@ -1098,16 +1098,13 @@ const MobileDrawer = ({ open, onClose }) => {
       }}>
         <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 10, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}><Store size={16} color="#0a0a0a" strokeWidth={2.5} /></div>
+            <div style={{ width: 40, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5 }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></div>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: 1.2 }}>PRATYEKSHA</div>
               <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.8, color: T.primary }}>OWNER SUITE</div>
             </div>
           </div>
-          <button onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textLow }}><X size={18} /></button>
+          <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textLow }}><X size={18} /></button>
         </div>
         {ownerName && (
           <div style={{ margin: '0 16px 8px', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', background: 'rgba(255,255,255,0.03)', borderRadius: 11 }}>
@@ -1133,7 +1130,7 @@ const MobileDrawer = ({ open, onClose }) => {
           ))}
         </nav>
         <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
-          <button onClick={logout} className="pown-btn" style={{
+          <button type="button" onClick={logout} className="pown-btn" style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
             borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
           }}><LogOut size={14} /> Log out</button>
@@ -1161,7 +1158,7 @@ const BottomNav = ({ onMore }) => {
           <span style={{ fontSize: 9.5, fontWeight: 700 }}>{item.label.split(' ')[0]}</span>
         </NavLink>
       ))}
-      <button onClick={onMore} className="pown-btn" style={{
+      <button type="button" onClick={onMore} className="pown-btn" style={{
         flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
         background: 'transparent', color: T.textLow
       }}>
@@ -1185,7 +1182,7 @@ const TopBar = ({ onMenu }) => {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {onMenu && (
-          <button onClick={onMenu} className="pown-btn" style={{
+          <button type="button" onClick={onMenu} className="pown-btn" style={{
             width: 36, height: 36, flexShrink: 0, borderRadius: 10, background: T.surfaceRaised,
             border: `1px solid ${T.border}`, color: T.textHigh, display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}><MenuIcon size={17} /></button>
@@ -1199,7 +1196,7 @@ const TopBar = ({ onMenu }) => {
         </div>
       </div>
       <div style={{ position: 'relative' }}>
-        <button onClick={() => setOutletMenuOpen(v => !v)} className="pown-btn" style={{
+        <button type="button" onClick={() => setOutletMenuOpen(v => !v)} className="pown-btn" style={{
           display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
           borderRadius: 12, padding: '9px 14px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, boxShadow: T.glow
         }}>
@@ -1407,7 +1404,6 @@ const DashboardPage = () => {
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <LiveClock />
-      <InstallBanner />
       {/* Hero KPI row */}
       <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
         <KpiCard hero icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${animatedRevenue.toLocaleString('en-IN')}`}
@@ -1472,7 +1468,7 @@ const DashboardPage = () => {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <GhostBtn icon={ChefHat} onClick={() => navigate(`/owner/${tenantId}/kitchen`)}>View Live Orders</GhostBtn>
         <GhostBtn icon={Package} onClick={() => navigate(`/owner/${tenantId}/inventory`)}>Check Inventory</GhostBtn>
-        <GhostBtn icon={LayoutGrid} onClick={() => navigate(`/owner/${tenantId}/revenue`)}>View Floor Map</GhostBtn>
+        <GhostBtn icon={TrendingUp} onClick={() => navigate(`/owner/${tenantId}/revenue`)}>View Revenue</GhostBtn>
       </div>
     </div>
   );
@@ -1512,7 +1508,9 @@ const RevenuePage = () => {
   // once and then sat stale indefinitely if left open. Now it polls as a
   // backstop AND refetches instantly whenever an order settles.
   const { data, loading, error, refetch } = useOwnerData('/api/owner/revenue/summary/:tenantId', { params: dates, refreshMs: 45000 });
-  useEffect(() => { if (liveOrderEvent?.type === 'order_status_updated' && liveOrderEvent.order?.status === 'settled') refetch(); }, [liveOrderEvent]); // eslint-disable-line
+  useEffect(() => {
+    if (liveOrderEvent?.type === 'order_voided' || (liveOrderEvent?.type === 'order_status_updated' && liveOrderEvent.order?.status === 'settled')) refetch();
+  }, [liveOrderEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1772,7 +1770,7 @@ const MenuPage = () => {
                         <td style={{ padding: '11px 20px', textAlign: 'right' }} className="pown-mono">{d.marginPct}%</td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }}><Badge tone={QUADRANT_META[d.quadrant.toLowerCase()]?.tone}>{d.quadrant}</Badge></td>
                         <td style={{ padding: '11px 20px', textAlign: 'right' }}>
-                          <button onClick={() => setPriceModal(d)} className="pown-btn" style={{ background: 'transparent', color: T.primary, fontSize: 11.5, fontWeight: 700 }}>Reprice</button>
+                          <button type="button" onClick={() => setPriceModal(d)} className="pown-btn" style={{ background: 'transparent', color: T.primary, fontSize: 11.5, fontWeight: 700 }}>Reprice</button>
                         </td>
                       </tr>
                     ))}
@@ -1861,7 +1859,7 @@ const InventoryPage = () => {
                 )}
               <GhostBtn icon={Phone} style={{ marginTop: 14 }} onClick={() => {
                 const msg = encodeURIComponent(`Hi, please deliver:\n${data.criticalItems.slice(0, 6).map(i => `- ${i.name}`).join('\n')}\n\nThank you.`);
-                window.open(`https://wa.me/?text=${msg}`, '_blank');
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
               }}>Contact Vendor on WhatsApp</GhostBtn>
             </Card>
 
@@ -2195,7 +2193,7 @@ const AlertsPage = () => {
                     {new Date(n.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
                   </div>
                 </div>
-                {!n.isRead && <button onClick={() => markNotifRead(n._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11, flexShrink: 0 }}>Mark read</button>}
+                {!n.isRead && <button type="button" onClick={() => markNotifRead(n._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11, flexShrink: 0 }}>Mark read</button>}
               </div>
             );
           })}
@@ -2227,7 +2225,7 @@ const AlertsPage = () => {
                         {new Date(a.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · {a.category}
                       </div>
                     </div>
-                    {!a.isRead && <button onClick={() => markRead(a._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11 }}>Mark read</button>}
+                    {!a.isRead && <button type="button" onClick={() => markRead(a._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11 }}>Mark read</button>}
                   </div>
                 );
               })}
@@ -2289,7 +2287,7 @@ const CompliancePage = () => {
       `Total GST due: ${rupee(data.totalGST)}\n\nFY turnover so far: ${rupee(data.fyTurnoverSoFar)}\nProjected annual: ${rupee(data.projectedAnnual)}\nRegime: ${data.regime}\n\n` +
       `(Full invoice register attached separately — download from the Owner App and attach before sending.)`
     );
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   return (
@@ -2490,6 +2488,48 @@ const ReportsPage = () => {
 };
 
 /* ════════════════════════════════════════════════════════════
+   EXECUTIVE INSIGHTS — compact owner decision centre
+   ════════════════════════════════════════════════════════════ */
+const ExecutiveInsightsPage = () => {
+  const navigate = useNavigate();
+  const { tenantId, liveOrderEvent, liveStockEvent } = useOwner();
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/insights/:tenantId', { refreshMs: 60000 });
+  useEffect(() => { if (liveOrderEvent || liveStockEvent) refetch(); }, [liveOrderEvent, liveStockEvent]);
+  return (
+    <div className="pown-fade-in" style={{ display:'grid', gap:16 }}>
+      <Card interactive style={{ padding:'22px', background:`linear-gradient(135deg, ${T.surfaceRaised}, rgba(211,191,162,0.07))`, overflow:'hidden', position:'relative' }}>
+        <div style={{ position:'absolute', width:220, height:220, right:-80, top:-100, borderRadius:'50%', background:T.primarySoft, filter:'blur(4px)', pointerEvents:'none' }} />
+        <Badge tone="gold">Owner decision centre</Badge>
+        <div style={{ fontSize:21, fontWeight:800, marginTop:10, letterSpacing:-0.4 }}>Know what needs attention now.</div>
+        <div style={{ fontSize:12, color:T.textMed, marginTop:5, lineHeight:1.6, maxWidth:620 }}>A compact snapshot built from settled revenue anchors, live stock and stored customer totals.</div>
+      </Card>
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && <>
+          <div className="pown-stagger" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(165px,1fr))', gap:12 }}>
+            <KpiCard hero icon={IndianRupee} label="TODAY" value={`₹${Number(data.today.revenue||0).toLocaleString('en-IN')}`} sub={`${data.today.orders} settled bills`} />
+            <KpiCard icon={TrendingUp} label="MONTH" value={`₹${Number(data.month.revenue||0).toLocaleString('en-IN')}`} sub={`${data.month.orders} settled orders`} />
+            <KpiCard icon={Receipt} label="GST" value={`₹${Number(data.month.gst||0).toLocaleString('en-IN')}`} sub="stored invoice tax" />
+            <KpiCard icon={Package} label="LOW STOCK" value={data.inventory.lowStock} sub={`${data.inventory.total} inventory items`} tone={data.inventory.lowStock ? 'danger' : 'default'} />
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:14 }}>
+            <Card><SectionHeading icon={Wallet} title="Financial pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Average order value" value={`₹${Number(data.month.avgOrderValue||0).toLocaleString('en-IN')}`} /><InsightRow label="Month GST" value={`₹${Number(data.month.gst||0).toLocaleString('en-IN')}`} /><InsightRow label="Settled orders" value={data.month.orders} /></div></Card>
+            <Card><SectionHeading icon={Package} title="Stock pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Inventory value" value={`₹${Number(data.inventory.stockValue||0).toLocaleString('en-IN')}`} /><InsightRow label="Low-stock items" value={data.inventory.lowStock} /><InsightRow label="Total items" value={data.inventory.total} /></div></Card>
+            <Card><SectionHeading icon={Users} title="Customer pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Customers" value={data.customers.total} /><InsightRow label="Loyal customers" value={data.customers.loyal} /><InsightRow label="Loyalty rate" value={`${data.customers.loyaltyRate}%`} /></div></Card>
+          </div>
+          <Card><SectionHeading icon={Zap} title="Suggested actions" /><div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:10 }}>
+            {data.inventory.lowStock > 0 && <InsightAction label="Review low stock" onClick={() => navigate(`/owner/${tenantId}/inventory`)} />}
+            <InsightAction label="Review revenue & sales" onClick={() => navigate(`/owner/${tenantId}/revenue`)} />
+            <InsightAction label="Review customer retention" onClick={() => navigate(`/owner/${tenantId}/customers`)} />
+          </div></Card>
+        </>}
+      </DataBoundary>
+    </div>
+  );
+};
+const InsightRow = ({ label, value }) => <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'10px 0', borderTop:`1px solid ${T.border}` }}><span style={{ fontSize:12, color:T.textMed }}>{label}</span><span className="pown-mono" style={{ fontSize:12.5, fontWeight:800, color:T.textHigh }}>{value}</span></div>;
+const InsightAction = ({ label, onClick }) => <button type="button" onClick={onClick} className="pown-btn" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 13px', background:T.primarySoft, border:`1px solid ${T.borderStrong}`, color:T.textHigh, borderRadius:11, fontSize:12.5, fontWeight:700 }}>{label}<ChevronRight size={14} color={T.primary} /></button>;
+
+/* ════════════════════════════════════════════════════════════
    "WHY PRATYEKSHA" — growth-oriented value tab
    ════════════════════════════════════════════════════════════ */
 const GROWTH_PILLARS = [
@@ -2592,7 +2632,7 @@ const GrowthPage = () => {
         <SectionHeading icon={LayoutGrid} title="Everything included, in one app" />
         <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
           {NAV_ITEMS.filter(i => !['growth', 'settings'].includes(i.key)).map(item => (
-            <button key={item.key} onClick={() => navigate(`/owner/${tenantId}/${item.key}`)} className="pown-btn pown-row-hover" style={{
+            <button type="button" key={item.key} onClick={() => navigate(`/owner/${tenantId}/${item.key}`)} className="pown-btn pown-row-hover" style={{
               display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '13px 14px',
               background: T.surface, border: `1px solid ${T.border}`, borderRadius: 13, color: T.textHigh
             }}>
@@ -2691,10 +2731,10 @@ const SettingsPage = () => {
               <SectionHeading icon={Target} title="Revenue Targets" />
               <div className="pown-grid-2">
                 <Field label="DAILY TARGET (\u20B9)">
-                  <input type="number" value={form.dailyTarget} onChange={e => setForm(f => ({ ...f, dailyTarget: Number(e.target.value) }))} style={inputStyle} />
+                  <input type="number" value={form.dailyTarget} onChange={e => setForm(f => ({ ...f, dailyTarget: e.target.value }))} style={inputStyle} />
                 </Field>
                 <Field label="MONTHLY TARGET (\u20B9)">
-                  <input type="number" value={form.monthlyTarget} onChange={e => setForm(f => ({ ...f, monthlyTarget: Number(e.target.value) }))} style={inputStyle} />
+                  <input type="number" value={form.monthlyTarget} onChange={e => setForm(f => ({ ...f, monthlyTarget: e.target.value }))} style={inputStyle} />
                 </Field>
               </div>
             </Card>
@@ -2827,7 +2867,7 @@ const EightySixForm = ({ tenantId, onDone }) => {
             background: 'rgba(255,255,255,0.02)', borderRadius: 10
           }}>
             <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.name}</span>
-            <button onClick={() => hideDish(d)} disabled={hiding === d._id} className="pown-btn" style={{
+            <button type="button" onClick={() => hideDish(d)} disabled={hiding === d._id} className="pown-btn" style={{
               background: T.dangerSoft, color: T.danger, border: 'none', borderRadius: 8,
               padding: '6px 11px', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5
             }}><EyeOff size={12} />{hiding === d._id ? 'Hiding…' : '86 It'}</button>
@@ -2884,6 +2924,7 @@ const OwnerAppInner = () => (
       <Route path="kitchen" element={<KitchenPage />} />
       <Route path="staff" element={<StaffPage />} />
       <Route path="customers" element={<CustomersPage />} />
+      <Route path="insights" element={<ExecutiveInsightsPage />} />
       <Route path="alerts" element={<AlertsPage />} />
       <Route path="compliance" element={<CompliancePage />} />
       <Route path="reports" element={<ReportsPage />} />
@@ -2945,7 +2986,7 @@ export function OwnerLauncher() {
           width: 52, height: 52, borderRadius: 15, margin: '0 auto 18px',
           background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 26px -6px rgba(211,191,162,0.5)'
-        }}><Store size={24} color="#0a0a0a" strokeWidth={2.25} /></div>
+        }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:7, background:'#fff', borderRadius:15 }} /></div>
         <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Welcome to Pratyeksha Owner</div>
         <div style={{ fontSize: 12, color: T.textLow, marginBottom: 20, lineHeight: 1.6 }}>Enter your outlet ID to open your dashboard. You'll only need to do this once on this device.</div>
         <input value={outletInput} onChange={e => setOutletInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && go()}

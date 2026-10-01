@@ -9,6 +9,8 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { io } from "socket.io-client";
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
+import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+import PwaInstallButton from './PwaInstallButton.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChefHat, Timer, Hourglass, BellRing, StickyNote,
@@ -21,7 +23,7 @@ import {
   PackageX, ShieldAlert, Wrench
 } from 'lucide-react';
 
-const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+const BASE_URL = API_BASE_URL;
 
 /* ─── helpers ─── */
 const useWindowSize = () => {
@@ -70,6 +72,12 @@ const UNIT_OPTIONS   = ['kg','g','litre','ml','pcs','plate','portion'];
 ═══════════════════════════════════════════════════════════════════ */
 const KitchenView = () => {
   const { tenantId } = useParams();
+
+  useEffect(() => {
+    if (tenantId) {
+      try { localStorage.setItem('kitchen_tenant_id', tenantId); } catch {}
+    }
+  }, [tenantId]);
   const { w }        = useWindowSize();
 
   const isMobile      = w < 600;
@@ -246,10 +254,12 @@ const KitchenView = () => {
     window.addEventListener('online',  onOnline);
     window.addEventListener('offline', onOffline);
 
-    const socket = io('https://pratyeksha-backend.onrender.com', { transports: ['polling','websocket'] });
+    const socket = io(SOCKET_BASE_URL, { transports: ['polling','websocket'], reconnection: true });
     socketRef.current = socket;
-    socket.emit('join_restaurant', tenantId);
+    const joinRestaurant = () => socket.emit('join_restaurant', tenantId);
+    socket.on('connect', joinRestaurant);
     socket.on('connect',    () => setIsOnline(true));
+    if (socket.connected) joinRestaurant();
     socket.on('disconnect', () => setIsOnline(false));
 
     socket.on('new_order', newOrder => {
@@ -284,6 +294,22 @@ const KitchenView = () => {
       fetchActiveOrders();
     });
 
+    // Orders can be advanced by another KDS/operator device. Remove them from
+    // this pending queue immediately instead of waiting for a refresh.
+    socket.on('order_status_updated', data => {
+      if (!data || data.tenantId && data.tenantId !== tenantId) return;
+      const orderId = data._id || data.orderId;
+      if (!orderId) return;
+      if (data.status && data.status !== 'pending') {
+        setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
+      }
+    });
+    socket.on('order_voided', data => {
+      if (!data) return;
+      const orderId = data.orderId || data._id;
+      if (orderId) setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
+    });
+
     // ── Keep menu availability live — an item 86'd or restored from the
     // Operator Portal (or auto-hidden by stock depletion) used to only reach
     // this screen's dish list whenever something else happened to trigger a
@@ -296,8 +322,9 @@ const KitchenView = () => {
     });
 
     return () => {
-      ['new_order','kds_item_cross_sync','order_modification_detected','menu_updated']
+      ['new_order','kds_item_cross_sync','order_modification_detected','order_status_updated','order_voided','menu_updated']
         .forEach(ev => socket.off(ev));
+      socket.off('connect', joinRestaurant);
       socket.disconnect();
       window.removeEventListener('online',  onOnline);
       window.removeEventListener('offline', onOffline);
@@ -320,7 +347,7 @@ const KitchenView = () => {
     // longer be tapped again while the save is still in flight. Restore it on failure.
     setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
-      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served' });
+      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served', tenantId });
     } catch (err) {
       console.error(err);
       setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
@@ -537,7 +564,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         <div style={rs.sidebarHeaderIcon}><Layers size={14} color="#56684c" /></div>
         <span style={{ fontSize:'0.56rem', fontWeight:900, color:'rgba(107,127,95,0.59)', letterSpacing:'2.5px', flex:1, textTransform:'uppercase' }}>STATIONS</span>
         {inDrawer && (
-          <button onClick={() => setSidebarOpen(false)} style={{ background:'rgba(196,178,148,0.16)', border:'1px solid rgba(196,178,148,0.4)', color:'#8b8e88', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setSidebarOpen(false)} style={{ background:'rgba(196,178,148,0.16)', border:'1px solid rgba(196,178,148,0.4)', color:'#8b8e88', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
             <X size={14} />
           </button>
         )}
@@ -547,7 +574,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       {!tenantOnlyVeg && (
         <div style={{ display:'flex', background:'#f1ebdf', borderRadius:9, border:'1px solid rgba(196,178,148,0.28)', padding:3, marginBottom:10, flexShrink:0 }}>
           {[false,true].map(nv => (
-            <button key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
+            <button type="button" key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
               style={{ flex:1, padding:'7px 4px', borderRadius:7, border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all 0.15s',
                 background: isNonVegMode===nv ? (nv ? 'rgba(163,59,59,0.12)' : 'rgba(74,124,63,0.16)') : 'transparent',
                 color: isNonVegMode===nv ? (nv ? '#a33b3b' : '#3f6b37') : '#7d8079' }}>
@@ -568,7 +595,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           const sel = selectedCategory === 'ALL' && !showMetricsDashboard;
           const total = orders.filter(o => ['pending','ready'].includes(o.status)).length;
           return (
-            <button onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
+            <button type="button" onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <Coffee size={12} color={sel?'#ffffff':'#8b8e88'} />
                 <span>ALL SECTIONS</span>
@@ -583,7 +610,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           const count = categoryPendingCounts[k] || 0;
           const sel = selectedCategory === k && !showMetricsDashboard;
           return (
-            <button key={cat._id} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
+            <button type="button" key={cat._id} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
                 <Flame size={12} color={sel?'#ffffff':count>0?'#6e8062':'#8f928a'} style={{ flexShrink:0 }} />
                 <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase', fontSize:'0.62rem' }}>{cat.name}</span>
@@ -603,7 +630,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
         {/* Speed Logs node */}
         <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid rgba(196,178,148,0.24)', display:'flex', flexDirection:'column', gap:4 }}>
-          <button onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(showMetricsDashboard), justifyContent:'space-between' }}>
+          <button type="button" onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(showMetricsDashboard), justifyContent:'space-between' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <TrendingUp size={12} color={showMetricsDashboard?'#ffffff':'#8b8e88'} />
               SPEED LOGS
@@ -613,12 +640,15 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             )}
           </button>
           {/* Refresh */}
-          <button onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(196,178,148,0.28)', background:'transparent', color:'#8f928a', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
+          <button type="button" onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(196,178,148,0.28)', background:'transparent', color:'#8f928a', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.color='#56684c'; e.currentTarget.style.borderColor='rgba(107,127,95,0.38)'; }}
             onMouseLeave={e => { e.currentTarget.style.color='#8f928a'; e.currentTarget.style.borderColor='rgba(196,178,148,0.28)'; }}>
             <RefreshCw size={12} /> REFRESH ORDERS
           </button>
         </div>
+      </div>
+      <div style={{ paddingTop:10, marginTop:10, borderTop:'1px solid rgba(196,178,148,0.24)', flexShrink:0 }}>
+        <PwaInstallButton kind="kitchen" compact light />
       </div>
     </div>
   );
@@ -652,7 +682,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         {/* Left: menu + brand */}
         <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
           {showDrawerToggle && (
-            <button onClick={() => setSidebarOpen(true)} style={rs.iconBtn}>
+            <button type="button" onClick={() => setSidebarOpen(true)} style={rs.iconBtn}>
               <AlignJustify size={18} color="#56684c" />
             </button>
           )}
@@ -661,9 +691,12 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               <ChefHat size={isMobile?15:18} color="#56684c" />
             </div>
             <div>
-              <h1 style={{ margin:0, fontWeight:900, letterSpacing:'3px', fontSize:isMobile?'0.8rem':isTablet?'0.85rem':'0.92rem', color:'#2e3134', fontFamily:"'Outfit',sans-serif", lineHeight:1.1 }}>
-                PRATYEKSHA <span style={{ color:'rgba(107,127,95,0.59)', fontWeight:600, letterSpacing:'1px', fontSize:'0.6em' }}>KDS</span>
-              </h1>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ background:'#f7f3eb', borderRadius:7, padding:'3px 5px', border:'1px solid rgba(196,178,148,0.35)' }}>
+                  <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{ width:isMobile?105:130, height:'auto', display:'block' }} />
+                </div>
+                <span style={{ color:'rgba(107,127,95,0.75)', fontWeight:800, letterSpacing:'1.5px', fontSize:'0.62rem' }}>KDS</span>
+              </div>
               <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
                 <span style={isOnline ? rs.dotGold : rs.dotRed} />
                 <span style={{ color:'#8a8d85', fontSize:'0.5rem', fontWeight:900, letterSpacing:'1.5px' }}>
@@ -687,7 +720,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 { val:'DINEIN', lbl:'DINE-IN',  icon:<UtensilsCrossed size={11} /> },
                 { val:'PARCEL', lbl:'PARCEL',   icon:<Package size={11} /> },
               ].map(s => (
-                <button key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(196,178,148,0.4)' : 'transparent', border:'none', color: stationFilter===s.val ? '#56684c' : '#7d8079', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
+                <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(196,178,148,0.4)' : 'transparent', border:'none', color: stationFilter===s.val ? '#56684c' : '#7d8079', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
                   <span style={{ color: stationFilter===s.val ? '#56684c' : '#8f928a' }}>{s.icon}</span>
                   {s.lbl}
                 </button>
@@ -696,25 +729,25 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           )}
 
           {/* Search toggle */}
-          <button onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)', background: showSearch ? 'rgba(196,178,148,0.28)' : '#faf7f1' }}>
+          <button type="button" onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)', background: showSearch ? 'rgba(196,178,148,0.28)' : '#faf7f1' }}>
             <Search size={14} color={showSearch?'#56684c':'#8b8e88'} />
           </button>
 
           {/* Voice */}
-          <button onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(107,127,95,0.73)' : 'rgba(196,178,148,0.32)', background: isListening ? 'rgba(196,178,148,0.4)' : '#faf7f1' }}>
+          <button type="button" onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(107,127,95,0.73)' : 'rgba(196,178,148,0.32)', background: isListening ? 'rgba(196,178,148,0.4)' : '#faf7f1' }}>
             <Mic size={14} color={isListening?'#56684c':'#8b8e88'} />
             {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isListening?'#56684c':'#8b8e88' }}>{isListening ? 'LIVE' : 'VOICE'}</span>}
           </button>
 
           {/* Aggregate toggle */}
-          <button onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(196,178,148,0.28)' : '#faf7f1', borderColor: isAggregateView ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)' }}>
+          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(196,178,148,0.28)' : '#faf7f1', borderColor: isAggregateView ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)' }}>
             {isAggregateView ? <LayoutGrid size={14} color="#56684c" /> : <BarChart3 size={14} color="#8b8e88" />}
             {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isAggregateView?'#56684c':'#8b8e88' }}>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
           </button>
 
           {/* Recall */}
           {recallQueue.length > 0 && (
-            <button onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(107,127,95,0.45)', background:'rgba(196,178,148,0.2)', position:'relative' }}>
+            <button type="button" onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(107,127,95,0.45)', background:'rgba(196,178,148,0.2)', position:'relative' }}>
               <History size={14} color="#56684c" />
               {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color:'#56684c' }}>RECALL</span>}
               <div style={{ position:'absolute', top:-6, right:-6, width:16, height:16, borderRadius:'50%', background:'linear-gradient(135deg,#71856a,#586b4f)', color:'#ffffff', fontSize:'0.48rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>{recallQueue.length}</div>
@@ -722,7 +755,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           )}
 
           {/* Wastage */}
-          <button onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)', background: showWastagePanel ? 'rgba(196,178,148,0.28)' : '#faf7f1', position:'relative' }}>
+          <button type="button" onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(107,127,95,0.52)' : 'rgba(196,178,148,0.32)', background: showWastagePanel ? 'rgba(196,178,148,0.28)' : '#faf7f1', position:'relative' }}>
             <Trash2 size={14} color={showWastagePanel?'#56684c':'#8b8e88'} />
             {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: showWastagePanel?'#56684c':'#8b8e88' }}>WASTAGE</span>}
             {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length > 0 && (
@@ -731,6 +764,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               </div>
             )}
           </button>
+
 
           {/* Ticket count pill */}
           <div style={{ background: filteredOrders.length>0 ? 'linear-gradient(135deg,#71856a,#586b4f)' : '#faf7f1', padding:'7px 13px', borderRadius:10, display:'flex', alignItems:'center', gap:6, flexShrink:0, border: filteredOrders.length===0 ? '1px solid rgba(196,178,148,0.32)' : 'none', minHeight:38 }}>
@@ -748,11 +782,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             <Search size={13} color="#8c7d64" />
             <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source, or dish name…" style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#2e3134', fontSize:'0.82rem', fontFamily:"'Outfit',sans-serif" }} />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} style={{ background:'rgba(196,178,148,0.24)', border:'1px solid rgba(196,178,148,0.48)', color:'#6c6f6f', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
+              <button type="button" onClick={() => setSearchQuery('')} style={{ background:'rgba(196,178,148,0.24)', border:'1px solid rgba(196,178,148,0.48)', color:'#6c6f6f', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
                 <X size={11} /> CLEAR
               </button>
             )}
-            <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background:'transparent', border:'none', color:'#8f928a', cursor:'pointer', display:'flex', alignItems:'center' }}>
+            <button type="button" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background:'transparent', border:'none', color:'#8f928a', cursor:'pointer', display:'flex', alignItems:'center' }}>
               <X size={14} />
             </button>
           </motion.div>
@@ -812,7 +846,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 </p>
               </div>
             </div>
-            <button onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}
+            <button type="button" onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}
               style={{ background:'#ffffff', border:'1px solid rgba(181,72,60,0.3)', color:'#b5483c', padding:'9px 16px', borderRadius:8, fontSize:'0.66rem', fontWeight:900, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, transition:'all 0.15s' }}>
               ACKNOWLEDGE
             </button>
@@ -891,7 +925,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowMetricsDashboard(false)}
+              <button type="button" onClick={() => setShowMetricsDashboard(false)}
                 style={{ background:'transparent', border:'1px solid rgba(107,127,95,0.38)', color:'#56684c', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><ChevronLeft size={13} /> BACK TO KITCHEN</span>
               </button>
@@ -964,9 +998,9 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 </div>
                 {/* Prev/Next */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-                  <button onClick={() => setMobileCardIndex(i => Math.max(0,i-1))} disabled={safeCardIndex===0} style={{ ...rs.navBtn, opacity: safeCardIndex===0 ? 0.25 : 1 }}><ChevronLeft size={16} /> PREV</button>
+                  <button type="button" onClick={() => setMobileCardIndex(i => Math.max(0,i-1))} disabled={safeCardIndex===0} style={{ ...rs.navBtn, opacity: safeCardIndex===0 ? 0.25 : 1 }}><ChevronLeft size={16} /> PREV</button>
                   <span style={{ color:'#7d8079', fontSize:'0.7rem', fontWeight:900, fontFamily:'monospace' }}>{safeCardIndex+1} / {filteredOrders.length}</span>
-                  <button onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length-1,i+1))} disabled={safeCardIndex===filteredOrders.length-1} style={{ ...rs.navBtn, opacity: safeCardIndex===filteredOrders.length-1 ? 0.25 : 1 }}>NEXT <ChevronRight size={16} /></button>
+                  <button type="button" onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length-1,i+1))} disabled={safeCardIndex===filteredOrders.length-1} style={{ ...rs.navBtn, opacity: safeCardIndex===filteredOrders.length-1 ? 0.25 : 1 }}>NEXT <ChevronRight size={16} /></button>
                 </div>
               </div>
             )
@@ -1002,7 +1036,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             { val:'DINEIN', lbl:'DINE-IN', icon:<UtensilsCrossed size={16} /> },
             { val:'PARCEL', lbl:'PARCEL',  icon:<Package size={16} /> },
           ].map(s => (
-            <button key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
+            <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
               {s.icon}
               <span style={{ fontSize:'0.48rem', fontWeight:900, letterSpacing:'0.3px' }}>{s.lbl}</span>
               {s.val !== 'ALL' && (() => {
@@ -1014,11 +1048,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               })()}
             </button>
           ))}
-          <button onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
             <BarChart3 size={16} />
             <span style={{ fontSize:'0.48rem', fontWeight:900 }}>SUMMARY</span>
           </button>
-          <button onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(196,178,148,0.32)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#56684c' : '#8f928a', transition:'all 0.15s' }}>
             <TrendingUp size={16} />
             <span style={{ fontSize:'0.48rem', fontWeight:900 }}>METRICS</span>
           </button>
@@ -1047,7 +1081,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                     <div style={{ fontSize:'0.5rem', color:'#8a8d85', fontWeight:900, letterSpacing:'1.5px', marginTop:2, textTransform:'uppercase' }}>Spoilage · Overcooked · Dropped · Excess</div>
                   </div>
                 </div>
-                <button onClick={() => setShowWastagePanel(false)} style={{ background:'#f7f3eb', border:'1px solid rgba(196,178,148,0.4)', color:'#8f918c', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
+                <button type="button" onClick={() => setShowWastagePanel(false)} style={{ background:'#f7f3eb', border:'1px solid rgba(196,178,148,0.4)', color:'#8f918c', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
                   <X size={16} />
                 </button>
               </div>
@@ -1055,7 +1089,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               {/* Tabs */}
               <div style={{ display:'flex', background:'#ffffff', borderBottom:'1px solid rgba(196,178,148,0.24)', flexShrink:0 }}>
                 {[['log','LOG ENTRY'],['report','MONTHLY REPORT']].map(([t,lbl]) => (
-                  <button key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#56684c' : '#8a8d85', borderBottom:`2px solid ${wastageTab===t ? 'rgba(107,127,95,0.8)' : 'transparent'}`, transition:'all 0.15s' }}>
+                  <button type="button" key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#56684c' : '#8a8d85', borderBottom:`2px solid ${wastageTab===t ? 'rgba(107,127,95,0.8)' : 'transparent'}`, transition:'all 0.15s' }}>
                     {lbl}
                   </button>
                 ))}
@@ -1084,7 +1118,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         {showWastageSuggest && wastageSuggestions.length > 0 && (
                           <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#ffffff', border:'1px solid rgba(196,178,148,0.48)', borderRadius:9, zIndex:10, overflow:'hidden', marginTop:2, boxShadow:'0 8px 24px rgba(60,50,35,0.16)' }}>
                             {wastageSuggestions.map(s => (
-                              <button key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName:s.itemName, inventoryId:s._id, unit:s.unit||'kg' })); setShowWastageSuggest(false); }}
+                              <button type="button" key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName:s.itemName, inventoryId:s._id, unit:s.unit||'kg' })); setShowWastageSuggest(false); }}
                                 style={{ width:'100%', padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#4a4d4f', fontSize:'0.75rem', fontWeight:700, textAlign:'left', transition:'background 0.1s' }}
                                 onMouseEnter={e => e.currentTarget.style.background='rgba(196,178,148,0.24)'}
                                 onMouseLeave={e => e.currentTarget.style.background='transparent'}>
@@ -1115,7 +1149,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         <label style={wFormLabel}>REASON *</label>
                         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                           {REASON_OPTIONS.map(r => (
-                            <button key={r} onClick={() => setWastageForm(p => ({ ...p, reason:r }))}
+                            <button type="button" key={r} onClick={() => setWastageForm(p => ({ ...p, reason:r }))}
                               style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${wastageForm.reason===r?'rgba(107,127,95,0.59)':'rgba(196,178,148,0.32)'}`, background: wastageForm.reason===r ? 'rgba(196,178,148,0.4)' : 'transparent', color: wastageForm.reason===r ? '#56684c' : '#7d8079', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', transition:'all 0.15s' }}>
                               {r}
                             </button>
@@ -1136,7 +1170,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                       </div>
 
                       {/* save button */}
-                      <button onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
+                      <button type="button" onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
                         style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#f7f3eb' : 'linear-gradient(135deg,#71856a,#586b4f)', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#8a8d85' : '#ffffff', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
                         {wastageSaving ? <><RotateCcw size={13} style={{ animation:'spin 1s linear infinite' }} /> SAVING…</> : <><Trash2 size={13} /> LOG WASTAGE</>}
                       </button>
@@ -1163,7 +1197,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                                   {e.notes && <span style={{ fontSize:'0.5rem', color:'#a0a299', fontStyle:'italic' }}>{e.notes}</span>}
                                 </div>
                               </div>
-                              <button onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(196,178,148,0.24)', color:'#8a8d85', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
+                              <button type="button" onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(196,178,148,0.24)', color:'#8a8d85', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
                                 onMouseEnter={ev => { ev.currentTarget.style.borderColor='rgba(107,127,95,0.38)'; ev.currentTarget.style.color='#56684c'; }}
                                 onMouseLeave={ev => { ev.currentTarget.style.borderColor='rgba(196,178,148,0.24)'; ev.currentTarget.style.color='#8a8d85'; }}>
                                 <X size={12} />
@@ -1238,13 +1272,13 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                           </div>
                         )}
 
-                        <button onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(196,178,148,0.48)', color:'#8c7d64', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(196,178,148,0.48)', color:'#8c7d64', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                           <RefreshCw size={12} /> REFRESH REPORT
                         </button>
                       </>
                     ) : (
                       <div style={{ textAlign:'center', padding:'40px 20px' }}>
-                        <button onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(196,178,148,0.2)', border:'1px solid rgba(196,178,148,0.48)', color:'#8c7d64', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
+                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(196,178,148,0.2)', border:'1px solid rgba(196,178,148,0.48)', color:'#8c7d64', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
                       </div>
                     )}
                   </div>
@@ -1282,7 +1316,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                     <div style={{ fontSize: '0.5rem', color: '#8a8d85', fontWeight: 800, letterSpacing: '0.5px', marginTop: 2, textTransform: 'uppercase' }}>{eightySixModal.categoryName}</div>
                   </div>
                 </div>
-                <button onClick={() => setEightySixModal(null)} style={{ background: '#f7f3eb', border: '1px solid rgba(196,178,148,0.4)', color: '#8f918c', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                <button type="button" onClick={() => setEightySixModal(null)} style={{ background: '#f7f3eb', border: '1px solid rgba(196,178,148,0.4)', color: '#8f918c', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
                   <X size={14} />
                 </button>
               </div>
@@ -1291,7 +1325,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 <div style={{ fontSize: '0.56rem', fontWeight: 900, color: '#8a8d85', letterSpacing: '1px', marginBottom: 9, textTransform: 'uppercase' }}>Which dish?</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 200, overflowY: 'auto' }}>
                   {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).map(dish => (
-                    <button key={dish._id} onClick={() => setSelectedDish86(dish)}
+                    <button type="button" key={dish._id} onClick={() => setSelectedDish86(dish)}
                       style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: selectedDish86?._id === dish._id ? '#56684c' : '#6c6f6f', background: selectedDish86?._id === dish._id ? 'rgba(196,178,148,0.36)' : 'transparent', border: `1px solid ${selectedDish86?._id === dish._id ? 'rgba(107,127,95,0.59)' : 'rgba(196,178,148,0.28)'}`, transition: 'all 0.15s' }}>
                       {dish.name}
                     </button>
@@ -1309,7 +1343,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         const RIcon = r.icon;
                         const active = selectedReason86 === r.id;
                         return (
-                          <button key={r.id} onClick={() => setSelectedReason86(r.id)}
+                          <button type="button" key={r.id} onClick={() => setSelectedReason86(r.id)}
                             style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: active ? '#56684c' : '#6c6f6f', background: active ? 'rgba(196,178,148,0.36)' : 'transparent', border: `1px solid ${active ? 'rgba(107,127,95,0.59)' : 'rgba(196,178,148,0.28)'}`, transition: 'all 0.15s' }}>
                             <RIcon size={13} />
                             {r.label}
@@ -1318,7 +1352,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                       })}
                     </div>
 
-                    <button onClick={confirm86}
+                    <button type="button" onClick={confirm86}
                       style={{ width: '100%', padding: '13px 0', borderRadius: 11, border: '1px solid rgba(46,49,52,0.4)', background: 'rgba(46,49,52,0.14)', color: '#2e3134', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <EyeOff size={14} /> 86 "{selectedDish86.name}"
                     </button>
@@ -1433,7 +1467,7 @@ const KDSOrderCard = ({
     socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState:next });
     try {
       const items = order.items.map((it,i) => i===idx ? { ...it, isCrossedLocal:next } : it);
-      await axios.patch(`${BASE_URL}/admin/orders/${order._id}`, { items });
+      await axios.patch(`${BASE_URL}/admin/orders/${order._id}`, { items, tenantId });
     } catch {}
   };
 
@@ -1687,7 +1721,7 @@ const KDSOrderCard = ({
       <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
         {/* Note toggle — small secondary action */}
         <div style={{ display:'flex', justifyContent:'flex-end' }}>
-          <button onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(196,178,148,0.28)', color:'#7d8079', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
+          <button type="button" onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(196,178,148,0.28)', color:'#7d8079', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(107,127,95,0.41)'; e.currentTarget.style.color='#56684c'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(196,178,148,0.28)'; e.currentTarget.style.color='#7d8079'; }}>
             <StickyNote size={10} /> {showNote ? 'HIDE NOTE' : 'ADD NOTE'}
@@ -1695,7 +1729,7 @@ const KDSOrderCard = ({
         </div>
 
         {/* DISPATCH BUTTON */}
-        <button
+        <button type="button"
           onClick={() => onReady(order._id)}
           style={{
             width:'100%',

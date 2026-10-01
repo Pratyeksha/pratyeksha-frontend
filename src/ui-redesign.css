@@ -1,0 +1,240 @@
+/* PRATYEKSHa UI/UX redesign layer
+   Existing product palette is intentionally preserved:
+   charcoal / near-black / warm beige / sage / ivory / white.
+   This file is layout and interaction polish only; business logic is untouched.
+*/
+:root{
+  --px-charcoal:#0d0d0d;
+  --px-charcoal-2:#141414;
+  --px-charcoal-3:#1b1b1b;
+  --px-ivory:#f7f3eb;
+  --px-white:#ffffff;
+  --px-beige:#d3bfa2;
+  --px-beige-2:#e4d9c6;
+  --px-sage:#6b7f5f;
+  --px-sage-dark:#56684c;
+  --px-text:#2e3134;
+  --px-muted:#7d8079;
+  --px-border:rgba(211,191,162,.22);
+  --px-shadow:0 18px 50px rgba(25,20,14,.10);
+  --px-shadow-soft:0 8px 24px rgba(25,20,14,.08);
+  --px-radius:14px;
+  --px-radius-sm:10px;
+  --px-control:42px;
+}
+
+html{scroll-behavior:smooth;}
+body{min-width:320px;overflow-x:hidden;background:var(--px-ivory);}
+button,input,select,textarea{min-width:0;}
+button{touch-action:manipulation;}
+img{max-width:100%;}
+
+/* shared interaction language */
+.p-operator-shell button,.p-master-shell button,.pown button,.p-kitchen-shell button,
+.customer-directory-shell button,.site button{transition:transform .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .16s ease,opacity .16s ease;}
+.p-operator-shell button:not(:disabled):active,.p-master-shell button:not(:disabled):active,.pown button:not(:disabled):active,.p-kitchen-shell button:not(:disabled):active{transform:translateY(1px);}
+.p-operator-shell input,.p-operator-shell select,.p-operator-shell textarea,
+.p-master-shell input,.p-master-shell select,.p-master-shell textarea,
+.pown input,.pown select,.pown textarea{min-height:var(--px-control);border-radius:10px;}
+
+/* ------------------------------------------------------------------
+   OPERATOR PORTAL
+------------------------------------------------------------------- */
+.p-operator-shell{background:var(--px-charcoal)!important;color:#f7f3eb!important;}
+.p-operator-shell .p-sidebar{width:264px!important;background:#090909!important;border-right:1px solid rgba(211,191,162,.13)!important;}
+.p-operator-shell .p-sidebar-top{padding:16px 14px!important;}
+.p-operator-shell .p-sidebar-bottom{padding:12px 14px 14px!important;border-top:1px solid rgba(211,191,162,.10)!important;}
+.p-operator-shell .p-sidebar-logo,.p-operator-shell img[alt*="Pratyeksha"],.p-master-shell img[alt*="Pratyeksha"]{object-fit:contain;object-position:center;}
+.p-operator-shell .p-nav-btn{min-height:42px!important;border-radius:10px!important;padding:9px 11px!important;}
+.p-operator-shell .p-nav-btn:hover{background:rgba(211,191,162,.075)!important;}
+.p-operator-shell .p-nav-btn[aria-current="page"],.p-operator-shell .p-nav-btn.active{background:rgba(211,191,162,.10)!important;box-shadow:inset 2px 0 0 var(--px-beige)!important;}
+.p-operator-shell .p-top-header{min-height:64px!important;padding:10px clamp(14px,2vw,26px)!important;background:rgba(13,13,13,.96)!important;border-bottom:1px solid rgba(211,191,162,.13)!important;backdrop-filter:blur(14px);}
+.p-operator-shell .p-header-left{gap:10px!important;}
+.p-operator-shell .p-page-title{font-size:clamp(16px,1.5vw,20px)!important;line-height:1.2!important;}
+.p-operator-shell .p-hud{gap:8px!important;flex-wrap:wrap;}
+.p-operator-shell .p-op-card{border-radius:14px!important;border:1px solid rgba(211,191,162,.13)!important;box-shadow:0 8px 28px rgba(0,0,0,.16)!important;}
+.p-operator-shell .p-modal-backdrop{padding:18px!important;}
+.p-operator-shell .p-modal-box{width:min(720px,100%)!important;max-height:min(88svh,860px)!important;border-radius:18px!important;border:1px solid rgba(211,191,162,.20)!important;box-shadow:0 28px 80px rgba(0,0,0,.45)!important;}
+.p-operator-shell table{min-width:640px;border-collapse:separate;border-spacing:0;}
+.p-operator-shell th{position:sticky;top:0;z-index:2;backdrop-filter:blur(10px);}
+.p-operator-shell td,.p-operator-shell th{padding:10px 12px!important;}
+.p-operator-shell .p-xls-btn,.p-operator-shell .p-autohide-toggle{min-height:38px!important;}
+
+/* ------------------------------------------------------------------
+   OWNER PORTAL
+------------------------------------------------------------------- */
+.pown{background:var(--px-charcoal)!important;color:#f5efe5!important;}
+.pown .pown-nav-link{min-height:42px!important;border-radius:10px!important;padding:9px 11px!important;}
+.pown .pown-nav-link:hover{background:rgba(211,191,162,.07)!important;}
+.pown .pown-scrollpane{scrollbar-gutter:stable;}
+.pown .pown-kpi{border-radius:15px!important;min-width:0;box-shadow:0 8px 28px rgba(0,0,0,.14)!important;}
+.pown .pown-kpi-icon{flex-shrink:0;}
+.pown .pown-btn{min-height:40px!important;border-radius:10px!important;}
+.pown table{width:100%;border-collapse:separate;border-spacing:0;}
+.pown th{position:sticky;top:0;z-index:2;}
+.pown td,.pown th{vertical-align:middle;}
+.pown .pown-scroll{overscroll-behavior:contain;}
+
+/* ------------------------------------------------------------------
+   MASTER ADMIN
+------------------------------------------------------------------- */
+.p-master-shell .p-sidebar{width:260px!important;background:#0b0b0b!important;border-right:1px solid rgba(211,191,162,.14)!important;}
+.p-master-shell .p-topbar{height:60px!important;background:#0b0b0b!important;border-bottom:1px solid rgba(211,191,162,.14)!important;}
+.p-master-shell .p-main{background:#111!important;}
+.p-master-shell .p-header{padding:18px clamp(16px,3vw,32px) 14px!important;}
+.p-master-shell .p-filterbar{padding-inline:clamp(16px,3vw,32px)!important;overflow-x:auto;scrollbar-width:none;}
+.p-master-shell .p-filterbar::-webkit-scrollbar{display:none;}
+.p-master-shell .p-scroll{padding-inline:clamp(16px,3vw,32px)!important;}
+.p-master-shell .p-stat-grid{grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))!important;gap:14px!important;}
+.p-master-shell .p-card{border-radius:14px!important;border-color:rgba(211,191,162,.14)!important;}
+.p-master-shell .p-card-lift:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.18)!important;}
+.p-master-shell .p-inp{min-height:42px!important;padding:10px 12px!important;border-radius:10px!important;}
+.p-master-shell .p-demo-card{border-radius:14px!important;}
+.p-master-shell .p-drawer{width:min(520px,100vw)!important;}
+
+/* ------------------------------------------------------------------
+   KITCHEN / KDS
+------------------------------------------------------------------- */
+.p-kitchen-shell{background:var(--px-ivory)!important;color:var(--px-text)!important;}
+.p-kitchen-shell header{min-height:66px;}
+.p-kitchen-shell .custom-scroll,.p-kitchen-shell .no-scrollbar{overscroll-behavior:contain;}
+.p-kitchen-shell button{min-height:38px;}
+.p-kitchen-shell .flash-card-pulse,.p-kitchen-shell .new-order-flash{border-radius:14px!important;}
+.p-kitchen-shell h1,.p-kitchen-shell h2,.p-kitchen-shell h3{overflow-wrap:anywhere;}
+
+/* ------------------------------------------------------------------
+   CUSTOMER DIRECTORY
+------------------------------------------------------------------- */
+.customer-directory-shell{min-height:100svh!important;}
+.customer-directory-shell>div{width:min(1180px,100%);padding-inline:clamp(14px,3vw,28px)!important;}
+.customer-directory-shell header{position:sticky;top:0;z-index:20;background:rgba(14,14,14,.94)!important;backdrop-filter:blur(16px);}
+.customer-directory-shell header img{width:clamp(110px,13vw,150px)!important;max-height:46px;object-fit:contain;}
+.customer-directory-shell section{max-width:100%;}
+.customer-directory-shell input{min-height:44px!important;border-radius:12px!important;}
+.customer-directory-shell button{min-height:40px;}
+
+/* ------------------------------------------------------------------
+   PUBLIC PRATYEKSHa SITE / MENU
+------------------------------------------------------------------- */
+.site{min-height:100svh;overflow-x:clip;}
+.site .nav{padding-inline:clamp(14px,4vw,56px)!important;}
+.site .nav-inner,.site .nav-content{max-width:1240px;width:100%;margin-inline:auto;}
+.site .brand img,.site .nav-brand-image,.site img[alt="Pratyeksha"]{object-fit:contain;object-position:left center;}
+.site .brand-logo-wrap{flex-shrink:0;}
+.site .hero,.site .section,.site section{scroll-margin-top:80px;}
+.site input,.site textarea,.site select{min-height:44px;border-radius:12px;}
+.site button{min-height:42px;}
+.site .legal-footer{padding-inline:clamp(16px,4vw,56px)!important;}
+
+/* Assistant */
+.chat-panel{width:min(440px,calc(100vw - 24px))!important;max-height:min(760px,calc(100svh - 24px))!important;border-radius:20px!important;box-shadow:0 24px 70px rgba(0,0,0,.42)!important;}
+.chat-messages{overscroll-behavior:contain;}
+.chat-bubble{overflow-wrap:anywhere;}
+.chat-suggestions{scrollbar-width:none;}
+.chat-suggestions::-webkit-scrollbar{display:none;}
+.chat-input-wrap input{min-height:44px!important;}
+.chat-input-wrap button{min-width:42px;min-height:42px;}
+
+/* logos: consistent fit and visible contrast without changing the palette */
+.p-operator-shell img[src*="logo"],.p-master-shell img[src*="logo"],.pown img[src*="logo"],.p-kitchen-shell img[src*="logo"],.customer-directory-shell img[src*="logo"],.site img[src*="logo"]{object-fit:contain;}
+.p-operator-shell .p-sidebar-top img,.p-master-shell .p-sidebar-inner img{max-width:100%;}
+
+/* tables: never force the whole viewport wider */
+.p-operator-shell .custom-scroll,.p-master-shell .p-scroll,.pown .pown-scrollpane{min-width:0;}
+.p-operator-shell .table-wrap,.p-master-shell .table-wrap,.pown .table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;}
+
+/* ------------------------------------------------------------------
+   TABLET
+------------------------------------------------------------------- */
+@media (max-width:1100px){
+  .p-operator-shell .p-sidebar{width:240px!important;}
+  .p-operator-shell .p-content,.p-master-shell .p-main{min-width:0;}
+  .pown .pown-kpi{min-height:108px!important;}
+}
+
+/* ------------------------------------------------------------------
+   MOBILE
+------------------------------------------------------------------- */
+@media (max-width:820px){
+  .p-operator-shell{font-size:14px!important;}
+  .p-operator-shell .p-sidebar{position:fixed!important;left:0;top:0;bottom:0;width:min(292px,88vw)!important;z-index:1000;transform:translateX(-105%);transition:transform .22s ease!important;box-shadow:20px 0 50px rgba(0,0,0,.35);}
+  .p-operator-shell .p-sidebar.p-sidebar-open{transform:translateX(0)!important;}
+  .p-operator-shell .p-top-header{padding-inline:12px!important;}
+  .p-operator-shell .p-hud{display:none!important;}
+  .p-operator-shell .p-page-title{font-size:15px!important;}
+  .p-operator-shell .p-modal-box{border-radius:16px!important;max-height:92svh!important;}
+
+  .p-master-shell .p-sidebar{position:fixed!important;z-index:1000;left:0;top:0;bottom:0;width:min(300px,88vw)!important;transform:translateX(-105%);transition:transform .22s ease!important;}
+  .p-master-shell .p-sidebar.open{transform:translateX(0)!important;}
+  .p-master-shell .p-main{width:100%!important;}
+  .p-master-shell .p-header{padding:15px 16px 12px!important;}
+  .p-master-shell .p-scroll{padding-inline:14px!important;}
+  .p-master-shell .p-demo-list.has-detail .p-demo-card{display:none;}
+  .p-master-shell .p-drawer{width:100%!important;}
+
+  .pown .pown-scrollpane{padding:14px 12px 88px!important;}
+  .pown .pown-kpi{min-height:100px!important;}
+  .pown table{min-width:640px;}
+
+  .p-kitchen-shell{font-size:14px;}
+  .p-kitchen-shell header{padding-inline:10px!important;}
+  .p-kitchen-shell .order-grid{grid-template-columns:1fr!important;}
+
+  .customer-directory-shell header{align-items:flex-start!important;padding-block:12px!important;}
+  .customer-directory-shell header>div:first-child>div:last-child{display:none;}
+  .customer-directory-shell section{padding-block:30px 18px!important;}
+
+  .chat-panel{inset:auto 12px 12px 12px!important;width:auto!important;max-height:calc(100svh - 24px)!important;border-radius:18px!important;}
+  .chat-launcher-copy{display:none!important;}
+}
+
+@media (max-width:560px){
+  .p-operator-shell .p-modal-backdrop{padding:8px!important;}
+  .p-operator-shell .p-modal-box{width:100%!important;border-radius:14px!important;}
+  .p-operator-shell .p-header-left{gap:7px!important;}
+  .p-operator-shell .p-op-card{border-radius:12px!important;}
+  .p-operator-shell .p-nav-label{font-size:12px!important;}
+
+  .p-master-shell .p-topbar{height:56px!important;}
+  .p-master-shell .p-card{border-radius:12px!important;}
+  .p-master-shell .p-header h1{font-size:20px!important;}
+
+  .pown .pown-btn{min-height:42px!important;}
+  .pown .pown-kpi{border-radius:13px!important;}
+
+  .p-kitchen-shell .no-scrollbar{scrollbar-width:none;}
+  .p-kitchen-shell h2{font-size:1.35rem!important;}
+
+  .customer-directory-shell>div{padding-inline:12px!important;}
+  .customer-directory-shell header{gap:10px!important;}
+  .customer-directory-shell header img{width:112px!important;}
+  .customer-directory-shell h1{font-size:clamp(30px,9vw,42px)!important;}
+
+  .site .nav{padding-inline:12px!important;}
+  .site .brand-logo-wrap{width:112px!important;height:40px!important;}
+  .site .nav-brand-image{width:104px!important;height:36px!important;}
+  .site .legal-footer{padding-inline:14px!important;}
+
+  .chat-header{padding:12px!important;}
+  .chat-topic-bar{overflow-x:auto!important;flex-wrap:nowrap!important;}
+  .chat-topic-bar button{flex:0 0 auto;}
+  .chat-suggestions{display:flex!important;overflow-x:auto!important;flex-wrap:nowrap!important;}
+  .chat-suggestions>button{flex:0 0 min(260px,78vw)!important;}
+  .chat-footer-row{flex-wrap:wrap!important;row-gap:5px!important;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .p-operator-shell .p-sidebar,.p-master-shell .p-sidebar{transition:none!important;}
+}
+
+/* Customer operational flow (QR / waitlist / pickup / bill) */
+.customer-shell{background:var(--px-charcoal)!important;color:#fff!important;width:100%;}
+.customer-shell>div{max-width:100%;}
+.customer-shell button{min-height:42px;}
+.customer-shell input,.customer-shell select,.customer-shell textarea{min-height:44px!important;border-radius:12px!important;}
+.customer-shell [style*="max-width: '400px'"]{width:100%;}
+@media(max-width:560px){
+  .customer-shell{padding-inline:14px!important;}
+  .customer-shell h1{font-size:clamp(26px,8vw,36px)!important;}
+  .customer-shell button{min-height:44px;}
+}

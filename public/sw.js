@@ -4,7 +4,7 @@
 // (Vite: /public/sw.js → deploys to https://yourapp.com/sw.js)
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'pratyeksha-menu-v1';
+const CACHE_NAME = 'pratyeksha-menu-v2';
 const API_HOST = 'pratyeksha-backend.onrender.com';
 
 // Only these read-only, "browse the menu" endpoints are cached.
@@ -43,35 +43,26 @@ function isCacheableMenuRequest(request) {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  // Let Vercel/Render handle SPA navigations normally; this worker only adds
+  // menu caching and push handling so existing API/UI behaviour stays intact.
   if (!isCacheableMenuRequest(request)) return; // let everything else pass through untouched
 
-  // Stale-while-revalidate: answer instantly from cache if we have it,
-  // and refresh the cache in the background for next time.
+  // Network-first: inventory/menu/availability can change at any moment.
+  // Never show an old cached stock state while the network is available.
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request);
-
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response && response.ok) cache.put(request, response.clone());
-          return response;
-        })
-        .catch(() => null);
-
-      if (cached) {
-        // Kick off the background refresh but don't wait on it.
-        networkFetch.catch(() => {});
-        return cached;
+      try {
+        const fresh = await fetch(request, { cache: 'no-store' });
+        if (fresh && fresh.ok) await cache.put(request, fresh.clone());
+        return fresh;
+      } catch {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        return new Response(
+          JSON.stringify({ offline: true, error: 'No cached menu available yet.' }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
       }
-
-      const fresh = await networkFetch;
-      if (fresh) return fresh;
-
-      // Truly offline with nothing cached yet for this tenant.
-      return new Response(
-        JSON.stringify({ offline: true, error: 'No cached menu available yet.' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
     })
   );
 });
@@ -81,8 +72,8 @@ self.addEventListener('push', function(event) {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Pratyeksha', {
       body: data.body || '',
-      icon: data.icon || '/logo.png',
-      badge: data.badge || '/logo.png',
+      icon: data.icon || '/pratyeksha-logo.png',
+      badge: data.badge || '/pratyeksha-logo.png',
       vibrate: data.vibrate || [200, 100, 200],
       data: data.data || {}
     })
@@ -91,11 +82,22 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
+  // Push notifications may wake a completely closed PWA, but they must never
+  // turn into an implicit table-ordering session. The backend supplies a safe
+  // customer-home URL, never a QR/table URL.
+  const rawUrl = event.notification.data?.url || '/';
+  let url = '/';
+  try {
+    const parsed = new URL(rawUrl, self.location.origin);
+    url = parsed.origin === self.location.origin ? `${parsed.pathname}${parsed.search}` : '/';
+  } catch {}
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
-        if (client.url.includes(url) && 'focus' in client) return client.focus();
+        if ('navigate' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
       }
       if (clients.openWindow) return clients.openWindow(url);
     })

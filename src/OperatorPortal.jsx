@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback,useRef  } from 'react';
 import axios from 'axios';
 import { io } from "socket.io-client";
+import PwaInstallButton from './PwaInstallButton.jsx';
+import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
  
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -19,7 +21,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   PackageX, ShieldAlert, Wrench
 } from 'lucide-react';
 
-const BASE_URL = "https://pratyeksha-backend.onrender.com/api";
+const BASE_URL = API_BASE_URL;
 
 const getTimeRemaining = (expiresAt) => {
   const diff = new Date(expiresAt) - new Date();
@@ -168,7 +170,7 @@ const AnnouncementPreviewCard = ({ data }) => {
 };
 
 const OperatorPortal = () => {
-  const socket = useMemo(() => io("https://pratyeksha-backend.onrender.com", {
+  const socket = useMemo(() => io(SOCKET_BASE_URL, {
     withCredentials: true,
     transports: ['polling', 'websocket'], 
     reconnectionAttempts: 5,
@@ -291,7 +293,7 @@ const istTodayStr = useMemo(() => {
 }, []);
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
-  const logoPath = `${import.meta.env.BASE_URL}logo.png`;
+  const logoPath = '/pratyeksha-logo.png';
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -689,7 +691,7 @@ if (tenantRes.data) setTenantConfig(tenantRes.data);
 const fetchPurchaseHistory = useCallback(async (itemId) => {
     setPurchaseHistoryLoading(true);
     try {
-        const res = await axios.get(`${BASE_URL}/inventory/item/${itemId}/history`);
+        const res = await axios.get(`${BASE_URL}/inventory/item/${itemId}/history?tenantId=${encodeURIComponent(tenantId)}`);
         setPurchaseHistoryData(res.data);
     } catch { setPurchaseHistoryData(null); }
     finally { setPurchaseHistoryLoading(false); }
@@ -709,7 +711,7 @@ const submitExtraRestock = async () => {
   if (!extraRestockQty || Number(extraRestockQty) <= 0) return showNotif('Enter a valid quantity', 'error');
   setIsSubmittingExtraRestock(true);
   try {
-    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty) });
+    await axios.patch(`${BASE_URL}/extra-items/item/${extraRestockModal._id}/restock`, { addQty: Number(extraRestockQty), tenantId });
     showNotif(`${extraRestockModal.name} restocked +${extraRestockQty}`);
     setExtraRestockModal(null);
     setExtraRestockQty('');
@@ -722,7 +724,7 @@ const submitExtraRestock = async () => {
 const deductExtraItemStock = useCallback(async (itemId, qty) => {
   try {
     await axios.patch(`${BASE_URL}/extra-items/item/${itemId}/restock`, { 
-      addQty: -Math.abs(qty)  // negative qty = deduction
+      addQty: Math.abs(qty), tenantId  // this endpoint is restock-only; deductions use the server-side order flow
     });
   } catch (err) {
     console.error('Extra item stock deduction failed:', err);
@@ -747,8 +749,13 @@ fetchAuditLogs();
 }, [isAuthenticated, viewDate, fetchAnalytics, fetchMonthlySalary, fetchExtraAnalytics]);
 
   useEffect(() => {
+    const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
+    const ingredientAlertTimers = new Set();
+
     if (isAuthenticated) {
-      socket.emit("join_restaurant", tenantId);
+      socket.connect();
+      socket.on('connect', joinRestaurant);
+      if (socket.connected) joinRestaurant();
       fetchInitialData();
       fetchManagementData();
       fetchTurnTimeData();
@@ -765,6 +772,10 @@ fetchAuditLogs();
         setAttendanceLogs(prev => prev.filter(log => log.staffId !== data.staffId));
         showNotif("Roster sync updated.", "info");
       });
+      socket.on('inventory_updated', () => {
+        fetchManagementData();
+      });
+
       socket.on("low_stock_alert", (data) => {
         showNotif(`LOW STOCK: ${data.itemName} — only ${data.currentStock}${data.unit} left`, "error");
         setLowStockAlerts(prev => {
@@ -798,9 +809,11 @@ fetchAuditLogs();
     });
  
     // Auto-dismiss after 60 seconds so the screen doesn't fill up
-    setTimeout(() => {
+    const alertTimer = setTimeout(() => {
+        ingredientAlertTimers.delete(alertTimer);
         setIngredientAlerts(prev => prev.filter(a => a.ingredientName !== data.ingredientName));
     }, 60000);
+    ingredientAlertTimers.add(alertTimer);
 });
       socket.on("new_waiter_request", (request) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
@@ -904,6 +917,10 @@ socket.on('pickup_ready', (data) => {
         new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
+socket.on('order_voided', () => {
+  fetchInitialData();
+  fetchAnalytics();
+});
 socket.on("order_status_updated", (data) => {
   if (data && data.status === 'settled') {
     setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
@@ -944,7 +961,23 @@ socket.on('aggregator_session_restored', (data) => {
   showNotif(`${data.platform.toUpperCase()} session restored`, 'success');
 });
     }
-    return () => { socket.off(); };
+    return () => {
+      socket.off('connect', joinRestaurant);
+      // Remove every listener owned by this effect. Without this, dependency
+      // changes could stack handlers and cause duplicate fetches/notifications.
+      [
+        'new_order', 'staff_wiped_live', 'inventory_updated', 'low_stock_alert',
+        'inventory_expiry_alert', 'ingredient_out_of_stock', 'new_waiter_request',
+        'menu_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
+        'new_waitlist_entry', 'new_reservation', 'reservation_updated', 'waitlist_cancelled',
+        'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
+        'order_voided', 'order_status_updated', 'aggregator_order_incoming',
+        'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored'
+      ].forEach(event => socket.off(event));
+      ingredientAlertTimers.forEach(clearTimeout);
+      ingredientAlertTimers.clear();
+      socket.disconnect();
+    };
 }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData, fetchCounterQueue]);
   // ── Attendance: fetch monthly logs when management tab opens or viewDate changes
   const fetchAttendanceForDate = useCallback(async (targetDate) => {
@@ -974,7 +1007,7 @@ const fetchCustomerDir = useCallback(async (seg = 'all', search = '') => {
   setCustomerLoading(true);
   try {
     const res = await axios.get(
-      `${BASE_URL}/customers/directory/${tenantId}?segment=${seg}&search=${search}&limit=300`
+      `${BASE_URL}/customers/directory/${encodeURIComponent(tenantId)}?segment=${encodeURIComponent(seg)}&search=${encodeURIComponent(search)}&limit=300`
     );
     setCustomerDir(res.data || { customers: [], summary: {} });
   } catch { setCustomerDir({ customers: [], summary: {} }); }
@@ -1007,7 +1040,8 @@ const handleAggregatorAccept = async (order, prepTime = 30) => {
   try {
     await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
       decision: 'accept',
-      prepTime
+      prepTime,
+      tenantId
     });
     showNotif(`${order.platform?.toUpperCase() || 'Aggregator'} order accepted — sent to kitchen`, 'success');
     setIncomingAggregatorOrders(prev => prev.filter(o => o._id !== order._id));
@@ -1021,7 +1055,8 @@ const handleAggregatorAccept = async (order, prepTime = 30) => {
 const handleAggregatorReject = async (order) => {
   try {
     await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
-      decision: 'reject'
+      decision: 'reject',
+      tenantId
     });
     showNotif(`${order.platform?.toUpperCase() || 'Aggregator'} order rejected`, 'info');
     setIncomingAggregatorOrders(prev => prev.filter(o => o._id !== order._id));
@@ -1169,6 +1204,78 @@ const dailySettlementBreakdown = useMemo(() => {
   return { cash: cashSum, upi: upiSum, card: cardSum, gross: cashSum+upiSum+cardSum };
 }, [analytics, istTodayStr, viewDate, currentMonthAnalytics]);
 
+// ── OPERATOR ASSISTANT: REALTIME SNAPSHOT ──
+// Fetch the actual server snapshot and return it. State setters are also updated,
+// but the returned values are what the current question uses, so React render
+// timing can never make an answer stale.
+const refreshAssistRealtimeData = useCallback(async () => {
+  const istNow = new Date(new Date().getTime() + 330 * 60000);
+  const today = istNow.toISOString().split('T')[0];
+  const monthStr = today.slice(0, 7);
+
+  const results = await Promise.allSettled([
+    axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
+    axios.get(`${BASE_URL}/menu/${tenantId}`),
+    axios.get(`${BASE_URL}/admin/waiter-requests/${tenantId}`),
+    axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${monthStr}`),
+    axios.get(`${BASE_URL}/admin/analytics/profitability/${tenantId}?month=${monthStr}`),
+    axios.get(`${BASE_URL}/admin/analytics/procurement/${tenantId}`),
+    axios.get(`${BASE_URL}/staff/${tenantId}`),
+    axios.get(`${BASE_URL}/extra-items/${tenantId}`),
+    axios.get(`${BASE_URL}/extra-items/analytics/${tenantId}`),
+    axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${today}`),
+    // Raw inventory is the source of truth for current stock. Procurement
+    // predictions can legitimately have no usage history and therefore null
+    // daysRemaining, so Assist must also read the actual inventory records.
+    axios.get(`${BASE_URL}/inventory/${tenantId}`),
+  ]);
+
+  const val = (i, fallback) =>
+    results[i]?.status === 'fulfilled' ? results[i].value.data : fallback;
+
+  const liveOrders = val(0, orders || []);
+  const liveMenu = val(1, menuItems || []);
+  const liveWaiterRequests = val(2, waiterRequests || []);
+  const analyticsPayload = val(3, {});
+  const liveAnalytics = analyticsPayload.salesData || [];
+  const liveProfitability = val(4, profitabilityData || []);
+  const liveProcurement = val(5, procurementData || []);
+  const liveStaff = val(6, staff || []);
+  const liveExtraItems = val(7, extraItems || []);
+  const liveExtraAnalytics = val(8, extraAnalytics || null);
+  const liveAttendance = val(9, []);
+  const liveInventory = val(10, []);
+
+  setOrders(liveOrders);
+  setMenuItems(liveMenu);
+  setWaiterRequests(liveWaiterRequests);
+  setAnalytics(liveAnalytics);
+  setProfitabilityData(liveProfitability);
+  setProcurementData(liveProcurement);
+  setStaff(liveStaff);
+  setExtraItems(liveExtraItems);
+  setExtraAnalytics(liveExtraAnalytics);
+  setAttendanceLogs(prev => {
+    const other = prev.filter(l => l.date !== today);
+    return [...other, ...(liveAttendance || [])];
+  });
+
+  return {
+    analytics: liveAnalytics,
+    orders: liveOrders,
+    inventory: liveInventory,
+    procurementData: liveProcurement,
+    profitabilityData: liveProfitability,
+    staff: liveStaff,
+    attendanceLogs: liveAttendance,
+    waiterRequests: liveWaiterRequests,
+    menuItems: liveMenu,
+    extraItems: liveExtraItems,
+    extraAnalytics: liveExtraAnalytics,
+  };
+}, [tenantId, orders, menuItems, waiterRequests, profitabilityData, procurementData,
+    staff, extraItems, extraAnalytics]);
+
 // ── OPERATOR ASSISTANT: answer from real data ──
 const handleAssistQuery = useCallback(async (question) => {
   const q = (question || assistInput).trim();
@@ -1179,6 +1286,50 @@ const handleAssistQuery = useCallback(async (question) => {
   setAssistLoading(true);
 
   try {
+    // Always get a fresh server snapshot before answering. Use the returned
+    // values directly instead of waiting for React's next render.
+    const live = await refreshAssistRealtimeData();
+    const {
+      analytics: liveAnalytics,
+      orders: liveOrders,
+      inventory: liveInventory,
+      procurementData: liveProcurement,
+      profitabilityData: liveProfitability,
+      staff: liveStaff,
+      attendanceLogs: liveAttendance,
+      waiterRequests: liveWaiterRequests,
+      menuItems: liveMenuItems,
+      extraItems: liveExtraItems,
+      extraAnalytics: liveExtraAnalytics,
+    } = live;
+
+    // Shadow the state snapshots used by the existing intent handlers.
+    const analytics = liveAnalytics;
+    const orders = liveOrders;
+    const inventory = Array.isArray(liveInventory) ? liveInventory : [];
+    const procurementData = liveProcurement;
+    const profitabilityData = liveProfitability;
+    const staff = liveStaff;
+    const attendanceLogs = liveAttendance;
+    const waiterRequests = liveWaiterRequests;
+    const menuItems = liveMenuItems;
+    const extraItems = liveExtraItems;
+    const extraAnalytics = liveExtraAnalytics;
+    const occupiedTables = [...new Set(
+      orders
+        .filter(o => ['pending','ready','served'].includes(o.status))
+        .map(o => o.tableNumber?.toString())
+        .filter(Boolean)
+    )];
+    const dailySettlementBreakdown = (() => {
+      const todayKey = new Date(new Date().getTime() + 330 * 60000).toISOString().split('T')[0];
+      const rows = analytics.filter(d => d._id === todayKey);
+      const cash = rows.reduce((s, r) => s + Number(r.cash || 0), 0);
+      const upi = rows.reduce((s, r) => s + Number(r.upi || 0), 0);
+      const card = rows.reduce((s, r) => s + Number(r.card || 0), 0);
+      return { cash, upi, card, gross: cash + upi + card };
+    })();
+
     const nowIST    = new Date(new Date().getTime() + 330 * 60000);
     const todayKey  = nowIST.toISOString().split('T')[0];
     const monthStr  = todayKey.slice(0, 7);
@@ -1209,9 +1360,34 @@ const pendingOrders = orders.filter(o =>
     const readyOrders   = orders.filter(o => o.status === 'ready');
     const servedOrders  = orders.filter(o => o.status === 'served');
 
-    const lowStockItems    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 3);
-    const criticalStock    = (procurementData || []).filter(p => p.daysRemaining !== null && p.daysRemaining <= 1);
-    const outOfStockItems  = (procurementData || []).filter(p => p.daysRemaining === 0);
+    // Current inventory is authoritative for stock status. Procurement prediction
+    // is used for runway/reorder estimates, not for deciding whether stock is zero.
+    const stockRows = inventory.length > 0
+      ? inventory.map(i => ({
+          ...i,
+          currentStock: Number(i.currentStock) || 0,
+          minThreshold: Number(i.minThreshold) || 0
+        }))
+      : (procurementData || []).map(p => ({
+          ...p,
+          currentStock: Number(p.currentStock) || 0,
+          minThreshold: Number(p.minThreshold) || 0
+        }));
+    const procurementById = new Map((procurementData || []).map(p => [String(p._id), p]));
+    const stockWithForecast = stockRows.map(i => ({
+      ...i,
+      ...(procurementById.get(String(i._id)) || {})
+    }));
+    const outOfStockItems = stockWithForecast.filter(i => Number(i.currentStock) <= 0);
+    const criticalStock = stockWithForecast.filter(i =>
+      Number(i.currentStock) <= 0 ||
+      (i.daysRemaining != null && Number(i.daysRemaining) <= 1)
+    );
+    const lowStockItems = stockWithForecast.filter(i =>
+      Number(i.currentStock) <= 0 ||
+      Number(i.currentStock) <= Number(i.minThreshold || 0) ||
+      (i.daysRemaining != null && Number(i.daysRemaining) <= 3)
+    );
 
     // Only dishes with a real recipe mapped have a genuine, non-fabricated margin —
     // a dish with no recipe defaults to 0 ingredient cost, i.e. a fake 100% margin,
@@ -1271,12 +1447,26 @@ const pendingOrders = orders.filter(o =>
       if (lowStockItems.length === 0) {
         answer = 'All inventory items have sufficient stock for the next 3+ days.';
       } else {
-        const list = lowStockItems.slice(0, 5).map(i => `${i.itemName} — ${i.daysRemaining}d left`).join('\n');
+        const list = lowStockItems.slice(0, 5).map(i => {
+          const days = i.daysRemaining != null ? ` — ${i.daysRemaining}d left` : '';
+          const label = Number(i.currentStock) <= 0 ? 'OUT OF STOCK' : 'LOW STOCK';
+          return `${i.itemName} — ${label}${days}`;
+        }).join('\n');
         answer = `${lowStockItems.length} item${lowStockItems.length > 1 ? 's' : ''} running low:\n${list}`;
       }
 
     // 7. Out of stock / critical
-    } else if (qL.includes('out of stock') || qL.includes('critical stock') || qL.includes('zero stock')) {
+    } else if (qL.includes('critical stock')) {
+      if (criticalStock.length === 0) {
+        answer = 'No critical stock items right now.';
+      } else {
+        const list = criticalStock.slice(0, 10).map(i => {
+          const days = i.daysRemaining != null ? ` — ${i.daysRemaining}d left` : '';
+          return `${i.itemName} — ${Number(i.currentStock) <= 0 ? 'OUT OF STOCK' : 'critical'}${days}`;
+        }).join('\n');
+        answer = `${criticalStock.length} critical stock item${criticalStock.length !== 1 ? 's' : ''}:\n${list}`;
+      }
+    } else if (qL.includes('out of stock') || qL.includes('zero stock')) {
       if (outOfStockItems.length === 0) {
         answer = 'No ingredients are out of stock.';
       } else {
@@ -1305,11 +1495,22 @@ const pendingOrders = orders.filter(o =>
         ? `Average order value this month: ₹${avgOrder}.\nBased on ${monthOrders} orders totalling ₹${monthRev.toLocaleString()}.`
         : 'No order data this month yet.';
 
-    // 11. Staff attendance
+    // 11. Staff count
+    } else if (
+      qL.includes('staff count') ||
+      qL.includes('how many staff members') ||
+      qL.includes('how many staff do we have')
+    ) {
+      const activeStaff = (staff || []).filter(s => s.isActive !== false);
+      answer = `You have ${activeStaff.length} active staff member${activeStaff.length !== 1 ? 's' : ''}.`;
+
+    // 12. Staff attendance
     } else if ((qL.includes('staff') || qL.includes('attendance')) && !qL.includes('salary')) {
       const presentToday = (staff || []).filter(s => {
-        const log = (attendanceLogs || []).find(l => l.staffId === s._id && l.date === todayKey);
-        return log?.status === 'present';
+        const log = (attendanceLogs || []).find(l =>
+          String(l.staffId) === String(s._id) && l.date === todayKey
+        );
+        return log?.status === 'Present';
       });
       answer = `Staff today: ${presentToday.length} present out of ${staff?.length || 0} total.\n${
         presentToday.length > 0 ? `Present: ${presentToday.slice(0, 5).map(s => s.name).join(', ')}${presentToday.length > 5 ? ' and more.' : '.'}` : 'No staff marked present yet.'
@@ -1317,7 +1518,7 @@ const pendingOrders = orders.filter(o =>
 
     // 12. Salary query
     } else if (qL.includes('salary') || qL.includes('payroll') || qL.includes('pay')) {
-      const thisMonthSalary = (staff || []).reduce((a, s) => a + (s.salary || 0), 0);
+      const thisMonthSalary = (staff || []).reduce((a, s) => a + (Number(s.baseSalary) || 0), 0);
       answer = `Total monthly payroll across ${staff?.length || 0} staff members: ₹${thisMonthSalary.toLocaleString()}.`;
 
     // 13. Service / waiter requests
@@ -1347,7 +1548,7 @@ const pendingOrders = orders.filter(o =>
       try {
         const wData = await axios.get(`${BASE_URL}/wastage/${tenantId}`).catch(() => ({ data: [] }));
         const wArr   = Array.isArray(wData.data) ? wData.data : [];
-        const wCost  = wArr.reduce((a, w) => a + (w.cost || 0), 0);
+        const wCost  = wArr.reduce((a, w) => a + Number(w.totalCost || 0), 0);
         answer = wArr.length > 0
           ? `${wArr.length} wastage entries today with a total cost of ₹${wCost.toLocaleString()}.`
           : 'No wastage recorded today.';
@@ -1384,7 +1585,7 @@ const pendingOrders = orders.filter(o =>
       const hourMap = {};
       orders.forEach(o => {
         if (!o.createdAt) return;
-        const h = new Date(new Date(o.createdAt).getTime() + 330 * 60000).getHours();
+        const h = new Date(new Date(o.createdAt).getTime() + 330 * 60000).getUTCHours();
         hourMap[h] = (hourMap[h] || 0) + 1;
       });
       const peak = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
@@ -1403,7 +1604,22 @@ const pendingOrders = orders.filter(o =>
       const nonVegCount = menuItems.filter(m => m.isVeg === false && m.isAvailable !== false).length;
       answer = `Menu has ${totalDishes} items total.\nActive: ${menuItems.filter(m => m.isAvailable !== false).length} · Hidden: ${hiddenDishes.length}.\nVeg: ${vegCount} · Non-veg: ${nonVegCount}.`;
 
-    // 24. Extra items revenue
+    // 24. Top revenue dish
+    } else if (
+      qL.includes('top revenue dish') ||
+      qL.includes('most revenue dish') ||
+      qL.includes('dish generates most revenue') ||
+      qL.includes('highest revenue dish')
+    ) {
+      answer = topRevDish
+        ? `${topRevDish.name} generates the most revenue at ₹${Math.round(topRevDish.totalRevenue || 0).toLocaleString()} from ${topRevDish.totalQtySold || 0} sold.`
+        : 'No dish-level revenue data is available for this period.';
+
+    // 25. Kitchen status
+    } else if (qL.includes('kitchen status') || qL.includes('live kitchen')) {
+      answer = `Live kitchen: ${pendingOrders.length} pending · ${readyOrders.length} ready · ${servedOrders.length} served.`;
+
+    // 26. Extra items revenue
     } else if (qL.includes('extra revenue') || qL.includes('beverage revenue') || qL.includes('extra item revenue')) {
       const extraRev = extraAnalytics?.totalRevenue || 0;
       answer = extraRev > 0
@@ -1443,8 +1659,8 @@ const pendingOrders = orders.filter(o =>
     setTimeout(() => assistEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 120);
   }
 }, [assistInput, analytics, orders, procurementData, profitabilityData, staff, attendanceLogs,
-    occupiedTables, waiterRequests, menuItems, extraItems, extraAnalytics, extraAnalytics,
-    dailySettlementBreakdown, tenantId, viewDate]);
+    occupiedTables, waiterRequests, menuItems, extraItems, extraAnalytics,
+    dailySettlementBreakdown, tenantId, viewDate, refreshAssistRealtimeData]);
 
 
   const advancedStats = useMemo(() => {
@@ -1707,7 +1923,7 @@ const unjoinTable = async (tableNumber) => {
 
 const cancelReservation = async (reservationId) => {
   try {
-    await axios.patch(`${BASE_URL}/reservations/${reservationId}`, { status: 'cancelled' });
+    await axios.patch(`${BASE_URL}/reservations/${reservationId}`, { status: 'cancelled', tenantId });
     showNotif('Reservation cancelled');
     fetchCounterQueue();
   } catch { showNotif('Could not cancel reservation', 'error'); }
@@ -1765,7 +1981,7 @@ const deleteVendor = async (id) => {
 
 const linkIngredientVendor = async (inventoryItemId, vendorId) => {
   try {
-    await axios.patch(`${BASE_URL}/inventory/item/${inventoryItemId}/vendor`, { vendorId: vendorId || null });
+    await axios.patch(`${BASE_URL}/inventory/item/${inventoryItemId}/vendor`, { vendorId: vendorId || null, tenantId });
     fetchManagementData();
   } catch { showNotif('Could not link vendor', 'error'); }
 };
@@ -1912,7 +2128,7 @@ const generateBill = async (id) => {
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
     const joinedForBill = getJoinedGroup(id, floorLayout).filter(t => t !== id);
-    const joinedQuery = joinedForBill.length > 0 ? `?joined=${joinedForBill.join(',')}` : '';
+    const joinedQuery = joinedForBill.length > 0 ? `?joined=${encodeURIComponent(joinedForBill.join(','))}` : '';
     const [res, countRes, tenantRes] = await Promise.all([
       axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}${joinedQuery}`),
       axios.get(`${BASE_URL}/admin/daily-bill-count/${tenantId}`).catch(() => ({ data: { nextBillNo: 1 } })),
@@ -2034,9 +2250,9 @@ const generateOnlineBill = async () => {
 
     const cgstPct = (freshTenant?.config?.cgstPercentage ?? 2.5) / 100;
     const sgstPct = (freshTenant?.config?.sgstPercentage ?? 2.5) / 100;
-    const subtotal = aggregated.reduce((a, i) => a + i.subtotal, 0);
-    const cgst = Math.round(subtotal * cgstPct * 100) / 100;
-    const sgst = Math.round(subtotal * sgstPct * 100) / 100;
+    const subtotal = onlineBills.reduce((a, b) => a + (Number(b.subtotal) || 0), 0);
+    const cgst = onlineBills.reduce((a, b) => a + (Number(b.cgst) || 0), 0);
+    const sgst = onlineBills.reduce((a, b) => a + (Number(b.sgst) || 0), 0);
     const grandTotal = onlineBills.reduce((a, b) => a + (Number(b.grandTotal) || 0), 0);
 
     setTableBill({
@@ -2352,7 +2568,7 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
 };
   const updateMenu = async (itemId, updateData) => {
     try {
-      const res = await axios.patch(`${BASE_URL}/menu-item/${itemId}`, updateData);
+      const res = await axios.patch(`${BASE_URL}/menu-item/${itemId}`, { ...updateData, tenantId });
       // The socket 'menu_updated' broadcast (which fires the instant this PATCH saves,
       // and reaches this same browser since it's in the tenant room) is what keeps
       // menuItems in sync — it carries the full authoritative document. Calling
@@ -2367,7 +2583,7 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
 
   const completeWaiterRequest = async (requestId) => {
     try {
-      await axios.patch(`${BASE_URL}/admin/waiter-requests/${requestId}/complete`);
+      await axios.patch(`${BASE_URL}/admin/waiter-requests/${requestId}/complete`, { tenantId });
       setWaiterRequests(prev=>prev.filter(r=>r._id!==requestId));
       showNotif("Service Call Resolved");
     } catch { showNotif("Error clearing request","error"); }
@@ -2551,7 +2767,7 @@ const exportToExcel = useCallback((type = 'daily') => {
     // ── INVENTORY ONLY EXPORT ── (unchanged)
     if (type === 'inventory') {
       const ws = {};
-      const totalValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0);
+      const totalValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0);
       const lowItems = inventory.filter(i => i.currentStock <= i.minThreshold).length;
 
       addTitleBlock(ws, `${tenantConfig?.name || tenantId} — INVENTORY REGISTER`, 'Full ingredient ledger with WAC, stock value, and status', todayStr);
@@ -2608,7 +2824,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:footerRow,c:8}});
       ws['!cols'] = [24,8,14,14,14,14,16,12,10].map(w=>({wch:w}));
       ws['!rows'] = [{hpt:28},{hpt:14},{hpt:14},{hpt:8},{hpt:20},{hpt:28},{hpt:8},{hpt:20}];
-      XLSX.utils.book_append_sheet(wb, ws, '📦 Inventory');
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
       XLSX.writeFile(wb, `Pratyeksha_Inventory_${todayStr}.xlsx`);
       showNotif('Inventory report exported — premium format');
       return;
@@ -2666,9 +2882,9 @@ const exportToExcel = useCallback((type = 'daily') => {
       const payRow = [
         ['PAYMENT BREAKDOWN','','','','','','',''],
         ['Mode','Amount (₹)','% of Revenue','','CHANNEL BREAKDOWN','','',''],
-        ['💵 Cash',totalCash,totalRev>0?`${Math.round((totalCash/totalRev)*100)}%`:'0%','','Dine-In','','',''],
-        ['📱 UPI', totalUPI,totalRev>0?`${Math.round((totalUPI/totalRev)*100)}%`:'0%','','Takeaway','','',''],
-        ['💳 Card',totalCard,totalRev>0?`${Math.round((totalCard/totalRev)*100)}%`:'0%','','Online','','',''],
+        ['Cash',totalCash,totalRev>0?`${Math.round((totalCash/totalRev)*100)}%`:'0%','','Dine-In','','',''],
+        ['UPI', totalUPI,totalRev>0?`${Math.round((totalUPI/totalRev)*100)}%`:'0%','','Takeaway','','',''],
+        ['Card',totalCard,totalRev>0?`${Math.round((totalCard/totalRev)*100)}%`:'0%','','Online','','',''],
       ];
       XLSX.utils.sheet_add_aoa(ws, payRow, { origin: 'A8' });
       styleCell(ws,'A8',hdrStyle());
@@ -2710,7 +2926,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:sfRow+2,c:7}});
       ws['!cols']=[16,14,10,12,12,12,12,22].map(w=>({wch:w}));
       ws['!rows']=[{hpt:30},{hpt:14},{hpt:12},{hpt:8},{hpt:22},{hpt:30}];
-      XLSX.utils.book_append_sheet(wb, ws, '📊 Dashboard');
+      XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
     }
 
     // ══════════════════════════════════
@@ -2725,9 +2941,9 @@ const exportToExcel = useCallback((type = 'daily') => {
       const classify = (d) => {
         const highSales=(d.totalQtySold||0)>=avgSold, highMargin=(d.marginPct||0)>=avgMargin;
         if (highSales&&highMargin) return {label:'⭐ STAR',color:GREEN};
-        if (highSales&&!highMargin) return {label:'🐄 PLOWHORSE',color:BLUE};
+        if (highSales&&!highMargin) return {label:'PLOWHORSE',color:BLUE};
         if (!highSales&&highMargin) return {label:'❓ PUZZLE',color:AMBER};
-        return {label:'🐕 DOG',color:RED};
+        return {label:'DOG',color:RED};
       };
 
       const starCount = profitabilityData.filter(d=>classify(d).label.includes('STAR')).length;
@@ -2771,7 +2987,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       const lastRow=profitabilityData.length+10;
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow,c:12}});
       ws['!cols']=[6,22,14,10,14,10,10,14,12,14,10,10,14].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '💰 Profitability');
+      XLSX.utils.book_append_sheet(wb, ws, 'Profitability');
     }
 
     // ══════════════════════════════════
@@ -2790,7 +3006,7 @@ const exportToExcel = useCallback((type = 'daily') => {
         const bar='█'.repeat(barLen)+'░'.repeat(25-barLen);
         const pct=totalSold>0?`${Math.round((d.sold/totalSold)*100)}%`:'—';
         const altBg=ri%2===0?'0D0D0D':'111111';
-        const medal=ri===0?'🥇':ri===1?'🥈':ri===2?'🥉':`#${ri+1}`;
+        const medal=ri===0?'#1':ri===1?'#2':ri===2?'#3':`#${ri+1}`;
         const row=[medal,d.name,(d.category||'').replace('cat_','').replace(/_/g,' '),d.sold||0,bar,pct];
         row.forEach((val,ci)=>{
           const addr=XLSX.utils.encode_cell({r:7+ri,c:ci});
@@ -2804,7 +3020,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       });
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:topPerformers.length+8,c:5}});
       ws['!cols']=[8,26,16,12,28,12].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '🍽️ Top Dishes');
+      XLSX.utils.book_append_sheet(wb, ws, 'Top Dishes');
     }
 
     // ══════════════════════════════════
@@ -2912,7 +3128,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
 
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:beStart+beData.length+2,c:7}});
       ws['!cols']=[32,20,12,12,12,12,12,12].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '📈 P&L & Break-Even');
+      XLSX.utils.book_append_sheet(wb, ws, 'P&L & Break-Even');
     }
 
     // ══════════════════════════════════
@@ -3009,7 +3225,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
 
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:dailyStart+2+(wastageAnalytics.dailyTrend||[]).length+4,c:7}});
       ws['!cols']=[26,12,12,22,12,12,12,12].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '🗑️ Wastage');
+      XLSX.utils.book_append_sheet(wb, ws, 'Wastage');
     }
 
     // ══════════════════════════════════
@@ -3101,7 +3317,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
 
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:totRow+50,c:8}});
       ws['!cols']=[24,16,10,12,12,14,12,14,10].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '🛒 Extra Items');
+      XLSX.utils.book_append_sheet(wb, ws, 'Extra Items');
     }
 
     // ══════════════════════════════════
@@ -3220,7 +3436,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
 
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:500,c:7}});
       ws['!cols']=[28,14,14,14,14,14,14,14].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '🔢 Waitlist & Counter');
+      XLSX.utils.book_append_sheet(wb, ws, 'Waitlist & Counter');
     }
 
     // ══════════════════════════════════
@@ -3275,7 +3491,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
       const lastRow=staffEfficiency.length+10;
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow,c:8}});
       ws['!cols']=[20,12,12,12,12,14,14,14,14].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '👥 Staff');
+      XLSX.utils.book_append_sheet(wb, ws, 'Staff');
     }
 
     // INSERT DIRECTLY ABOVE IT:
@@ -3354,7 +3570,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
 
       ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: cursorRow + 2, c: 7 } });
       ws['!cols'] = [26, 16, 16, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, '🛵 Aggregators');
+      XLSX.utils.book_append_sheet(wb, ws, 'Aggregators');
     }
     // ══════════════════════════════════
     // SHEET 9: INVENTORY SNAPSHOT (was Sheet 5)
@@ -3383,7 +3599,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
       });
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:inventory.length+7,c:7}});
       ws['!cols']=[22,8,12,12,12,12,14,12].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '📦 Stock');
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock');
     }
 
 
@@ -3396,7 +3612,7 @@ const totalRevPL = canonicalMonthRevenue + (extraAnalytics?.totalRevenue || 0);
       addTitleBlock(
         ws,
         `${tenantConfig?.name || tenantId} — GST INVOICE REGISTER`,
-        `All tax invoices for ${periodLabel} · SAC 996331 · GST @ 5%`,
+        `All tax invoices for ${periodLabel} · SAC 996331 · GST @ ${Math.round(_totalGstPct * 1000) / 10}%`,
         todayStr
       );
 
@@ -3407,7 +3623,7 @@ const gstCGST       = gstTaxable * _cgstPct;
 const gstSGST       = gstTaxable * _sgstPct;
       const gstTotalTax   = gstCGST + gstSGST;
 
-      const kpiLabels = ['TAXABLE VALUE', 'CGST @ 2.5%', 'SGST @ 2.5%', 'TOTAL GST'];
+      const kpiLabels = ['TAXABLE VALUE', `CGST @ ${(_cgstPct*100).toFixed(2).replace(/\.00$/, '')}%`, `SGST @ ${(_sgstPct*100).toFixed(2).replace(/\.00$/, '')}%`, 'TOTAL GST'];
       const kpiValues = [
         `₹${Math.round(gstTaxable).toLocaleString()}`,
         `₹${Math.round(gstCGST).toLocaleString()}`,
@@ -3427,7 +3643,7 @@ const gstSGST       = gstTaxable * _sgstPct;
       // Invoice summary by date (B2C aggregate — suitable for GSTR-3B)
       const headers = [
         'Date', 'Bill Count', 'Gross Revenue (₹)',
-        'Taxable Value (₹)', 'CGST 2.5% (₹)', 'SGST 2.5% (₹)',
+        'Taxable Value (₹)', `CGST ${(_cgstPct*100).toFixed(2).replace(/\.00$/, '')}% (₹)`, `SGST ${(_sgstPct*100).toFixed(2).replace(/\.00$/, '')}% (₹)`,
         'Total Tax (₹)', 'Cash (₹)', 'UPI (₹)', 'Card (₹)'
       ];
       XLSX.utils.sheet_add_aoa(ws, [[''], ['B2C OUTWARD SUPPLY SUMMARY (GSTR-3B TABLE 3.1)','','','','','','','','',''], headers], { origin: 'A8' });
@@ -3491,7 +3707,7 @@ const sgst     = taxable * _sgstPct;
         ['GSTR-3B READY SUMMARY (Table 3.1a)', ''],
         ['Nature of Supply', 'B2C (Intra-State Restaurant Services)'],
         ['SAC Code', '996331'],
-        ['GST Rate', '5% (Composition or Regular)'],
+        ['GST Rate', `${(_totalGstPct * 100).toFixed(2).replace(/\.00$/, '')}%`],
         ['Total Taxable Value (₹)', Math.round(gstTaxable)],
         ['Total CGST (₹)', Math.round(gstCGST)],
         ['Total SGST (₹)', Math.round(gstSGST)],
@@ -3600,7 +3816,7 @@ const sgst     = taxable * _sgstPct;
       const finalGSTRow = payRecStart + payRecData.length + 2;
       ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: finalGSTRow, c: 9 } });
       ws['!cols'] = [28, 14, 16, 14, 14, 14, 14, 14, 14, 14].map(w => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, '🧾 GST Register');
+      XLSX.utils.book_append_sheet(wb, ws, 'GST Register');
     }
 
     // ══════════════════════════════════
@@ -3622,7 +3838,7 @@ const sgst     = taxable * _sgstPct;
     ws['A6'] = { v: 'Check that /orders/:tenantId endpoint is returning data, and that ordersData state is populated before export.', t: 's', s: cellStyle(false, '888888', '0A0A0A') };
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 7, c: 13 } });
     ws['!cols'] = [14, 12, 12, 10, 18, 14, 30, 14, 14, 12, 12, 12, 12, 12].map(w => ({ wch: w }));
-    XLSX.utils.book_append_sheet(wb, ws, '🧾 Invoice Register');
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoice Register');
   } else {
     // KPIs
 const invTotal    = ordersData.filter(o => o.billDetails?.isSettlementAnchor === true).length;
@@ -3654,7 +3870,7 @@ const invSGST     = invTaxable * _sgstPct;
       'Invoice No', 'Date', 'Time (IST)', 'Table No',
       'Customer Name', 'Phone',
       'Items (Summary)', 'Gross Amount (₹)',
-      'Taxable Value (₹)', 'CGST 2.5% (₹)', 'SGST 2.5% (₹)',
+      'Taxable Value (₹)', `CGST ${(_cgstPct*100).toFixed(2).replace(/\.00$/, '')}% (₹)`, `SGST ${(_sgstPct*100).toFixed(2).replace(/\.00$/, '')}% (₹)`,
       'Total Tax (₹)', 'Payment Mode', 'Status'
     ];
     XLSX.utils.sheet_add_aoa(ws, [[''], ['BILL-LEVEL INVOICE DETAIL', '', '', '', '', '', '', '', '', '', '', '', '', ''], headers], { origin: 'A8' });
@@ -3748,7 +3964,7 @@ const sgst       = taxable * _sgstPct;
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: noteRow + 2, c: 13 } });
     ws['!cols'] = [14, 12, 12, 10, 18, 14, 30, 14, 14, 12, 12, 12, 12, 12].map(w => ({ wch: w }));
     ws['!rows'] = [{ hpt: 30 }, { hpt: 14 }, { hpt: 12 }, { hpt: 8 }, { hpt: 22 }, { hpt: 30 }];
-    XLSX.utils.book_append_sheet(wb, ws, '🧾 Invoice Register');
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoice Register');
   }
 }
     // ══════════════════════════════════
@@ -3822,7 +4038,7 @@ const sgst       = taxable * _sgstPct;
 
       ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:summaryData.length+6,c:1}});
       ws['!cols']=[30,28].map(w=>({wch:w}));
-      XLSX.utils.book_append_sheet(wb, ws, '📋 Summary');
+      XLSX.utils.book_append_sheet(wb, ws, 'Summary');
     }
 
     const filename=`Pratyeksha_${tenantConfig?.name||'Report'}_${type}_${type==='monthly'?exportMonthStr:todayStr}.xlsx`;
@@ -3946,7 +4162,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
           </div>
 
           <div style="text-align:center;margin-top:24px;font-size:9px;font-weight:900;color:#ccc;letter-spacing:1px;">
-            POWERED BY PRATYEKSHA
+            <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:'115px',height:'auto',background:'#f7f3eb',borderRadius:'5px',padding:'3px 5px'}} />
           </div>
         </div>
       `;
@@ -4123,7 +4339,7 @@ const netPay = salaryForSlip - deductions;
       </div>
 
       <div style="text-align:center;margin-top:16px;font-size:0.55rem;color:#aaa;border-top:1px solid #eee;padding-top:8px;">
-        Generated by PRATYEKSHA · ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
+        <img src="/pratyeksha-logo.png" alt="Pratyeksha" style="width:115px;height:auto;background:#f7f3eb;border-radius:5px;padding:3px 5px;vertical-align:middle"/> · ${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
       </div>
     </div>
   `;
@@ -4204,13 +4420,13 @@ const renderMonthHeatmap = () => {
   // LOGIN SCREEN
   // ─────────────────────────────────────────────────────
   if (!isAuthenticated) return (
-    <div style={styles.loginOverlay}>
+    <div style={{ ...styles.loginOverlay, position:'relative' }}>
       <motion.div initial={false} animate={{opacity:1}} style={styles.loginBox}>
         <img src={logoPath} alt="Logo" style={styles.sidebarLogo}/>
         <h2 style={{fontSize:'1.2rem',marginBottom:'30px',fontWeight:'900'}}>ADMIN COMMAND CENTER</h2>
         <form onSubmit={handleLogin}>
-          <input type="text" placeholder="Username" style={styles.input} onChange={e=>setLoginData({...loginData,username:e.target.value})}/>
-          <input type="password" placeholder="Access PIN" style={styles.input} onChange={e=>setLoginData({...loginData,password:e.target.value})}/>
+          <input type="text" placeholder="Username" style={styles.input} onChange={e=>setLoginData(p => ({...p, username:e.target.value}))}/>
+          <input type="password" placeholder="Access PIN" style={styles.input} onChange={e=>setLoginData(p => ({...p, password:e.target.value}))}/>
           <button type="submit" style={styles.mainBtn}>INITIALIZE</button>
         </form>
       </motion.div>
@@ -4313,25 +4529,16 @@ const renderMonthHeatmap = () => {
   }}>
     {/* Logo row */}
     <div style={{display:'flex',alignItems:'center',gap:'11px',marginBottom:'18px'}}>
-      <div style={{
-        width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
-        background:'linear-gradient(135deg,rgba(211,191,162,0.15),rgba(138,112,77,0.08))',
-        border:'1px solid rgba(211,191,162,0.18)',
-        display:'flex',alignItems:'center',justifyContent:'center',
-        boxShadow:'0 4px 16px rgba(0,0,0,0.4)'
-      }}>
-        <img src={logoPath} alt="P" style={{width:'22px',height:'22px',objectFit:'contain',filter:'brightness(1.4)'}} className="p-sidebar-logo-wrap"/>
-      </div>
-      <div>
-        <div style={{fontSize:'0.78rem',fontWeight:'900',color:'#d3bfa2',letterSpacing:'1.5px',lineHeight:1}}>PRATYEKSHA</div>
-        <div style={{fontSize:'0.5rem',color:'#333',fontWeight:'700',letterSpacing:'1px',marginTop:'3px'}}>OPERATOR TERMINAL</div>
+      <div style={{ background:'#f7f3eb', borderRadius:10, padding:'7px 10px 6px', display:'flex', flexDirection:'column', gap:4, width:'100%', maxWidth:'205px', boxSizing:'border-box', overflow:'hidden', alignItems:'flex-start' }}>
+        <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{ width:'100%', maxWidth:'184px', height:'42px', objectFit:'contain', objectPosition:'left center', display:'block' }} />
+        <div style={{fontSize:'0.5rem',color:'#6b6b64',fontWeight:'800',letterSpacing:'1px'}}>OPERATOR TERMINAL</div>
       </div>
     </div>
  
   </div>
  
   {/* ── Navigation ── */}
-  <div style={{...styles.sidebarTop,padding:'14px 14px',flex:1}} className="p-sidebar-top">
+  <div style={{...styles.sidebarTop,padding:'14px 14px',flex:1,minHeight:0,overflowY:'auto',overflowX:'hidden'}} className="p-sidebar-top no-sb">
     {/* Section labels + nav items */}
     {[
       {
@@ -4380,7 +4587,7 @@ const renderMonthHeatmap = () => {
           {items.map(tab=>{
             const isActive = activeTab === tab.id;
             return (
-              <button key={tab.id}
+              <button type="button" key={tab.id}
                 onClick={()=>{setActiveTab(tab.id);setSidebarOpen(false);}}
                 className="p-nav-btn"
                 title={tab.label}
@@ -4433,6 +4640,11 @@ const renderMonthHeatmap = () => {
     ))}
   </div>
  
+  {/* ── Fixed sidebar footer: install + operator card ── */}
+  <div style={{padding:'0 16px 12px',flexShrink:0}}>
+    <PwaInstallButton kind="operator" compact />
+  </div>
+
   {/* ── Bottom operator card ── */}
   <div style={{
     padding:'16px',borderTop:'1px solid rgba(211,191,162,0.06)',
@@ -4457,7 +4669,7 @@ const renderMonthHeatmap = () => {
         <div style={{fontSize:'0.52rem',color:'#2a2a2a',fontWeight:'700',marginTop:'1px'}}>Session active</div>
       </div>
     </div>
-    <button onClick={handleLogout} className="p-logout-btn" style={{
+    <button type="button" onClick={handleLogout} className="p-logout-btn" style={{
       width:'100%',padding:'10px',background:'transparent',
       border:'1px solid rgba(255,255,255,0.05)',color:'#252525',
       borderRadius:'9px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',
@@ -4475,7 +4687,7 @@ const renderMonthHeatmap = () => {
 <header style={styles.topHeader} className="p-top-header">
  
   {/* Hamburger */}
-  <button className="p-hamburger" onClick={()=>setSidebarOpen(true)} style={{
+  <button type="button" className="p-hamburger" onClick={()=>setSidebarOpen(true)} style={{
     display:'none',background:'transparent',border:'1px solid #1a1a1a',color:'#d3bfa2',
     width:'36px',height:'36px',borderRadius:'9px',cursor:'pointer',
     alignItems:'center',justifyContent:'center',flexShrink:0
@@ -4485,27 +4697,6 @@ const renderMonthHeatmap = () => {
  
   {/* Page title block */}
   <div className="p-header-left" style={{display:'flex',alignItems:'center',gap:'14px',minWidth:0}}>
-    {/* Icon for active tab */}
-    <div style={{
-      width:'36px',height:'36px',borderRadius:'10px',flexShrink:0,
-      background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',
-      display:'flex',alignItems:'center',justifyContent:'center'
-    }}>
-      {activeTab==='pending'     ? <CookingPot size={16} color="#d3bfa2"/> :
-       activeTab==='billing'     ? <ReceiptIndianRupee size={16} color="#d3bfa2"/> :
-       activeTab==='menu'        ? <UtensilsCrossed size={16} color="#d3bfa2"/> :
-       activeTab==='insights'    ? <BarChart3 size={16} color="#d3bfa2"/> :
-       activeTab==='intelligence'? <Sparkles size={16} color="#d3bfa2"/> :
-       activeTab==='assist'      ? <MessageSquare size={16} color="#d3bfa2"/> :
-       activeTab==='audit'       ? <ShieldCheck size={16} color="#d3bfa2"/> :
-       activeTab==='management'  ? <UserRoundCog size={16} color="#d3bfa2"/> :
-       activeTab==='inventory'   ? <Layers size={16} color="#d3bfa2"/> :
-       activeTab==='extras'      ? <ShoppingBag size={16} color="#d3bfa2"/> :
-       activeTab==='recipes'     ? <ChefHat size={16} color="#d3bfa2"/> :
-       activeTab==='customers'   ? <Users size={16} color="#d3bfa2"/> :
-       activeTab==='marketing'   ? <Megaphone size={16} color="#d3bfa2"/> :
-       <BarChart3 size={16} color="#d3bfa2"/>}
-    </div>
     <div>
       <h1 style={{...styles.pageTitle,fontSize:'0.95rem',margin:0,letterSpacing:'2px',lineHeight:1}} className="p-page-title">
         {activeTab==='pending'?'LIVE KITCHEN':
@@ -4561,7 +4752,7 @@ const renderMonthHeatmap = () => {
           </div>
         ))}
       </motion.div>
-      <button onClick={downloadAllTodaysInvoices} disabled={isDownloadingAllBills} style={{
+      <button type="button" onClick={downloadAllTodaysInvoices} disabled={isDownloadingAllBills} style={{
         marginLeft:'10px',padding:'9px 16px',
         background:isDownloadingAllBills?'#0d0d0d':'linear-gradient(135deg,#d3bfa2,#bda88a)',
         border:'none',color:isDownloadingAllBills?'#444':'#000',
@@ -4579,17 +4770,17 @@ const renderMonthHeatmap = () => {
   {activeTab==='insights' && (
     <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-insights-header">
       <div style={{...styles.headerMonthSelector,borderRadius:'9px',padding:'5px 12px'}}>
-        <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
+        <button type="button" onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
         <div style={{...styles.headerMonthDisplay,gap:'6px'}}>
           <Calendar size={12} color="#8a704d"/>
           <span style={{fontWeight:'900',fontSize:'0.78rem',color:'#d3bfa2'}}>
             {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
           </span>
         </div>
-        <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
+        <button type="button" onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
       </div>
       {['daily','weekly','monthly','annual'].map(p=>(
-        <button key={p} onClick={()=>exportToExcel(p)} className="p-xls-btn"
+        <button type="button" key={p} onClick={()=>exportToExcel(p)} className="p-xls-btn"
           style={{padding:'7px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.2)';e.currentTarget.style.color='#d3bfa2';}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
@@ -4602,7 +4793,7 @@ const renderMonthHeatmap = () => {
   {/* ── INVENTORY header controls ── */}
   {activeTab==='inventory' && (
     <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
-      <button onClick={()=>exportToExcel('inventory')}
+      <button type="button" onClick={()=>exportToExcel('inventory')}
         style={{padding:'9px 16px',background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',transition:'all 0.15s'}}
         onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.07)';}}
         onMouseLeave={e=>{e.currentTarget.style.background='transparent';}}>
@@ -4615,11 +4806,11 @@ const renderMonthHeatmap = () => {
   {activeTab==='management' && (
     <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
       <div style={{...styles.headerMonthSelector,borderRadius:'9px',padding:'5px 12px'}}>
-        <button onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
+        <button type="button" onClick={()=>changeMonth(-1)} style={styles.headerMonthNav}><ChevronLeft size={14}/></button>
         <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
           {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
         </span>
-        <button onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
+        <button type="button" onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
       </div>
     </div>
   )}
@@ -4630,7 +4821,7 @@ const renderMonthHeatmap = () => {
       {[
         {l:'TOTAL',v:extraItems.length,c:'#d3bfa2'},
         {l:'AVAILABLE',v:extraItems.filter(i=>i.isAvailable).length,c:'#4ade80'},
-        {l:'STOCK VALUE',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*i.price),0).toLocaleString()}`,c:'#d3bfa2'},
+        {l:'STOCK VALUE',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||0)),0).toLocaleString()}`,c:'#d3bfa2'},
       ].map((s,i)=>(
         <div key={i} style={{
           textAlign:'center',padding:'8px 16px',
@@ -4649,7 +4840,7 @@ const renderMonthHeatmap = () => {
     <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-menu-header-actions">
       <div style={{display:'flex',background:'#000',border:'1px solid #1a1a1a',borderRadius:'9px',padding:'3px',gap:'3px'}}>
         {[{val:'all',label:'ALL'},{val:'veg',label:'VEG'},{val:'nonveg',label:'NON-VEG'}].map(f=>(
-          <button key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
+          <button type="button" key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
             padding:'6px 12px',border:'none',borderRadius:'6px',cursor:'pointer',
             fontSize:'0.6rem',fontWeight:'900',transition:'all 0.15s',
             background:menuVegFilter===f.val?'#d3bfa2':'transparent',
@@ -4661,7 +4852,7 @@ const renderMonthHeatmap = () => {
           </button>
         ))}
       </div>
-      <button onClick={async()=>{try{await axios.post(`${BASE_URL}/admin/recalculate-bestsellers/${tenantId}`);await fetchInitialData();showNotif('Bestsellers recalculated');}catch{showNotif('Failed','error');}}}
+      <button type="button" onClick={async()=>{try{await axios.post(`${BASE_URL}/admin/recalculate-bestsellers/${tenantId}`);await fetchInitialData();showNotif('Bestsellers recalculated');}catch{showNotif('Failed','error');}}}
         style={{display:'flex',alignItems:'center',gap:'5px',padding:'7px 13px',borderRadius:'8px',cursor:'pointer',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.15)',color:'#d3bfa2',fontSize:'0.58rem',fontWeight:'900',outline:'none',fontFamily:'inherit',transition:'all 0.15s'}}
         onMouseEnter={e=>{e.currentTarget.style.background='rgba(211,191,162,0.12)';}}
         onMouseLeave={e=>{e.currentTarget.style.background='rgba(211,191,162,0.06)';}}>
@@ -4691,7 +4882,7 @@ const renderMonthHeatmap = () => {
       )}
       {/* Sub-tab pills */}
       {['announcements','offers','campaigns'].map(st=>(
-        <button key={st} onClick={()=>setMarketingSubTab(st)}
+        <button type="button" key={st} onClick={()=>setMarketingSubTab(st)}
           style={{
             padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
             fontSize:'0.6rem',fontWeight:'900',letterSpacing:'0.5px',
@@ -4705,7 +4896,6 @@ const renderMonthHeatmap = () => {
       ))}
     </div>
   )}
- 
 </header>
   
 {ingredientAlerts.filter(a => !a.dismissed).length > 0 && (
@@ -4790,7 +4980,7 @@ const renderMonthHeatmap = () => {
                     {/* Action hints */}
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                         {/* Restock shortcut */}
-                        <button
+                        <button type="button"
                             onClick={() => {
                                 // Jump to inventory tab and pre-fill the item name
                                 setActiveTab('inventory');
@@ -4828,7 +5018,7 @@ const renderMonthHeatmap = () => {
                 </div>
  
                 {/* Dismiss */}
-                <button
+                <button type="button"
                     onClick={() => setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a))}
                     style={{
                         background: 'transparent', border: 'none', color: '#444',
@@ -4985,17 +5175,17 @@ const renderMonthHeatmap = () => {
     </div>
     <div style={{ display:'flex', gap:'8px' }}>
       {joinMode && (
-        <button onClick={confirmJoinTables}
+        <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(74,158,111,0.35)', background:'rgba(74,158,111,0.1)', color:'#4a9e6f', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
           <CheckCircle2 size={11}/> JOIN ({pendingJoinSelection.length})
         </button>
       )}
-      <button
+      <button type="button"
         onClick={() => { setJoinMode(p => !p); setPendingJoinSelection([]); }}
         style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:`1px solid ${joinMode ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.2)'}`, background: joinMode ? 'rgba(211,191,162,0.08)' : 'transparent', color: joinMode ? '#d3bfa2' : '#888', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
         <Link2 size={11}/> {joinMode ? 'CANCEL' : 'JOIN TABLES'}
       </button>
-      <button
+      <button type="button"
         onClick={() => {
           if (floorEditMode) { saveFloorLayout(localFloorLayout || floorLayout); }
           else { setLocalFloorLayout(floorLayout); }
@@ -5096,10 +5286,10 @@ const renderMonthHeatmap = () => {
           {/* Seats stepper — edit mode only */}
           {floorEditMode && (
             <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{ position:'absolute', bottom:-24, display:'flex', alignItems:'center', gap:'5px' }}>
-              <button onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: Math.max(1, (o.seats||2)-1) } : o))}
+              <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: Math.max(1, (o.seats||2)-1) } : o))}
                 style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#111', color:'#888', border:'1px solid #222', borderRadius:4, cursor:'pointer' }}>-</button>
               <span style={{ fontSize:'0.55rem', color:'#888', fontWeight:800 }}>{t.seats || 2}</span>
-              <button onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: (o.seats||2)+1 } : o))}
+              <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: (o.seats||2)+1 } : o))}
                 style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#111', color:'#888', border:'1px solid #222', borderRadius:4, cursor:'pointer' }}>+</button>
             </div>
           )}
@@ -5154,7 +5344,7 @@ const renderMonthHeatmap = () => {
                   {groupOrders.length === 0 ? 'No active order' : `${groupOrders.reduce((a,o)=>a+(o.items?.length||0),0)} item(s) on the ticket`}
                 </div>
               </div>
-              <button onClick={() => setActiveTableTicket(null)} style={{ background:'#111', border:'1px solid rgba(211,191,162,0.1)', color:'#888', padding:6, borderRadius:8, cursor:'pointer', display:'flex' }}>
+              <button type="button" onClick={() => setActiveTableTicket(null)} style={{ background:'#111', border:'1px solid rgba(211,191,162,0.1)', color:'#888', padding:6, borderRadius:8, cursor:'pointer', display:'flex' }}>
                 <X size={13}/>
               </button>
             </div>
@@ -5181,7 +5371,7 @@ const renderMonthHeatmap = () => {
 
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {t?.groupId && (
-                  <button onClick={() => { unjoinTable(activeTableTicket); setActiveTableTicket(null); }}
+                  <button type="button" onClick={() => { unjoinTable(activeTableTicket); setActiveTableTicket(null); }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(211,191,162,0.15)', background:'transparent', color:'#888', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
                     <Link2 size={12}/> UNJOIN TABLE
                   </button>
@@ -5192,20 +5382,20 @@ const renderMonthHeatmap = () => {
                       <CalendarClock size={11}/> RESERVED · {activeReservation.customerName || 'Walk-in'}
                       {activeReservation.partySize ? ` · ${activeReservation.partySize} guests` : ''}
                     </div>
-                    <button onClick={() => { cancelReservation(activeReservation._id); setActiveTableTicket(null); }}
+                    <button type="button" onClick={() => { cancelReservation(activeReservation._id); setActiveTableTicket(null); }}
                       style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 0', borderRadius:8, border:'1px solid rgba(200,114,114,0.3)', background:'rgba(200,114,114,0.08)', color:'#c87272', fontSize:'0.58rem', fontWeight:900, cursor:'pointer' }}>
                       <X size={11}/> CANCEL RESERVATION
                     </button>
                   </div>
                 )}
                 {!isReserved && groupOrders.length === 0 && (
-                  <button onClick={() => { setQuickReserveTable(activeTableTicket); setActiveTableTicket(null); }}
+                  <button type="button" onClick={() => { setQuickReserveTable(activeTableTicket); setActiveTableTicket(null); }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(138,112,77,0.35)', background:'rgba(138,112,77,0.1)', color:'#8a704d', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
                     <CalendarClock size={12}/> RESERVE THIS TABLE
                   </button>
                 )}
                 {groupOrders.length > 0 && (
-                  <button onClick={() => { generateBill(activeTableTicket); setActiveTableTicket(null); }}
+                  <button type="button" onClick={() => { generateBill(activeTableTicket); setActiveTableTicket(null); }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(74,158,111,0.35)', background:'rgba(74,158,111,0.1)', color:'#4a9e6f', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
                     <ReceiptText size={12}/> OPEN BILLING
                   </button>
@@ -5243,13 +5433,13 @@ const renderMonthHeatmap = () => {
               style={{ padding:'10px 12px', background:'#000', border:'1px solid #1a1a1a', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <span style={{ fontSize:'0.65rem', color:'#888', fontWeight:800 }}>Party size</span>
-              <button onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: Math.max(1, p.partySize-1) }))}
+              <button type="button" onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: Math.max(1, p.partySize-1) }))}
                 style={{ width:26, height:26, background:'#111', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>-</button>
               <span style={{ fontSize:'0.75rem', color:'#fff', fontWeight:900 }}>{quickReserveDraft.partySize}</span>
-              <button onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: p.partySize+1 }))}
+              <button type="button" onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: p.partySize+1 }))}
                 style={{ width:26, height:26, background:'#111', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>+</button>
             </div>
-            <button onClick={submitQuickReserve}
+            <button type="button" onClick={submitQuickReserve}
               style={{ marginTop:6, padding:'12px 0', borderRadius:9, border:'none', background:'#8a704d', color:'#000', fontSize:'0.68rem', fontWeight:900, cursor:'pointer' }}>
               CONFIRM RESERVATION
             </button>
@@ -5411,7 +5601,7 @@ const renderMonthHeatmap = () => {
               <div style={{ fontWeight: '900', color: '#d3bfa2', fontSize: '0.7rem', marginBottom: '2px', fontFamily: 'monospace' }}>T-{req.tableNumber}</div>
               <div style={{ fontSize: '0.6rem', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
             </div>
-            <button onClick={() => completeWaiterRequest(req._id)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.15)', color: '#8a704d', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0, transition: 'all 0.15s' }}
+            <button type="button" onClick={() => completeWaiterRequest(req._id)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.15)', color: '#8a704d', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0, transition: 'all 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; }}>
               DONE
@@ -5475,7 +5665,7 @@ const renderMonthHeatmap = () => {
             ))}
           </div>
         )}
-        <button onClick={fetchCounterQueue} style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+        <button type="button" onClick={fetchCounterQueue} style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}>
           <RefreshCw size={12} />
@@ -5491,7 +5681,7 @@ const renderMonthHeatmap = () => {
           { id: 'pickup',       label: 'PICKUP',        icon: <ShoppingBag size={11} />,  count: pickupEntries.length },
           { id: 'reservations', label: 'RESERVATIONS',  icon: <CalendarClock size={11} />, count: reservationEntries.filter(r => r.status === 'pending').length },
         ].map(tab => (
-          <button key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
+          <button type="button" key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '12px 14px', background: 'transparent', border: 'none',
             cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '1px',
@@ -5512,7 +5702,7 @@ const renderMonthHeatmap = () => {
         <input type="text" placeholder="Search name..." value={queueSearch} onChange={e => setQueueSearch(e.target.value)}
           style={{ background: 'transparent', border: 'none', color: '#c8c0b0', outline: 'none', fontSize: '0.64rem', width: '130px' }} />
         {queueSearch && (
-          <button onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#2a2a2a', cursor: 'pointer', padding: 0, display: 'flex' }}>
+          <button type="button" onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#2a2a2a', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <X size={10} />
           </button>
         )}
@@ -5589,13 +5779,13 @@ const renderMonthHeatmap = () => {
                   {/* Actions */}
                   <div style={{ padding: '0 15px 14px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      <button onClick={() => setAssignTableModal(entry)} style={{ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', fontWeight: '900', fontSize: '0.58rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'opacity 0.15s' }}
+                      <button type="button" onClick={() => setAssignTableModal(entry)} style={{ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#000', fontWeight: '900', fontSize: '0.58rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'opacity 0.15s' }}
                         onMouseEnter={e => e.currentTarget.style.opacity = '0.85'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                         <TableProperties size={11} /> ASSIGN TABLE
                       </button>
-                      <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: `Mark as no-show and remove from queue.`, onConfirm: async () => {
+                      <button type="button" onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: `Mark as no-show and remove from queue.`, onConfirm: async () => {
   try {
-    await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`);
+    await axios.patch(`${BASE_URL}/waitlist/${entry._id}/no-show`, { tenantId });
     fetchCounterQueue();
     showNotif(`${entry.customerName} — marked no-show`);
   } catch (err) {
@@ -5609,7 +5799,7 @@ const renderMonthHeatmap = () => {
                       </button>
                     </div>
                     {/* Re-notify */}
-                    <button onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Almost ready!', body: `Hi ${entry.customerName}! Your table will be ready soon. Please stay nearby.` }); showNotif(`${entry.customerName} — notified`); } catch { showNotif('Notification failed', 'error'); } }}
+                    <button type="button" onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Almost ready!', body: `Hi ${entry.customerName}! Your table will be ready soon. Please stay nearby.`, tenantId }); showNotif(`${entry.customerName} — notified`); } catch { showNotif('Notification failed', 'error'); } }}
                       style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#2a2a2a', borderRadius: '8px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; e.currentTarget.style.color = '#2a2a2a'; }}>
@@ -5682,12 +5872,12 @@ const renderMonthHeatmap = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', paddingLeft: '34px' }}>
                         {/* Step 1 — Send to Kitchen */}
                         {!isKitchenFired && (
-                          <button onClick={async () => {
+                          <button type="button" onClick={async () => {
                             try {
                               const orderItems = (entry.items || []).map(i => ({ menuItemId: i.menuItemId || null, name: i.name, quantity: Number(i.quantity) || 1, portion: i.portion || 'Single', pricePerUnit: Number(i.price || i.pricePerUnit) || 0, subtotal: Number(i.subtotal) || 0, suggestion: '' }));
                               const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
                               await axios.post(`${BASE_URL}/orders`, { tenantId, tableNumber: 'Counter', items: orderItems, source: 'counter-pickup', sessionId: entry.sessionId, waitlistId: entry._id, status: 'pending', billDetails: { itemsTotal, grandTotal: itemsTotal } });
-                              await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`);
+                              await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`, { tenantId });
                               fetchCounterQueue(); fetchInitialData();
                               showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
                             } catch (err) { showNotif(err.response?.data?.error || 'Failed', 'error'); }
@@ -5699,7 +5889,7 @@ const renderMonthHeatmap = () => {
                         )}
                         {/* Step 2 — Mark ready */}
                         {isKitchenFired && !isReady && (
-                          <button onClick={async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`); fetchCounterQueue(); showNotif(`${entry.customerName} — customer notified, pickup ready`); }}
+                          <button type="button" onClick={async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`, { tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — customer notified, pickup ready`); }}
                             style={{ padding: '9px 14px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: '#d3bfa2', fontWeight: '900', fontSize: '0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; }}>
@@ -5715,7 +5905,7 @@ const renderMonthHeatmap = () => {
                         <div style={{ fontSize: '0.46rem', color: '#2a2a2a', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
                       </div>
-                      <button onClick={() => {
+                      <button type="button" onClick={() => {
   setPickupPaymentMethod('cash');
   setPickupPaymentModal(entry);
 }}
@@ -5725,7 +5915,7 @@ const renderMonthHeatmap = () => {
                       </button>
                       {/* Cancel */}
                       {!['served','settled','cancelled'].includes(entry.status) && (
-                        <button onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } })}
+                        <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } })}
                           style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
@@ -5733,7 +5923,7 @@ const renderMonthHeatmap = () => {
                         </button>
                       )}
                       {isReady && (
-                        <button onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Your pickup order is ready!', body: `Hi ${entry.customerName}! Please collect your order from the counter.`, tag: 'pickup-ready-reminder' }); showNotif(`${entry.customerName} — re-notified`); } catch { showNotif('Notification failed', 'error'); } }}
+                        <button type="button" onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Your pickup order is ready!', body: `Hi ${entry.customerName}! Please collect your order from the counter.`, tag: 'pickup-ready-reminder', tenantId }); showNotif(`${entry.customerName} — re-notified`); } catch { showNotif('Notification failed', 'error'); } }}
                           style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.1)', color: 'rgba(211,191,162,0.4)', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.1)'; e.currentTarget.style.color = 'rgba(211,191,162,0.4)'; }}>
@@ -5802,7 +5992,7 @@ const renderMonthHeatmap = () => {
           ].map(({ value, label, icon }) => {
             const active = pickupPaymentMethod === value;
             return (
-              <button
+              <button type="button"
                 key={value}
                 onClick={() => setPickupPaymentMethod(value)}
                 style={{
@@ -5828,7 +6018,7 @@ const renderMonthHeatmap = () => {
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button
+        <button type="button"
           onClick={() => setPickupPaymentModal(null)}
           style={{
             flex: 1, padding: '12px', borderRadius: '10px',
@@ -5839,7 +6029,7 @@ const renderMonthHeatmap = () => {
         >
           CANCEL
         </button>
-        <button
+        <button type="button"
           disabled={isSettlingPickup}
           onClick={async () => {
             if (isSettlingPickup) return;
@@ -5847,7 +6037,7 @@ const renderMonthHeatmap = () => {
             try {
               await axios.patch(
                 `${BASE_URL}/waitlist/${pickupPaymentModal._id}/settle`,
-                { paymentMethod: pickupPaymentMethod, finalAmount: pickupPaymentModal.totalAmount }
+                { paymentMethod: pickupPaymentMethod, finalAmount: pickupPaymentModal.totalAmount, tenantId }
               );
               setPickupPaymentModal(null);
               fetchCounterQueue();
@@ -5888,7 +6078,7 @@ const renderMonthHeatmap = () => {
                 {[
                   { onClick: () => { const d = new Date(reservationViewDate); d.setDate(d.getDate() - 1); setReservationViewDate(d.toISOString().split('T')[0]); }, icon: <ChevronLeft size={13} /> },
                 ].map((btn, i) => (
-                  <button key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                  <button type="button" key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
                     {btn.icon}
@@ -5897,17 +6087,17 @@ const renderMonthHeatmap = () => {
                 <div style={{ padding: '7px 16px', background: '#040405', border: '1px solid #161616', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
                   {new Date(reservationViewDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
                 </div>
-                <button onClick={() => { const d = new Date(reservationViewDate); d.setDate(d.getDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setDate(d.getDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
                   <ChevronRight size={13} />
                 </button>
-                <button onClick={() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}>
                   TODAY
                 </button>
-                <button onClick={() => fetchCounterQueue()} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => fetchCounterQueue()} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}>
                   <RefreshCw size={11} />
@@ -6007,21 +6197,21 @@ const renderMonthHeatmap = () => {
                           <div style={{ display: 'flex', gap: '5px' }}>
                             {/* Confirm */}
                             {entry.status === 'pending' && (
-                              <button onClick={async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed' }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); }}
+                              <button type="button" onClick={async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); }}
                                 style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
                                 CONFIRM
                               </button>
                             )}
                             {/* Seat */}
                             {entry.status === 'confirmed' && (
-                              <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+                              <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
                                 style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <TableProperties size={10} /> SEAT
                               </button>
                             )}
                             {/* Change table */}
                             {entry.status === 'seated' && (
-                              <button onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
+                              <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
                                 style={{ padding: '5px 9px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
@@ -6029,7 +6219,7 @@ const renderMonthHeatmap = () => {
                               </button>
                             )}
                             {/* Edit */}
-                            <button onClick={() => setReservationEditModal(entry)}
+                            <button type="button" onClick={() => setReservationEditModal(entry)}
                               style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
@@ -6037,7 +6227,7 @@ const renderMonthHeatmap = () => {
                             </button>
                             {/* No-show */}
                             {['pending', 'confirmed'].includes(entry.status) && (
-                              <button onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show' }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
+                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
                                 style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#2a2a2a', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}>
@@ -6049,13 +6239,13 @@ const renderMonthHeatmap = () => {
                           {/* Cancel + Notify — stacked */}
                           {['pending', 'confirmed'].includes(entry.status) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                              <button onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled' }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
+                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
                                 style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
                                 <X size={9} /> CANCEL
                               </button>
-                              <button onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify' }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
+                              <button type="button" onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify', tenantId }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
                                 style={{ padding: '5px 10px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.08)', color: 'rgba(211,191,162,0.35)', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.22)'; e.currentTarget.style.color = '#d3bfa2'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}>
@@ -6110,7 +6300,7 @@ const renderMonthHeatmap = () => {
               }
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={() => setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a))}
             style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
           >
@@ -6138,7 +6328,7 @@ const renderMonthHeatmap = () => {
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>EDIT DISH</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#444', fontWeight: '600' }}>{editDishModal.name}</p>
               </div>
-              <button onClick={() => setEditDishModal(null)} style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button type="button" onClick={() => setEditDishModal(null)} style={{ background: 'transparent', border: '1px solid #1a1a1a', color: '#555', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={14} />
               </button>
             </div>
@@ -6160,7 +6350,7 @@ const renderMonthHeatmap = () => {
                 {[{ key: 'price', label: 'Base Price (₹)' }, { key: 'priceHalf', label: 'Half Price (₹)' }, { key: 'priceFull', label: 'Full Price (₹)' }].map(f => (
                   <div key={f.key}>
                     <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
-                    <input type="number" value={editDishData[f.key] ?? ''} onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                    <input type="number" value={editDishData[f.key] ?? ''} onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value }))}
                       style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#d3bfa2', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '900' }} />
                   </div>
                 ))}
@@ -6189,7 +6379,7 @@ const renderMonthHeatmap = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '0.58rem', color: '#444', marginBottom: '5px', fontWeight: '700' }}>Serving Size (pax)</div>
-                  <input type="number" min="1" value={editDishData.servingSize ?? 1} onChange={e => setEditDishData(p => ({ ...p, servingSize: Number(e.target.value) }))}
+                  <input type="number" min="1" value={editDishData.servingSize ?? 1} onChange={e => setEditDishData(p => ({ ...p, servingSize: e.target.value }))}
                     style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               </div>
@@ -6247,14 +6437,14 @@ const renderMonthHeatmap = () => {
                 style={{ width: '100%', background: '#111', border: '1px solid #1a1a1a', color: '#666', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.6 }} />
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={async () => {
+              <button type="button" onClick={async () => {
                 try {
                   const payload = { ...editDishData };
                   if (payload.priceHalf === '') delete payload.priceHalf;
                   if (payload.priceFull === '') delete payload.priceFull;
                   // Clear auto-hide flag if operator is manually restoring
                   if (payload.isAvailable) payload._autoHiddenByIngredient = null;
-                  const res = await axios.patch(`${BASE_URL}/menu-item/${editDishModal._id}`, payload);
+                  const res = await axios.patch(`${BASE_URL}/menu-item/${editDishModal._id}`, { ...payload, tenantId });
                   socket.emit('menu_change_detected', { tenantId, itemId: editDishModal._id, updateData: res.data });
                   setMenuItems(prev => prev.map(i => i._id === editDishModal._id ? res.data : i));
                   showNotif(`${editDishData.name || editDishModal.name} — updated`);
@@ -6263,7 +6453,7 @@ const renderMonthHeatmap = () => {
               }} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
                 SAVE CHANGES
               </button>
-              <button onClick={() => setEditDishModal(null)} style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setEditDishModal(null)} style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #1a1a1a', color: '#555', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}>
                 CANCEL
               </button>
             </div>
@@ -6306,11 +6496,11 @@ const renderMonthHeatmap = () => {
           <Search size={13} color="#444" />
           <input type="text" placeholder="Search dishes..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
-          {searchQuery && <button onClick={() => setSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={12} /></button>}
+          {searchQuery && <button type="button" onClick={() => setSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={12} /></button>}
         </div>
 
         {/* ADD DISH */}
-        <button onClick={() => setShowAddDishModal(true)} style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px', flexShrink: 0 }}>
+        <button type="button" onClick={() => setShowAddDishModal(true)} style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px', flexShrink: 0 }}>
           <UtensilsCrossed size={14} /> + ADD DISH
         </button>
       </div>
@@ -6389,12 +6579,12 @@ const renderMonthHeatmap = () => {
                 )}
               </div>
               {/* Category-level HIDE ALL / SHOW ALL */}
-              <button
+              <button type="button"
                 onClick={async () => {
                   const newVal = allHidden; // if all hidden → show all; else → hide all
                   try {
                     await Promise.all(catItems.map(item =>
-                      axios.patch(`${BASE_URL}/menu-item/${item._id}`, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '' })
+                      axios.patch(`${BASE_URL}/menu-item/${item._id}`, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '', tenantId })
                     ));
                     setMenuItems(prev => prev.map(i =>
                       catItems.find(c => c._id === i._id)
@@ -6509,7 +6699,7 @@ const renderMonthHeatmap = () => {
 
                   {/* ACTION BUTTONS */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                    <button onClick={() => {
+                    <button type="button" onClick={() => {
                       setEditDishModal(item);
                       setEditDishData({ name: item.name, name_mr: item.name_mr || '', price: item.price || '', priceHalf: item.priceHalf || '', priceFull: item.priceFull || '', categoryId: item.categoryId || '', spicylevel: item.spicylevel || '', servingSize: item.servingSize || 1, isVeg: item.isVeg !== false, isAvailable: item.isAvailable !== false, isChefSpecial: item.isChefSpecial || false, tags: item.tags || [], ingredients: item.ingredients || { en: [], mr: [] }, chefMessage: item.chefMessage || '' });
                     }} style={{ width: '100%', padding: '9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '9px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.15s' }}
@@ -6519,7 +6709,7 @@ const renderMonthHeatmap = () => {
                       <SquarePen size={12} /> EDIT ALL DETAILS
                     </button>
                     <div style={{ display: 'flex', gap: '7px' }}>
-                      <button onClick={async () => {
+                      <button type="button" onClick={async () => {
                         const newVal = !item.isAvailable;
                         // Update instantly for a stable, non-flickering tap response,
                         // then reconcile with the server. Roll back only if the save fails.
@@ -6532,7 +6722,7 @@ const renderMonthHeatmap = () => {
                       }} style={{ flex: 1, padding: '9px 8px', background: item.isAvailable ? '#111' : 'rgba(211,191,162,0.06)', border: item.isAvailable ? '1px solid #1a1a1a' : '1px solid rgba(211,191,162,0.2)', color: item.isAvailable ? '#444' : '#d3bfa2', borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}>
                         {item.isAvailable ? 'HIDE' : 'SHOW'}
                       </button>
-                      <button onClick={() => setPendingDeleteDish(item)} style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '9px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                      <button type="button" onClick={() => setPendingDeleteDish(item)} style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #1a1a1a', color: '#333', borderRadius: '9px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#333'; }}
                         title="Remove dish"><X size={14} /></button>
@@ -6589,7 +6779,7 @@ const renderMonthHeatmap = () => {
         <div style={{fontSize:'0.58rem',color:'#444',fontStyle:'italic'}}>
           Avg ₹{customerDir.summary?.total > 0 ? Math.round((customerDir.summary?.totalRevenue||0)/customerDir.summary.total).toLocaleString() : 0} per customer
         </div>
-        <button
+        <button type="button"
           onClick={() => fetchCustomerDir(customerSegFilter, customerSearch)}
           style={{
             marginTop:'8px', display:'flex', alignItems:'center', gap:'6px',
@@ -6606,7 +6796,7 @@ const renderMonthHeatmap = () => {
     {/* ── SEGMENT PILLS + SEARCH ── */}
     <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
       {Object.entries(SEG_META).map(([seg, meta]) => (
-        <button
+        <button type="button"
           key={seg}
           onClick={() => { setCustomerSegFilter(seg); fetchCustomerDir(seg, customerSearch); }}
           style={{
@@ -6767,7 +6957,7 @@ const renderMonthHeatmap = () => {
                     </span>
                   )}
                 </div>
-                <button onClick={() => setCustomerProfile(null)} style={{
+                <button type="button" onClick={() => setCustomerProfile(null)} style={{
                   background:'#13151a', border:'1px solid #252932',
                   color:'#555', padding:'8px', borderRadius:'9px', cursor:'pointer',
                   display:'flex', alignItems:'center', justifyContent:'center'
@@ -6873,7 +7063,7 @@ const renderMonthHeatmap = () => {
     ].map(st=>{
       const isActive = marketingSubTab === st.id;
       return (
-        <button key={st.id} onClick={()=>setMarketingSubTab(st.id)}
+        <button type="button" key={st.id} onClick={()=>setMarketingSubTab(st.id)}
           style={{
             display:'flex',alignItems:'center',gap:'7px',
             padding:'10px 20px',
@@ -6964,7 +7154,7 @@ const renderMonthHeatmap = () => {
                 {id:'wish',         label:'Festive Wish', icon:<Sparkles size={12}/>},
                 {id:'announcement', label:'Notice',       icon:<Megaphone size={12}/>},
               ].map(opt=>(
-                <button key={opt.id} onClick={()=>setNewAnnouncement(p=>({...p,type:opt.id}))}
+                <button type="button" key={opt.id} onClick={()=>setNewAnnouncement(p=>({...p,type:opt.id}))}
                   style={{
                     display:'flex',alignItems:'center',gap:'7px',padding:'9px 10px',
                     borderRadius:'8px',cursor:'pointer',transition:'all 0.15s',
@@ -7033,7 +7223,7 @@ const renderMonthHeatmap = () => {
                 <span style={{color:'#444',fontWeight:'600',marginLeft:'3px'}}>(blank = now)</span>
               </div>
               {(newAnnouncement.startDate||newAnnouncement.startTime) && (
-                <button onClick={()=>setNewAnnouncement(p=>({...p,startDate:'',startTime:''}))}
+                <button type="button" onClick={()=>setNewAnnouncement(p=>({...p,startDate:'',startTime:''}))}
                   style={{fontSize:'0.48rem',color:'#444',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}>CLEAR</button>
               )}
             </div>
@@ -7054,7 +7244,7 @@ const renderMonthHeatmap = () => {
                 {label:'Fri 7PM',fn:()=>{const d=new Date();const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);d.setHours(19,0,0,0);return d;}},
                 {label:'Sat 12PM',fn:()=>{const d=new Date();const ds=(6-d.getDay()+7)%7||7;d.setDate(d.getDate()+ds);d.setHours(12,0,0,0);return d;}},
               ].map(p=>(
-                <button key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:d.toISOString().split('T')[0],startTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:d.toISOString().split('T')[0],startTime:d.toTimeString().slice(0,5)}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(186,117,23,0.2)',background:'rgba(186,117,23,0.06)',color:'#BA7517',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7089,7 +7279,7 @@ const renderMonthHeatmap = () => {
                 {label:'+3 days',fn:()=>new Date(Date.now()+3*86400000)},
                 {label:'+7 days',fn:()=>new Date(Date.now()+7*86400000)},
               ].map(p=>(
-                <button key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:d.toISOString().split('T')[0],expiryTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:d.toISOString().split('T')[0],expiryTime:d.toTimeString().slice(0,5)}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid #1e1e1e',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7117,7 +7307,7 @@ const renderMonthHeatmap = () => {
           )}
  
           {/* Publish button */}
-          <button
+          <button type="button"
             onClick={async()=>{
               if(!newAnnouncement.title||!newAnnouncement.message||!newAnnouncement.expiryDate||!newAnnouncement.expiryTime){
                 showNotif('Headline, message and expiry are required','error');return;
@@ -7229,24 +7419,24 @@ const renderMonthHeatmap = () => {
                 <div style={{display:'flex',flexDirection:'column',gap:'5px',flexShrink:0,alignItems:'flex-end'}}>
                   <div style={{display:'flex',gap:'5px'}}>
                     {isLive&&(
-                      <button onClick={()=>setConfirmModal({show:true,title:'End this announcement?',subtitle:'Removed from customer menu immediately.',onConfirm:async()=>{try{await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false});fetchAnnouncements();showNotif('Announcement ended');}catch{showNotif('Failed','error');}}})}
+                      <button type="button" onClick={()=>setConfirmModal({show:true,title:'End this announcement?',subtitle:'Removed from customer menu immediately.',onConfirm:async()=>{try{await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false, tenantId});fetchAnnouncements();showNotif('Announcement ended');}catch{showNotif('Failed','error');}}})}
                         style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid rgba(186,117,23,0.22)',background:'rgba(186,117,23,0.06)',color:'#BA7517',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
                         <Zap size={8}/> END
                       </button>
                     )}
                     {isScheduled&&(
-                      <button onClick={()=>setConfirmModal({show:true,title:'Cancel this scheduled announcement?',subtitle:'It will not go live.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();showNotif('Schedule cancelled');}catch{showNotif('Failed','error');}}})}
+                      <button type="button" onClick={()=>setConfirmModal({show:true,title:'Cancel this scheduled announcement?',subtitle:'It will not go live.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();showNotif('Schedule cancelled');}catch{showNotif('Failed','error');}}})}
                         style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid #1e1e1e',background:'transparent',color:'#444',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
                         <X size={8}/> CANCEL
                       </button>
                     )}
                     {isEnded&&(
-                      <button onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`);fetchAnnouncements();}catch{}}})}
+                      <button type="button" onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();}catch{}}})}
                         style={{width:'26px',height:'26px',padding:0,borderRadius:'6px',cursor:'pointer',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={10}/></button>
                     )}
                   </div>
                   {isEnded&&(
-                    <button onClick={()=>{
+                    <button type="button" onClick={()=>{
                       setNewAnnouncement({
                         title:a.title,message:a.message,type:a.type,
                         accentColor:a.accentColor||'gold',icon:a.icon||'tag',
@@ -7364,7 +7554,7 @@ const renderMonthHeatmap = () => {
               style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
           </div>
         </div>
-        <button onClick={async()=>{
+        <button type="button" onClick={async()=>{
           if(!newOffer.title?.trim()){showNotif('Offer title is required','error');return;}
           try{
             const payload={
@@ -7434,16 +7624,16 @@ const renderMonthHeatmap = () => {
             </div>
  
             <div style={{display:'flex',gap:'6px'}}>
-              <button onClick={async()=>{
+              <button type="button" onClick={async()=>{
                 try{
-await axios.patch(`${BASE_URL}/offers/${offer._id}`, {isActive:!offer.isActive});
+await axios.patch(`${BASE_URL}/offers/${offer._id}`, {isActive:!offer.isActive, tenantId});
                   fetchOffers();
                   showNotif(`"${offer.title}" ${!offer.isActive?'activated':'paused'}`);
                 }catch{showNotif('Update failed','error');}
               }} style={{flex:1,padding:'8px',background:offer.isActive?'#0d0d0d':'rgba(74,222,128,0.05)',border:offer.isActive?'1px solid #1a1a1a':'1px solid rgba(74,222,128,0.16)',color:offer.isActive?'#444':'#4ade80',borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}>
                 {offer.isActive?'PAUSE':'ACTIVATE'}
               </button>
-              <button onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${offer._id}`);
+              <button type="button" onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${offer._id}`, { data: { tenantId } });
 fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
                 style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
@@ -7484,7 +7674,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       <div style={{padding:'15px 20px',borderBottom:'1px solid #111',background:'#060606',display:'flex',alignItems:'center',gap:'9px'}}>
         <Send size={13} color="#d3bfa2"/>
         <div>
-          <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>SEND PUSH CAMPAIGN</div>
+          <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>{newCampaign.segment==='all'?'SEND CUSTOMER BROADCAST':'SEND PUSH CAMPAIGN'}</div>
           <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'1px'}}>Push notification to customer segments who opted in</div>
         </div>
       </div>
@@ -7495,14 +7685,14 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Target Segment</div>
           <div style={{display:'flex',gap:'7px',flexWrap:'wrap'}}>
             {[
-              {id:'all',     label:'All Customers',    icon:<Users size={11}/>,       desc:'Everyone who opted in'},
+              {id:'all',     label:'Broadcast — All',   icon:<Users size={11}/>,       desc:'Every opted-in customer for this restaurant'},
               {id:'loyal',   label:'Loyal',            icon:<Star size={11}/>,        desc:'10+ visits'},
               {id:'at-risk', label:'At Risk',          icon:<AlertTriangle size={11}/>,desc:'2+ visits, none in the last 21 days'},
               {id:'new',     label:'New',              icon:<UserPlus size={11}/>,    desc:'Exactly 1 visit'},
             ].map(seg=>{
               const isActive=newCampaign.segment===seg.id;
               return(
-                <button key={seg.id} onClick={()=>setNewCampaign(p=>({...p,segment:seg.id}))}
+                <button type="button" key={seg.id} onClick={()=>setNewCampaign(p=>({...p,segment:seg.id}))}
                   title={seg.desc}
                   style={{
                     display:'flex',alignItems:'center',gap:'6px',
@@ -7542,17 +7732,17 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <div style={{background:'#0a0a0a',border:'1px solid #141414',borderRadius:'10px',padding:'12px'}}>
             <div style={{fontSize:'0.46rem',color:'#2a2a2a',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
             <div style={{background:'#1a1c22',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
-              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}>🔔</div>
+              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}><Bell size={14} color="#d3bfa2" /></div>
               <div>
                 <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
                 <div style={{fontSize:'0.62rem',color:'#888',lineHeight:1.4}}>{newCampaign.body||'Your message here'}</div>
-                <div style={{fontSize:'0.52rem',color:'#2a2a2a',marginTop:'5px'}}>Pratyeksha · now</div>
+                <div style={{marginTop:'5px'}}><img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:72,height:'auto',background:'#f7f3eb',borderRadius:3,padding:'2px 4px'}} /></div>
               </div>
             </div>
           </div>
         )}
  
-        <button disabled={campaignSending} onClick={async()=>{
+        <button type="button" disabled={campaignSending} onClick={async()=>{
           if(!newCampaign.title?.trim()||!newCampaign.body?.trim()){showNotif('Title and message are required','error');return;}
           setCampaignSending(true);
           try{
@@ -7577,7 +7767,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           display:'flex',alignItems:'center',gap:'6px',letterSpacing:'0.5px',
           alignSelf:'flex-start',transition:'all 0.2s'
         }}>
-          <Send size={12}/>{campaignSending?'SENDING…':'SEND CAMPAIGN'}
+          <Send size={12}/>{campaignSending?'SENDING…':newCampaign.segment==='all'?'SEND BROADCAST':'SEND CAMPAIGN'}
         </button>
       </div>
     </div>
@@ -7626,8 +7816,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             <motion.div key="billing" initial={false} animate={{opacity:1}} style={{display:'flex',gap:'50px'}}>
               <div style={{flex:1}}>
                 <div style={styles.specialModeRow}>
-                  <button onClick={()=>generateBill('Takeaway')} style={selectedTable==='Takeaway'?styles.activeSpecBtn:styles.specBtn}><ShoppingBag size={16}/> DIRECT TAKEAWAY</button>
-                  <button onClick={generateOnlineBill} style={selectedTable==='Online'?styles.activeSpecBtn:styles.specBtn}><Truck size={16}/> ONLINE ORDERING</button>
+                  <button type="button" onClick={()=>generateBill('Takeaway')} style={selectedTable==='Takeaway'?styles.activeSpecBtn:styles.specBtn}><ShoppingBag size={16}/> DIRECT TAKEAWAY</button>
+                  <button type="button" onClick={generateOnlineBill} style={selectedTable==='Online'?styles.activeSpecBtn:styles.specBtn}><Truck size={16}/> ONLINE ORDERING</button>
                 </div>
 {/* ── DINING FLOOR OCCUPANCY GRID ── */}
 <h3 style={styles.gridLabel}>DINING FLOOR OCCUPANCY</h3>
@@ -7661,7 +7851,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           }} />
         )}
 
-        <button
+        <button type="button"
           onClick={() => generateBill(id)}
           style={{
             ...styles.tableBtn,
@@ -7751,7 +7941,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
         {/* ACK button for critical tables */}
         {showAlert && (
-          <button
+          <button type="button"
             onClick={e => {
               e.stopPropagation();
               setAcknowledgedTables(p => ({ ...p, [id]: Date.now() }));
@@ -7989,7 +8179,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       {/* Toggle percent / flat */}
       <div style={{display:'flex', background:'#f0f0f0', borderRadius:'6px', padding:'2px', gap:'2px'}}>
         {['percent','flat'].map(t => (
-          <button key={t} onClick={() => { setDiscountType(t); setDiscountReason(''); }} style={{
+          <button type="button" key={t} onClick={() => { setDiscountType(t); setDiscountReason(''); }} style={{
             padding:'3px 8px', borderRadius:'4px', fontSize:'0.6rem',
             fontWeight:'900', border:'none', cursor:'pointer',
             background: discountType === t ? '#222' : 'transparent',
@@ -8022,9 +8212,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     {/* ── PAYMENT MODE ── */}
     <div style={{margin:'16px 0'}}>
       <div style={{display:'flex', gap:'5px', marginBottom:'16px', background:'#f5f5f5', padding:'4px', borderRadius:'10px'}}>
-        <button onClick={() => setActivePaymentType('full')}
+        <button type="button" onClick={() => setActivePaymentType('full')}
           style={activePaymentType === 'full' ? styles.activeMiniTab : styles.miniTab}>SINGLE MODE</button>
-        <button onClick={() => setActivePaymentType('split')}
+        <button type="button" onClick={() => setActivePaymentType('split')}
           style={activePaymentType === 'split' ? styles.activeMiniTab : styles.miniTab}>SPLIT BILL</button>
       </div>
       {activePaymentType === 'split' ? (
@@ -8036,14 +8226,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               </div>
               <input type="number" placeholder="₹0" style={styles.billInput}
                 value={paymentModes[key]}
-                onChange={e => setPaymentModes({...paymentModes, [key]: e.target.value})}/>
+                onChange={e => setPaymentModes(prev => ({...prev, [key]: e.target.value}))}/>
             </div>
           ))}
         </div>
       ) : (
         <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px'}}>
           {['cash','upi','card'].map(m => (
-            <button key={m} onClick={() => setSelectedSingleMode(m)}
+            <button type="button" key={m} onClick={() => setSelectedSingleMode(m)}
               style={selectedSingleMode === m ? styles.activeModeBtn : styles.modeBtn}>
               {m === 'cash' && <Banknote size={16}/>}
               {m === 'upi'  && <Smartphone size={16}/>}
@@ -8083,14 +8273,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     </div>
 
     {/* ── SETTLE BUTTON ── */}
-    <button onClick={settleBill}
+    <button type="button" onClick={settleBill}
       style={{...styles.settleBtn, marginTop:'18px', opacity: isSettling ? 0.5 : 1, cursor: isSettling ? 'not-allowed' : 'pointer'}}
       disabled={isSettling}>
       {isSettling ? 'PROCESSING...' : 'FINALIZE SETTLEMENT'}
     </button>
 
     <div style={{textAlign:'center', marginTop:'18px', fontSize:'0.58rem', fontWeight:'900', color:'#ccc', letterSpacing:'1px'}}>
-      POWERED BY PRATYEKSHA
+      <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:'115px',height:'auto',background:'#f7f3eb',borderRadius:'5px',padding:'3px 5px'}} />
     </div>
 
   </motion.div>
@@ -8348,7 +8538,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             id: 'gst-deadline', priority: 1, category: 'COMPLIANCE',
             icon: <ReceiptText size={16} />, color: tone.urgent,
             title: `GSTR-1 filing due soon`,
-            stat: { value: `${daysToGstr1}d`, label: `left · est. liability ₹${Math.round(stats.revenue * 0.05 / 1.05).toLocaleString()}` },
+            stat: { value: `${daysToGstr1}d`, label: `left · est. liability ₹${Math.round(stats.revenue * (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) / (1 + (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100))).toLocaleString()}` },
             tag: `Export GST Invoice Register and send to your CA`,
           });
         }
@@ -9489,7 +9679,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               <Sparkles size={15} color="#d3bfa2" strokeWidth={1.4} />
             </div>
             <div>
-              <div style={{ fontSize: '0.62rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>PRATYEKSHA INTELLIGENCE</div>
+              <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:120,height:'auto',background:'#f7f3eb',borderRadius:5,padding:'3px 5px'}} />
               <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)', marginTop: '2px' }}>{aiBrain.dayOfWeek} · AI-powered daily forecast</div>
             </div>
           </div>
@@ -9592,8 +9782,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     {/* ════ GST + P&L ════ */}
     {stats.revenue > 0 && (() => {
       const monthlyRevenue      = stats.revenue;
-      const cgst5               = monthlyRevenue * 0.025;
-      const sgst5               = monthlyRevenue * 0.025;
+      const taxableRevenue      = monthlyRevenue / (1 + _totalGstPct);
+      const cgst5               = taxableRevenue * _cgstPct;
+      const sgst5               = taxableRevenue * _sgstPct;
       const totalGst5           = cgst5 + sgst5;
       const netRevenueAfterGst5 = monthlyRevenue - totalGst5;
       const ingredientCost      = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0) + (extraAnalytics?.totalCost||0);
@@ -9622,8 +9813,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             </BT>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
               {[
-                { l:'CGST @ 2.5%',  v:Math.round(cgst5),              c:'rgba(255,255,255,0.8)' },
-                { l:'SGST @ 2.5%',  v:Math.round(sgst5),              c:'rgba(255,255,255,0.8)' },
+                { l:`CGST @ ${(_cgstPct*100).toFixed(2).replace(/\.00$/, '')}%`,  v:Math.round(cgst5),              c:'rgba(255,255,255,0.8)' },
+                { l:`SGST @ ${(_sgstPct*100).toFixed(2).replace(/\.00$/, '')}%`,  v:Math.round(sgst5),              c:'rgba(255,255,255,0.8)' },
                 { l:'TOTAL GST DUE',v:Math.round(totalGst5),          c:'#fff', bold:true },
                 { l:'NET REVENUE',  v:Math.round(netRevenueAfterGst5), c:'rgba(211,191,162,0.7)' },
               ].map(s=>(
@@ -9688,7 +9879,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>}>P&L SUMMARY</BT>
             {[
               { l:'TOTAL REVENUE',            v:monthlyRevenue,           sign:'',  bold:false },
-              { l:'— GST PAID (5%)',           v:-totalGst5,               sign:'-', bold:false },
+              { l:`— GST PAID (${(_totalGstPct*100).toFixed(2).replace(/\.00$/, '')}%)`,           v:-totalGst5,               sign:'-', bold:false },
               { l:'NET REVENUE',              v:netRevenueAfterGst5,      sign:'',  bold:true  },
               { l:'— INGREDIENT COST',         v:-ingredientCost,          sign:'-', bold:false },
               { l:'GROSS PROFIT',             v:grossAfterGst,            sign:'',  bold:true  },
@@ -10795,7 +10986,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           </div>
         </div>
       </div>
-      <button onClick={fetchAuditLogs}
+      <button type="button" onClick={fetchAuditLogs}
         style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: 'rgba(211,191,162,0.7)', fontSize: '0.58rem', fontWeight: '800', cursor: 'pointer', outline: 'none', fontFamily: 'Poppins, sans-serif', letterSpacing: '0.5px' }}>
         <RefreshCw size={12} strokeWidth={2} />
         REFRESH
@@ -10955,7 +11146,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             fontSize: '0.65rem', fontWeight: '900',
             color: '#d3bfa2', letterSpacing: '2.5px'
           }}>
-            PRATYEKSHA ASSIST
+            ASSIST
           </div>
           <div style={{
             fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)',
@@ -10966,7 +11157,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         </div>
       </div>
       {/* Clear chat */}
-      <button
+      <button type="button"
         onClick={() => setAssistMessages([{ role: 'system', text: 'Hello. Ask me anything about your restaurant — orders, revenue, stock, staff, or menu performance.', ts: new Date() }])}
         style={{
           display: 'flex', alignItems: 'center', gap: '5px',
@@ -11062,7 +11253,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             {cats.map(c => {
               const active = assistFilterCat === c.key;
               return (
-                <button
+                <button type="button"
                   key={c.key}
                   onClick={() => setAssistFilterCat(c.key)}
                   style={{
@@ -11089,7 +11280,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             display: 'flex', gap: '5px', flexWrap: 'wrap'
           }}>
             {activeQs.map(({ label, q: qText }) => (
-              <button
+              <button type="button"
                 key={label}
                 onClick={() => handleAssistQuery(qText)}
                 style={{
@@ -11253,7 +11444,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           }}
         />
         {assistInput && (
-          <button
+          <button type="button"
             onClick={() => setAssistInput('')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
@@ -11265,7 +11456,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         )}
       </div>
 
-      <button
+      <button type="button"
         onClick={() => handleAssistQuery()}
         disabled={assistLoading || !assistInput.trim()}
         style={{
@@ -11388,7 +11579,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>{f.l}</label>
             <input type={f.t} placeholder={f.p}
               style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box',fontWeight:'600'}}
-              value={newStaff[f.k]} onChange={e=>setNewStaff({...newStaff,[f.k]:e.target.value})}/>
+              value={newStaff[f.k]} onChange={e=>setNewStaff(p => ({ ...p, [f.k]: e.target.value }))}/>
           </div>
         ))}
  
@@ -11397,7 +11588,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Role</label>
           <select
             style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
-            value={newStaff.role} onChange={e=>setNewStaff({...newStaff,role:e.target.value,assignedTables:[]})}>
+            value={newStaff.role} onChange={e=>setNewStaff(prev => ({...prev, role:e.target.value,assignedTables:[]}))}>
             {['Waiter','Chef','Manager','Cashier','Helper'].map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         </div>
@@ -11407,7 +11598,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Shift</label>
           <select
             style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
-            value={newStaff.shiftType} onChange={e=>setNewStaff({...newStaff,shiftType:e.target.value})}>
+            value={newStaff.shiftType} onChange={e=>setNewStaff(p => ({ ...p, shiftType: e.target.value }))}>
             <option value="Day Shift">Day Shift</option>
             <option value="Night Shift">Night Shift</option>
             <option value="Both Shifts">Both Shifts</option>
@@ -11419,7 +11610,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Joining Date</label>
           <input type="date"
             style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark',cursor:'pointer',boxSizing:'border-box'}}
-            value={newStaff.joiningDate} onChange={e=>setNewStaff({...newStaff,joiningDate:e.target.value})}/>
+            value={newStaff.joiningDate} onChange={e=>setNewStaff(p => ({ ...p, joiningDate: e.target.value }))}/>
         </div>
       </div>
  
@@ -11433,7 +11624,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               const isSel=newStaff.assignedTables.includes(t);
               return (
                 <button key={t} type="button"
-                  onClick={()=>setNewStaff({...newStaff,assignedTables:isSel?newStaff.assignedTables.filter(x=>x!==t):[...newStaff.assignedTables,t]})}
+                  onClick={()=>setNewStaff(prev => ({...prev, assignedTables:isSel?prev.assignedTables.filter(x=>x!==t):[...prev.assignedTables,t]}))}
                   style={{
                     padding:'7px 14px',borderRadius:'7px',border:'none',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s',
                     background:isSel?'linear-gradient(135deg,#8a704d,#d3bfa2)':'#111',
@@ -11463,7 +11654,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               return (
                 <button key={catId} type="button" onClick={()=>{
                   const updated=isChecked?currentSel.filter(c=>c!==catId):[...currentSel,catId];
-                  setNewStaff({...newStaff,cookingRole:updated.join(', ')});
+                  setNewStaff(prev => ({...prev, cookingRole:updated.join(', ')}));
                 }} style={{
                   padding:'6px 14px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'900',
                   border:isChecked?'none':'1px solid #222',cursor:'pointer',transition:'all 0.15s',
@@ -11488,9 +11679,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           <label style={{fontSize:'0.52rem',color:'#555',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Residential Address</label>
           <input type="text" placeholder="Full residential address"
             style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
-            value={newStaff.address} onChange={e=>setNewStaff({...newStaff,address:e.target.value})}/>
+            value={newStaff.address} onChange={e=>setNewStaff(p => ({ ...p, address: e.target.value }))}/>
         </div>
-        <button onClick={async()=>{
+        <button type="button" onClick={async()=>{
           if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif('Fill all required fields','error');
           try {
             const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
@@ -11539,15 +11730,15 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           <input type="text" placeholder="Filter by name..."
             style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'160px'}}
             value={rosterSearchQuery} onChange={e=>setRosterSearchQuery(e.target.value)}/>
-          {rosterSearchQuery && <button onClick={()=>setRosterSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
+          {rosterSearchQuery && <button type="button" onClick={()=>setRosterSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
         </div>
         {/* Month nav */}
         <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#0a0a0a',border:'1px solid #141414',borderRadius:'8px',padding:'6px 12px'}}>
-          <button onClick={()=>changeMonth(-1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronLeft size={13}/></button>
+          <button type="button" onClick={()=>changeMonth(-1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronLeft size={13}/></button>
           <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
             {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
           </span>
-          <button onClick={()=>changeMonth(1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronRight size={13}/></button>
+          <button type="button" onClick={()=>changeMonth(1)} style={{background:'transparent',border:'none',color:'#444',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronRight size={13}/></button>
         </div>
       </div>
     </div>
@@ -11708,7 +11899,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                             </div>
                           );
                           return (
-                            <button onClick={async()=>{
+                            <button type="button" onClick={async()=>{
                               const istNow2=new Date(new Date().getTime()+330*60*1000);
                               const currentMonthStr=istNow2.getFullYear()+'-'+String(istNow2.getMonth()+1).padStart(2,'0');
                               if(monthStr>currentMonthStr){showNotif('Cannot pay future month','error');return;}
@@ -11739,11 +11930,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
  
                       {/* Actions */}
                       <td style={{padding:'14px 8px'}}>
-                        <button onClick={()=>setConfirmModal({
+                        <button type="button" onClick={()=>setConfirmModal({
                           show:true,title:`Remove ${pureName}?`,
                           subtitle:'This will permanently remove the staff member.',
                           onConfirm:async()=>{
-await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
+await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                             showNotif(`${pureName} removed`);
                             fetchManagementData();
                           }
@@ -11801,7 +11992,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
             style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',fontWeight:'700',colorScheme:'dark',cursor:'pointer'}}/>
         </div>
-        <button onClick={()=>fetchAttendanceForDate(attendanceDate)}
+        <button type="button" onClick={()=>fetchAttendanceForDate(attendanceDate)}
           style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #141414',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#141414';e.currentTarget.style.color='#444';}}>
@@ -11884,12 +12075,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                           <div style={{fontSize:'0.58rem',color:statusColor,fontWeight:'700',marginTop:'1px'}}>{statusLabel}</div>
                         </div>
                       </div>
-                      <button
+                      <button type="button"
                         onClick={async()=>{
                           if(!isCurrentlyClockedIn){
                             await axios.post(`${BASE_URL}/staff/attendance/clock-in`,{tenantId,staffId:m._id});
                           } else {
-                            await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`);
+                            await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`, { tenantId });
                           }
                           fetchAttendanceForDate(attendanceDate);
                         }}
@@ -12159,7 +12350,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         : 'ADD / RESTOCK INGREDIENT'}
     </h4>
     {selectedExistingItem && (
-      <button onClick={() => {
+      <button type="button" onClick={() => {
         setSelectedExistingItem(null);
         setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
       }} style={{ background: 'transparent', border: '1px solid #333', color: '#555', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
@@ -12240,8 +12431,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         value={newInventoryItem.itemName}
         onChange={e => {
           const val = e.target.value;
-          setNewInventoryItem({ ...newInventoryItem, itemName: val });
-          setSelectedExistingItem(null);
+          setNewInventoryItem(p => ({ ...p, itemName: val }));
+          setSelectedExistingItem(prev => prev ? null : prev);
           if (val.trim().length >= 1) {
             const matches = inventory.filter(i => i.itemName.toLowerCase().includes(val.toLowerCase()));
             setInventorySuggestions(matches);
@@ -12296,7 +12487,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <input type="number" placeholder={selectedExistingItem ? `+ to ${selectedExistingItem.currentStock}` : '500'}
         style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.currentStock}
-        onChange={e => setNewInventoryItem({ ...newInventoryItem, currentStock: e.target.value })}
+        onChange={e => setNewInventoryItem(p => ({ ...p, currentStock: e.target.value }))}
       />
     </div>
 
@@ -12311,9 +12502,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         value={selectedExistingItem ? newInventoryItem.purchasePrice : newInventoryItem.costPrice}
         onChange={e => {
           if (selectedExistingItem) {
-            setNewInventoryItem({ ...newInventoryItem, purchasePrice: e.target.value });
+            setNewInventoryItem(p => ({ ...p, purchasePrice: e.target.value }));
           } else {
-            setNewInventoryItem({ ...newInventoryItem, costPrice: e.target.value });
+            setNewInventoryItem(p => ({ ...p, costPrice: e.target.value }));
           }
         }}
       />
@@ -12326,7 +12517,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         <input type="text" placeholder="e.g. Rajesh Traders" list="vendor-name-list"
           style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
           value={newInventoryItem.vendor || ''}
-          onChange={e => setNewInventoryItem({ ...newInventoryItem, vendor: e.target.value })}
+          onChange={e => setNewInventoryItem(p => ({ ...p, vendor: e.target.value }))}
         />
         <datalist id="vendor-name-list">
           {vendors.map(v => <option key={v._id} value={v.name} />)}
@@ -12339,14 +12530,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <input type="number" placeholder="100"
             style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
             value={newInventoryItem.minThreshold}
-            onChange={e => setNewInventoryItem({ ...newInventoryItem, minThreshold: e.target.value })}
+            onChange={e => setNewInventoryItem(p => ({ ...p, minThreshold: e.target.value }))}
           />
         </div>
         <div>
           <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
           <select style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
             value={newInventoryItem.unit}
-            onChange={e => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}>
+            onChange={e => setNewInventoryItem(p => ({ ...p, unit: e.target.value }))}>
             {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
           </select>
         </div>
@@ -12362,14 +12553,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <input type="date" min={new Date().toISOString().split('T')[0]}
         style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.expiryDate || ''}
-        onChange={e => setNewInventoryItem({ ...newInventoryItem, expiryDate: e.target.value })}
+        onChange={e => setNewInventoryItem(p => ({ ...p, expiryDate: e.target.value }))}
       />
     </div>
 
     {/* ADD / RESTOCK BUTTON */}
     <div>
       <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
-      <button disabled={isSubmittingRestock} onClick={async () => {
+      <button type="button" disabled={isSubmittingRestock} onClick={async () => {
         if (isSubmittingRestock) return;
         if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif("Name and quantity are required", "error");
         if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
@@ -12423,7 +12614,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                   <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'8px'}}>
                     <Truck size={14} color="#d3bfa2" /> VENDORS <span style={{color:'#555',fontWeight:'500'}}>({vendors.length})</span>
                   </h4>
-                  <button onClick={() => setShowVendorPanel(p => !p)}
+                  <button type="button" onClick={() => setShowVendorPanel(p => !p)}
                     style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px', borderRadius:'8px', border:'1px solid rgba(211,191,162,0.25)', background:'rgba(211,191,162,0.06)', color:'#d3bfa2', fontSize:'0.65rem', fontWeight:'900', cursor:'pointer' }}>
                     {showVendorPanel ? <ChevronUp size={12}/> : <ChevronDown size={12}/>} {showVendorPanel ? 'HIDE' : 'MANAGE'}
                   </button>
@@ -12449,7 +12640,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                       <input type="number" placeholder="Lead days" value={newVendorDraft.leadTimeDays}
                         onChange={e => setNewVendorDraft(p => ({ ...p, leadTimeDays: e.target.value }))}
                         style={{ padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
-                      <button onClick={saveVendor}
+                      <button type="button" onClick={saveVendor}
                         style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: '#d3bfa2', color: '#000', fontSize: '0.68rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         {editingVendorId ? 'UPDATE' : 'ADD'}
                       </button>
@@ -12473,17 +12664,17 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                                   {v.contactPerson && `${v.contactPerson} · `}{v.phone || 'no phone'} · {v.paymentTerms} · {v.leadTimeDays}d lead · {linkedCount} ingredient{linkedCount !== 1 ? 's' : ''} linked
                                 </div>
                               </div>
-                              <button onClick={() => generatePurchaseOrderPDF(v)}
+                              <button type="button" onClick={() => generatePurchaseOrderPDF(v)}
                                 title={dueCount === 0 ? 'Nothing due for reorder' : `${dueCount} item(s) due for reorder`}
                                 disabled={dueCount === 0}
                                 style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${dueCount > 0 ? 'rgba(74,158,111,0.35)' : 'rgba(255,255,255,0.08)'}`, background: dueCount > 0 ? 'rgba(74,158,111,0.1)' : 'transparent', color: dueCount > 0 ? '#4a9e6f' : '#333', fontSize: '0.6rem', fontWeight: '900', cursor: dueCount === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
                                 <FileText size={11} /> PO {dueCount > 0 ? `(${dueCount})` : ''}
                               </button>
-                              <button onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
+                              <button type="button" onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
                                 style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
                                 <SquarePen size={12} />
                               </button>
-                              <button onClick={() => deleteVendor(v._id)}
+                              <button type="button" onClick={() => deleteVendor(v._id)}
                                 style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
                                 <X size={12} />
                               </button>
@@ -12584,7 +12775,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     const val = Number(e.target.value);
                     if (val === item.currentStock) return;
                     // Use general patch — stock only
-                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val });
+                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val, tenantId });
                     fetchManagementData();
                     showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
                   }}
@@ -12609,7 +12800,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                   e.target.style.color = '#888';
                   const val = Number(e.target.value);
                   if (val === item.minThreshold) return;
-                  await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val });
+                  await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
                   fetchManagementData();
                   showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
                 }}
@@ -12634,7 +12825,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           const val = Number(e.target.value);
           const current = item.weightedAvgCost || item.costPrice || 0;
           if (Math.abs(val - current) < 0.001) return;
-          await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val });
+          await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
           fetchManagementData();
           showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
         }}
@@ -12680,7 +12871,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
     {/* ── PURCHASE ORDER BUTTON — only shows when low stock ── */}
     {isLow && (
-      <button
+      <button type="button"
         onClick={() => {
           // Pull procurement data for this item if available
           const proc = procurementData.find(p => p._id?.toString() === item._id?.toString());
@@ -12731,7 +12922,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 {/* ACTION */}
 <td>
   <div style={{ display: 'flex', gap: '6px' }}>
-    <button
+    <button type="button"
       onClick={async () => {
         setPurchaseHistoryItem(item);
         await fetchPurchaseHistory(item._id);
@@ -12741,13 +12932,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     >
       HISTORY
     </button>
-    <button
+    <button type="button"
       onClick={() => setConfirmModal({
         show: true,
         title: `Remove ${item.itemName}?`,
         subtitle: 'Permanently delete this ingredient and all linked recipe references.',
         onConfirm: async () => {
-          await axios.delete(`${BASE_URL}/inventory/item/${item._id}`);
+          await axios.delete(`${BASE_URL}/inventory/item/${item._id}`, { data: { tenantId } });
           fetchManagementData();
           showNotif(`${item.itemName} removed`);
         }
@@ -12768,7 +12959,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     <tr style={{ borderTop: '2px solid #1a1a1a' }}>
       <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.65rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
       <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
-        ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * i.costPrice)), 0).toLocaleString()}
+        ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0).toLocaleString()}
       </td>
       <td colSpan="2" />
     </tr>
@@ -12792,7 +12983,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>{purchaseHistoryItem.itemName}</h3>
               <div style={{ fontSize: '0.75rem', color: '#8a704d', marginTop: '3px' }}>{purchaseHistoryItem.unit}</div>
             </div>
-            <button onClick={() => setPurchaseHistoryItem(null)} style={{ background: '#111', border: '1px solid #1a1a1a', color: '#555', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
+            <button type="button" onClick={() => setPurchaseHistoryItem(null)} style={{ background: '#111', border: '1px solid #1a1a1a', color: '#555', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
               <X size={16} />
             </button>
           </div>
@@ -12986,7 +13177,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
             {/* 1-TAP PURCHASE ORDER BUTTON */}
             {needsOrder && (
-              <button
+              <button type="button"
                 onClick={() => {
                   setPurchaseOrderModal({
                     item: { ...item, ...fullItem },
@@ -13086,7 +13277,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             : 'RECIPE BUILDER'}
         </span>
         {activeRecipeItemId && (
-          <button
+          <button type="button"
             onClick={() => { setActiveRecipeItemId(''); setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]); }}
             style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', borderRadius: '7px', padding: '4px 10px', fontSize: '0.55rem', fontWeight: '700', cursor: 'pointer', letterSpacing: '0.5px' }}>
             CLEAR
@@ -13298,7 +13489,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     </div>
 
                     {/* Remove */}
-                    <button
+                    <button type="button"
                       onClick={() => setRecipeIngredientRows(p => p.filter((_, i) => i !== idx))}
                       style={{ width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', transition: 'all 0.15s', flexShrink: 0 }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,114,114,0.4)'; e.currentTarget.style.color = '#c87272'; e.currentTarget.style.background = 'rgba(200,114,114,0.07)'; }}
@@ -13337,7 +13528,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-            <button
+            <button type="button"
               onClick={() => setRecipeIngredientRows(p => [...p, { inventoryId: '', quantityUsed: '' }])}
               style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', fontSize: '0.6rem', fontWeight: '800', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; }}
@@ -13345,7 +13536,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <Package size={13} strokeWidth={2} />
               ADD INGREDIENT
             </button>
-            <button
+            <button type="button"
               disabled={!activeRecipeItemId}
               onClick={async () => {
                 if (!activeRecipeItemId) return showNotif('Select a menu item first', 'error');
@@ -13499,7 +13690,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
                 {/* Remove */}
                 {hasRecipe && (
-                  <button
+                  <button type="button"
                     onClick={async e => {
                       e.stopPropagation();
                       if (!window.confirm(`Remove recipe for "${dish.name}"?`)) return;
@@ -13546,7 +13737,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       </div>
       <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
         {/* Date navigator */}
-        <button onClick={() => {
+        <button type="button" onClick={() => {
           const d = new Date(reservationViewDate);
           d.setDate(d.getDate()-1);
           setReservationViewDate(d.toISOString().split('T')[0]);
@@ -13558,7 +13749,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         <input type="date" value={reservationViewDate}
           onChange={e => setReservationViewDate(e.target.value)}
           style={{padding:'8px 12px',background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.75rem',fontWeight:'900',outline:'none',colorScheme:'dark',cursor:'pointer'}}/>
-        <button onClick={() => {
+        <button type="button" onClick={() => {
           const d = new Date(reservationViewDate);
           d.setDate(d.getDate()+1);
           setReservationViewDate(d.toISOString().split('T')[0]);
@@ -13567,7 +13758,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
           <ChevronRight size={14}/>
         </button>
-        <button onClick={fetchCounterQueue}
+        <button type="button" onClick={fetchCounterQueue}
           style={{padding:'8px 14px',background:'transparent',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer'}}>
           <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><RefreshCw size={11} /> REFRESH</span>
         </button>
@@ -13667,7 +13858,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                       </div>
                       <div style={{display:'flex',gap:'5px'}}>
                         {entry.status==='pending' && (
-                          <button onClick={async()=>{
+                          <button type="button" onClick={async()=>{
                             await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed'});
                             fetchCounterQueue();
                             showNotif(`${entry.customerName} confirmed`);
@@ -13676,12 +13867,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                           </button>
                         )}
                         {['pending','confirmed'].includes(entry.status) && (
-                          <button onClick={()=>setAssignTableModal({...entry,_fromReservation:true})}
+                          <button type="button" onClick={()=>setAssignTableModal(prev => ({...prev, _fromReservation:true}))}
                             style={{padding:'4px 10px',background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
                             SEAT
                           </button>
                         )}
-                        <button onClick={()=>setReservationEditModal(entry)}
+                        <button type="button" onClick={()=>setReservationEditModal(entry)}
                           style={{width:'26px',height:'26px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'6px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem'}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
                           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
@@ -13721,7 +13912,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#d3bfa2'}}>EDIT ITEM</h3>
               <p style={{margin:'3px 0 0',fontSize:'0.62rem',color:'#444'}}>{extraItemEditModal.name}</p>
             </div>
-            <button onClick={()=>setExtraItemEditModal(null)}
+            <button type="button" onClick={()=>setExtraItemEditModal(null)}
               style={{background:'transparent',border:'1px solid #1a1a1a',color:'#444',width:'30px',height:'30px',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
               <X size={13}/>
             </button>
@@ -13799,7 +13990,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           </div>
  
           <div style={{display:'flex',gap:'10px'}}>
-            <button onClick={async()=>{
+            <button type="button" onClick={async()=>{
               if(!extraItemEditData.name?.trim())return showNotif('Name is required','error');
               if(!extraItemEditData.price||Number(extraItemEditData.price)<=0)return showNotif('Valid price required','error');
               try {
@@ -13811,14 +14002,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                   lowStockThreshold:extraItemEditData.lowStockThreshold===''?5:Number(extraItemEditData.lowStockThreshold),
                   description:extraItemEditData.description?.trim()||'',isAvailable:extraItemEditData.isAvailable,
                 };
-                const res=await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`,payload);
+                const res=await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`,{...payload,tenantId});
                 setExtraItems(prev=>prev.map(i=>(i._id===res.data.item._id?res.data.item:i)));
                 showNotif(`${payload.name} — updated`);setExtraItemEditModal(null);
               } catch(err){showNotif(err.response?.data?.error||'Update failed','error');}
             }} style={{flex:1,padding:'12px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
               SAVE CHANGES
             </button>
-            <button onClick={()=>setExtraItemEditModal(null)}
+            <button type="button" onClick={()=>setExtraItemEditModal(null)}
               style={{padding:'12px 20px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
               CANCEL
             </button>
@@ -13858,11 +14049,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             )}
           </div>
           <div style={{display:'flex',gap:'8px'}}>
-            <button disabled={isSubmittingExtraRestock} onClick={submitExtraRestock}
+            <button type="button" disabled={isSubmittingExtraRestock} onClick={submitExtraRestock}
               style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:isSubmittingExtraRestock?'not-allowed':'pointer',letterSpacing:'0.5px',opacity:isSubmittingExtraRestock?0.55:1}}>
               {isSubmittingExtraRestock ? 'SAVING…' : '+ ADD STOCK'}
             </button>
-            <button onClick={()=>{setExtraRestockModal(null);setExtraRestockQty('');}}
+            <button type="button" onClick={()=>{setExtraRestockModal(null);setExtraRestockQty('');}}
               style={{padding:'11px 16px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
               CANCEL
             </button>
@@ -13922,12 +14113,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Item Name *</label>
           <input type="text" placeholder="e.g. Thums Up 750ml"
             style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
-            value={newExtraItem.name} onChange={e=>setNewExtraItem({...newExtraItem,name:e.target.value})}/>
+            value={newExtraItem.name} onChange={e=>setNewExtraItem(prev => ({...prev, name:e.target.value}))}/>
         </div>
         <div>
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Category</label>
           <select style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
-            value={newExtraItem.category} onChange={e=>setNewExtraItem({...newExtraItem,category:e.target.value})}>
+            value={newExtraItem.category} onChange={e=>setNewExtraItem(prev => ({...prev, category:e.target.value}))}>
             {['Cold Drinks','Ice Cream','Packaged Snacks','Juices','Mineral Water','Tobacco','Dairy','Sweets','Other'].map(c=><option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -13935,13 +14126,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Sell Price (₹) *</label>
           <input type="number" placeholder="e.g. 40"
             style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}
-            value={newExtraItem.price} onChange={e=>setNewExtraItem({...newExtraItem,price:e.target.value})}/>
+            value={newExtraItem.price} onChange={e=>setNewExtraItem(prev => ({...prev, price:e.target.value}))}/>
         </div>
         <div>
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Cost Price (₹)</label>
           <input type="number" placeholder="e.g. 28"
             style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
-            value={newExtraItem.costPrice} onChange={e=>setNewExtraItem({...newExtraItem,costPrice:e.target.value})}/>
+            value={newExtraItem.costPrice} onChange={e=>setNewExtraItem(prev => ({...prev, costPrice:e.target.value}))}/>
           {newExtraItem.price&&newExtraItem.costPrice&&Number(newExtraItem.price)>0&&(
             <div style={{fontSize:'0.56rem',color:'#4ade80',marginTop:'4px',fontWeight:'700'}}>
               Margin: {Math.round(((newExtraItem.price-newExtraItem.costPrice)/newExtraItem.price)*100)}%
@@ -13951,7 +14142,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         <div>
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Unit</label>
           <select style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
-            value={newExtraItem.unit} onChange={e=>setNewExtraItem({...newExtraItem,unit:e.target.value})}>
+            value={newExtraItem.unit} onChange={e=>setNewExtraItem(prev => ({...prev, unit:e.target.value}))}>
             {['piece','bottle','can','pack','cup','cone','bar','pouch','litre','ml'].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
@@ -13959,7 +14150,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Opening Stock</label>
           <input type="number" placeholder="e.g. 24"
             style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
-            value={newExtraItem.currentStock} onChange={e=>setNewExtraItem({...newExtraItem,currentStock:e.target.value})}/>
+            value={newExtraItem.currentStock} onChange={e=>setNewExtraItem(prev => ({...prev, currentStock:e.target.value}))}/>
         </div>
       </div>
       <div style={{display:'flex',gap:'12px',alignItems:'flex-end'}}>
@@ -13967,9 +14158,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <label style={{fontSize:'0.5rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Description (optional)</label>
           <input type="text" placeholder="e.g. Chilled carbonated drink, served in bottle"
             style={{width:'100%',padding:'10px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
-            value={newExtraItem.description} onChange={e=>setNewExtraItem({...newExtraItem,description:e.target.value})}/>
+            value={newExtraItem.description} onChange={e=>setNewExtraItem(prev => ({...prev, description:e.target.value}))}/>
         </div>
-        <button onClick={async()=>{
+        <button type="button" onClick={async()=>{
           if(!newExtraItem.name?.trim())return showNotif('Item name is required','error');
           if(!newExtraItem.price||Number(newExtraItem.price)<=0)return showNotif('Valid price is required','error');
           try {
@@ -13997,7 +14188,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'14px',flexWrap:'wrap'}}>
     <div style={{display:'flex',gap:'7px',flexWrap:'wrap',flex:1}}>
       {['All',...new Set(extraItems.map(i=>i.category))].map(cat=>(
-        <button key={cat} onClick={()=>setActiveExtraCategory(cat)} style={{
+        <button type="button" key={cat} onClick={()=>setActiveExtraCategory(cat)} style={{
           padding:'7px 16px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
           border:activeExtraCategory===cat?'none':'1px solid #1a1a1a',
           background:activeExtraCategory===cat?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#0d0d0d',
@@ -14010,7 +14201,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     </div>
     <div style={{display:'flex',gap:'8px',alignItems:'center',flexShrink:0}}>
       {/* Low stock filter */}
-      <button onClick={()=>setActiveExtraCategory(activeExtraCategory==='__lowstock__'?'All':'__lowstock__')}
+      <button type="button" onClick={()=>setActiveExtraCategory(activeExtraCategory==='__lowstock__'?'All':'__lowstock__')}
         style={{
           display:'flex',alignItems:'center',gap:'6px',
           padding:'7px 14px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
@@ -14027,7 +14218,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
         <input type="text" placeholder="Search items..." value={extraItemSearchQuery}
           onChange={e=>setExtraItemSearchQuery(e.target.value)}
           style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'150px'}}/>
-        {extraItemSearchQuery&&<button onClick={()=>setExtraItemSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
+        {extraItemSearchQuery&&<button type="button" onClick={()=>setExtraItemSearchQuery('')} style={{background:'transparent',border:'none',color:'#333',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
       </div>
     </div>
   </div>
@@ -14174,7 +14365,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                 {/* Actions */}
                 <div style={{display:'flex',flexDirection:'column',gap:'7px'}}>
                   {/* Restock */}
-                  <button onClick={()=>{setExtraRestockModal(item);setExtraRestockQty('');}}
+                  <button type="button" onClick={()=>{setExtraRestockModal(item);setExtraRestockQty('');}}
                     style={{
                       width:'100%',padding:'9px',borderRadius:'8px',cursor:'pointer',
                       background:isOut?'rgba(211,191,162,0.08)':'rgba(211,191,162,0.04)',
@@ -14190,8 +14381,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
  
                   {/* Hide/Show + Edit + Delete */}
                   <div style={{display:'flex',gap:'6px'}}>
-                    <button onClick={async()=>{
-                      await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`,{isAvailable:!item.isAvailable});
+                    <button type="button" onClick={async()=>{
+                      await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`,{isAvailable:!item.isAvailable,tenantId});
                       fetchExtraItems();
                       showNotif(`${item.name} ${!item.isAvailable?'shown on menu':'hidden'}`);
                     }} style={{
@@ -14203,14 +14394,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     }}>
                       {item.isAvailable?'HIDE':'SHOW'}
                     </button>
-                    <button onClick={()=>{setExtraItemEditModal(item);setExtraItemEditData({...item});}}
+                    <button type="button" onClick={()=>{setExtraItemEditModal(item);setExtraItemEditData({...item});}}
                       style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#333',borderRadius:'7px',fontSize:'0.7rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#333';}}><SquarePen size={12} /></button>
-                    <button onClick={()=>setConfirmModal({
+                    <button type="button" onClick={()=>setConfirmModal({
                       show:true,title:`Remove "${item.name}"?`,
                       subtitle:'This permanently removes the item from your catalog.',
-                      onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}`);fetchExtraItems();showNotif(`${item.name} removed`);}
+                      onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}?tenantId=${encodeURIComponent(tenantId)}`);fetchExtraItems();showNotif(`${item.name} removed`);}
                     })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #1a1a1a',color:'#2a2a2a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(192,57,43,0.25)';e.currentTarget.style.color='#c0392b';}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#2a2a2a';}}><X size={12} /></button>
@@ -14249,7 +14440,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>RESERVATION</div>
             <h3 style={{color:'#fff',margin:0,fontSize:'1rem',fontWeight:'900'}}>{reservationEditModal.customerName}</h3>
           </div>
-          <button onClick={() => setReservationEditModal(null)}
+          <button type="button" onClick={() => setReservationEditModal(null)}
             style={{background:'#111',border:'1px solid #1a1a1a',color:'#555',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
             <X size={16} />
           </button>
@@ -14302,8 +14493,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           </div>
 
           <div style={{display:'flex',gap:'12px',paddingTop:'16px',borderTop:'1px solid #111'}}>
-            <button onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
-            <button onClick={async () => {
+            <button type="button" onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
+            <button type="button" onClick={async () => {
               await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
                 status: reservationEditModal.status,
                 tablePreference: reservationEditModal.tablePreference,
@@ -14336,7 +14527,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <h3 style={{ color: '#fff', margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>EDIT ITEM</h3>
             <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '4px' }}>{extraItemEditModal.name}</div>
           </div>
-          <button onClick={() => setExtraItemEditModal(null)}
+          <button type="button" onClick={() => setExtraItemEditModal(null)}
             style={{ background: '#111', border: '1px solid #1a1a1a', color: '#555', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}>
             <X size={16} />
           </button>
@@ -14347,7 +14538,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <div>
             <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Item Name *</label>
             <input type="text" value={extraItemEditData.name || ''}
-              onChange={e => setExtraItemEditData({ ...extraItemEditData, name: e.target.value })}
+              onChange={e => setExtraItemEditData(prev => ({...prev, name: e.target.value }))}
               style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
@@ -14356,7 +14547,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category</label>
               <select value={extraItemEditData.category || 'Cold Drinks'}
-                onChange={e => setExtraItemEditData({ ...extraItemEditData, category: e.target.value })}
+                onChange={e => setExtraItemEditData(prev => ({...prev, category: e.target.value }))}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
                 {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
                   <option key={c} value={c}>{c}</option>
@@ -14366,7 +14557,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
               <select value={extraItemEditData.unit || 'piece'}
-                onChange={e => setExtraItemEditData({ ...extraItemEditData, unit: e.target.value })}
+                onChange={e => setExtraItemEditData(prev => ({...prev, unit: e.target.value }))}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
                 {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
                   <option key={u} value={u}>{u}</option>
@@ -14380,7 +14571,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
               <input type="number" value={extraItemEditData.price || ''}
-                onChange={e => setExtraItemEditData({ ...extraItemEditData, price: e.target.value })}
+                onChange={e => setExtraItemEditData(prev => ({...prev, price: e.target.value }))}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
 
@@ -14389,7 +14580,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 <div>
   <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
   <input type="number" value={extraItemEditData.costPrice ?? ''}
-    onChange={e => setExtraItemEditData({ ...extraItemEditData, costPrice: e.target.value })}
+    onChange={e => setExtraItemEditData(prev => ({...prev, costPrice: e.target.value }))}
     style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
   {extraItemEditData.price && extraItemEditData.costPrice && (
     <div style={{ fontSize: '0.58rem', color: '#4ade80', marginTop: '4px' }}>
@@ -14401,7 +14592,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div>
               <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
               <input type="number" value={extraItemEditData.currentStock ?? ''}
-                onChange={e => setExtraItemEditData({ ...extraItemEditData, currentStock: e.target.value })}
+                onChange={e => setExtraItemEditData(prev => ({...prev, currentStock: e.target.value }))}
                 style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
           </div>
@@ -14410,7 +14601,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
           <div>
             <label style={{ fontSize: '0.55rem', color: '#555', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description</label>
             <input type="text" value={extraItemEditData.description || ''}
-              onChange={e => setExtraItemEditData({ ...extraItemEditData, description: e.target.value })}
+              onChange={e => setExtraItemEditData(prev => ({...prev, description: e.target.value }))}
               style={{ width: '100%', padding: '11px 13px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
@@ -14420,7 +14611,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>ITEM AVAILABILITY</div>
               <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '3px' }}>Toggle to show or hide from active catalog</div>
             </div>
-            <button type="button" onClick={() => setExtraItemEditData({ ...extraItemEditData, isAvailable: !extraItemEditData.isAvailable })}
+            <button type="button" onClick={() => setExtraItemEditData(prev => ({...prev, isAvailable: !prev.isAvailable }))}
               style={{ width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: extraItemEditData.isAvailable ? '#d3bfa2' : '#1a1a1a', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
               <div style={{ position: 'absolute', top: '4px', left: extraItemEditData.isAvailable ? '22px' : '4px', width: '16px', height: '16px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#000' : '#444', transition: 'left 0.2s' }} />
             </button>
@@ -14428,8 +14619,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: '12px', marginTop: '8px', paddingTop: '20px', borderTop: '1px solid #111' }}>
-            <button onClick={() => setExtraItemEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
-            <button
+            <button type="button" onClick={() => setExtraItemEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
+            <button type="button"
               onClick={async () => {
                 if (!extraItemEditData.name?.trim()) return showNotif('Item name required', 'error');
                 if (!extraItemEditData.price || Number(extraItemEditData.price) <= 0) return showNotif('Valid price required', 'error');
@@ -14464,8 +14655,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>{confirmModal.title}</h3>
               <p style={{color:'#666',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>{confirmModal.subtitle}</p>
               <div style={{display:'flex',gap:'12px'}}>
-                <button onClick={()=>setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null})} style={styles.cancelBtn}>CANCEL</button>
-                <button onClick={()=>{if(confirmModal.onConfirm)confirmModal.onConfirm();setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null});}} style={styles.confirmBtn}>CONFIRM</button>
+                <button type="button" onClick={()=>setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null})} style={styles.cancelBtn}>CANCEL</button>
+                <button type="button" onClick={()=>{if(confirmModal.onConfirm)confirmModal.onConfirm();setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null});}} style={styles.confirmBtn}>CONFIRM</button>
               </div>
             </motion.div>
           </div>
@@ -14489,7 +14680,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                 <div style={{marginBottom:'20px'}}>
                   <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>PRICE (₹)</label>
                   <input type="number" style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#222'}}
-                    value={activePriceEditItem.price||''} onChange={e=>setActivePriceEditItem({...activePriceEditItem,price:Number(e.target.value)})}/>
+                    value={activePriceEditItem.price||''} onChange={e=>setActivePriceEditItem(prev => ({...prev, price:e.target.value}))}/>
                 </div>
               ) : (
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'15px',marginBottom:'20px'}}>
@@ -14497,14 +14688,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                     <div key={k}>
                       <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>{l}</label>
                       <input type="number" style={{...styles.input,marginBottom:0,background:'#000',borderColor:'#222'}}
-                        value={activePriceEditItem[k]||''} onChange={e=>setActivePriceEditItem({...activePriceEditItem,[k]:Number(e.target.value),price:k==='priceFull'?Number(e.target.value):activePriceEditItem.price})}/>
+                        value={activePriceEditItem[k]||''} onChange={e=>setActivePriceEditItem(prev => ({...prev, [k]:e.target.value,price:k==='priceFull'?e.target.value:activePriceEditItem.price}))}/>
                     </div>
                   ))}
                 </div>
               )}
               <div style={{display:'flex',gap:'12px',marginTop:'30px'}}>
-                <button onClick={()=>setActivePriceEditItem(null)} style={styles.cancelBtn}>ABORT</button>
-                <button onClick={()=>{
+                <button type="button" onClick={()=>setActivePriceEditItem(null)} style={styles.cancelBtn}>ABORT</button>
+                <button type="button" onClick={()=>{
                   const payload=activePriceEditItem.priceHalf
                     ?{priceHalf:activePriceEditItem.priceHalf,priceFull:activePriceEditItem.priceFull,price:activePriceEditItem.priceFull}
                     :{price:activePriceEditItem.price};
@@ -14536,7 +14727,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div style={{fontSize:'0.58rem',color:'#444',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>MENU REGISTRY</div>
             <h3 style={{color:'#fff',margin:0,fontSize:'1.15rem',fontWeight:'900'}}>ADD NEW DISH</h3>
           </div>
-          <button onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:''});}}
+          <button type="button" onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:''});}}
             style={{background:'#111',border:'1px solid #1a1a1a',color:'#555',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
             <X size={16}/>
           </button>
@@ -14551,13 +14742,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (English) *</label>
               <input type="text" placeholder="e.g. Paneer Tikka"
                 style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
-                value={newDish.name} onChange={e=>setNewDish({...newDish,name:e.target.value})}/>
+                value={newDish.name} onChange={e=>setNewDish(prev => ({...prev, name:e.target.value}))}/>
             </div>
             <div>
               <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (Marathi)</label>
               <input type="text" placeholder="e.g. पनीर टिक्का"
                 style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
-                value={newDish.name_mr} onChange={e=>setNewDish({...newDish,name_mr:e.target.value})}/>
+                value={newDish.name_mr} onChange={e=>setNewDish(prev => ({...prev, name_mr:e.target.value}))}/>
             </div>
           </div>
 
@@ -14566,7 +14757,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>CATEGORY *</label>
             <select
               style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:newDish.categoryId?'#fff':'#444',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
-              value={newDish.categoryId} onChange={e=>setNewDish({...newDish,categoryId:e.target.value})}>
+              value={newDish.categoryId} onChange={e=>setNewDish(prev => ({...prev, categoryId:e.target.value}))}>
               <option value="">-- Select category --</option>
               {categories.map(c=><option key={c.categoryId} value={c.categoryId}>{c.name}</option>)}
             </select>
@@ -14578,7 +14769,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div style={{display:'flex',gap:'8px',marginBottom:'14px'}}>
               {['single','half-full'].map(mode=>(
                 <button key={mode} type="button"
-                  onClick={()=>setNewDish({...newDish,_priceMode:mode,price:'',priceHalf:'',priceFull:''})}
+                  onClick={()=>setNewDish(prev => ({...prev, _priceMode:mode,price:'',priceHalf:'',priceFull:''}))}
                   style={{
                     padding:'8px 18px',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
                     background: (newDish._priceMode||'single')===mode ? 'rgba(211,191,162,0.1)' : 'transparent',
@@ -14596,7 +14787,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                 <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>PRICE (₹) *</label>
                 <input type="number" placeholder="e.g. 180"
                   style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
-                  value={newDish.price} onChange={e=>setNewDish({...newDish,price:e.target.value})}/>
+                  value={newDish.price} onChange={e=>setNewDish(prev => ({...prev, price:e.target.value}))}/>
               </div>
             ) : (
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
@@ -14604,13 +14795,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
                   <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>HALF PRICE (₹) *</label>
                   <input type="number" placeholder="e.g. 120"
                     style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
-                    value={newDish.priceHalf} onChange={e=>setNewDish({...newDish,priceHalf:e.target.value})}/>
+                    value={newDish.priceHalf} onChange={e=>setNewDish(prev => ({...prev, priceHalf:e.target.value}))}/>
                 </div>
                 <div>
                   <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>FULL PRICE (₹) *</label>
                   <input type="number" placeholder="e.g. 220"
                     style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
-                    value={newDish.priceFull} onChange={e=>setNewDish({...newDish,priceFull:e.target.value,price:e.target.value})}/>
+                    value={newDish.priceFull} onChange={e=>setNewDish(prev => ({...prev, priceFull:e.target.value,price:e.target.value}))}/>
                 </div>
               </div>
             )}
@@ -14622,7 +14813,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <div style={{display:'flex',gap:'8px'}}>
               {['','Low','Medium','High'].map(level=>(
                 <button key={level} type="button"
-                  onClick={()=>setNewDish({...newDish,spicylevel:level})}
+                  onClick={()=>setNewDish(prev => ({...prev, spicylevel:level}))}
                   style={{
                     flex:1,padding:'8px 6px',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
                     background: newDish.spicylevel===level ? 'rgba(211,191,162,0.08)' : 'transparent',
@@ -14681,13 +14872,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
               <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (English, comma separated)</label>
               <input type="text" placeholder="e.g. Paneer, Tomato, Capsicum"
                 style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
-                value={newDish.ingredients.en} onChange={e=>setNewDish({...newDish,ingredients:{...newDish.ingredients,en:e.target.value}})}/>
+                value={newDish.ingredients.en} onChange={e=>setNewDish(prev => ({...prev, ingredients:{...(prev.ingredients || {}),en:e.target.value}}))}/>
             </div>
             <div>
               <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (Marathi)</label>
               <input type="text" placeholder="e.g. पनीर, टोमॅटो, कॅप्सिकम"
                 style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
-                value={newDish.ingredients.mr} onChange={e=>setNewDish({...newDish,ingredients:{...newDish.ingredients,mr:e.target.value}})}/>
+                value={newDish.ingredients.mr} onChange={e=>setNewDish(prev => ({...prev, ingredients:{...(prev.ingredients || {}),mr:e.target.value}}))}/>
             </div>
           </div>
 
@@ -14699,7 +14890,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
     <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>DISH TYPE *</label>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
       <button type="button"
-        onClick={() => setNewDish({...newDish, isVeg: true})}
+        onClick={() => setNewDish(prev => ({...prev, isVeg: true}))}
         style={{
           padding: '14px', borderRadius: '10px', cursor: 'pointer',
           border: newDish.isVeg === true ? '1px solid rgba(74,124,63,0.5)' : '1px solid #1a1a1a',
@@ -14727,7 +14918,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       </button>
 
       <button type="button"
-        onClick={() => setNewDish({...newDish, isVeg: false})}
+        onClick={() => setNewDish(prev => ({...prev, isVeg: false}))}
         style={{
           padding: '14px', borderRadius: '10px', cursor: 'pointer',
           border: newDish.isVeg === false ? '1px solid rgba(138,48,48,0.5)' : '1px solid #1a1a1a',
@@ -14768,7 +14959,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
       <div style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>CHEF'S SPECIAL</div>
       <div style={{fontSize:'0.58rem',color:'#444',marginTop:'3px'}}>Highlighted with Sparkle badge on customer menu</div>
     </div>
-    <button type="button" onClick={()=>setNewDish({...newDish,isChefSpecial:!newDish.isChefSpecial})}
+    <button type="button" onClick={()=>setNewDish(prev => ({...prev, isChefSpecial:!prev.isChefSpecial}))}
       style={{
         width:'40px',height:'22px',borderRadius:'11px',border:'none',cursor:'pointer',
         background:newDish.isChefSpecial?'#d3bfa2':'#1a1a1a',
@@ -14791,17 +14982,17 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`);
             <label style={{fontSize:'0.55rem',color:'#555',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>TAGS (optional, comma separated)</label>
             <input type="text" placeholder="e.g. bestseller, must-try, new"
               style={{width:'100%',padding:'11px 13px',background:'#000',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
-              value={newDish.tags} onChange={e=>setNewDish({...newDish,tags:e.target.value})}/>
+              value={newDish.tags} onChange={e=>setNewDish(prev => ({...prev, tags:e.target.value}))}/>
           </div>
 
           {/* ACTIONS */}
           <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid #111'}}>
-            <button
+            <button type="button"
               onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});}}
               style={styles.cancelBtn}>
               CANCEL
             </button>
-            <button
+            <button type="button"
               onClick={async()=>{
                 if(!newDish.name?.trim()) return showNotif("Dish name is required","error");
                 if(!newDish.categoryId) return showNotif("Select a category","error");
@@ -14865,11 +15056,11 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
           This will remove the dish from customer menus immediately. Settled order history is unaffected.
         </p>
         <div style={{display:'flex',gap:'12px'}}>
-          <button onClick={()=>setPendingDeleteDish(null)} style={styles.cancelBtn}>ABORT</button>
-          <button
+          <button type="button" onClick={()=>setPendingDeleteDish(null)} style={styles.cancelBtn}>ABORT</button>
+          <button type="button"
             onClick={async()=>{
               try {
-                await axios.delete(`${BASE_URL}/menu-item/${pendingDeleteDish._id}`);
+                await axios.delete(`${BASE_URL}/menu-item/${pendingDeleteDish._id}`, { data: { tenantId } });
                 setMenuItems(prev=>prev.filter(m=>m._id!==pendingDeleteDish._id));
                 socket.emit("menu_change_detected",{tenantId,itemId:pendingDeleteDish._id,updateData:{...pendingDeleteDish,isAvailable:false,_deleted:true}});
                 showNotif(`${pendingDeleteDish.name} removed from menu`,"success");
@@ -14898,8 +15089,8 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
                 Delete <b style={{color:'#fff'}}>{pendingDeleteStaff.name.split(' (')[0]}</b> and all their records?
               </p>
               <div style={{display:'flex',gap:'12px'}}>
-                <button onClick={()=>setPendingDeleteStaff(null)} style={styles.cancelBtn}>ABORT</button>
-            <button onClick={async()=>{
+                <button type="button" onClick={()=>setPendingDeleteStaff(null)} style={styles.cancelBtn}>ABORT</button>
+            <button type="button" onClick={async()=>{
   if (wipingStaffId) return; // guard
   setWipingStaffId(pendingDeleteStaff._id);
   try {
@@ -14992,7 +15183,7 @@ style={{
               const id   = n.toString();
               const isOcc = occupiedTables.includes(id);
               return (
-                <button
+                <button type="button"
                   key={n}
                   disabled={isOcc}
 onClick={async () => {
@@ -15024,7 +15215,8 @@ onClick={async () => {
     } else {
       // ── WAITLIST PATH (unchanged) ──
       const res = await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, {
-        tableNumber: id
+        tableNumber: id,
+        tenantId
       });
       if (res.data?.success) {
         setAssignTableModal(null);
@@ -15085,7 +15277,7 @@ onClick={async () => {
               {Array.from({ length: tableCount }, (_, i) => (i + 1).toString()).filter(id => !occupiedTables.includes(id)).length} tables free
             </span>
           </div>
-          <button onClick={() => setAssignTableModal(null)} style={{
+          <button type="button" onClick={() => setAssignTableModal(null)} style={{
             padding: '10px 22px', background: 'transparent', border: '1px solid #1a1a1a',
             color: '#444', borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer'
           }}
@@ -15167,13 +15359,13 @@ onClick={async () => {
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button
+          <button type="button"
             onClick={() => handleAggregatorReject(activeAggregatorPopup)}
             style={{ flex: 1, padding: '14px', background: 'transparent', border: '1px solid #2a1515', color: '#8a3030', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
           >
             REJECT
           </button>
-          <button
+          <button type="button"
             onClick={() => handleAggregatorAccept(activeAggregatorPopup)}
             style={{ flex: 2, padding: '14px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '12px', fontSize: '0.78rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
           >
@@ -15259,13 +15451,13 @@ onClick={async () => {
         </div>
 
         <div style={{display:'flex',gap:'12px'}}>
-          <button
+          <button type="button"
             onClick={() => {setSalaryEditModal(null); setSalaryEditPassword('');}}
             style={styles.cancelBtn}
           >
             CANCEL
           </button>
-          <button
+          <button type="button"
             onClick={async () => {
               const expectedPass = `${tenantId}@${tableCount}`;
               if (salaryEditPassword !== expectedPass) {
@@ -15363,7 +15555,7 @@ onClick={async () => {
               )}
             </div>
           </div>
-          <button onClick={() => setPurchaseOrderModal(null)} style={{
+          <button type="button" onClick={() => setPurchaseOrderModal(null)} style={{
             background: '#111', border: '1px solid #1a1a1a',
             color: '#555', padding: '7px', borderRadius: '8px', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -15421,7 +15613,7 @@ onClick={async () => {
                 {(() => {
                   const base = purchaseOrderModal.suggestedQty || 100;
                   return [Math.round(base * 0.5), base, Math.round(base * 1.5), Math.round(base * 2)].map(qty => (
-                    <button
+                    <button type="button"
                       key={qty}
                       onClick={() => setPurchaseOrderModal(p => ({ ...p, customQty: String(qty), copySuccess: false }))}
                       style={{
@@ -15529,7 +15721,7 @@ onClick={async () => {
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '10px' }}>
             {/* COPY button */}
-            <button
+            <button type="button"
               onClick={() => {
                 const item     = purchaseOrderModal.item;
                 const qty      = Number(purchaseOrderModal.customQty) || 0;
@@ -15596,7 +15788,7 @@ onClick={async () => {
             </button>
 
             {/* WhatsApp share button */}
-            <button
+            <button type="button"
               onClick={() => {
                 const item     = purchaseOrderModal.item;
                 const qty      = Number(purchaseOrderModal.customQty) || 0;
@@ -15620,7 +15812,7 @@ onClick={async () => {
                   `\n_Sent via Pratyeksha POS_`
                 );
 
-                window.open(`https://wa.me/?text=${waText}`, '_blank');
+                window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, '_blank');
               }}
               style={{
                 flex: 1, padding: '13px', borderRadius: '10px',
@@ -15636,7 +15828,7 @@ onClick={async () => {
             </button>
 
             {/* Close */}
-            <button
+            <button type="button"
               onClick={() => setPurchaseOrderModal(null)}
               style={{
                 padding: '13px 16px', borderRadius: '10px',

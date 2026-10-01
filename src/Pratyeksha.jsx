@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { UtensilsCrossed } from "lucide-react";
 
 const API = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || "";
 const GA_MEASUREMENT_ID = (typeof import.meta !== "undefined" && import.meta.env?.VITE_GA_MEASUREMENT_ID) || "";
@@ -912,7 +913,7 @@ function PratyekshaChatbot() {
   return (
     <>
       {open && <div className="chat-backdrop is-open" onClick={() => setOpen(false)} aria-hidden="true" />}
-      <button className={`chat-launcher ${open ? "is-open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label={open ? "Close PRATYEKSHa assistant" : "Open PRATYEKSHa assistant"}>
+      <button type="button" className={`chat-launcher ${open ? "is-open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label={open ? "Close PRATYEKSHa assistant" : "Open PRATYEKSHa assistant"}>
         <span className="chat-launcher-glow" />
         <span className="chat-launcher-icon"><I name={open ? "close" : "spark"} size={21} /></span>
         {!open && <span className="chat-launcher-copy"><small>PRATYEKSHa</small><strong>Ask the system</strong></span>}
@@ -925,7 +926,7 @@ function PratyekshaChatbot() {
             <strong>Ask. Explore. Understand.</strong>
             <small><span className="chat-status-dot" /> {CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ question variations covered</small>
           </div>
-          <button className="chat-close" onClick={() => setOpen(false)} aria-label="Close assistant"><I name="close" size={17} /></button>
+          <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Close assistant"><I name="close" size={17} /></button>
         </div>
         <div className="chat-trust">
           <span className="chat-live-dot" /> Grounded in PRATYEKSHa information <span>•</span> No invented pricing
@@ -934,7 +935,7 @@ function PratyekshaChatbot() {
           {Object.keys(CHAT_TOPIC_SETS).map((topic) => {
             const [icon] = CHAT_TOPIC_META[topic];
             return (
-              <button key={topic} className={activeTopic === topic ? "active" : ""} onClick={() => setActiveTopic(topic)}>
+              <button type="button" key={topic} className={activeTopic === topic ? "active" : ""} onClick={() => setActiveTopic(topic)}>
                 <I name={icon} size={11} /> {topic}
               </button>
             );
@@ -961,7 +962,7 @@ function PratyekshaChatbot() {
                       <a href={`mailto:${CHATBOT_KNOWLEDGE.contact.email}`}><I name="mail" size={12} /> {CHATBOT_KNOWLEDGE.contact.email}</a>
                       <a href={`tel:${CHATBOT_KNOWLEDGE.contact.phone.replace(/[^\d+]/g, "")}`}><I name="phone" size={12} /> {CHATBOT_KNOWLEDGE.contact.phone}</a>
                     </div>
-                    <button onClick={openDemo}>Book a private demo <I name="arrowUpRight" size={13} /></button>
+                    <button type="button" onClick={openDemo}>Book a private demo <I name="arrowUpRight" size={13} /></button>
                   </div>
                 )}
               </div>
@@ -984,7 +985,7 @@ function PratyekshaChatbot() {
           </div>
           <div className="chat-suggestions">
             {suggestions.map(([item, icon]) => (
-              <button key={item} onClick={() => send(item)}>
+              <button type="button" key={item} onClick={() => send(item)}>
                 <span><I name={icon} size={13} /></span>
                 <b>{item}</b>
                 <I name="arrow" size={11} />
@@ -1003,7 +1004,7 @@ function PratyekshaChatbot() {
           <span>•</span>
           <span><I name="users" size={10} /> Human confirmation for unknowns</span>
           <span>•</span>
-          <button onClick={openDemo}>Book demo <I name="arrowUpRight" size={11} /></button>
+          <button type="button" onClick={openDemo}>Book demo <I name="arrowUpRight" size={11} /></button>
         </div>
       </aside>
     </>
@@ -1048,14 +1049,14 @@ function ProductVisual({ type }) {
                 <strong>Paneer Tikka</strong>
                 <span>Smoky • Chef special</span>
               </div>
-              <button>
+              <button type="button">
                 <I name="plus" size={15} />
               </button>
             </div>
           </div>
           <div className="dish-row">
             <div className="mini-dish">
-              <div className="mini-dish-image">🍽</div>
+              <div className="mini-dish-image"><UtensilsCrossed size={18} strokeWidth={1.8} /></div>
               <span>Veg Momos</span>
               <b>₹180</b>
             </div>
@@ -1067,7 +1068,7 @@ function ProductVisual({ type }) {
           </div>
           <div className="phone-bottom">
             <span>Table 12</span>
-            <button>
+            <button type="button">
               View order <I name="arrow" size={13} />
             </button>
           </div>
@@ -1117,7 +1118,7 @@ function ProductVisual({ type }) {
               <p>Veg Momos × 1</p>
               <div className="ticket-footer">
                 <span>4 items</span>
-                <button>
+                <button type="button">
                   <I name="arrow" size={13} />
                 </button>
               </div>
@@ -1132,7 +1133,7 @@ function ProductVisual({ type }) {
               <p>Cold Coffee × 2</p>
               <div className="ticket-footer">
                 <span>4 items</span>
-                <button>
+                <button type="button">
                   <I name="arrow" size={13} />
                 </button>
               </div>
@@ -1153,7 +1154,7 @@ function ProductVisual({ type }) {
               </div>
               <div className="ticket-footer">
                 <span>Chef: Rahul</span>
-                <button>
+                <button type="button">
                   <I name="check" size={13} />
                 </button>
               </div>
@@ -1420,7 +1421,7 @@ function ProductVisual({ type }) {
             <strong>“Something familiar?”</strong>
             <p>Invite Akshay back with a dish he already loves.</p>
           </div>
-          <button>
+          <button type="button">
             Send campaign <I name="send" size={14} />
           </button>
         </div>
@@ -1448,7 +1449,7 @@ function NotFoundPage({ onHome }) {
       <span className="special-kicker">404 / PAGE NOT FOUND</span>
       <h1>This page took a<br /><em>wrong turn.</em></h1>
       <p>The page you requested does not exist or may have moved. Return to the restaurant experience system and continue exploring.</p>
-      <button className="button primary" onClick={onHome}>Back to Pratyeksha <I name="arrow" size={16} /></button>
+      <button type="button" className="button primary" onClick={onHome}>Back to Pratyeksha <I name="arrow" size={16} /></button>
     </div>
   );
 }
@@ -1466,8 +1467,8 @@ function ThankYouPage({ onHome, onDemo }) {
       <h1>Your next restaurant<br /><em>conversation starts here.</em></h1>
       <p>Thanks for requesting a private demo. Our team will review the details and contact you using the information you provided.</p>
       <div className="special-actions">
-        <button className="button primary" onClick={onHome}>Back to website <I name="arrow" size={16} /></button>
-        <button className="button secondary" onClick={onDemo}>Send another request</button>
+        <button type="button" className="button primary" onClick={onHome}>Back to website <I name="arrow" size={16} /></button>
+        <button type="button" className="button secondary" onClick={onDemo}>Send another request</button>
       </div>
       <small className="special-note">If you need us sooner: hello.pratyeksha@gmail.com</small>
     </div>
@@ -2071,10 +2072,10 @@ function App() {
       <div className="legal-page-shell">
         <style>{CSS}</style>
         <header className="legal-nav">
-          <button className="legal-brand" onClick={closeLegal} aria-label="Back to Pratyeksha home">
+          <button type="button" className="legal-brand" onClick={closeLegal} aria-label="Back to Pratyeksha home">
             <BrandLogo className="legal-brand-image" alt="Pratyeksha logo" />
           </button>
-          <button className="legal-close" onClick={closeLegal}>
+          <button type="button" className="legal-close" onClick={closeLegal}>
             <span>Back to website</span><I name="arrow" size={15} />
           </button>
         </header>
@@ -2143,9 +2144,9 @@ function App() {
           <span>© {new Date().getFullYear()} Pratyeksha</span>
           <span>Built for cafés & restaurants.</span>
           <div>
-            <button onClick={() => openLegal("privacy")}>Privacy Policy</button>
-            <button onClick={() => openLegal("terms")}>Terms of Use</button>
-            <button onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
+            <button type="button" onClick={() => openLegal("privacy")}>Privacy Policy</button>
+            <button type="button" onClick={() => openLegal("terms")}>Terms of Use</button>
+            <button type="button" onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
           </div>
         </footer>
       </div>
@@ -2170,7 +2171,7 @@ function App() {
       />
       {}
       <header className={`nav ${scrolled ? "nav-scrolled" : ""}`}>
-        <button
+        <button type="button"
           className="brand"
           onClick={() => scrollTo("home")}
           aria-label="Pratyeksha home"
@@ -2180,35 +2181,35 @@ function App() {
           </span>
         </button>
         <nav className="desktop-nav">
-          <button
+          <button type="button"
             className={activeSection === "system" ? "active" : ""}
             onClick={() => scrollTo("system")}
           >
             System
           </button>
-          <button
+          <button type="button"
             className={activeSection === "experience" ? "active" : ""}
             onClick={() => scrollTo("experience")}
           >
             Experience
           </button>
-          <button
+          <button type="button"
             className={activeSection === "operations" ? "active" : ""}
             onClick={() => scrollTo("operations")}
           >
             Operations
           </button>
-          <button
+          <button type="button"
             className={activeSection === "intelligence" ? "active" : ""}
             onClick={() => scrollTo("intelligence")}
           >
             Intelligence
           </button>
-          <button onClick={() => scrollTo("demo")} className="nav-demo">
+          <button type="button" onClick={() => scrollTo("demo")} className="nav-demo">
             Book Demo
           </button>
         </nav>
-        <button
+        <button type="button"
           className="mobile-menu-button"
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
@@ -2218,7 +2219,7 @@ function App() {
       </header>
       {}
       <div className={`mobile-menu ${mobileOpen ? "open" : ""}`}>
-        <button
+        <button type="button"
           className="mobile-close"
           onClick={() => setMobileOpen(false)}
         >
@@ -2235,7 +2236,7 @@ function App() {
             ["marketing", "Marketing"],
             ["demo", "Book a Demo"],
           ].map(([id, label]) => (
-            <button key={id} onClick={() => scrollTo(id)}>
+            <button type="button" key={id} onClick={() => scrollTo(id)}>
               {label}
             </button>
           ))}
@@ -2265,14 +2266,14 @@ function App() {
               intelligent restaurant experience system.
             </p>
             <div className="hero-actions reveal delay-3">
-              <button
+              <button type="button"
                 className="button primary"
                 onClick={() => scrollTo("demo")}
               >
                 Book a Private Demo
                 <I name="arrow" size={16} />
               </button>
-              <button
+              <button type="button"
                 className="button secondary"
                 onClick={() => scrollTo("system")}
               >
@@ -2381,7 +2382,7 @@ function App() {
             </div>
             <div className="product-tabs">
               {Object.entries(PRODUCTS).map(([key, item]) => (
-                <button key={key} className={`product-tab ${activeProduct === key ? "active" : ""}`} onClick={() => setActiveProduct(key)} aria-label={`View ${item.eyebrow}`}>
+                <button type="button" key={key} className={`product-tab ${activeProduct === key ? "active" : ""}`} onClick={() => setActiveProduct(key)} aria-label={`View ${item.eyebrow}`}>
                   <div className="product-tab-top">
                     <span className="product-tab-number">{item.number}</span>
                     <I name={{experience:"phone",kitchen:"kitchen",operations:"layers",intelligence:"chart",marketing:"spark"}[key]} size={15} className="product-tab-icon" />
@@ -2403,10 +2404,10 @@ function App() {
                   </div>
                 </div>
                 <div className="product-nav">
-                  <button aria-label="Previous layer" onClick={() => { const keys = Object.keys(PRODUCTS); setActiveProduct(keys[(activeProductIndex - 1 + keys.length) % keys.length]); }}>
+                  <button type="button" aria-label="Previous layer" onClick={() => { const keys = Object.keys(PRODUCTS); setActiveProduct(keys[(activeProductIndex - 1 + keys.length) % keys.length]); }}>
                     <I name="chevronLeft" size={16} />
                   </button>
-                  <button aria-label="Next layer" onClick={() => { const keys = Object.keys(PRODUCTS); setActiveProduct(keys[(activeProductIndex + 1) % keys.length]); }}>
+                  <button type="button" aria-label="Next layer" onClick={() => { const keys = Object.keys(PRODUCTS); setActiveProduct(keys[(activeProductIndex + 1) % keys.length]); }}>
                     <I name="chevronRight" size={16} />
                   </button>
                   <span className="product-counter">0{activeProductIndex + 1} / 05</span>
@@ -2489,7 +2490,7 @@ function App() {
                     </div>
                   ))}
                 </div>
-                <button
+                <button type="button"
                   className="module-link reveal delay-4"
                   onClick={() => scrollTo("demo")}
                 >
@@ -2756,7 +2757,7 @@ function App() {
                     Your demo request has been received. Our team
                     will contact you shortly.
                   </p>
-                  <button
+                  <button type="button"
                     className="button primary"
                     onClick={() => setSent(false)}
                   >
@@ -2949,7 +2950,7 @@ function App() {
                 <small>TABLE 12 / MENU</small><strong>Tonight's menu</strong><p>Find something you will remember.</p>
                 <div className="mock-menu"><span /><div><b>Paneer Special</b><small>Chef selection</small></div></div>
                 <div className="mock-menu"><span className="sage-dish" /><div><b>Fresh Fruit Shake</b><small>Made to order</small></div></div>
-                <button>Explore menu <I name="arrow" size={13} /></button>
+                <button type="button">Explore menu <I name="arrow" size={13} /></button>
               </div>
             </div>
             <div className="journey-float"><I name="spark" size={15} /><span><small>SMART SIGNAL</small><b>Returning guest</b></span></div>
@@ -2984,7 +2985,7 @@ function App() {
               <div className="board-main">
                 <div className="board-welcome">
                   <div><small>GOOD EVENING</small><b>Restaurant overview</b></div>
-                  <button>View live floor <I name="arrow" size={12} /></button>
+                  <button type="button">View live floor <I name="arrow" size={12} /></button>
                 </div>
                 <div className="board-metrics">
                   <div><small>TODAY'S SALES</small><strong>₹ 48,260</strong><em>+12.8%</em></div>
@@ -3027,8 +3028,8 @@ function App() {
       <section id="faq" className="faq-section">
         <div className="faq-orbit faq-orbit-one"/><div className="faq-orbit faq-orbit-two"/>
         <div className="faq-inner">
-          <div className="faq-intro reveal"><div className="eyebrow">QUESTIONS / ANSWERS</div><div className="faq-kicker">08 / CLARITY BEFORE COMMITMENT</div><h2>Everything you need to know, <em>before the first demo.</em></h2><p>A concise look at how Pratyeksha fits into a real café or restaurant without the usual software-sales noise.</p><div className="faq-side-card"><span><I name="spark" size={17}/></span><div><small>STILL CURIOUS?</small><strong>Let's show you the actual experience.</strong></div><button onClick={()=>scrollTo("demo")}>Book demo <I name="arrow" size={14}/></button></div></div>
-          <div className="faq-list reveal delay-1">{faqs.map((item,index)=>{const open=openFaq===index;return <article className={`faq-item ${open?'is-open':''}`} key={item.q}><button className="faq-question" onClick={()=>setOpenFaq(open?-1:index)} aria-expanded={open}><span className="faq-index">{String(index+1).padStart(2,"0")}</span><span className="faq-question-text">{item.q}</span><span className="faq-toggle"><i/><i/></span></button><div className="faq-answer-wrap"><div className="faq-answer">{item.a}</div></div></article>})}</div>
+          <div className="faq-intro reveal"><div className="eyebrow">QUESTIONS / ANSWERS</div><div className="faq-kicker">08 / CLARITY BEFORE COMMITMENT</div><h2>Everything you need to know, <em>before the first demo.</em></h2><p>A concise look at how Pratyeksha fits into a real café or restaurant without the usual software-sales noise.</p><div className="faq-side-card"><span><I name="spark" size={17}/></span><div><small>STILL CURIOUS?</small><strong>Let's show you the actual experience.</strong></div><button type="button" onClick={()=>scrollTo("demo")}>Book demo <I name="arrow" size={14}/></button></div></div>
+          <div className="faq-list reveal delay-1">{faqs.map((item,index)=>{const open=openFaq===index;return <article className={`faq-item ${open?'is-open':''}`} key={item.q}><button type="button" className="faq-question" onClick={()=>setOpenFaq(open?-1:index)} aria-expanded={open}><span className="faq-index">{String(index+1).padStart(2,"0")}</span><span className="faq-question-text">{item.q}</span><span className="faq-toggle"><i/><i/></span></button><div className="faq-answer-wrap"><div className="faq-answer">{item.a}</div></div></article>})}</div>
         </div>
         <div className="faq-bottom-line"><span>Pratyeksha / RESTAURANT EXPERIENCE SYSTEM</span><span>DESIGNED AROUND THE WAY PEOPLE DINE</span></div>
       </section>
@@ -3037,7 +3038,7 @@ function App() {
       <footer className="footer">
         <div className="footer-top">
           <div className="footer-brand">
-            <button
+            <button type="button"
               className="footer-logo"
               onClick={() => scrollTo("home")}
             >
@@ -3053,37 +3054,37 @@ function App() {
           </div>
           <div className="footer-column">
             <h4>Platform</h4>
-            <button onClick={() => scrollTo("experience")}>
+            <button type="button" onClick={() => scrollTo("experience")}>
               Customer Experience
             </button>
-            <button onClick={() => scrollTo("operations")}>
+            <button type="button" onClick={() => scrollTo("operations")}>
               Kitchen & Operations
             </button>
-            <button onClick={() => scrollTo("billing")}>
+            <button type="button" onClick={() => scrollTo("billing")}>
               Smart Billing
             </button>
-            <button onClick={() => scrollTo("inventory")}>
+            <button type="button" onClick={() => scrollTo("inventory")}>
               Inventory
             </button>
-            <button onClick={() => scrollTo("intelligence")}>
+            <button type="button" onClick={() => scrollTo("intelligence")}>
               Intelligence
             </button>
           </div>
           <div className="footer-column">
             <h4>For Business</h4>
-            <button onClick={() => scrollTo("system")}>
+            <button type="button" onClick={() => scrollTo("system")}>
               Cafés
             </button>
-            <button onClick={() => scrollTo("system")}>
+            <button type="button" onClick={() => scrollTo("system")}>
               Restaurants
             </button>
-            <button onClick={() => scrollTo("system")}>
+            <button type="button" onClick={() => scrollTo("system")}>
               QSRs
             </button>
-            <button onClick={() => scrollTo("system")}>
+            <button type="button" onClick={() => scrollTo("system")}>
               Multi-outlet
             </button>
-            <button onClick={() => scrollTo("demo")}>
+            <button type="button" onClick={() => scrollTo("demo")}>
               Book Demo
             </button>
           </div>
@@ -3104,7 +3105,7 @@ function App() {
           <div>
             <span>RESTAURANT EXPERIENCE SYSTEM</span>
           </div>
-          <button onClick={() => scrollTo("home")}>
+          <button type="button" onClick={() => scrollTo("home")}>
             Back to top
             <I name="arrow" size={14} />
           </button>
@@ -3116,15 +3117,15 @@ function App() {
           </span>
           <span>Built for cafés & restaurants.</span>
           <div className="footer-legal-links">
-            <button onClick={() => openLegal("privacy")}>Privacy Policy</button>
-            <button onClick={() => openLegal("terms")}>Terms of Use</button>
-            <button onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
+            <button type="button" onClick={() => openLegal("privacy")}>Privacy Policy</button>
+            <button type="button" onClick={() => openLegal("terms")}>Terms of Use</button>
+            <button type="button" onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
           </div>
         </div>
       </footer>
       <PratyekshaChatbot />
       <div className="mobile-sticky-cta" aria-label="Book a private demo">
-        <button onClick={() => scrollTo("demo")}><span>Book a Private Demo</span><I name="arrow" size={15} /></button>
+        <button type="button" onClick={() => scrollTo("demo")}><span>Book a Private Demo</span><I name="arrow" size={15} /></button>
       </div>
       <CookieBanner
         consent={cookieConsent}
@@ -3135,7 +3136,7 @@ function App() {
       {showConsentSettings && cookieConsent && (
         <div className="consent-settings-toast" role="status">
           <span>Analytics preference: {cookieConsent.analytics ? "allowed" : "off"}.</span>
-          <button onClick={() => updateConsent(!cookieConsent.analytics)}>{cookieConsent.analytics ? "Turn off analytics" : "Allow analytics"}</button>
+          <button type="button" onClick={() => updateConsent(!cookieConsent.analytics)}>{cookieConsent.analytics ? "Turn off analytics" : "Allow analytics"}</button>
         </div>
       )}
     </div>

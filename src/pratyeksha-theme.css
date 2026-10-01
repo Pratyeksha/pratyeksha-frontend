@@ -1,0 +1,195 @@
+
+:root {
+  --pr-warm-white:#F7F3EB; --pr-white:#FFFFFF; --pr-beige:#E4D9C6; --pr-beige-light:#F0E8DA;
+  --pr-beige-soft:#F4ECDF; --pr-beige-deep:#D8C9B2; --pr-charcoal:#2E3134; --pr-charcoal-deep:#242628;
+  --pr-charcoal-soft:#565A57; --pr-muted:#8A8D85; --pr-sage:#6B7F5F; --pr-sage-dark:#56684C;
+  --pr-sage-light:#E8EDE3; --pr-sage-soft:#EEF1EA; --pr-gold:#C7A269; --pr-gold-dark:#A98248;
+  --pr-danger:#C94A4A; --pr-danger-bg:#F7E7E5; --pr-border:#E4D9C6;
+  --pr-shadow-sm:0 4px 16px rgba(46,49,52,.05); --pr-shadow-md:0 8px 30px rgba(46,49,52,.07);
+  --pr-shadow-lg:0 18px 50px rgba(46,49,52,.09);
+}
+html, body { background: var(--pr-warm-white); color: var(--pr-charcoal); }
+
+
+/* ── PRATYEKSHa Premium Motion Layer ───────────────────────────── */
+html { scroll-behavior: smooth; }
+body {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(228,217,198,.28), transparent 30%),
+    radial-gradient(circle at 92% 12%, rgba(232,237,227,.48), transparent 28%),
+    var(--pr-warm-white);
+}
+#root { min-height: 100vh; }
+.pr-page-transition { min-height: 100vh; transform-origin: 50% 0; }
+button, input, select, textarea {
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease, color .18s ease, transform .18s ease;
+}
+button:not(:disabled):focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(107,127,95,.38);
+  outline-offset: 2px;
+}
+.pr-premium-glass {
+  background: rgba(255,255,255,.82);
+  border: 1px solid rgba(228,217,198,.72);
+  box-shadow: var(--pr-shadow-md);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.pr-premium-shimmer { position: relative; overflow: hidden; }
+.pr-premium-shimmer::after {
+  content: '';
+  position: absolute; inset: 0 auto 0 -45%; width: 35%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.24), transparent);
+  transform: skewX(-18deg);
+  animation: pr-shimmer 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes pr-shimmer { 0%, 58% { left: -45%; } 100% { left: 125%; } }
+@keyframes pr-soft-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(107,127,95,0); } 50% { box-shadow: 0 0 0 7px rgba(107,127,95,.08); } }
+.pr-live-pulse { animation: pr-soft-pulse 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRATYEKSHa PRODUCT LIGHT UI — final consistency layer
+   Applies to Customer / Operator / KDS / Owner / Master Admin.
+   Marketing landing (/landing) intentionally keeps its own editorial theme.
+   ───────────────────────────────────────────────────────────── */
+.pr-product-shell {
+  --product-bg: var(--pr-warm-white);
+  --product-surface: var(--pr-white);
+  --product-soft: var(--pr-beige-light);
+  --product-border: var(--pr-border);
+  --product-text: var(--pr-charcoal);
+  --product-text-2: var(--pr-charcoal-soft);
+  --product-muted: var(--pr-muted);
+  --product-action: var(--pr-sage);
+  color: var(--product-text);
+}
+
+.pr-product-shell input,
+.pr-product-shell select,
+.pr-product-shell textarea {
+  color: var(--pr-charcoal) !important;
+  background: var(--pr-white) !important;
+  border-color: var(--pr-border) !important;
+}
+.pr-product-shell input::placeholder,
+.pr-product-shell textarea::placeholder { color: var(--pr-muted) !important; opacity: 1; }
+.pr-product-shell option { color: var(--pr-charcoal); background: var(--pr-white); }
+
+/* Correct the legacy customer-menu dark-theme inline text on the light shell. */
+.pr-product-shell [style*="color: var(--pr-white)"] { color: var(--pr-charcoal) !important; }
+.pr-product-shell [style*="color: 'var(--pr-white)'"] { color: var(--pr-charcoal) !important; }
+
+/* Legacy low-opacity white labels become readable charcoal hierarchy. */
+.pr-product-shell [style*="color: rgba(255,255,255,0.1)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.15)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.18)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.2)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.22)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.25)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.3)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.35)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.38)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.4)"] { color: var(--pr-charcoal-soft) !important; }
+.pr-product-shell [style*="color: rgba(255,255,255,0.45)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.5)"],
+.pr-product-shell [style*="color: rgba(255,255,255,0.55)"] { color: var(--pr-charcoal) !important; }
+
+/* Legacy dark panels are converted to premium white surfaces; charcoal remains
+   available for hierarchy through text, icons and selected headers. */
+.pr-product-shell [style*="background: rgba(14,14,14"],
+.pr-product-shell [style*="background: rgba(5,5,5"],
+.pr-product-shell [style*="background: #080809"],
+.pr-product-shell [style*="background: var(--pr-charcoal-deep)"] {
+  background: var(--pr-white) !important;
+  color: var(--pr-charcoal) !important;
+  border-color: var(--pr-border) !important;
+}
+
+/* Beige structure should read as beige, not as a low-contrast brown-on-beige wash. */
+.pr-product-shell [style*="rgba(211,191,162,0.04)"],
+.pr-product-shell [style*="rgba(211,191,162,0.05)"],
+.pr-product-shell [style*="rgba(211,191,162,0.06)"],
+.pr-product-shell [style*="rgba(211,191,162,0.07)"],
+.pr-product-shell [style*="rgba(211,191,162,0.08)"],
+.pr-product-shell [style*="rgba(211,191,162,0.1)"] {
+  background: var(--pr-beige-soft) !important;
+}
+
+/* Product cards, tables and navigation get a single recognizable surface system. */
+.pr-product-shell .p-op-card,
+.pr-product-shell .pown-kpi,
+.pr-product-shell .p-card,
+.pr-product-shell .p-demo-card,
+.pr-product-shell .p-kpi,
+.pr-product-shell .p-extras-kpi {
+  border-color: var(--pr-border) !important;
+  box-shadow: var(--pr-shadow-sm);
+}
+.pr-product-shell .p-op-card:hover,
+.pr-product-shell .p-card-lift:hover,
+.pr-product-shell .pown-row-hover:hover {
+  border-color: rgba(107,127,95,.35) !important;
+  box-shadow: var(--pr-shadow-md) !important;
+  transform: translateY(-2px);
+}
+.pr-product-shell .p-nav-btn.active,
+.pr-product-shell .p-nav-btn[aria-current="page"],
+.pr-product-shell .pown-nav-link.active,
+.pr-product-shell .pown-nav-link[aria-current="page"],
+.pr-product-shell .p-nav-item.active {
+  background: var(--pr-sage-light) !important;
+  color: var(--pr-sage) !important;
+}
+.pr-product-shell button {
+  -webkit-tap-highlight-color: transparent;
+}
+.pr-product-shell button:not(:disabled):hover { filter: saturate(1.03); }
+
+/* Smooth, premium motion without making operational screens distracting. */
+.pr-product-shell .p-op-card,
+.pr-product-shell .p-card,
+.pr-product-shell .pown-kpi,
+.pr-product-shell .p-demo-card,
+.pr-product-shell .p-nav-btn,
+.pr-product-shell .pown-nav-link,
+.pr-product-shell .p-btn,
+.pr-product-shell .pown-btn {
+  transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s ease,
+              border-color .2s ease, background-color .2s ease, color .2s ease;
+}
+
+.pr-product-shell .pr-directory-skeleton { position: relative; overflow: hidden; }
+.pr-product-shell .pr-directory-skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  animation: pr-directory-shimmer 1.35s ease-in-out infinite;
+}
+@keyframes pr-directory-shimmer { to { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-product-shell *, .pr-product-shell *::before, .pr-product-shell *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .pr-product-shell .p-pad { padding: 18px 16px 34px !important; }
+  .pr-product-shell .p-form-grid,
+  .pr-product-shell .p-chart-grid { grid-template-columns: 1fr !important; }
+  .pr-product-shell .p-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+/* Customer menu responsive grid */
+.pr-menu-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px !important; }
+.pr-menu-grid > div { min-width: 0; }
+@media (max-width: 760px) {
+  .pr-menu-grid { grid-template-columns: 1fr !important; gap: 14px !important; padding-inline: 14px !important; }
+  .pr-menu-grid > div[style*="grid-column"] { grid-column: 1 !important; }
+}
