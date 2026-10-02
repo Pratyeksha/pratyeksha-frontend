@@ -73,7 +73,6 @@ self.addEventListener('push', function(event) {
     self.registration.showNotification(data.title || 'Pratyeksha', {
       body: data.body || '',
       icon: data.icon || '/pratyeksha-logo.png',
-      badge: data.badge || '/pratyeksha-logo.png',
       vibrate: data.vibrate || [200, 100, 200],
       data: data.data || {}
     })

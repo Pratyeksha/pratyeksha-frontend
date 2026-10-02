@@ -7736,6 +7736,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
               <div>
                 <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
                 <div style={{fontSize:'0.62rem',color:'#888',lineHeight:1.4}}>{newCampaign.body||'Your message here'}</div>
+                <div style={{fontSize:'0.48rem',color:'#8a704d',fontWeight:'800',marginTop:'6px'}}>FROM: {tenantConfig?.name || tenantId}</div>
                 <div style={{marginTop:'5px'}}><img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:72,height:'auto',background:'#f7f3eb',borderRadius:3,padding:'2px 4px'}} /></div>
               </div>
             </div>
@@ -7796,8 +7797,12 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                   </div>
                   <span style={{fontSize:'0.58rem',color:'#2a2a2a',display:'flex',alignItems:'center',gap:'3px',flexShrink:0,whiteSpace:'nowrap'}}><Users size={8}/>{c.sentCount||0} reached</span>
                 </div>
-                <div style={{fontSize:'0.68rem',color:'#555',lineHeight:1.5,marginBottom:'4px'}}>{c.body||c.message||''}</div>
-                <div style={{fontSize:'0.54rem',color:'#2a2a2a'}}>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+                <div style={{fontSize:'0.68rem',color:'#555',lineHeight:1.5,marginBottom:'5px'}}>{c.body||c.message||''}</div>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',fontSize:'0.54rem',color:'#2a2a2a'}}>
+                  <span style={{color:'#8a704d',fontWeight:'800'}}>SENT BY: {c.tenantName || tenantConfig?.name || tenantId}</span>
+                  <span>•</span>
+                  <span>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
+                </div>
               </div>
             </div>
           ))}

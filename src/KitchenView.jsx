@@ -196,7 +196,11 @@ const KitchenView = () => {
       if (tenantRes.data?.name)                              setTenantName(tenantRes.data.name);
       if (tenantRes.data?.config?.onlyVeg !== undefined)     setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
       const hydrationMap = {};
-      incoming.forEach(o => o.items?.forEach((item,idx) => { if (item.isCrossedLocal) hydrationMap[`${o._id}-${idx}`] = true; }));
+      incoming.forEach(o => o.items?.forEach((item,idx) => {
+        // Rehydrate from the persisted server state, not only the old local flag.
+        // Otherwise a reload/device switch makes completed dishes look unfinished.
+        if (item.isCrossedLocal || item.kdsCompletedAt) hydrationMap[`${o._id}-${idx}`] = true;
+      }));
       setCheckedItemsGlobal(hydrationMap);
       fetchHealth();
     } catch (err) { console.error('KDS fetch:', err.message); }
@@ -236,7 +240,7 @@ const KitchenView = () => {
   /* ── main effect: socket + initial fetch ── */
   useEffect(() => {
     if (!tenantId) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     const prevDay = localStorage.getItem(`kds_operational_date_${tenantId}`);
     if (prevDay !== today) {
       localStorage.removeItem(`kds_completed_count_${tenantId}`);
@@ -287,6 +291,22 @@ const KitchenView = () => {
       }));
     });
 
+    socket.on('kds_item_timing_updated', data => {
+      if (!data || data.tenantId && data.tenantId !== tenantId) return;
+      const itemIndex = Number(data.itemIndex);
+      const itemPatch = data.item || {};
+      setOrders(prev => prev.map(o => {
+        if (String(o._id) !== String(data.orderId)) return o;
+        const items = o.items.map((it,i) => i === itemIndex ? { ...it, ...itemPatch } : it);
+        return { ...o, items, ...(data.orderTiming || {}) };
+      }));
+      const key = `${data.orderId}-${itemIndex}`;
+      setCheckedItemsGlobal(prev => ({ ...prev, [key]: !!itemPatch.kdsCompletedAt || !!itemPatch.isCrossedLocal }));
+      if (itemPatch.kdsPrepTimeSeconds != null) {
+        setItemFinalTimes(prev => ({ ...prev, [`${data.orderId}-${itemIndex}`]: Number(itemPatch.kdsPrepTimeSeconds) }));
+      }
+    });
+
     socket.on('order_modification_detected', data => {
       if (data.tenantId !== tenantId) return;
       alertPlayer.current?.play().catch(() => {});
@@ -322,7 +342,7 @@ const KitchenView = () => {
     });
 
     return () => {
-      ['new_order','kds_item_cross_sync','order_modification_detected','order_status_updated','order_voided','menu_updated']
+      ['new_order','kds_item_cross_sync','kds_item_timing_updated','order_modification_detected','order_status_updated','order_voided','menu_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
       socket.disconnect();
@@ -339,15 +359,19 @@ const KitchenView = () => {
     if (!order) return;
     setProcessingOrderIds(prev => new Set(prev).add(orderId));
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
-    const dur = Math.floor((Date.now() - new Date(order.createdAt)) / 1000);
-    setTotalProcessingTime(prev  => { const n = prev + dur;  localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
-    setCompletedTicketsCount(prev => { const n = prev + 1;   localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
+    // Do not count client-side ticket age as kitchen prep time. Server timing is
+    // authoritative and is what Owner/Operator analytics consume.
     if (mobileCardIndex > 0) setMobileCardIndex(i => i - 1);
     // Remove it from the board immediately — instant feedback, and the card can no
     // longer be tapped again while the save is still in flight. Restore it on failure.
     setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
-      await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served', tenantId });
+      const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
+      const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
+      if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
+        setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
+        setCompletedTicketsCount(prev => { const n = prev + 1; localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
+      }
     } catch (err) {
       console.error(err);
       setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
@@ -1416,6 +1440,20 @@ const KDSOrderCard = ({
     return () => clearInterval(t);
   }, [order.createdAt]);
 
+  /* Server-authoritative item timers. The browser only renders elapsed time. */
+  useEffect(() => {
+    const starts = {};
+    const finals = {};
+    (order.items || []).forEach((item, idx) => {
+      if (item.isExtraItem || item.extraItemId != null) return;
+      const start = item.kdsStartedAt || order.kdsStartedAt || order.createdAt;
+      if (start && !item.kdsCompletedAt && !item.isCrossedLocal) starts[idx] = new Date(start).getTime();
+      if (item.kdsPrepTimeSeconds != null) finals[`${order._id}-${idx}`] = Number(item.kdsPrepTimeSeconds);
+    });
+    setItemStartTimes(starts);
+    setItemFinalTimes(prev => ({ ...prev, ...finals }));
+  }, [order._id, order.items, order.kdsStartedAt, order.createdAt, setItemFinalTimes]);
+
   /* item-level cook timers */
   useEffect(() => {
     const t = setInterval(() => {
@@ -1456,25 +1494,52 @@ const KDSOrderCard = ({
   const toggleItemCrossed = async idx => {
     const key  = `${order._id}-${idx}`;
     const next = !checkedItemsGlobal[key];
-    if (next && itemStartTimes[idx]) {
-      const s = Math.floor((Date.now() - itemStartTimes[idx]) / 1000);
-      setItemFinalTimes(prev => ({ ...prev, [idx]: s }));
-    }
-    if (!next && !itemStartTimes[idx]) {
-      setItemStartTimes(p => ({ ...p, [idx]: Date.now() }));
-    }
+    const startMs = itemStartTimes[idx] || new Date(order.items?.[idx]?.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime();
+    setItemStartTimes(prev => ({ ...prev, [idx]: startMs }));
     setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
     socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState:next });
     try {
-      const items = order.items.map((it,i) => i===idx ? { ...it, isCrossedLocal:next } : it);
-      await axios.patch(`${BASE_URL}/admin/orders/${order._id}`, { items, tenantId });
-    } catch {}
+      const currentItem = order.items?.[idx] || {};
+      const r = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
+        itemIndex: idx, completed: next, tenantId,
+        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
+      });
+      if (next && r.data?.item?.kdsPrepTimeSeconds != null) {
+        setItemFinalTimes(prev => ({ ...prev, [`${order._id}-${idx}`]: Number(r.data.item.kdsPrepTimeSeconds) }));
+        setItemStartTimes(prev => ({ ...prev, [idx]: new Date(r.data.item.kdsStartedAt || startMs).getTime() }));
+      }
+    } catch (err) {
+      const authoritative = err?.response?.data?.item;
+      if (err?.response?.status === 409 && authoritative) {
+        setCheckedItemsGlobal(prev => ({ ...prev, [key]: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal }));
+        if (authoritative.kdsPrepTimeSeconds != null) {
+          setItemFinalTimes(prev => ({ ...prev, [key]: Number(authoritative.kdsPrepTimeSeconds) }));
+        }
+        setItemStartTimes(prev => ({ ...prev, [idx]: authoritative.kdsStartedAt ? new Date(authoritative.kdsStartedAt).getTime() : startMs }));
+      } else {
+        setCheckedItemsGlobal(prev => ({ ...prev, [key]: !next }));
+      }
+      console.error('KDS item timing save failed:', err?.message || err);
+    }
   };
 
-  const startItemTimer = (idx, e) => {
+  const startItemTimer = async (idx, e) => {
     e.preventDefault();
-    if (!itemStartTimes[idx] && !checkedItemsGlobal[`${order._id}-${idx}`]) {
-      setItemStartTimes(p => ({ ...p, [idx]: Date.now() }));
+    const key = `${order._id}-${idx}`;
+    if (itemStartTimes[idx] || checkedItemsGlobal[key]) return;
+    // Persist the actual cook-start moment. The local clock remains immediate
+    // feedback, while the server becomes the source of truth for analytics.
+    const now = Date.now();
+    setItemStartTimes(p => ({ ...p, [idx]: now }));
+    try {
+      const currentItem = order.items?.[idx] || {};
+      await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
+        itemIndex: idx, action: 'start', tenantId,
+        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
+      });
+    } catch (err) {
+      setItemStartTimes(p => { const n = { ...p }; delete n[idx]; return n; });
+      console.error('KDS item start save failed:', err?.message || err);
     }
   };
 
@@ -1606,10 +1671,10 @@ const KDSOrderCard = ({
           if (!modeMatch) return null;
 
           const crossed      = !!checkedItemsGlobal[`${order._id}-${idx}`];
-          const hasStarted   = !!itemStartTimes[idx];
-          const elapsedSecs  = itemElapsed[idx] || 0;
+          const hasStarted   = !!itemStartTimes[idx] || !!item.kdsStartedAt;
+          const elapsedSecs  = item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0);
           const isSlow       = hasStarted && !crossed && elapsedSecs >= 300;
-          const finalSecs    = itemFinalTimes?.[idx] ?? elapsedSecs;
+          const finalSecs    = itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs;
 
           /* Per-item source tag */
           const itemTag = isAggOrder

@@ -2056,7 +2056,7 @@ const StaffPage = () => {
                       <span className="pown-mono" style={{ width: 20, color: T.textLow, fontSize: 12, fontWeight: 700 }}>#{i + 1}</span>
                       <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{l.name}</span>
                       <span className="pown-mono" style={{ fontSize: 11.5, color: T.textLow }}>{l.tablesServed} tables</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Star size={12} color={T.primary} fill={T.primary} /><span className="pown-mono" style={{ fontSize: 12 }}>{l.rating}</span></span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Star size={12} color={T.primary} fill={T.primary} /><span className="pown-mono" style={{ fontSize: 12 }}>{l.rating ?? '—'}</span></span>
                     </div>
                   ))}
                 </div>

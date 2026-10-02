@@ -19,6 +19,32 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
+// Stable shell component. Keeping this outside the parent render prevents React
+// from remounting the registration form on every keystroke/state update.
+const CustomerShell = ({ children, centered = true, scrollRef }) => (
+  <div ref={scrollRef} style={{
+    minHeight: '100vh', height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+    background: '#0e0e0e', color: '#fff', fontFamily: 'Poppins, sans-serif',
+    display: 'flex', flexDirection: 'column', alignItems: centered ? 'center' : 'stretch',
+    justifyContent: 'flex-start', padding: centered ? '48px 24px' : '0', boxSizing: 'border-box'
+  }}>{children}</div>
+);
+
+const CustomerRestaurantBadge = ({ restaurantName }) => (
+  <div style={{ textAlign:'center', marginBottom:'40px' }}>
+    <div style={{ display:'flex', justifyContent:'flex-end', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
+      <PwaInstallButton kind="customer" compact />
+    </div>
+    <div style={{ width:'56px', height:'56px', borderRadius:'16px', background:'rgba(211,191,162,0.07)', border:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', boxShadow:'0 0 0 8px rgba(211,191,162,0.03)' }}>
+      <UtensilsCrossed size={22} color="#d3bfa2" strokeWidth={1.5} />
+    </div>
+    <div style={{ background:'#f7f3eb', borderRadius:12, padding:'7px 10px', display:'inline-flex', marginBottom:10 }}>
+      <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:150, maxWidth:'68vw', height:'auto', display:'block' }} />
+    </div>
+    <div style={{ fontSize:'1.1rem', fontWeight:'900', color:'#d3bfa2', margin:'0 0 6px' }}>{restaurantName || 'Restaurant'}</div>
+  </div>
+);
+
 const PratyekshaPremiumMenu = () => {
   const { tenantId: urlTenantId } = useParams();
   const [restaurantData, setRestaurantData] = useState(null);
@@ -102,6 +128,7 @@ useEffect(() => { cartRef.current = cart; }, [cart]);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, tissue: 0 });
 const [orderEta, setOrderEta] = useState(null);
+const etaRefreshRef = useRef(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
   const [showReviewPage, setShowReviewPage] = useState(false);
@@ -1464,7 +1491,13 @@ socket.on("order_status_updated", (data) => {
   const orderId = data._id || data.orderId;
   if (!orderId) return; // always have orderId from server
   setLiveOrderStatuses(prev => ({ ...prev, [orderId]: data.status }));
-if (data.status === 'ready' || data.status === 'served') setPrepPct(100);
+  if (data.status === 'ready' || data.status === 'served') setPrepPct(100);
+  etaRefreshRef.current?.();
+});
+
+socket.on('kds_item_timing_updated', (data) => {
+  if (!data || (data.tenantId && String(data.tenantId) !== String(tenantId))) return;
+  etaRefreshRef.current?.();
 });
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
@@ -1474,6 +1507,7 @@ return () => {
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
   socket.off("order_status_updated");
+  socket.off('kds_item_timing_updated');
   socket.off('order_voided');
   socket.off('announcement_updated');
 socket.off('announcement_ended');
@@ -1486,16 +1520,29 @@ socket.off('menu_item_deleted');
 
   useEffect(() => { waitlistSocket.connect(); return () => waitlistSocket.disconnect(); }, [waitlistSocket]);
 
-  // ── Dynamic ETA polling — now correctly at top level ──
+  // ── Dynamic ETA — server-authoritative, refreshable after realtime status changes ──
 useEffect(() => {
-  if (!hasPlacedInitialOrder || !tenantId || !tableNumber || isCounterScan) return;
-  const load = () => {
-    axios.get(`${BASE_URL}/orders/eta/${tenantId}/${tableNumber}`)
-      .then(r => setOrderEta(r.data)).catch(() => {});
+  if (!hasPlacedInitialOrder || !tenantId || !tableNumber || isCounterScan) {
+    etaRefreshRef.current = null;
+    return;
+  }
+  let disposed = false;
+  const load = async () => {
+    try {
+      const r = await axios.get(`${BASE_URL}/orders/eta/${encodeURIComponent(tenantId)}/${encodeURIComponent(tableNumber)}`);
+      if (!disposed && r.data) setOrderEta(r.data);
+    } catch {
+      // Keep the last known ETA visible during transient failures.
+    }
   };
+  etaRefreshRef.current = load;
   load();
-  const iv = setInterval(load, 90000);
-  return () => clearInterval(iv);
+  const iv = setInterval(load, 30000);
+  return () => {
+    disposed = true;
+    if (etaRefreshRef.current === load) etaRefreshRef.current = null;
+    clearInterval(iv);
+  };
 }, [hasPlacedInitialOrder, tenantId, tableNumber, isCounterScan]);
 
 
@@ -3241,6 +3288,17 @@ useEffect(() => {
           extraItemId:  item.extraItemId || null,
         }));
         setPlacedOrders(serverItems);
+        const restoredOrders = Array.isArray(r.data?.orders) ? r.data.orders : [];
+        if (restoredOrders.length) {
+          setLiveOrderStatuses(prev => {
+            const next = { ...prev };
+            restoredOrders.forEach(o => { if (o?._id && o?.status) next[o._id] = o.status; });
+            return next;
+          });
+          const pending = restoredOrders.filter(o => o?.status === 'pending');
+          const oldestPending = pending.sort((a,b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0];
+          if (oldestPending?.createdAt) setOrderPlacedAt(new Date(oldestPending.createdAt).getTime());
+        }
         setHasPlacedInitialOrder(true);
       }
     })
@@ -3282,45 +3340,6 @@ const featureEnabled = key => customerFeatures[key] !== false;
 // ── COUNTER / DIRECTORY FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
 
-const Shell = ({ children, centered = true }) => (
-  <div ref={scrollRef} style={{    minHeight: '100vh',
-    height: '100vh',           // ← lock to viewport height
-    overflowY: 'auto',         // ← THIS is what enables scroll
-    WebkitOverflowScrolling: 'touch', // ← iOS momentum scroll
-    background: '#0e0e0e', color: '#fff',
-    fontFamily: 'Poppins, sans-serif',
-    display: 'flex', flexDirection: 'column',
-    alignItems: centered ? 'center' : 'stretch',
-    justifyContent: centered ? 'flex-start' : 'flex-start', // ← never 'center' (breaks scroll)
-    padding: centered ? '48px 24px' : '0',
-    boxSizing: 'border-box',
-  }}>
-    {children}
-  </div>
-);
-  const RestaurantBadge = () => (
-    <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-      <div style={{ display:'flex', justifyContent:'flex-end', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
-        <PwaInstallButton kind="customer" compact />
-      </div>
-      <div style={{
-        width: '56px', height: '56px', borderRadius: '16px',
-        background: 'rgba(211,191,162,0.07)',
-        border: '1px solid rgba(211,191,162,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 16px',
-        boxShadow: '0 0 0 8px rgba(211,191,162,0.03)'
-      }}>
-        <UtensilsCrossed size={22} color="#d3bfa2" strokeWidth={1.5} />
-      </div>
-      <div style={{ background:'#f7f3eb', borderRadius:12, padding:'7px 10px', display:'inline-flex', marginBottom:10 }}>
-        <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:150, maxWidth:'68vw', height:'auto', display:'block' }} />
-      </div>
-      <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#d3bfa2', margin: '0 0 6px' }}>
-        {restaurantData?.name || 'Restaurant'}
-      </div>
-    </div>
-  );
 
 // ══════════════════════════════════════════
 // SCREEN: CONFIRM
@@ -3336,7 +3355,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
 
     return (
-      <Shell centered={false}>
+      <CustomerShell centered={false} scrollRef={scrollRef}>
         {/* Top bar */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
@@ -3551,7 +3570,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             {language === 'mr' ? 'बुकिंग रद्द करा' : 'Cancel Reservation'}
           </button>
         </div>
-      </Shell>
+      </CustomerShell>
     );
   }
 
@@ -3562,7 +3581,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
 
   return (
-    <Shell centered={false}>
+    <CustomerShell centered={false} scrollRef={scrollRef}>
       {/* Top bar */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 10,
@@ -3784,7 +3803,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           </motion.div>
         )}
       </AnimatePresence>
-    </Shell>
+    </CustomerShell>
   );
 }
 
@@ -3806,7 +3825,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
 
     return (
-      <Shell centered={false}>
+      <CustomerShell centered={false} scrollRef={scrollRef}>
         {/* Sticky top bar */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
@@ -3903,11 +3922,6 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name };
     setCustomerInfo(prev => ({ ...prev, name }));
   }}
-  onBlur={e => {
-    setCustomerInfo(prev => ({ ...prev, name: e.target.value.trim() }));
-    e.target.style.borderColor = 'rgba(211,191,162,0.12)';
-  }}
-  onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
   onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
   autoComplete="name"
   style={{
@@ -3947,12 +3961,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       customerInfoDraftRef.current = { ...customerInfoDraftRef.current, phone: digits };
       setCustomerInfo(prev => ({ ...prev, phone: digits }));
     }}
-    onBlur={e => {
-      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-      setCustomerInfo(prev => ({ ...prev, phone: digits }));
-      e.target.style.borderColor = 'rgba(211,191,162,0.12)';
-    }}
     onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
+    onBlur={e => { e.target.style.borderColor = 'rgba(211,191,162,0.12)'; }}
     autoComplete="tel"
     style={{
       width: '100%', padding: '15px 16px 15px 52px',
@@ -4563,7 +4573,7 @@ if (phone.length === 10) {
             </motion.div>
           )}
         </AnimatePresence>
-      </Shell>
+      </CustomerShell>
     );
   }      
   // ══════════════════════════════════════════
@@ -4577,8 +4587,8 @@ if (phone.length === 10) {
   const isFull        = freeTables <= 0;
 
   return (
-    <Shell>
-      <RestaurantBadge />
+    <CustomerShell scrollRef={scrollRef}>
+      <CustomerRestaurantBadge restaurantName={restaurantData?.name} />
 
       {/* Occupancy strip */}
       <div style={{
@@ -4793,7 +4803,7 @@ if (phone.length === 10) {
         <Globe2 size={13} strokeWidth={1.5} />
         {language === 'en' ? 'मराठी' : 'English'}
       </button>
-    </Shell>
+    </CustomerShell>
   );
 } // ← end of if (isCounterScan && registrationStep !== 'menu')
 
@@ -5954,7 +5964,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         />
       </div>
       <div style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.35)', fontWeight:'700', fontFamily:'monospace' }}>
-        {prepPct}% · ~{Math.max(0, orderEta.etaMinutes - Math.round((Date.now()-orderPlacedAt)/60000))}m left
+        {prepPct}% · ~{Math.max(0, orderEta.etaMinutes - (orderPlacedAt ? Math.round((Date.now()-orderPlacedAt)/60000) : 0))}m left
       </div>
     </>
   ) : (

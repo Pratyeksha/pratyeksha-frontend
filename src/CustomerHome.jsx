@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Coffee, UtensilsCrossed, Search, Bell, ChevronRight, MapPin, Wifi, Sparkles } from 'lucide-react';
+import { Coffee, UtensilsCrossed, Search, Bell, ChevronRight, MapPin, Wifi, Sparkles, ArrowUpRight, X, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
@@ -19,6 +19,10 @@ export default function CustomerHome() {
   const [query, setQuery] = useState('');
   const [notification, setNotification] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [showAllOffers, setShowAllOffers] = useState(false);
+  const [allOffers, setAllOffers] = useState([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offersError, setOffersError] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -37,6 +41,22 @@ export default function CustomerHome() {
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, []);
+
+  const loadAllOffers = async () => {
+    if (offersLoading) return;
+    setShowAllOffers(true);
+    setOffersLoading(true);
+    setOffersError('');
+    try {
+      const res = await axios.get(`${BASE_URL}/offers/current/all?limit=500`, { timeout: 10000 });
+      setAllOffers(Array.isArray(res.data?.offers) ? res.data.offers : []);
+    } catch (err) {
+      setAllOffers([]);
+      setOffersError(err?.response?.data?.error || 'Unable to load current offers.');
+    } finally {
+      setOffersLoading(false);
+    }
+  };
 
   const retryLoad = () => {
     setLoading(true);
@@ -111,24 +131,29 @@ export default function CustomerHome() {
 
         {filtered.some(t => Array.isArray(t.activeOffers) && t.activeOffers.length > 0) && (
           <section style={{ marginBottom:24 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-              <div style={{ width:30, height:30, borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(211,191,162,.09)', border:'1px solid rgba(211,191,162,.16)' }}>
-                <Sparkles size={14} color="#d3bfa2" />
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                <div style={{ width:30, height:30, borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(211,191,162,.09)', border:'1px solid rgba(211,191,162,.16)', flexShrink:0 }}>
+                  <Sparkles size={14} color="#d3bfa2" />
+                </div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:10, letterSpacing:2, color:'#d3bfa2', fontWeight:900 }}>CURRENT OFFERS</div>
+                  <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:2 }}>Live promotions from our active restaurants.</div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize:10, letterSpacing:2, color:'#d3bfa2', fontWeight:900 }}>LIVE OFFERS</div>
-                <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:2 }}>Promotions currently available at active cafés and restaurants.</div>
-              </div>
+              <button type="button" onClick={loadAllOffers} style={{ border:'1px solid rgba(211,191,162,.24)', background:'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.05))', color:'#d3bfa2', borderRadius:20, padding:'8px 12px', cursor:'pointer', fontSize:9, fontWeight:900, letterSpacing:.8, display:'inline-flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
+                SEE ALL OFFERS <ArrowUpRight size={12} />
+              </button>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:10 }}>
-              {filtered.flatMap(t => (t.activeOffers || []).map(offer => ({ ...offer, _tenant:t }))).slice(0,8).map(offer => (
-                <button type="button" key={`${offer._tenant.tenantId}-${offer._id}`} onClick={() => openTenant(offer._tenant)} style={{ textAlign:'left', border:'1px solid rgba(211,191,162,.14)', borderRadius:15, background:'linear-gradient(145deg,#171717,#111)', color:'#fff', padding:'13px 14px', cursor:'pointer', display:'flex', alignItems:'center', gap:11 }}>
-                  <div style={{ width:36, height:36, borderRadius:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, background:'rgba(211,191,162,.08)', border:'1px solid rgba(211,191,162,.14)' }}>
-                    <Sparkles size={15} color="#d3bfa2" />
+            <div style={{ display:'flex', gap:10, overflowX:'auto', paddingBottom:7, scrollbarWidth:'thin', WebkitOverflowScrolling:'touch' }}>
+              {filtered.flatMap(t => (t.activeOffers || []).map(offer => ({ ...offer, _tenant:t }))).slice(0,12).map(offer => (
+                <button type="button" key={`${offer._tenant.tenantId}-${offer._id}`} onClick={() => openTenant(offer._tenant)} style={{ minWidth:250, maxWidth:290, textAlign:'left', border:'1px solid rgba(211,191,162,.14)', borderRadius:15, background:'linear-gradient(145deg,#171717,#111)', color:'#fff', padding:'14px', cursor:'pointer', display:'flex', alignItems:'center', gap:11, flexShrink:0 }}>
+                  <div style={{ width:38, height:38, borderRadius:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, background:'rgba(211,191,162,.08)', border:'1px solid rgba(211,191,162,.14)' }}>
+                    <Tag size={15} color="#d3bfa2" />
                   </div>
                   <div style={{ minWidth:0, flex:1 }}>
                     <div style={{ fontSize:12, fontWeight:900, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{offer.title}</div>
-                    <div style={{ marginTop:3, fontSize:10, color:'rgba(255,255,255,.42)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ marginTop:4, fontSize:10, color:'rgba(255,255,255,.42)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {offer._tenant.name} · {offer.type==='percent_off' ? `${offer.value}% OFF` : offer.type==='fixed_off' ? `₹${offer.value} OFF` : offer.type==='free_item' ? `FREE ${offer.freeItem || 'ITEM'}` : 'HAPPY HOUR'}
                     </div>
                   </div>
@@ -137,6 +162,53 @@ export default function CustomerHome() {
               ))}
             </div>
           </section>
+        )}
+
+        {showAllOffers && (
+          <div role="dialog" aria-modal="true" style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(5,5,5,.82)', backdropFilter:'blur(12px)', display:'flex', alignItems:'center', justifyContent:'center', padding:18 }}>
+            <div style={{ width:'min(1100px,100%)', maxHeight:'88vh', overflow:'hidden', border:'1px solid rgba(211,191,162,.18)', borderRadius:24, background:'linear-gradient(145deg,#181818,#0d0d0d)', boxShadow:'0 30px 80px rgba(0,0,0,.45)', display:'flex', flexDirection:'column' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:15, padding:'20px 22px', borderBottom:'1px solid rgba(211,191,162,.1)' }}>
+                <div>
+                  <div style={{ fontSize:10, letterSpacing:2.4, color:'#d3bfa2', fontWeight:900 }}>ALL CURRENT OFFERS</div>
+                  <div style={{ marginTop:5, color:'rgba(255,255,255,.45)', fontSize:12 }}>Discover live offers across our active cafés and restaurants.</div>
+                </div>
+                <button type="button" onClick={() => setShowAllOffers(false)} aria-label="Close offers" style={{ width:36, height:36, borderRadius:12, border:'1px solid rgba(211,191,162,.16)', background:'rgba(255,255,255,.03)', color:'#d3bfa2', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><X size={16}/></button>
+              </div>
+              <div style={{ overflowY:'auto', padding:18, WebkitOverflowScrolling:'touch' }}>
+                {offersLoading ? (
+                  <div style={{ minHeight:220, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,.38)', fontSize:12 }}>Loading current offers…</div>
+                ) : offersError ? (
+                  <div style={{ minHeight:180, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,.48)', fontSize:12, textAlign:'center' }}>{offersError}</div>
+                ) : allOffers.length === 0 ? (
+                  <div style={{ minHeight:180, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,.38)', fontSize:12 }}>No current offers are available right now.</div>
+                ) : (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(245px,1fr))', gap:12 }}>
+                    {allOffers.map(offer => {
+                      const tenant = offer.tenant || {};
+                      const value = offer.type==='percent_off' ? `${offer.value}% OFF` : offer.type==='fixed_off' ? `₹${offer.value} OFF` : offer.type==='free_item' ? `FREE ${offer.freeItem || 'ITEM'}` : `${offer.happyStart || '?'}–${offer.happyEnd || '?'}`;
+                      return (
+                        <button type="button" key={`${tenant.tenantId}-${offer._id}`} onClick={() => { setShowAllOffers(false); openTenant(tenant); }} style={{ textAlign:'left', border:'1px solid rgba(211,191,162,.14)', borderRadius:18, background:'linear-gradient(145deg,#191919,#101010)', color:'#fff', padding:16, cursor:'pointer', minHeight:140 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <div style={{ width:38, height:38, borderRadius:12, overflow:'hidden', background:'#f7f3eb', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                              {tenant.branding?.logoUrl ? <img src={tenant.branding.logoUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'contain' }} /> : <img src={logo} alt="" style={{ width:27, height:27, objectFit:'contain' }} />}
+                            </div>
+                            <div style={{ minWidth:0, flex:1 }}>
+                              <div style={{ fontSize:10, color:'#d3bfa2', fontWeight:900, letterSpacing:.8, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tenant.name || 'Restaurant'}</div>
+                              <div style={{ fontSize:14, fontWeight:900, marginTop:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{offer.title}</div>
+                            </div>
+                          </div>
+                          <div style={{ marginTop:18, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+                            <span style={{ padding:'6px 9px', borderRadius:8, background:'rgba(211,191,162,.09)', border:'1px solid rgba(211,191,162,.14)', color:'#d3bfa2', fontSize:10, fontWeight:900 }}>{value}</span>
+                            <ChevronRight size={15} color="#d3bfa2" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
