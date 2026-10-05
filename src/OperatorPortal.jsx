@@ -83,6 +83,15 @@ const numberToWords = (num) => {
     return str.trim() + " Only";
 };
 
+// One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
+const __sfxCache = {};
+const playCachedSound = (url) => {
+  try {
+    const a = __sfxCache[url] || (__sfxCache[url] = new Audio(url));
+    a.currentTime = 0;
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+  } catch { /* autoplay blocked / unsupported */ }
+};
 const playSFX = (type = 'default') => {
   const sounds = {
     waitlist:    'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',  // chime
@@ -90,7 +99,7 @@ const playSFX = (type = 'default') => {
     reservation: 'https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3',  // soft ping
     default:     'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
   };
-  new Audio(sounds[type] || sounds.default).play().catch(() => {});
+  playCachedSound(sounds[type] || sounds.default);
 };
 
 const calculateTenure = (joiningDateString) => {
@@ -173,7 +182,8 @@ const OperatorPortal = () => {
   const socket = useMemo(() => io(SOCKET_BASE_URL, {
     withCredentials: true,
     transports: ['polling', 'websocket'], 
-    reconnectionAttempts: 5,
+    reconnectionAttempts: Infinity, // 5 attempts then permanent silence: a Render cold start or Wi-Fi blip killed live updates until reload
+    reconnectionDelayMax: 10000,
     timeout: 20000, 
   }), []);
 
@@ -341,6 +351,7 @@ const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: '
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
 
   const [isSettling, setIsSettling] = useState(false);
+  const settlingRef = useRef(false); // state is async: two taps in one tick both saw isSettling=false
 const [isSubmittingRestock, setIsSubmittingRestock] = useState(false);
 const [isSubmittingExtraRestock, setIsSubmittingExtraRestock] = useState(false);
 const [isSettlingPickup, setIsSettlingPickup] = useState(false);
@@ -441,7 +452,7 @@ const [reservationEntries, setReservationEntries] = useState([]);
 const [avgWaitData,      setAvgWaitData]       = useState(null);
 const [queueTab,         setQueueTab]          = useState('waitlist');
 const [reservationViewDate, setReservationViewDate] = useState(() => {
-  const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;
   return d.toISOString().split('T')[0];
 });
 const [reservationEditModal, setReservationEditModal] = useState(null);
@@ -751,10 +762,17 @@ fetchAuditLogs();
   useEffect(() => {
     const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
     const ingredientAlertTimers = new Set();
+    // Events emitted while the socket was down are never replayed: refetch on every RE-connect.
+    let hasConnectedOnce = socket.connected;
+    const resyncOnReconnect = () => {
+      if (hasConnectedOnce) { fetchInitialData(); fetchCounterQueue(); }
+      hasConnectedOnce = true;
+    };
 
     if (isAuthenticated) {
       socket.connect();
       socket.on('connect', joinRestaurant);
+      socket.on('connect', resyncOnReconnect);
       if (socket.connected) joinRestaurant();
       fetchInitialData();
       fetchManagementData();
@@ -763,7 +781,7 @@ fetchAuditLogs();
       fetchReservationNoShowData();
 
       socket.on("new_order", (order) => { 
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{}); 
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
         showNotif(`Order Update: Table ${order.tableNumber}`); 
         fetchInitialData(); 
       });
@@ -816,7 +834,7 @@ fetchAuditLogs();
     ingredientAlertTimers.add(alertTimer);
 });
       socket.on("new_waiter_request", (request) => {
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(()=>{});
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
         setWaiterRequests(prev => [request, ...prev]);
       });
@@ -852,7 +870,7 @@ socket.on("table_occupied_live", (data) => {
         }
         return prevOrders;
     });
-    new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
+    playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 });
 
       socket.on("menu_item_deleted", ({ itemId }) => {
@@ -914,7 +932,7 @@ socket.on('pickup_ready', (data) => {
 
       socket.on("bill_requested", (data) => {
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 socket.on('order_voided', () => {
@@ -933,7 +951,7 @@ socket.on("order_status_updated", (data) => {
 });
 // ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
       socket.on('aggregator_order_incoming', (data) => {
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
         setIncomingAggregatorOrders(prev => {
           const exists = prev.find(o => o._id === data._id);
           return exists ? prev : [...prev, data];
@@ -952,7 +970,7 @@ socket.on('aggregator_session_expired', (data) => {
     if (prev.find(a => a.platform === data.platform)) return prev;
     return [...prev, data];
   });
-  new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+  playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
   showNotif(data.message, 'error');
 });
 
@@ -963,6 +981,7 @@ socket.on('aggregator_session_restored', (data) => {
     }
     return () => {
       socket.off('connect', joinRestaurant);
+      socket.off('connect', resyncOnReconnect);
       // Remove every listener owned by this effect. Without this, dependency
       // changes could stack handlers and cause duplicate fetches/notifications.
       [
@@ -2484,7 +2503,8 @@ useEffect(() => {
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
-    if (isSettling) return;
+    if (isSettling || settlingRef.current) return;
+    settlingRef.current = true;
     setIsSettling(true);
     
 const cgstPct         = parseFloat(tableBill.cgstPct) / 100;  // e.g. 2.5% → 0.025
@@ -2561,8 +2581,12 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
             }, 1500);
         }
     } catch (err) {
-        showNotif("Failed to save to database", "error");
+        // Show the server's real reason instead of a generic message that hides what went wrong.
+        showNotif(err.response?.data?.error || "Failed to save to database", "error");
+        // 409 = bill changed on the server; reload it so the operator sees the real total.
+        if (err.response?.status === 409 && selectedTable && selectedTable !== 'Online') generateBill(selectedTable);
     } finally {
+        settlingRef.current = false;
         setIsSettling(false);
     }
 };
@@ -3881,11 +3905,11 @@ const invSGST     = invTaxable * _sgstPct;
 
 const periodOrders = ordersData.filter(order => {
   if (order.billDetails?.isSettlementAnchor !== true) return false; // ← one row per bill, not per order
-  const d = new Date(order.createdAt);
+  const d = new Date(new Date(order.createdAt).getTime() + 330 * 60000); // IST calendar day (was UTC: 00:00-05:30 IST bills landed on yesterday)
   const dateStr = d.toISOString().split('T')[0];
   if (type === 'daily')   return dateStr === todayStr;
   if (type === 'weekly') {
-    const weekAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const weekAgo = new Date(new Date().getTime() + 330 * 60000 - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     return dateStr >= weekAgo && dateStr <= todayStr;
   }
   if (type === 'monthly') return dateStr.startsWith(exportMonthStr);
@@ -6076,7 +6100,7 @@ const renderMonthHeatmap = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                 {[
-                  { onClick: () => { const d = new Date(reservationViewDate); d.setDate(d.getDate() - 1); setReservationViewDate(d.toISOString().split('T')[0]); }, icon: <ChevronLeft size={13} /> },
+                  { onClick: () => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() - 1); setReservationViewDate(d.toISOString().split('T')[0]); }, icon: <ChevronLeft size={13} /> },
                 ].map((btn, i) => (
                   <button type="button" key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
@@ -6087,12 +6111,12 @@ const renderMonthHeatmap = () => {
                 <div style={{ padding: '7px 16px', background: '#040405', border: '1px solid #161616', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
                   {new Date(reservationViewDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
                 </div>
-                <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setDate(d.getDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#444'; }}>
                   <ChevronRight size={13} />
                 </button>
-                <button type="button" onClick={() => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */; setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}>
                   TODAY
@@ -7240,7 +7264,7 @@ const renderMonthHeatmap = () => {
             <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
               {[
                 {label:'Tonight 7PM',fn:()=>{const d=new Date();d.setHours(19,0,0,0);return d;}},
-                {label:'Tomorrow 12PM',fn:()=>{const d=new Date();d.setDate(d.getDate()+1);d.setHours(12,0,0,0);return d;}},
+                {label:'Tomorrow 12PM',fn:()=>{const d=new Date();d.setDate(d.getDate() + 1);d.setHours(12,0,0,0);return d;}},
                 {label:'Fri 7PM',fn:()=>{const d=new Date();const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);d.setHours(19,0,0,0);return d;}},
                 {label:'Sat 12PM',fn:()=>{const d=new Date();const ds=(6-d.getDay()+7)%7||7;d.setDate(d.getDate()+ds);d.setHours(12,0,0,0);return d;}},
               ].map(p=>(
@@ -11693,7 +11717,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
               await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables});
             showNotif(`${newStaff.name} enrolled`,'success');
-            const istResetDate=(()=>{const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+            const istResetDate=(()=>{const d=new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
             setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:istResetDate,baseSalary:'',assignedTables:[],cookingRole:''});
             fetchManagementData();
           } catch { showNotif('Failed to enroll','error'); }
@@ -13744,7 +13768,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* Date navigator */}
         <button type="button" onClick={() => {
           const d = new Date(reservationViewDate);
-          d.setDate(d.getDate()-1);
+          d.setUTCDate(d.getUTCDate() - 1);
           setReservationViewDate(d.toISOString().split('T')[0]);
         }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
@@ -13756,7 +13780,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           style={{padding:'8px 12px',background:'#000',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.75rem',fontWeight:'900',outline:'none',colorScheme:'dark',cursor:'pointer'}}/>
         <button type="button" onClick={() => {
           const d = new Date(reservationViewDate);
-          d.setDate(d.getDate()+1);
+          d.setUTCDate(d.getUTCDate() + 1);
           setReservationViewDate(d.toISOString().split('T')[0]);
         }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
@@ -13864,7 +13888,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       <div style={{display:'flex',gap:'5px'}}>
                         {entry.status==='pending' && (
                           <button type="button" onClick={async()=>{
-                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed'});
+                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed', tenantId});
                             fetchCounterQueue();
                             showNotif(`${entry.customerName} confirmed`);
                           }} style={{padding:'4px 10px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#000',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
@@ -14501,6 +14525,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             <button type="button" onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
             <button type="button" onClick={async () => {
               await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
+                tenantId,
                 status: reservationEditModal.status,
                 tablePreference: reservationEditModal.tablePreference,
                 specialRequests: reservationEditModal.specialRequests
@@ -14631,6 +14656,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 if (!extraItemEditData.price || Number(extraItemEditData.price) <= 0) return showNotif('Valid price required', 'error');
                 try {
                   await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`, {
+                    tenantId,
                     name: extraItemEditData.name.trim(),
                     category: extraItemEditData.category,
                     price: Number(extraItemEditData.price),
@@ -15099,7 +15125,7 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
   if (wipingStaffId) return; // guard
   setWipingStaffId(pendingDeleteStaff._id);
   try {
-    await axios.delete(`${BASE_URL}/staff/remove/${pendingDeleteStaff._id}`);
+    await axios.delete(`${BASE_URL}/staff/remove/${pendingDeleteStaff._id}`, { data: { tenantId } });
     setStaff(p=>p.filter(m=>m._id!==pendingDeleteStaff._id));
     setAttendanceLogs(p=>p.filter(l=>l.staffId!==pendingDeleteStaff._id));
     showNotif(`${pendingDeleteStaff.name.split(' (')[0]} removed`,"info");
@@ -15196,6 +15222,7 @@ onClick={async () => {
     if (assignTableModal._fromReservation) {
       // ── RESERVATION PATH ──
       const res = await axios.patch(`${BASE_URL}/reservations/${assignTableModal._id}`, {
+        tenantId,
         status: 'seated',
         assignedTable: id
       });
@@ -15476,6 +15503,7 @@ onClick={async () => {
               try {
                 // Update base salary on staff record
                 await axios.patch(`${BASE_URL}/staff/salary-status/${salaryEditModal.staffId}`, {
+                  tenantId,
                   baseSalary: Number(salaryEditValue)
                 });
                 // Also update the monthly salary record for current month

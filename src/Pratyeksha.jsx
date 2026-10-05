@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { UtensilsCrossed } from "lucide-react";
 
-const API = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || "";
+// Shared base: with VITE_API_URL unset this used "" and posted to /demo-request on the Vercel host (404), losing every lead.
+import API_BASE_URL from "./apiBase.js";
+const API = API_BASE_URL;
 const GA_MEASUREMENT_ID = (typeof import.meta !== "undefined" && import.meta.env?.VITE_GA_MEASUREMENT_ID) || "";
 const LOGO_SRC = "/pratyeksha-logo.png";
 const CONSENT_STORAGE_KEY = "pratyeksha-consent-v2";

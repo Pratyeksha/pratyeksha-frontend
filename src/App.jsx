@@ -11,7 +11,7 @@ import {
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
-  Sun, Moon, ArrowUp, WifiOff
+  Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
@@ -624,44 +624,44 @@ useEffect(() => {
       const seenKey = `ann_seen_${ann._id}`;
       if (!sessionStorage.getItem(seenKey)) {
         sessionStorage.setItem(seenKey, '1');
-        axios.post(`${BASE_URL}/announcements/${ann._id}/view`).catch(() => {});
+        axios.post(`${BASE_URL}/announcements/${ann._id}/view`, { tenantId: ann.tenantId }).catch(() => {});
       }
     })
     .catch(() => {});
 }, [tenantId]);
 
+  // Browser notification for the full-screen banner. It used to run during render, re-firing on every re-render.
+  useEffect(() => {
+    if (!notificationBanner || !('Notification' in window)) return;
+    const isTableBanner = notificationBanner.type === 'table';
+    const send = () => {
+      new Notification(
+        isTableBanner ? 'आपले टेबल तयार आहे! | Your table is ready!' : 'तुमची ऑर्डर तयार आहे! | Your order is ready!',
+        {
+          body: isTableBanner
+            ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
+            : `Please collect your order at ${notificationBanner.restaurantName}.`,
+          icon: '/pratyeksha-logo.png', badge: '/pratyeksha-logo.png',
+          vibrate: [300, 100, 300], tag: 'pratyeksha-ready', renotify: true
+        }
+      );
+    };
+    try {
+      if (Notification.permission === 'granted') send();
+      else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') send(); });
+    } catch { /* some mobile browsers throw on new Notification(); the on-screen banner still shows */ }
+  }, [notificationBanner]);
+
   // =========================================================================
   // ── CONDITIONAL RENDER LAYOUTS (MUST ALWAYS GO AFTER ALL HOOK DECLARATIONS) ──
   // =========================================================================
 
-  // 1. Fullscreen Notification Banner Overlay
-if (notificationBanner) {
+  // 1. Fullscreen Notification Banner Overlay.
+// Built here but RETURNED only after the last hook. Returning early skipped ~20 hooks and crashed the app
+// ("Rendered fewer hooks than expected") the moment a banner arrived.
+const notificationBannerView = !notificationBanner ? null : (() => {
 const isTable       = notificationBanner.type === 'table';
 const isReservation = notificationBanner.type === 'reservation_confirmed';
-  // Request notification permission and show browser notification
-  const sendBrowserNotification = () => {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'granted') {
-      new Notification(
-        isTable ? 'आपले टेबल तयार आहे! | Your table is ready!' : 'तुमची ऑर्डर तयार आहे! | Your order is ready!',
-        {
-          body: isTable
-            ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
-            : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/pratyeksha-logo.png',
-          badge: '/pratyeksha-logo.png',
-          vibrate: [300, 100, 300],
-          tag: 'pratyeksha-ready',
-          renotify: true
-        }
-      );
-    } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission().then(perm => {
-        if (perm === 'granted') sendBrowserNotification();
-      });
-    }
-  };
-  sendBrowserNotification();
 
   return (
     <div style={{
@@ -819,7 +819,7 @@ onClick={() => {
 
     </div>
   );
-}
+})();
 
   
   // 2. Counter Screen Flow Router Check
@@ -1396,6 +1396,9 @@ const fetchMenuContent = async () => {
     const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
     socket.on('connect', joinRestaurant);
     if (socket.connected) joinRestaurant();
+    // Menu/availability changes missed while offline are never replayed: refetch on RE-connect.
+    let _seenConnect = socket.connected;
+    socket.on('connect', () => { if (_seenConnect) fetchMenuContent(); _seenConnect = true; });
 
 socket.on("menu_updated", (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -1473,7 +1476,7 @@ socket.on('announcement_updated', (data) => {
   const seenKey = `ann_seen_${ann._id}`;
   if (!sessionStorage.getItem(seenKey)) {
     sessionStorage.setItem(seenKey, '1');
-    axios.post(`${BASE_URL}/announcements/${ann._id}/view`).catch(() => {});
+    axios.post(`${BASE_URL}/announcements/${ann._id}/view`, { tenantId: ann.tenantId }).catch(() => {});
   }
 });
 
@@ -1537,7 +1540,7 @@ useEffect(() => {
   };
   etaRefreshRef.current = load;
   load();
-  const iv = setInterval(load, 30000);
+  const iv = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) load(); }, 30000);
   return () => {
     disposed = true;
     if (etaRefreshRef.current === load) etaRefreshRef.current = null;
@@ -2521,13 +2524,13 @@ if (unavailableItems.length > 0) {
       grandTotal: Math.round(total * (1 + taxRate))
     },
     status: "pending",
-    paymentStatus: "unpaid",
-    createdAt: new Date().toISOString()
+    paymentStatus: "unpaid"
   };
  
     const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
-    if (orderRes.data?._id) {
-      setLiveOrderStatuses(prev => ({ ...prev, [orderRes.data._id]: 'pending' }));
+    const placedOrderId = orderRes.data?.order?._id || orderRes.data?._id;
+    if (placedOrderId) {
+      setLiveOrderStatuses(prev => ({ ...prev, [placedOrderId]: 'pending' }));
       setOrderPlacedAt(Date.now());
 setPrepPct(0);
     }
@@ -3337,6 +3340,9 @@ useEffect(() => {
 const customerFeatures = restaurantData?.config?.customerFeatures || {};
 const featureEnabled = key => customerFeatures[key] !== false;
 
+// ── Fullscreen table/order-ready banner — safe to return here: every hook is declared above ──
+if (notificationBannerView) return notificationBannerView;
+
 // ── COUNTER / DIRECTORY FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
 
@@ -3551,7 +3557,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
           {/* ── CANCEL ── */}
           <button type="button" onClick={() => {
-            if (waitlistEntry?._id) axios.delete(`${BASE_URL}/reservations/${waitlistEntry._id}`).catch(() => {});
+            if (waitlistEntry?._id) axios.delete(`${BASE_URL}/reservations/${waitlistEntry._id}`, { data: { tenantId: waitlistEntry.tenantId } }).catch(() => {});
             sessionStorage.removeItem('pratyeksha_session');
             const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
             sessionStorage.setItem('pratyeksha_session', newId);
@@ -4147,7 +4153,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         // A reservation for today can't be for a time that's already passed (or is
         // about to, with no lead time for the kitchen/floor to prepare) — filter
         // those out rather than silently accepting a booking that's already gone.
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = new Date(Date.now() + 330 * 60000).toISOString().split('T')[0];
         if (reservationDate === todayStr) {
           const earliestBookable = new Date(Date.now() + 45 * 60000); // 45-min lead time
           slots = slots.filter(slot => {

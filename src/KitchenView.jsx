@@ -119,6 +119,7 @@ const KitchenView = () => {
   const [wastageSaving,        setWastageSaving]        = useState(false);
   const [wastageLoading,       setWastageLoading]       = useState(false);
   const [kitchenHealth,        setKitchenHealth]        = useState(null);
+  const [serverKdsToday,       setServerKdsToday]       = useState(null); // { count, avgSeconds } from the database
   const [itemFinalTimes,       setItemFinalTimes]       = useState({});
   const [searchQuery,          setSearchQuery]          = useState('');
   const [showSearch,           setShowSearch]           = useState(false);
@@ -178,6 +179,10 @@ const KitchenView = () => {
     try {
       const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`);
       setKitchenHealth(r.data);
+    } catch {}
+    try {
+      const s = await axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`);
+      if (s.data && Number.isFinite(Number(s.data.count))) setServerKdsToday(s.data);
     } catch {}
   };
 
@@ -262,6 +267,9 @@ const KitchenView = () => {
     socketRef.current = socket;
     const joinRestaurant = () => socket.emit('join_restaurant', tenantId);
     socket.on('connect', joinRestaurant);
+    // Tickets/timings that changed while the socket was down are never replayed: resync on reconnect.
+    let hasConnectedOnce = false;
+    socket.on('connect', () => { if (hasConnectedOnce) fetchActiveOrders(); hasConnectedOnce = true; });
     socket.on('connect',    () => setIsOnline(true));
     if (socket.connected) joinRestaurant();
     socket.on('disconnect', () => setIsOnline(false));
@@ -270,14 +278,16 @@ const KitchenView = () => {
       if (newOrder.tenantId !== tenantId) return;
       const kitchenItems = (newOrder.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
       if (!kitchenItems.length) return;
-      const allExtra = kitchenItems.every(i => i.isExtraItem === true || i.extraItemId != null);
-      if (allExtra) return;
-      const cleanOrder = { ...newOrder, items: kitchenItems };
-      setOrders(prev => [cleanOrder, ...prev]);
+      if (newOrder.status && newOrder.status !== 'pending') return;
+      // Keep the FULL items array: kds-item timing calls use the index inside order.items on the
+      // server, so stripping extra items here shifted every index and timed/crossed the wrong dish.
+      // The card render already skips extra items.
+      const cleanOrder = { ...newOrder };
+      setOrders(prev => prev.some(o => String(o._id) === String(cleanOrder._id)) ? prev : [cleanOrder, ...prev]);
       setMobileCardIndex(0);
       const otype = getOrderType(cleanOrder);
       if (otype === 'swiggy' || otype === 'zomato')
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
       else audioPlayer.current?.play().catch(() => {});
       speakOrder(cleanOrder);
     });
@@ -367,6 +377,7 @@ const KitchenView = () => {
     setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
       const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
+      fetchHealth(); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
         setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
@@ -399,6 +410,7 @@ const KitchenView = () => {
     if (!selectedDish86) return;
     try {
       await axios.patch(`${BASE_URL}/menu-item/${selectedDish86._id}`, {
+        tenantId,
         isAvailable: false,
         outOfStockReason: selectedReason86,
         outOfStockAt: new Date().toISOString(),
@@ -496,7 +508,8 @@ const KitchenView = () => {
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
-    orders.forEach(o => o.items.filter(i => !i.isExtraItem && i.extraItemId == null).forEach((i,idx) => {
+    orders.forEach(o => o.items.forEach((i,idx) => {
+      if (i.isExtraItem || i.extraItemId != null) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const otype = getOrderType(o);
       const isP = otype === 'parcel';
@@ -509,18 +522,24 @@ totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
 
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
-    filteredOrders.forEach(o => o.items.filter(i => !i.isExtraItem && i.extraItemId == null).forEach((i,idx) => {
+    filteredOrders.forEach(o => o.items.forEach((i,idx) => {
+      if (i.isExtraItem || i.extraItemId != null) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
 m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
     }));
     return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,7);
   }, [filteredOrders, checkedItemsGlobal]);
 
+  // Prefer the database figures (same on every KDS device and in the Owner app); the localStorage counters stay
+  // only as an offline fallback before the first server response.
+  const dispatchedToday = serverKdsToday ? serverKdsToday.count : completedTicketsCount;
   const avgClearTime = useMemo(() => {
-    if (!completedTicketsCount) return '—';
-    const avg = Math.floor(totalProcessingTime / completedTicketsCount);
+    const avg = serverKdsToday
+      ? serverKdsToday.avgSeconds
+      : (completedTicketsCount ? Math.floor(totalProcessingTime / completedTicketsCount) : 0);
+    if (!avg) return '—';
     return `${Math.floor(avg/60)}m ${avg%60}s`;
-  }, [totalProcessingTime, completedTicketsCount]);
+  }, [totalProcessingTime, completedTicketsCount, serverKdsToday]);
 
   const visibleCategories = useMemo(() => {
     return categories.filter(cat => {
@@ -659,8 +678,8 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               <TrendingUp size={12} color={showMetricsDashboard?'#ffffff':'#8b8e88'} />
               SPEED LOGS
             </div>
-            {completedTicketsCount > 0 && (
-              <span style={{ ...rs.countChip(showMetricsDashboard, true) }}>{completedTicketsCount}</span>
+            {dispatchedToday > 0 && (
+              <span style={{ ...rs.countChip(showMetricsDashboard, true) }}>{dispatchedToday}</span>
             )}
           </button>
           {/* Refresh */}
@@ -938,7 +957,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               <p style={{ color:'#a0a299', fontSize:'0.6rem', marginBottom:32, letterSpacing:'0.5px', textAlign:'center' }}>Session performance — resets at midnight IST</p>
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, width:'100%', maxWidth:520, marginBottom:28 }}>
                 {[
-                  { label:'TICKETS DISPATCHED', value:completedTicketsCount, sub:'today', big:true },
+                  { label:'TICKETS DISPATCHED', value:dispatchedToday, sub:'today', big:true },
                   { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
                   { label:'CURRENTLY PENDING',   value:filteredOrders.length, sub:'active tickets', big:true },
                 ].map(s => (
@@ -1422,6 +1441,8 @@ const KDSOrderCard = ({
   isMobile, isTablet,
   itemFinalTimes, setItemFinalTimes
 }) => {
+  // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
+  const tenantId     = order.tenantId;
   const otype        = getOrderType(order);
   const isAggOrder   = otype === 'swiggy' || otype === 'zomato';
   const isParcelOrder = otype === 'parcel';
@@ -1456,6 +1477,7 @@ const KDSOrderCard = ({
 
   /* item-level cook timers */
   useEffect(() => {
+    if (Object.keys(itemStartTimes).length === 0) { setItemElapsed(prev => (Object.keys(prev).length ? {} : prev)); return undefined; }
     const t = setInterval(() => {
       setItemElapsed(prev => {
         const u = {};
@@ -1486,7 +1508,7 @@ const KDSOrderCard = ({
         : 'rgba(196,178,148,0.32)';
 
   const kitchenItems = (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
-  const checkedCount  = kitchenItems.filter((_,idx) => checkedItemsGlobal[`${order._id}-${idx}`]).length;
+  const checkedCount  = (order.items || []).reduce((n, it, idx) => (!it.isExtraItem && it.extraItemId == null && checkedItemsGlobal[`${order._id}-${idx}`]) ? n + 1 : n, 0);
   const totalItems    = kitchenItems.length;
   const progressPct   = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
   const allDone       = progressPct === 100 && totalItems > 0;
@@ -1919,4 +1941,13 @@ const wFormLabel = {
   textTransform:'uppercase',
 };
 
+// One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
+const __sfxCache = {};
+const playCachedSound = (url) => {
+  try {
+    const a = __sfxCache[url] || (__sfxCache[url] = new Audio(url));
+    a.currentTime = 0;
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+  } catch { /* autoplay blocked / unsupported */ }
+};
 export default KitchenView;

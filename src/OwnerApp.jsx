@@ -335,6 +335,10 @@ function OwnerProvider({ tenantId, children }) {
     s.on('new_order', () => setLiveOrderEvent({ type: 'new_order', _t: Date.now() }));
     s.on('order_status_updated', (order) => setLiveOrderEvent({ type: 'order_status_updated', order, _t: Date.now() }));
     s.on('order_voided', (payload) => setLiveOrderEvent({ type: 'order_voided', order: payload, _t: Date.now() }));
+    // Kitchen (KDS) activity: dish started / crossed off, and ticket edits. Without these the
+    // owner's Kitchen page only caught up on its 20s poll.
+    s.on('kds_item_timing_updated', () => setLiveOrderEvent({ type: 'kds_item_timing_updated', _t: Date.now() }));
+    s.on('order_modification_detected', () => setLiveOrderEvent({ type: 'order_modification_detected', _t: Date.now() }));
     // Stock/menu events — same idea: these already fire from the backend
     // (inventory deduction, low-stock threshold, 86'd dish), the Owner App
     // just never listened. Wired to Inventory + Menu pages below.
@@ -405,7 +409,7 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
   useEffect(() => { fetchData(false); }, [fetchData]);
   useEffect(() => {
     if (!refreshMs) return;
-    const id = setInterval(() => fetchData(true), refreshMs);
+    const id = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) fetchData(true); }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, fetchData]);
 
@@ -1489,13 +1493,13 @@ const Divider = () => <div style={{ width: 1, height: 16, background: T.border }
 const dateRangeFor = (key) => {
   const fmt = (d) => d.toISOString().split('T')[0];
   const today = new Date(Date.now() + 330 * 60000);
-  const y = new Date(today); y.setDate(y.getDate() - 1);
+  const y = new Date(today); y.setUTCDate(y.getUTCDate() - 1); // UTC setters: `today` is an IST-shifted instant, local-time setters/constructors drifted a day
   switch (key) {
     case 'today': return { from: fmt(today), to: fmt(today) };
     case 'yesterday': return { from: fmt(y), to: fmt(y) };
-    case 'week': { const s = new Date(today); s.setDate(s.getDate() - today.getUTCDay()); return { from: fmt(s), to: fmt(today) }; }
-    case 'month': { const s = new Date(today.getUTCFullYear(), today.getUTCMonth(), 1); return { from: fmt(s), to: fmt(today) }; }
-    case 'lastMonth': { const s = new Date(today.getUTCFullYear(), today.getUTCMonth() - 1, 1); const e = new Date(today.getUTCFullYear(), today.getUTCMonth(), 0); return { from: fmt(s), to: fmt(e) }; }
+    case 'week': { const s = new Date(today); s.setUTCDate(s.getUTCDate() - today.getUTCDay()); return { from: fmt(s), to: fmt(today) }; }
+    case 'month': { const s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)); return { from: fmt(s), to: fmt(today) }; }
+    case 'lastMonth': { const s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)); const e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0)); return { from: fmt(s), to: fmt(e) }; }
     default: return { from: fmt(today), to: fmt(today) };
   }
 };
@@ -1892,7 +1896,12 @@ const StatBlock = ({ label, value, tone }) => (
 const KitchenPage = () => {
   const { liveOrderEvent } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/kitchen/summary/:tenantId', { refreshMs: 20000 });
-  useEffect(() => { if (liveOrderEvent) refetch(); }, [liveOrderEvent]); // eslint-disable-line
+  // Debounced: a busy kitchen fires many dish events per second.
+  useEffect(() => {
+    if (!liveOrderEvent) return undefined;
+    const id = setTimeout(() => refetch(), 1200);
+    return () => clearTimeout(id);
+  }, [liveOrderEvent]); // eslint-disable-line
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
@@ -1950,8 +1959,13 @@ const KitchenPage = () => {
                       <div>
                         <div style={{ fontSize: 12.5, fontWeight: 700 }}>Table {t.tableNumber}</div>
                         <div style={{ fontSize: 11, color: T.textLow }}>{t.items.slice(0, 3).join(', ')}</div>
+                        {t.itemsTotal > 0 && (
+                          <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 2 }}>
+                            {t.status === 'ready' ? `Ready \u00B7 waiting ${t.waitingMinutes || 0}m` : `${t.itemsDone || 0}/${t.itemsTotal} dishes done${t.itemsStarted ? ` \u00B7 ${t.itemsStarted} cooking` : ''}`}
+                          </div>
+                        )}
                       </div>
-                      <Badge tone={t.ageMinutes > 25 ? 'danger' : t.ageMinutes > 15 ? 'warning' : 'gold'}>{t.ageMinutes}m</Badge>
+                      <Badge tone={t.ageMinutes >= 15 ? 'danger' : t.ageMinutes > 10 ? 'warning' : 'gold'}>{t.ageMinutes}m</Badge>
                     </div>
                   ))}
                 </div>
