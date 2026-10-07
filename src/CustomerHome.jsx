@@ -89,6 +89,7 @@ export default function CustomerHome() {
   const openTenant = tenant => {
     // No table number is intentionally attached here. This is a directory selection,
     // not a QR/table scan, so it cannot silently turn the installed PWA into a dine-in order session.
+    if (!tenant?.tenantId) return;
     navigate(`/${encodeURIComponent(tenant.tenantId)}?entry=home`);
   };
 

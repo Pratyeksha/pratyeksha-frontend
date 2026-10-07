@@ -246,16 +246,19 @@ const KitchenView = () => {
   useEffect(() => {
     if (!tenantId) return;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-    const prevDay = localStorage.getItem(`kds_operational_date_${tenantId}`);
-    if (prevDay !== today) {
-      localStorage.removeItem(`kds_completed_count_${tenantId}`);
-      localStorage.removeItem(`kds_processing_time_${tenantId}`);
-      localStorage.setItem(`kds_operational_date_${tenantId}`, today);
-    }
-    const cc = localStorage.getItem(`kds_completed_count_${tenantId}`);
-    const ct = localStorage.getItem(`kds_processing_time_${tenantId}`);
-    if (cc) setCompletedTicketsCount(parseInt(cc, 10));
-    if (ct) setTotalProcessingTime(parseInt(ct, 10));
+    // Blocked/throwing storage used to abort this whole effect, so the socket never connected and the KDS stayed empty.
+    try {
+      const prevDay = localStorage.getItem(`kds_operational_date_${tenantId}`);
+      if (prevDay !== today) {
+        localStorage.removeItem(`kds_completed_count_${tenantId}`);
+        localStorage.removeItem(`kds_processing_time_${tenantId}`);
+        localStorage.setItem(`kds_operational_date_${tenantId}`, today);
+      }
+      const cc = localStorage.getItem(`kds_completed_count_${tenantId}`);
+      const ct = localStorage.getItem(`kds_processing_time_${tenantId}`);
+      if (cc) setCompletedTicketsCount(parseInt(cc, 10) || 0);
+      if (ct) setTotalProcessingTime(parseInt(ct, 10) || 0);
+    } catch { /* counters just start from zero */ }
     fetchActiveOrders();
 
     const onOnline  = () => setIsOnline(true);
@@ -320,7 +323,23 @@ const KitchenView = () => {
     socket.on('order_modification_detected', data => {
       if (data.tenantId !== tenantId) return;
       alertPlayer.current?.play().catch(() => {});
-      setInterceptedAlerts(prev => [{ id: Date.now(), ...data }, ...prev]);
+      let note = data.modificationNote;
+      if (data.replaced) {
+        // Customer changed the order inside the 2-minute window: spell out what changed for the chef.
+        const added = (data.items || []).filter(i => i.modChange === 'new').map(i => `${i.quantity}× ${i.name}`);
+        const qtyChanged = (data.items || []).filter(i => i.modChange === 'qty').map(i => `${i.name} ${i.modPrevQty}→${i.quantity}`);
+        const removed = (data.replacedInfo?.removed || []).map(i => `${i.quantity}× ${i.name}`);
+        const parts = [];
+        if (added.length) parts.push(`ADDED: ${added.join(', ')}`);
+        if (qtyChanged.length) parts.push(`QTY: ${qtyChanged.join(', ')}`);
+        if (removed.length) parts.push(`REMOVED: ${removed.join(', ')}`);
+        note = `Customer REPLACED the order${parts.length ? ' — ' + parts.join(' · ') : ''}`;
+        if (data.orderId) {
+          const prefix = `${data.orderId}-`;
+          setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
+        }
+      }
+      setInterceptedAlerts(prev => [{ id: Date.now(), ...data, modificationNote: note }, ...prev]);
       fetchActiveOrders();
     });
 
@@ -380,24 +399,34 @@ const KitchenView = () => {
       fetchHealth(); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
-        setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; localStorage.setItem(`kds_processing_time_${tenantId}`, n); return n; });
-        setCompletedTicketsCount(prev => { const n = prev + 1; localStorage.setItem(`kds_completed_count_${tenantId}`, n); return n; });
+        // localStorage can throw (private mode / quota). Inside a state updater that crashed the screen, and in this try it
+        // wrongly put an already-dispatched ticket back on the board.
+        setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
+        setCompletedTicketsCount(prev => { const n = prev + 1; try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch {} return n; });
       }
     } catch (err) {
       console.error(err);
       setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
       setRecallQueue(prev => prev.filter(o => o._id !== orderId));
-      setCompletedTicketsCount(prev => Math.max(0, prev - 1));
     } finally {
       setProcessingOrderIds(prev => { const next = new Set(prev); next.delete(orderId); return next; });
     }
   };
 
-  const handleRecall = () => {
+  const handleRecall = async () => {
     if (!recallQueue.length) return;
-    setOrders(prev => [recallQueue[0], ...prev]);
+    const recalled = recallQueue[0];
+    // Persist the recall: it only re-appeared locally, so the order stayed 'ready' on the server and vanished again
+    // on the next refresh / on every other device.
+    try {
+      await axios.patch(`${BASE_URL}/admin/orders/${recalled._id}`, { status: 'pending', recall: true, tenantId });
+    } catch (err) {
+      console.error('Recall failed:', err);
+      return;
+    }
+    setOrders(prev => prev.some(o => String(o._id) === String(recalled._id)) ? prev : [recalled, ...prev]);
     setRecallQueue(prev => prev.slice(1));
-    setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); localStorage.setItem(`kds_completed_count_${tenantId}`,n); return n; });
+    setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); try { localStorage.setItem(`kds_completed_count_${tenantId}`,n); } catch {} return n; });
   };
 
   const trigger86 = (categoryKey, categoryName) => {
@@ -920,7 +949,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:5, background: kitchenHealth.bottleneck ? 'rgba(181,72,60,0.08)' : 'rgba(196,178,148,0.16)', border:`1px solid ${kitchenHealth.bottleneck ? 'rgba(181,72,60,0.2)' : 'rgba(196,178,148,0.32)'}` }}>
                   {kitchenHealth.bottleneck ? <AlertTriangle size={9} color="#b5483c" /> : <CheckCircle2 size={9} color="#56684c" />}
                   <span style={{ fontSize:'0.5rem', fontWeight:900, color: kitchenHealth.bottleneck ? '#b5483c' : '#8c7d64', letterSpacing:'0.5px' }}>
-                    {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
+                    {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck?.name || kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
                   </span>
                 </div>
               </div>
@@ -929,10 +958,10 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                   <div key={s.name} style={{ background:'#faf7f1', border:`1px solid ${s.isBottleneck ? 'rgba(181,72,60,0.2)' : 'rgba(196,178,148,0.24)'}`, borderRadius:8, padding:'9px 10px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                       <span style={{ fontSize:'0.55rem', color: s.isBottleneck ? '#b5483c' : '#75786f', fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1, marginRight:4 }}>{s.name}</span>
-                      <span style={{ fontSize:'0.54rem', fontFamily:'monospace', fontWeight:900, color: s.isBottleneck ? '#b5483c' : '#8f918c', flexShrink:0 }}>{s.pending}</span>
+                      <span style={{ fontSize:'0.54rem', fontFamily:'monospace', fontWeight:900, color: s.isBottleneck ? '#b5483c' : '#8f918c', flexShrink:0 }}>{s.orderCount ?? s.pending ?? 0}</span>
                     </div>
                     <div style={{ height:3, background:'rgba(196,178,148,0.24)', borderRadius:2, overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${Math.min(100, Math.round((s.pending/Math.max(s.pending,5))*100))}%`, background: s.isBottleneck ? '#b5483c' : 'rgba(107,127,95,0.66)', borderRadius:2, transition:'width 0.5s ease' }} />
+                      <div style={{ height:'100%', width:`${Math.min(100, Math.max(0, Math.round(Number(s.loadPct ?? 0) || 0)))}%`, background: s.isBottleneck ? '#b5483c' : 'rgba(107,127,95,0.66)', borderRadius:2, transition:'width 0.5s ease' }} />
                     </div>
                   </div>
                 ))}
@@ -1232,7 +1261,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                                 <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
                                   <span style={{ fontWeight:800, fontSize:'0.76rem', color:'#4a4d4f' }}>{e.itemName}</span>
                                   <span style={{ fontSize:'0.52rem', fontFamily:'monospace', color:'#8c7d64', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'rgba(140,125,100,0.12)', border:'1px solid rgba(140,125,100,0.3)' }}>{e.quantity}{e.unit}</span>
-                                  {e.costLoss > 0 && <span style={{ fontSize:'0.54rem', color:'#56684c', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{e.costLoss.toFixed(0)}</span>}
+                                  {Number(e.totalCost) > 0 && <span style={{ fontSize:'0.54rem', color:'#56684c', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{Number(e.totalCost).toFixed(0)}</span>}
                                 </div>
                                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                                   <span style={{ fontSize:'0.5rem', padding:'1px 6px', borderRadius:4, background:'rgba(196,178,148,0.16)', color:'#8b8e88', border:'1px solid rgba(196,178,148,0.28)', fontWeight:700 }}>{e.reason}</span>
@@ -1453,9 +1482,15 @@ const KDSOrderCard = ({
   const [showNote,      setShowNote]      = useState(false);
   const [localNote,     setLocalNote]     = useState('');
 
+  /* The customer replaced the dishes: per-dish local timers are keyed by line index and would now point at different dishes */
+  useEffect(() => {
+    setItemStartTimes({});
+    setItemElapsed({});
+  }, [order.modifiedAt]);
+
   /* live second counter */
   useEffect(() => {
-    const tick = () => setSeconds(Math.floor((Date.now() - new Date(order.createdAt)) / 1000));
+    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - new Date(order.createdAt)) / 1000)));
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
@@ -1482,7 +1517,7 @@ const KDSOrderCard = ({
       setItemElapsed(prev => {
         const u = {};
         Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
-          u[idx] = Math.floor((Date.now() - startMs) / 1000);
+          u[idx] = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         });
         return u;
       });
@@ -1615,6 +1650,9 @@ const KDSOrderCard = ({
             {isNewest && (
               <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'rgba(196,178,148,0.4)', color:'#56684c', border:'1px solid rgba(107,127,95,0.41)', letterSpacing:'0.5px', flexShrink:0 }}>NEW</span>
             )}
+            {order.isModified && (
+              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#b5483c', color:'#ffffff', letterSpacing:'0.5px', flexShrink:0 }}>REPLACED</span>
+            )}
           </div>
           {/* Source + order ID row */}
           <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
@@ -1661,6 +1699,19 @@ const KDSOrderCard = ({
             <span style={{ fontSize:'0.52rem', color:'rgba(107,127,95,0.59)', fontFamily:'monospace' }}>
               ~{order.aggregatorRaw.expectedDeliveryTime}m
             </span>
+          )}
+        </div>
+      )}
+
+      {/* REPLACED STRIP — what the customer changed */}
+      {order.isModified && (
+        <div style={{ marginBottom:10, padding:'6px 10px', borderRadius:8, background:'rgba(181,72,60,0.08)', border:'1px solid rgba(181,72,60,0.3)', fontSize:'0.55rem', color:'#9a3f35', fontWeight:700, lineHeight:1.4 }}>
+          <div style={{ fontWeight:900, letterSpacing:'0.6px' }}>⚠ ORDER REPLACED BY CUSTOMER</div>
+          {(order.replacedInfo?.previousItems || []).length > 0 && (
+            <div style={{ fontWeight:600, opacity:0.9 }}>Was: {(order.replacedInfo.previousItems).map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>
+          )}
+          {(order.replacedInfo?.removed || []).length > 0 && (
+            <div style={{ fontWeight:800 }}>Removed: {(order.replacedInfo.removed).map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>
           )}
         </div>
       )}
@@ -1733,6 +1784,11 @@ const KDSOrderCard = ({
                     {item.isChefSpecial && !crossed && <Sparkles size={10} style={{ display:'inline', marginRight:3 }} />}
                     {item.name}
                   </span>
+                  {item.modChange && !crossed && (
+                    <span style={{ fontSize:'0.43rem', fontWeight:900, padding:'1px 6px', borderRadius:4, background:'#b5483c', color:'#fff', letterSpacing:'0.4px', flexShrink:0 }}>
+                      {item.modChange === 'new' ? 'NEW' : `QTY ${item.modPrevQty}→${item.quantity}`}
+                    </span>
+                  )}
 
                   {/* Veg/NonVeg dot */}
                   {!tenantOnlyVeg && !crossed && (

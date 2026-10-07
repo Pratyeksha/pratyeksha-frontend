@@ -87,11 +87,12 @@ const generateToken = useCallback(() => {
 
 // Store token per session so it doesn't regenerate on re-render
 const [sessionToken] = useState(() => {
-  const stored = sessionStorage.getItem('pratyeksha_token');
+  let stored = null;
+  try { stored = sessionStorage.getItem('pratyeksha_token'); } catch {}
   if (stored) return stored;
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const token = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  sessionStorage.setItem('pratyeksha_token', token);
+  try { sessionStorage.setItem('pratyeksha_token', token); } catch {}
   return token;
 });
 
@@ -121,6 +122,7 @@ useEffect(() => {
 const [cart, setCart] = useState({});
 const [cartStockWarning, setCartStockWarning] = useState(null); // { itemId, itemName }
 const cartRef = useRef({});
+const extraSendingRef = useRef(false);
 useEffect(() => { cartRef.current = cart; }, [cart]);
  const [suggestions, setSuggestions] = useState({}); 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -136,7 +138,13 @@ const etaRefreshRef = useRef(null);
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
   const [orderTrackingPanelOpen, setOrderTrackingPanelOpen] = useState(false);
   const [orderPlacedScreen, setOrderPlacedScreen] = useState(false);
-const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  // 2-minute "change my order" window after placing a dine-in order
+  const [modifiable, setModifiable] = useState(null);          // { orderId, deadline(ms, client clock), items }
+  const [modifyingOrderId, setModifyingOrderId] = useState(null);
+  const [modifyTick, setModifyTick] = useState(Date.now());
+const [isPlacingOrder, _setIsPlacingOrder] = useState(false);
+const placingRef = useRef(false);
+const setIsPlacingOrder = (v) => { placingRef.current = !!v; _setIsPlacingOrder(!!v); };
 // { orderId: 'pending' | 'ready' | 'served' }
 
   const [alert, setAlert] = useState({ show: false, msg: '', type: 'success' });
@@ -178,10 +186,11 @@ const [hasQrSession, setHasQrSession] = useState(false);
 // REPLACE the existing sessionId useState:
 const [sessionId, setSessionId] = useState(() => {
   // Always generate fresh — session validity checked against backend
-  const stored = sessionStorage.getItem('pratyeksha_session');
+  let stored = null;
+  try { stored = sessionStorage.getItem('pratyeksha_session'); } catch {}
   if (stored) return stored;
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  sessionStorage.setItem('pratyeksha_session', id);
+  try { sessionStorage.setItem('pratyeksha_session', id); } catch {}
   return id;
 });
 
@@ -362,7 +371,7 @@ const cartUnavailableCheck = useMemo(() => {
     .filter(([key]) => {
       const id = key.split('-')[0];
       const item = allMenuItems.find(m => m._id === id || m._id?.toString() === id);
-      return item && !item.isAvailable;
+      return item && item.isAvailable === false;
     })
     .map(([key]) => {
       const id = key.split('-')[0];
@@ -476,7 +485,6 @@ return () => {
   waitlistSocket.off('announcement_ended');
   waitlistSocket.off('connect', joinSession);
 };  }, [isCounterScan, sessionId, waitlistSocket]);
-
 // REPLACE the existing useEffect that has:
 // "axios.get(`${BASE_URL}/waitlist/session/${activeTenant}/${sessionId}`)"
 
@@ -527,9 +535,9 @@ useEffect(() => {
             // Never wipe a registration that the customer has already started.
             if (customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
 
-            sessionStorage.removeItem('pratyeksha_session');
+            try { sessionStorage.removeItem('pratyeksha_session'); } catch {}
             const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            sessionStorage.setItem('pratyeksha_session', newId);
+            try { sessionStorage.setItem('pratyeksha_session', newId); } catch {}
             setWaitlistEntry(null);
             setCounterMode(null);
             setRegistrationStep('mode');
@@ -540,9 +548,9 @@ useEffect(() => {
           })
           .catch(() => {
             if (cancelled || customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
-            sessionStorage.removeItem('pratyeksha_session');
+            try { sessionStorage.removeItem('pratyeksha_session'); } catch {}
             const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            sessionStorage.setItem('pratyeksha_session', newId);
+            try { sessionStorage.setItem('pratyeksha_session', newId); } catch {}
             setWaitlistEntry(null);
             setCounterMode(null);
             setRegistrationStep('mode');
@@ -554,9 +562,9 @@ useEffect(() => {
       })
       .catch(() => {
         if (cancelled || customerInfoDraftRef.current.name || customerInfoDraftRef.current.phone) return;
-        sessionStorage.removeItem('pratyeksha_session');
+        try { sessionStorage.removeItem('pratyeksha_session'); } catch {}
         const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        sessionStorage.setItem('pratyeksha_session', newId);
+        try { sessionStorage.setItem('pratyeksha_session', newId); } catch {}
         setWaitlistEntry(null);
         setCounterMode(null);
         setRegistrationStep('mode');
@@ -622,8 +630,9 @@ useEffect(() => {
       setActiveAnnouncement(ann);
       // Only count as a view once per browser session per announcement
       const seenKey = `ann_seen_${ann._id}`;
-      if (!sessionStorage.getItem(seenKey)) {
-        sessionStorage.setItem(seenKey, '1');
+      let seen = false;
+      try { seen = !!sessionStorage.getItem(seenKey); if (!seen) sessionStorage.setItem(seenKey, '1'); } catch {}
+      if (!seen) {
         axios.post(`${BASE_URL}/announcements/${ann._id}/view`, { tenantId: ann.tenantId }).catch(() => {});
       }
     })
@@ -774,24 +783,8 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
 
       {/* CTA button */}
       <button type="button"
-onClick={() => {
-  const nameVal  = nameInputRef.current?.value?.trim() || customerInfo.name;
-  const phoneVal = (phoneInputRef.current?.value || customerInfo.phone || '').replace(/\D/g,'');
-  if (nameVal) setCustomerInfo(prev => ({ ...prev, name: nameVal }));
-  if (phoneVal) setCustomerInfo(prev => ({ ...prev, phone: phoneVal }));
-
-  const nameOk  = nameVal.length > 0;
-  const phoneOk = phoneVal.length === 10;
-  const resOk   = counterMode !== 'reservation' || (reservationDate && reservationTime);
-
-  if (!nameOk || !phoneOk || !resOk) return;
-
-  if (counterMode === 'reservation') {
-    setReservationAskOrder(true); // ← show the prompt
-  } else {
-    setRegistrationStep('menu');
-  }
-}}        style={{
+onClick={() => setNotificationBanner(null)}
+        style={{
           width: '100%', maxWidth: '320px',
           padding: '18px 40px',
           background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
@@ -829,9 +822,12 @@ onClick={() => {
     return number.toString().split('').map(d => isNaN(d) ? d : mrDigits[d]).join('');
   };
 
+  const alertTimerRef = useRef(null);
+  useEffect(() => () => { if (alertTimerRef.current) clearTimeout(alertTimerRef.current); }, []);
   const triggerAlert = (msgKey, type = 'success') => {
-    setAlert({ show: true, msg: t[language][msgKey] || msgKey, type });
-    setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
+    setAlert({ show: true, msg: (t[language] && t[language][msgKey]) || msgKey, type });
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
   };
 // ── SMART VOICE: speak dish details ──
 
@@ -1359,7 +1355,10 @@ useEffect(() => {
     if (!tenantId) return;
 
     // 1. PHASE A: EXECUTE INITIAL REST DATA FETCH ON MOUNT
+let _disposedMenu = false;
+let _menuReqSeq = 0;
 const fetchMenuContent = async () => {
+  const mySeq = ++_menuReqSeq;
   try {
     const [res, cat, extras] = await Promise.all([
       axios.get(`${BASE_URL}/tenant/${tenantId}`),
@@ -1371,10 +1370,11 @@ const fetchMenuContent = async () => {
     const menuRes = await axios.get(`${BASE_URL}/menu/engineered/${tenantId}`)
       .catch(() => axios.get(`${BASE_URL}/menu/${tenantId}`));
 
+    if (_disposedMenu || mySeq !== _menuReqSeq) return;
     setRestaurantData(res.data);
-    setCategoryList(cat.data);
-    setAllMenuItems(menuRes.data);
-    setExtraItems(extras.data || []);
+    setCategoryList(Array.isArray(cat.data) ? cat.data : []);
+    setAllMenuItems(Array.isArray(menuRes.data) ? menuRes.data : []);
+    setExtraItems(Array.isArray(extras.data) ? extras.data : []);
     // If the browser reports offline but we still got real data back, it came
     // from the service worker's menu cache, not a live network round-trip.
     setServingFromCache(!navigator.onLine);
@@ -1384,7 +1384,7 @@ const fetchMenuContent = async () => {
     // instead of leaving the customer on a blank/loading screen forever.
     if (!navigator.onLine) setIsOffline(true);
   } finally {
-    setIsLoading(false);
+    if (!_disposedMenu) setIsLoading(false);
   }
 };
     fetchMenuContent();
@@ -1474,8 +1474,9 @@ socket.on('announcement_updated', (data) => {
   setActiveAnnouncement(ann);
   setAnnouncementDismissed(false);
   const seenKey = `ann_seen_${ann._id}`;
-  if (!sessionStorage.getItem(seenKey)) {
-    sessionStorage.setItem(seenKey, '1');
+  let seenAnn = false;
+  try { seenAnn = !!sessionStorage.getItem(seenKey); if (!seenAnn) sessionStorage.setItem(seenKey, '1'); } catch {}
+  if (!seenAnn) {
     axios.post(`${BASE_URL}/announcements/${ann._id}/view`, { tenantId: ann.tenantId }).catch(() => {});
   }
 });
@@ -1505,6 +1506,7 @@ socket.on('kds_item_timing_updated', (data) => {
 
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
+  _disposedMenu = true;
   socket.off("menu_updated");
   socket.off('menu_bulk_updated');
   socket.off("extra_item_updated");
@@ -1569,8 +1571,10 @@ useEffect(() => {
   };
 
 const sendExtraItemsRequest = async () => {
-  const activeItems = Object.entries(extraItemCart).filter(([, qty]) => qty > 0);
+  const activeItems = Object.entries(extraItemCart).filter(([id, qty]) => qty > 0 && extraItems.some(i => i._id === id));
   if (activeItems.length === 0) return;
+  if (extraSendingRef.current) return;
+  extraSendingRef.current = true;
 
   const requestText = activeItems.map(([id, qty]) => {
     const item = extraItems.find(i => i._id === id);
@@ -1614,6 +1618,8 @@ try {
   setIsExtraItemsOpen(false);
 } catch {
   triggerAlert('orderError', 'error');
+} finally {
+  extraSendingRef.current = false;
 }
 };
 
@@ -2385,8 +2391,9 @@ const notifyWaiter = async (serviceType = "Custom") => {
       const id = isMulti ? key.split('-')[0] : key;
       const portion = isMulti ? key.split('-')[1] : 'Single';
       const item = allMenuItems.find(i => i._id === id);
+      if (!item) return acc;
       const price = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
-      return acc + (price || 0) * qty;
+      return acc + (Number(price) || 0) * qty;
     }, 0);
   };
 
@@ -2395,7 +2402,8 @@ useEffect(() => {
   if (!tenantId || tableNumber === 'Counter' || isCounterScan) return;
   if (welcomeDismissed) return;
  
-  const savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`);
+  let savedPhone = null;
+  try { savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`); } catch {}
  
   if (savedPhone && savedPhone.length === 10) {
     // ── RETURNING CUSTOMER: try to recognize and show full welcome card ──
@@ -2462,7 +2470,7 @@ const sendBatchToKitchen = async () => {
     triggerAlert('Please scan the restaurant QR code to start table ordering.', 'error');
     return;
   }
-  if (isPlacingOrder) return;           // ← ADD: block re-entry
+  if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);      
   try {
     const summary = {};
@@ -2475,7 +2483,7 @@ const sendBatchToKitchen = async () => {
  
       const summaryKey = `${id}-${portion}`;
       if (!summary[summaryKey]) {
-        const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+        const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
 summary[summaryKey] = {
   menuItemId:   item._id,
   name:         item.name,
@@ -2510,6 +2518,37 @@ if (unavailableItems.length > 0) {
   return;
 }
     const orderItems = Object.values(summary);
+    if (orderItems.length === 0) { triggerAlert('orderError', 'error'); return; }
+
+    // ── Editing a just-placed order: replace its dishes instead of creating a second order ──
+    if (modifyingOrderId) {
+      try {
+        const mres = await axios.patch(`${BASE_URL}/orders/${modifyingOrderId}/customer-modify`, { tenantId, items: orderItems });
+        const upd = mres.data?.order;
+        if (!mres.data?.unchanged && upd) {
+          const fresh = (upd.items || []).filter(i => !i.isExtraItem).map(i => ({ ...i, menuItemId: i.menuItemId ? String(i.menuItemId) : null }));
+          setModifiable(prev => prev ? { ...prev, items: fresh } : prev);
+          setPlacedOrders(prev => [
+            ...prev.filter(p => String(p.orderId || '') !== String(modifyingOrderId)),
+            ...(upd.items || []).map(i => ({ menuItemId: i.menuItemId || null, name: i.name || '', name_mr: i.name_mr || '', quantity: i.quantity || 1, portion: i.portion || 'Single', pricePerUnit: i.pricePerUnit || 0, subtotal: i.subtotal || 0, isExtraItem: !!i.isExtraItem, extraItemId: i.extraItemId || null, orderId: modifyingOrderId }))
+          ]);
+          setOrderPlacedAt(Date.now());
+          setPrepPct(0);
+        }
+        triggerAlert(mres.data?.unchanged ? 'No changes to send.' : 'Order updated — the kitchen has been told.');
+        setModifyingOrderId(null);
+        setCart({}); setSuggestions({}); setRecommendedDishes([]);
+        setIsDrawerOpen(false);
+        if (!mres.data?.unchanged) { setOrderPlacedScreen(true); setTimeout(() => setOrderPlacedScreen(false), 15000); }
+      } catch (merr) {
+        const code = merr?.response?.data?.code;
+        triggerAlert(merr?.response?.data?.error || 'Could not update the order. Please try again.', 'error');
+        if (code === 'MODIFY_LOCKED' || code === 'MODIFY_WINDOW_CLOSED') {
+          setModifyingOrderId(null); setModifiable(null); setCart({}); setSuggestions({});
+        }
+      }
+      return;
+    }
     const total = orderItems.reduce((acc, item) => acc + item.subtotal, 0);
  
   const taxRate = ((restaurantData?.config?.cgstPercentage ?? 2.5) + (restaurantData?.config?.sgstPercentage ?? 2.5)) / 100;
@@ -2536,10 +2575,13 @@ setPrepPct(0);
     }
  
     
-    setPlacedOrders(prev => [...prev, ...orderItems]);
+    setPlacedOrders(prev => [...prev, ...orderItems.map(i => ({ ...i, orderId: placedOrderId || undefined }))]);
+    if (placedOrderId) setModifiable({ orderId: placedOrderId, deadline: Date.now() + (Number(orderRes.data?.modifyWindowMsLeft) || 120000), items: orderItems });
  
     // ── Customer upsert — single declaration, no duplicate ──
-    const knownPhone = welcomePhone || localStorage.getItem(`pratyeksha_phone_${tenantId}`);
+    let storedPhone = null;
+    try { storedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`); } catch {}
+    const knownPhone = welcomePhone || storedPhone;
     if (knownPhone && knownPhone.length === 10) {
       const visitItems = orderItems.map(i => ({
         menuItemId: i.menuItemId,
@@ -2577,7 +2619,7 @@ setPrepPct(0);
  
 const placeWaitlistOrder = async () => {
   if (!customerInfo.name.trim()) return;
-  if (isPlacingOrder) return;          // ← ADD: prevent double-submit
+  if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);             // ← ADD
   const summary = {};
   Object.entries(cart).forEach(([key, qty]) => {
@@ -2585,9 +2627,10 @@ const placeWaitlistOrder = async () => {
     const id = isMulti ? key.split('-')[0] : key;
     const portion = isMulti ? key.split('-')[1] : 'Single';
     const item = allMenuItems.find(i => i._id === id);
+    if (!item) return;
     const summaryKey = `${id}-${portion}`;
     if (!summary[summaryKey]) {
-      const unitPrice = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+      const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
       summary[summaryKey] = { menuItemId: item._id, name: item.name, quantity: 0, portion, pricePerUnit: unitPrice, subtotal: 0, price: unitPrice };
     }
     summary[summaryKey].quantity += qty;
@@ -2710,7 +2753,7 @@ const placeReservation = async () => {
     return;
   }
 
-  if (isPlacingOrder) return;           // ← prevent double-submit (same guard as the other two order paths)
+  if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);
 
   const summary = {};
@@ -2722,7 +2765,7 @@ const item = allMenuItems.find(i => i._id === id || i._id?.toString() === id);
 if (!item) return; // ← ADD: skip deleted/missing items
 const summaryKey = `${id}-${portion}`;
 if (!summary[summaryKey]) {
-  const unitPrice = portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price);
+  const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
       summary[summaryKey] = { menuItemId: item._id, name: item.name, quantity: 0, portion, pricePerUnit: unitPrice, subtotal: 0, price: unitPrice };
     }
     summary[summaryKey].quantity += qty;
@@ -2732,8 +2775,9 @@ if (!summary[summaryKey]) {
   const orderItems = Object.values(summary);
   const total = orderItems.reduce((a, i) => a + i.subtotal, 0);
   const [hours, minutes] = reservationTime.split(':').map(Number);
-  const resDateTime = new Date(reservationDate);
-  resDateTime.setHours(hours, minutes, 0, 0);
+  // Restaurant time is IST. `new Date('YYYY-MM-DD')` is UTC midnight and setHours() uses the DEVICE zone, so the booked
+  // time was wrong (even a different day) on any phone outside IST.
+  const resDateTime = new Date(`${reservationDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`);
 
   try {
     // ── Place reservation ──
@@ -2815,7 +2859,7 @@ const key = item.isExtraItem
     return {
       items,
       total,
-      billNo: placedOrders[0]?.billNo || '001',
+      billNo: placedOrders[0]?.billNo || '—', // the real bill number only exists after settlement; '001' was shown on every receipt
       date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
     };
@@ -2845,9 +2889,13 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
   const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
   const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-  const cgstAmt    = subtotal * (cgstPct / 100);
-  const sgstAmt    = subtotal * (sgstPct / 100);
-  const grandTotal = Math.round(subtotal + cgstAmt + sgstAmt);
+  // Same 2-decimal rounding the server uses at settlement (it never rounds the grand total to a whole rupee), so the
+  // customer's invoice matches the operator's bill to the paisa.
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const cgstAmt    = r2(r2(subtotal) * (cgstPct / 100));
+  const sgstAmt    = r2(r2(subtotal) * (sgstPct / 100));
+  const grandTotal = r2(r2(subtotal) + cgstAmt + sgstAmt);
   const taxableAmt = subtotal; // items are priced ex-tax; tax is added on top
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
@@ -2866,7 +2914,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const itemRows = finalBillItems.map((item, idx) => `
     <tr>
       <td class="desc">
-        <span class="item-name">${item.quantity}x ${item.name}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}</span>
+        <span class="item-name">${item.quantity}x ${escHtml(item.name)}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}</span>
         <span class="item-rate">@ ₹${item.pricePerUnit} / item</span>
       </td>
       <td class="num">₹${(item.pricePerUnit * item.quantity).toFixed(2)}</td>
@@ -3053,9 +3101,9 @@ const autoDownloadInvoicePDF = useCallback(() => {
     </div>
     <div class="grand-row">
       <span class="grand-label">Grand Total</span>
-      <span class="grand-amt">₹${grandTotal}</span>
+      <span class="grand-amt">₹${Number.isInteger(grandTotal) ? grandTotal : grandTotal.toFixed(2)}</span>
     </div>
-    <div class="words-note"><em>${numberToWordsClient(grandTotal)}</em></div>
+    <div class="words-note"><em>${numberToWordsClient(Math.round(grandTotal))}</em></div>
     <div class="gst-note">GST @ ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%) · SAC 996331</div>
   </div>
 
@@ -3223,22 +3271,28 @@ const registerCustomerPushSubscription = async (phoneOverride) => {
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   const cartKey = `pratyeksha_cart_${tenantId}_${tableNumber}`;
-  if (Object.keys(cart).length > 0) {
-    localStorage.setItem(cartKey, JSON.stringify(cart));
-  } else {
-    localStorage.removeItem(cartKey);
-  }
+  // Storage can throw (Safari private mode / blocked storage / quota): an exception in this effect crashed the whole
+  // customer menu the moment an item was added.
+  try {
+    if (Object.keys(cart).length > 0) {
+      localStorage.setItem(cartKey, JSON.stringify(cart));
+    } else {
+      localStorage.removeItem(cartKey);
+    }
+  } catch { /* persistence is best-effort */ }
 }, [cart, tenantId, tableNumber, isCounterScan]);
 
 // ── Persist placedOrders to localStorage on every change ──
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
   const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
-  if (placedOrders.length > 0) {
-    localStorage.setItem(key, JSON.stringify(placedOrders));
-  } else {
-    localStorage.removeItem(key);
-  }
+  try {
+    if (placedOrders.length > 0) {
+      localStorage.setItem(key, JSON.stringify(placedOrders));
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch { /* persistence is best-effort */ }
 }, [placedOrders, tenantId, tableNumber, isCounterScan]);
 
 // ── Restore placedOrders on mount — after tenantId AND tableNumber are both known ──
@@ -3258,6 +3312,58 @@ try {
 } catch { /* ignore */ }
 
 }, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
+// ── Modify window: tick once a second only while a window is open ──
+useEffect(() => {
+  if (!modifiable) return undefined;
+  const id = setInterval(() => {
+    const n = Date.now();
+    setModifyTick(n);
+    if (n >= modifiable.deadline) setModifiable(null);
+  }, 1000);
+  setModifyTick(Date.now());
+  return () => clearInterval(id);
+}, [modifiable]);
+const modifySecsLeft = modifiable ? Math.max(0, Math.ceil((modifiable.deadline - modifyTick) / 1000)) : 0;
+const canModifyOrder = !!modifiable && modifySecsLeft > 0 && (liveOrderStatuses[modifiable.orderId] ?? 'pending') === 'pending';
+const modifyClock = `${Math.floor(modifySecsLeft / 60)}:${String(modifySecsLeft % 60).padStart(2, '0')}`;
+// Window closed (time up or kitchen moved on) while editing: leave edit mode and drop the pre-filled cart so it can't be re-sent as a new order.
+useEffect(() => {
+  if (modifyingOrderId && !canModifyOrder) {
+    setModifyingOrderId(null);
+    setCart({}); setSuggestions({});
+    triggerAlert('The 2-minute change window has ended. Please ask the staff for any change.', 'error');
+  }
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [canModifyOrder, modifyingOrderId]);
+
+const startModifyOrder = () => {
+  if (!canModifyOrder) return;
+  const nextCart = {}; const nextSug = {};
+  (modifiable.items || []).forEach(i => {
+    if (i.isExtraItem || !i.menuItemId) return;
+    const key = (i.portion && i.portion !== 'Single') ? `${i.menuItemId}-${i.portion}` : String(i.menuItemId);
+    nextCart[key] = (nextCart[key] || 0) + (Number(i.quantity) || 1);
+    if (i.suggestion) nextSug[key] = i.suggestion;
+  });
+  setCart(nextCart); setSuggestions(nextSug);
+  setModifyingOrderId(modifiable.orderId);
+  setOrderPlacedScreen(false);
+  setIsDrawerOpen(true);
+};
+const cancelModifyEdit = () => { setModifyingOrderId(null); setCart({}); setSuggestions({}); setIsDrawerOpen(false); };
+const modifyOrderStrip = canModifyOrder && !modifyingOrderId ? (
+  <div style={{ margin: '0 16px 10px', padding: '10px 14px', borderRadius: '14px', border: '1px solid rgba(211,191,162,0.25)', background: 'rgba(211,191,162,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+    <div style={{ fontSize: '0.62rem', color: 'rgba(211,191,162,0.8)', fontWeight: 700, lineHeight: 1.35 }}>
+      {language === 'mr' ? 'ऑर्डर बदलायचा आहे?' : 'Changed your mind?'}
+      <div style={{ fontSize: '0.55rem', opacity: 0.6, fontFamily: 'monospace' }}>{modifyClock} {language === 'mr' ? 'शिल्लक' : 'left to change'}</div>
+    </div>
+    <button type="button" onClick={(e) => { e.stopPropagation(); startModifyOrder(); }}
+      style={{ background: '#d3bfa2', color: '#0c0c0c', border: 'none', borderRadius: '10px', padding: '9px 14px', fontSize: '0.62rem', fontWeight: 900, letterSpacing: '0.4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      {language === 'mr' ? 'ऑर्डर बदला' : 'MODIFY ORDER'}
+    </button>
+  </div>
+) : null;
+
 useEffect(() => {
   if (!orderPlacedAt || !orderEta?.etaMinutes) return;
   const etaMs = orderEta.etaMinutes * 60 * 1000;
@@ -3289,6 +3395,7 @@ useEffect(() => {
           subtotal:     item.subtotal || 0,
           isExtraItem:  item.isExtraItem || false,
           extraItemId:  item.extraItemId || null,
+          orderId:      item.orderId || undefined,
         }));
         setPlacedOrders(serverItems);
         const restoredOrders = Array.isArray(r.data?.orders) ? r.data.orders : [];
@@ -3301,6 +3408,17 @@ useEffect(() => {
           const pending = restoredOrders.filter(o => o?.status === 'pending');
           const oldestPending = pending.sort((a,b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0];
           if (oldestPending?.createdAt) setOrderPlacedAt(new Date(oldestPending.createdAt).getTime());
+          // Page reloaded inside the 2-minute change window: keep the Modify button available.
+          const newestPending = pending.length ? pending[pending.length - 1] : null;
+          if (newestPending?.createdAt && newestPending.source !== 'counter-pickup' && (!newestPending.source || newestPending.source === 'direct')) {
+            const left = 120000 - (Date.now() - new Date(newestPending.createdAt).getTime());
+            if (left > 2000) {
+              setModifiable(prev => prev || {
+                orderId: String(newestPending._id), deadline: Date.now() + left,
+                items: (newestPending.items || []).filter(i => !i.isExtraItem).map(i => ({ ...i, menuItemId: i.menuItemId ? String(i.menuItemId) : null }))
+              });
+            }
+          }
         }
         setHasPlacedInitialOrder(true);
       }
@@ -3558,9 +3676,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {/* ── CANCEL ── */}
           <button type="button" onClick={() => {
             if (waitlistEntry?._id) axios.delete(`${BASE_URL}/reservations/${waitlistEntry._id}`, { data: { tenantId: waitlistEntry.tenantId } }).catch(() => {});
-            sessionStorage.removeItem('pratyeksha_session');
+            try { sessionStorage.removeItem('pratyeksha_session'); } catch {}
             const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            sessionStorage.setItem('pratyeksha_session', newId);
+            try { sessionStorage.setItem('pratyeksha_session', newId); } catch {}
             setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
             customerInfoDraftRef.current = { name: '', phone: '' }; setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
             setReservationDate(''); setReservationTime(''); setSpecialRequests(''); setTablePreference('');
@@ -3762,9 +3880,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         {/* Cancel / Leave Queue */}
         <button type="button" onClick={() => {
           axios.delete(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}`).catch(() => {});
-          sessionStorage.removeItem('pratyeksha_session');
+          try { sessionStorage.removeItem('pratyeksha_session'); } catch {}
           const newId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          sessionStorage.setItem('pratyeksha_session', newId);
+          try { sessionStorage.setItem('pratyeksha_session', newId); } catch {}
           setWaitlistEntry(null); setRegistrationStep('mode'); setCounterMode(null);
           customerInfoDraftRef.current = { name: '', phone: '' }; setCustomerInfo({ name: '', phone: '' }); setPartySize(1);
           setScheduledPickupTime(''); setReservationDate(''); setReservationTime('');
@@ -4078,7 +4196,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       <input
         type="date"
         value={reservationDate}
-        min={new Date().toISOString().split('T')[0]}
+        min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
         onChange={e => setReservationDate(e.target.value)}
         style={{
           width: '100%', padding: '15px 16px',
@@ -4158,8 +4276,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           const earliestBookable = new Date(Date.now() + 45 * 60000); // 45-min lead time
           slots = slots.filter(slot => {
             const [hr, mn] = slot.split(':').map(Number);
-            const slotDate = new Date();
-            slotDate.setHours(hr, mn, 0, 0);
+            // Restaurant time is IST: building the slot with local setHours() was wrong on any device outside IST.
+            const slotDate = new Date(`${todayStr}T${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}:00+05:30`);
             return slotDate >= earliestBookable;
           });
         }
@@ -5911,6 +6029,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
   return (
     <>
+      {modifyOrderStrip}
       {/* STICKY BANNER */}
       <motion.div
         onClick={() => setOrderTrackingPanelOpen(true)}
@@ -7165,7 +7284,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 <div style={styles.billLineTotal}>
           <span>{t[language].grandTotal}</span>
           <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
-            ₹{Math.round(grandTotal)}
+            ₹{Number.isInteger(Math.round(grandTotal * 100) / 100) ? Math.round(grandTotal * 100) / 100 : (Math.round(grandTotal * 100) / 100).toFixed(2)}
           </span>
         </div>
       </>
@@ -7694,6 +7813,17 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
   </motion.div>
 )}
 
+        {modifyingOrderId && (
+          <div style={{ margin: '0 0 10px', padding: '9px 12px', borderRadius: '12px', border: '1px solid rgba(181,72,60,0.4)', background: 'rgba(181,72,60,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <span style={{ fontSize: '0.6rem', color: '#e0a79f', fontWeight: 800, lineHeight: 1.35 }}>
+              {language === 'mr' ? 'ऑर्डर बदलत आहात' : 'Editing your placed order'} · {modifyClock}
+              <br /><span style={{ fontWeight: 600, opacity: 0.8 }}>{language === 'mr' ? 'शेफला "बदललेला ऑर्डर" असे दिसेल' : 'The chef will see it tagged as REPLACED'}</span>
+            </span>
+            <button type="button" onClick={cancelModifyEdit} style={{ background: 'transparent', border: '1px solid rgba(224,167,159,0.5)', color: '#e0a79f', borderRadius: '8px', padding: '6px 10px', fontSize: '0.55rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {language === 'mr' ? 'रद्द करा' : 'KEEP ORIGINAL'}
+            </button>
+          </div>
+        )}
         {totalItemsInCart > 0 && (
 <button type="button"
   style={{
@@ -7717,7 +7847,9 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   : counterMode === 'reservation'
                   ? (language === 'mr' ? 'बुकिंग कन्फर्म करा' : 'CONFIRM RESERVATION')
                   : (language === 'mr' ? 'पिकअप ऑर्डर द्या' : 'PLACE PICKUP ORDER')
-                : t[language].orderNow}
+                : modifyingOrderId
+                  ? (language === 'mr' ? 'ऑर्डर अपडेट करा' : 'UPDATE ORDER')
+                  : t[language].orderNow}
             </span>
           </button>
         )}
@@ -9028,6 +9160,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2 }}
         >
+          {canModifyOrder && (
+            <button type="button" onClick={startModifyOrder}
+              style={{ width: '100%', padding: '14px', marginBottom: '10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.4)', borderRadius: '13px', color: '#d3bfa2', fontWeight: '900', fontSize: '0.78rem', cursor: 'pointer', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              {language === 'mr' ? 'ऑर्डर बदला' : 'Modify order'} · {modifyClock}
+            </button>
+          )}
           <button type="button"
             onClick={() => setOrderPlacedScreen(false)}
             style={{

@@ -22,6 +22,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
 } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
+const asArr = (v) => (Array.isArray(v) ? v : []);
 
 const getTimeRemaining = (expiresAt) => {
   const diff = new Date(expiresAt) - new Date();
@@ -298,8 +299,11 @@ const [newCampaign, setNewCampaign]           = useState({
 const [campaignSending, setCampaignSending]   = useState(false);
  
   // ── IST today string — used for billing HUD and daily breakdowns
-const istTodayStr = useMemo(() => {
-  return new Date(new Date().getTime() + 330*60*1000).toISOString().split('T')[0];
+const [istTodayStr, setIstTodayStr] = useState(() => new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]);
+useEffect(() => {
+  // keep "today" correct if the portal stays open past IST midnight
+  const id = setInterval(() => setIstTodayStr(new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]), 60000);
+  return () => clearInterval(id);
 }, []);
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
@@ -387,7 +391,7 @@ const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 const [auditLogs, setAuditLogs] = useState([]);
   const occupiedTables = useMemo(() => [
-    ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).map(o => o.tableNumber.toString()))
+    ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).filter(o => o.tableNumber != null).map(o => o.tableNumber.toString()))
   ], [orders]);
 // ── OPERATOR ASSISTANT ──
 const [assistMessages, setAssistMessages] = useState([
@@ -413,7 +417,7 @@ const fetchAuditLogs = useCallback(async () => {
   try {
 const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=200`);
 
-setAuditLogs(r.data);
+setAuditLogs(asArr(r.data));
   } catch {}
 }, [tenantId]);
 
@@ -534,7 +538,7 @@ const fetchCounterQueue = useCallback(async () => {
         !['settled','completed','cancelled'].includes(e.status)
       )
     );
-    setReservationEntries(rRes.data || []);
+    setReservationEntries(asArr(rRes.data));
     setAvgWaitData(aRes.data);
   } catch { }
 }, [tenantId, reservationViewDate]);
@@ -542,7 +546,7 @@ const fetchCounterQueue = useCallback(async () => {
 const fetchAnnouncements = useCallback(async () => {
   try {
     const res = await axios.get(`${BASE_URL}/announcements/${tenantId}`);
-    setAnnouncements(res.data || []);
+    setAnnouncements(asArr(res.data));
   } catch { setAnnouncements([]); }
 }, [tenantId]);
 
@@ -577,16 +581,20 @@ const fetchExtraAnalytics = useCallback(async () => {
 }, [tenantId]);
 
 
+const initialFetchSeq = useRef(0);
+const analyticsFetchSeq = useRef(0);
 const fetchInitialData = useCallback(async () => {
+    const seq = ++initialFetchSeq.current;
     try {
       const [orderRes, menuRes, waiterRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
         axios.get(`${BASE_URL}/menu/${tenantId}`),
         axios.get(`${BASE_URL}/admin/waiter-requests/${tenantId}`).catch(() => ({ data: [] }))
       ]);
-      setOrders(orderRes.data);
-      setMenuItems(menuRes.data);
-      setWaiterRequests(waiterRes.data); 
+      if (seq !== initialFetchSeq.current) return; // newer fetch in flight; don't let an older response overwrite it
+      setOrders(asArr(orderRes.data));
+      setMenuItems(asArr(menuRes.data));
+      setWaiterRequests(asArr(waiterRes.data)); 
       fetchCounterQueue();
     } catch (err) { console.error("Data Sync Error:", err); }
   }, [tenantId, fetchCounterQueue]);
@@ -603,6 +611,7 @@ const fetchInitialData = useCallback(async () => {
 // REPLACE fetchAnalytics entirely:
  
 const fetchAnalytics = useCallback(async () => {
+  const aSeq = ++analyticsFetchSeq.current;
   try {
     const istNow = new Date(new Date().getTime() + 330*60*1000);
     const todayStr = istNow.toISOString().split('T')[0];
@@ -610,8 +619,8 @@ const fetchAnalytics = useCallback(async () => {
  
     // Check if viewDate is the current month — hourly only makes sense for today
     const isCurrentMonth =
-      viewDate.getFullYear() === istNow.getFullYear() &&
-      viewDate.getMonth()    === istNow.getMonth();
+      viewDate.getFullYear() === istNow.getUTCFullYear() &&
+      viewDate.getMonth()    === istNow.getUTCMonth();
  
     // For past months, use the last day of that month as the "date" for hourly
     const hourlyDate = isCurrentMonth
@@ -639,7 +648,8 @@ const results = await Promise.allSettled([
       wastageRes, extraRes, aggregatorRes
     ] = results;
  
-    const val = (r, fallback) => r.status === 'fulfilled' ? r.value.data : fallback;
+    if (aSeq !== analyticsFetchSeq.current) return; // stale response (month changed meanwhile)
+    const val = (r, fallback) => (r.status === 'fulfilled' && r.value.data != null) ? r.value.data : fallback;
  
     setAnalytics(val(analyticsRes, { salesData: [] }).salesData || []);
     setTopPerformers(val(analyticsRes, { topItems: [] }).topItems || []);
@@ -651,8 +661,8 @@ const results = await Promise.allSettled([
     });
     setTrendsData(val(trendsRes, null));
     setPrepTimeData(val(prepRes, null));
-    setProfitabilityData(val(profitRes, []));
-    setProcurementData(val(procureRes, []));
+    setProfitabilityData(asArr(val(profitRes, [])));
+    setProcurementData(asArr(val(procureRes, [])));
     setStaffEfficiency(val(staffEffRes, { efficiency: [] }).efficiency || []);
  
     const waitlistData = val(waitlistRes, null);
@@ -669,7 +679,7 @@ const results = await Promise.allSettled([
 const fetchMonthlySalary = useCallback(async (monthStr) => {
   try {
     const res = await axios.get(`${BASE_URL}/staff/salary/${tenantId}/${monthStr}`);
-    setMonthlySalaryRecords(res.data || []);
+    setMonthlySalaryRecords(asArr(res.data));
   } catch { setMonthlySalaryRecords([]); }
 }, [tenantId]);
 
@@ -685,10 +695,10 @@ const fetchManagementData = useCallback(async () => {
     // ADD after the existing Promise.all in fetchManagementData:
 const tenantRes = await axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }));
 if (tenantRes.data) setTenantConfig(tenantRes.data);
-    setInventory(invRes.data || []);
-    setStaff(staffRes.data || []);
-    setMenuItems(menuRes.data || []);
-    setCategories(catRes.data || []);
+    setInventory(asArr(invRes.data));
+    setStaff(asArr(staffRes.data));
+    setMenuItems(asArr(menuRes.data));
+    setCategories(asArr(catRes.data));
     // ← ENSURE THIS IS HERE:
     const monthPrefix = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
     fetchMonthlySalary(monthPrefix);
@@ -706,13 +716,13 @@ const fetchPurchaseHistory = useCallback(async (itemId) => {
         setPurchaseHistoryData(res.data);
     } catch { setPurchaseHistoryData(null); }
     finally { setPurchaseHistoryLoading(false); }
-}, []);
+}, [tenantId]);
 
 const fetchExtraItems = useCallback(async () => {
   setExtraItemsLoading(true);
   try {
     const res = await axios.get(`${BASE_URL}/extra-items/${tenantId}`);
-    setExtraItems(res.data || []);
+    setExtraItems(asArr(res.data));
   } catch { setExtraItems([]); }
   finally { setExtraItemsLoading(false); }
 }, [tenantId]);
@@ -740,7 +750,7 @@ const deductExtraItemStock = useCallback(async (itemId, qty) => {
   } catch (err) {
     console.error('Extra item stock deduction failed:', err);
   }
-}, []);
+}, [tenantId]);
 
 useEffect(() => {
   if (!isAuthenticated) return;
@@ -748,12 +758,20 @@ useEffect(() => {
   fetchMonthlySalary(monthPrefix);
 }, [isAuthenticated, viewDate, fetchMonthlySalary]);
 
+// AI brain (90-day aggregation), audit log and extra-item analytics do not depend on viewDate: they used to be refetched
+// on every date-navigation click because they shared the effect below. Load them once per login.
+useEffect(() => {
+  if (isAuthenticated) {
+    fetchExtraAnalytics();
+    fetchAiBrain();
+    fetchAuditLogs();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isAuthenticated]);
+
 useEffect(() => {
   if (isAuthenticated) {
     fetchAnalytics();
-    fetchExtraAnalytics();   // ← ADD THIS LINE
-        fetchAiBrain();
-fetchAuditLogs();
     const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
     if (activeTab === 'management') fetchMonthlySalary(monthPrefix);
   }
@@ -931,6 +949,7 @@ socket.on('pickup_ready', (data) => {
 });
 
       socket.on("bill_requested", (data) => {
+        if (data?.tableNumber == null) return;
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
         playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
@@ -948,6 +967,9 @@ socket.on("order_status_updated", (data) => {
     // Only refresh orders list — skip analytics
     fetchInitialData();
   }
+});
+socket.on('order_modification_detected', (data) => {
+  if (data?.replaced) showNotif(`Table ${data.tableNumber}: customer REPLACED their order — kitchen notified`);
 });
 // ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
       socket.on('aggregator_order_incoming', (data) => {
@@ -990,7 +1012,7 @@ socket.on('aggregator_session_restored', (data) => {
         'menu_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
         'new_waitlist_entry', 'new_reservation', 'reservation_updated', 'waitlist_cancelled',
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
-        'order_voided', 'order_status_updated', 'aggregator_order_incoming',
+        'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
         'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored'
       ].forEach(event => socket.off(event));
       ingredientAlertTimers.forEach(clearTimeout);
@@ -1004,7 +1026,7 @@ socket.on('aggregator_session_restored', (data) => {
       const res = await axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${targetDate}`);
       setAttendanceLogs(prev => {
         // Merge daily logs into existing set without blowing away monthly logs
-        const dailyLogs = res.data || [];
+        const dailyLogs = asArr(res.data);
         const otherLogs = prev.filter(l => l.date !== targetDate);
         return [...otherLogs, ...dailyLogs];
       });
@@ -1015,7 +1037,7 @@ useEffect(() => {
   if (activeTab === 'management') {
     const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
     axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`)
-      .then(r => setAttendanceLogs(r.data || []))
+      .then(r => setAttendanceLogs(asArr(r.data)))
       .catch(()=>{});
     fetchAttendanceForDate(attendanceDate);
     fetchMonthlySalary(monthPrefix); // ← ADD THIS
@@ -1043,19 +1065,22 @@ const fetchCustomerProfile = useCallback(async (phone) => {
 const fetchOffers = useCallback(async () => {
   try {
     const res = await axios.get(`${BASE_URL}/offers/${tenantId}`);
-    setOffers(res.data || []);
+    setOffers(asArr(res.data));
   } catch { setOffers([]); }
 }, [tenantId]);
  
 const fetchCampaigns = useCallback(async () => {
   try {
     const res = await axios.get(`${BASE_URL}/campaigns/${tenantId}`);
-    setCampaigns(res.data || []);
+    setCampaigns(asArr(res.data));
   } catch { setCampaigns([]); }
 }, [tenantId]);
 
 
+const aggregatorDecisionBusy = useRef(false);
 const handleAggregatorAccept = async (order, prepTime = 30) => {
+  if (aggregatorDecisionBusy.current) return;
+  aggregatorDecisionBusy.current = true;
   try {
     await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
       decision: 'accept',
@@ -1068,10 +1093,12 @@ const handleAggregatorAccept = async (order, prepTime = 30) => {
     fetchInitialData(); // refresh pending/KDS list immediately
   } catch (err) {
     showNotif(err.response?.data?.error || 'Failed to accept order', 'error');
-  }
+  } finally { aggregatorDecisionBusy.current = false; }
 };
 
 const handleAggregatorReject = async (order) => {
+  if (aggregatorDecisionBusy.current) return;
+  aggregatorDecisionBusy.current = true;
   try {
     await axios.patch(`${BASE_URL}/admin/orders/${order._id}/aggregator-decision`, {
       decision: 'reject',
@@ -1082,7 +1109,7 @@ const handleAggregatorReject = async (order) => {
     setActiveAggregatorPopup(null);
   } catch (err) {
     showNotif(err.response?.data?.error || 'Failed to reject order', 'error');
-  }
+  } finally { aggregatorDecisionBusy.current = false; }
 };
 
 // When the active popup is dismissed, show the next queued one if any
@@ -1117,7 +1144,7 @@ const purchaseRecommendations = useMemo(() => {
         urgency: item.daysRemaining <= 1 ? 'critical' : item.daysRemaining <= 2 ? 'high' : 'medium'
       };
     })
-    .sort((a, b) => (a.daysRemaining||99) - (b.daysRemaining||99));
+    .sort((a, b) => (a.daysRemaining ?? 99) - (b.daysRemaining ?? 99));
 }, [procurementData]);
 
   const stats = useMemo(() => {
@@ -1158,8 +1185,8 @@ const hudLiveCounterBreakdown = useMemo(() => {
  
   const istNow = new Date(new Date().getTime() + 330*60*1000);
   const isCurrentMonth =
-    viewDate.getFullYear() === istNow.getFullYear() &&
-    viewDate.getMonth()    === istNow.getMonth();
+    viewDate.getFullYear() === istNow.getUTCFullYear() &&
+    viewDate.getMonth()    === istNow.getUTCMonth();
  
   // For current month: show today's live invoice count (original behaviour)
   // For past months: show total for the selected month
@@ -1207,8 +1234,8 @@ const dailySettlementBreakdown = useMemo(() => {
   if (analytics?.length) {
     const istNow = new Date(new Date().getTime() + 330*60*1000);
     const isCurrentMonth =
-      viewDate.getFullYear() === istNow.getFullYear() &&
-      viewDate.getMonth()    === istNow.getMonth();
+      viewDate.getFullYear() === istNow.getUTCFullYear() &&
+      viewDate.getMonth()    === istNow.getUTCMonth();
  
     const entriesToSum = isCurrentMonth
       ? analytics.filter(d => d._id === istTodayStr)
@@ -1252,24 +1279,27 @@ const refreshAssistRealtimeData = useCallback(async () => {
   const val = (i, fallback) =>
     results[i]?.status === 'fulfilled' ? results[i].value.data : fallback;
 
-  const liveOrders = val(0, orders || []);
-  const liveMenu = val(1, menuItems || []);
-  const liveWaiterRequests = val(2, waiterRequests || []);
-  const analyticsPayload = val(3, {});
-  const liveAnalytics = analyticsPayload.salesData || [];
-  const liveProfitability = val(4, profitabilityData || []);
-  const liveProcurement = val(5, procurementData || []);
-  const liveStaff = val(6, staff || []);
-  const liveExtraItems = val(7, extraItems || []);
+  const liveOrders = asArr(val(0, orders || []));
+  const liveMenu = asArr(val(1, menuItems || []));
+  const liveWaiterRequests = asArr(val(2, waiterRequests || []));
+  const analyticsPayload = val(3, {}) || {};
+  const liveAnalytics = asArr(analyticsPayload.salesData);
+  const liveProfitability = asArr(val(4, profitabilityData || []));
+  const liveProcurement = asArr(val(5, procurementData || []));
+  const liveStaff = asArr(val(6, staff || []));
+  const liveExtraItems = asArr(val(7, extraItems || []));
   const liveExtraAnalytics = val(8, extraAnalytics || null);
-  const liveAttendance = val(9, []);
-  const liveInventory = val(10, []);
+  const liveAttendance = asArr(val(9, []));
+  const liveInventory = asArr(val(10, []));
 
   setOrders(liveOrders);
   setMenuItems(liveMenu);
   setWaiterRequests(liveWaiterRequests);
-  setAnalytics(liveAnalytics);
-  setProfitabilityData(liveProfitability);
+  // Snapshot is for the CURRENT month; don't clobber a different month the user is viewing
+  if (viewDate.getFullYear() === istNow.getUTCFullYear() && viewDate.getMonth() === istNow.getUTCMonth()) {
+    setAnalytics(liveAnalytics);
+    setProfitabilityData(liveProfitability);
+  }
   setProcurementData(liveProcurement);
   setStaff(liveStaff);
   setExtraItems(liveExtraItems);
@@ -1293,7 +1323,7 @@ const refreshAssistRealtimeData = useCallback(async () => {
     extraAnalytics: liveExtraAnalytics,
   };
 }, [tenantId, orders, menuItems, waiterRequests, profitabilityData, procurementData,
-    staff, extraItems, extraAnalytics]);
+    staff, extraItems, extraAnalytics, viewDate]);
 
 // ── OPERATOR ASSISTANT: answer from real data ──
 const handleAssistQuery = useCallback(async (question) => {
@@ -1693,7 +1723,7 @@ const pendingOrders = orders.filter(o =>
   }, [currentMonthAnalytics]);
 
   const filteredStaff = useMemo(() => {
-    let list = staff.filter(m => m.name.toLowerCase().includes(rosterSearchQuery.toLowerCase()));
+    let list = staff.filter(m => (m.name || '').toLowerCase().includes(rosterSearchQuery.toLowerCase()));
     if (ledgerSortConfig.key) {
       list.sort((a,b) => {
         let vA = a[ledgerSortConfig.key], vB = b[ledgerSortConfig.key];
@@ -1751,7 +1781,7 @@ const liveFloorIntelligence = useMemo(() => {
 const margins = menuItems.map(m => {
   // Try to get real margin from profitabilityData first
   const profRow = profitabilityData.find(p => p.name === m.name || p.menuItemId === m._id);
-  if (profRow?.marginPct != null) return { name: m.name, margin: profRow.marginPct.toFixed(0) };
+  if (profRow?.marginPct != null) return { name: m.name, margin: Number(profRow.marginPct).toFixed(0) };
   // Fall back to costPrice only if explicitly set — never fabricate 50%
   if (m.costPrice && m.price) {
     return { name: m.name, margin: (((m.price - m.costPrice) / m.price) * 100).toFixed(0) };
@@ -1961,9 +1991,11 @@ const submitQuickReserve = async () => {
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
+const notifTimerRef = useRef(null);
 const showNotif = useCallback((msg, type = 'success', subtype = '') => {
   setNotif({ show: true, msg, type, subtype });
-  setTimeout(() => setNotif(p => ({ ...p, show: false })), 5000);
+  if (notifTimerRef.current) clearTimeout(notifTimerRef.current); // an older toast's timer must not hide the newer one early
+  notifTimerRef.current = setTimeout(() => setNotif(p => ({ ...p, show: false })), 5000);
 }, []);
 
 const fetchVendors = useCallback(async () => {
@@ -2225,11 +2257,13 @@ const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
       address:       freshTenant?.address
                        ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
                        : '',
-      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
     });
   } catch (err) {
     console.error('Bill Error:', err);
+    // The bill modal just vanished with no message when the bill request failed; tell the operator why.
+    showNotif(err?.response?.data?.error || 'Could not load the bill. Please try again.', 'error');
     setSelectedTable(null);
   }
 };
@@ -2288,13 +2322,14 @@ const generateOnlineBill = async () => {
       address: freshTenant?.address
         ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
         : '',
-      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
       isOnlineSummary: true,
       orderCount: onlineBills.length
     });
   } catch (err) {
     console.error('Online Bill Error:', err);
+    showNotif(err?.response?.data?.error || 'Could not load online orders. Please try again.', 'error');
     setSelectedTable(null);
   }
 };
@@ -2560,8 +2595,9 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
             showNotif(`Invoice #${res.data.billNo} Generated`, "success");
             
             // Immediately remove from local state so table goes dark NOW
+            // Joined tables were billed in the same settlement: drop their orders too (they lingered as live tables until the refetch).
             setOrders(prev => prev.filter(o =>
-                !(o.tableNumber === selectedTable)
+                !(o.tableNumber === selectedTable || joinedTables.includes(o.tableNumber))
             ));
             
             // Delay cleanup to show success briefly
@@ -2861,7 +2897,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       filteredData = analytics.filter(d=>d._id===todayStr);
       periodLabel = `Daily · ${todayStr}`;
     } else if (type==='weekly') {
-      const weekAgo = new Date(istNow.getTime()-7*24*60*60*1000).toISOString().split('T')[0];
+      const weekAgo = new Date(istNow.getTime()-6*24*60*60*1000).toISOString().split('T')[0];
       filteredData = analytics.filter(d=>d._id>=weekAgo&&d._id<=todayStr);
       periodLabel = `Weekly · ${weekAgo} to ${todayStr}`;
     } else if (type==='monthly') {
@@ -3909,7 +3945,7 @@ const periodOrders = ordersData.filter(order => {
   const dateStr = d.toISOString().split('T')[0];
   if (type === 'daily')   return dateStr === todayStr;
   if (type === 'weekly') {
-    const weekAgo = new Date(new Date().getTime() + 330 * 60000 - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const weekAgo = new Date(new Date().getTime() + 330 * 60000 - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     return dateStr >= weekAgo && dateStr <= todayStr;
   }
   if (type === 'monthly') return dateStr.startsWith(exportMonthStr);
@@ -4114,10 +4150,10 @@ const downloadAllTodaysInvoices = useCallback(async () => {
       const settledDate = bill.settledAt ? new Date(bill.settledAt) : new Date();
       const dateStr = isNaN(settledDate.getTime())
         ? '—'
-        : settledDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+        : settledDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase();
       const timeStr = isNaN(settledDate.getTime())
         ? '—'
-        : settledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        : settledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
       const grandTotal = Math.round(bill.grandTotal || 0);
       const tableOrCustomerLabel = bill.isAggregator ? 'CUSTOMER' : 'TABLE';
@@ -5386,6 +5422,7 @@ const renderMonthHeatmap = () => {
                         <span style={{ width:6, height:6, borderRadius:'50%', background: ORDER_STATUS_RING[o.status] || '#555' }} />
                         <span style={{ fontSize:'0.7rem', fontWeight:800, color:'#ddd' }}>{it.name}</span>
                         {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#555' }}>({it.portion})</span>}
+                        {o.isModified && !it.isExtraItem && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'#b5483c', color:'#fff', letterSpacing:'0.4px' }}>{it.modChange === 'new' ? 'REPLACED · NEW' : it.modChange === 'qty' ? 'REPLACED · QTY' : 'REPLACED'}</span>}
                       </div>
                       <span style={{ fontSize:'0.65rem', fontWeight:900, color:'#888' }}>×{it.quantity}</span>
                     </div>
@@ -7253,7 +7290,7 @@ const renderMonthHeatmap = () => {
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
               <input type="date" value={newAnnouncement.startDate}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
                 onChange={e=>setNewAnnouncement(p=>({...p,startDate:e.target.value}))}
                 style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
               <input type="time" value={newAnnouncement.startTime}
@@ -7289,7 +7326,7 @@ const renderMonthHeatmap = () => {
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
               <input type="date" value={newAnnouncement.expiryDate}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
                 onChange={e=>setNewAnnouncement(p=>({...p,expiryDate:e.target.value}))}
                 style={{width:'100%',padding:'8px 10px',background:'#0d0d0d',border:'1px solid #1e1e1e',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
               <input type="time" value={newAnnouncement.expiryTime}
@@ -7573,7 +7610,7 @@ const renderMonthHeatmap = () => {
           </div>
           <div>
             <div style={{fontSize:'0.48rem',color:'#444',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Expires At (optional)</div>
-            <input type="date" value={newOffer.expiresAt} min={new Date().toISOString().split('T')[0]}
+            <input type="date" value={newOffer.expiresAt} min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
               onChange={e=>setNewOffer(p=>({...p,expiresAt:e.target.value}))}
               style={{width:'100%',padding:'9px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
           </div>
@@ -8560,7 +8597,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       // ── 9. GST / COMPLIANCE URGENCY ──
       if (stats.revenue > 0) {
         const now = new Date();
-        const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + 1, 11);
+        const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + (now.getDate() > 11 ? 1 : 0), 11);
         const daysToGstr1 = Math.ceil((nextGstr1 - now) / (1000 * 60 * 60 * 24));
         if (daysToGstr1 <= 5 && daysToGstr1 > 0) {
           recs.push({
@@ -8586,11 +8623,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         const breakEvenRevenue = contributionMarginPct > 0 ? monthlyPayroll / contributionMarginPct : 0;
         const today = new Date(new Date().getTime() + 330 * 60 * 1000);
         const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-        const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+        const isCurrentMonth = viewDate.getMonth() === today.getUTCMonth() && viewDate.getFullYear() === today.getUTCFullYear();
         const progressPct = breakEvenRevenue > 0 ? Math.round((totalRevenue / breakEvenRevenue) * 100) : 0;
 
-        if (isCurrentMonth && progressPct < 100 && today.getDate() > daysInMonth * 0.6) {
-          const daysLeft = daysInMonth - today.getDate();
+        if (isCurrentMonth && progressPct < 100 && today.getUTCDate() > daysInMonth * 0.6) {
+          const daysLeft = daysInMonth - today.getUTCDate();
           recs.push({
             id: 'breakeven-risk', priority: 1, category: 'FINANCIAL HEALTH',
             icon: <Activity size={16} />, color: tone.urgent,
@@ -8603,7 +8640,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             id: 'breakeven-achieved', priority: 5, category: 'FINANCIAL HEALTH',
             icon: <ClipboardCheck size={16} />, color: tone.positive,
             title: `Break-even achieved this month`,
-            stat: { value: `${progressPct}%`, label: `of payroll covered, ${daysInMonth - today.getDate()} days left`, bar: Math.min(100, progressPct) },
+            stat: { value: `${progressPct}%`, label: `of payroll covered, ${daysInMonth - today.getUTCDate()} days left`, bar: Math.min(100, progressPct) },
             tag: `Reinvest surplus into marketing or staff bonuses`,
           });
         }
@@ -9099,7 +9136,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       if (analytics.length > 0) {
         const totalGross = analytics.reduce((a, b) => a + (b.revenue || 0), 0);
         // Heuristic: compare subtotal-implied vs actual when available via profitabilityData totals
-        const totalListPrice = profitabilityData.reduce((a, d) => a + (d.sellingPrice * (d.totalQtySold || 0)), 0);
+        const totalListPrice = profitabilityData.reduce((a, d) => a + ((d.sellingPrice || 0) * (d.totalQtySold || 0)), 0);
         if (totalListPrice > 0 && totalGross > 0) {
           const realizationPct = Math.round((totalGross / totalListPrice) * 100);
           if (realizationPct < 85 && totalListPrice > 5000) {
@@ -9198,13 +9235,13 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         }).length;
         const today = new Date(new Date().getTime() + 330 * 60 * 1000);
         const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-        const isCurrentMonth = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
-        if (isCurrentMonth && unpaidCount > 0 && today.getDate() >= daysInMonth - 3) {
+        const isCurrentMonth = viewDate.getMonth() === today.getUTCMonth() && viewDate.getFullYear() === today.getUTCFullYear();
+        if (isCurrentMonth && unpaidCount > 0 && today.getUTCDate() >= daysInMonth - 3) {
           recs.push({
             id: 'salary-payout-due', priority: 2, category: 'STAFF',
             icon: <Wallet size={16} />, color: tone.urgent,
             title: `${unpaidCount} staff salaries still unpaid as month closes`,
-            stat: { value: unpaidCount, label: `pending payments — only ${daysInMonth - today.getDate()} days left in the month` },
+            stat: { value: unpaidCount, label: `pending payments — only ${daysInMonth - today.getUTCDate()} days left in the month` },
             tag: `Process payroll before month-end to avoid morale issues`,
           });
         }
@@ -9230,7 +9267,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       // ── 47. PICKUP VS DINE-IN GROWTH SHIFT ──
       if (waitlistAnalytics?.month && waitlistAnalytics.month.total > 0) {
         const { dineIn, pickup } = waitlistAnalytics.month;
-        const totalQ = dineIn + pickup;
+        const totalQ = (dineIn || 0) + (pickup || 0);
         if (totalQ > 0) {
           const pickupPct = Math.round((pickup / totalQ) * 100);
           if (pickupPct > 50) {
@@ -9827,8 +9864,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       const estimatedAnnual = monthlyRevenue * 12;
       const isCompositionEligible = estimatedAnnual < 15000000;
       const now = new Date();
-      const nextGstr1  = new Date(now.getFullYear(), now.getMonth()+1, 11);
-      const nextGstr3B = new Date(now.getFullYear(), now.getMonth()+1, 20);
+      const nextGstr1  = new Date(now.getFullYear(), now.getMonth()+(now.getDate()>11?1:0), 11);
+      const nextGstr3B = new Date(now.getFullYear(), now.getMonth()+(now.getDate()>20?1:0), 20);
       const daysToGstr1  = Math.ceil((nextGstr1 - now)/86400000);
       const daysToGstr3B = Math.ceil((nextGstr3B - now)/86400000);
 
@@ -9965,7 +10002,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       icon={<Activity size={16}/>}
       title={(() => {
         const istNow = new Date(new Date().getTime() + 330*60*1000);
-        const isCurr = viewDate.getFullYear()===istNow.getFullYear() && viewDate.getMonth()===istNow.getMonth();
+        const isCurr = viewDate.getFullYear()===istNow.getUTCFullYear() && viewDate.getMonth()===istNow.getUTCMonth();
         return isCurr ? "Today's Pulse" : `${viewDate.toLocaleString('default',{month:'long'})} Pulse`;
       })()}
       subtitle="Live operational signals — act on these now"
@@ -10239,9 +10276,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     {/* Month-end forecast */}
     {currentMonthAnalytics.length > 0 && (() => {
       const today = new Date(new Date().getTime() + 330*60*1000);
-      const isCurr = viewDate.getMonth()===today.getMonth() && viewDate.getFullYear()===today.getFullYear();
+      const isCurr = viewDate.getMonth()===today.getUTCMonth() && viewDate.getFullYear()===today.getUTCFullYear();
       if (!isCurr) return null;
-      const dayOfMonth = today.getDate();
+      const dayOfMonth = today.getUTCDate();
       const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
       const dailyRevenues = currentMonthAnalytics.map(d=>d.revenue||0).filter(v=>v>0);
       if (!dailyRevenues.length) return null;
@@ -10694,9 +10731,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                           <td>
                             <select value={status}
                               onChange={async e=>{
-                                await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`,{status:e.target.value});
-                                fetchMonthlySalary(monthStr);
-                                showNotif(`${s.name} — ${monthStr} marked ${e.target.value}`);
+                                const newStatus = e.target.value;
+                                try {
+                                  await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`,{status:newStatus});
+                                  fetchMonthlySalary(monthStr);
+                                  showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
+                                } catch (err) {
+                                  showNotif(err?.response?.data?.error || 'Could not update salary status');
+                                }
                               }}
                               style={{ background:'rgba(255,255,255,0.03)', color: isPaid?'rgba(211,191,162,0.8)':'rgba(255,255,255,0.3)', border:`1px solid ${isPaid?'rgba(211,191,162,0.2)':'rgba(255,255,255,0.07)'}`, padding:'5px 9px', borderRadius:'6px', fontSize:'0.58rem', fontWeight:'900', outline:'none', cursor:'pointer' }}>
                               <option value="Unpaid">UNPAID</option>
@@ -11710,8 +11752,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             style={{width:'100%',padding:'10px 13px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#fff',borderRadius:'9px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
             value={newStaff.address} onChange={e=>setNewStaff(p => ({ ...p, address: e.target.value }))}/>
         </div>
-        <button type="button" onClick={async()=>{
+        <button type="button" onClick={async(ev)=>{
           if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif('Fill all required fields','error');
+          const enrollBtn=ev.currentTarget; if(enrollBtn.dataset.busy) return; enrollBtn.dataset.busy='1';
           try {
             const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
             if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
@@ -11721,6 +11764,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:istResetDate,baseSalary:'',assignedTables:[],cookingRole:''});
             fetchManagementData();
           } catch { showNotif('Failed to enroll','error'); }
+          finally { delete enrollBtn.dataset.busy; }
         }} style={{
           padding:'10px 28px',
           background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
@@ -11811,7 +11855,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                 </tr>
                 {bucket.map(m=>{
                   const prefix=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-                  const days=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)).length;
+                  const days=new Set(attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)).map(l=>l.date)).size;
                   const pureName=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
                   const staffLogs=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(prefix)&&l.clockIn&&l.clockOut);
                   const totalHrs=staffLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
@@ -11916,8 +11960,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                           if(isFutureMonth) return (
                             <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'#0a0a0a',color:'#222',border:'1px solid #111',display:'inline-block'}}>PENDING</span>
                           );
-                          const salRecord=monthlySalaryRecords.find(r=>(r.staffId===m._id||r.staffId?.toString()===m._id?.toString())&&r.month===monthStr);
-                          if(salRecord?.paidAt) return (
+                          const salRecord=monthlySalaryRecords.find(r=>(r.staffId===m._id||r.staffId?.toString()===m._id?.toString())&&r.monthStr===monthStr);
+                          if(salRecord?.paidAt||salRecord?.status==='Paid') return (
                             <div>
                               <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'rgba(74,222,128,0.07)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.18)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
                                 <CheckCircle2 size={9}/>PAID
@@ -12579,7 +12623,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         <CalendarClock size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
         BATCH EXPIRY (optional)
       </label>
-      <input type="date" min={new Date().toISOString().split('T')[0]}
+      <input type="date" min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
         style={{ width: '100%', padding: '10px 12px', background: '#000', border: '1px solid #1a1a1a', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.expiryDate || ''}
         onChange={e => setNewInventoryItem(p => ({ ...p, expiryDate: e.target.value }))}

@@ -750,7 +750,7 @@ export default function PratyekshaMasterAdmin() {
   const [expenseSummary, setExpenseSummary] = useState(null);
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [expenseForm, setExpenseForm] = useState({
-    category: 'domain', label: '', amount: '', date: new Date().toISOString().slice(0, 10),
+    category: 'domain', label: '', amount: '', date: new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10),
     recurring: false, recurringInterval: 'monthly', vendor: '', notes: ''
   });
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -888,10 +888,15 @@ export default function PratyekshaMasterAdmin() {
   };
 
   const runDeleteTenant = async (client, confirmText) => {
-    const res = await axios.delete(`${BASE_URL}/admin/master/tenant/${client.tenantId}`, { data: { confirm: confirmText } });
-    await fetchData();
-    setDeleteTarget(null);
-    flash(`${client.name} deleted — ${res.data.totalDocumentsDeleted} records removed across ${Object.keys(res.data.collections).length} collections`);
+    // A failed delete (wrong confirm text, server error) used to be an unhandled rejection with no message at all.
+    try {
+      const res = await axios.delete(`${BASE_URL}/admin/master/tenant/${client.tenantId}`, { data: { confirm: confirmText } });
+      await fetchData();
+      setDeleteTarget(null);
+      flash(`${client.name} deleted — ${res.data.totalDocumentsDeleted} records removed across ${Object.keys(res.data.collections).length} collections`);
+    } catch (e) {
+      flash(e?.response?.data?.error || 'Could not delete client', 'error');
+    }
   };
 
   const fetchNotifications = useCallback(async () => {
@@ -944,7 +949,7 @@ export default function PratyekshaMasterAdmin() {
   }, []);
 
   const resetExpenseForm = () => {
-    setExpenseForm({ category: 'domain', label: '', amount: '', date: new Date().toISOString().slice(0, 10), recurring: false, recurringInterval: 'monthly', vendor: '', notes: '' });
+    setExpenseForm({ category: 'domain', label: '', amount: '', date: new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10), recurring: false, recurringInterval: 'monthly', vendor: '', notes: '' });
     setEditingExpenseId(null);
   };
 

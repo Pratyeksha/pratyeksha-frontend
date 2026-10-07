@@ -391,17 +391,21 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const paramsKey = JSON.stringify(params);
+  const reqSeq = useRef(0);
 
   const fetchData = useCallback(async (silent) => {
+    const mySeq = ++reqSeq.current;
     if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await api.get(path.replace(':tenantId', tenantId), { params });
+      if (mySeq !== reqSeq.current) return;
       setData(res.data);
     } catch (e) {
+      if (mySeq !== reqSeq.current) return;
       setError(e?.response?.data?.error || e.message || 'Failed to load');
     } finally {
-      setLoading(false);
+      if (mySeq === reqSeq.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, tenantId, paramsKey]);
@@ -603,12 +607,12 @@ const Money = ({ value, size = 15, weight = 700, color = T.textHigh, prefix = '\
 };
 
 const Delta = ({ pct }) => {
-  const up = pct >= 0;
+  const up = !(Number(pct) < 0);
   const Icon = up ? ArrowUpRight : ArrowDownRight;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: up ? T.primary : T.danger }}>
       <Icon size={12} strokeWidth={2.5} />
-      <span className="pown-mono">{Math.abs(pct)}%</span>
+      <span className="pown-mono">{Math.abs(Number(pct) || 0)}%</span>
     </span>
   );
 };
@@ -741,8 +745,8 @@ const inputStyle = {
   padding: '10px 12px', color: T.textHigh, fontSize: 13, fontFamily: T.font, outline: 'none'
 };
 
-const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style }) => (
-  <button type="button" onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
+const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style, type = 'button' }) => (
+  <button type={type} onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
     background: disabled ? 'rgba(211,191,162,0.35)' : `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`,
     color: '#0a0a0a', border: 'none', boxShadow: disabled ? 'none' : '0 8px 20px -8px rgba(211,191,162,0.55)',
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 800, display: 'inline-flex',
@@ -867,7 +871,7 @@ const LoginScreen = () => {
             </div>
           </Field>
           {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
-          <PrimaryBtn icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+          <PrimaryBtn type="submit" icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
             {loading ? 'Signing in…' : 'Sign In'}
           </PrimaryBtn>
         </form>
@@ -913,7 +917,7 @@ const SetupScreen = () => {
           {password && password.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Password needs at least 6 characters.</div>}
           {confirm && password !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
           {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
-          <PrimaryBtn icon={loading ? Loader2 : CheckCircle2} disabled={loading || !canSubmit} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+          <PrimaryBtn type="submit" icon={loading ? Loader2 : CheckCircle2} disabled={loading || !canSubmit} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
             {loading ? 'Setting up…' : 'Create Login & Continue'}
           </PrimaryBtn>
         </form>
@@ -1624,7 +1628,7 @@ const foodCostTone = (pct) => {
 };
 
 const PnlPage = () => {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/pnl/:tenantId', { params: { month }, refreshMs: 60000 });
 
   return (
@@ -2006,7 +2010,7 @@ const ScoreLine = ({ label, value, pass, target }) => (
    MODULE 7 — STAFF & PAYROLL
    ════════════════════════════════════════════════════════════ */
 const StaffPage = () => {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/staff/summary/:tenantId', { params: { month }, refreshMs: 45000 });
   const { liveStaffEvent } = useOwner();
   useEffect(() => { if (liveStaffEvent) refetch(); }, [liveStaffEvent]); // eslint-disable-line
@@ -2090,6 +2094,7 @@ const CustomersPage = () => {
   const { data, loading, error, refetch } = useOwnerData('/api/owner/customers/insights/:tenantId', { refreshMs: 90000 });
   const { tenantId } = useOwner();
   const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState('');
 
   const sendWinback = async () => {
     if (!data?.atRiskList?.length) return;
@@ -2099,7 +2104,10 @@ const CustomersPage = () => {
         phones: data.atRiskList.map(c => c.phone),
         message: `We miss you! Here's 15% off your next visit. Valid 7 days.`
       });
-    } finally { setSending(false); }
+      setSendMsg('Win-back offer sent');
+    } catch (e) {
+      setSendMsg(e?.response?.data?.error || 'Could not send win-back offer');
+    } finally { setSending(false); setTimeout(() => setSendMsg(''), 3500); }
   };
 
   return (
@@ -2130,6 +2138,7 @@ const CustomersPage = () => {
               <PrimaryBtn icon={Send} onClick={sendWinback} disabled={sending || !data.atRiskList.length}>
                 {sending ? 'Sending…' : `Send to ${data.atRiskList.length} At-Risk Customers`}
               </PrimaryBtn>
+              {sendMsg && <div role="status" style={{ marginTop: 8, fontSize: 12, color: T.textLow }}>{sendMsg}</div>}
             </Card>
 
             <Card padded={false}>
@@ -2178,8 +2187,8 @@ const AlertsPage = () => {
   useEffect(() => { if (liveAlert) refetch(); }, [liveAlert]); // eslint-disable-line
   useEffect(() => { if (liveAdminNotification) refetchNotifs(); }, [liveAdminNotification]); // eslint-disable-line
 
-  const markRead = async (id) => { await api.post(`/api/owner/alerts/read/${id}`); refetch(); };
-  const markNotifRead = async (id) => { await api.post(`/api/owner/notifications/${id}/read`); refetchNotifs(); };
+  const markRead = async (id) => { try { await api.post(`/api/owner/alerts/read/${id}`); } catch (_) { /* ignore; refetch shows truth */ } refetch(); };
+  const markNotifRead = async (id) => { try { await api.post(`/api/owner/notifications/${id}/read`); } catch (_) { /* ignore */ } refetchNotifs(); };
 
   const NOTIF_SEVERITY = {
     urgent: { tone: 'danger' }, important: { tone: 'warning' }, info: { tone: 'gold' }
@@ -2256,7 +2265,7 @@ const AlertsPage = () => {
    MODULE 10 — COMPLIANCE & GST
    ════════════════════════════════════════════════════════════ */
 const CompliancePage = () => {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month }, refreshMs: 120000 });
   const { tenantId } = useOwner();
   const [toast, setToast] = useState(null);
@@ -2695,7 +2704,8 @@ const SettingsPage = () => {
 
   const save = async () => {
     setSaving(true);
-    try { await api.put(`/api/owner/settings/${tenantId}`, form); refetch(); }
+    try { await api.put(`/api/owner/settings/${tenantId}`, form); refetch(); flash('Settings saved'); }
+    catch (e) { flash(e?.response?.data?.error || 'Could not save settings'); }
     finally { setSaving(false); }
   };
 
