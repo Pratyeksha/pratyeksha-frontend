@@ -186,20 +186,22 @@ const KitchenView = () => {
     } catch {}
   };
 
-  const fetchActiveOrders = async () => {
+  const fetchActiveOrders = async (opts) => {
+    // ordersOnly: socket-triggered refreshes don't need categories/menu/tenant again (the menu is kept live by socket events).
+    const ordersOnly = opts && opts.ordersOnly === true;
     try {
       const [ordersRes, catRes, menuRes, tenantRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
-        axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
-        axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null })),
+        ordersOnly ? null : axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
+        ordersOnly ? null : axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
+        ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null })),
       ]);
       const incoming = (ordersRes.data || []).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(incoming);
-      setCategories(catRes.data  || []);
-      setMenuItems(menuRes.data  || []);
-      if (tenantRes.data?.name)                              setTenantName(tenantRes.data.name);
-      if (tenantRes.data?.config?.onlyVeg !== undefined)     setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
+      if (catRes)  setCategories(catRes.data  || []);
+      if (menuRes) setMenuItems(menuRes.data  || []);
+      if (tenantRes?.data?.name)                              setTenantName(tenantRes.data.name);
+      if (tenantRes?.data?.config?.onlyVeg !== undefined)     setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
       const hydrationMap = {};
       incoming.forEach(o => o.items?.forEach((item,idx) => {
         // Rehydrate from the persisted server state, not only the old local flag.
@@ -212,29 +214,37 @@ const KitchenView = () => {
   };
 
   /* ── voice recognition ── */
+  const voiceHandlerRef = useRef(() => {});
+  const handleVoiceResult = e => {
+    const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
+    const isCompleteCmd = txt.includes('complete table') || txt.includes('ready table')
+      || txt.includes('टेबल तयार') || txt.includes('तयार टेबल')
+      || txt.includes('पूर्ण टेबल') || txt.includes('आर्डर तयार');
+    if (isCompleteCmd) {
+      const mNums = { 'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10 };
+      let tNum = null;
+      Object.entries(mNums).forEach(([w,n]) => { if (txt.includes(w)) tNum = n.toString(); });
+      if (!tNum) { const m = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/); if (m?.[1]) tNum = m[1].toUpperCase(); }
+      if (tNum) { const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tNum.toUpperCase()); if (o) markAsReady(o._id); }
+    }
+    if (txt.includes('recall last') || txt.includes('परत आण')) handleRecall();
+    if (txt.includes('show summary') || txt.includes('सारांश')) setIsAggregateView(v => !v);
+  };
+  voiceHandlerRef.current = handleVoiceResult; // always the latest closure (orders, recall queue)
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+    // One recognizer for the lifetime of the screen. It used to be re-created on every orders/recallQueue change while the
+    // previous one kept listening, so a spoken "recall last" ran once per leaked recognizer (several tickets recalled) and
+    // Stop only reached the newest instance. The latest closure is read through a ref instead.
+    if (recognitionRef.current) return;
     const rec = new SR();
     rec.continuous = true; rec.interimResults = false; rec.lang = 'hi-IN';
-    rec.onresult = e => {
-      const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-      const isCompleteCmd = txt.includes('complete table') || txt.includes('ready table')
-        || txt.includes('टेबल तयार') || txt.includes('तयार टेबल')
-        || txt.includes('पूर्ण टेबल') || txt.includes('आर्डर तयार');
-      if (isCompleteCmd) {
-        const mNums = { 'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10 };
-        let tNum = null;
-        Object.entries(mNums).forEach(([w,n]) => { if (txt.includes(w)) tNum = n.toString(); });
-        if (!tNum) { const m = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/); if (m?.[1]) tNum = m[1].toUpperCase(); }
-        if (tNum) { const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tNum.toUpperCase()); if (o) markAsReady(o._id); }
-      }
-      if (txt.includes('recall last') || txt.includes('परत आण')) handleRecall();
-      if (txt.includes('show summary') || txt.includes('सारांश')) setIsAggregateView(v => !v);
-    };
+    rec.onresult = e => voiceHandlerRef.current(e);
     rec.onerror = rec.onend = () => setIsListening(false);
     recognitionRef.current = rec;
-  }, [orders, recallQueue]);
+    return () => { try { rec.abort(); } catch {} recognitionRef.current = null; }; // leaving the KDS left the mic recognizer running
+  }, []);
 
   const toggleVoice = () => {
     if (!recognitionRef.current) return alert('Speech recognition not supported.');
@@ -340,7 +350,7 @@ const KitchenView = () => {
         }
       }
       setInterceptedAlerts(prev => [{ id: Date.now(), ...data, modificationNote: note }, ...prev]);
-      fetchActiveOrders();
+      fetchActiveOrders({ ordersOnly: true });
     });
 
     // Orders can be advanced by another KDS/operator device. Remove them from
@@ -365,13 +375,17 @@ const KitchenView = () => {
     // refetch, so the 86 modal could show stale availability in the meantime. ──
     socket.on('menu_updated', updatedItem => {
       if (!updatedItem || updatedItem.tenantId !== tenantId) return;
-      setMenuItems(prev => prev.map(item =>
-        item._id === updatedItem._id ? { ...item, ...updatedItem } : item
-      ));
+      // A dish created after the KDS opened was never added (only existing ones were patched), so it was missing from the 86 list.
+      setMenuItems(prev => prev.some(item => item._id === updatedItem._id)
+        ? prev.map(item => item._id === updatedItem._id ? { ...item, ...updatedItem } : item)
+        : [...prev, updatedItem]);
     });
+    socket.on('menu_item_deleted', ({ itemId } = {}) => { if (itemId) setMenuItems(prev => prev.filter(i => String(i._id) !== String(itemId))); });
+    socket.on('menu_item_restored', ({ itemId, item } = {}) => { if (itemId && item) setMenuItems(prev => prev.map(i => String(i._id) === String(itemId) ? { ...i, ...item } : i)); });
+    socket.on('menu_bulk_updated', items => { if (Array.isArray(items)) setMenuItems(items); });
 
     return () => {
-      ['new_order','kds_item_cross_sync','kds_item_timing_updated','order_modification_detected','order_status_updated','order_voided','menu_updated']
+      ['new_order','kds_item_cross_sync','kds_item_timing_updated','order_modification_detected','order_status_updated','order_voided','menu_updated','menu_item_deleted','menu_item_restored','menu_bulk_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
       socket.disconnect();
@@ -593,7 +607,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
   const fetchWastageAnalytics = useCallback(async () => {
     try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
   }, [tenantId]);
-  useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); if (wastageTab==='report') fetchWastageAnalytics(); } }, [showWastagePanel]);
+  useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); } }, [showWastagePanel]);
   useEffect(() => { if (showWastagePanel && wastageTab==='report') fetchWastageAnalytics(); }, [wastageTab, showWastagePanel]);
 
   const saveWastageEntry = async () => {

@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/feedback-suite-app/(.*)",
+      "destination": "/feedback-suite-app/index.html"
+    },
+    {
+      "source": "/feedback-suite/(.*)",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

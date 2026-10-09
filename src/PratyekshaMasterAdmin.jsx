@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import API_BASE_URL from './apiBase.js';
+import LeadCRM from './LeadCRM.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, RefreshCcw, Search, TrendingUp, Users, Trophy,
@@ -468,9 +469,16 @@ const ConfirmModal = ({ data, onClose, onConfirm }) => {
 const RenewModal = ({ client, onClose, onSubmit }) => {
   const [months, setMonths] = useState('12');
   const [amount, setAmount] = useState('1200');
+  const [products, setProducts] = useState({ pratyeksha: true, feedbackSuite: false, whatsappCampaigns: false });
+  const [feedbackAdminEmail, setFeedbackAdminEmail] = useState('');
+  const [feedbackAdminPassword, setFeedbackAdminPassword] = useState('');
+  const [campaignStudioPassword, setCampaignStudioPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // This component stays mounted while closed, so the previous client's duration/amount were pre-filled for the next one
+  // and could be confirmed by mistake as that client's payment. Reset whenever a different client is opened.
+  useEffect(() => { if (client) { setMonths('12'); setAmount('1200'); setProducts({ pratyeksha: client.config?.products?.pratyeksha !== false, feedbackSuite: client.config?.products?.feedbackSuite === true, whatsappCampaigns: client.config?.products?.whatsappCampaigns === true }); setFeedbackAdminEmail(client.config?.feedbackAdmin?.email || ''); setFeedbackAdminPassword(''); setCampaignStudioPassword(''); setBusy(false); } }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!client) return null;
-  const submit = async () => { setBusy(true); await onSubmit(Number(months), Number(amount)); setBusy(false); };
+  const submit = async () => { if (!products.pratyeksha && !products.feedbackSuite) return; if (products.feedbackSuite && (!feedbackAdminEmail || (!client.config?.feedbackAdmin?.passwordConfigured && feedbackAdminPassword.length < 10))) return; if (products.whatsappCampaigns && (!client.config?.feedbackAdmin?.campaignPasswordConfigured && campaignStudioPassword.length < 10)) return; setBusy(true); await onSubmit(Number(months), Number(amount), products, { feedbackAdminEmail, feedbackAdminPassword, campaignStudioPassword }); setBusy(false); };
   return (
     <ModalShell title={`Renew — ${client.name}`} icon={RotateCcw} onClose={onClose} width={380}>
       <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
@@ -480,9 +488,29 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
         <LabeledInput label="Amount Received (₹)">
           <input className="p-inp" style={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
         </LabeledInput>
+        <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 9, padding: 12, border: `1px solid ${C.border}`, borderRadius: 9 }}>
+          <div style={{ fontSize: 11, color: C.textDim, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Products included</div>
+          {[['pratyeksha','PRATYEKSHa Restaurant Suite'],['feedbackSuite','Feedback Suite'],['whatsappCampaigns','WhatsApp Offer Campaigns']].map(([key,label]) => (
+            <label key={key} style={{ display:'flex', alignItems:'center', gap:9, color:C.text, fontSize:12, cursor:'pointer' }}>
+              <input type="checkbox" checked={!!products[key]} disabled={key==='whatsappCampaigns' && !products.feedbackSuite} onChange={e=>setProducts(prev=>({ ...prev, [key]:e.target.checked, ...(key==='feedbackSuite' && !e.target.checked ? {whatsappCampaigns:false} : {}) }))} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+        {products.feedbackSuite && <div style={{ display:'grid', gap:10, padding:12, border:`1px solid ${C.border}`, borderRadius:9 }}>
+          <LabeledInput label="Feedback Admin Email" required>
+            <input className="p-inp" style={inp} type="email" value={feedbackAdminEmail} onChange={e=>setFeedbackAdminEmail(e.target.value)} required />
+          </LabeledInput>
+          <LabeledInput label={client.config?.feedbackAdmin?.passwordConfigured ? 'Change Feedback Password (optional)' : 'Feedback Admin Password'} required={!client.config?.feedbackAdmin?.passwordConfigured} hint="At least 10 characters">
+            <input className="p-inp" style={inp} type="password" minLength={10} value={feedbackAdminPassword} onChange={e=>setFeedbackAdminPassword(e.target.value)} required={!client.config?.feedbackAdmin?.passwordConfigured} />
+          </LabeledInput>
+          {products.whatsappCampaigns && <LabeledInput label={client.config?.feedbackAdmin?.campaignPasswordConfigured ? 'Change Campaign Password (optional)' : 'Campaign Studio Password'} required={!client.config?.feedbackAdmin?.campaignPasswordConfigured} hint="At least 10 characters; separate from admin password">
+            <input className="p-inp" style={inp} type="password" minLength={10} value={campaignStudioPassword} onChange={e=>setCampaignStudioPassword(e.target.value)} required={!client.config?.feedbackAdmin?.campaignPasswordConfigured} />
+          </LabeledInput>}
+        </div>}
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button type="button" onClick={submit} disabled={busy || !months || !amount} style={{
+        <button type="button" onClick={submit} disabled={busy || !months || !amount || (!products.pratyeksha && !products.feedbackSuite)} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
           background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: busy ? 0.6 : 1
@@ -531,7 +559,7 @@ const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) =
         onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
         style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 12 }}
       >
-        <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0])} />
+        <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; /* re-picking the same (corrected) file did not fire onChange */ }} />
         <Upload size={17} color={file ? '#d3bfa2' : C.textDim} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: file ? C.text : C.textMid, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : `Click or drop ${label.toLowerCase()} JSON`}</div>
@@ -718,7 +746,7 @@ export default function PratyekshaMasterAdmin() {
     street:'', city:'', state:'', pincode:'',
     tableCount:'12', taxPercentage:'5',
     username:'', password:'', confirmPassword:'',
-    planMonths:'12', paidAmount:'', googleReview:'', instaId:''
+    planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:''
   });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardSuccess, setOnboardSuccess] = useState(null);
@@ -800,9 +828,9 @@ export default function PratyekshaMasterAdmin() {
     return Math.ceil((new Date(exp) - now) / (1000*60*60*24));
   };
 
-  const submitRenew = async (client, months, amount) => {
+  const submitRenew = async (client, months, amount, products, credentials) => {
     try {
-      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: months, paidAmount: amount });
+      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: months, paidAmount: amount, products, ...credentials });
       await fetchData();
       setRenewClient(null);
       flash(`${client.name} renewed for ${months} month${months === 1 ? '' : 's'}`);
@@ -872,6 +900,10 @@ export default function PratyekshaMasterAdmin() {
         taxPercentage:Number(onboarding.taxPercentage),
         planMonths:Number(onboarding.planMonths),
         paidAmount:Number(onboarding.paidAmount),
+        products:onboarding.products,
+        feedbackAdminEmail:onboarding.feedbackAdminEmail,
+        feedbackAdminPassword:onboarding.feedbackAdminPassword,
+        campaignStudioPassword:onboarding.campaignStudioPassword,
         categories: onboardCategories || undefined,
         menuItems: onboardMenuItems || undefined,
       });
@@ -879,7 +911,7 @@ export default function PratyekshaMasterAdmin() {
         tenantId:res.data.tenantId, username:onboarding.username, password:onboarding.password, name:onboarding.name,
         categoriesWritten: res.data.categoriesWritten, menuItemsWritten: res.data.menuItemsWritten
       });
-      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' });
+      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
       setOnboardCategories(null); setOnboardMenuItems(null);
       fetchData();
     } catch(err) {
@@ -1135,6 +1167,7 @@ export default function PratyekshaMasterAdmin() {
             <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
+            <NavItem id="crm" label="Lead CRM" icon={Users} />
             <NavItem id="notifications" label="Notifications" icon={Bell} />
             <NavItem id="expenses" label="Operating Costs" icon={Receipt} />
           </div>
@@ -1283,7 +1316,7 @@ export default function PratyekshaMasterAdmin() {
                         ))}
                         <span style={{ marginLeft:'auto', fontSize:11, color:C.textFaint, display:'flex', alignItems:'center', gap:4 }}>
                           <Clock size={9} strokeWidth={1.5} />
-                          {new Date(req.createdAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}
+                          {new Date(req.createdAt).toLocaleDateString('en-GB',{ timeZone: 'Asia/Kolkata',day:'2-digit',month:'short'})}
                         </span>
                       </div>
                     </motion.div>
@@ -1380,7 +1413,7 @@ export default function PratyekshaMasterAdmin() {
                       ))}
                       <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0' }}>
                         <span style={{ fontSize:12, color:C.textDim }}>Submitted</span>
-                        <span style={{ fontSize:12, color:C.textDim }}>{new Date(selectedDemo.createdAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
+                        <span style={{ fontSize:12, color:C.textDim }}>{new Date(selectedDemo.createdAt).toLocaleDateString('en-GB',{ timeZone: 'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric'})}</span>
                       </div>
                     </div>
                     <Div />
@@ -1673,7 +1706,7 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td className="hide-mob">
                           <div style={{ fontSize:13, fontWeight:500, color:C.text }}>
-                            {client.config?.planExpiry ? new Date(client.config.planExpiry).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}
+                            {client.config?.planExpiry ? new Date(client.config.planExpiry).toLocaleDateString('en-GB',{ timeZone: 'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric'}) : '—'}
                           </div>
                           {dl!==null && (
                             <div style={{ fontSize:11, fontWeight:500, marginTop:2, color: dl<=0?C.danger:dl<=30?'#8a704d':C.textDim }}>
@@ -1912,6 +1945,26 @@ export default function PratyekshaMasterAdmin() {
                       <input className="p-inp" style={inp} placeholder="@jayambefusion" value={onboarding.instaId} onChange={e=>setOnboarding(p=>({...p,instaId:e.target.value}))} />
                     </LabeledInput>
                   </div>
+                  <div style={{ marginTop:14, padding:12, border:`1px solid ${C.border}`, borderRadius:9, display:'grid', gap:9 }}>
+                    <div style={{ fontSize:11, color:C.textDim, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase' }}>Products in this subscription</div>
+                    {[['pratyeksha','PRATYEKSHa Restaurant Suite'],['feedbackSuite','Feedback Suite'],['whatsappCampaigns','WhatsApp Offer Campaigns']].map(([key,label]) => (
+                      <label key={key} style={{ display:'flex', alignItems:'center', gap:9, color:C.text, fontSize:12, cursor:'pointer' }}>
+                        <input type="checkbox" checked={!!onboarding.products?.[key]} disabled={key==='whatsappCampaigns' && !onboarding.products?.feedbackSuite} onChange={e=>setOnboarding(prev=>({ ...prev, products:{ ...prev.products, [key]:e.target.checked, ...(key==='feedbackSuite' && !e.target.checked ? {whatsappCampaigns:false} : {}) } }))} />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                    {onboarding.products?.feedbackSuite && <div className="p-form-grid" style={{ marginTop:8 }}>
+                      <LabeledInput label="Feedback Admin Email" required>
+                        <input className="p-inp" style={inp} type="email" placeholder="owner@business.com" value={onboarding.feedbackAdminEmail} onChange={e=>setOnboarding(prev=>({...prev,feedbackAdminEmail:e.target.value}))} />
+                      </LabeledInput>
+                      <LabeledInput label="Feedback Admin Password" required hint="At least 10 characters; stored as a hash">
+                        <input className="p-inp" style={inp} type="password" minLength={10} value={onboarding.feedbackAdminPassword} onChange={e=>setOnboarding(prev=>({...prev,feedbackAdminPassword:e.target.value}))} />
+                      </LabeledInput>
+                      {onboarding.products?.whatsappCampaigns && <LabeledInput label="Campaign Studio Password" required hint="Use a different password; at least 10 characters">
+                        <input className="p-inp" style={inp} type="password" minLength={10} value={onboarding.campaignStudioPassword} onChange={e=>setOnboarding(prev=>({...prev,campaignStudioPassword:e.target.value}))} />
+                      </LabeledInput>}
+                    </div>}
+                  </div>
                 </div>
 
                 {/* Menu setup — optional JSON uploads instead of manual entry */}
@@ -1944,7 +1997,7 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
+                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>
@@ -1953,6 +2006,8 @@ export default function PratyekshaMasterAdmin() {
             </div>
           </div>
         )}
+
+        {activeSection==='crm' && <LeadCRM />}
 
         {activeSection==='notifications' && (
           <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900, width:'100%' }}>
@@ -2224,7 +2279,7 @@ export default function PratyekshaMasterAdmin() {
                           {e.vendor && <div style={{ fontSize:11, color:C.textDim, marginTop:2 }}>{e.vendor}{e.recurring ? ` · ${e.recurringInterval}` : ''}</div>}
                         </td>
                         <td style={{ padding:'12px', fontSize:12, color:C.textMid }}>{EXPENSE_CATEGORY_LABELS_FRONTEND[e.category] || e.category}</td>
-                        <td style={{ padding:'12px', fontSize:12, color:C.textDim }}>{new Date(e.date).toLocaleDateString()}</td>
+                        <td style={{ padding:'12px', fontSize:12, color:C.textDim }}>{new Date(e.date).toLocaleDateString(undefined, { timeZone: 'Asia/Kolkata' })}</td>
                         <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString()}</td>
                         <td style={{ padding:'12px', borderRadius:'0 10px 10px 0', textAlign:'right' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
@@ -2248,7 +2303,7 @@ export default function PratyekshaMasterAdmin() {
           <ConfirmModal data={confirmModal} onClose={() => setConfirmModal(null)} onConfirm={confirmModal.onConfirm} />
         )}
         {renewClient && (
-          <RenewModal client={renewClient} onClose={() => setRenewClient(null)} onSubmit={(m, a) => submitRenew(renewClient, m, a)} />
+          <RenewModal client={renewClient} onClose={() => setRenewClient(null)} onSubmit={(m, a, products, credentials) => submitRenew(renewClient, m, a, products, credentials)} />
         )}
         {importTarget && (
           <ImportMenuModal target={importTarget} onClose={() => setImportTarget(null)} onDone={fetchData} flash={flash} />

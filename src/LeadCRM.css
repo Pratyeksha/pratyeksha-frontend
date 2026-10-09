@@ -1,0 +1,23 @@
+/* PRATYEKSHa Lead CRM — scoped premium finish */
+.pr-crm { color-scheme: dark; scrollbar-width: thin; scrollbar-color: #514638 #11110f; }
+.pr-crm * { box-sizing: border-box; }
+.pr-crm button, .pr-crm input, .pr-crm select, .pr-crm textarea { font: inherit; }
+.pr-crm button { transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.pr-crm button:hover:not(:disabled) { border-color: #9e8a6c !important; box-shadow: 0 5px 18px rgba(0,0,0,.18); }
+.pr-crm button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.pr-crm button:focus-visible, .pr-crm input:focus-visible, .pr-crm select:focus-visible, .pr-crm textarea:focus-visible { outline: 2px solid #d3bfa2; outline-offset: 2px; }
+.pr-crm input::placeholder, .pr-crm textarea::placeholder { color: #77736b; }
+.pr-crm input:focus, .pr-crm select:focus, .pr-crm textarea:focus { border-color: #8e7a5f !important; box-shadow: 0 0 0 3px rgba(211,191,162,.08); }
+.pr-crm table { border-collapse: separate; border-spacing: 0; }
+.pr-crm th { position: sticky; top: 0; z-index: 1; background: #151410; backdrop-filter: blur(12px); }
+.pr-crm ::-webkit-scrollbar { width: 8px; height: 8px; }
+.pr-crm ::-webkit-scrollbar-thumb { background: #514638; border-radius: 20px; }
+.pr-crm ::-webkit-scrollbar-track { background: #11110f; }
+@media (max-width: 760px) {
+  .pr-crm { padding-left: 12px !important; padding-right: 12px !important; }
+  .pr-crm table { min-width: 640px; }
+  .pr-crm .pr-crm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pr-crm *, .pr-crm *::before, .pr-crm *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

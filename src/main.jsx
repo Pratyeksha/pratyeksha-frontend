@@ -10,6 +10,7 @@ import Pratyeksha from './Pratyeksha.jsx'
 import OwnerApp, { OwnerLauncher } from './OwnerApp.jsx'
 import CustomerHome from './CustomerHome.jsx'
 import { configurePwa } from './pwa.js'
+import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
 
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false }; }
@@ -58,14 +59,17 @@ createRoot(document.getElementById('root')).render(
         {/* 5b. Owner App Route (Live Dashboard, P&L, Inventory, Staff, etc.) */}
         <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
 
-        {/* 6. Customer Menu Route (Dynamic) */}
+        {/* 6. Feedback Suite — isolated sub-app; original feedback UI and CSS remain unchanged */}
+        <Route path="/feedback-suite/*" element={<FeedbackSuiteFrame />} />
+
+        {/* 7. Customer Menu Route (Dynamic) */}
         {/* Must stay near the bottom — catches /:tenantId */}
         <Route path="/:tenantId" element={<App />} />
 
-        {/* 7. Customer PWA Home — installed app opens here unless a restaurant QR route is active */}
+        {/* 8. Customer PWA Home — installed app opens here unless a restaurant QR route is active */}
         <Route path="/" element={<CustomerHome />} />
 
-        {/* 8. Default fallback → customer PWA home */}
+        {/* 9. Default fallback → customer PWA home */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

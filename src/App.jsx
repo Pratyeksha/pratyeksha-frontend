@@ -32,7 +32,7 @@ const CustomerShell = ({ children, centered = true, scrollRef }) => (
 
 const CustomerRestaurantBadge = ({ restaurantName }) => (
   <div style={{ textAlign:'center', marginBottom:'40px' }}>
-    <div style={{ display:'flex', justifyContent:'flex-end', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
+    <div style={{ display:'flex', justifyContent:'flex-start', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
       <PwaInstallButton kind="customer" compact />
     </div>
     <div style={{ width:'56px', height:'56px', borderRadius:'16px', background:'rgba(211,191,162,0.07)', border:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', boxShadow:'0 0 0 8px rgba(211,191,162,0.03)' }}>
@@ -1674,8 +1674,8 @@ const ic = (key, color = '#c9a84c', size = 13) =>
     .replace(/height="\d+"/, `height="${size}"`)
     .replace('stroke="currentColor"', `stroke="${color}"`);
 
-const nowStamp = () => new Date().toLocaleString('en-IN', {
-  timeZone: 'Asia/Kolkata',
+const nowStamp = () => new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata',
+ 
   day: '2-digit', month: 'short', year: 'numeric',
   hour: '2-digit', minute: '2-digit', hour12: true
 });
@@ -2094,10 +2094,10 @@ const downloadPickupToken = () => {
   const rd         = restaurantData;
   const hasOrder   = (entry.items || []).length > 0;
   const pickupTime = entry.scheduledPickupTime
-    ? new Date(entry.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    ? new Date(entry.scheduledPickupTime).toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
     : null;
   const pickupDate = entry.scheduledPickupTime
-    ? new Date(entry.scheduledPickupTime).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+    ? new Date(entry.scheduledPickupTime).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })
     : null;
   const fullAddr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
 
@@ -2209,10 +2209,10 @@ const downloadReservationPDF = () => {
   const hasPreOrder = (entry.items || []).length > 0;
   const isConf      = ['confirmed','seated'].includes(entry.status);
   const resTime     = entry.reservationTime ? new Date(entry.reservationTime) : null;
-  const fmtLong     = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-  const fmtShort    = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
-  const fmtTime     = resTime ? resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
-  const fmtDay      = resTime ? resTime.toLocaleDateString('en-IN', { weekday: 'long' }) : '';
+  const fmtLong     = resTime ? resTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  const fmtShort    = resTime ? resTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' }) : '—';
+  const fmtTime     = resTime ? resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
+  const fmtDay      = resTime ? resTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long' }) : '';
   // Use last-6 of DB _id as stable token so it matches the on-screen token
   const tokenId     = entry._id?.slice(-6)?.toUpperCase() || token;
   const fullAddr    = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode].filter(Boolean).join(', ');
@@ -2397,6 +2397,27 @@ const notifyWaiter = async (serviceType = "Custom") => {
     }, 0);
   };
 
+const welcomeRecsPendingRef = useRef(false);
+const lastOrderItemsRef = useRef(null);
+const computeWelcomeRecsRef = useRef(null);
+computeWelcomeRecsRef.current = (lastOrderItems) => {
+  lastOrderItemsRef.current = lastOrderItems;
+  if (!allMenuItems.length) return; // retried by the effect below when the menu arrives
+  const lastNames = lastOrderItems.map(i => i.name?.toLowerCase().trim());
+  const lastCategoryIds = allMenuItems.filter(m => lastNames.includes(m.name?.toLowerCase().trim())).map(m => m.categoryId);
+  const recs = allMenuItems
+    .filter(m => m.isAvailable !== false && !lastNames.includes(m.name?.toLowerCase().trim()) && (lastCategoryIds.includes(m.categoryId) || m.isBestSeller === true || m.isChefSpecial === true))
+    .slice(0, 3)
+    .map(m => ({ ...m, matchReason: lastCategoryIds.includes(m.categoryId)
+      ? (language === 'mr' ? 'तुमच्या मागील ऑर्डरनुसार' : 'Based on your last order')
+      : m.isChefSpecial ? (language === 'mr' ? 'शेफ स्पेशल' : "Chef's pick") : (language === 'mr' ? 'बेस्टसेलर' : 'Bestseller') }));
+  welcomeRecsPendingRef.current = false;
+  setRecommendedDishes(recs);
+};
+useEffect(() => {
+  if (welcomeRecsPendingRef.current && allMenuItems.length && lastOrderItemsRef.current) computeWelcomeRecsRef.current(lastOrderItemsRef.current);
+}, [allMenuItems]);
+
 useEffect(() => {
   // Only for dine-in table scans — not counter mode
   if (!tenantId || tableNumber === 'Counter' || isCounterScan) return;
@@ -2414,32 +2435,10 @@ useEffect(() => {
           setWelcomeCard(r.data);
           // ── Compute smart dish recommendations from last order history ──
 if (r.data?.lastOrderItems?.length > 0) {
-  const lastNames = r.data.lastOrderItems.map(i => i.name?.toLowerCase().trim());
-  const lastCategoryIds = allMenuItems
-    .filter(m => lastNames.includes(m.name?.toLowerCase().trim()))
-    .map(m => m.categoryId);
-
-  const recs = allMenuItems
-    .filter(m =>
-      m.isAvailable !== false &&
-      !lastNames.includes(m.name?.toLowerCase().trim()) &&
-      (
-        lastCategoryIds.includes(m.categoryId) ||
-        m.isBestSeller === true ||
-        m.isChefSpecial === true
-      )
-    )
-    .slice(0, 3)
-    .map(m => ({
-      ...m,
-      matchReason: lastCategoryIds.includes(m.categoryId)
-        ? (language === 'mr' ? 'तुमच्या मागील ऑर्डरनुसार' : 'Based on your last order')
-        : m.isChefSpecial
-        ? (language === 'mr' ? 'शेफ स्पेशल' : "Chef's pick")
-        : (language === 'mr' ? 'बेस्टसेलर' : 'Bestseller')
-    }));
-
-  setRecommendedDishes(recs);
+  // The menu usually has NOT finished loading when this response arrives, and this effect's closure only saw the empty
+  // first-render menu, so returning customers never got recommendations. Compute from the live menu, and again once it loads.
+  welcomeRecsPendingRef.current = true;
+  computeWelcomeRecsRef.current && computeWelcomeRecsRef.current(r.data.lastOrderItems);
 }
           setWelcomePhone(savedPhone);
         } else {
@@ -2559,8 +2558,8 @@ if (unavailableItems.length > 0) {
     items: orderItems,
     billDetails: {
       itemsTotal: total,
-      taxAmount:  Math.round(total * taxRate),
-      grandTotal: Math.round(total * (1 + taxRate))
+      taxAmount:  Math.round(total * taxRate * 100) / 100,
+      grandTotal: Math.round(total * (1 + taxRate) * 100) / 100
     },
     status: "pending",
     paymentStatus: "unpaid"
@@ -2702,7 +2701,7 @@ const askNotificationPermission = async () => {
       {
         body: counterMode === 'dine-in'
           ? `Hi ${customerInfo.name}! You're in the queue.`
-          : `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}.`,
+          : `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`,
         icon: '/pratyeksha-logo.png',
       }
     );
@@ -2720,7 +2719,7 @@ askNotificationPermission();
         const vapidKey = keyRes.data?.publicKey;
         if (vapidKey) {
           const reg = await navigator.serviceWorker.register('/sw.js');
-          const perm = await Notification.requestPermission();
+          const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
           if (perm === 'granted') {
             function urlBase64ToUint8Array(b) {
               const pad = '='.repeat((4 - b.length % 4) % 4);
@@ -2730,7 +2729,7 @@ askNotificationPermission();
               for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
               return arr;
             }
-            const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+            const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
             await axios.patch(`${BASE_URL}/waitlist/session/${tenantId}/${sessionId}/push-subscription`, { subscription: sub.toJSON(), pageUrl: window.location.href });
           }
         }
@@ -2818,7 +2817,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
         : Notification.permission;
       if (perm === 'granted') {
         new Notification('Reservation Requested!', {
-          body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
+          body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
           icon: '/pratyeksha-logo.png',
         });
       }
@@ -2860,8 +2859,8 @@ const key = item.isExtraItem
       items,
       total,
       billNo: placedOrders[0]?.billNo || '—', // the real bill number only exists after settlement; '001' was shown on every receipt
-      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+      date: new Date().toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase(),
+      time: new Date().toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
     };
   }, [placedOrders]);
   
@@ -2900,16 +2899,16 @@ const autoDownloadInvoicePDF = useCallback(() => {
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
     .filter(Boolean).join(', ');
-  const now = new Date().toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
+  const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata',
+   
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true
   });
   const invoiceNo  = `INV-${Date.now().toString().slice(-8)}`;
-  const dateStr    = new Date().toLocaleDateString('en-IN', {
+  const dateStr    = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata',
     day: 'numeric', month: 'long', year: 'numeric'
   }).toUpperCase();
-  const timeStr    = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  const timeStr    = new Date().toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
   const itemRows = finalBillItems.map((item, idx) => `
     <tr>
@@ -3268,9 +3267,13 @@ const registerCustomerPushSubscription = async (phoneOverride) => {
 
 
 // ── Persist cart to localStorage so it survives browser close ──
+const cartRestoredKeyRef = useRef(null);
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   const cartKey = `pratyeksha_cart_${tenantId}_${tableNumber}`;
+  // The restore effect below runs AFTER this one on mount: with the initial empty cart this branch removed the saved cart
+  // before it could be read, so a reload/browser close always lost the cart. Wait until this key has been restored.
+  if (cartRestoredKeyRef.current !== cartKey) return;
   // Storage can throw (Safari private mode / blocked storage / quota): an exception in this effect crashed the whole
   // customer menu the moment an item was added.
   try {
@@ -3310,6 +3313,7 @@ try {
     }
   }
 } catch { /* ignore */ }
+cartRestoredKeyRef.current = cartKey; // from now on the persist effect may write this key
 
 }, [tenantId, tableNumber, isCounterScan]); // ← tableNumber in deps ensures it runs after URL param is parsed
 // ── Modify window: tick once a second only while a window is open ──
@@ -3554,8 +3558,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               {resTime && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '0', borderTop: '1px solid rgba(211,191,162,0.08)', paddingTop: '18px' }}>
                   {[
-                    { icon: <CalendarClock size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />, label: language === 'mr' ? 'तारीख' : 'DATE', val: resTime.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'}) },
-                    { icon: <Clock3 size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />, label: language === 'mr' ? 'वेळ' : 'TIME', val: resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true}) },
+                    { icon: <CalendarClock size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />, label: language === 'mr' ? 'तारीख' : 'DATE', val: resTime.toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short'}) },
+                    { icon: <Clock3 size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />, label: language === 'mr' ? 'वेळ' : 'TIME', val: resTime.toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true}) },
                     { icon: <Users size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />, label: language === 'mr' ? 'जण' : 'GUESTS', val: `${waitlistEntry.partySize}` },
                   ].map((r, i, arr) => (
                     <div key={i} style={{
@@ -3586,8 +3590,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               {[
                 { label: language === 'mr' ? 'नाव' : 'NAME', val: waitlistEntry.customerName, gold: true },
                 waitlistEntry.customerPhone && { label: language === 'mr' ? 'मोबाईल' : 'MOBILE', val: `+91 ${waitlistEntry.customerPhone}`, mono: true },
-                resTime && { label: language === 'mr' ? 'तारीख' : 'DATE', val: resTime.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'}) },
-                resTime && { label: language === 'mr' ? 'वेळ' : 'TIME', val: resTime.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true}), mono: true },
+                resTime && { label: language === 'mr' ? 'तारीख' : 'DATE', val: resTime.toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'long',day:'numeric',month:'long'}) },
+                resTime && { label: language === 'mr' ? 'वेळ' : 'TIME', val: resTime.toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true}), mono: true },
                 { label: language === 'mr' ? 'जण' : 'GUESTS', val: `${waitlistEntry.partySize} ${waitlistEntry.partySize === 1 ? (language === 'mr' ? 'व्यक्ती' : 'person') : (language === 'mr' ? 'जण' : 'people')}` },
                 waitlistEntry.specialRequests && { label: language === 'mr' ? 'विशेष' : 'SPECIAL', val: `"${waitlistEntry.specialRequests}"`, italic: true },
               ].filter(Boolean).map((r, i) => (
@@ -3778,7 +3782,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 {language === 'mr' ? 'पिकअप वेळ' : 'Pickup Time'}
               </p>
               <div style={{ fontSize: '3.6rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', letterSpacing: '-2px', marginBottom: '8px', lineHeight: 1 }}>
-                {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true})}
+                {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}
               </div>
               <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.18)', fontWeight: '600', margin: 0 }}>
                 {language === 'mr' ? 'ठरलेली वेळ' : 'Your scheduled slot'}
@@ -3811,7 +3815,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               waitlistEntry.customerPhone && { label: language === 'mr' ? 'मोबाईल' : 'MOBILE', val: `+91 ${waitlistEntry.customerPhone}`, mono: true },
               { label: language === 'mr' ? 'प्रकार' : 'TYPE', val: isDineIn ? 'DINE-IN WAITLIST' : 'PICKUP', badge: true },
               isDineIn && { label: language === 'mr' ? 'जण' : 'GUESTS', val: `${waitlistEntry.partySize}` },
-              !isDineIn && waitlistEntry.scheduledPickupTime && { label: language === 'mr' ? 'पिकअप वेळ' : 'PICKUP TIME', val: new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:true}), mono: true, gold: true },
+              !isDineIn && waitlistEntry.scheduledPickupTime && { label: language === 'mr' ? 'पिकअप वेळ' : 'PICKUP TIME', val: new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true}), mono: true, gold: true },
               waitlistEntry.specialRequests && { label: language === 'mr' ? 'विशेष' : 'SPECIAL', val: `"${waitlistEntry.specialRequests}"`, italic: true },
             ].filter(Boolean).map((row, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3943,7 +3947,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       const slot = new Date(base.getTime() + i * 15 * 60000);
       pickupOptions.push({
         value: slot.toISOString(),
-        label: slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        label: slot.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
       });
     }
 
@@ -4581,7 +4585,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   }}>
                     {[
                       { icon: <Users size={10} color="rgba(211,191,162,0.4)" />, label: customerInfo.name, sub: `${partySize} guests` },
-                      { icon: <CalendarClock size={10} color="rgba(211,191,162,0.4)" />, label: reservationDate ? new Date(reservationDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—', sub: (() => { if (!reservationTime) return '—'; const [h,m] = reservationTime.split(':').map(Number); return h < 12 ? `${h}:${m.toString().padStart(2,'0')} AM` : h === 12 ? `12:${m.toString().padStart(2,'0')} PM` : `${h-12}:${m.toString().padStart(2,'0')} PM`; })() },
+                      { icon: <CalendarClock size={10} color="rgba(211,191,162,0.4)" />, label: reservationDate ? new Date(reservationDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : '—', sub: (() => { if (!reservationTime) return '—'; const [h,m] = reservationTime.split(':').map(Number); return h < 12 ? `${h}:${m.toString().padStart(2,'0')} AM` : h === 12 ? `12:${m.toString().padStart(2,'0')} PM` : `${h-12}:${m.toString().padStart(2,'0')} PM`; })() },
                     ].map((s, i) => (
                       <div key={i} style={{
                         background: '#141414',
@@ -4959,7 +4963,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         {alert.show && (
           <motion.div initial={{ y: -100 }} animate={{ y: 24 }} exit={{ y: -100 }} style={styles.globalAlert}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-               {alert.type === 'success' ? <CheckCircle2 size={20} color={primaryColor} /> : <AlertCircle size={20} color="#ff4444" />}
+               {alert.type === 'success' ? <CheckCircle2 size={20} color={primaryColor} /> : <AlertCircle size={20} color="#e8b87a" />}
                <span style={{ fontSize: '0.88rem', fontWeight: '600', color: '#fff' }}>{alert.msg}</span>
              </div>
              <X size={16} color="#555" onClick={() => setAlert({ ...alert, show: false })} />
@@ -5032,7 +5036,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
     <Clock3 size={10} color="rgba(211,191,162,0.4)" strokeWidth={1.5} />
     <span style={{ fontSize: '0.66rem', fontWeight: '900', color: '#d3bfa2' }}>
-      Pickup {new Date(scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+      Pickup {new Date(scheduledPickupTime).toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })}
     </span>
   </div>
 ) : (
@@ -5083,7 +5087,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 )}
 
       <header style={styles.header}>
-        <div style={{ position:'absolute', top:'14px', right:'14px', zIndex:6 }}><PwaInstallButton kind="customer" compact /></div>
+        <div style={{ position:'absolute', top:'14px', left:'14px', zIndex:6 }}><PwaInstallButton kind="customer" compact /></div>
         <div style={styles.langToggleBox}>
           <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
@@ -6022,7 +6026,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
   const statusMeta = {
     pending: { label: language === 'mr' ? 'किचनमध्ये बनत आहे' : 'In the kitchen', sub: language === 'mr' ? 'थोडा वेळ लागेल' : 'Being prepared now', icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: true },
-    ready:   { label: language === 'mr' ? 'तयार आहे!' : 'Ready!', sub: language === 'mr' ? 'कृपया घ्या' : 'Please collect your order', icon: <CheckCircle2 size={14} color="#6dba96" strokeWidth={2} />, pulse: false },
+    ready:   { label: language === 'mr' ? 'तयार आहे!' : 'Ready!', sub: language === 'mr' ? 'कृपया घ्या' : 'Please collect your order', icon: <CheckCircle2 size={14} color="#ecd9b0" strokeWidth={2} />, pulse: true },
     served:  { label: language === 'mr' ? 'सर्व्ह केले' : 'All served', sub: language === 'mr' ? 'आनंद घ्या!' : 'Enjoy your meal!', icon: <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: false },
   };
   const meta = statusMeta[activeStatus];
@@ -6033,13 +6037,22 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       {/* STICKY BANNER */}
       <motion.div
         onClick={() => setOrderTrackingPanelOpen(true)}
-        initial={{ opacity: 0, y: -12 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
+        whileTap={{ scale: 0.985 }}
         style={{
-          margin: '0 16px 12px',
-          background: hasReady ? 'rgba(45,106,79,0.12)' : '#0c0c0c',
-          border: `1px solid ${hasReady ? 'rgba(109,186,150,0.3)' : 'rgba(211,191,162,0.1)'}`,
-          borderRadius: '16px', overflow: 'hidden', cursor: 'pointer'
+          // Sticky to the bottom of the screen, level with the floating action buttons on the right.
+          position: 'fixed', left: '14px', right: '104px',
+          bottom: 'calc(30px + env(safe-area-inset-bottom, 0px))', zIndex: 1000,
+          background: hasReady
+            ? 'linear-gradient(135deg, rgba(48,41,29,0.96), rgba(18,16,12,0.97))'
+            : 'linear-gradient(135deg, rgba(26,24,21,0.95), rgba(12,12,12,0.96))',
+          border: `1px solid ${hasReady ? 'rgba(236,217,176,0.45)' : 'rgba(211,191,162,0.18)'}`,
+          boxShadow: hasReady
+            ? '0 10px 30px rgba(0,0,0,0.55), 0 0 22px rgba(236,217,176,0.16)'
+            : '0 10px 28px rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+          borderRadius: '20px', overflow: 'hidden', cursor: 'pointer'
         }}
       >
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -6047,8 +6060,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <div style={{
               width: '36px', height: '36px', borderRadius: '10px',
-              background: hasReady ? 'rgba(109,186,150,0.1)' : 'rgba(211,191,162,0.06)',
-              border: `1px solid ${hasReady ? 'rgba(109,186,150,0.2)' : 'rgba(211,191,162,0.1)'}`,
+              background: hasReady ? 'rgba(236,217,176,0.1)' : 'rgba(211,191,162,0.06)',
+              border: `1px solid ${hasReady ? 'rgba(236,217,176,0.2)' : 'rgba(211,191,162,0.1)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
               {meta.icon}
@@ -6066,7 +6079,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: '900', color: hasReady ? '#6dba96' : '#d3bfa2', marginBottom: '2px' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: '900', color: hasReady ? '#ecd9b0' : '#d3bfa2', marginBottom: '2px' }}>
               {meta.label}
             </div>
             <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.22)', fontWeight: '500' }}>
@@ -6099,7 +6112,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         return (
           <div key={s} style={{
             width:i<=stepIdx?'14px':'5px', height:'5px', borderRadius:'2.5px', transition:'all 0.4s',
-            background:i<=stepIdx?(s==='ready'||activeStatus==='ready'?'rgba(109,186,150,0.7)':'rgba(211,191,162,0.5)'):'rgba(255,255,255,0.07)'
+            background:i<=stepIdx?(s==='ready'||activeStatus==='ready'?'rgba(236,217,176,0.7)':'rgba(211,191,162,0.5)'):'rgba(255,255,255,0.07)'
           }}/>
         );
       })}
@@ -6112,6 +6125,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         </div>
       </motion.div>
 
+      {/* keeps the last content clear of the sticky bar */}
+      <div aria-hidden="true" style={{ height: '110px' }} />
       {/* ── FULL TRACKING PANEL (slide up) ── */}
       <AnimatePresence>
         {orderTrackingPanelOpen && (
@@ -6193,14 +6208,14 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                           style={{
                             width: '36px', height: '36px', borderRadius: '10px',
                             background: reached
-                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(45,106,79,0.25)' : 'rgba(211,191,162,0.1)')
+                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(211,191,162,0.25)' : 'rgba(211,191,162,0.1)')
                               : 'rgba(255,255,255,0.04)',
                             border: `1px solid ${reached
-                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(109,186,150,0.35)' : 'rgba(211,191,162,0.25)')
+                              ? (activeStatus === 'ready' && i === 2 ? 'rgba(236,217,176,0.35)' : 'rgba(211,191,162,0.25)')
                               : 'rgba(255,255,255,0.07)'}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             color: reached
-                              ? (activeStatus === 'ready' && i === 2 ? '#6dba96' : '#d3bfa2')
+                              ? (activeStatus === 'ready' && i === 2 ? '#ecd9b0' : '#d3bfa2')
                               : 'rgba(255,255,255,0.15)',
                             transition: 'all 0.4s'
                           }}
@@ -6209,7 +6224,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                         </motion.div>
                         <div style={{
                           fontSize: '0.54rem', fontWeight: '700', textAlign: 'center', lineHeight: 1.4,
-                          color: reached ? (activeStatus === 'ready' && i === 2 ? '#6dba96' : 'rgba(255,255,255,0.5)') : 'rgba(255,255,255,0.15)',
+                          color: reached ? (activeStatus === 'ready' && i === 2 ? '#ecd9b0' : 'rgba(255,255,255,0.5)') : 'rgba(255,255,255,0.15)',
                           whiteSpace: 'pre-line', transition: 'all 0.4s'
                         }}>
                           {step.label}
@@ -6223,10 +6238,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                   {Object.entries(liveOrderStatuses).map(([orderId, status], idx) => {
                     const stepIdx = ['pending','ready','served'].indexOf(status);
-                    const statusColor = { pending: '#8a704d', ready: '#6dba96', served: '#555' };
+                    const statusColor = { pending: '#8a704d', ready: '#ecd9b0', served: '#555' };
                     const statusIcon  = {
                       pending: <Flame size={11} color="#8a704d" strokeWidth={1.5} />,
-                      ready:   <CheckCircle2 size={11} color="#6dba96" strokeWidth={2} />,
+                      ready:   <CheckCircle2 size={11} color="#ecd9b0" strokeWidth={2} />,
                       served:  <Sparkles size={11} color="#555" strokeWidth={1.5} />
                     };
                     const statusLabel = {
@@ -6238,8 +6253,8 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                       <div key={orderId} style={{
                         display: 'flex', alignItems: 'center', gap: '10px',
                         padding: '10px 13px',
-                        background: status === 'ready' ? 'rgba(45,106,79,0.08)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${status === 'ready' ? 'rgba(109,186,150,0.15)' : 'rgba(211,191,162,0.07)'}`,
+                        background: status === 'ready' ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${status === 'ready' ? 'rgba(236,217,176,0.15)' : 'rgba(211,191,162,0.07)'}`,
                         borderRadius: '11px', transition: 'all 0.3s'
                       }}>
                         <div style={{
@@ -6262,7 +6277,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                             <div key={s} style={{
                               width: i <= stepIdx ? '12px' : '4px', height: '4px', borderRadius: '2px',
                               background: i <= stepIdx
-                                ? (s === 'ready' ? 'rgba(109,186,150,0.6)' : 'rgba(211,191,162,0.45)')
+                                ? (s === 'ready' ? 'rgba(236,217,176,0.6)' : 'rgba(211,191,162,0.45)')
                                 : 'rgba(255,255,255,0.07)',
                               transition: 'all 0.4s'
                             }} />
@@ -7814,12 +7829,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 )}
 
         {modifyingOrderId && (
-          <div style={{ margin: '0 0 10px', padding: '9px 12px', borderRadius: '12px', border: '1px solid rgba(181,72,60,0.4)', background: 'rgba(181,72,60,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-            <span style={{ fontSize: '0.6rem', color: '#e0a79f', fontWeight: 800, lineHeight: 1.35 }}>
+          <div style={{ margin: '0 0 10px', padding: '9px 12px', borderRadius: '12px', border: '1px solid rgba(201,150,90,0.4)', background: 'rgba(201,150,90,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <span style={{ fontSize: '0.6rem', color: '#e6c08f', fontWeight: 800, lineHeight: 1.35 }}>
               {language === 'mr' ? 'ऑर्डर बदलत आहात' : 'Editing your placed order'} · {modifyClock}
               <br /><span style={{ fontWeight: 600, opacity: 0.8 }}>{language === 'mr' ? 'शेफला "बदललेला ऑर्डर" असे दिसेल' : 'The chef will see it tagged as REPLACED'}</span>
             </span>
-            <button type="button" onClick={cancelModifyEdit} style={{ background: 'transparent', border: '1px solid rgba(224,167,159,0.5)', color: '#e0a79f', borderRadius: '8px', padding: '6px 10px', fontSize: '0.55rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <button type="button" onClick={cancelModifyEdit} style={{ background: 'transparent', border: '1px solid rgba(230,192,143,0.5)', color: '#e6c08f', borderRadius: '8px', padding: '6px 10px', fontSize: '0.55rem', fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {language === 'mr' ? 'रद्द करा' : 'KEEP ORIGINAL'}
             </button>
           </div>
@@ -8385,7 +8400,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 </div>
                 <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff', fontFamily: 'monospace' }}>
                   {welcomeCard.lastVisit
-                    ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                    ? new Date(welcomeCard.lastVisit).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })
                     : '—'}
                 </div>
               </div>
@@ -8475,7 +8490,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       </div>
       {welcomeCard.lastOrderDate && (
         <div style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.14)', fontWeight:'600' }}>
-          {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}
+          {new Date(welcomeCard.lastOrderDate).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short'})}
         </div>
       )}
     </div>

@@ -455,6 +455,10 @@ const [pickupEntries,    setPickupEntries]     = useState([]);
 const [reservationEntries, setReservationEntries] = useState([]);
 const [avgWaitData,      setAvgWaitData]       = useState(null);
 const [queueTab,         setQueueTab]          = useState('waitlist');
+// Latest fetchers for the long-lived socket effect (declared further down); refs avoid stale closures without re-subscribing the socket.
+const fetchTurnTimeDataRef = useRef(() => {});
+const fetchTableRevenueDataRef = useRef(() => {});
+const fetchReservationNoShowDataRef = useRef(() => {});
 const [reservationViewDate, setReservationViewDate] = useState(() => {
   const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;
   return d.toISOString().split('T')[0];
@@ -583,17 +587,20 @@ const fetchExtraAnalytics = useCallback(async () => {
 
 const initialFetchSeq = useRef(0);
 const analyticsFetchSeq = useRef(0);
-const fetchInitialData = useCallback(async () => {
+const fetchInitialData = useCallback(async (opts) => {
+    // Socket-driven refreshes pass { skipMenu: true }: the menu already updates through its own socket events, and
+    // re-downloading the whole menu on every order status change was the heaviest request during service.
+    const skipMenu = opts && opts.skipMenu === true;
     const seq = ++initialFetchSeq.current;
     try {
       const [orderRes, menuRes, waiterRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/operator`),
-        axios.get(`${BASE_URL}/menu/${tenantId}`),
+        skipMenu ? Promise.resolve(null) : axios.get(`${BASE_URL}/menu/${tenantId}`),
         axios.get(`${BASE_URL}/admin/waiter-requests/${tenantId}`).catch(() => ({ data: [] }))
       ]);
       if (seq !== initialFetchSeq.current) return; // newer fetch in flight; don't let an older response overwrite it
       setOrders(asArr(orderRes.data));
-      setMenuItems(asArr(menuRes.data));
+      if (menuRes) setMenuItems(asArr(menuRes.data));
       setWaiterRequests(asArr(waiterRes.data)); 
       fetchCounterQueue();
     } catch (err) { console.error("Data Sync Error:", err); }
@@ -794,14 +801,14 @@ useEffect(() => {
       if (socket.connected) joinRestaurant();
       fetchInitialData();
       fetchManagementData();
-      fetchTurnTimeData();
-      fetchTableRevenueData();
-      fetchReservationNoShowData();
+      fetchTurnTimeDataRef.current();
+      fetchTableRevenueDataRef.current();
+      fetchReservationNoShowDataRef.current();
 
       socket.on("new_order", (order) => { 
         playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
-        showNotif(`Order Update: Table ${order.tableNumber}`); 
-        fetchInitialData(); 
+        showNotif(`Order Update: Table ${order?.tableNumber ?? ''}`); 
+        fetchInitialData({ skipMenu: true }); 
       });
       socket.on("staff_wiped_live", (data) => {
         setStaff(prev => prev.filter(m => m._id !== data.staffId));
@@ -866,6 +873,10 @@ socket.on("menu_updated", (updatedItem) => {
     return [...prev, updatedItem];
   });
 }); 
+socket.on('menu_bulk_updated', (items) => {
+  // Previously the Operator never listened to this event and only caught up through the full menu refetch on each order refresh.
+  if (Array.isArray(items)) setMenuItems(items);
+});
 socket.on('menu_item_restored', ({ itemId, item }) => {
   setMenuItems(prev =>
     prev.map(i => i._id === itemId ? { ...i, ...item } : i)
@@ -911,7 +922,7 @@ socket.on('new_reservation', (data) => {
   showNotif(
     `Reservation — ${data?.customerName || 'Guest'} · ${data?.partySize || '?'} pax · ${
       data?.reservationTime
-        ? new Date(data.reservationTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        ? new Date(data.reservationTime).toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
         : ''
     }`,
     'info', 'reservation'
@@ -955,17 +966,17 @@ socket.on('pickup_ready', (data) => {
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 socket.on('order_voided', () => {
-  fetchInitialData();
+  fetchInitialData({ skipMenu: true });
   fetchAnalytics();
 });
 socket.on("order_status_updated", (data) => {
   if (data && data.status === 'settled') {
     setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
-    fetchInitialData();
+    fetchInitialData({ skipMenu: true });
     fetchAnalytics();
   } else if (['pending', 'ready', 'served'].includes(data?.status)) {
     // Only refresh orders list — skip analytics
-    fetchInitialData();
+    fetchInitialData({ skipMenu: true });
   }
 });
 socket.on('order_modification_detected', (data) => {
@@ -1009,7 +1020,7 @@ socket.on('aggregator_session_restored', (data) => {
       [
         'new_order', 'staff_wiped_live', 'inventory_updated', 'low_stock_alert',
         'inventory_expiry_alert', 'ingredient_out_of_stock', 'new_waiter_request',
-        'menu_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
+        'menu_updated', 'menu_bulk_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
         'new_waitlist_entry', 'new_reservation', 'reservation_updated', 'waitlist_cancelled',
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
         'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
@@ -1044,15 +1055,19 @@ useEffect(() => {
   }
 }, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, fetchMonthlySalary, tenantId]);
 
+const customerDirSeq = useRef(0);
 const fetchCustomerDir = useCallback(async (seg = 'all', search = '') => {
+  // Every keystroke in the search box fires a request; a slow earlier response could overwrite the newer one (stale list for the typed text).
+  const mySeq = ++customerDirSeq.current;
   setCustomerLoading(true);
   try {
     const res = await axios.get(
       `${BASE_URL}/customers/directory/${encodeURIComponent(tenantId)}?segment=${encodeURIComponent(seg)}&search=${encodeURIComponent(search)}&limit=300`
     );
+    if (mySeq !== customerDirSeq.current) return;
     setCustomerDir(res.data || { customers: [], summary: {} });
-  } catch { setCustomerDir({ customers: [], summary: {} }); }
-  finally { setCustomerLoading(false); }
+  } catch { if (mySeq === customerDirSeq.current) setCustomerDir({ customers: [], summary: {} }); }
+  finally { if (mySeq === customerDirSeq.current) setCustomerLoading(false); }
 }, [tenantId]);
  
 const fetchCustomerProfile = useCallback(async (phone) => {
@@ -1867,6 +1882,9 @@ const fetchReservationNoShowData = useCallback(async () => {
     setReservationNoShowData(res.data);
   } catch { setReservationNoShowData(null); }
 }, [tenantId]);
+fetchTurnTimeDataRef.current = fetchTurnTimeData;
+fetchTableRevenueDataRef.current = fetchTableRevenueData;
+fetchReservationNoShowDataRef.current = fetchReservationNoShowData;
 
 const [dailyCostData, setDailyCostData] = useState({}); // { 'YYYY-MM-DD': { revenue, cost, profit } }
 const fetchDailyCostData = useCallback(async () => {
@@ -2070,7 +2088,7 @@ const generatePurchaseOrderPDF = async (vendor) => {
         <div style="text-align:right;">
           <div style="font-size:16px;font-weight:900;color:#BA7517;">PURCHASE ORDER</div>
           <div style="font-size:12px;color:#666;margin-top:4px;">${poNumber}</div>
-          <div style="font-size:12px;color:#666;">${today.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</div>
+          <div style="font-size:12px;color:#666;">${today.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day:'numeric', month:'short', year:'numeric' })}</div>
         </div>
       </div>
 
@@ -2345,8 +2363,8 @@ const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
 // the operator actually typed in. A % discount is mathematically identical either way,
 // so it's still computed off the subtotal for a clean line-item breakdown.
 const finalAmt = discountType === 'flat'
-  ? Math.max(0, Math.round(preDiscountTotal - Number(discount || 0)))
-  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct));
+  ? Math.max(0, Math.round((preDiscountTotal - Number(discount || 0)) * 100) / 100)
+  : Math.round(tableBill.subtotal * (1 - (Math.min(100, Number(discount) || 0)) / 100) * (1 + cgstPct + sgstPct) * 100) / 100;
 const discountedSub  = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 
 if (activePaymentType === 'split') {
@@ -2398,8 +2416,8 @@ useEffect(() => {
 useEffect(() => {
   if (!socket) return;
 
-  const lowStockAudio = new Audio('/sounds/low-stock-alert.mp3'); // place file in /public/sounds/
-  const outOfStockAudio = new Audio('/sounds/out-of-stock-alert.mp3');
+  const lowStockAudio = { play: () => { playCachedSound('/sounds/low-stock-alert.mp3'); return Promise.resolve(); } }; // cached: no new Audio per effect run
+  const outOfStockAudio = { play: () => { playCachedSound('/sounds/out-of-stock-alert.mp3'); return Promise.resolve(); } };
 
   const handleItemUpdated = (updatedItem) => {
     setExtraItems(prev =>
@@ -2550,8 +2568,8 @@ const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
 // approaches give different final numbers, and only the first matches what "₹50 off"
 // actually means to an operator typing it in.
 const finalAmt = discountType === 'flat'
-  ? Math.max(0, Math.round(preDiscountTotal - Number(discount || 0)))
-  : Math.round(tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct));
+  ? Math.max(0, Math.round((preDiscountTotal - Number(discount || 0)) * 100) / 100)
+  : Math.round(tableBill.subtotal * (1 - (Math.min(100, Number(discount) || 0)) / 100) * (1 + cgstPct + sgstPct) * 100) / 100;
 const discountedSub   = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 const discountedCgst  = Math.round(discountedSub * cgstPct * 100) / 100;
 const discountedSgst  = Math.round(discountedSub * sgstPct * 100) / 100;
@@ -2666,12 +2684,25 @@ const [acknowledgedTables, setAcknowledgedTables] = useState({});
 
 
 const [ordersData, setOrdersData] = useState([]);
+const ordersDataRef = useRef([]);
+const pickupFiringRef = useRef(new Set()); // pickup entries whose kitchen ticket is being created (double-click guard)
+// The invoice register export used the 1000 newest orders (ALL statuses) loaded once at page open: bills settled after
+// that were missing from the daily export and monthly/annual exports were silently truncated. Reload settled bills right before exporting.
+const refreshOrdersForExport = useCallback(async () => {
+  try {
+    const r = await axios.get(`${BASE_URL}/orders/${tenantId}?limit=5000&status=settled`);
+    const list = Array.isArray(r.data) ? r.data : [];
+    ordersDataRef.current = list;
+    setOrdersData(list);
+  } catch { /* keep whatever was loaded */ }
+}, [tenantId]);
 
 useEffect(() => {
   if (!tenantId) return;
   axios.get(`${BASE_URL}/orders/${tenantId}?limit=1000`)
     .then(r => {
       setOrdersData(r.data || []);
+      ordersDataRef.current = r.data || [];
     })
     .catch(() => {
       setOrdersData([]);
@@ -2691,11 +2722,11 @@ const fetchIncomingAggregatorOrders = useCallback(async () => {
       createdAt: order.createdAt
     }));
     setIncomingAggregatorOrders(list);
-    if (list.length > 0 && !activeAggregatorPopup) {
-      setActiveAggregatorPopup(list[0]);
-    }
+    // Functional update: depending on activeAggregatorPopup made this callback (and the effect below) re-run and refetch
+    // every time the popup changed, and re-opened a popup the operator had just closed.
+    if (list.length > 0) setActiveAggregatorPopup(prev => prev || list[0]);
   } catch { /* silent */ }
-}, [tenantId, activeAggregatorPopup]);
+}, [tenantId]);
 
 
 useEffect(() => {
@@ -2728,8 +2759,9 @@ const _cgstPct = (tenantConfig?.config?.cgstPercentage ?? 2.5) / 100;   // e.g. 
 const _sgstPct = (tenantConfig?.config?.sgstPercentage ?? 2.5) / 100;
 const _totalGstPct = _cgstPct + _sgstPct;                                 // e.g. 0.05
 
-const exportToExcel = useCallback((type = 'daily') => {
-  import('xlsx').then(XLSX => {
+const exportToExcel = useCallback(async (type = 'daily') => {
+  import('xlsx').then(async XLSX => {
+    const ordersData = ordersDataRef.current; // freshest bills (state may lag the refresh just before export)
     const wb = XLSX.utils.book_new();
 
     // ── STYLE HELPERS ── (unchanged)
@@ -2890,6 +2922,12 @@ const exportToExcel = useCallback((type = 'daily') => {
       return;
     }
 
+    // `analytics` only holds the month selected in the header. Daily/weekly exports of another month silently produced an
+    // empty (all-zero) report, so refuse instead.
+    if ((type === 'daily' || type === 'weekly') && exportMonthStr !== todayStr.slice(0, 7)) {
+      showNotif('Daily/Weekly export uses the current month. Switch the month selector to this month first.', 'error');
+      return;
+    }
     // ── FILTER DATA BY PERIOD ──
     let filteredData = analytics;
     let periodLabel = '';
@@ -2898,7 +2936,15 @@ const exportToExcel = useCallback((type = 'daily') => {
       periodLabel = `Daily · ${todayStr}`;
     } else if (type==='weekly') {
       const weekAgo = new Date(istNow.getTime()-6*24*60*60*1000).toISOString().split('T')[0];
-      filteredData = analytics.filter(d=>d._id>=weekAgo&&d._id<=todayStr);
+      // The loaded month is the only one in `analytics`; in the first 6 days of a month the week reaches into the previous month, so pull those days in too.
+      let weekPool = analytics;
+      if (weekAgo.slice(0, 7) !== todayStr.slice(0, 7)) {
+        try {
+          const prevRes = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${weekAgo.slice(0, 7)}`);
+          weekPool = [...(prevRes.data?.salesData || []), ...analytics];
+        } catch { /* fall back to the loaded month only */ }
+      }
+      filteredData = weekPool.filter(d=>d._id>=weekAgo&&d._id<=todayStr);
       periodLabel = `Weekly · ${weekAgo} to ${todayStr}`;
     } else if (type==='monthly') {
       filteredData = analytics.filter(d=>d._id?.startsWith(exportMonthStr));
@@ -2906,7 +2952,7 @@ const exportToExcel = useCallback((type = 'daily') => {
     } else if (type === 'annual') {
       const year = viewDate.getFullYear();
       filteredData = analytics.filter(d => d._id?.startsWith(`${year}-`));
-      periodLabel = `Annual · FY ${year}-${String(year + 1).slice(2)}`;
+      periodLabel = `Annual · Calendar Year ${year}`; // data is Jan–Dec; "FY 2026-27" (an Apr–Mar year) was wrong in a tax/accounting export
     }
 
     const totalRev       = filteredData.reduce((a,b)=>a+(b.revenue||0),0);
@@ -3093,7 +3139,7 @@ const exportToExcel = useCallback((type = 'daily') => {
       const monthStr = exportMonthStr;
       const monthlyPayroll = staffEfficiency.reduce((a,s)=>{
         const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
-        return a+(Number(rec?.baseSalary||s.baseSalary)||0);
+        return a+(Number(rec?.netSalary ?? rec?.baseSalary ?? s.baseSalary)||0);
       },0);
       const extraRev    = extraAnalytics?.totalRevenue||0;
       const extraCost   = extraAnalytics?.totalCost||0;
@@ -3901,9 +3947,22 @@ const sgst     = taxable * _sgstPct;
     XLSX.utils.book_append_sheet(wb, ws, 'Invoice Register');
   } else {
     // KPIs
-const invTotal    = ordersData.filter(o => o.billDetails?.isSettlementAnchor === true).length;
-const invRevTotal = ordersData
-  .filter(o => o.billDetails?.isSettlementAnchor === true)
+const periodOrders = ordersData.filter(order => {
+  if (order.billDetails?.isSettlementAnchor !== true) return false; // ← one row per bill, not per order
+  // Bill date (same as the analytics/GST figures); a party billed after midnight belongs to the day on the invoice.
+  const dateStr = order.billDetails?.headerDateStringIST || new Date(new Date(order.createdAt).getTime() + 330 * 60000).toISOString().split('T')[0];
+  if (type === 'daily')   return dateStr === todayStr;
+  if (type === 'weekly') {
+    const weekAgo = new Date(new Date().getTime() + 330 * 60000 - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return dateStr >= weekAgo && dateStr <= todayStr;
+  }
+  if (type === 'monthly') return dateStr.startsWith(exportMonthStr);
+  if (type === 'annual')  return dateStr.startsWith(`${viewDate.getFullYear()}-`);
+  return true;
+});
+// KPIs follow the exported period (they summed EVERY loaded bill, so they disagreed with the rows below).
+const invTotal    = periodOrders.length;
+const invRevTotal = periodOrders
   .reduce((a, b) => a + (b.billDetails?.grandTotal || 0), 0);    
 const invTaxable  = invRevTotal / (1 + _totalGstPct);
 const invCGST     = invTaxable * _cgstPct;
@@ -3939,19 +3998,7 @@ const invSGST     = invTaxable * _sgstPct;
     ws['!merges'].push({ s: { r: 8, c: 0 }, e: { r: 8, c: 13 } });
     headers.forEach((_, ci) => styleCell(ws, XLSX.utils.encode_cell({ r: 9, c: ci }), hdrStyle()));
 
-const periodOrders = ordersData.filter(order => {
-  if (order.billDetails?.isSettlementAnchor !== true) return false; // ← one row per bill, not per order
-  const d = new Date(new Date(order.createdAt).getTime() + 330 * 60000); // IST calendar day (was UTC: 00:00-05:30 IST bills landed on yesterday)
-  const dateStr = d.toISOString().split('T')[0];
-  if (type === 'daily')   return dateStr === todayStr;
-  if (type === 'weekly') {
-    const weekAgo = new Date(new Date().getTime() + 330 * 60000 - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    return dateStr >= weekAgo && dateStr <= todayStr;
-  }
-  if (type === 'monthly') return dateStr.startsWith(exportMonthStr);
-  if (type === 'annual')  return dateStr.startsWith(`${viewDate.getFullYear()}-`);
-  return true;
-});
+
 
     periodOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
@@ -4037,7 +4084,7 @@ const sgst       = taxable * _sgstPct;
       const extraProfit=extraAnalytics?.totalProfit||0;
       const wastageCost=wastageAnalytics?.totalCost||0;
       const monthStr=exportMonthStr;
-      const monthlyPayroll=staffEfficiency.reduce((a,s)=>{const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);return a+(Number(rec?.baseSalary||s.baseSalary)||0);},0);
+      const monthlyPayroll=staffEfficiency.reduce((a,s)=>{const rec=monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);return a+(Number(rec?.netSalary ?? rec?.baseSalary ?? s.baseSalary)||0);},0);
       const m=waitlistAnalytics?.month||{};
 
       const summaryData=[
@@ -4338,7 +4385,7 @@ const netPay = salaryForSlip - deductions;
           ['Employee Name', pureName],
           ['Role', member.role],
           ['Contact', member.contact],
-          ['Joining Date', member.joiningDate ? new Date(member.joiningDate).toLocaleDateString('en-GB') : '—'],
+          ['Joining Date', member.joiningDate ? new Date(member.joiningDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—'],
           ['Shift Type', member.shiftType],
           ['Employee ID', member._id.toString().slice(-6).toUpperCase()]
         ].map(([k,v]) => `
@@ -4840,7 +4887,7 @@ const renderMonthHeatmap = () => {
         <button type="button" onClick={()=>changeMonth(1)} style={styles.headerMonthNav}><ChevronRight size={14}/></button>
       </div>
       {['daily','weekly','monthly','annual'].map(p=>(
-        <button type="button" key={p} onClick={()=>exportToExcel(p)} className="p-xls-btn"
+        <button type="button" key={p} onClick={async()=>{ await refreshOrdersForExport(); exportToExcel(p); }} className="p-xls-btn"
           style={{padding:'7px 12px',background:'#0d0d0d',border:'1px solid #1a1a1a',color:'#444',borderRadius:'8px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.2)';e.currentTarget.style.color='#d3bfa2';}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1a1a1a';e.currentTarget.style.color='#444';}}>
@@ -5072,7 +5119,7 @@ const renderMonthHeatmap = () => {
  
                         {/* Time */}
                         <span style={{ fontSize: '0.58rem', color: '#333', marginLeft: 'auto' }}>
-                            {new Date(alert.alertAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(alert.alertAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                         </span>
                     </div>
                 </div>
@@ -5934,14 +5981,23 @@ const renderMonthHeatmap = () => {
                         {/* Step 1 — Send to Kitchen */}
                         {!isKitchenFired && (
                           <button type="button" onClick={async () => {
+                            // A second click while the first request was in flight created a SECOND kitchen ticket for the same pickup order.
+                            if (pickupFiringRef.current.has(entry._id)) return;
+                            pickupFiringRef.current.add(entry._id);
+                            let ticketCreated = false;
                             try {
                               const orderItems = (entry.items || []).map(i => ({ menuItemId: i.menuItemId || null, name: i.name, quantity: Number(i.quantity) || 1, portion: i.portion || 'Single', pricePerUnit: Number(i.price || i.pricePerUnit) || 0, subtotal: Number(i.subtotal) || 0, suggestion: '' }));
                               const itemsTotal = orderItems.reduce((a, i) => a + i.subtotal, 0);
                               await axios.post(`${BASE_URL}/orders`, { tenantId, tableNumber: 'Counter', items: orderItems, source: 'counter-pickup', sessionId: entry.sessionId, waitlistId: entry._id, status: 'pending', billDetails: { itemsTotal, grandTotal: itemsTotal } });
+                              ticketCreated = true;
                               await axios.patch(`${BASE_URL}/waitlist/${entry._id}/kitchen-fired`, { tenantId });
                               fetchCounterQueue(); fetchInitialData();
                               showNotif(`${entry.customerName} — ticket sent to kitchen`, 'success');
-                            } catch (err) { showNotif(err.response?.data?.error || 'Failed', 'error'); }
+                            } catch (err) {
+                              // If only the "fired" flag failed, the ticket already exists: retrying this button would have created a duplicate.
+                              if (ticketCreated) { fetchCounterQueue(); fetchInitialData(); showNotif(`${entry.customerName} — ticket IS in the kitchen, but the queue status did not update. Refresh before retrying.`, 'error'); }
+                              else showNotif(err.response?.data?.error || 'Failed', 'error');
+                            } finally { pickupFiringRef.current.delete(entry._id); }
                           }} style={{ padding: '9px 14px', borderRadius: '9px', background: 'rgba(138,112,77,0.07)', border: '1px solid rgba(138,112,77,0.22)', color: '#8a704d', fontWeight: '900', fontSize: '0.6rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.14)'; e.currentTarget.style.color = '#d3bfa2'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(138,112,77,0.07)'; e.currentTarget.style.color = '#8a704d'; }}>
@@ -5950,7 +6006,7 @@ const renderMonthHeatmap = () => {
                         )}
                         {/* Step 2 — Mark ready */}
                         {isKitchenFired && !isReady && (
-                          <button type="button" onClick={async () => { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`, { tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — customer notified, pickup ready`); }}
+                          <button type="button" onClick={async () => { try { await axios.patch(`${BASE_URL}/waitlist/${entry._id}/pickup-ready`, { tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — customer notified, pickup ready`); } catch (err) { showNotif(err.response?.data?.error || 'Could not mark ready', 'error'); } }}
                             style={{ padding: '9px 14px', borderRadius: '9px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: '#d3bfa2', fontWeight: '900', fontSize: '0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s' }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; }}>
@@ -5976,7 +6032,7 @@ const renderMonthHeatmap = () => {
                       </button>
                       {/* Cancel */}
                       {!['served','settled','cancelled'].includes(entry.status) && (
-                        <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } })}
+                        <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { try { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
                           style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
@@ -6146,7 +6202,7 @@ const renderMonthHeatmap = () => {
                   </button>
                 ))}
                 <div style={{ padding: '7px 16px', background: '#040405', border: '1px solid #161616', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
-                  {new Date(reservationViewDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {new Date(reservationViewDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })}
                 </div>
                 <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #1a1a1a', color: '#444', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
@@ -6216,7 +6272,7 @@ const renderMonthHeatmap = () => {
                           {/* Time block */}
                           <div style={{ textAlign: 'center', padding: '8px 12px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '10px', flexShrink: 0, minWidth: '64px' }}>
                             <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>
-                              {resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              {resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })}
                             </div>
                             {isUpcoming && <div style={{ fontSize: '0.44rem', color: '#8a704d', fontWeight: '900', marginTop: '4px', letterSpacing: '0.5px' }}>in {minsUntil}m</div>}
                             {isOverdue && <div style={{ fontSize: '0.44rem', color: '#8a704d', fontWeight: '900', marginTop: '4px', letterSpacing: '0.5px' }}>{Math.abs(minsUntil)}m ago</div>}
@@ -6258,7 +6314,7 @@ const renderMonthHeatmap = () => {
                           <div style={{ display: 'flex', gap: '5px' }}>
                             {/* Confirm */}
                             {entry.status === 'pending' && (
-                              <button type="button" onClick={async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); }}
+                              <button type="button" onClick={async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); } catch (err) { showNotif(err.response?.data?.error || 'Could not confirm reservation', 'error'); } }}
                                 style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#000', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
                                 CONFIRM
                               </button>
@@ -6288,7 +6344,7 @@ const renderMonthHeatmap = () => {
                             </button>
                             {/* No-show */}
                             {['pending', 'confirmed'].includes(entry.status) && (
-                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } })}
+                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } catch (err) { showNotif(err.response?.data?.error || 'Could not mark no-show', 'error'); } } })}
                                 style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #1a1a1a', color: '#2a2a2a', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#2a2a2a'; }}>
@@ -6300,13 +6356,13 @@ const renderMonthHeatmap = () => {
                           {/* Cancel + Notify — stacked */}
                           {['pending', 'confirmed'].includes(entry.status) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
+                              <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
                                 style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #111', color: '#1e1e1e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#111'; e.currentTarget.style.color = '#1e1e1e'; }}>
                                 <X size={9} /> CANCEL
                               </button>
-                              <button type="button" onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify', tenantId }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
+                              <button type="button" onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify', tenantId }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
                                 style={{ padding: '5px 10px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.08)', color: 'rgba(211,191,162,0.35)', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.22)'; e.currentTarget.style.color = '#d3bfa2'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}>
@@ -7085,7 +7141,7 @@ const renderMonthHeatmap = () => {
                           Table {o.tableNumber} · {o.items?.length || 0} items
                         </div>
                         <div style={{fontSize:'0.6rem',color:'#444',marginTop:'3px'}}>
-                          {new Date(o.createdAt).toLocaleDateString('en-IN')}
+                          {new Date(o.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                         </div>
                       </div>
                       <div style={{fontFamily:'monospace',fontWeight:'900',color:'#d3bfa2',fontSize:'0.88rem'}}>
@@ -7305,7 +7361,7 @@ const renderMonthHeatmap = () => {
                 {label:'Fri 7PM',fn:()=>{const d=new Date();const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);d.setHours(19,0,0,0);return d;}},
                 {label:'Sat 12PM',fn:()=>{const d=new Date();const ds=(6-d.getDay()+7)%7||7;d.setDate(d.getDate()+ds);d.setHours(12,0,0,0);return d;}},
               ].map(p=>(
-                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:d.toISOString().split('T')[0],startTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,startTime:d.toTimeString().slice(0,5)}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(186,117,23,0.2)',background:'rgba(186,117,23,0.06)',color:'#BA7517',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7340,7 +7396,7 @@ const renderMonthHeatmap = () => {
                 {label:'+3 days',fn:()=>new Date(Date.now()+3*86400000)},
                 {label:'+7 days',fn:()=>new Date(Date.now()+7*86400000)},
               ].map(p=>(
-                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:d.toISOString().split('T')[0],expiryTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,expiryTime:d.toTimeString().slice(0,5)}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid #1e1e1e',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7395,7 +7451,7 @@ const renderMonthHeatmap = () => {
                   isActive:!isScheduled,
                 });
                 showNotif(isScheduled
-                  ?`Scheduled for ${startsAt.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
+                  ?`Scheduled for ${startsAt.toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
                   :'Live on customer menu now ✓');
                 setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
                 fetchAnnouncements();
@@ -7469,9 +7525,9 @@ const renderMonthHeatmap = () => {
                         {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
                       </span>
                     )}
-                    {isScheduled&&timeUntil&&<span style={{color:'#BA7517',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>}
+                    {isScheduled&&timeUntil&&<span style={{color:'#BA7517',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>}
                     {isLive&&timeLeft&&<span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ends in {timeLeft}</span>}
-                    {isEnded&&<span style={{display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ended {new Date(a.expiresAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
+                    {isEnded&&<span style={{display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ended {new Date(a.expiresAt).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
                     <span style={{display:'flex',alignItems:'center',gap:'3px'}}><Eye size={8}/>{a.viewCount||0} views</span>
                   </div>
                 </div>
@@ -7679,7 +7735,7 @@ const renderMonthHeatmap = () => {
               )}
               {offer.expiresAt&&(
                 <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#c0392b':'#555',display:'flex',alignItems:'center',gap:'3px'}}>
-                  <Clock size={8}/>{new Date(offer.expiresAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}
+                  <Clock size={8}/>{new Date(offer.expiresAt).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short'})}
                 </span>
               )}
             </div>
@@ -7845,7 +7901,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         <div style={{textAlign:'center',padding:'40px',color:'#1a1a1a',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
       ):(
         <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
-          {[...(Array.isArray(campaigns)?campaigns:[])].reverse().map(c=>(
+          {[...(Array.isArray(campaigns)?campaigns:[])].map(c=>( /* server already returns newest first; .reverse() put the oldest campaign on top */
             <div key={c._id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#060606',border:'1px solid #0d0d0d'}}>
               <div style={{width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Send size={11} color="#8a704d"/>
@@ -7862,7 +7918,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                 <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',fontSize:'0.54rem',color:'#2a2a2a'}}>
                   <span style={{color:'#8a704d',fontWeight:'800'}}>SENT BY: {c.tenantName || tenantConfig?.name || tenantId}</span>
                   <span>•</span>
-                  <span>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
+                  <span>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
                 </div>
               </div>
             </div>
@@ -8256,7 +8312,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <input type="number" value={discount}
         onChange={e => {
           const v = parseFloat(e.target.value);
-          setDiscount(isNaN(v) ? 0 : Math.max(0, v));
+          setDiscount(isNaN(v) ? 0 : Math.max(0, discountType === 'percent' ? Math.min(100, v) : v));
           setDiscountReason('');
         }}
         placeholder={discountType === 'percent' ? '0-100' : '0'}
@@ -8330,7 +8386,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           const total = discountType === 'flat'
             ? Math.max(0, preDiscountTotal - Number(discount || 0))
             : tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct);
-          return Math.round(total).toLocaleString('en-IN');
+          return (Math.round(total * 100) / 100).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', maximumFractionDigits: 2 });
         })()}</span>
       </div>
       <div style={{fontSize:'0.56rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'6px', letterSpacing:'0.5px'}}>
@@ -9857,7 +9913,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       const monthStr            = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
       const payrollCost         = staffEfficiency.reduce((a,s)=>{
         const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
-        return a + (Number(rec?.baseSalary||s.baseSalary)||0);
+        return a + (Number(rec?.netSalary ?? rec?.baseSalary ?? s.baseSalary)||0);
       },0);
       const grossAfterGst = netRevenueAfterGst5 - ingredientCost;
       const netAfterAll   = grossAfterGst - payrollCost;
@@ -10986,7 +11042,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
       const payroll = staffEfficiency.reduce((a,s)=>{
         const rec = monthlySalaryRecords.find(r=>r.staffId?.toString()===s._id?.toString()&&r.monthStr===monthStr);
-        return a + (Number(rec?.baseSalary||s.baseSalary)||0);
+        return a + (Number(rec?.netSalary ?? rec?.baseSalary ?? s.baseSalary)||0);
       },0);
       const totalRev4 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0)+(extraAnalytics?.totalRevenue||0);
       const totalCost4= profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0)+(extraAnalytics?.totalCost||0);
@@ -11442,7 +11498,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               fontSize: '0.48rem', color: 'rgba(255,255,255,0.15)',
               marginTop: '6px', textAlign: 'right', fontFamily: 'monospace'
             }}>
-              {new Date(msg.ts).toLocaleTimeString('en-IN', {
+              {new Date(msg.ts).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata',
                 hour: '2-digit', minute: '2-digit', hour12: true
               })}
             </div>
@@ -11757,8 +11813,12 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           const enrollBtn=ev.currentTarget; if(enrollBtn.dataset.busy) return; enrollBtn.dataset.busy='1';
           try {
             const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
-            if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0)
-              await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables});
+            if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0){
+              // If only the table assignment failed the staff member already exists: the generic "Failed to enroll" made operators
+              // register them again (duplicate roster entry).
+              try { await axios.put(`${BASE_URL}/staff/floor-map`,{tenantId,staffId:res.data.member._id,assignedTables:newStaff.assignedTables}); }
+              catch { showNotif(`${newStaff.name} enrolled, but table assignment failed — assign tables from the roster`,'error'); }
+            }
             showNotif(`${newStaff.name} enrolled`,'success');
             const istResetDate=(()=>{const d=new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
             setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:istResetDate,baseSalary:'',assignedTables:[],cookingRole:''});
@@ -11979,16 +12039,19 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                               const monthLogs=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(monthStr));
                               const workDays=[...new Set(monthLogs.map(l=>l.date))].length;
                               const perDay=Number(m.baseSalary)/26;
-                              const net=Math.round(perDay*workDays);
+                              // 30/31 attended days of a /26 per-day rate paid MORE than the monthly salary; pay is capped at the base salary.
+                              const net=Math.min(Math.round(Number(m.baseSalary)||0),Math.round(perDay*workDays));
                               setConfirmModal({
                                 show:true,
                                 title:`Pay ${pureName}?`,
                                 subtitle:`${workDays} days worked · ₹${net.toLocaleString()} net salary for ${viewDate.toLocaleString('default',{month:'long'})}`,
                                 onConfirm:async()=>{
-                                  await axios.post(`${BASE_URL}/staff/salary/mark-paid`,{tenantId,staffId:m._id,month:monthStr,workDays,netSalary:net,baseSalary:Number(m.baseSalary)});
-                                  showNotif(`${pureName} — salary marked paid`,'success');
-                                  const prefix2=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-                                  fetchMonthlySalary(prefix2);
+                                  try {
+                                    await axios.post(`${BASE_URL}/staff/salary/mark-paid`,{tenantId,staffId:m._id,month:monthStr,workDays,netSalary:net,baseSalary:Number(m.baseSalary)});
+                                    showNotif(`${pureName} — salary marked paid`,'success');
+                                    const prefix2=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+                                    fetchMonthlySalary(prefix2);
+                                  } catch (err) { showNotif(err.response?.data?.error||'Could not mark salary paid','error'); }
                                 }
                               });
                             }} style={{
@@ -12150,11 +12213,18 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       </div>
                       <button type="button"
                         onClick={async()=>{
-                          if(!isCurrentlyClockedIn){
-                            await axios.post(`${BASE_URL}/staff/attendance/clock-in`,{tenantId,staffId:m._id});
-                          } else {
-                            await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`, { tenantId });
-                          }
+                          // Double-tap clocked a person in twice (two open sessions); errors were silent.
+                          const busyKey=`clock-${m._id}`;
+                          if(pickupFiringRef.current.has(busyKey)) return;
+                          pickupFiringRef.current.add(busyKey);
+                          try{
+                            if(!isCurrentlyClockedIn){
+                              await axios.post(`${BASE_URL}/staff/attendance/clock-in`,{tenantId,staffId:m._id});
+                            } else {
+                              await axios.patch(`${BASE_URL}/staff/attendance/clock-out/${latestActiveLog._id}`, { tenantId });
+                            }
+                          }catch(err){ showNotif(err.response?.data?.error||'Clock action failed','error'); }
+                          finally{ pickupFiringRef.current.delete(busyKey); }
                           fetchAttendanceForDate(attendanceDate);
                         }}
                         style={{
@@ -12173,8 +12243,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     {dayLogs.length>0&&(
                       <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
                         {dayLogs.map((log,idx)=>{
-                          const inTime=log.clockIn?new Date(log.clockIn).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}):'—';
-                          const outTime=log.clockOut?new Date(log.clockOut).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}):null;
+                          const inTime=log.clockIn?new Date(log.clockIn).toLocaleTimeString('en-IN',{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true}):'—';
+                          const outTime=log.clockOut?new Date(log.clockOut).toLocaleTimeString('en-IN',{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true}):null;
                           const hrs=log.totalWorkingHours;
                           return (
                             <div key={log._id} style={{
@@ -12822,7 +12892,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 if (daysLeft > 5) return null; // only surface it once it matters
                 const expired = daysLeft < 0;
                 return (
-                  <div title={new Date(item.batchExpiry).toLocaleDateString('en-IN')} style={{ marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 7px', borderRadius: '5px', fontSize: '0.48rem', fontWeight: '900', background: expired ? 'rgba(200,114,114,0.12)' : 'rgba(186,117,23,0.12)', border: `1px solid ${expired ? 'rgba(200,114,114,0.35)' : 'rgba(186,117,23,0.35)'}`, color: expired ? '#c87272' : '#BA7517' }}>
+                  <div title={new Date(item.batchExpiry).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} style={{ marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 7px', borderRadius: '5px', fontSize: '0.48rem', fontWeight: '900', background: expired ? 'rgba(200,114,114,0.12)' : 'rgba(186,117,23,0.12)', border: `1px solid ${expired ? 'rgba(200,114,114,0.35)' : 'rgba(186,117,23,0.35)'}`, color: expired ? '#c87272' : '#BA7517' }}>
                     <CalendarClock size={9} />
                     {expired ? 'EXPIRED — USE FIRST' : daysLeft === 0 ? 'EXPIRES TODAY' : `${daysLeft}D LEFT · FEFO`}
                   </div>
@@ -12845,12 +12915,18 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   title="Edit current stock level directly"
                   style={{ width: '80px', background: '#000', border: `1px solid ${item.currentStock < 0 ? 'rgba(186,117,23,0.4)' : '#1a1a1a'}`, color: item.currentStock < 0 ? '#BA7517' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
                   onBlur={async e => {
-                    const val = Number(e.target.value);
-                    if (val === item.currentStock) return;
+                    const raw = String(e.target.value).trim();
+                    const val = Number(raw);
+                    // A cleared box read as 0 and wiped the stock on blur; and a negative (depleted) stock is DISPLAYED as 0, so just
+                    // focusing and leaving the field "changed" -5 to 0.
+                    if (raw === '' || !Number.isFinite(val)) { e.target.value = Math.max(0, item.currentStock); return; }
+                    if (val === Math.max(0, item.currentStock)) return;
                     // Use general patch — stock only
-                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val, tenantId });
-                    fetchManagementData();
-                    showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
+                    try {
+                      await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val, tenantId });
+                      fetchManagementData();
+                      showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
+                    } catch (err) { e.target.value = Math.max(0, item.currentStock); showNotif(err.response?.data?.error || 'Could not update stock', 'error'); }
                   }}
                 />
                 {item.currentStock < 0 && (
@@ -12871,11 +12947,15 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 onBlur={async e => {
                   e.target.style.borderColor = 'rgba(211,191,162,0.15)';
                   e.target.style.color = '#888';
-                  const val = Number(e.target.value);
+                  const rawT = String(e.target.value).trim();
+                  const val = Number(rawT);
+                  if (rawT === '' || !Number.isFinite(val)) { e.target.value = item.minThreshold; return; } // cleared box saved a threshold of 0
                   if (val === item.minThreshold) return;
-                  await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
-                  fetchManagementData();
-                  showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
+                  try {
+                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
+                    fetchManagementData();
+                    showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
+                  } catch (err) { e.target.value = item.minThreshold; showNotif(err.response?.data?.error || 'Could not update threshold', 'error'); }
                 }}
               />
             </td>
@@ -12895,12 +12975,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         onBlur={async e => {
           e.target.style.borderColor = 'rgba(211,191,162,0.15)';
           e.target.style.color = '#666';
-          const val = Number(e.target.value);
+          const rawW = String(e.target.value).trim();
+          const val = Number(rawW);
           const current = item.weightedAvgCost || item.costPrice || 0;
+          if (rawW === '' || !Number.isFinite(val)) { e.target.value = current.toFixed(2); return; } // cleared box set the unit cost to 0 and zeroed every dish margin using it
           if (Math.abs(val - current) < 0.001) return;
-          await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
-          fetchManagementData();
-          showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
+          try {
+            await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
+            fetchManagementData();
+            showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
+          } catch (err) { e.target.value = current.toFixed(2); showNotif(err.response?.data?.error || 'Could not update cost', 'error'); }
         }}
       />
     </div>
@@ -13103,7 +13187,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                       <div>
                         <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>
-                          {new Date(entry.purchaseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {new Date(entry.purchaseDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
                         </div>
                         {entry.vendor && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px' }}>{entry.vendor}</div>}
                         {entry.batchId && <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '1px' }}>Batch: {entry.batchId}</div>}
@@ -13624,7 +13708,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   setRecipeIngredientRows([{ inventoryId: '', quantityUsed: '' }]);
                   fetchAnalytics();
                   fetchManagementData();
-                } catch { showNotif('Failed to save recipe', 'error'); }
+                } catch (err) { showNotif(err.response?.data?.error || 'Failed to save recipe', 'error'); }
               }}
               style={{ flex: 2, padding: '11px', borderRadius: '10px', border: 'none', background: activeRecipeItemId ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : 'rgba(255,255,255,0.04)', color: activeRecipeItemId ? '#0a0a0a' : 'rgba(255,255,255,0.2)', fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px', cursor: activeRecipeItemId ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.2s' }}>
               <PackageCheck size={14} strokeWidth={2} />
@@ -13858,7 +13942,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       <div style={{padding:'16px 20px',borderBottom:'1px solid #0d0d0d',background:'#0a0a0a',display:'flex',alignItems:'center',gap:'10px'}}>
         <CalendarClock size={16} color="#d3bfa2"/>
         <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>
-          {new Date(reservationViewDate).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+          {new Date(reservationViewDate).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'long',day:'numeric',month:'long',year:'numeric'})}
         </span>
       </div>
       <div style={{padding:'20px'}}>
@@ -15754,11 +15838,11 @@ onClick={async () => {
                 const vendor   = purchaseOrderModal.customVendor || '—';
                 const price    = purchaseOrderModal.lastPrice || 0;
                 const total    = price > 0 ? (price * qty).toFixed(0) : '—';
-                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const today    = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
                 const deadline = (() => {
                   const d = new Date();
                   d.setDate(d.getDate() + Math.max(1, Math.min(purchaseOrderModal.daysLeft || 3, 3)));
-                  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                  return d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
                 })();
 
                 const lines = [
@@ -15805,11 +15889,11 @@ onClick={async () => {
                 const vendor   = purchaseOrderModal.customVendor || '—';
                 const price    = purchaseOrderModal.lastPrice || 0;
                 const total    = price > 0 ? (price * qty).toFixed(0) : '—';
-                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const today    = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
                 const deadline = (() => {
                   const d = new Date();
                   d.setDate(d.getDate() + Math.max(1, Math.min(purchaseOrderModal.daysLeft || 3, 3)));
-                  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                  return d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
                 })();
 
                 const text = [
@@ -15872,7 +15956,7 @@ onClick={async () => {
                 const vendor   = purchaseOrderModal.customVendor || '';
                 const price    = purchaseOrderModal.lastPrice || 0;
                 const total    = price > 0 ? `₹${(price * qty).toFixed(0)}` : '';
-                const today    = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const today    = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
 
                 const waText = encodeURIComponent(
                   `*PURCHASE ORDER* — ${today}\n` +

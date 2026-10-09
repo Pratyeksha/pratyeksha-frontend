@@ -37,7 +37,8 @@ function isCacheableMenuRequest(request) {
   if (request.method !== 'GET') return false;
   let url;
   try { url = new URL(request.url); } catch { return false; }
-  if (url.hostname !== API_HOST) return false;
+  // Host-agnostic: the API host differs per deployment (VITE_API_URL); every cacheable pattern below is an /api/ path, so the path check is enough.
+  if (!url.pathname.startsWith('/api/')) return false;
   return CACHEABLE_PATH_PATTERNS.some((re) => re.test(url.pathname));
 }
 
@@ -68,7 +69,8 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', function(event) {
-  const data = event.data ? event.data.json() : {};
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; } // a plain-text push used to throw and show nothing
   event.waitUntil(
     self.registration.showNotification(data.title || 'Pratyeksha', {
       body: data.body || '',
@@ -93,6 +95,9 @@ self.addEventListener('notificationclick', function(event) {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
+        // Same origin hosts the operator/owner/kitchen/admin apps too: never navigate their tabs to a customer page.
+        let cp = '/'; try { cp = new URL(client.url).pathname; } catch {}
+        if (/^\/(owner|operator|kitchen|master-admin|admin)/.test(cp)) continue;
         if ('navigate' in client) {
           client.navigate(url);
           return client.focus();

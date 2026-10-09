@@ -96,7 +96,8 @@ export default function CustomerHome() {
   return (
     <main style={{ minHeight:'100vh', background:'#0e0e0e', color:'#fff', fontFamily:'Poppins, sans-serif' }}>
       <div style={{ maxWidth:1180, margin:'0 auto', padding:'22px 20px 48px' }}>
-        <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, paddingBottom:24, borderBottom:'1px solid rgba(211,191,162,.1)' }}>
+        <header style={{ display:'flex', alignItems:'center', justifyContent:'flex-start', gap:16, paddingBottom:24, borderBottom:'1px solid rgba(211,191,162,.1)' }}>
+          <div style={{ alignSelf:'flex-start' }}><PwaInstallButton kind="customer" compact /></div>
           <div style={{ display:'flex', alignItems:'center', gap:14, minWidth:0 }}>
             <div style={{ background:'#f7f3eb', borderRadius:14, padding:'7px 10px', display:'flex', alignItems:'center' }}>
               <img src={logo} alt="Pratyeksha" style={{ width:150, height:'auto', display:'block' }} />
@@ -106,7 +107,6 @@ export default function CustomerHome() {
               <div style={{ fontSize:13, color:'rgba(255,255,255,.55)', marginTop:4 }}>Discover a restaurant, then choose its available guest services.</div>
             </div>
           </div>
-          <PwaInstallButton kind="customer" compact />
         </header>
 
         {notification && (
