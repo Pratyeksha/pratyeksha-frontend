@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import API_BASE_URL from './apiBase.js';
 import LeadCRM from './LeadCRM.jsx';
+import MasterDocuments from './MasterDocuments.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, RefreshCcw, Search, TrendingUp, Users, Trophy,
@@ -12,7 +13,7 @@ import {
   BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
   Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send, Receipt,
   Globe, Server, MessageSquare, QrCode, CreditCard, Wrench, Megaphone as MegaphoneIcon,
-  TrendingDown, PlusCircle, Edit3
+  TrendingDown, PlusCircle, Edit3, FileText
 } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
@@ -728,6 +729,7 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
 ════════════════════════════════════════ */
 export default function PratyekshaMasterAdmin() {
   const [activeSection, setActiveSection] = useState('demos');
+  const [docsClientId, setDocsClientId] = useState(null);
   const [clients,       setClients]       = useState([]);
   const [stats,         setStats]         = useState({ totalRevenue:0, grossRevenue:0, totalExpenses:0, netRevenue:0, activeCount:0, expiredCount:0, disabledCount:0, expiringSoon:0, topClients:[], totalClients:0 });
   const [loading,       setLoading]       = useState(true);
@@ -834,7 +836,7 @@ export default function PratyekshaMasterAdmin() {
       await fetchData();
       setRenewClient(null);
       flash(`${client.name} renewed for ${months} month${months === 1 ? '' : 's'}`);
-    } catch { flash('Renewal failed.', 'error'); }
+    } catch (err) { flash(err?.response?.data?.error || 'Renewal failed.', 'error'); }
   };
 
   const submitToggle = async (client) => {
@@ -1170,6 +1172,7 @@ export default function PratyekshaMasterAdmin() {
             <NavItem id="crm" label="Lead CRM" icon={Users} />
             <NavItem id="notifications" label="Notifications" icon={Bell} />
             <NavItem id="expenses" label="Operating Costs" icon={Receipt} />
+            <NavItem id="documents" label="Documents" icon={FileText} />
           </div>
 
           <Div />
@@ -1725,6 +1728,14 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
+                            <button type="button" onClick={()=>{ setDocsClientId(String(client._id || client.tenantId)); navTo('documents'); }} title="Prepare welcome / invoice / agreement" style={{
+                              padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
+                              cursor:'pointer', background:'transparent',
+                              border:`1px solid ${C.border}`, color: C.textDim,
+                              display:'flex', alignItems:'center', gap:4,
+                            }}>
+                              <FileText size={12} />
+                            </button>
                             <button type="button" onClick={()=>setImportTarget({ tenantId: client.tenantId, tenantName: client.name })} title="Import menu (JSON)" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
@@ -2008,6 +2019,12 @@ export default function PratyekshaMasterAdmin() {
         )}
 
         {activeSection==='crm' && <LeadCRM />}
+
+        {activeSection==='documents' && (
+          <div className="no-sb p-fade-in" style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', width:'100%', WebkitOverflowScrolling:'touch' }}>
+            <MasterDocuments clients={clients} focusClientId={docsClientId} onFocusHandled={()=>setDocsClientId(null)} />
+          </div>
+        )}
 
         {activeSection==='notifications' && (
           <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900, width:'100%' }}>

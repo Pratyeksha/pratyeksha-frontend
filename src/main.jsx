@@ -9,8 +9,8 @@ import PratyekshaMasterAdmin from './PratyekshaMasterAdmin.jsx'
 import Pratyeksha from './Pratyeksha.jsx'
 import OwnerApp, { OwnerLauncher } from './OwnerApp.jsx'
 import CustomerHome from './CustomerHome.jsx'
-import { configurePwa } from './pwa.js'
 import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
+import { configurePwa } from './pwa.js'
 
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false }; }

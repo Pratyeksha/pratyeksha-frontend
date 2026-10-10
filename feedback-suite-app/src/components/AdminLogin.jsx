@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { loginAdmin } from '../api';
+import { useTenantName } from '../brand';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminLogin() {
+  const tenantName = useTenantName();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +32,7 @@ export default function AdminLogin() {
       <div className="auth-glow" />
       <section className="auth-card">
         <div className="auth-mark"><LockKeyhole size={22} /></div>
-        <span className="eyebrow">JAY AMBE / INSIGHT</span>
+        <span className="eyebrow">{(tenantName || 'Guest feedback').toUpperCase()} / INSIGHT</span>
         <h1>Welcome back.</h1>
         <p>Sign in to review what your guests are telling you.</p>
 

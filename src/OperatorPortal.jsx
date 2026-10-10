@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback,useRef  } from 'react'
 import axios from 'axios';
 import { io } from "socket.io-client";
 import PwaInstallButton from './PwaInstallButton.jsx';
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
  
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9885,6 +9886,79 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
     </div>
 
+    {/* ════ VISUAL CHARTS ════ */}
+    {(() => {
+      const GOLD = '#d3bfa2', BLUE = '#5aa9e6', AX = 'rgba(255,255,255,0.35)', GRID = 'rgba(255,255,255,0.06)';
+      const money = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${Math.round(v)}`;
+      const tip = { background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.25)', borderRadius: 10, fontSize: 12, color: '#fff' };
+      const daily = [...currentMonthAnalytics].sort((a, b) => a._id.localeCompare(b._id)).map(d => ({ day: d._id.slice(8), revenue: d.revenue || 0, orders: d.count || 0 }));
+      const hourly = (hourlyAnalytics.hourly || []).filter(h => h.orderCount > 0 || (h.hour >= 8 && h.hour <= 23)).map(h => ({ hour: `${h.hour}h`, orders: h.orderCount, revenue: h.revenue }));
+      const dow = hourlyAnalytics.dayOfWeek || [];
+      const hasHourly = hourly.some(h => h.orders > 0);
+      const hasDow = dow.some(d => d.revenue > 0);
+      const card = { background: 'linear-gradient(165deg, #0a0a0a 0%, #060606 100%)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 };
+      const ttl = { fontSize: '0.6rem', fontWeight: 900, color: GOLD, letterSpacing: 2, marginBottom: 4 };
+      const sub = { fontSize: '0.55rem', color: 'rgba(255,255,255,0.3)', marginBottom: 12 };
+      const empty = <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '0.7rem' }}>No data yet</div>;
+      const top = hasDow ? [...dow].sort((a, b) => b.revenue - a.revenue)[0] : null;
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 24 }}>
+          <div style={{ ...card, gridColumn: '1 / -1' }}>
+            <div style={ttl}>DAILY REVENUE</div>
+            <div style={sub}>{viewDate.toLocaleString('en-IN', { month: 'long', year: 'numeric' })} · settled bills</div>
+            {daily.length === 0 ? empty : (
+              <div style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={daily} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+                    <defs><linearGradient id="opRevFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GOLD} stopOpacity={0.35} /><stop offset="100%" stopColor={GOLD} stopOpacity={0} /></linearGradient></defs>
+                    <CartesianGrid stroke={GRID} vertical={false} />
+                    <XAxis dataKey="day" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={money} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} width={52} />
+                    <RcTooltip contentStyle={tip} cursor={{ stroke: GOLD, strokeOpacity: 0.3 }} formatter={(v, n) => n === 'revenue' ? [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue'] : [v, 'Orders']} labelFormatter={l => `Day ${l}`} />
+                    <Area type="monotone" dataKey="revenue" stroke={GOLD} strokeWidth={2} fill="url(#opRevFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+          <div style={card}>
+            <div style={ttl}>ORDERS BY HOUR</div>
+            <div style={sub}>Selected day · settlement time (IST)</div>
+            {!hasHourly ? empty : (
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={hourly} margin={{ top: 6, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid stroke={GRID} vertical={false} />
+                    <XAxis dataKey="hour" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+                    <YAxis allowDecimals={false} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <RcTooltip contentStyle={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v, n) => n === 'orders' ? [v, 'Orders'] : [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue']} />
+                    <Bar dataKey="orders" fill={BLUE} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+          <div style={card}>
+            <div style={ttl}>REVENUE BY WEEKDAY</div>
+            <div style={sub}>{top ? `Strongest: ${top.day} · ${money(top.revenue)}` : 'All-time settled bills'}</div>
+            {!hasDow ? empty : (
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dow} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+                    <CartesianGrid stroke={GRID} vertical={false} />
+                    <XAxis dataKey="day" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={money} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} width={52} />
+                    <RcTooltip contentStyle={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v) => [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue']} />
+                    <Bar dataKey="revenue" fill={GOLD} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    })()}
+
     {/* ════ SMART DIGEST ════ */}
     <div style={{
       background: '#080808', border: '1px solid rgba(211,191,162,0.15)',
@@ -16443,7 +16517,7 @@ tr:hover td{background:rgba(255,255,255,.01);}
 const styles = {
   dashboard:{display:'flex',width:'100vw',height:'100vh',background:'#050505',color:'#fff',position:'fixed',top:0,left:0,fontFamily:"'Inter', sans-serif"},
   sidebar:{width:'280px',background:'#080808',display:'flex',flexDirection:'column',borderRight:'1px solid #151515'},
-  sidebarTop:{padding:'40px 25px',flex:1,overflowY:'auto'},
+  
   logoWrapper:{marginBottom:'40px',paddingLeft:'10px'},
   sidebarLogo:{width:'140px',filter:'brightness(1.5)'},
   navStack:{display:'flex',flexDirection:'column',gap:'8px'},

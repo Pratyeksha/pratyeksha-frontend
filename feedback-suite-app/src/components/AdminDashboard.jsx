@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { getDashboard, getFeedback, getCustomers, getCustomerFeedback, exportCustomersExcel } from '../api';
+import { useTenantName } from '../brand';
 import { useNavigate } from 'react-router-dom';
 import pratyekshaLogo from '../assets/pratyeksha-logo.png';
 
@@ -54,6 +55,7 @@ function StatCard({ label, value, caption, icon: Icon, tone = '' }) {
 function defaultFilters() { return { q: '', minRating: '', maxRating: '', belowThree: '', revisit: '', dateFrom: '', dateTo: '' }; }
 
 export default function AdminDashboard() {
+  const tenantName = useTenantName();
   const navigate = useNavigate();
   const [active, setActive] = useState('overview');
   const [dashboard, setDashboard] = useState(null);
@@ -133,7 +135,7 @@ export default function AdminDashboard() {
     try {
       const blob = await exportCustomersExcel(token, { q: filters.q, dateFrom: filters.dateFrom, dateTo: filters.dateTo, minRating: filters.minRating, maxRating: filters.maxRating });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `jay-ambe-customers-${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = `${(tenantName || 'feedback').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'feedback'}-customers-${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url);
     } catch { /* keep the dashboard usable even if an export fails */ }
   };
 
@@ -141,7 +143,7 @@ export default function AdminDashboard() {
   return (
     <main className="dashboard-shell">
       <aside className={`dashboard-sidebar ${mobileNav ? 'open' : ''}`}>
-        <div className="dashboard-brand"><div className="brand-icon"><Coffee size={20} strokeWidth={1.8} /></div><div><b>JAY AMBE CAFE</b><span>INSIGHT</span></div></div>
+        <div className="dashboard-brand"><div className="brand-icon"><Coffee size={20} strokeWidth={1.8} /></div><div><b>{(tenantName || 'Guest feedback').toUpperCase()}</b><span>INSIGHT</span></div></div>
         <div className="sidebar-section">
           <span className="sidebar-label">Workspace</span>
           {nav.map(({ id, label, icon: Icon }) => <button key={id} className={`nav-button ${active === id ? 'active' : ''}`} onClick={() => { setActive(id); setMobileNav(false); }}><Icon size={18} />{label}{id === 'feedback' && dashboard?.total ? <em>{dashboard.total}</em> : null}</button>)}
@@ -163,7 +165,7 @@ export default function AdminDashboard() {
       <section className="dashboard-main">
         <header className="dashboard-topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={20} /></button>
-          <div><span className="eyebrow">JAY AMBE CAFE / CUSTOMER VOICE</span><h1>{nav.find((n) => n.id === active)?.label}</h1></div>
+          <div><span className="eyebrow">{(tenantName || 'Guest feedback').toUpperCase()} / CUSTOMER VOICE</span><h1>{nav.find((n) => n.id === active)?.label}</h1></div>
           <div className="top-actions">
             {!installed && <button className="ghost-button install-button" onClick={installAdminApp}>Install app</button>}
             <button className="ghost-button export-button" onClick={exportExcel}><Download size={16} /><span>Excel</span></button>

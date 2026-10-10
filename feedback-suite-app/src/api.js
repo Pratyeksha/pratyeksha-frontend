@@ -6,10 +6,11 @@ const api = axios.create({
   timeout: 30000,
 });
 
+export const getPublicSettings = () => api.get('/settings/public');
 export const submitFeedback = (payload) => api.post('/feedback', payload);
 export const loginAdmin = (payload) => api.post('/auth/login', { ...payload, tenantId: payload?.tenantId || resolveTenantId() });
 
-const resolveTenantId = () => {
+export const resolveTenantId = () => {
   const queryTenant = new URLSearchParams(window.location.search).get('tenantId');
   return queryTenant || localStorage.getItem('active_tenant') || localStorage.getItem('feedbackTenantId') || '';
 };

@@ -1382,6 +1382,98 @@ const chartTooltipStyle = {
 };
 
 /* ════════════════════════════════════════════════════════════
+   CHART KIT — shared visuals for every owner module
+   Categorical hues are the validated dark-surface set (blue, orange, aqua, violet, amber, magenta) assigned in fixed order;
+   single-series charts use the brand gold. Every chart ships a value legend/list (never colour alone) and a hover tooltip.
+   ════════════════════════════════════════════════════════════ */
+const VIZ = ['#3987e5', '#d95926', '#199e70', '#9085e9', '#c98500', '#d55181'];
+const fmtINRc = (v) => `₹${Math.round(Number(v) || 0).toLocaleString('en-IN')}`;
+const clipLabel = (s, n = 17) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+/** Top-N rows kept, the rest folded into one "Other" row (a 7th+ hue is never generated). */
+const foldOther = (rows, max = 5) => {
+  const list = (rows || []).filter(r => Number(r.value) > 0).sort((a, b) => b.value - a.value);
+  if (list.length <= max) return list;
+  const rest = list.slice(max - 1).reduce((a, r) => a + Number(r.value), 0);
+  return [...list.slice(0, max - 1), { label: 'Other', value: rest }];
+};
+
+const ChartCard = ({ icon, title, hint, children }) => (
+  <Card>
+    <SectionHeading icon={icon} title={title} />
+    {hint && <div style={{ fontSize: 11, color: T.textLow, margin: '-6px 0 12px', lineHeight: 1.5 }}>{hint}</div>}
+    {children}
+  </Card>
+);
+
+const DonutChart = ({ items, valueFormat = (v) => v, centerValue, centerLabel, size = 176 }) => {
+  const rows = (items || []).filter(i => Number(i.value) > 0);
+  const total = rows.reduce((a, r) => a + Number(r.value), 0);
+  if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', width: size, height: size, flex: '0 0 auto', margin: '0 auto' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={rows} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="98%" paddingAngle={rows.length > 1 ? 2 : 0} stroke="#0a0a0a" strokeWidth={2} isAnimationActive={false}>
+              {rows.map((r, i) => <Cell key={r.label} fill={r.color || VIZ[i % VIZ.length]} />)}
+            </Pie>
+            <Tooltip {...chartTooltipStyle} formatter={(v, n) => [valueFormat(v), n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <span className="pown-mono" style={{ fontSize: 17, fontWeight: 800, color: T.textHigh }}>{centerValue ?? valueFormat(total)}</span>
+          {centerLabel && <span style={{ fontSize: 9.5, letterSpacing: 1, fontWeight: 800, color: T.textLow, marginTop: 2 }}>{centerLabel}</span>}
+        </div>
+      </div>
+      <div style={{ flex: '1 1 160px', minWidth: 150, display: 'grid', gap: 9 }}>
+        {rows.map((r, i) => (
+          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, flex: '0 0 auto', background: r.color || VIZ[i % VIZ.length] }} />
+            <span style={{ flex: 1, minWidth: 0, color: T.textMed, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+            <span className="pown-mono" style={{ color: T.textHigh, fontWeight: 700 }}>{valueFormat(r.value)}</span>
+            <span className="pown-mono" style={{ color: T.textLow, width: 36, textAlign: 'right' }}>{Math.round((Number(r.value) / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const HBarChart = ({ data, valueFormat = (v) => v, color = T.primary, rowHeight = 30, nameWidth = 112 }) => {
+  const rows = (data || []).filter(r => r && r.label != null);
+  if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(120, rows.length * rowHeight + 28)}>
+      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 18, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.05)" horizontal={false} />
+        <XAxis type="number" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={valueFormat} />
+        <YAxis type="category" dataKey="label" width={nameWidth} tick={{ ...AxisTick, fill: 'rgba(255,255,255,0.62)' }} tickFormatter={(v) => clipLabel(v)} axisLine={false} tickLine={false} />
+        <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
+        <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const ColumnChart = ({ data, valueFormat = (v) => v, height = 200, color = T.primary, highlightLabel }) => {
+  const rows = (data || []).filter(r => r && r.label != null);
+  if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+        <XAxis dataKey="label" tick={AxisTick} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => clipLabel(v, 11)} />
+        <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} tickFormatter={valueFormat} />
+        <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
+        <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false}>
+          {rows.map((r) => <Cell key={r.label} fill={highlightLabel && r.label === highlightLabel ? T.primary : color} fillOpacity={highlightLabel && r.label !== highlightLabel ? 0.55 : 1} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════
    MODULE 1 — LIVE DASHBOARD
    ════════════════════════════════════════════════════════════ */
 const DashboardPage = () => {
@@ -1559,18 +1651,15 @@ const RevenuePage = () => {
             </Card>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-              <Card>
-                <SectionHeading title="By Source" />
-                <BreakdownList items={data.bySource.map(s => ({ label: s.source, value: s.revenue, pct: s.pct }))} />
-              </Card>
-              <Card>
-                <SectionHeading title="By Payment Mode" />
-                <BreakdownList items={data.byPayment.map(p => ({ label: p.mode, value: p.revenue, pct: p.pct, icon: p.mode === 'Cash' ? Banknote : p.mode === 'UPI' ? Smartphone : CreditCard }))} />
-              </Card>
-              <Card>
-                <SectionHeading title="By Time of Day" />
-                <BreakdownList items={data.byTimeOfDay.map(t => ({ label: `${t.label} (${t.range})`, value: t.revenue }))} showPct={false} />
-              </Card>
+              <ChartCard title="Revenue by Source">
+                <DonutChart items={foldOther(data.bySource.map(s => ({ label: s.source, value: s.revenue })))} valueFormat={fmtINRc} centerLabel="REVENUE" />
+              </ChartCard>
+              <ChartCard title="Revenue by Payment Mode">
+                <DonutChart items={foldOther(data.byPayment.map(p => ({ label: p.mode, value: p.revenue })))} valueFormat={fmtINRc} centerLabel="COLLECTED" />
+              </ChartCard>
+              <ChartCard title="Revenue by Time of Day">
+                <ColumnChart data={data.byTimeOfDay.map(t => ({ label: t.label, value: t.revenue }))} valueFormat={fmtINRc} height={190} highlightLabel={[...data.byTimeOfDay].sort((a, b) => b.revenue - a.revenue)[0]?.label} />
+              </ChartCard>
             </div>
 
             <Card>
@@ -1757,6 +1846,18 @@ const MenuPage = () => {
               ))}
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+              <ChartCard icon={TrendingUp} title="Top Dishes by Revenue" hint="Best earners this month">
+                <HBarChart data={[...data.dishTable].sort((a, b) => b.revenue - a.revenue).slice(0, 8).map(d => ({ label: d.name, value: d.revenue }))} valueFormat={fmtINRc} nameWidth={118} />
+              </ChartCard>
+              <ChartCard icon={PieIcon} title="Category Share" hint="Where the revenue comes from">
+                <DonutChart items={foldOther(data.categoryBreakdown.map(c => ({ label: c.category, value: c.revenue })))} valueFormat={fmtINRc} centerLabel="REVENUE" />
+              </ChartCard>
+              <ChartCard icon={ClipboardList} title="Menu Matrix" hint="Dishes per quadrant">
+                <HBarChart data={Object.entries(QUADRANT_META).map(([key, meta]) => ({ label: meta.label, value: data.matrix[key]?.length || 0 }))} nameWidth={100} />
+              </ChartCard>
+            </div>
+
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading icon={ClipboardList} title="Dish Performance" /></div>
               <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
@@ -1841,6 +1942,20 @@ const InventoryPage = () => {
                 <StatBlock label="Depleted" value={data.counts.depleted} tone="danger" />
               </div>
             </Card>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+              <ChartCard icon={Gauge} title="Stock Status" hint="Ingredients by health">
+                <DonutChart centerValue={data.counts.healthy + data.counts.low + data.counts.critical + data.counts.depleted} centerLabel="ITEMS" items={[
+                  { label: 'Healthy', value: data.counts.healthy, color: VIZ[2] },
+                  { label: 'Low', value: data.counts.low, color: VIZ[4] },
+                  { label: 'Critical', value: data.counts.critical, color: VIZ[1] },
+                  { label: 'Depleted', value: data.counts.depleted, color: VIZ[5] }
+                ]} />
+              </ChartCard>
+              <ChartCard icon={Flame} title="Wastage Cost" hint="Top wasted items this month">
+                <HBarChart data={(data.wastage.topWasted || []).slice(0, 6).map(w => ({ label: w.name, value: w.cost }))} valueFormat={fmtINRc} color={VIZ[1]} nameWidth={110} />
+              </ChartCard>
+            </div>
 
             <Card>
               <SectionHeading icon={AlertTriangle} title="Critical Items" />
@@ -1935,6 +2050,18 @@ const KitchenPage = () => {
               <KpiCard icon={Timer} label="YESTERDAY" value={`${data.trends.yesterdayAvg}m`} />
               <KpiCard icon={Timer} label="WEEK AVG" value={`${data.trends.weekAvg}m`} />
               <KpiCard icon={Zap} label="BEST / WORST" value={`${data.trends.best}m / ${data.trends.worst}m`} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+              <ChartCard icon={Timer} title="Prep Time Trend" hint="Average minutes per ticket">
+                <ColumnChart height={190} valueFormat={(v) => `${v}m`} highlightLabel="Today" data={[
+                  { label: 'Yesterday', value: data.trends.yesterdayAvg }, { label: 'Today', value: data.trends.todayAvg },
+                  { label: 'Week avg', value: data.trends.weekAvg }, { label: 'Best', value: data.trends.best }, { label: 'Worst', value: data.trends.worst }
+                ]} />
+              </ChartCard>
+              <ChartCard icon={ChefHat} title="Slowest Dishes (min)" hint="Average prep time today">
+                <HBarChart data={data.slowestDishes.slice(0, 7).map(d => ({ label: d.name, value: d.avgTime }))} valueFormat={(v) => `${v}m`} color={VIZ[1]} nameWidth={118} />
+              </ChartCard>
             </div>
 
             <Card>
@@ -2065,6 +2192,22 @@ const StaffPage = () => {
               <ProgressBar pct={data.payroll.total ? (data.payroll.paid / data.payroll.total) * 100 : 0} />
             </Card>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+              <ChartCard icon={UserCheck} title="Today's Attendance">
+                <DonutChart centerValue={data.attendanceToday.list.length} centerLabel="STAFF" items={[
+                  { label: 'Present', value: data.attendanceToday.present, color: VIZ[2] },
+                  { label: 'Late', value: data.attendanceToday.late, color: VIZ[4] },
+                  { label: 'Absent', value: data.attendanceToday.absent, color: VIZ[1] }
+                ]} />
+              </ChartCard>
+              <ChartCard icon={Wallet} title="Payroll Status" hint={data.payroll.monthLabel}>
+                <DonutChart valueFormat={fmtINRc} centerLabel="TOTAL" items={[
+                  { label: 'Paid', value: data.payroll.paid, color: VIZ[2] },
+                  { label: 'Pending', value: data.payroll.pending, color: VIZ[4] }
+                ]} />
+              </ChartCard>
+            </div>
+
             {data.leaderboard.length > 0 && (
               <Card>
                 <SectionHeading icon={Award} title="Performance Leaderboard" />
@@ -2128,6 +2271,15 @@ const CustomersPage = () => {
               <StatBlock label="One-time" value={data.segments.oneTime} />
               <StatBlock label="At-risk" value={data.segments.atRisk} tone="danger" />
             </div>
+
+            <ChartCard icon={Users} title="Customer Segments" hint="How your guests split by visit pattern">
+              <DonutChart centerValue={data.overview.total} centerLabel="CUSTOMERS" items={[
+                { label: 'VIP', value: data.segments.vip, color: VIZ[3] },
+                { label: 'Regular', value: data.segments.regular, color: VIZ[0] },
+                { label: 'One-time', value: data.segments.oneTime, color: VIZ[4] },
+                { label: 'At-risk', value: data.segments.atRisk, color: VIZ[1] }
+              ]} />
+            </ChartCard>
 
             <Card>
               <SectionHeading icon={Megaphone} title="Win-Back Campaign"

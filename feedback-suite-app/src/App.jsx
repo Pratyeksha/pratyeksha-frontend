@@ -4,7 +4,6 @@ import FeedbackForm from './components/FeedbackForm';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import CampaignStudio from './components/CampaignStudio';
-import Documents from './components/Documents';
 
 function App() {
   return (
@@ -14,8 +13,6 @@ function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/campaigns" element={<CampaignStudio />} />
-      <Route path="/documents" element={<Documents />} />
-      <Route path="/documents/:type" element={<Documents />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

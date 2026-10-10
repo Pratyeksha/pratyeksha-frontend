@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarClock, CheckCircle2, Clock3, ImagePlus, LockKeyhole, Megaphone, Play, RefreshCw, Send, ShieldCheck, Upload, Video, XCircle } from 'lucide-react';
 import { createCampaign, getCampaignAudience, getCampaignStatus, getCampaigns, sendCampaign, unlockCampaignStudio, uploadCampaignMedia } from '../api';
+import { useTenantName } from '../brand';
 import { useNavigate } from 'react-router-dom';
 import pratyekshaLogo from '../assets/pratyeksha-logo.png';
 
@@ -10,6 +11,8 @@ function toLocalInput(date) {
 }
 
 export default function CampaignStudio() {
+  const tenantName = useTenantName();
+  const brandUpper = (tenantName || 'Guest feedback').toUpperCase();
   const navigate = useNavigate();
   const token = localStorage.getItem('jayAmbeAdminToken');
   const [configured, setConfigured] = useState(false);
@@ -121,7 +124,7 @@ const [campaignAccessToken, setCampaignAccessToken] = useState('');
   if(!campaignAccessToken) return <main className="campaign-lock-shell">
     <section className="campaign-lock-card">
       <div className="campaign-lock-mark"><LockKeyhole size={24}/></div>
-      <span className="eyebrow">JAY AMBE CAFE / PRIVATE</span>
+      <span className="eyebrow">{brandUpper} / PRIVATE</span>
       <h1>Campaign <em>Studio</em></h1>
       <p>This workspace is protected by a second private password. Your normal admin login is not enough to open campaign controls.</p>
       <form onSubmit={unlock} className="campaign-lock-form">
@@ -134,7 +137,7 @@ const [campaignAccessToken, setCampaignAccessToken] = useState('');
     </section>
   </main>;
   return <main className="campaign-shell">
-    <header className="campaign-topbar"><div><button className="campaign-back" onClick={() => { clearCampaignAccess(); navigate('/admin'); }}>← Admin</button><span className="eyebrow">JAY AMBE CAFE / DIRECT</span><h1>Campaign <em>Studio</em></h1><p>Create, personalize, schedule and monitor WhatsApp campaigns from one workspace.</p></div><div className="campaign-brand"><span>POWERED BY</span><img src={pratyekshaLogo} alt="Pratyeksha"/></div></header>
+    <header className="campaign-topbar"><div><button className="campaign-back" onClick={() => { clearCampaignAccess(); navigate('/admin'); }}>← Admin</button><span className="eyebrow">{brandUpper} / DIRECT</span><h1>Campaign <em>Studio</em></h1><p>Create, personalize, schedule and monitor WhatsApp campaigns from one workspace.</p></div><div className="campaign-brand"><span>POWERED BY</span><img src={pratyekshaLogo} alt="Pratyeksha"/></div></header>
     <div className="campaign-layout">
       <section className="campaign-main">
         <div className="campaign-status-row"><div className={`connection-status ${configured?'connected':'not-connected'}`}><span></span>{configured?'WhatsApp API connected':'WhatsApp API not configured'}</div><button className="ghost-button" onClick={load}><RefreshCw size={15}/> Refresh</button></div>
@@ -159,11 +162,11 @@ const [campaignAccessToken, setCampaignAccessToken] = useState('');
         {notice&&<div className="campaign-success"><CheckCircle2 size={17}/>{notice}</div>}{error&&<div className="campaign-error"><XCircle size={17}/>{error}</div>}
       </section>
       <aside className="campaign-side">
-        <div className="campaign-preview"><span className="eyebrow">LIVE PREVIEW</span><div className="whatsapp-card"><div className="wa-head"><span>JAY AMBE CAFE</span><small>WhatsApp template</small></div>{form.mediaId&&<div className="wa-media">{form.mediaType==='video'?<Video size={32}/>:<ImagePlus size={32}/>}<span>{fileName||'Campaign media'}</span></div>}<div className="wa-body">{preview||'Your personalized campaign message will appear here.'}</div><small className="wa-note">Template approval and WhatsApp policy rules apply.</small></div></div>
+        <div className="campaign-preview"><span className="eyebrow">LIVE PREVIEW</span><div className="whatsapp-card"><div className="wa-head"><span>{brandUpper}</span><small>WhatsApp template</small></div>{form.mediaId&&<div className="wa-media">{form.mediaType==='video'?<Video size={32}/>:<ImagePlus size={32}/>}<span>{fileName||'Campaign media'}</span></div>}<div className="wa-body">{preview||'Your personalized campaign message will appear here.'}</div><small className="wa-note">Template approval and WhatsApp policy rules apply.</small></div></div>
         <div className="campaign-history"><div className="campaign-panel-head"><div><span className="eyebrow">CAMPAIGN HISTORY</span><h3>Recent sends</h3></div></div>{campaigns.map(c=><article className="history-campaign" key={c._id}><div><strong>{c.name}</strong><span>{c.status} · {c.stats?.total||c.recipients?.length||0} recipients</span></div>{c.status==='draft'||c.status==='scheduled'?<button onClick={()=>send(c._id)} disabled={!configured}><Send size={15}/></button>:<span className="history-stat">{c.stats?.sent||0}/{c.stats?.total||0}</span>}</article>)}{!campaigns.length&&<span className="empty-campaign">No campaigns yet.</span>}</div>
-        <div className="campaign-compliance"><ShieldCheck size={17}/><div><strong>Permission first</strong><p>Use this workspace only for customers who explicitly agreed to receive WhatsApp marketing from Jay Ambe Cafe. Honor opt-outs and approved templates.</p></div></div>
+        <div className="campaign-compliance"><ShieldCheck size={17}/><div><strong>Permission first</strong><p>Use this workspace only for customers who explicitly agreed to receive WhatsApp marketing from {tenantName || 'your business'}. Honor opt-outs and approved templates.</p></div></div>
       </aside>
     </div>
-    <footer className="campaign-footer"><span>JAY AMBE CAFE · CAMPAIGN STUDIO</span><span className="powered-by"><small>POWERED BY</small><img src={pratyekshaLogo} alt="Pratyeksha"/></span></footer>
+    <footer className="campaign-footer"><span>{brandUpper} · CAMPAIGN STUDIO</span><span className="powered-by"><small>POWERED BY</small><img src={pratyekshaLogo} alt="Pratyeksha"/></span></footer>
   </main>;
 }

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Check, Coffee, MessageCircle, ShieldCheck, Star, UtensilsCrossed } from 'lucide-react';
 import { submitFeedback } from '../api';
+import { useTenantName } from '../brand';
 import StarRating from './StarRating';
 import pratyekshaLogo from '../assets/pratyeksha-logo.png';
 
 const initialRatings = { foodQuality: 0, taste: 0, service: 0, ambience: 0 };
 
 export default function FeedbackForm() {
+  const tenantName = useTenantName();
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -78,7 +80,7 @@ export default function FeedbackForm() {
       <header className="feedback-hero">
         <div className="brand-lockup">
           <div className="brand-icon"><Coffee size={27} /></div>
-          <div><span className="brand-name">JAY AMBE</span><span className="brand-sub">CAFE</span></div>
+          <div><span className="brand-name">{(tenantName || 'Welcome').toUpperCase()}</span><span className="brand-sub">GUEST FEEDBACK</span></div>
         </div>
         <div className="hero-copy">
           <span className="eyebrow">A little note from us</span>
@@ -149,8 +151,8 @@ export default function FeedbackForm() {
       </section>
 
       <footer className="feedback-footer">
-        <span><UtensilsCrossed size={15} /> Jay Ambe Cafe</span>
-        <span>Good food · Good vibes · Always</span>
+        <span><UtensilsCrossed size={15} /> {tenantName || 'Thank you for visiting'}</span>
+        <span>Thank you for visiting</span>
         <span><MessageCircle size={15} /> We read every response</span>
         <span className="powered-by"><small>POWERED BY</small><img src={pratyekshaLogo} alt="Pratyeksha" /></span>
       </footer>
