@@ -27,6 +27,7 @@ const readList = (key) => {
 const writeList = (key, list) => { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* ignore */ } };
 
 const typeOf = (t) => String(t?.businessType || 'Restaurant').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const isCafe = (t) => typeOf(t) === 'cafe' || /caf[eé]|coffee/i.test(String(t?.name || ''));
 const offerValue = (o) => (o.type === 'percent_off' ? `${o.value}% OFF` : o.type === 'fixed_off' ? `₹${o.value} OFF` : o.type === 'free_item' ? `FREE ${o.freeItem || 'ITEM'}` : 'HAPPY HOUR');
 
 const SERVICES = [
@@ -58,12 +59,19 @@ const css = `
 `;
 
 const Avatar = ({ t, size = 50, radius = 15 }) => {
-  const type = typeOf(t);
+  // Every café gets the coffee mark (consistent, instantly recognisable); other places show their logo.
+  if (isCafe(t)) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: radius, background: 'linear-gradient(145deg,#f7f3eb,#e9dfcc)', boxShadow: 'inset 0 0 0 1px rgba(138,112,77,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Coffee size={size * 0.46} color="#8a704d" strokeWidth={1.8} />
+      </div>
+    );
+  }
   return (
     <div style={{ width: size, height: size, borderRadius: radius, background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
       {t.branding?.logoUrl
         ? <img src={t.branding.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : type === 'cafe' ? <Coffee size={size * 0.42} color="#8a704d" /> : <UtensilsCrossed size={size * 0.42} color="#8a704d" />}
+        : <UtensilsCrossed size={size * 0.42} color="#8a704d" />}
     </div>
   );
 };
@@ -152,9 +160,9 @@ export default function CustomerHome() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tenants.filter((t) => {
-      const type = typeOf(t);
-      if (filter === 'cafe' && type !== 'cafe') return false;
-      if (filter === 'restaurant' && type === 'cafe') return false;
+      const cafe = isCafe(t);
+      if (filter === 'cafe' && !cafe) return false;
+      if (filter === 'restaurant' && cafe) return false;
       if (service && (t.config?.customerFeatures || {})[service] === false) return false;
       if (favOnly && !favs.includes(t.tenantId)) return false;
       return !q || `${t.name} ${t.address?.city || ''}`.toLowerCase().includes(q);
@@ -353,9 +361,7 @@ export default function CustomerHome() {
                       const value = offer.type === 'happy_hour' ? `${offer.happyStart || '?'}–${offer.happyEnd || '?'}` : offerValue(offer);
                       return (
                         <button type="button" key={`${tenant.tenantId}-${offer._id}`} onClick={() => { setShowAllOffers(false); openTenant(tenant); }} style={{ textAlign: 'left', border: '1px solid rgba(211,191,162,.14)', borderRadius: 16, background: 'linear-gradient(145deg,#191919,#101010)', color: '#fff', padding: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, fontFamily: 'inherit' }}>
-                          <div style={{ width: 40, height: 40, borderRadius: 12, overflow: 'hidden', background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {tenant.branding?.logoUrl ? <img src={tenant.branding.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <img src={logo} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />}
-                          </div>
+                          <Avatar t={tenant} size={40} radius={12} />
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 900, color: GOLD }}>{value}</div>
                             <div style={{ fontSize: 11, marginTop: 3, color: 'rgba(255,255,255,.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer.title} · {tenant.name || 'Restaurant'}</div>

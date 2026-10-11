@@ -3,6 +3,7 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
+import { AmbientBackdrop, BrandLoader } from './PremiumUI.jsx';
 import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,ChevronDown ,
@@ -19,29 +20,67 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
+// Premium design tokens shared by every guest screen (champagne on ink — no green / red).
+const PX = {
+  card: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))',
+  gold: 'linear-gradient(135deg, #e6d6b8 0%, #d3bfa2 45%, #b99f78 100%)',
+  goldSoft: 'linear-gradient(135deg, rgba(211,191,162,0.16), rgba(211,191,162,0.04))',
+  line: 'rgba(211,191,162,0.16)',
+  glassBar: 'rgba(11,11,12,0.74)',
+  shadow: '0 18px 44px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.06)',
+  serif: "'Playfair Display', Georgia, serif",
+};
+
 // Stable shell component. Keeping this outside the parent render prevents React
 // from remounting the registration form on every keystroke/state update.
 const CustomerShell = ({ children, centered = true, scrollRef }) => (
   <div ref={scrollRef} style={{
-    minHeight: '100vh', height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-    background: '#0e0e0e', color: '#fff', fontFamily: 'Poppins, sans-serif',
-    display: 'flex', flexDirection: 'column', alignItems: centered ? 'center' : 'stretch',
-    justifyContent: 'flex-start', padding: centered ? '48px 24px' : '0', boxSizing: 'border-box'
-  }}>{children}</div>
+    position: 'relative', minHeight: '100vh', height: '100vh', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
+    background: '#0b0b0c', color: '#fff', fontFamily: 'Poppins, sans-serif',
+    display: 'flex', flexDirection: 'column', boxSizing: 'border-box'
+  }}>
+    <AmbientBackdrop />
+    <div className="px-rise" style={{
+      position: 'relative', zIndex: 1, flex: 1, width: '100%', boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', alignItems: centered ? 'center' : 'stretch', textAlign: centered ? 'center' : 'left',
+      justifyContent: 'flex-start', padding: centered ? 'calc(40px + env(safe-area-inset-top, 0px)) 22px calc(36px + env(safe-area-inset-bottom, 0px))' : '0'
+    }}>{children}</div>
+  </div>
 );
 
 const CustomerRestaurantBadge = ({ restaurantName }) => (
-  <div style={{ textAlign:'center', marginBottom:'40px' }}>
-    <div style={{ display:'flex', justifyContent:'flex-start', width:'100%', maxWidth:'400px', margin:'0 auto 14px' }}>
+  <div style={{ textAlign: 'center', marginBottom: '30px', width: '100%', maxWidth: '400px' }}>
+    <div style={{ display: 'flex', justifyContent: 'flex-start', width: '100%', margin: '0 auto 18px' }}>
       <PwaInstallButton kind="customer" compact />
     </div>
-    <div style={{ width:'56px', height:'56px', borderRadius:'16px', background:'rgba(211,191,162,0.07)', border:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', boxShadow:'0 0 0 8px rgba(211,191,162,0.03)' }}>
-      <UtensilsCrossed size={22} color="#d3bfa2" strokeWidth={1.5} />
+    <div style={{ position: 'relative', display: 'inline-flex', marginBottom: '20px' }}>
+      <div style={{ position: 'absolute', inset: '-14px', borderRadius: '30px', background: 'radial-gradient(circle, rgba(211,191,162,0.22), transparent 70%)', filter: 'blur(6px)' }} />
+      <div style={{ position: 'relative', background: '#f7f3eb', borderRadius: 20, padding: '10px 16px', boxShadow: '0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.35) inset' }}>
+        <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width: 150, maxWidth: '58vw', height: 'auto', display: 'block' }} />
+      </div>
     </div>
-    <div style={{ background:'#f7f3eb', borderRadius:12, padding:'7px 10px', display:'inline-flex', marginBottom:10 }}>
-      <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:150, maxWidth:'68vw', height:'auto', display:'block' }} />
+    <div style={{ fontFamily: PX.serif, fontSize: '1.7rem', fontWeight: 700, lineHeight: 1.15, letterSpacing: '-0.3px', background: 'linear-gradient(180deg,#f3e8d2,#d3bfa2 70%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', padding: '0 6px' }}>{restaurantName || 'Restaurant'}</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12 }}>
+      <span style={{ width: 34, height: 1, background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.6))' }} />
+      <Sparkles size={11} color="#d3bfa2" />
+      <span style={{ width: 34, height: 1, background: 'linear-gradient(90deg, rgba(211,191,162,0.6), transparent)' }} />
     </div>
-    <div style={{ fontSize:'1.1rem', fontWeight:'900', color:'#d3bfa2', margin:'0 0 6px' }}>{restaurantName || 'Restaurant'}</div>
+  </div>
+);
+
+// Animated success header used by the confirmation screens.
+const SuccessHero = ({ icon: Icon = CheckCircle2, title, subtitle }) => (
+  <div style={{ textAlign: 'center', marginBottom: '26px' }}>
+    <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto 22px' }}>
+      <div style={{ position: 'absolute', inset: -16, borderRadius: '50%', background: 'radial-gradient(circle, rgba(211,191,162,0.28), transparent 68%)', animation: 'pxBreath 3.2s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', padding: 2, background: 'conic-gradient(from 0deg, transparent 0 50%, #d3bfa2 80%, transparent 100%)', WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)', WebkitMaskComposite: 'xor', maskComposite: 'exclude', animation: 'pxOrbit 3.2s linear infinite' }} />
+      <motion.div initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.1 }}
+        style={{ position: 'absolute', inset: 10, borderRadius: '50%', background: PX.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 30px rgba(211,191,162,0.35), inset 0 1px 0 rgba(255,255,255,0.55)' }}>
+        <Icon size={30} color="#14110c" strokeWidth={2} />
+      </motion.div>
+    </div>
+    <h1 style={{ fontFamily: PX.serif, fontSize: '1.9rem', fontWeight: 700, color: '#f7f3eb', margin: '0 0 10px', letterSpacing: '-0.4px', lineHeight: 1.15 }}>{title}</h1>
+    <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.8rem', fontWeight: 500, lineHeight: 1.7, margin: '0 auto', maxWidth: 300 }}>{subtitle}</p>
   </div>
 );
 
@@ -719,7 +758,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
       {/* Marathi headline */}
       <p style={{
         fontSize: '0.58rem', fontWeight: '900', letterSpacing: '3px',
-        color: 'rgba(211,191,162,0.4)', textTransform: 'uppercase',
+        color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase',
         marginBottom: '12px', margin: '0 0 12px'
       }}>
         {notificationBanner.restaurantName?.toUpperCase()}
@@ -740,7 +779,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
 
       <h2 style={{
         fontSize: '0.9rem', fontWeight: '500',
-        color: 'rgba(255,255,255,0.3)',
+        color: 'rgba(255,255,255,0.52)',
         marginBottom: '40px', lineHeight: 1.5,
         letterSpacing: '0.2px'
       }}>
@@ -758,7 +797,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
       }}>
         <p style={{
           fontSize: '0.58rem', fontWeight: '900', letterSpacing: '2px',
-          color: 'rgba(211,191,162,0.35)', textTransform: 'uppercase',
+          color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase',
           marginBottom: '10px', margin: '0 0 10px'
         }}>
           {isTable ? 'Table Number' : 'Pickup Location'}
@@ -772,7 +811,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           {isTable ? `T${notificationBanner.tableNumber}` : 'Counter'}
         </p>
         <p style={{
-          fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)',
+          fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)',
           margin: 0, fontWeight: '600'
         }}>
           {isTable
@@ -802,7 +841,7 @@ onClick={() => setNotificationBanner(null)}
       {/* Subtext */}
       <p style={{
         marginTop: '16px', fontSize: '0.68rem',
-        color: 'rgba(255,255,255,0.15)', fontWeight: '600',
+        color: 'rgba(255,255,255,0.52)', fontWeight: '600',
         letterSpacing: '0.3px'
       }}>
         {isTable
@@ -2361,7 +2400,7 @@ const notifyWaiter = async (serviceType = "Custom") => {
 
   const primaryColor = '#d3bfa2'; 
   const secondaryColor = '#1a1a1a'; 
-  const cardBg = 'rgba(211, 191, 162, 0.08)';
+  const cardBg = PX.card;
   const borderColor = 'rgba(211, 191, 162, 0.2)';
 
   const addToCart = (item, portion) => {
@@ -3487,19 +3526,19 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         {/* Top bar */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
-          background: 'rgba(14,14,14,0.96)', backdropFilter: 'blur(14px)',
+          background: PX.glassBar, backdropFilter: 'blur(14px)',
           borderBottom: '1px solid rgba(211,191,162,0.07)',
           padding: '14px 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
-          <span style={{ fontSize: '0.52rem', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(211,191,162,0.3)' }}>
+          <span style={{ fontSize: '0.52rem', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(211,191,162,0.62)' }}>
             {restaurantData?.name}
           </span>
           <span style={{
             fontSize: '0.52rem', fontWeight: '900', letterSpacing: '1.5px',
-            padding: '5px 12px', borderRadius: '20px',
+            padding: '5px 12px', borderRadius: '24px',
             background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)',
-            color: 'rgba(211,191,162,0.4)',
+            color: 'rgba(211,191,162,0.62)',
             display: 'inline-flex', alignItems: 'center', gap: '6px'
           }}>
             <CalendarClock size={11} color="rgba(211,191,162,0.4)" />
@@ -3510,33 +3549,21 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         <div style={{ padding: '32px 22px 80px', maxWidth: '420px', margin: '0 auto', width: '100%' }}>
 
           {/* ── HERO ── */}
-          <div style={{ marginBottom: '28px' }}>
-            <div style={{
-              width: '52px', height: '52px', borderRadius: '16px',
-              background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '18px'
-            }}>
-              <CalendarClock size={24} color="rgba(211,191,162,0.8)" strokeWidth={1.5} />
-            </div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.6px', lineHeight: 1.15, marginBottom: '8px' }}>
-              {language === 'mr' ? 'बुकिंग झाली!' : 'Table Reserved!'}
-            </h1>
-            <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.76rem', fontWeight: '500', lineHeight: 1.7 }}>
-              {language === 'mr'
-                ? 'तुमची विनंती मिळाली. रेस्टॉरंट लवकरच कन्फर्म करेल.'
-                : `We've received your reservation at ${restaurantData?.name}. The restaurant will confirm shortly.`}
-            </p>
-          </div>
+          <SuccessHero icon={CalendarClock}
+            title={language === 'mr' ? 'बुकिंग झाली!' : 'Table Reserved!'}
+            subtitle={language === 'mr'
+              ? 'तुमची विनंती मिळाली. रेस्टॉरंट लवकरच कन्फर्म करेल.'
+              : `We've received your reservation at ${restaurantData?.name}. The restaurant will confirm shortly.`} />
 
           {/* ── TOKEN CARD ── */}
           <div style={{
-            background: '#111', border: '1px solid rgba(211,191,162,0.12)',
-            borderRadius: '22px', overflow: 'hidden', marginBottom: '14px', position: 'relative'
+            background: '#111', border: '1px solid rgba(211,191,162,0.18)',
+            borderRadius: '26px', overflow: 'hidden', marginBottom: '14px', position: 'relative'
           }}>
             {/* Gold shimmer */}
             <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px', background: 'linear-gradient(90deg,transparent,rgba(211,191,162,0.5),transparent)' }} />
             <div style={{ padding: '26px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.48rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.48rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase', marginBottom: '12px' }}>
                 {language === 'mr' ? 'बुकिंग टोकन' : 'Booking Token'}
               </div>
               <div style={{ fontSize: '2.8rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', letterSpacing: '8px', lineHeight: 1, marginBottom: '14px' }}>
@@ -3568,7 +3595,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '5px' }}>
                         {r.icon}
-                        <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{r.label}</span>
+                        <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>{r.label}</span>
                       </div>
                       <div style={{ fontSize: '0.78rem', fontWeight: '800', color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>{r.val}</div>
                     </div>
@@ -3579,10 +3606,10 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           </div>
 
           {/* ── GUEST DETAILS ── */}
-          <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '16px', overflow: 'hidden', marginBottom: '14px' }}>
+          <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '20px', overflow: 'hidden', marginBottom: '14px' }}>
             <div style={{ padding: '12px 16px', background: 'rgba(211,191,162,0.03)', borderBottom: '1px solid rgba(211,191,162,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckCircle2 size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.5} />
-              <span style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(211,191,162,0.35)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(211,191,162,0.62)', letterSpacing: '2px', textTransform: 'uppercase' }}>
                 {language === 'mr' ? 'तपशील' : 'Reservation Details'}
               </span>
             </div>
@@ -3596,7 +3623,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 waitlistEntry.specialRequests && { label: language === 'mr' ? 'विशेष' : 'SPECIAL', val: `"${waitlistEntry.specialRequests}"`, italic: true },
               ].filter(Boolean).map((r, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                  <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700', letterSpacing: '0.5px', flexShrink: 0, textTransform: 'uppercase' }}>{r.label}</span>
+                  <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', letterSpacing: '0.5px', flexShrink: 0, textTransform: 'uppercase' }}>{r.label}</span>
                   <span style={{ fontSize: '0.76rem', fontWeight: r.gold ? '800' : '600', color: r.gold ? '#d3bfa2' : 'rgba(255,255,255,0.4)', fontFamily: r.mono ? 'monospace' : 'inherit', fontStyle: r.italic ? 'italic' : 'normal', textAlign: 'right', lineHeight: 1.4 }}>{r.val}</span>
                 </div>
               ))}
@@ -3605,10 +3632,10 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
           {/* ── PRE-ORDER SUMMARY — only when items exist ── */}
           {hasItems && (
-            <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '16px', overflow: 'hidden', marginBottom: '14px' }}>
+            <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '20px', overflow: 'hidden', marginBottom: '14px' }}>
               <div style={{ padding: '12px 16px', background: 'rgba(211,191,162,0.03)', borderBottom: '1px solid rgba(211,191,162,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <UtensilsCrossed size={12} color="rgba(211,191,162,0.4)" strokeWidth={1.5} />
-                <span style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(211,191,162,0.35)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '0.5rem', fontWeight: '900', color: 'rgba(211,191,162,0.62)', letterSpacing: '2px', textTransform: 'uppercase' }}>
                   {language === 'mr' ? 'प्री-ऑर्डर' : 'Pre-Order'}
                 </span>
               </div>
@@ -3616,17 +3643,17 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 {waitlistEntry.items.map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: i < waitlistEntry.items.length - 1 ? '10px' : '0', marginBottom: i < waitlistEntry.items.length - 1 ? '10px' : '0', borderBottom: i < waitlistEntry.items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '0.6rem', fontWeight: '900', fontFamily: 'monospace', color: 'rgba(211,191,162,0.25)', minWidth: '20px' }}>×{item.quantity}</span>
+                      <span style={{ fontSize: '0.6rem', fontWeight: '900', fontFamily: 'monospace', color: 'rgba(211,191,162,0.62)', minWidth: '20px' }}>×{item.quantity}</span>
                       <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}>{item.name}</span>
                       {item.portion && item.portion !== 'Single' && (
-                        <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.3)', fontWeight: '700' }}>{item.portion}</span>
+                        <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700' }}>{item.portion}</span>
                       )}
                     </div>
                     <span style={{ fontSize: '0.78rem', color: '#d3bfa2', fontWeight: '800', fontFamily: 'monospace' }}>₹{item.subtotal}</span>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', marginTop: '10px', borderTop: '1px solid rgba(211,191,162,0.08)' }}>
-                  <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                     {language === 'mr' ? 'एकूण' : 'Total'}
                   </span>
                   <span style={{ fontSize: '1rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>₹{waitlistEntry.totalAmount}</span>
@@ -3636,11 +3663,11 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           )}
 
           {/* ── NOTIFICATION PILL ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 15px', marginBottom: '20px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 15px', marginBottom: '20px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '16px' }}>
             <div style={{ width: '30px', height: '30px', borderRadius: '9px', flexShrink: 0, background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <BellRing size={13} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
             </div>
-            <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.65, fontWeight: '500' }}>
+            <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.65, fontWeight: '500' }}>
               {language === 'mr' ? 'बुकिंग कन्फर्म झाल्यावर सूचना मिळेल.' : "You'll be notified when the restaurant confirms your booking."}
             </p>
           </div>
@@ -3648,8 +3675,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {/* ── DOWNLOAD PDF — always shown ── */}
           <button type="button" onClick={downloadReservationPDF} style={{
             width: '100%', padding: '17px',
-            background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-            border: 'none', borderRadius: '14px',
+            background: PX.gold,
+            border: 'none', borderRadius: '18px',
             color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
             cursor: 'pointer', marginBottom: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
@@ -3666,7 +3693,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     width: '100%', padding: '15px',
     background: 'rgba(211,191,162,0.07)',
     border: '1px solid rgba(211,191,162,0.18)',
-    color: '#d3bfa2', borderRadius: '13px',
+    color: '#d3bfa2', borderRadius: '16px',
     fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
     marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px'
@@ -3689,7 +3716,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             setCart({}); setSuggestions({});setRecommendedDishes([]);
           }} style={{
             width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.05)',
-            color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.52)', fontSize: '0.68rem', cursor: 'pointer',
             padding: '12px', borderRadius: '11px', fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.15s'
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.3)'; }}
@@ -3713,19 +3740,19 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       {/* Top bar */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 10,
-        background: 'rgba(14,14,14,0.95)', backdropFilter: 'blur(12px)',
+        background: PX.glassBar, backdropFilter: 'blur(12px)',
         borderBottom: '1px solid rgba(211,191,162,0.07)',
         padding: '14px 24px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between'
       }}>
-        <span style={{ fontSize: '0.52rem', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(211,191,162,0.3)' }}>
+        <span style={{ fontSize: '0.52rem', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(211,191,162,0.62)' }}>
           {restaurantData?.name}
         </span>
         <span style={{
           fontSize: '0.52rem', fontWeight: '900', letterSpacing: '1.5px',
-          padding: '5px 12px', borderRadius: '20px',
+          padding: '5px 12px', borderRadius: '24px',
           background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)',
-          color: 'rgba(211,191,162,0.4)',
+          color: 'rgba(211,191,162,0.62)',
           display: 'inline-flex', alignItems: 'center', gap: '6px'
         }}>
           {isDineIn
@@ -3737,33 +3764,21 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
       <div style={{ padding: '36px 24px 60px', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
 
-        {/* Icon + heading */}
-        <div style={{
-          width: '56px', height: '56px', borderRadius: '16px',
-          background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '22px'
-        }}>
-          <CheckCircle2 size={24} color="rgba(211,191,162,0.7)" strokeWidth={1.5} />
-        </div>
-
-        <h1 style={{ fontSize: '1.7rem', fontWeight: '900', color: '#fff', marginBottom: '8px', letterSpacing: '-0.6px', lineHeight: 1.15 }}>
-          {language === 'mr' ? "तुम्ही रांगेत आहात!" : "You're All Set!"}
-        </h1>
-        <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: '0.78rem', marginBottom: '28px', fontWeight: '500', lineHeight: 1.7 }}>
-          {language === 'mr' ? 'तुमची माहिती यशस्वीरित्या नोंदवली गेली आहे.' : "Your details are confirmed. Relax — we'll handle the rest."}
-        </p>
+        <SuccessHero icon={CheckCircle2}
+          title={language === 'mr' ? "तुम्ही रांगेत आहात!" : "You're All Set!"}
+          subtitle={language === 'mr' ? 'तुमची माहिती यशस्वीरित्या नोंदवली गेली आहे.' : "Your details are confirmed. Relax — we'll handle the rest."} />
 
         {/* STATUS CARD */}
         <div style={{
-          background: '#121212', border: '1px solid rgba(211,191,162,0.09)',
-          borderRadius: '22px', padding: '28px 24px', marginBottom: '14px',
+          background: PX.card, border: '1px solid rgba(211,191,162,0.09)',
+          borderRadius: '26px', padding: '28px 24px', marginBottom: '14px',
           textAlign: 'center', position: 'relative', overflow: 'hidden'
         }}>
           <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px', background: 'linear-gradient(90deg,transparent,rgba(211,191,162,0.25),transparent)' }} />
 
           {isDineIn ? (
             <>
-              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', marginBottom: '14px', margin: '0 0 14px' }}>
+              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase', marginBottom: '14px', margin: '0 0 14px' }}>
                 {language === 'mr' ? 'रांगेतील स्थान' : 'Queue Position'}
               </p>
               <div style={{ fontSize: '5rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1, fontFamily: 'monospace', marginBottom: '16px', letterSpacing: '-4px' }}>
@@ -3771,30 +3786,30 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               </div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', borderRadius: '30px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
                 <Hourglass size={11} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
-                <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+                <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700' }}>
                   {language === 'mr' ? `अंदाजे ~${estWait} मिनिटे` : `~${estWait} min estimated wait`}
                 </span>
               </div>
             </>
           ) : waitlistEntry.scheduledPickupTime ? (
             <>
-              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', margin: '0 0 14px' }}>
+              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase', margin: '0 0 14px' }}>
                 {language === 'mr' ? 'पिकअप वेळ' : 'Pickup Time'}
               </p>
               <div style={{ fontSize: '3.6rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', letterSpacing: '-2px', marginBottom: '8px', lineHeight: 1 }}>
                 {new Date(waitlistEntry.scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}
               </div>
-              <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.18)', fontWeight: '600', margin: 0 }}>
+              <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600', margin: 0 }}>
                 {language === 'mr' ? 'ठरलेली वेळ' : 'Your scheduled slot'}
               </p>
             </>
           ) : (
             <>
-              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.25)', textTransform: 'uppercase', margin: '0 0 14px' }}>
+              <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase', margin: '0 0 14px' }}>
                 {language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order'}
               </p>
               <ShoppingBag size={36} color="rgba(211,191,162,0.4)" strokeWidth={1} style={{ marginBottom: '10px' }} />
-              <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)', fontWeight: '600', margin: 0 }}>
+              <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600', margin: 0 }}>
                 {language === 'mr' ? 'ऑर्डर नोंदवली गेली' : 'Order received'}
               </p>
             </>
@@ -3802,10 +3817,10 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         </div>
 
         {/* CONFIRMATION DETAILS — single card, no duplicate */}
-        <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '18px', overflow: 'hidden', marginBottom: '12px' }}>
+        <div style={{ background: '#0a0a0a', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '22px', overflow: 'hidden', marginBottom: '12px' }}>
           <div style={{ padding: '12px 18px', background: 'rgba(211,191,162,0.04)', borderBottom: '1px solid rgba(211,191,162,0.07)', display: 'flex', alignItems: 'center', gap: '9px' }}>
             <CheckCircle2 size={13} color="rgba(211,191,162,0.5)" strokeWidth={2} />
-            <span style={{ fontSize: '0.52rem', fontWeight: '900', color: 'rgba(211,191,162,0.4)', letterSpacing: '2px', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.52rem', fontWeight: '900', color: 'rgba(211,191,162,0.62)', letterSpacing: '2px', textTransform: 'uppercase' }}>
               {language === 'mr' ? 'पुष्टी तपशील' : 'Confirmation Details'}
             </span>
           </div>
@@ -3819,9 +3834,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               waitlistEntry.specialRequests && { label: language === 'mr' ? 'विशेष' : 'SPECIAL', val: `"${waitlistEntry.specialRequests}"`, italic: true },
             ].filter(Boolean).map((row, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>{row.label}</span>
+                <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', letterSpacing: '0.5px' }}>{row.label}</span>
                 {row.badge
-                  ? <span style={{ fontSize: '0.6rem', fontWeight: '900', padding: '3px 10px', borderRadius: '20px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d' }}>{row.val}</span>
+                  ? <span style={{ fontSize: '0.6rem', fontWeight: '900', padding: '3px 10px', borderRadius: '24px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', color: '#8a704d' }}>{row.val}</span>
                   : <span style={{ fontSize: '0.78rem', fontWeight: row.gold ? '800' : '600', color: row.gold ? '#d3bfa2' : 'rgba(255,255,255,0.4)', fontFamily: row.mono ? 'monospace' : 'inherit', fontStyle: row.italic ? 'italic' : 'normal' }}>{row.val}</span>
                 }
               </div>
@@ -3831,40 +3846,40 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
         {/* PRE-ORDER SUMMARY — only when items exist */}
         {hasItems && (
-          <div style={{ background: '#0c0c0c', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '16px', padding: '18px', marginBottom: '12px' }}>
-            <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2.5px', color: 'rgba(211,191,162,0.22)', textTransform: 'uppercase', marginBottom: '14px', margin: '0 0 14px' }}>
+          <div style={{ background: '#0c0c0c', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '20px', padding: '18px', marginBottom: '12px' }}>
+            <p style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2.5px', color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase', marginBottom: '14px', margin: '0 0 14px' }}>
               {language === 'mr' ? 'प्री-ऑर्डर' : 'Pre-Order'}
             </p>
             {waitlistEntry.items.map((item, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: i < waitlistEntry.items.length - 1 ? '10px' : '0', marginBottom: i < waitlistEntry.items.length - 1 ? '10px' : '0', borderBottom: i < waitlistEntry.items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '0.6rem', fontWeight: '900', fontFamily: 'monospace', color: 'rgba(211,191,162,0.25)', minWidth: '18px' }}>×{item.quantity}</span>
+                  <span style={{ fontSize: '0.6rem', fontWeight: '900', fontFamily: 'monospace', color: 'rgba(211,191,162,0.62)', minWidth: '18px' }}>×{item.quantity}</span>
                   <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}>{item.name}{item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}</span>
                 </div>
                 <span style={{ fontSize: '0.78rem', color: '#d3bfa2', fontWeight: '800', fontFamily: 'monospace' }}>₹{item.subtotal}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', marginTop: '8px', borderTop: '1px solid rgba(211,191,162,0.07)' }}>
-              <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Total</span>
+              <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Total</span>
               <span style={{ fontSize: '1rem', color: '#d3bfa2', fontWeight: '900', fontFamily: 'monospace' }}>₹{waitlistEntry.totalAmount}</span>
             </div>
           </div>
         )}
 
         {/* NOTIFICATION PILL */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', marginBottom: '16px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', marginBottom: '16px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '18px' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0, background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <BellRing size={14} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
           </div>
-          <p style={{ margin: 0, fontSize: '0.71rem', color: 'rgba(255,255,255,0.22)', lineHeight: 1.65, fontWeight: '500' }}>
+          <p style={{ margin: 0, fontSize: '0.71rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.65, fontWeight: '500' }}>
             {language === 'mr' ? 'टेबल / ऑर्डर तयार झाल्यावर सूचना मिळेल — पेज बंद केले तरीही.' : "You'll be notified when ready — even if you close this page."}
           </p>
         </div>
 
 <button type="button" onClick={isDineIn ? downloadWaitlistToken : downloadPickupToken} style={{
   width: '100%', padding: '17px',
-  background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
-  border: 'none', borderRadius: '14px',
+  background: PX.gold,
+  border: 'none', borderRadius: '18px',
   color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
   cursor: 'pointer', marginBottom: '10px',
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
@@ -3894,8 +3909,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           setCart({}); setSuggestions({});setRecommendedDishes([]);
         }} style={{
           width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.05)',
-          color: 'rgba(255,255,255,0.18)', fontSize: '0.7rem', cursor: 'pointer',
-          padding: '13px', borderRadius: '12px', fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.2s'
+          color: 'rgba(255,255,255,0.52)', fontSize: '0.7rem', cursor: 'pointer',
+          padding: '13px', borderRadius: '16px', fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.2s'
         }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.18)'; }}
@@ -3911,18 +3926,18 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 40px' }}>
             <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
-              style={{ width: '100%', maxWidth: '400px', background: '#111', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '24px 24px 20px 20px', padding: '32px 24px 28px', margin: '0 16px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '18px' }}>
+              style={{ width: '100%', maxWidth: '400px', background: '#111', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '24px 24px 20px 20px', padding: '32px 24px 28px', margin: '0 16px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '18px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '18px' }}>
                 <UtensilsCrossed size={22} color="rgba(211,191,162,0.6)" strokeWidth={1.5} />
               </div>
               <h3 style={{ fontSize: '1.1rem', fontWeight: '900', color: '#fff', marginBottom: '8px', letterSpacing: '-0.3px' }}>
                 {language === 'mr' ? 'आधीच ऑर्डर देणार का?' : 'Pre-order your meal?'}
               </h3>
-              <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)', lineHeight: 1.7, marginBottom: '26px', fontWeight: '500' }}>
+              <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.7, marginBottom: '26px', fontWeight: '500' }}>
                 {language === 'mr' ? 'तुम्ही येण्यापूर्वीच ऑर्डर तयार असेल — प्रतीक्षा नाही!' : 'Your food will be ready when you arrive — no waiting!'}
               </p>
 
-              <button type="button" onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '13px', color: 'rgba(255,255,255,0.2)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
+              <button type="button" onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', color: 'rgba(255,255,255,0.52)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; }}>
                 {language === 'mr' ? 'नाही, नंतर ठरवतो' : "No, I'll decide later"}
@@ -3957,17 +3972,17 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         {/* Sticky top bar */}
         <div style={{
           position: 'sticky', top: 0, zIndex: 10,
-          background: 'rgba(14,14,14,0.96)',
+          background: PX.glassBar,
           backdropFilter: 'blur(12px)',
           borderBottom: '1px solid rgba(211,191,162,0.07)',
           padding: '14px 20px',
           display: 'flex', alignItems: 'center', gap: '14px'
         }}>
           <button type="button" onClick={() => setRegistrationStep('mode')} style={{
-            width: '36px', height: '36px', borderRadius: '10px',
+            width: '36px', height: '36px', borderRadius: '13px',
             background: 'rgba(211,191,162,0.05)',
             border: '1px solid rgba(211,191,162,0.1)',
-            color: 'rgba(211,191,162,0.5)', cursor: 'pointer',
+            color: 'rgba(211,191,162,0.62)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0, transition: 'all 0.15s'
           }}
@@ -3986,7 +4001,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 ? (language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table')
                 : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Schedule Pickup')}
             </div>
-            <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.25)', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)', marginTop: '2px' }}>
               {restaurantData?.name}
             </div>
           </div>
@@ -3998,14 +4013,14 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           <div style={{
             display: 'flex', alignItems: 'center', gap: '14px',
             padding: '16px 18px', marginBottom: '28px',
-            background: '#121212',
+            background: PX.card,
             border: '1px solid rgba(211,191,162,0.09)',
-            borderRadius: '16px'
+            borderRadius: '20px'
           }}>
             <div style={{
-              width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
+              width: '42px', height: '42px', borderRadius: '16px', flexShrink: 0,
               background: 'rgba(211,191,162,0.07)',
-              border: '1px solid rgba(211,191,162,0.12)',
+              border: '1px solid rgba(211,191,162,0.18)',
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
 {counterMode === 'dine-in'
@@ -4022,7 +4037,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   ? (language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table')
                   : (language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order')}
               </div>
-              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.2)', fontWeight: '500' }}>
+              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.52)', fontWeight: '500' }}>
                 {isDineIn
                   ? (avgWaitData?.queueLength
                     ? `${avgWaitData.queueLength} ahead · ~${avgWaitData.estimatedWait || 20} min`
@@ -4035,7 +4050,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {/* Name field */}
           <div style={{ marginBottom: '22px' }}>
             <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+              fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
               fontWeight: '900', letterSpacing: '2px',
               display: 'block', marginBottom: '10px', textTransform: 'uppercase'
             }}>
@@ -4054,8 +4069,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
   autoComplete="name"
   style={{
     width: '100%', padding: '15px 16px',
-    background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-    color: '#fff', borderRadius: '12px', fontSize: '1rem',
+    background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
+    color: '#fff', borderRadius: '16px', fontSize: '1rem',
     outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
     fontFamily: 'Poppins, sans-serif'
   }}
@@ -4065,7 +4080,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {/* ── CONTACT (all modes in old block) ── */}
           <div style={{ marginBottom: '22px' }}>
             <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+              fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
               fontWeight: '900', letterSpacing: '2px',
               display: 'block', marginBottom: '10px', textTransform: 'uppercase'
             }}>
@@ -4075,7 +4090,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
   <span style={{
     position: 'absolute', left: '14px', top: '50%',
     transform: 'translateY(-50%)',
-    fontSize: '0.85rem', color: 'rgba(211,191,162,0.4)',
+    fontSize: '0.85rem', color: 'rgba(211,191,162,0.62)',
     fontWeight: '700', pointerEvents: 'none'
   }}>+91</span>
   <input
@@ -4094,8 +4109,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     autoComplete="tel"
     style={{
       width: '100%', padding: '15px 16px 15px 52px',
-      background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-      color: '#fff', borderRadius: '12px', fontSize: '1rem',
+      background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
+      color: '#fff', borderRadius: '16px', fontSize: '1rem',
       outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
       fontFamily: 'Poppins, sans-serif', letterSpacing: '1.5px'
     }}
@@ -4112,7 +4127,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {isDineIn && (
             <div style={{ marginBottom: '22px' }}>
               <label style={{
-                fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+                fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
                 fontWeight: '900', letterSpacing: '2px',
                 display: 'block', marginBottom: '10px', textTransform: 'uppercase'
               }}>
@@ -4121,7 +4136,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {[1, 2, 3, 4, 5, 6].map(n => (
                   <button key={n} type="button" onClick={() => preserveScroll(() => setPartySize(n))} style={{
-                    width: '54px', height: '54px', borderRadius: '13px',
+                    width: '54px', height: '54px', borderRadius: '16px',
                     border: 'none', cursor: 'pointer',
                     fontWeight: '900', fontSize: '1rem',
                     transition: 'all 0.15s',
@@ -4145,7 +4160,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 {counterMode === 'pickup' && (
   <div style={{ marginBottom: '22px' }}>
     <label style={{
-      fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+      fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
       fontWeight: '900', letterSpacing: '2px',
       display: 'block', marginBottom: '10px', textTransform: 'uppercase'
     }}>
@@ -4161,10 +4176,10 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         onChange={e => setScheduledPickupTime(e.target.value)}
         style={{
           width: '100%', padding: '15px 16px 15px 42px',
-          background: '#121212',
-          border: '1px solid rgba(211,191,162,0.12)',
+          background: PX.card,
+          border: '1px solid rgba(211,191,162,0.18)',
           color: scheduledPickupTime ? '#fff' : 'rgba(255,255,255,0.25)',
-          borderRadius: '12px', fontSize: '0.9rem',
+          borderRadius: '16px', fontSize: '0.9rem',
           outline: 'none', cursor: 'pointer',
           appearance: 'none', boxSizing: 'border-box',
           fontFamily: 'Poppins, sans-serif'
@@ -4191,7 +4206,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     {/* Date picker */}
     <div style={{ marginBottom: '22px' }}>
       <label style={{
-        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
         fontWeight: '900', letterSpacing: '2px',
         display: 'block', marginBottom: '10px', textTransform: 'uppercase'
       }}>
@@ -4204,8 +4219,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         onChange={e => setReservationDate(e.target.value)}
         style={{
           width: '100%', padding: '15px 16px',
-          background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-          color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+          background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
+          color: '#fff', borderRadius: '16px', fontSize: '0.9rem',
           outline: 'none', boxSizing: 'border-box', colorScheme: 'dark',
           fontFamily: 'Poppins, sans-serif', cursor: 'pointer'
         }}
@@ -4215,7 +4230,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     {/* ── MEAL PERIOD + TIME SLOTS ── */}
     <div style={{ marginBottom: '22px' }}>
       <label style={{
-        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
         fontWeight: '900', letterSpacing: '2px',
         display: 'block', marginBottom: '12px', textTransform: 'uppercase'
       }}>
@@ -4224,9 +4239,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
       {/* Lunch / Dinner toggle */}
       <div style={{
-        display: 'flex', background: '#0d0d0d',
+        display: 'flex', background: PX.card,
         border: '1px solid rgba(211,191,162,0.1)',
-        borderRadius: '12px', padding: '4px', gap: '4px',
+        borderRadius: '16px', padding: '4px', gap: '4px',
         marginBottom: '14px'
       }}>
         {[
@@ -4294,7 +4309,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         };
 
         if (slots.length === 0) return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '18px', color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', fontWeight: '600', textAlign: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '18px', color: 'rgba(255,255,255,0.52)', fontSize: '0.72rem', fontWeight: '600', textAlign: 'center' }}>
             {reservationDate === todayStr && h !== null ? (
               <>
                 <Clock3 size={14} />
@@ -4315,7 +4330,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               const isSelected = reservationTime === slot;
               return (
                 <button key={slot} type="button" onClick={() => preserveScroll(() => setReservationTime(slot))} style={{
-                  padding: '11px 4px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                  padding: '11px 4px', borderRadius: '13px', border: 'none', cursor: 'pointer',
                   fontWeight: '900', fontSize: '0.68rem',
                   background: isSelected ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
                   color: isSelected ? '#0c0c0c' : 'rgba(255,255,255,0.2)',
@@ -4335,7 +4350,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     {/* Party size for reservation */}
     <div style={{ marginBottom: '22px' }}>
       <label style={{
-        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
         fontWeight: '900', letterSpacing: '2px',
         display: 'block', marginBottom: '10px', textTransform: 'uppercase'
       }}>
@@ -4344,7 +4359,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {[1, 2, 3, 4, 5, 6].map(n => (
           <button key={n} type="button" onClick={() => preserveScroll(() => setPartySize(n))} style={{
-            width: '54px', height: '54px', borderRadius: '13px',
+            width: '54px', height: '54px', borderRadius: '16px',
             border: 'none', cursor: 'pointer',
             fontWeight: '900', fontSize: '1rem', transition: 'all 0.15s',
             background: partySize === n ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : '#121212',
@@ -4361,7 +4376,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
     {/* Special requests — NO table preference */}
     <div style={{ marginBottom: '22px' }}>
       <label style={{
-        fontSize: '0.54rem', color: 'rgba(211,191,162,0.35)',
+        fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
         fontWeight: '900', letterSpacing: '2px',
         display: 'block', marginBottom: '10px', textTransform: 'uppercase'
       }}>
@@ -4376,8 +4391,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
         style={{
           width: '100%', padding: '15px 16px',
-          background: '#121212', border: '1px solid rgba(211,191,162,0.12)',
-          color: '#fff', borderRadius: '12px', fontSize: '0.9rem',
+          background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
+          color: '#fff', borderRadius: '16px', fontSize: '0.9rem',
           outline: 'none', boxSizing: 'border-box',
           fontFamily: 'Poppins, sans-serif', transition: 'border-color 0.2s'
         }}
@@ -4407,7 +4422,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {hint && (
             <div style={{
               textAlign: 'center', marginBottom: '10px',
-              fontSize: '0.6rem', color: 'rgba(211,191,162,0.3)',
+              fontSize: '0.6rem', color: 'rgba(211,191,162,0.62)',
               fontWeight: '700', letterSpacing: '0.3px'
             }}>
               {hint}
@@ -4423,7 +4438,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 : 'rgba(211,191,162,0.05)',
               color: allOk ? '#0c0c0c' : 'rgba(211,191,162,0.2)',
               border: allOk ? 'none' : '1px solid rgba(211,191,162,0.08)',
-              borderRadius: '14px', fontWeight: '900', fontSize: '0.88rem',
+              borderRadius: '18px', fontWeight: '900', fontSize: '0.88rem',
               cursor: allOk ? 'pointer' : 'not-allowed',
               letterSpacing: '0.5px', textTransform: 'uppercase',
               transition: 'all 0.2s',
@@ -4460,12 +4475,12 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 <div key={s.label} style={{
                   background: '#0c0c0c',
                   border: '1px solid rgba(211,191,162,0.07)',
-                  borderRadius: '12px', padding: '14px 16px',
+                  borderRadius: '16px', padding: '14px 16px',
                   display: 'flex', alignItems: 'center', gap: '10px'
                 }}>
                   {s.icon}
                   <div>
-                    <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.2)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
+                    <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
                     <div style={{ fontSize: '0.88rem', fontWeight: '900', color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>{s.val}</div>
                   </div>
                 </div>
@@ -4493,7 +4508,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 {hint && (
                   <div style={{
                     textAlign: 'center', marginBottom: '10px',
-                    fontSize: '0.6rem', color: 'rgba(211,191,162,0.3)',
+                    fontSize: '0.6rem', color: 'rgba(211,191,162,0.62)',
                     fontWeight: '700', letterSpacing: '0.3px'
                   }}>
                     {hint}
@@ -4509,7 +4524,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                       : 'rgba(211,191,162,0.05)',
                     color: allOk ? '#0c0c0c' : 'rgba(211,191,162,0.2)',
                     border: allOk ? 'none' : '1px solid rgba(211,191,162,0.08)',
-                    borderRadius: '14px', fontWeight: '900', fontSize: '0.88rem',
+                    borderRadius: '18px', fontWeight: '900', fontSize: '0.88rem',
                     cursor: allOk ? 'pointer' : 'not-allowed',
                     letterSpacing: '0.5px', textTransform: 'uppercase',
                     transition: 'all 0.2s',
@@ -4558,8 +4573,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                 transition={{ type: 'spring', damping: 26 }}
                 style={{
                   width: '100%', maxWidth: '420px',
-                  background: '#0f0f0f',
-                  border: '1px solid rgba(211,191,162,0.12)',
+                  background: PX.card,
+                  border: '1px solid rgba(211,191,162,0.18)',
                   borderRadius: '24px 24px 20px 20px',
                   overflow: 'hidden', margin: '0 16px'
                 }}
@@ -4571,7 +4586,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   background: 'rgba(211,191,162,0.03)'
                 }}>
                   <div style={{
-                    fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)',
+                    fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)',
                     fontWeight: '900', letterSpacing: '2.5px',
                     textTransform: 'uppercase', marginBottom: '4px'
                   }}>
@@ -4588,15 +4603,15 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                       { icon: <CalendarClock size={10} color="rgba(211,191,162,0.4)" />, label: reservationDate ? new Date(reservationDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : '—', sub: (() => { if (!reservationTime) return '—'; const [h,m] = reservationTime.split(':').map(Number); return h < 12 ? `${h}:${m.toString().padStart(2,'0')} AM` : h === 12 ? `12:${m.toString().padStart(2,'0')} PM` : `${h-12}:${m.toString().padStart(2,'0')} PM`; })() },
                     ].map((s, i) => (
                       <div key={i} style={{
-                        background: '#141414',
+                        background: PX.card,
                         border: '1px solid rgba(211,191,162,0.07)',
-                        borderRadius: '10px', padding: '10px 12px',
+                        borderRadius: '13px', padding: '10px 12px',
                         display: 'flex', alignItems: 'center', gap: '8px'
                       }}>
                         {s.icon}
                         <div>
                           <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#d3bfa2', lineHeight: 1.2 }}>{s.label}</div>
-                          <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', marginTop: '2px' }}>{s.sub}</div>
+                          <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', marginTop: '2px' }}>{s.sub}</div>
                         </div>
                       </div>
                     ))}
@@ -4612,7 +4627,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                     {language === 'mr' ? 'आधीच जेवण ऑर्डर करायचे का?' : 'Would you like to pre-order?'}
                   </h3>
                   <p style={{
-                    fontSize: '0.68rem', color: 'rgba(255,255,255,0.2)',
+                    fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)',
                     lineHeight: 1.7, marginBottom: '20px', fontWeight: '500'
                   }}>
                     {language === 'mr'
@@ -4625,8 +4640,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                     onClick={() => { setReservationAskOrder(false); setRegistrationStep('menu'); }}
                     style={{
                       width: '100%', padding: '16px',
-                      background: 'linear-gradient(135deg,#d3bfa2,#bda88a)',
-                      border: 'none', borderRadius: '13px',
+                      background: PX.gold,
+                      border: 'none', borderRadius: '16px',
                       color: '#0c0c0c', fontWeight: '900', fontSize: '0.86rem',
                       cursor: 'pointer', marginBottom: '10px',
                       letterSpacing: '0.5px', textTransform: 'uppercase',
@@ -4687,7 +4702,7 @@ if (phone.length === 10) {
                       width: '100%', padding: '14px',
                       background: 'transparent',
                       border: '1px solid rgba(211,191,162,0.1)',
-                      borderRadius: '13px', color: 'rgba(255,255,255,0.25)',
+                      borderRadius: '16px', color: 'rgba(255,255,255,0.52)',
                       fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer',
                       transition: 'all 0.15s', letterSpacing: '0.3px'
                     }}
@@ -4714,221 +4729,126 @@ if (phone.length === 10) {
   const freeTables    = totalCount - occupiedCount;
   const isFull        = freeTables <= 0;
 
+  const RING = 2 * Math.PI * 26;
+  const freeFrac = Math.max(0, Math.min(1, freeTables / Math.max(1, totalCount)));
+  const modeTiles = [
+    featureEnabled('waitlist') && {
+      key: 'dine-in', icon: Armchair, hero: true,
+      title: language === 'mr' ? 'रांगेत नाव नोंदवा' : 'Join Waitlist',
+      sub: language === 'mr'
+        ? `प्रतीक्षा करताना आधीच ऑर्डर द्या${queueLen > 0 ? ` · ~${estWait} मिनिट` : ''}`
+        : `Pre-order while you wait${queueLen > 0 ? ` · ~${estWait} min` : ' · No queue now'}`,
+      chip: queueLen > 0 ? `${queueLen} group${queueLen !== 1 ? 's' : ''} ahead` : null,
+    },
+    featureEnabled('pickup') && {
+      key: 'pickup', icon: ShoppingBag,
+      title: language === 'mr' ? 'टेकअवे / पिकअप' : 'Takeaway / Pickup',
+      sub: language === 'mr' ? 'ऑर्डर द्या, ठरलेल्या वेळी घ्या' : 'Order now, collect at your time',
+    },
+    featureEnabled('reservation') && {
+      key: 'reservation', icon: CalendarClock,
+      title: language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table',
+      sub: language === 'mr' ? 'तारीख व वेळ निवडा · आधीच ऑर्डर द्या' : 'Pick a date & time · Pre-order',
+    },
+  ].filter(Boolean);
+
   return (
     <CustomerShell scrollRef={scrollRef}>
       <CustomerRestaurantBadge restaurantName={restaurantData?.name} />
 
-      {/* Occupancy strip */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '12px',
-        padding: '13px 18px', marginBottom: '28px',
-        background: '#121212',
-        border: '1px solid rgba(211,191,162,0.09)',
-        borderRadius: '16px', width: '100%', maxWidth: '400px'
+      {/* Live table pulse */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} style={{
+        display: 'flex', alignItems: 'center', gap: '16px',
+        padding: '14px 18px', marginBottom: '22px',
+        background: PX.card, border: `1px solid ${PX.line}`, boxShadow: PX.shadow,
+        borderRadius: '26px', width: '100%', maxWidth: '400px', boxSizing: 'border-box'
       }}>
-        <div style={{
-          width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-          background: isFull ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.7)',
-          boxShadow: isFull
-            ? '0 0 6px rgba(211,191,162,0.15)'
-            : '0 0 8px rgba(211,191,162,0.35)'
-        }} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.74rem', color: isFull ? 'rgba(211,191,162,0.6)' : 'rgba(211,191,162,0.85)', fontWeight: '800' }}>
+        <div style={{ position: 'relative', width: 62, height: 62, flexShrink: 0 }}>
+          <svg width="62" height="62" viewBox="0 0 62 62" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="31" cy="31" r="26" fill="none" stroke="rgba(211,191,162,0.12)" strokeWidth="5" />
+            <circle cx="31" cy="31" r="26" fill="none" stroke="#d3bfa2" strokeWidth="5" strokeLinecap="round"
+              strokeDasharray={`${freeFrac * RING} ${RING}`} style={{ transition: 'stroke-dasharray 0.8s ease', filter: 'drop-shadow(0 0 6px rgba(211,191,162,0.5))' }} />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: PX.serif, fontSize: '1.15rem', fontWeight: 700, color: '#f3e8d2' }}>{Math.max(0, freeTables)}</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+          <div style={{ fontSize: '0.5rem', fontWeight: 900, letterSpacing: '2.4px', color: 'rgba(211,191,162,0.62)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#d3bfa2', boxShadow: '0 0 8px rgba(211,191,162,0.8)' }} />
+            {language === 'mr' ? 'आत्ता थेट' : 'LIVE NOW'}
+          </div>
+          <div style={{ fontSize: '0.88rem', color: '#f7f3eb', fontWeight: 800, marginTop: 5 }}>
             {isFull
-              ? (language === 'mr' ? `सर्व ${totalCount} टेबल भरलेले` : `All ${totalCount} tables occupied`)
-              : (language === 'mr' ? `${freeTables} टेबल उपलब्ध` : `${freeTables} of ${totalCount} tables free`)}
+              ? (language === 'mr' ? `सर्व ${totalCount} टेबल भरलेले` : `All ${totalCount} tables taken`)
+              : (language === 'mr' ? `${freeTables} / ${totalCount} टेबल उपलब्ध` : `${freeTables} of ${totalCount} tables free`)}
           </div>
           {isFull && queueLen > 0 && (
-            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.52)', marginTop: 3 }}>
               {queueLen} group{queueLen !== 1 ? 's' : ''} waiting · ~{estWait} min
             </div>
           )}
         </div>
-        {/* Occupancy bar */}
-        <div style={{
-          width: '56px', height: '3px',
-          background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', flexShrink: 0
-        }}>
-          <div style={{
-            height: '100%',
-            width: `${(occupiedCount / totalCount) * 100}%`,
-            background: 'rgba(211,191,162,0.5)',
-            borderRadius: '2px', transition: 'width 0.6s ease'
-          }} />
-        </div>
-      </div>
+      </motion.div>
 
-      {/* Mode cards */}
+      {/* Mode tiles */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '400px' }}>
-
-        {featureEnabled('waitlist') && <>
-        {/* WAITLIST card */}
-        <button type="button"
-          onClick={() => { setCounterMode('dine-in'); setRegistrationStep('register'); }}
-          style={{
-            background: '#121212',
-            border: '1px solid rgba(211,191,162,0.12)',
-            borderRadius: '22px', padding: '22px 20px',
-            textAlign: 'left', cursor: 'pointer',
-            color: '#fff', transition: 'all 0.18s', width: '100%',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#161616';
-            e.currentTarget.style.borderColor = 'rgba(211,191,162,0.22)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#121212';
-            e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)';
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{
-              width: '52px', height: '52px', borderRadius: '15px', flexShrink: 0,
-              background: 'rgba(211,191,162,0.07)',
-              border: '1px solid rgba(211,191,162,0.14)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <Armchair size={22} color="#d3bfa2" strokeWidth={1.5} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{
-                fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2',
-                marginBottom: '6px', letterSpacing: '-0.1px'
+        {modeTiles.map((tile, i) => {
+          const Icon = tile.icon;
+          return (
+            <motion.button key={tile.key} type="button"
+              initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 + i * 0.08, type: 'spring', stiffness: 260, damping: 24 }}
+              whileTap={{ scale: 0.975 }} whileHover={{ y: -3 }}
+              onClick={() => { setCounterMode(tile.key); setRegistrationStep('register'); }}
+              style={{
+                position: 'relative', overflow: 'hidden', width: '100%', textAlign: 'left', cursor: 'pointer', color: '#fff',
+                padding: '20px 18px', borderRadius: '26px', boxSizing: 'border-box',
+                background: tile.hero ? `${PX.goldSoft}, ${PX.card}` : PX.card,
+                border: `1px solid ${tile.hero ? 'rgba(211,191,162,0.38)' : PX.line}`,
+                boxShadow: tile.hero ? '0 20px 46px rgba(211,191,162,0.12), inset 0 1px 0 rgba(255,255,255,0.08)' : PX.shadow,
+                fontFamily: 'inherit'
               }}>
-                {language === 'mr' ? 'रांगेत नाव नोंदवा' : 'Join Waitlist'}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
-                {language === 'mr'
-                  ? `प्रतीक्षा करताना आधीच ऑर्डर द्या${queueLen > 0 ? ` · ~${estWait} मिनिट` : ''}`
-                  : `Pre-order while you wait${queueLen > 0 ? ` · ~${estWait} min` : ' · No queue now'}`}
-              </div>
-              {queueLen > 0 && (
+              <div style={{ position: 'absolute', right: -26, top: -26, width: 110, height: 110, borderRadius: '50%', border: '1px solid rgba(211,191,162,0.18)', boxShadow: '0 0 0 14px rgba(211,191,162,0.03)' }} />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{
-                  marginTop: '12px', display: 'inline-flex',
-                  alignItems: 'center', gap: '6px',
-                  padding: '5px 12px', borderRadius: '20px',
-                  background: 'rgba(211,191,162,0.05)',
-                  border: '1px solid rgba(211,191,162,0.1)'
+                  width: '56px', height: '56px', borderRadius: '22px', flexShrink: 0,
+                  background: tile.hero ? PX.gold : 'rgba(211,191,162,0.08)',
+                  border: tile.hero ? 'none' : '1px solid rgba(211,191,162,0.18)',
+                  boxShadow: tile.hero ? '0 10px 24px rgba(211,191,162,0.28)' : 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                  <Users size={10} color="rgba(211,191,162,0.35)" />
-                  <span style={{ fontSize: '0.58rem', color: 'rgba(211,191,162,0.45)', fontWeight: '800' }}>
-                    {queueLen} group{queueLen !== 1 ? 's' : ''} ahead
-                  </span>
+                  <Icon size={24} color={tile.hero ? '#14110c' : '#d3bfa2'} strokeWidth={1.7} />
                 </div>
-              )}
-            </div>
-            <ChevronRight size={16} color="rgba(211,191,162,0.2)" style={{ marginTop: '4px', flexShrink: 0 }} />
-          </div>
-        </button></>}
-
-        {featureEnabled('pickup') && <>
-        {/* PICKUP card */}
-        <button type="button"
-          onClick={() => { setCounterMode('pickup'); setRegistrationStep('register'); }}
-          style={{
-            background: '#0f0f0f',
-            border: '1px solid rgba(211,191,162,0.08)',
-            borderRadius: '22px', padding: '22px 20px',
-            textAlign: 'left', cursor: 'pointer',
-            color: '#fff', transition: 'all 0.18s', width: '100%',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#141414';
-            e.currentTarget.style.borderColor = 'rgba(211,191,162,0.16)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#0f0f0f';
-            e.currentTarget.style.borderColor = 'rgba(211,191,162,0.08)';
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{
-              width: '52px', height: '52px', borderRadius: '15px', flexShrink: 0,
-              background: 'rgba(211,191,162,0.05)',
-              border: '1px solid rgba(211,191,162,0.09)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <ShoppingBag size={22} color="rgba(211,191,162,0.7)" strokeWidth={1.5} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{
-                fontSize: '0.9rem', fontWeight: '900',
-                color: 'rgba(211,191,162,0.75)',
-                marginBottom: '6px', letterSpacing: '-0.1px'
-              }}>
-                {language === 'mr' ? 'टेकअवे / पिकअप' : 'Takeaway / Pickup'}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: PX.serif, fontSize: '1.12rem', fontWeight: 700, color: '#f7f3eb', letterSpacing: '-0.2px' }}>{tile.title}</div>
+                  <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.55, marginTop: 4 }}>{tile.sub}</div>
+                  {tile.chip && (
+                    <div style={{ marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 20, background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.22)' }}>
+                      <Users size={10} color="#d3bfa2" />
+                      <span style={{ fontSize: '0.58rem', color: '#d3bfa2', fontWeight: 800 }}>{tile.chip}</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.16)' }}>
+                  <ChevronRight size={16} color="#d3bfa2" />
+                </div>
               </div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
-                {language === 'mr'
-                  ? 'ऑर्डर द्या, ठरलेल्या वेळी घ्या · प्रतीक्षा नाही'
-                  : 'Order now, collect at your time · Skip the queue'}
-              </div>
-            </div>
-            <ChevronRight size={16} color="rgba(211,191,162,0.15)" style={{ marginTop: '4px', flexShrink: 0 }} />
-          </div>
-        </button></>}
-
-        {featureEnabled('reservation') && <>
-        {/* RESERVATION card */}
-<button type="button"
-  onClick={() => { setCounterMode('reservation'); setRegistrationStep('register'); }}
-  style={{
-    background: '#0f0f0f',
-    border: '1px solid rgba(211,191,162,0.07)',
-    borderRadius: '22px', padding: '22px 20px',
-    textAlign: 'left', cursor: 'pointer',
-    color: '#fff', transition: 'all 0.18s', width: '100%',
-  }}
-  onMouseEnter={e => { e.currentTarget.style.background = '#141414'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.14)'; }}
-  onMouseLeave={e => { e.currentTarget.style.background = '#0f0f0f'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; }}
->
-  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-    <div style={{
-      width: '52px', height: '52px', borderRadius: '15px', flexShrink: 0,
-      background: 'rgba(211,191,162,0.04)',
-      border: '1px solid rgba(211,191,162,0.08)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}>
-      <CalendarClock size={22} color="rgba(211,191,162,0.55)" strokeWidth={1.5} />
-    </div>
-    <div style={{ flex: 1 }}>
-      <div style={{ fontSize: '0.9rem', fontWeight: '900', color: 'rgba(211,191,162,0.65)', marginBottom: '6px' }}>
-        {language === 'mr' ? 'टेबल बुकिंग' : 'Reserve a Table'}
-      </div>
-      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.18)', lineHeight: 1.6 }}>
-        {language === 'mr'
-          ? 'आगाऊ बुकिंग करा · तारीख व वेळ निवडा · आधीच ऑर्डर द्या'
-          : 'Book in advance · Choose date & time · Pre-order your meal'}
-      </div>
-    </div>
-    <ChevronRight size={16} color="rgba(211,191,162,0.12)" style={{ marginTop: '4px', flexShrink: 0 }} />
-  </div>
-</button></>}
-
+            </motion.button>
+          );
+        })}
       </div>
 
       {/* Language toggle */}
       <button type="button"
         onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}
         style={{
-          marginTop: '32px', background: 'transparent',
-          border: '1px solid rgba(211,191,162,0.08)',
-          color: 'rgba(211,191,162,0.25)', padding: '9px 22px',
-          borderRadius: '20px', fontSize: '0.65rem', fontWeight: '800',
+          marginTop: '30px', background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${PX.line}`,
+          color: 'rgba(211,191,162,0.7)', padding: '10px 22px',
+          borderRadius: '26px', fontSize: '0.68rem', fontWeight: '800',
           cursor: 'pointer', display: 'flex', alignItems: 'center',
-          gap: '7px', transition: 'all 0.15s', letterSpacing: '0.5px'
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)';
-          e.currentTarget.style.color = 'rgba(211,191,162,0.5)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.borderColor = 'rgba(211,191,162,0.08)';
-          e.currentTarget.style.color = 'rgba(211,191,162,0.25)';
+          gap: '8px', letterSpacing: '0.5px', fontFamily: 'inherit'
         }}
       >
-        <Globe2 size={13} strokeWidth={1.5} />
+        <Globe2 size={13} strokeWidth={1.6} />
         {language === 'en' ? 'मराठी' : 'English'}
       </button>
     </CustomerShell>
@@ -4938,10 +4858,11 @@ if (phone.length === 10) {
 
 
 // ── LOADER ──
-if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:190, maxWidth:'70vw', background:'#f7f3eb', borderRadius:12, padding:'8px 12px' }} /></div>;
+if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू लोड होत आहे' : 'Preparing your menu'} />;
 
   return (
-    <div style={{...styles.body, backgroundColor: secondaryColor}}>
+    <div style={{...styles.body, backgroundColor: '#0b0b0c', position: 'relative', isolation: 'isolate'}}>
+      <div className="px-ambient" style={{ zIndex: -1 }} aria-hidden="true"><div className="px-grain" /></div>
 
       {/* OFFLINE / SAVED-MENU NOTICE — persistent, not a timed toast */}
       <AnimatePresence>
@@ -5010,10 +4931,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           {avgWaitData.queueLength + 1} in queue
         </span>
       </div>
-      <span style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.15)' }}>·</span>
+      <span style={{ fontSize: '0.55rem', color: 'rgba(211,191,162,0.62)' }}>·</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
         <Hourglass size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
-        <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+        <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700' }}>
           ~{avgWaitData.estimatedWait || 20} min
         </span>
       </div>
@@ -5049,7 +4970,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
             <Users size={9} color="rgba(211,191,162,0.2)" />
-            <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>
+            <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600' }}>
               {customerInfo.name}
               {counterMode === 'dine-in' && partySize > 1 && ` · ${partySize} pax`}
             </span>
@@ -5065,7 +4986,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           padding: '7px 12px',
           background: 'rgba(211,191,162,0.05)',
           border: '1px solid rgba(211,191,162,0.1)',
-          color: 'rgba(211,191,162,0.4)',
+          color: 'rgba(211,191,162,0.62)',
           borderRadius: '9px', fontSize: '0.58rem', fontWeight: '900',
           cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0,
           transition: 'all 0.15s'
@@ -5176,7 +5097,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
     </button>
   </div>
 )}
-        <h1 style={{...styles.cafeName, color: primaryColor}}>{restaurantData?.name || 'Restaurant'}</h1>
+        <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '10px 0 4px' }} aria-hidden="true">
+          <span style={{ width: 40, height: 1, background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.6))' }} />
+          <Sparkles size={11} color="#d3bfa2" />
+          <span style={{ width: 40, height: 1, background: 'linear-gradient(90deg, rgba(211,191,162,0.6), transparent)' }} />
+        </div>
         <div style={styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
@@ -5358,7 +5284,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     width: '24px', height: '24px', borderRadius: '7px', flexShrink: 0,
                     background: 'rgba(255,255,255,0.04)',
                     border: '1px solid rgba(255,255,255,0.07)',
-                    color: 'rgba(255,255,255,0.25)', cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.52)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'all 0.15s'
                   }}
@@ -5379,7 +5305,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
               {/* Message */}
               <div style={{
-                fontSize: '0.72rem', color: 'rgba(255,255,255,0.38)',
+                fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)',
                 lineHeight: 1.6, fontWeight: '500'
               }}>
                 {activeAnnouncement.message}
@@ -5424,7 +5350,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     </span>
                   </div>
 
-                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>
+                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700' }}>
                     {language === 'mr' ? 'आजच वापरा' : 'TODAY ONLY'}
                   </span>
                 </motion.div>
@@ -5450,7 +5376,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
                 </svg>
               </div>
-              <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.18)', fontWeight: '700' }}>
+              <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700' }}>
                 {restaurantData?.name}
               </span>
             </div>
@@ -5486,7 +5412,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           onClick={() => setSearchQuery('')}
           style={{
             background: 'none', border: 'none',
-            color: 'rgba(211,191,162,0.4)', cursor: 'pointer', padding: '4px',
+            color: 'rgba(211,191,162,0.62)', cursor: 'pointer', padding: '4px',
             display: 'flex', alignItems: 'center'
           }}
         >
@@ -5514,7 +5440,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           <Search size={11} color="rgba(211,191,162,0.3)" />
           <span style={{
             fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2px',
-            color: 'rgba(211,191,162,0.28)', textTransform: 'uppercase'
+            color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase'
           }}>
             {globalSearchResults.length} {language === 'mr' ? 'पदार्थ सापडले' : 'dishes found'}
           </span>
@@ -5596,14 +5522,14 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     flexWrap: 'wrap'
                   }}>
                     <span style={{
-                      fontSize: '0.56rem', color: 'rgba(211,191,162,0.35)',
+                      fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)',
                       fontWeight: '700'
                     }}>
                       {language === 'mr' ? (cat?.name_mr || cat?.name) : cat?.name}
                     </span>
                     {!isCurrentCat && (
                       <>
-                        <span style={{ color: 'rgba(211,191,162,0.15)', fontSize: '0.5rem' }}>·</span>
+                        <span style={{ color: 'rgba(211,191,162,0.62)', fontSize: '0.5rem' }}>·</span>
                         <span style={{
                           fontSize: '0.52rem',
                           color: 'rgba(201,168,76,0.45)',
@@ -5656,7 +5582,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   </div>
                   {item.priceHalf && (
                     <div style={{
-                      fontSize: '0.54rem', color: 'rgba(211,191,162,0.3)',
+                      fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
                       fontWeight: '700', marginTop: '1px'
                     }}>
                       H: ₹{item.priceHalf}
@@ -5683,7 +5609,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             borderTop: '1px solid rgba(211,191,162,0.07)',
             display: 'flex', alignItems: 'center', gap: '8px',
             cursor: 'pointer',
-            fontSize: '0.58rem', color: 'rgba(211,191,162,0.3)',
+            fontSize: '0.58rem', color: 'rgba(211,191,162,0.62)',
             fontWeight: '800', letterSpacing: '0.5px',
             transition: 'color 0.15s'
           }}
@@ -5701,7 +5627,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 </div>
 
       {/* CATEGORY NAV */}
-      <div style={{...styles.navContainer, backgroundColor: secondaryColor}}>
+      <div style={{...styles.navContainer, backgroundColor: 'rgba(11,11,12,0.8)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)'}}>
         <nav ref={navRef} style={styles.navScroll} className="no-scrollbar">
           <button type="button" ref={selectedCategoryId === 'all' ? activeTabRef : null} onClick={() => setSelectedCategoryId('all')} style={{...styles.navItem, color: selectedCategoryId === 'all' ? primaryColor : '#888'}}>
             {t[language].all} {selectedCategoryId === 'all' && <motion.div layoutId="underline" style={styles.activeUnderline} />}
@@ -5750,12 +5676,12 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       {/* Left: label + count */}
       <div style={{ flex: 1, minWidth: '100px' }}>
         <div style={{
-          fontSize: '0.46rem', color: 'rgba(211,191,162,0.28)',
+          fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)',
           fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px'
         }}>
           {language === 'mr' ? 'श्रेणी अंतर्दृष्टी' : 'Category Insights'}
         </div>
-        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', fontWeight: '600' }}>
+        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600' }}>
           {catItems.length} {language === 'mr' ? 'पदार्थ' : 'dishes'}
           {totalSold > 0 && ` · ${totalSold} ${language === 'mr' ? 'विक्री (३० दिवस)' : 'sold (30 days)'}`}
         </div>
@@ -6082,7 +6008,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             <div style={{ fontSize: '0.72rem', fontWeight: '900', color: hasReady ? '#ecd9b0' : '#d3bfa2', marginBottom: '2px' }}>
               {meta.label}
             </div>
-            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.22)', fontWeight: '500' }}>
+            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', fontWeight: '500' }}>
               {meta.sub}
             </div>
           </div>
@@ -6162,7 +6088,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
               {/* Panel header */}
               <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(211,191,162,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
                     {language === 'mr' ? 'ऑर्डर स्थिती' : 'Order Tracking'}
                   </div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff', display: 'flex', alignItems: 'center', gap: '7px' }}>
@@ -6261,7 +6187,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                           width: '26px', height: '26px', borderRadius: '7px', flexShrink: 0,
                           background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.56rem', fontWeight: '900', color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace'
+                          fontSize: '0.56rem', fontWeight: '900', color: 'rgba(255,255,255,0.52)', fontFamily: 'monospace'
                         }}>
                           #{idx + 1}
                         </div>
@@ -6338,24 +6264,24 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       {/* FABs RIGHT SIDE */}
 {/* FABs RIGHT SIDE */}
 <div style={styles.rightFabContainer}>
-  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsWaiterModalOpen(true)}>
-    <BellRing size={26} color={secondaryColor} />
+  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}} onClick={() => setIsWaiterModalOpen(true)}>
+    <BellRing size={24} color="#d3bfa2" strokeWidth={1.8} />
   </motion.div>
 
   {/* EXTRA ITEMS FAB */}
   {extraItems.filter(i => i.isAvailable).length > 0 && (
     <motion.div
       initial={{ scale: 0 }} animate={{ scale: 1 }}
-      style={{...styles.fabBase, background: primaryColor}}
+      whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}}
       onClick={() => { setIsExtraItemsOpen(true); setExtraItemCart({}); setActiveExtraCategory('All'); setExtraItemSearchQuery(''); }}
     >
-      <ShoppingBag size={24} color={secondaryColor} strokeWidth={2.5} />
+      <ShoppingBag size={22} color="#d3bfa2" strokeWidth={1.8} />
     </motion.div>
   )}
 
   {(totalItemsInCart > 0 || hasPlacedInitialOrder) && (
-    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{...styles.fabBase, background: primaryColor}} onClick={() => setIsDrawerOpen(true)}>
-      <Utensils size={26} color={secondaryColor} strokeWidth={2.5} />
+    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: PX.gold, boxShadow: '0 14px 32px rgba(211,191,162,0.38), 0 0 0 4px rgba(211,191,162,0.12), inset 0 1px 0 rgba(255,255,255,0.55)'}} onClick={() => setIsDrawerOpen(true)}>
+      <Utensils size={24} color="#14110c" strokeWidth={2.2} />
       {totalItemsInCart > 0 && <span style={styles.fabBadge}>{convertToMrNumber(totalItemsInCart)}</span>}
     </motion.div>
   )}
@@ -6458,7 +6384,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 {language === 'mr' ? 'अतिरिक्त वस्तू' : 'Extra Items'}
               </h2>
               <p style={{
-                color: 'rgba(211,191,162,0.22)', fontSize: '0.56rem',
+                color: 'rgba(211,191,162,0.62)', fontSize: '0.56rem',
                 margin: '4px 0 0', fontWeight: '700', letterSpacing: '0.4px',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}>
@@ -6510,7 +6436,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 width: '36px', height: '36px', borderRadius: '11px', flexShrink: 0,
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.08)',
-                color: 'rgba(255,255,255,0.3)', cursor: 'pointer',
+                color: 'rgba(255,255,255,0.52)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.15s'
               }}
@@ -6558,7 +6484,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
               onClick={() => setExtraItemSearchQuery('')}
               style={{
                 background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '6px', color: 'rgba(211,191,162,0.4)', cursor: 'pointer',
+                borderRadius: '6px', color: 'rgba(211,191,162,0.62)', cursor: 'pointer',
                 padding: '3px 7px', display: 'flex', alignItems: 'center', gap: '4px',
                 fontSize: '0.52rem', fontWeight: '800', flexShrink: 0
               }}
@@ -6658,10 +6584,10 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 <Package size={28} color="rgba(201,168,76,0.2)" strokeWidth={1.4}/>
               </div>
               <div>
-                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'rgba(255,255,255,0.18)', marginBottom: '5px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'rgba(255,255,255,0.52)', marginBottom: '5px', textAlign: 'center' }}>
                   {language === 'mr' ? 'कोणतीही वस्तू सापडली नाही' : 'No items found'}
                 </div>
-                <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.1)', fontWeight: '600', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600', textAlign: 'center' }}>
                   {extraItemSearchQuery
                     ? (language === 'mr' ? 'वेगळा शब्द वापरा' : `No results for "${extraItemSearchQuery}"`)
                     : (language === 'mr' ? 'वेगळी श्रेणी निवडा' : 'Try a different category')}
@@ -6717,7 +6643,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                       <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(201,168,76,0.1), transparent)' }}/>
                       <span style={{
                         fontSize: '0.48rem', fontWeight: '900',
-                        color: 'rgba(211,191,162,0.18)', letterSpacing: '0.8px'
+                        color: 'rgba(211,191,162,0.62)', letterSpacing: '0.8px'
                       }}>
                         {items.length} {language === 'mr' ? 'वस्तू' : 'items'}
                       </span>
@@ -6826,7 +6752,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                                   ₹{item.price}
                                 </span>
                                 <span style={{
-                                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.18)',
+                                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)',
                                   fontWeight: '700'
                                 }}>
                                   / {item.unit}
@@ -6837,7 +6763,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                                   <span style={{
                                     fontSize: '0.48rem', padding: '2px 7px',
                                     background: 'rgba(211,191,162,0.04)',
-                                    color: 'rgba(211,191,162,0.28)',
+                                    color: 'rgba(211,191,162,0.62)',
                                     borderRadius: '5px', fontWeight: '900',
                                     border: '1px solid rgba(211,191,162,0.1)',
                                     letterSpacing: '0.5px'
@@ -6883,7 +6809,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                             {/* ── ADD / QUANTITY CONTROLS ── */}
                             {isOut ? (
                               <div style={{
-                                fontSize: '0.5rem', color: 'rgba(211,191,162,0.18)',
+                                fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)',
                                 fontWeight: '900', letterSpacing: '0.5px',
                                 textAlign: 'center', minWidth: '58px'
                               }}>
@@ -7074,7 +7000,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   <div style={{ fontSize: '0.65rem', fontWeight: '800', color: 'rgba(255,255,255,0.55)' }}>
                     {Object.keys(extraItemCart).length} {language === 'mr' ? 'प्रकार' : 'type'}{Object.keys(extraItemCart).length > 1 ? 's' : ''}
                   </div>
-                  <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.2)', fontWeight: '700', letterSpacing: '0.5px' }}>
+                  <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', letterSpacing: '0.5px' }}>
                     {language === 'mr' ? 'निवडल्या' : 'SELECTED'}
                   </div>
                 </div>
@@ -7089,7 +7015,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     return acc + (item?.price || 0) * qty;
                   }, 0).toLocaleString()}
                 </div>
-                <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.18)', fontWeight: '800', letterSpacing: '0.8px' }}>
+                <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.52)', fontWeight: '800', letterSpacing: '0.8px' }}>
                   {language === 'mr' ? 'अंदाजे रक्कम' : 'ESTIMATED TOTAL'}
                 </div>
               </div>
@@ -7179,7 +7105,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
     <div style={{ position: 'relative', marginBottom: '15px' }}>
       <span style={{
         position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)',
-        fontSize: '0.9rem', color: 'rgba(211,191,162,0.5)', fontWeight: '700', pointerEvents: 'none'
+        fontSize: '0.9rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700', pointerEvents: 'none'
       }}>+91</span>
       <input
         type="tel"
@@ -7260,7 +7186,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       </div>
       {/* Row 2: Rate × qty → total */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <span style={{ fontSize: '0.68rem', color: 'rgba(211,191,162,0.45)', fontWeight: '600' }}>
+        <span style={{ fontSize: '0.68rem', color: 'rgba(211,191,162,0.62)', fontWeight: '600' }}>
           ₹{convertToMrNumber(order.pricePerUnit)} × {order.quantity}
         </span>
         <span style={{ fontSize: '0.9rem', fontWeight: '900', color: primaryColor }}>
@@ -7431,35 +7357,32 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
   }}>
 
     {/* ── HERO SECTION ── */}
-    <div style={{
-      width: '100%', padding: '52px 28px 40px',
-      background: 'linear-gradient(180deg, rgba(211,191,162,0.07) 0%, transparent 100%)',
-      borderBottom: '1px solid rgba(211,191,162,0.08)',
-      textAlign: 'center'
-    }}>
-      {/* Animated sparkle icon */}
+    <div style={{ width: '100%', padding: '56px 28px 34px', textAlign: 'center', position: 'relative' }}>
       <motion.div
-        animate={{ rotate: [0, 5, -5, 0], scale: [1, 1.05, 1] }}
-        transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
-        style={{
-          width: '72px', height: '72px', borderRadius: '22px',
-          background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 22px',
-          boxShadow: '0 0 0 8px rgba(211,191,162,0.04), 0 0 0 16px rgba(211,191,162,0.02)'
-        }}
+        initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 160, damping: 14 }}
+        style={{ position: 'relative', width: '92px', height: '92px', margin: '0 auto 24px' }}
       >
-        <Sparkles size={32} color="#d3bfa2" strokeWidth={1.5} />
+        <div style={{ position: 'absolute', inset: '-14px', borderRadius: '50%', border: '1px dashed rgba(211,191,162,0.28)', animation: 'pxOrbit 22s linear infinite' }} />
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '30px', background: PX.gold, boxShadow: '0 18px 44px rgba(211,191,162,0.28), inset 0 1px 0 rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Sparkles size={38} color="#14110c" strokeWidth={1.6} />
+        </div>
       </motion.div>
 
-      <div style={{ fontSize: '0.5rem', fontWeight: '900', letterSpacing: '3px', color: 'rgba(211,191,162,0.35)', textTransform: 'uppercase', marginBottom: '10px' }}>
+      <div className="px-rise" style={{ fontSize: '0.56rem', fontWeight: 800, letterSpacing: '4px', color: 'rgba(211,191,162,0.7)', textTransform: 'uppercase', marginBottom: '12px' }}>
         {restaurantData?.name}
       </div>
-      <h2 style={{ fontSize: '2rem', fontWeight: '900', color: '#fff', margin: '0 0 10px', letterSpacing: '-0.6px', lineHeight: 1.15 }}>
+      <h2 className="px-rise" style={{ fontFamily: PX.serif, fontSize: '2.15rem', fontWeight: 700, color: '#f7f3eb', textAlign: 'center', margin: '0 0 12px', letterSpacing: '-0.5px', lineHeight: 1.15, animationDelay: '.08s' }}>
         {t[language].visitAgain}
       </h2>
-      <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.78rem', lineHeight: 1.8, maxWidth: '280px', margin: '0 auto', fontWeight: '500' }}>
+      <div className="px-rise" style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '14px', animationDelay: '.14s' }}>
+        {[0,1,2,3,4].map(i => (
+          <motion.span key={i} initial={{ opacity: 0, y: 6, scale: 0.6 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.25 + i * 0.09, type: 'spring', stiffness: 220, damping: 14 }} style={{ display: 'inline-flex' }}>
+            <Star size={16} color="#d3bfa2" fill="#d3bfa2" strokeWidth={1.4} />
+          </motion.span>
+        ))}
+      </div>
+      <p className="px-rise" style={{ color: 'rgba(247,243,235,0.58)', fontSize: '0.8rem', lineHeight: 1.7, maxWidth: '270px', margin: '0 auto', fontWeight: 500, animationDelay: '.2s' }}>
         {language === 'mr'
           ? 'तुमच्या भेटीबद्दल आभार! पुन्हा भेटू लवकरच.'
           : 'Thank you for dining with us. We hope to see you again soon!'}
@@ -7467,84 +7390,59 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
     </div>
 
     {/* ── ACTION CARDS ── */}
-    <div style={{ width: '100%', maxWidth: '400px', padding: '28px 22px 0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div style={{ width: '100%', maxWidth: '400px', padding: '6px 22px 0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
       {/* Google Review */}
       {restaurantData?.googleReview && (
-        <a href={restaurantData.googleReview} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '16px',
-            padding: '18px 20px',
-            background: '#fff',
-            borderRadius: '18px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-            transition: 'transform 0.15s, box-shadow 0.15s'
-          }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.3)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.25)'; }}
-          >
-            <div style={{
-              width: '44px', height: '44px', borderRadius: '13px',
-              background: '#f8f9fa', border: '1px solid #eee',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111', marginBottom: '2px' }}>{t[language].rateGoogle}</div>
-              <div style={{ fontSize: '0.62rem', color: '#888', fontWeight: '600' }}>
-                {language === 'mr' ? 'तुमचा अनुभव शेअर करा' : 'Share your experience'}
-              </div>
-            </div>
-            <ChevronRight size={18} color="#ccc" />
+        <motion.a href={restaurantData.googleReview} target="_blank" rel="noreferrer"
+          initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: 'spring', stiffness: 150, damping: 18 }}
+          whileTap={{ scale: 0.97 }} whileHover={{ y: -3 }}
+          style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 18px', background: PX.card, border: `1px solid ${PX.line}`, borderRadius: '22px', boxShadow: PX.shadow, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ width: '50px', height: '50px', borderRadius: '16px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 20px rgba(0,0,0,0.35)' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
           </div>
-        </a>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#f7f3eb', marginBottom: '3px' }}>{t[language].rateGoogle}</div>
+            <div style={{ fontSize: '0.64rem', color: 'rgba(247,243,235,0.5)', fontWeight: 600 }}>
+              {language === 'mr' ? 'तुमचा अनुभव शेअर करा' : 'Share your experience'}
+            </div>
+          </div>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(211,191,162,0.12)', border: `1px solid ${PX.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ChevronRight size={16} color="#d3bfa2" />
+          </div>
+        </motion.a>
       )}
 
       {/* Instagram */}
-
-          {(restaurantData?.instagram || restaurantData?.instaId) && (
-            <a href={restaurantData.instagram || restaurantData.instaId} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>                   <div style={{
-            display: 'flex', alignItems: 'center', gap: '16px',
-            padding: '18px 20px',
-            background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
-            borderRadius: '18px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(131,58,180,0.3)',
-            transition: 'transform 0.15s, box-shadow 0.15s'
-          }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(131,58,180,0.4)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(131,58,180,0.3)'; }}
-          >
-            <div style={{
-              width: '44px', height: '44px', borderRadius: '13px',
-              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-            }}>
-              {/* Instagram icon SVG */}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#fff', marginBottom: '2px' }}>
-                {language === 'mr' ? 'इन्स्टाग्रामवर फॉलो करा' : 'Follow us on Instagram'}
-              </div>
-              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
-                {language === 'mr' ? 'नवीन पदार्थ व ऑफर्स मिळवा' : 'Stay updated with our latest dishes'}
-              </div>
-            </div>
-            <ChevronRight size={18} color="rgba(255,255,255,0.5)" />
+      {(restaurantData?.instagram || restaurantData?.instaId) && (
+        <motion.a href={restaurantData.instagram || restaurantData.instaId} target="_blank" rel="noreferrer"
+          initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, type: 'spring', stiffness: 150, damping: 18 }}
+          whileTap={{ scale: 0.97 }} whileHover={{ y: -3 }}
+          style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 18px', background: PX.card, border: `1px solid ${PX.line}`, borderRadius: '22px', boxShadow: PX.shadow, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ width: '50px', height: '50px', borderRadius: '16px', background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 20px rgba(131,58,180,0.35)' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+            </svg>
           </div>
-        </a>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#f7f3eb', marginBottom: '3px' }}>
+              {language === 'mr' ? 'इन्स्टाग्रामवर फॉलो करा' : 'Follow us on Instagram'}
+            </div>
+            <div style={{ fontSize: '0.64rem', color: 'rgba(247,243,235,0.5)', fontWeight: 600 }}>
+              {language === 'mr' ? 'नवीन पदार्थ व ऑफर्स मिळवा' : 'Stay updated with our latest dishes'}
+            </div>
+          </div>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(211,191,162,0.12)', border: `1px solid ${PX.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ChevronRight size={16} color="#d3bfa2" />
+          </div>
+        </motion.a>
       )}
 
       {/* Divider */}
@@ -7554,9 +7452,9 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         style={{
           width: '100%', padding: '17px',
           background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.18)',
-          color: '#d3bfa2', borderRadius: '14px',
-          fontWeight: '900', fontSize: '0.82rem', cursor: 'pointer',
+          border: '1px solid rgba(211,191,162,0.22)',
+          color: '#d3bfa2', borderRadius: '18px',
+          fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer',
           letterSpacing: '0.5px', textTransform: 'uppercase',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
           transition: 'all 0.15s'
@@ -7571,7 +7469,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
       {/* Powered by */}
       <div style={{ textAlign: 'center', paddingTop: '8px' }}>
-        <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.1)', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
           <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
         </span>
       </div>
@@ -7653,7 +7551,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     }}
                     style={{
                       background: 'none', border: 'none',
-                      color: 'rgba(211,191,162,0.25)',
+                      color: 'rgba(211,191,162,0.62)',
                       cursor: 'pointer', padding: '4px',
                       display: 'flex', alignItems: 'center',
                       flexShrink: 0, marginLeft: '10px',
@@ -7908,7 +7806,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           {/* Veg / Non-veg */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '5px', border: '1px solid rgba(211,191,162,0.15)', background: 'rgba(211,191,162,0.05)' }}>
             <Leaf size={9} color="rgba(211,191,162,0.5)" strokeWidth={2} />
-            <span style={{ fontSize: '0.47rem', fontWeight: '800', color: 'rgba(211,191,162,0.5)', letterSpacing: '0.5px' }}>
+            <span style={{ fontSize: '0.47rem', fontWeight: '800', color: 'rgba(211,191,162,0.62)', letterSpacing: '0.5px' }}>
               {activeModel.isVeg !== false ? 'VEG' : 'NON-VEG'}
             </span>
           </div>
@@ -7933,7 +7831,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           {activeModel.spicylevel && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
               <Flame size={9} color="rgba(255,255,255,0.3)" strokeWidth={2} />
-              <span style={{ fontSize: '0.47rem', fontWeight: '700', color: 'rgba(255,255,255,0.3)', textTransform: 'capitalize' }}>{activeModel.spicylevel}</span>
+              <span style={{ fontSize: '0.47rem', fontWeight: '700', color: 'rgba(255,255,255,0.52)', textTransform: 'capitalize' }}>{activeModel.spicylevel}</span>
             </div>
           )}
  
@@ -7979,7 +7877,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         {/* Drag hint */}
         <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 11px', borderRadius: '20px', background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.07)', backdropFilter: 'blur(8px)' }}>
           <CircleDot size={9} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
-          <span style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.25)', fontWeight: '700', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
             {t[language].zoomRotate || 'Drag to rotate · Pinch to zoom'}
           </span>
         </div>
@@ -7999,7 +7897,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 />
               </div>
               <div style={styles.chefBubbleRight}>
-                <MessageSquare size={10} style={{ position: 'absolute', top: '12px', left: '-7px', color: 'rgba(211,191,162,0.4)' }} />
+                <MessageSquare size={10} style={{ position: 'absolute', top: '12px', left: '-7px', color: 'rgba(211,191,162,0.62)' }} />
                 "{activeModel.chefMessage || "My personal favourite — you'll love the flavours."}"
               </div>
             </div>
@@ -8010,7 +7908,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
       {/* ── SCROLL HINT — nudges user to scroll ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 0 4px', background: '#080808' }}>
         <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out infinite' }} />
-        <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.22)', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
           Scroll for details
         </span>
         <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out 0.2s infinite' }} />
@@ -8022,7 +7920,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         {/* Description */}
         {activeModel.description && (
           <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '7px' }}>ABOUT THIS DISH</div>
+            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.62)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '7px' }}>ABOUT THIS DISH</div>
             <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, fontWeight: '400' }}>
               {activeModel.description}
             </p>
@@ -8061,7 +7959,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             <div key={i} style={{ padding: '12px 18px', borderRight: '1px solid rgba(255,255,255,0.04)', textAlign: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>{stat.icon}</div>
               <div style={{ fontSize: '0.78rem', fontWeight: '800', color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{stat.value}</div>
-              <div style={{ fontSize: '0.48rem', fontWeight: '700', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{stat.label}</div>
+              <div style={{ fontSize: '0.48rem', fontWeight: '700', color: 'rgba(255,255,255,0.52)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{stat.label}</div>
             </div>
           ))}
         </div>
@@ -8069,7 +7967,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         {/* Ingredients */}
         {activeModel.ingredients?.en?.length > 0 && (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px' }}>
+            <div style={{ fontSize: '0.5rem', fontWeight: '700', color: 'rgba(211,191,162,0.62)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '8px' }}>
               KEY INGREDIENTS
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
@@ -8077,7 +7975,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 ? activeModel.ingredients.mr
                 : activeModel.ingredients.en
               ).slice(0, 6).map((ing, i) => (
-                <span key={i} style={{ padding: '3px 9px', borderRadius: '5px', fontSize: '0.6rem', fontWeight: '600', color: 'rgba(211,191,162,0.5)', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
+                <span key={i} style={{ padding: '3px 9px', borderRadius: '5px', fontSize: '0.6rem', fontWeight: '600', color: 'rgba(211,191,162,0.62)', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)' }}>
                   {ing}
                 </span>
               ))}
@@ -8099,7 +7997,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                     HEAR THIS DISH
                   </div>
-                  <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.2)', marginTop: '2px', fontWeight: '500' }}>
+                  <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.52)', marginTop: '2px', fontWeight: '500' }}>
                     {voiceLang === 'mr-IN'
                       ? 'मराठीत वर्णन ऐका'
                       : voiceLang === 'hi-IN'
@@ -8153,7 +8051,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   ))}
                 </p>
               ) : (
-                <p style={{ margin: 0, fontSize: '0.58rem', color: 'rgba(255,255,255,0.14)', lineHeight: 1.65, fontStyle: 'italic' }}>
+                <p style={{ margin: 0, fontSize: '0.58rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.65, fontStyle: 'italic' }}>
                   {voiceLang === 'mr-IN'
                     ? 'खाली दाबा आणि या पदार्थाबद्दल ऐका...'
                     : voiceLang === 'hi-IN'
@@ -8225,7 +8123,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             {speakingItemId === activeModel._id && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px' }}>
                 <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'rgba(211,191,162,0.7)', flexShrink: 0, animation: 'pulse 0.9s ease-in-out infinite' }} />
-                <span style={{ fontSize: '0.48rem', fontWeight: '600', color: 'rgba(211,191,162,0.3)', letterSpacing: '0.2px' }}>
+                <span style={{ fontSize: '0.48rem', fontWeight: '600', color: 'rgba(211,191,162,0.62)', letterSpacing: '0.2px' }}>
                   {voicePaused
                     ? (voiceLang === 'mr-IN' ? 'थांबवले — पुन्हा सुरू करण्यासाठी दाबा' : voiceLang === 'hi-IN' ? 'रुका हुआ — जारी रखने के लिए दबाएं' : 'Paused — tap play to continue')
                     : (voiceLang === 'mr-IN' ? 'मराठीत बोलत आहे...' : voiceLang === 'hi-IN' ? 'हिन्दी में बोल रहा है...' : 'Speaking in Indian English...')
@@ -8307,7 +8205,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
           {/* Greeting */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.35)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+            <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
               {welcomeCard.isLoyal ? 'LOYAL GUEST' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK' : 'WELCOME'}
             </div>
             <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -8315,7 +8213,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${welcomeCard.name?.split(' ')[0]}!`
                 : `नमस्कार, ${welcomeCard.name?.split(' ')[0]}!`}
             </div>
-            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.18)', marginTop: '2px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', marginTop: '2px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <MapPin size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
               {restaurantData?.name}
             </div>
@@ -8331,7 +8229,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
               <div style={{ fontSize: '1rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace', lineHeight: 1 }}>
                 {welcomeCard.visitCount}×
               </div>
-              <div style={{ fontSize: '0.42rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: '3px' }}>
+              <div style={{ fontSize: '0.42rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: '3px' }}>
                 {language === 'mr' ? 'भेटी' : 'Visits'}
               </div>
             </div>
@@ -8361,7 +8259,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 <Flame size={15} color="#d3bfa2" strokeWidth={1.5} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {language === 'mr' ? 'सर्वात आवडते' : 'Top Dish'}
                 </div>
                 {welcomeCard.allDishes?.[0] ? (
@@ -8369,13 +8267,13 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                     <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {welcomeCard.allDishes[0].name}
                     </div>
-                    <div style={{ fontSize: '0.54rem', color: 'rgba(211,191,162,0.28)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Hash size={8} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
                       {language === 'mr' ? `${welcomeCard.allDishes[0].count} वेळा` : `Ordered ${welcomeCard.allDishes[0].count}×`}
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'rgba(255,255,255,0.2)' }}>—</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'rgba(255,255,255,0.52)' }}>—</div>
                 )}
               </div>
             </div>
@@ -8395,7 +8293,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 <Timer size={15} color="rgba(211,191,162,0.5)" strokeWidth={1.5} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.44rem', color: 'rgba(255,255,255,0.2)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div style={{ fontSize: '0.44rem', color: 'rgba(255,255,255,0.52)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {language === 'mr' ? 'शेवटची भेट' : 'Last Visit'}
                 </div>
                 <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff', fontFamily: 'monospace' }}>
@@ -8422,7 +8320,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                   background: '#0d0d0d', border: '1px solid rgba(211,191,162,0.07)',
                   borderRadius: '13px', minWidth: 0
                 }}>
-                  <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.22)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '9px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ fontSize: '0.44rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '9px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <Flame size={9} color="rgba(211,191,162,0.3)" strokeWidth={1.5} />
                     {language === 'mr' ? 'जास्त ऑर्डर' : 'Most Ordered'}
                   </div>
@@ -8452,7 +8350,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                               }}>
                                 {dish.name}
                               </span>
-                              <span style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.28)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '4px' }}>
+                              <span style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)', fontFamily: 'monospace', flexShrink: 0, marginLeft: '4px' }}>
                                 {dish.count}×
                               </span>
                             </div>
@@ -8593,7 +8491,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
                 <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#d3bfa2' }}>
                   {language === 'mr' ? "तुम्ही लॉयल गेस्ट आहात!" : "You're a Loyal Guest"}
                 </span>
-                <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.18)' }}>
+                <span style={{ fontSize: '0.56rem', color: 'rgba(255,255,255,0.52)' }}>
                   {language === 'mr'
                     ? `· ${welcomeCard.visitCount} भेटींसाठी आभार`
                     : `· thanks for ${welcomeCard.visitCount} visits`}
@@ -8613,7 +8511,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
     }}>
       <Sparkles size={9} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
       <span style={{
-        fontSize: '0.44rem', color: 'rgba(211,191,162,0.3)',
+        fontSize: '0.44rem', color: 'rgba(211,191,162,0.62)',
         fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase'
       }}>
         {language === 'mr' ? 'तुम्हाला आवडेल' : 'YOU MIGHT LIKE'}
@@ -8651,7 +8549,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             {language === 'mr' ? (dish.name_mr || dish.name) : dish.name}
           </div>
           <div style={{
-            fontSize: '0.5rem', color: 'rgba(211,191,162,0.28)',
+            fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)',
             marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
           }}>
             <Star size={7} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
@@ -8662,7 +8560,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         {/* Price */}
         {dish.price > 0 && (
           <span style={{
-            fontSize: '0.6rem', color: 'rgba(211,191,162,0.45)',
+            fontSize: '0.6rem', color: 'rgba(211,191,162,0.62)',
             fontFamily: 'monospace', fontWeight: '700', flexShrink: 0
           }}>
             ₹{dish.price}
@@ -8750,13 +8648,13 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
         <div style={{ padding: '22px 22px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
             <div>
-              <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.3)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '5px' }}>
+              <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '5px' }}>
                 {restaurantData?.name}
               </div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.3px' }}>
                 {language === 'mr' ? 'तुम्ही आधी आलेले आहात का?' : 'Been here before?'}
               </h3>
-              <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
+              <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.6 }}>
                 {language === 'mr'
                   ? 'नंबर द्या — शेवटची ऑर्डर दाखवतो!'
                   : 'Enter your number and we\'ll show your last order.'}
@@ -8774,7 +8672,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
 
           {/* Phone input */}
           <div style={{ position: 'relative', marginBottom: '12px' }}>
-            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', color: 'rgba(211,191,162,0.4)', fontWeight: '700', pointerEvents: 'none' }}>+91</span>
+            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700', pointerEvents: 'none' }}>+91</span>
             <input
               type="tel"
               inputMode="numeric"
@@ -8844,7 +8742,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             style={{
               width: '100%', marginTop: '10px', padding: '11px',
               background: 'transparent', border: 'none',
-              color: 'rgba(255,255,255,0.15)', fontSize: '0.72rem',
+              color: 'rgba(255,255,255,0.52)', fontSize: '0.72rem',
               cursor: 'pointer', fontWeight: '700'
             }}
           >
@@ -9059,7 +8957,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             <h1 style={{ fontSize: '1.7rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.6px', lineHeight: 1.15, marginBottom: '8px' }}>
               {language === 'mr' ? 'किचनमध्ये जात आहे' : 'Heading to the Kitchen'}
             </h1>
-            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.2)', lineHeight: 1.7, fontWeight: '500', maxWidth: '280px', margin: '0 auto' }}>
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.7, fontWeight: '500', maxWidth: '280px', margin: '0 auto' }}>
               {language === 'mr'
                 ? 'तुमची ऑर्डर आमच्या शेफकडे गेली आहे. थोड्याच वेळात तयार होईल!'
                 : "Your order is with our chef. We'll keep you updated every step of the way."}
@@ -9130,7 +9028,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Timer size={13} color="rgba(201,168,76,0.45)" strokeWidth={1.5} />
-              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', fontWeight: '600' }}>
+              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600' }}>
                 {language === 'mr' ? 'अंदाजे तयारीची वेळ' : 'Estimated prep time'}
               </span>
             </div>
@@ -9158,7 +9056,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
             }}>
               {s.icon}
               <div>
-                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.25)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div style={{ fontSize: '0.48rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {s.label}
                 </div>
                 <div style={{ fontSize: '0.92rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>
@@ -9198,7 +9096,7 @@ if (isLoading) return <div style={{ ...styles.loader, color: primaryColor }}><im
           </button>
  
           {/* Auto-dismiss countdown */}
-          <div style={{ textAlign: 'center', fontSize: '0.58rem', color: 'rgba(255,255,255,0.12)', fontWeight: '600' }}>
+          <div style={{ textAlign: 'center', fontSize: '0.58rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600' }}>
             {language === 'mr' ? 'काही सेकंदात आपोआप बंद होईल' : 'Auto-closing in a few seconds'}
           </div>
         </motion.div>
@@ -9246,24 +9144,24 @@ body: {
   WebkitOverflowScrolling: 'touch'  // ← ADD THIS for iOS momentum scroll
 },
 
-header: { padding: '50px 20px 10px', textAlign: 'center', position: 'relative' },
+header: { padding: '60px 20px 18px', textAlign: 'center', position: 'relative' },
 contentWrapper: { 
   touchAction: 'pan-y',       // keep existing
   overflowY: 'visible',       // ← ADD THIS — don't clip children
 },  header: { padding: '50px 20px 10px', textAlign: 'center' },
   searchWrapper: { padding: '0 20px 15px' },
-  searchContainer: { display: 'flex', alignItems: 'center', background: 'rgba(211, 191, 162, 0.05)', border: '1px solid rgba(211, 191, 162, 0.2)', borderRadius: '15px', padding: '12px 15px', gap: '10px' },
+  searchContainer: { display: 'flex', alignItems: 'center', background: 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))', border: '1px solid rgba(211, 191, 162, 0.22)', borderRadius: '20px', padding: '13px 17px', gap: '11px', boxShadow: '0 10px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)' },
   searchInput: { background: 'none', border: 'none', color: '#fff', outline: 'none', width: '100%', fontSize: '0.9rem' },
   langToggleBox: { position: 'absolute', top: '15px', right: '15px' },
   langBtn: { background: 'rgba(211, 191, 162, 0.05)', border: '1px solid', padding: '6px 12px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '800', display: 'flex', alignItems: 'center' },
-  cafeName: { fontSize: '1.4rem', fontFamily: 'Playfair Display, serif', fontWeight: '800' },
+  cafeName: { fontSize: '2rem', fontFamily: 'Playfair Display, serif', fontWeight: '800', letterSpacing: '-0.5px', lineHeight: 1.1, margin: '0 0 2px' },
   poweredBy: { fontSize: '0.6rem', letterSpacing: '3px', marginTop: '5px', opacity: 0.5 },
   navContainer: { position: 'sticky', top: '0', zIndex: 999, borderBottom: '1px solid rgba(211, 191, 162, 0.15)' },
   navScroll: { display: 'flex', overflowX: 'auto', padding: '16px 10px', gap: '20px', whiteSpace: 'nowrap' },
   navItem: { background: 'none', border: 'none', fontWeight: '800', fontSize: '0.72rem', flexShrink: 0, padding: '6px 5px', position: 'relative', outline: 'none' },
-  activeUnderline: { position: 'absolute', bottom: '-8px', left: '0', right: '0', height: '3px', background: '#d3bfa2', borderRadius: '10px' },
+  activeUnderline: { position: 'absolute', bottom: '-8px', left: '0', right: '0', height: '3px', background: 'linear-gradient(90deg, #b99f78, #f0e3c8, #b99f78)', borderRadius: '10px', boxShadow: '0 0 12px rgba(211,191,162,0.6)' },
   menuContainer: { padding: '10px 15px 120px', maxWidth: '600px', margin: '0 auto' },
-  menuCard: { borderRadius: '24px', padding: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', border: '1px solid', position: 'relative' },
+  menuCard: { borderRadius: '28px', padding: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', border: '1px solid', position: 'relative', boxShadow: '0 18px 40px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06)' },
   itemContentLeft: { flex: 1, paddingRight: '12px', textAlign: 'left' },
   itemDesc: { fontSize: '0.6rem', color: '#888', lineHeight: '1.4' },
   priceContainer: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' },
@@ -9271,10 +9169,10 @@ contentWrapper: {
   priceLabel: { fontSize: '0.75rem', fontWeight: '600' },
   counterRowSmall: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 10px', borderRadius: '10px', background: 'rgba(211, 191, 162, 0.12)', border: '1px solid rgba(211,191,162,0.25)' },
   qtyBtnSmall: { background: 'rgba(211,191,162,0.14)', border: 'none', color: '#d3bfa2', fontWeight: '900', width: '22px', height: '22px', borderRadius: '6px', fontSize: '0.85rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' },
-  addBtnSmall: { background: 'rgba(211,191,162,0.1)', border: '1.5px solid rgba(211,191,162,0.5)', fontSize: '0.64rem', fontWeight: '900', padding: '8px 16px', borderRadius: '8px', color: '#d3bfa2', letterSpacing: '0.4px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', transition: 'transform 0.1s, background 0.15s' },
+  addBtnSmall: { background: 'linear-gradient(135deg, #e6d6b8 0%, #d3bfa2 50%, #b99f78 100%)', border: 'none', fontSize: '0.66rem', fontWeight: '900', padding: '9px 20px', borderRadius: '13px', color: '#14110c', letterSpacing: '0.6px', cursor: 'pointer', boxShadow: '0 8px 20px rgba(211,191,162,0.25), inset 0 1px 0 rgba(255,255,255,0.5)' },
   view3dBtn: { color: '#1a1a1a', width: '40px', height: '40px', borderRadius: '50%', border: 'none', fontSize: '0.6rem', fontWeight: '900' },
   rightFabContainer: { position: 'fixed', bottom: '30px', right: '25px', display: 'flex', flexDirection: 'column', gap: '15px', zIndex: 1000 },
-  fabBase: { width: '65px', height: '65px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' },
+  fabBase: { width: '60px', height: '60px', cursor: 'pointer', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' },
   fabBadge: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '20px', height: '20px', borderRadius: '50%', fontSize: '0.65rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   fullscreenModal: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#1a1a1a', zIndex: 5000, display: 'flex', flexDirection: 'column' },
   modalHeader: { padding: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211, 191, 162, 0.1)' },

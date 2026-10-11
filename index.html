@@ -14,9 +14,28 @@
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+      html,body{margin:0;background:#0b0b0c}
+      #root>.pxs{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;background:radial-gradient(120% 80% at 50% 0%,#1a160f 0%,#0b0b0c 58%,#070708 100%);overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+      .pxs .halo{position:absolute;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(211,191,162,.22),transparent 62%);animation:pxsBreath 3.4s ease-in-out infinite}
+      .pxs .stage{position:relative;width:min(78vw,300px);padding:14px}
+      .pxs .ring{position:absolute;inset:-4px;border-radius:34px;padding:2px;background:conic-gradient(from 0deg,transparent 0 55%,rgba(211,191,162,.95) 78%,transparent 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:pxsOrbit 2.6s linear infinite}
+      .pxs .ring.slow{inset:-14px;border-radius:42px;opacity:.45;animation-duration:5.2s;animation-direction:reverse}
+      .pxs .card{position:relative;overflow:hidden;border-radius:28px;background:#f7f3eb;padding:24px 22px;box-shadow:0 30px 70px rgba(0,0,0,.55);animation:pxsFloat 4.6s ease-in-out infinite}
+      .pxs .card img{display:block;width:100%;height:auto}
+      .pxs .card::after{content:'';position:absolute;top:0;bottom:0;width:32%;left:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.85),transparent);animation:pxsSweep 2.8s ease-in-out infinite}
+      .pxs .bar{position:relative;width:120px;height:3px;border-radius:3px;background:rgba(211,191,162,.14);overflow:hidden}
+      .pxs .bar i{position:absolute;inset:0;width:38%;border-radius:3px;background:linear-gradient(90deg,transparent,#d3bfa2,transparent);animation:pxsLoad 1.5s ease-in-out infinite}
+      @keyframes pxsOrbit{to{transform:rotate(360deg)}}
+      @keyframes pxsBreath{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.12);opacity:.95}}
+      @keyframes pxsSweep{0%{transform:translateX(-130%) skewX(-18deg)}55%,100%{transform:translateX(260%) skewX(-18deg)}}
+      @keyframes pxsFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+      @keyframes pxsLoad{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+      @media (prefers-reduced-motion:reduce){.pxs *{animation:none!important}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="pxs" role="status" aria-label="Loading"><div class="halo"></div><div class="stage"><span class="ring slow"></span><span class="ring"></span><div class="card"><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div></div><div class="bar"><i></i></div></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import React, { StrictMode } from 'react'
+import React, { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
@@ -11,6 +11,27 @@ import OwnerApp, { OwnerLauncher } from './OwnerApp.jsx'
 import CustomerHome from './CustomerHome.jsx'
 import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
 import { configurePwa } from './pwa.js'
+import { BrandLoader } from './PremiumUI.jsx'
+
+/* Premium launch screen: shown once per page load / PWA launch, continues the static splash in index.html. */
+function SplashGate({ children }) {
+  const [phase, setPhase] = useState('show'); // show → fade → gone
+  useEffect(() => {
+    const t1 = window.setTimeout(() => setPhase('fade'), 1000);
+    const t2 = window.setTimeout(() => setPhase('gone'), 1500);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, []);
+  return (
+    <>
+      {children}
+      {phase !== 'gone' && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100000, opacity: phase === 'fade' ? 0 : 1, transition: 'opacity .5s ease', pointerEvents: phase === 'fade' ? 'none' : 'auto' }}>
+          <BrandLoader />
+        </div>
+      )}
+    </>
+  );
+}
 
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false }; }
@@ -37,6 +58,7 @@ function KitchenLauncher() {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AppErrorBoundary>
+      <SplashGate>
       <BrowserRouter>
       <Routes>
         {/* 1. 🌐 Pratyeksha Landing Page */}
@@ -74,6 +96,7 @@ createRoot(document.getElementById('root')).render(
 
       </Routes>
       </BrowserRouter>
+      </SplashGate>
     </AppErrorBoundary>
   </StrictMode>
 )
