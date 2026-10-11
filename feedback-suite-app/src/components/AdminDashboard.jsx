@@ -22,7 +22,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { getDashboard, getFeedback, getCustomers, getCustomerFeedback, exportCustomersExcel } from '../api';
+import { getDashboard, getFeedback, getCustomers, getCustomerFeedback, exportCustomersExcel, eraseCustomer } from '../api';
 import { useTenantName } from '../brand';
 import { useNavigate } from 'react-router-dom';
 import pratyekshaLogo from '../assets/pratyeksha-logo.png';
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
         </>}
       </section>
       {selected && <FeedbackDrawer item={selected} onClose={() => setSelected(null)} />}
-      {selectedCustomer && <CustomerDrawer customer={selectedCustomer} token={token} onClose={() => setSelectedCustomer(null)} />}
+      {selectedCustomer && <CustomerDrawer customer={selectedCustomer} token={token} onClose={() => setSelectedCustomer(null)} onDeleted={() => setCustomers((list) => list.filter((c) => c._id !== selectedCustomer._id))} />}
     </main>
   );
 }
@@ -244,11 +244,13 @@ function FeedbackDrawer({ item, onClose }) {
   return <div className="drawer-overlay" onClick={onClose}><aside className="feedback-drawer" onClick={e=>e.stopPropagation()}><div className="drawer-head"><div><span className="eyebrow">FEEDBACK DETAIL</span><h2>{item.name||'Anonymous guest'}</h2><p>{formatDate(item.createdAt)} · {item.source||'Source not shared'}</p></div><button className="icon-button" onClick={onClose}><X size={19}/></button></div><div className="drawer-body"><div className={`drawer-score ${avg(item.ratings)<3?'low-drawer-score':''}`}><strong>{avg(item.ratings).toFixed(1)}</strong><span>overall experience</span></div><div className="drawer-ratings">{scoreKeys.map(([key,label])=><div key={key}><span>{label}</span><b>{item.ratings?.[key]||0}/5</b></div>)}</div><div className="quote-block"><span>Liked most</span><p>{item.likedMost||'No comment shared.'}</p></div><div className="quote-block"><span>Could improve</span><p>{item.improve||'No improvement note shared.'}</p></div><div className="quote-block"><span>Additional comments</span><p>{item.comments||'No additional comment.'}</p></div><div className="drawer-meta"><span>Return intent</span><b>{item.revisit||'Not answered'}</b></div>{item.mobile&&<div className="drawer-meta"><span>Mobile</span><b>{item.mobile}</b></div>}</div></aside></div>;
 }
 
-function CustomerDrawer({ customer, token, onClose }) {
+function CustomerDrawer({ customer, token, onClose, onDeleted }) {
   const [history,setHistory]=useState([]);
   const [profile,setProfile]=useState(customer);
+  const [deleting,setDeleting]=useState(false);
+  const deleteData=async()=>{ if(!window.confirm('Permanently delete this guest and all their feedback? This cannot be undone.')) return; setDeleting(true); try{ await eraseCustomer(token,customer._id); onDeleted&&onDeleted(); onClose(); }catch{ window.alert('Could not delete this customer. Please try again.'); setDeleting(false);} };
   useEffect(()=>{getCustomerFeedback(token,customer._id).then(r=>setHistory(r.data.items||[])).catch(()=>{});},[customer._id,token]);
-  return <div className="drawer-overlay" onClick={onClose}><aside className="feedback-drawer customer-drawer" onClick={e=>e.stopPropagation()}><div className="drawer-head"><div><span className="eyebrow">CUSTOMER PROFILE</span><h2>{customer.name}</h2><p>{customer.mobile} · {customer.feedbackCount||0} feedback responses</p></div><button className="icon-button" onClick={onClose}><X size={19}/></button></div><div className="drawer-body"><div className="customer-profile-hero"><div className="customer-avatar large">{(customer.name||'G').slice(0,1).toUpperCase()}</div><div><strong>{Number(customer.averageRating||0).toFixed(1)}/5</strong><span>lifetime average</span></div></div><div className="history-title"><span className="eyebrow">FEEDBACK HISTORY</span><h3>Every visit stays here</h3></div><div className="customer-history">{history.map((item)=><button key={item._id} onClick={()=>{}} className={`history-item ${avg(item.ratings)<3?'low-history':''}`}><span>{formatDate(item.createdAt)}</span><b>{avg(item.ratings).toFixed(1)}★</b><small>{item.revisit||'—'} · {item.source||'Source not shared'}</small></button>)}{!history.length&&<Empty text="No feedback history found."/>}</div></div></aside></div>;
+  return <div className="drawer-overlay" onClick={onClose}><aside className="feedback-drawer customer-drawer" onClick={e=>e.stopPropagation()}><div className="drawer-head"><div><span className="eyebrow">CUSTOMER PROFILE</span><h2>{customer.name}</h2><p>{customer.mobile} · {customer.feedbackCount||0} feedback responses</p></div><button className="icon-button" onClick={onClose}><X size={19}/></button></div><div className="drawer-body"><div className="customer-profile-hero"><div className="customer-avatar large">{(customer.name||'G').slice(0,1).toUpperCase()}</div><div><strong>{Number(customer.averageRating||0).toFixed(1)}/5</strong><span>lifetime average</span></div></div>{customer.erasureRequestedAt&&<div className="insight-note"><span>This guest asked for their data to be deleted on {formatDate(customer.erasureRequestedAt)}. Marketing to them has already stopped.</span></div>}<div className="history-title"><span className="eyebrow">FEEDBACK HISTORY</span><h3>Every visit stays here</h3></div><div className="customer-history">{history.map((item)=><button key={item._id} onClick={()=>{}} className={`history-item ${avg(item.ratings)<3?'low-history':''}`}><span>{formatDate(item.createdAt)}</span><b>{avg(item.ratings).toFixed(1)}★</b><small>{item.revisit||'—'} · {item.source||'Source not shared'}</small></button>)}{!history.length&&<Empty text="No feedback history found."/>}</div><button type="button" className="ghost-button" disabled={deleting} onClick={deleteData} style={{marginTop:16,width:'100%'}}>{deleting?'Deleting…':'Delete this guest’s data (DPDP request)'}</button></div></aside></div>;
 }
 
 function Empty({ text }) { return <div className="empty-state"><MessageSquareText size={20}/><span>{text}</span></div>; }

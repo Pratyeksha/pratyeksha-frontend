@@ -12,6 +12,7 @@ import CustomerHome from './CustomerHome.jsx'
 import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
 import { configurePwa } from './pwa.js'
 import { BrandLoader } from './PremiumUI.jsx'
+import { loaderMessageFor } from './loaderMessages.js'
 
 /* Premium launch screen: shown once per page load / PWA launch, continues the static splash in index.html. */
 function SplashGate({ children }) {
@@ -26,7 +27,7 @@ function SplashGate({ children }) {
       {children}
       {phase !== 'gone' && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100000, opacity: phase === 'fade' ? 0 : 1, transition: 'opacity .5s ease', pointerEvents: phase === 'fade' ? 'none' : 'auto' }}>
-          <BrandLoader />
+          <BrandLoader message={loaderMessageFor(window.location.pathname)} />
         </div>
       )}
     </>

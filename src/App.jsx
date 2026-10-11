@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { AmbientBackdrop, BrandLoader } from './PremiumUI.jsx';
+import { GuestLegalSheet, ConsentCheck, getGuestConsent, setGuestConsent, setGuestToken, clearGuestLocalData, GUEST_CONSENT_VERSION } from './GuestLegal.jsx';
 import { io } from "socket.io-client";
 import { 
   CheckCircle2, AlertCircle, Utensils, Info, X, Sparkles, Volume1, Volume2, Play, Pause,ChevronDown ,
@@ -12,7 +13,7 @@ import {
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
-  Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star
+  Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star, User, ShieldCheck, Lock
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
@@ -33,6 +34,75 @@ const PX = {
 
 // Stable shell component. Keeping this outside the parent render prevents React
 // from remounting the registration form on every keystroke/state update.
+const maskGuestPhone = (p) => (p && p.length >= 4 ? `+91 ••••••${p.slice(-4)}` : '');
+
+/** Name + mobile collection. A remembered guest sees a welcome-back card instead of the form. */
+const GuestIdentityBlock = ({ language, info, onName, onPhone, locked, onForget }) => {
+  const mr = language === 'mr';
+  const label = { fontSize: '0.54rem', color: 'rgba(211,191,162,0.72)', fontWeight: 800, letterSpacing: '2px', display: 'block', marginBottom: 10, textTransform: 'uppercase', textAlign: 'left' };
+  const field = { width: '100%', boxSizing: 'border-box', padding: '16px 16px 16px 50px', background: PX.card, border: '1px solid rgba(211,191,162,0.22)', color: '#f7f3eb', borderRadius: 18, fontSize: '1rem', outline: 'none', fontFamily: 'Poppins, sans-serif', transition: 'border-color .2s, box-shadow .2s', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' };
+  const focus = e => { e.target.style.borderColor = 'rgba(211,191,162,0.6)'; e.target.style.boxShadow = '0 0 0 4px rgba(211,191,162,0.1)'; };
+  const blur = e => { e.target.style.borderColor = 'rgba(211,191,162,0.22)'; e.target.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.05)'; };
+  const icon = { position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' };
+
+  if (locked && info.name && info.phone?.length === 10) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', marginBottom: 22, borderRadius: 22, background: PX.card, border: `1px solid ${PX.line}`, boxShadow: PX.shadow, textAlign: 'left' }}>
+        <div style={{ width: 48, height: 48, borderRadius: 16, flexShrink: 0, background: PX.gold, color: '#14110c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: PX.serif, fontWeight: 700, fontSize: '1.3rem' }}>
+          {info.name.trim().charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '0.5rem', letterSpacing: 2.5, fontWeight: 800, color: 'rgba(211,191,162,0.65)', textTransform: 'uppercase', marginBottom: 3 }}>{mr ? 'पुन्हा स्वागत' : 'Welcome back'}</div>
+          <div style={{ fontFamily: PX.serif, fontSize: '1.15rem', fontWeight: 700, color: '#f7f3eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.name}</div>
+          <div style={{ fontSize: '0.64rem', color: 'rgba(247,243,235,0.5)', marginTop: 2, letterSpacing: 1 }}>{maskGuestPhone(info.phone)}</div>
+        </div>
+        <button type="button" onClick={onForget} style={{ background: 'none', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', borderRadius: 12, padding: '8px 11px', fontSize: '0.58rem', fontWeight: 800, cursor: 'pointer', fontFamily: 'Poppins, sans-serif', whiteSpace: 'nowrap' }}>
+          {mr ? 'तुम्ही नाही?' : 'Not you?'}
+        </button>
+      </motion.div>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ marginBottom: 20 }}>
+        <label style={label}>{mr ? 'तुमचे नाव *' : 'Your name *'}</label>
+        <div style={{ position: 'relative' }}>
+          <User size={17} color="rgba(211,191,162,0.6)" strokeWidth={1.7} style={icon} />
+          <input type="text" autoComplete="name" maxLength={60} placeholder={mr ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'} value={info.name} onChange={e => onName(e.target.value)} onFocus={focus} onBlur={blur} style={field} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 22 }}>
+        <label style={label}>{mr ? '१० अंकी मोबाईल नंबर *' : '10-digit mobile number *'}</label>
+        <div style={{ position: 'relative' }}>
+          <span style={{ ...icon, fontSize: '0.84rem', color: 'rgba(211,191,162,0.75)', fontWeight: 700 }}>+91</span>
+          <input type="tel" inputMode="numeric" autoComplete="tel" maxLength={10} placeholder="9876543210" value={info.phone} onChange={e => onPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} onFocus={focus} onBlur={blur} style={{ ...field, paddingLeft: 56, letterSpacing: 2 }} />
+        </div>
+        {info.phone?.length > 0 && info.phone.length !== 10 && (
+          <div style={{ fontSize: '0.6rem', color: '#e8b87a', marginTop: 7, fontWeight: 700, textAlign: 'left' }}>
+            {mr ? `आणखी ${10 - info.phone.length} अंक हवेत` : `${10 - info.phone.length} more digits needed`}
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
+const GuestLegalLinks = ({ language, onOpen, style }) => {
+  const mr = language === 'mr';
+  const btn = { background: 'none', border: 0, padding: '4px 2px', cursor: 'pointer', color: 'rgba(211,191,162,0.62)', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', ...style }}>
+      <ShieldCheck size={11} color="rgba(211,191,162,0.55)" />
+      <button type="button" style={btn} onClick={() => onOpen('privacy')}>{mr ? 'गोपनीयता' : 'Privacy'}</button>
+      <span style={{ color: 'rgba(211,191,162,0.3)' }}>·</span>
+      <button type="button" style={btn} onClick={() => onOpen('terms')}>{mr ? 'अटी' : 'Terms'}</button>
+      <span style={{ color: 'rgba(211,191,162,0.3)' }}>·</span>
+      <button type="button" style={btn} onClick={() => onOpen('data')}>{mr ? 'माझा डेटा / हटवा' : 'My data / Delete'}</button>
+    </div>
+  );
+};
+
 const CustomerShell = ({ children, centered = true, scrollRef }) => (
   <div ref={scrollRef} style={{
     position: 'relative', minHeight: '100vh', height: '100vh', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
@@ -265,6 +335,9 @@ const [waitlistEntry, setWaitlistEntry] = useState(null);
 const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
   const customerInfoDraftRef = useRef({ name: '', phone: '' });
 const [savedCustomer, setSavedCustomer] = useState(null);
+const [legalSheet, setLegalSheet] = useState({ open: false, tab: 'privacy' });
+const [guestConsent, setGuestConsentState] = useState(false);
+const [identityEditing, setIdentityEditing] = useState(false);
 const [partySize, setPartySize] = useState(1);
 const [scheduledPickupTime, setScheduledPickupTime] = useState('');
 const [registrationStep, setRegistrationStep] = useState('mode'); // 'mode' | 'register' | 'menu' | 'confirm'
@@ -617,6 +690,44 @@ useEffect(() => {
   return () => { cancelled = true; };
 }, [urlTenantId, sessionId]); 
 
+// ── GUEST PRIVACY HELPERS (DPDP) ──
+useEffect(() => { if (tenantId) setGuestConsentState(!!getGuestConsent(tenantId)); }, [tenantId]);
+const openLegal = (tab = 'privacy') => setLegalSheet({ open: true, tab });
+const toggleGuestConsent = (on) => {
+  setGuestConsentState(!!on);
+  if (on) setGuestConsent(tenantId);
+  else { try { localStorage.removeItem(`pratyeksha_consent_${tenantId}`); } catch {} }
+};
+// Name/mobile are only ever sent to the server once the guest has agreed to the privacy notice.
+const upsertGuest = (payload) => {
+  const tid = payload?.tenantId || tenantId;
+  const consent = getGuestConsent(tid);
+  if (!consent) return Promise.resolve(null);
+  const phone = String(payload?.phone || '').replace(/\D/g, '').slice(-10);
+  return axios.post(`${BASE_URL}/customers/upsert`, { ...payload, consentVersion: consent.version })
+    .then(r => { if (r.data?.erasureToken) setGuestToken(tid, phone, r.data.erasureToken); return r; });
+};
+// Once-per-table-session bookkeeping so a visit, the spend and the dish counts are each recorded exactly once.
+const creditKey = () => `pratyeksha_credit_${tenantId}_${tableNumber || 'x'}`;
+const getCredit = () => { try { return { visit: false, spend: 0, dishes: false, ...(JSON.parse(sessionStorage.getItem(creditKey()) || '{}')) }; } catch { return { visit: false, spend: 0, dishes: false }; } };
+const addCredit = (patch) => { const c = getCredit(); const next = { visit: c.visit || !!patch.visit, spend: c.spend + (Number(patch.spend) || 0), dishes: c.dishes || !!patch.dishes }; try { sessionStorage.setItem(creditKey(), JSON.stringify(next)); } catch {} return next; };
+const resetCredit = () => { try { sessionStorage.removeItem(creditKey()); } catch {} };
+const forgetGuestIdentity = () => {
+  try {
+    localStorage.removeItem(`pratyeksha_customer_history_${tenantId}`);
+    localStorage.removeItem(`pratyeksha_phone_${tenantId}`);
+  } catch {}
+  setSavedCustomer(null); setWelcomeCard(null); setWelcomePhone('');
+  customerInfoDraftRef.current = { name: '', phone: '' };
+  setCustomerInfo({ name: '', phone: '' }); setCustomerPhone('');
+  setIdentityEditing(true);
+};
+const onGuestErased = () => {
+  forgetGuestIdentity();
+  setGuestConsentState(false);
+  resetCredit();
+};
+
 // ── RETURNING CUSTOMER HISTORY ──
 // Keep the existing backend customer record as the source of truth, while storing
 // the last confirmed identity locally so a returning guest can view a bill without
@@ -652,6 +763,32 @@ useEffect(() => {
   setCustomerInfo(savedCustomer);
   setCustomerPhone(savedCustomer.phone);
 }, [isBillOpen, savedCustomer]);
+
+// A remembered guest is never asked again: if anything cleared the form (e.g. a stale session reset), restore it.
+useEffect(() => {
+  if (!savedCustomer || identityEditing) return;
+  if (customerInfo.name || customerInfo.phone) return;
+  setCustomerInfo(savedCustomer);
+  setCustomerPhone(savedCustomer.phone);
+}, [savedCustomer, identityEditing, customerInfo.name, customerInfo.phone]);
+
+// A guest recognised by mobile number at the table (QR) is already known — remember them so the bill never asks again.
+useEffect(() => {
+  if (!tenantId || !welcomeCard?.name || !welcomePhone || welcomePhone.length !== 10) return;
+  const customer = { name: String(welcomeCard.name).trim(), phone: welcomePhone };
+  if (!customer.name || customer.name === 'Guest') return;
+  setSavedCustomer(prev => (prev && prev.name === customer.name && prev.phone === customer.phone) ? prev : customer);
+  setCustomerInfo(prev => (prev.name || prev.phone) ? prev : customer);
+  setCustomerPhone(welcomePhone);
+  try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify(customer)); } catch {}
+}, [tenantId, welcomeCard?.name, welcomePhone]);
+
+useEffect(() => {
+  if (!isBillOpen || customerInfo.phone || !tenantId) return;
+  let p = '';
+  try { p = localStorage.getItem(`pratyeksha_phone_${tenantId}`) || ''; } catch {}
+  if (p.length === 10) setCustomerInfo(prev => prev.phone ? prev : { ...prev, phone: p });
+}, [isBillOpen, tenantId]);
 
 useEffect(() => {
   if (!tenantId || !savedCustomer?.phone) return;
@@ -2619,22 +2756,23 @@ setPrepPct(0);
     // ── Customer upsert — single declaration, no duplicate ──
     let storedPhone = null;
     try { storedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`); } catch {}
-    const knownPhone = welcomePhone || storedPhone;
-    if (knownPhone && knownPhone.length === 10) {
+    const knownPhone = welcomePhone || storedPhone || savedCustomer?.phone || String(customerInfo.phone || '').replace(/\D/g, '');
+    if (knownPhone && knownPhone.length === 10 && getGuestConsent(tenantId)) {
       const visitItems = orderItems.map(i => ({
         menuItemId: i.menuItemId,
         name:       i.name,
         quantity:   i.quantity,
         subtotal:   i.subtotal,
       }));
-      axios.post(`${BASE_URL}/customers/upsert`, {
+      const credit = getCredit();
+      upsertGuest({
         tenantId,
-        name:           customerInfo.name?.trim() || welcomeCard?.name || 'Guest',
+        name:           customerInfo.name?.trim() || welcomeCard?.name || savedCustomer?.name || '',
         phone:          knownPhone,
         lastOrderItems: visitItems,
         visitAmount:    total,
-        incrementVisit: false,
-      }).catch(() => {});
+        incrementVisit: !credit.visit,
+      }).then(r => { if (r) addCredit({ visit: true, spend: total, dishes: true }); }).catch(() => {});
     }
  
     triggerAlert("orderSuccess");
@@ -2699,11 +2837,12 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
     // ── ADD THIS: upsert customer into CustomerSchema ──
     const phone = customerInfo.phone?.replace(/\D/g, '') || '';
     if (phone.length === 10) {
-      axios.post(`${BASE_URL}/customers/upsert`, {
+      upsertGuest({
         tenantId,
         name: customerInfo.name.trim(),
         phone,
         lastVisit: new Date().toISOString(),
+        incrementVisit: counterMode === 'pickup',
         lastOrderItems: orderItems.map(i => ({
           menuItemId: i.menuItemId,
           name: i.name,
@@ -2841,7 +2980,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
     // ── Auto-save / upsert customer in DB with visit count ──
     const phone = customerInfo.phone?.replace(/\D/g, '') || '';
     if (phone.length === 10) {
-      axios.post(`${BASE_URL}/customers/upsert`, {
+      upsertGuest({
         tenantId,
         name: customerInfo.name.trim(),
         phone,
@@ -3207,15 +3346,18 @@ const requestFinalBill = async () => {
 
     const visitTotal = finalBillItems.reduce((sum, i) => sum + (i.subtotal || 0), 0);
 
-    await axios.post(`${BASE_URL}/customers/upsert`, {
+    // Orders already credited this table's visit, spend and dishes when they were placed — only add what is missing.
+    const credit = getCredit();
+    const billUpsert = await upsertGuest({
       tenantId,
       name: customerInfo.name.trim(),
       phone: customerInfo.phone.replace(/\D/g, ''),
       lastVisit: new Date().toISOString(),
-      lastOrderItems: visitItems,
-      visitAmount: visitTotal,
-      incrementVisit: true,
+      ...(credit.dishes ? {} : { lastOrderItems: visitItems }),
+      visitAmount: Math.max(0, Math.round((visitTotal - credit.spend) * 100) / 100),
+      incrementVisit: !credit.visit,
     });
+    if (billUpsert) addCredit({ visit: true, spend: Math.max(0, visitTotal - credit.spend), dishes: true });
 
     const phoneDigits = customerInfo.phone.replace(/\D/g, '');
     if (phoneDigits.length === 10) {
@@ -3471,35 +3613,55 @@ useEffect(() => {
     });
 }, [tenantId, tableNumber, isCounterScan]);
 
+// "Goes well with your order" — the same smart pairing strip for QR table ordering, waitlist, pickup and reservations.
 useEffect(() => {
   if (!allMenuItems.length) return;
   const cartIds = Object.keys(cart).map(k => k.split('-')[0]);
   if (cartIds.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
 
-  const cartItems = cartIds.map(id => allMenuItems.find(m => m._id === id || m._id?.toString() === id)).filter(Boolean);
-  const hasMain = cartItems.some(i => {
-    const cat = (i.categoryId || '').toLowerCase();
-    return cat.includes('main') || cat.includes('curry') || cat.includes('rice') || cat.includes('roti') || cat.includes('biryani');
-  });
-
-  if (!hasMain) { setComboSuggestions([]); setShowComboStrip(false); return; }
-
-  // Find complementary items: drinks + desserts not already in cart
-  const suggestions = allMenuItems.filter(m => {
-    if (!m.isAvailable) return false;
-    if (cartIds.includes(m._id) || cartIds.includes(m._id?.toString())) return false;
-    const cat = (m.categoryId || '').toLowerCase();
-    return cat.includes('drink') || cat.includes('dessert') || cat.includes('sweet') || cat.includes('juice') || cat.includes('beverage') || cat.includes('ice');
-  }).slice(0, 6);
-
-  setComboSuggestions(suggestions);
-  setShowComboStrip(suggestions.length > 0);
+  const kindOf = (m) => {
+    const c = `${m.categoryId || ''} ${m.category || ''} ${m.name || ''}`.toLowerCase();
+    if (/drink|juice|beverage|coffee|tea|shake|lassi|soda|cola|mojito|water|latte|cappuccino|chai/.test(c)) return 'drink';
+    if (/dessert|sweet|ice|cake|brownie|pastry|gulab|kulfi|cookie|waffle/.test(c)) return 'dessert';
+    if (/snack|starter|fries|sandwich|burger|pizza|roll|momo|pakora|bites|wrap/.test(c)) return 'snack';
+    return 'main';
+  };
+  const inCartSet = new Set(cartIds.map(String));
+  const cartItems = cartIds.map(id => allMenuItems.find(m => String(m._id) === String(id))).filter(Boolean);
+  if (cartItems.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
+  const have = new Set(cartItems.map(kindOf));
+  const wantedOrder = ['drink', 'dessert', 'snack'].filter(k => !have.has(k));
+  const rank = (m) => {
+    const w = wantedOrder.indexOf(kindOf(m));
+    return (w === -1 ? 10 : w) - (m.isBestSeller ? 1.5 : 0) - (m.isChefSpecial ? 1 : 0);
+  };
+  const pool = allMenuItems.filter(m => m.isAvailable !== false && !inCartSet.has(String(m._id)) && Number(m.price || m.priceHalf || m.priceFull) > 0);
+  let picks = pool.filter(m => kindOf(m) !== 'main').sort((x, y) => rank(x) - rank(y)).slice(0, 6);
+  if (picks.length === 0) picks = pool.filter(m => m.isBestSeller || m.isChefSpecial).slice(0, 6);
+  setComboSuggestions(picks);
+  setShowComboStrip(picks.length > 0);
 }, [cart, allMenuItems]);
 
 // ── Tenant-specific guest services. Defaults stay enabled to preserve every
 // existing restaurant workflow unless the tenant explicitly disables a service.
 const customerFeatures = restaurantData?.config?.customerFeatures || {};
 const featureEnabled = key => customerFeatures[key] !== false;
+
+const legalPhone = (savedCustomer?.phone || String(customerInfo.phone || '').replace(/\D/g, '')).slice(0, 10);
+const legalSheetEl = (
+  <GuestLegalSheet
+    open={legalSheet.open}
+    tab={legalSheet.tab}
+    onTab={tab => setLegalSheet(prev => ({ ...prev, tab }))}
+    onClose={() => setLegalSheet(prev => ({ ...prev, open: false }))}
+    language={language}
+    tenantId={tenantId}
+    tenantName={restaurantData?.name || 'the restaurant'}
+    phone={legalPhone.length === 10 ? legalPhone : ''}
+    name={customerInfo.name || savedCustomer?.name || ''}
+    onErased={onGuestErased}
+  />
+);
 
 // ── Fullscreen table/order-ready banner — safe to return here: every hook is declared above ──
 if (notificationBannerView) return notificationBannerView;
@@ -4047,81 +4209,15 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             </div>
           </div>
 
-          {/* Name field */}
-          <div style={{ marginBottom: '22px' }}>
-            <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
-              fontWeight: '900', letterSpacing: '2px',
-              display: 'block', marginBottom: '10px', textTransform: 'uppercase'
-            }}>
-              {language === 'mr' ? 'तुमचे नाव *' : 'Your Name *'}
-            </label>
-            <input
-  type="text"
-  placeholder={language === 'mr' ? 'उदा. राज शर्मा' : 'e.g. Raj Sharma'}
-  value={customerInfo.name}
-  onChange={e => {
-    const name = e.target.value;
-    customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name };
-    setCustomerInfo(prev => ({ ...prev, name }));
-  }}
-  onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-  autoComplete="name"
-  style={{
-    width: '100%', padding: '15px 16px',
-    background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
-    color: '#fff', borderRadius: '16px', fontSize: '1rem',
-    outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
-    fontFamily: 'Poppins, sans-serif'
-  }}
-/>
-          </div>
-
-          {/* ── CONTACT (all modes in old block) ── */}
-          <div style={{ marginBottom: '22px' }}>
-            <label style={{
-              fontSize: '0.54rem', color: 'rgba(211,191,162,0.62)',
-              fontWeight: '900', letterSpacing: '2px',
-              display: 'block', marginBottom: '10px', textTransform: 'uppercase'
-            }}>
-              {language === 'mr' ? '१० अंकी मोबाईल नंबर *' : '10-Digit Mobile Number *'}
-            </label>
-            <div style={{ position: 'relative' }}>
-  <span style={{
-    position: 'absolute', left: '14px', top: '50%',
-    transform: 'translateY(-50%)',
-    fontSize: '0.85rem', color: 'rgba(211,191,162,0.62)',
-    fontWeight: '700', pointerEvents: 'none'
-  }}>+91</span>
-  <input
-    type="tel"
-    inputMode="numeric"
-    maxLength={10}
-    placeholder="9876543210"
-    value={customerInfo.phone}
-    onChange={e => {
-      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-      customerInfoDraftRef.current = { ...customerInfoDraftRef.current, phone: digits };
-      setCustomerInfo(prev => ({ ...prev, phone: digits }));
-    }}
-    onFocus={e => e.target.style.borderColor = 'rgba(211,191,162,0.4)'}
-    onBlur={e => { e.target.style.borderColor = 'rgba(211,191,162,0.12)'; }}
-    autoComplete="tel"
-    style={{
-      width: '100%', padding: '15px 16px 15px 52px',
-      background: PX.card, border: '1px solid rgba(211,191,162,0.18)',
-      color: '#fff', borderRadius: '16px', fontSize: '1rem',
-      outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
-      fontFamily: 'Poppins, sans-serif', letterSpacing: '1.5px'
-    }}
-  />
-</div>
-            {customerInfo.phone?.length > 0 && customerInfo.phone?.length !== 10 && (
-              <div style={{ fontSize: '0.6rem', color: '#BA7517', marginTop: '5px', fontWeight: '700' }}>
-                {10 - (customerInfo.phone?.length || 0)} more digits needed
-              </div>
-            )}
-          </div>
+          {/* Name + mobile (hidden for a remembered guest) */}
+          <GuestIdentityBlock
+            language={language}
+            info={customerInfo}
+            locked={!!savedCustomer && !identityEditing}
+            onForget={forgetGuestIdentity}
+            onName={name => { customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name }; setIdentityEditing(true); setCustomerInfo(prev => ({ ...prev, name })); }}
+            onPhone={digits => { customerInfoDraftRef.current = { ...customerInfoDraftRef.current, phone: digits }; setIdentityEditing(true); setCustomerInfo(prev => ({ ...prev, phone: digits })); }}
+          />
 
           {/* Party size — dine-in only */}
           {isDineIn && (
@@ -4405,7 +4501,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
       const phoneOk = customerInfo.phone?.replace(/\D/g,'').length === 10;
       const dateOk  = !!reservationDate;
       const timeOk  = !!reservationTime;
-      const allOk   = nameOk && phoneOk && dateOk && timeOk;
+      const allOk   = nameOk && phoneOk && dateOk && timeOk && guestConsent;
 
       const hint = !nameOk
         ? (language === 'mr' ? 'नाव आवश्यक आहे' : 'Enter your name above')
@@ -4415,10 +4511,15 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         ? (language === 'mr' ? 'तारीख निवडा' : 'Choose a date')
         : !timeOk
         ? (language === 'mr' ? 'वेळ निवडा' : 'Select a time slot')
+        : !guestConsent
+        ? (language === 'mr' ? 'गोपनीयता संमती आवश्यक' : 'Please accept the privacy notice')
         : null;
 
       return (
         <div style={{ marginBottom: '40px' }}>
+          <div style={{ marginBottom: 14 }}>
+            <ConsentCheck checked={guestConsent} onChange={toggleGuestConsent} onOpen={openLegal} language={language} tenantName={restaurantData?.name || 'the restaurant'} />
+          </div>
           {hint && (
             <div style={{
               textAlign: 'center', marginBottom: '10px',
@@ -4493,7 +4594,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             const nameOk  = customerInfo.name.trim().length > 0;
             const phoneOk = customerInfo.phone?.replace(/\D/g,'').length === 10;
             const pickupOk = counterMode !== 'pickup' || !!scheduledPickupTime;
-            const allOk   = nameOk && phoneOk && pickupOk;
+            const allOk   = nameOk && phoneOk && pickupOk && guestConsent;
 
             const hint = !nameOk
               ? (language === 'mr' ? 'नाव आवश्यक आहे' : 'Enter your name above')
@@ -4501,10 +4602,15 @@ if (registrationStep === 'confirm' && waitlistEntry) {
               ? (language === 'mr' ? '१० अंकी नंबर आवश्यक' : '10-digit number required')
               : !pickupOk
               ? (language === 'mr' ? 'पिकअप वेळ निवडा' : 'Select a pickup time')
+              : !guestConsent
+              ? (language === 'mr' ? 'गोपनीयता संमती आवश्यक' : 'Please accept the privacy notice')
               : null;
 
             return (
               <div style={{ marginBottom: '40px' }}>
+                <div style={{ marginBottom: 14 }}>
+                  <ConsentCheck checked={guestConsent} onChange={toggleGuestConsent} onOpen={openLegal} language={language} tenantName={restaurantData?.name || 'the restaurant'} />
+                </div>
                 {hint && (
                   <div style={{
                     textAlign: 'center', marginBottom: '10px',
@@ -4550,6 +4656,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
         </div>{/* end of padding div */}
 
+        {legalSheetEl}
         {/* ── RESERVATION ORDER PROMPT OVERLAY ── */}
 {/* ── RESERVATION: ASK ORDER OVERLAY ── */}
         <AnimatePresence>
@@ -4680,7 +4787,7 @@ setRegistrationStep('confirm');
 
 const phone = customerInfo.phone?.replace(/\D/g, '') || '';
 if (phone.length === 10) {
-  axios.post(`${BASE_URL}/customers/upsert`, {
+  upsertGuest({
     tenantId,
     name: customerInfo.name.trim(),
     phone,
@@ -4851,6 +4958,8 @@ if (phone.length === 10) {
         <Globe2 size={13} strokeWidth={1.6} />
         {language === 'en' ? 'मराठी' : 'English'}
       </button>
+      <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 22, paddingBottom: 18 }} />
+      {legalSheetEl}
     </CustomerShell>
   );
 } // ← end of if (isCounterScan && registrationStep !== 'menu')
@@ -4863,6 +4972,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
   return (
     <div style={{...styles.body, backgroundColor: '#0b0b0c', position: 'relative', isolation: 'isolate'}}>
       <div className="px-ambient" style={{ zIndex: -1 }} aria-hidden="true"><div className="px-grain" /></div>
+      {legalSheetEl}
 
       {/* OFFLINE / SAVED-MENU NOTICE — persistent, not a timed toast */}
       <AnimatePresence>
@@ -5104,6 +5214,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
           <span style={{ width: 40, height: 1, background: 'linear-gradient(90deg, rgba(211,191,162,0.6), transparent)' }} />
         </div>
         <div style={styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
+        <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -6290,35 +6401,64 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
       {/* WAITER MODAL */}
       <AnimatePresence>
         {isWaiterModalOpen && (
-          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} style={styles.fullscreenModal}>
-            <div style={styles.modalHeader}>
-              <h2 style={{color: primaryColor}}>{t[language].callWaiter}</h2>
-              <X size={30} color={primaryColor} onClick={() => setIsWaiterModalOpen(false)} />
+          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            style={{ ...styles.fullscreenModal, isolation: 'isolate' }}>
+            <div className="px-ambient" style={{ zIndex: -1 }} aria-hidden="true"><div className="px-grain" /></div>
+            <div style={{ ...styles.modalHeader, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 16, background: PX.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 28px rgba(211,191,162,0.25)' }}>
+                  <BellRing size={22} color="#14110c" strokeWidth={2} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontFamily: PX.serif, fontSize: '1.4rem', fontWeight: 700, color: '#f7f3eb', textAlign: 'left', lineHeight: 1.1 }}>{t[language].callWaiter}</h2>
+                  <div style={{ fontSize: '0.62rem', color: 'rgba(211,191,162,0.62)', marginTop: 5, fontWeight: 600 }}>
+                    {language === 'mr' ? 'आम्ही तुमच्या टेबलवर आणतो' : "We'll bring it right to your table"}
+                  </div>
+                </div>
+              </div>
+              <button type="button" onClick={() => setIsWaiterModalOpen(false)} aria-label="Close"
+                style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: `1px solid ${PX.line}`, color: '#d3bfa2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={18} />
+              </button>
             </div>
+
             <div style={styles.modalScrollBody}>
               <div style={styles.waiterCardGrid}>
-              {['spoon', 'fork', 'plates', 'tissue'].map(id => (
-  <div key={id} style={styles.waiterCountCard}>
-    <div style={{ color: primaryColor }}>
-      {/* UPDATED ICON LOGIC */}
-      {id === 'spoon' && <Utensils size={24} />}
-      {id === 'fork' && <UtensilsCrossed size={24} />}
-      {id === 'plates' && <Layers size={24} />}
-      {id === 'tissue' && <Box size={24} />}
-    </div>
-    <p style={styles.waiterLabel}>{t[language][id]}</p>
-                    <div style={styles.countControls}>
-                      <button type="button" style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={16}/></button>
-                      <span style={styles.countDisplay}>{convertToMrNumber(waiterCounts[id])}</span>
-                      <button type="button" style={styles.countBtn} onClick={() => updateWaiterCount(id, 1)}><Plus size={16}/></button>
-                    </div>
-                  </div>
-                ))}
+                {['spoon', 'fork', 'plates', 'tissue'].map((id, i) => {
+                  const n = waiterCounts[id] || 0;
+                  return (
+                    <motion.div key={id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * i }}
+                      style={{ ...styles.waiterCountCard, borderColor: n > 0 ? 'rgba(211,191,162,0.5)' : 'rgba(211,191,162,0.14)', boxShadow: n > 0 ? '0 0 0 4px rgba(211,191,162,0.07), ' + PX.shadow : PX.shadow }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 15, background: 'rgba(211,191,162,0.09)', border: `1px solid ${PX.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d3bfa2' }}>
+                        {id === 'spoon' && <Utensils size={21} strokeWidth={1.7} />}
+                        {id === 'fork' && <UtensilsCrossed size={21} strokeWidth={1.7} />}
+                        {id === 'plates' && <Layers size={21} strokeWidth={1.7} />}
+                        {id === 'tissue' && <Box size={21} strokeWidth={1.7} />}
+                      </div>
+                      <p style={styles.waiterLabel}>{t[language][id]}</p>
+                      <div style={styles.countControls}>
+                        <button type="button" aria-label="Less" style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={15} /></button>
+                        <span style={styles.countDisplay}>{convertToMrNumber(n)}</span>
+                        <button type="button" aria-label="More" style={{ ...styles.countBtn, background: PX.gold, color: '#14110c' }} onClick={() => updateWaiterCount(id, 1)}><Plus size={15} /></button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
-              <div style={{ padding: '0 25px' }}>
-                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.clean)}><Trash2 size={20} color={primaryColor}/> <span>{t[language].clean}</span></button>
-                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.other)}><HelpCircle size={20} color={primaryColor}/> <span>{t[language].other}</span></button>
-                <button type="button" style={{...styles.kitchenBtn, background: primaryColor, marginTop: '20px'}} onClick={() => notifyWaiter("Custom")}>{t[language].sendRequest}</button>
+              <div style={{ padding: '0 22px', maxWidth: 480, margin: '0 auto' }}>
+                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.clean)}>
+                  <span style={styles.waiterActionIcon}><Trash2 size={18} color="#d3bfa2" strokeWidth={1.7} /></span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{t[language].clean}</span>
+                  <ChevronRight size={16} color="rgba(211,191,162,0.5)" />
+                </button>
+                <button type="button" style={styles.waiterActionRow} onClick={() => notifyWaiter(t.en.other)}>
+                  <span style={styles.waiterActionIcon}><HelpCircle size={18} color="#d3bfa2" strokeWidth={1.7} /></span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{t[language].other}</span>
+                  <ChevronRight size={16} color="rgba(211,191,162,0.5)" />
+                </button>
+                <button type="button" className="px-gold" style={{ ...styles.kitchenBtn, marginTop: 14, borderRadius: 20, fontSize: '0.86rem', letterSpacing: '0.6px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'Poppins, sans-serif' }} onClick={() => notifyWaiter("Custom")}>
+                  <BellRing size={16} strokeWidth={2.2} /> {t[language].sendRequest}
+                </button>
               </div>
             </div>
           </motion.div>
@@ -6723,7 +6863,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                                     ? 'rgba(255,255,255,0.05)'
                                     : 'rgba(211,191,162,0.08)'}`,
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              transition: 'all 0.22s', flexShrink: 0
+                              transition: 'all 0.22s'
                             }}>
                               <ItemIcon
                                 size={19}
@@ -7077,79 +7217,53 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
   setCart({});
   setSuggestions({});setRecommendedDishes([]);
   setCustomerInfo({ name: '', phone: '' });
+  resetCredit();
   localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
   localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
 }} />            </div>
             
             <div style={styles.modalScrollBody}>
 {!billRequested ? (
-  <div style={styles.formContainer}>
-    <p style={styles.instructionText}>{t[language].enterDetails}</p>
-    {savedCustomer && customerInfo.phone === savedCustomer.phone && customerInfo.name === savedCustomer.name && (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'10px 12px', marginBottom:12, border:'1px solid rgba(211,191,162,0.14)', borderRadius:10, background:'rgba(211,191,162,0.05)' }}>
-        <div style={{ fontSize:11, color:'rgba(211,191,162,0.72)', lineHeight:1.4 }}>Returning customer · saved details restored</div>
-        <button type="button" onClick={() => setCustomerInfo({ name:'', phone:'' })} style={{ border:0, background:'transparent', color:'#d3bfa2', fontSize:10, fontWeight:900, cursor:'pointer' }}>CHANGE</button>
+  <div style={{ padding: '14px 22px 40px', maxWidth: 440, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', marginBottom: 26 }}>
+      <div style={{ width: 64, height: 64, borderRadius: 22, margin: '0 auto 16px', background: PX.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 16px 36px rgba(211,191,162,0.25), inset 0 1px 0 rgba(255,255,255,0.5)' }}>
+        <ReceiptText size={28} color="#14110c" strokeWidth={1.8} />
       </div>
-    )}
+      <h3 style={{ fontFamily: PX.serif, fontSize: '1.55rem', fontWeight: 700, color: '#f7f3eb', margin: '0 0 8px', textAlign: 'center' }}>
+        {language === 'mr' ? 'जवळजवळ झाले' : 'Almost done'}
+      </h3>
+      <p style={{ ...styles.instructionText, margin: 0 }}>
+        {savedCustomer && !identityEditing
+          ? (language === 'mr' ? 'तुमचे बिल तयार करूया.' : "Let's get your bill ready.")
+          : t[language].enterDetails}
+      </p>
+    </motion.div>
 
-    {/* Name field */}
-    <input
-      type="text"
-      placeholder={t[language].fullName}
-      style={styles.input}
-      value={customerInfo.name}
-      onChange={e => { const name = e.target.value; customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name }; setCustomerInfo(prev => ({ ...prev, name })); }}
+    <GuestIdentityBlock
+      language={language}
+      info={customerInfo}
+      locked={!!savedCustomer && !identityEditing}
+      onForget={forgetGuestIdentity}
+      onName={name => { customerInfoDraftRef.current = { ...customerInfoDraftRef.current, name }; setIdentityEditing(true); setCustomerInfo(prev => ({ ...prev, name })); }}
+      onPhone={digits => { setIdentityEditing(true); setCustomerInfo(prev => ({ ...prev, phone: digits })); }}
     />
 
-    {/* Phone — 10-digit enforced */}
-    <div style={{ position: 'relative', marginBottom: '15px' }}>
-      <span style={{
-        position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)',
-        fontSize: '0.9rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700', pointerEvents: 'none'
-      }}>+91</span>
-      <input
-        type="tel"
-        inputMode="numeric"
-        maxLength={10}
-        placeholder="10-digit mobile number"
-        style={{
-          ...styles.input,
-          marginBottom: 0,
-          paddingLeft: '52px',
-          letterSpacing: '1.5px',
-          width: '100%', boxSizing: 'border-box'
-        }}
-        value={customerInfo.phone}
-        onInput={e => {
-          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-          setCustomerInfo(prev => ({ ...prev, phone: digits }));
-        }}
-      />
+    <div style={{ marginBottom: 18 }}>
+      <ConsentCheck checked={guestConsent} onChange={toggleGuestConsent} onOpen={openLegal} language={language} tenantName={restaurantData?.name || 'the restaurant'} />
     </div>
 
-    {/* Inline hint */}
-    {customerInfo.phone.length > 0 && customerInfo.phone.length !== 10 && (
-      <div style={{ fontSize: '0.62rem', color: '#BA7517', marginBottom: '10px', fontWeight: '700', textAlign: 'center' }}>
-        {10 - customerInfo.phone.length} more digits needed
-      </div>
-    )}
-
-    <button type="button"
-      disabled={!customerInfo.name.trim() || customerInfo.phone.length !== 10}
-      style={{
-        ...styles.kitchenBtn,
-        background: (customerInfo.name.trim() && customerInfo.phone.length === 10)
-          ? primaryColor : 'rgba(211,191,162,0.1)',
-        color: (customerInfo.name.trim() && customerInfo.phone.length === 10)
-          ? '#1a1a1a' : 'rgba(211,191,162,0.2)',
-        cursor: (customerInfo.name.trim() && customerInfo.phone.length === 10)
-          ? 'pointer' : 'not-allowed',
-        transition: 'all 0.2s'
-      }}
-      onClick={requestFinalBill}
-    >
-      {t[language].generateBill}
-    </button>
+    {(() => {
+      const ready = customerInfo.name.trim() && customerInfo.phone.length === 10 && guestConsent;
+      return (
+        <button type="button" className="px-gold" disabled={!ready} onClick={requestFinalBill}
+          style={{ width: '100%', padding: '18px', borderRadius: 20, fontWeight: 900, fontSize: '0.88rem', letterSpacing: '0.6px', textTransform: 'uppercase', cursor: ready ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'Poppins, sans-serif' }}>
+          <ReceiptText size={17} strokeWidth={2.2} />
+          {t[language].generateBill}
+          <ChevronRight size={16} />
+        </button>
+      );
+    })()}
+    <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 18 }} />
   </div>
 
               ) : !showReviewPage ? (
@@ -7163,7 +7277,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                       <div style={styles.billBriefHeader}><ReceiptText size={18} /> {t[language].billSummary}</div>
                       
                       <div style={styles.billTableHead}>
-                         <span style={{flex: 2}}>Item</span>
+                         <span style={{flex: 2, textAlign: 'left'}}>Item</span>
                          <span style={{flex: 0.5, textAlign: 'center'}}>{t[language].qty}</span>
                          <span style={{flex: 1, textAlign: 'right'}}>{t[language].amt}</span>
                       </div>
@@ -7347,6 +7461,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                      </button>
 
                    </div>
+                   <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 22 }} />
                 </div>
 ) : (
   <div style={{
@@ -7467,6 +7582,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
         {language === 'mr' ? 'बंद करा' : 'Close'}
       </button>
 
+      <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 4 }} />
       {/* Powered by */}
       <div style={{ textAlign: 'center', paddingTop: '8px' }}>
         <span style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)', fontWeight: '800', letterSpacing: '2px', textTransform: 'uppercase' }}>
@@ -7655,48 +7771,48 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
   <motion.div
     initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
     exit={{ opacity:0, height:0 }}
-    style={{ margin:'0 0 10px', overflow:'hidden' }}
+    style={{ margin:'0 0 12px', overflow:'hidden' }}
   >
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
-      <div style={{ fontSize:'0.5rem', fontWeight:'900', color:'rgba(201,168,76,0.45)', letterSpacing:'1.5px', display:'flex', alignItems:'center', gap:'5px' }}>
-        <Sparkles size={9} color="rgba(201,168,76,0.4)" strokeWidth={1.5}/>
-        {language==='mr' ? 'यांसोबत छान लागेल' : 'GOES WELL WITH YOUR ORDER'}
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+      <div style={{ fontSize:'0.54rem', fontWeight:800, color:'rgba(211,191,162,0.78)', letterSpacing:'2px', display:'flex', alignItems:'center', gap:'6px', textTransform:'uppercase' }}>
+        <Sparkles size={11} color="#d3bfa2" strokeWidth={1.6}/>
+        {language==='mr' ? 'यांसोबत छान लागेल' : 'Goes well with your order'}
       </div>
-      <button type="button" onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.2)', cursor:'pointer', padding:0, display:'flex' }}>
-        <X size={11}/>
+      <button type="button" aria-label="Hide suggestions" onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(247,243,235,0.35)', cursor:'pointer', padding:2, display:'flex' }}>
+        <X size={13}/>
       </button>
     </div>
-    <div style={{ display:'flex', gap:'8px', overflowX:'auto', paddingBottom:'4px' }} className="no-scrollbar">
+    <div style={{ display:'flex', gap:'10px', overflowX:'auto', paddingBottom:'4px' }} className="no-scrollbar">
       {comboSuggestions.map(item => {
         const isMulti = !!(item.priceHalf || item.priceFull);
         const price = isMulti ? (item.priceHalf || item.price) : item.price;
         const portion = isMulti ? 'Half' : 'Single';
         const key = `${item._id}-${portion}`;
         const inCart = cart[key] > 0;
+        const nm = language === 'mr' ? (item.name_mr || item.name) : item.name;
         return (
-          <motion.button key={item._id} whileTap={{ scale:0.94 }}
+          <motion.button key={item._id} type="button" whileTap={{ scale:0.95 }}
             onClick={() => {
               if (inCart) return;
               setCart(prev => ({ ...prev, [key]: 1 }));
-              triggerAlert(language==='mr' ? `${item.name} जोडले` : `${item.name} added`, 'success');
+              triggerAlert(language==='mr' ? `${nm} जोडले` : `${nm} added`, 'success');
             }}
             style={{
-              flexShrink:0, padding:'8px 12px', borderRadius:'12px', border:'none', cursor:'pointer',
-              background: inCart ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.03)',
-              border:`1px solid ${inCart ? 'rgba(201,168,76,0.3)' : 'rgba(255,255,255,0.07)'}`,
-              display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'3px',
-              minWidth:'100px', maxWidth:'130px', fontFamily:'Poppins, sans-serif'
+              flexShrink:0, padding:'11px 12px 11px 14px', borderRadius:'18px', cursor: inCart ? 'default' : 'pointer',
+              background: inCart ? 'rgba(211,191,162,0.14)' : PX.card,
+              border:`1px solid ${inCart ? 'rgba(211,191,162,0.45)' : PX.line}`,
+              boxShadow: inCart ? 'none' : '0 10px 24px rgba(0,0,0,0.3)',
+              display:'flex', alignItems:'center', gap:'10px',
+              minWidth:'150px', maxWidth:'190px', fontFamily:'Poppins, sans-serif', textAlign:'left'
             }}
           >
-            <div style={{ fontSize:'0.65rem', fontWeight:'700', color:inCart?'#c9a84c':'rgba(255,255,255,0.55)', textAlign:'left', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'110px' }}>
-              {item.name}
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ fontSize:'0.72rem', fontWeight:700, color: inCart ? '#d3bfa2' : '#f7f3eb', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nm}</div>
+              <div style={{ fontSize:'0.66rem', fontWeight:800, color:'rgba(211,191,162,0.8)', marginTop:'3px' }}>₹{convertToMrNumber(price)}</div>
             </div>
-            <div style={{ fontSize:'0.58rem', fontWeight:'900', color:'rgba(201,168,76,0.6)', fontFamily:'monospace' }}>
-              ₹{price}
-            </div>
-            {inCart && (
-              <div style={{ fontSize:'0.46rem', fontWeight:'900', color:'#c9a84c', letterSpacing:'0.5px' }}>ADDED</div>
-            )}
+            <span style={{ width:'28px', height:'28px', borderRadius:'10px', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', background: inCart ? 'transparent' : PX.gold, color:'#14110c' }}>
+              {inCart ? <CheckCircle2 size={17} color="#d3bfa2" /> : <Plus size={15} strokeWidth={2.6} />}
+            </span>
           </motion.button>
         );
       })}
@@ -7741,7 +7857,8 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
 <button type="button"
   style={{
     ...styles.kitchenBtn,
-    background: isPlacingOrder ? '#555' : primaryColor,
+    background: isPlacingOrder ? '#555' : PX.gold,
+    borderRadius: '20px', letterSpacing: '0.6px', textTransform: 'uppercase', boxShadow: '0 12px 30px rgba(211,191,162,0.22)',
     opacity: isPlacingOrder ? 0.6 : 1,
     pointerEvents: isPlacingOrder ? 'none' : 'auto'
   }}
@@ -8161,8 +8278,9 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
         transition={{ type: 'spring', damping: 26, stiffness: 280 }}
         style={{
           width: '100%', maxWidth: '480px',
-          background: '#0c0c0c',
-          border: '1px solid rgba(211,191,162,0.15)',
+          background: 'linear-gradient(180deg, #17140f 0%, #0b0b0c 45%)',
+          border: '1px solid rgba(211,191,162,0.2)',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.6)',
           borderRadius: '28px 28px 20px 20px',
           overflow: 'hidden', margin: '0 12px',
           maxHeight: '88vh', overflowY: 'auto'
@@ -8208,7 +8326,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             <div style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
               {welcomeCard.isLoyal ? 'LOYAL GUEST' : welcomeCard.visitCount >= 2 ? 'WELCOME BACK' : 'WELCOME'}
             </div>
-            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: PX.serif, fontSize: '1.05rem', fontWeight: 700, color: '#f7f3eb', letterSpacing: '-0.2px', lineHeight: 1.25 }}>
               {language === 'en'
                 ? `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${welcomeCard.name?.split(' ')[0]}!`
                 : `नमस्कार, ${welcomeCard.name?.split(' ')[0]}!`}
@@ -8453,7 +8571,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             }
           }}
           style={{
-            width:'100%', padding:'9px 12px', borderRadius:'10px', border:'none',
+            width:'100%', padding:'9px 12px', borderRadius:'10px',
             background: reorderConfirmPending
               ? 'linear-gradient(135deg,rgba(201,168,76,0.25),rgba(201,168,76,0.15))'
               : 'rgba(211,191,162,0.06)',
@@ -8500,102 +8618,19 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             </div>
           )}
 
-{/* ── YOU MIGHT LIKE — smart dish recommendations ── */}
-{recommendedDishes.length > 0 && (
-  <div style={{ marginBottom: '10px' }}>
-
-    {/* Section header */}
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '6px',
-      marginBottom: '8px'
-    }}>
-      <Sparkles size={9} color="rgba(211,191,162,0.35)" strokeWidth={1.5} />
-      <span style={{
-        fontSize: '0.44rem', color: 'rgba(211,191,162,0.62)',
-        fontWeight: '900', letterSpacing: '2.5px', textTransform: 'uppercase'
-      }}>
-        {language === 'mr' ? 'तुम्हाला आवडेल' : 'YOU MIGHT LIKE'}
-      </span>
-    </div>
-
-    {/* Dish chips */}
-    {recommendedDishes.map(dish => (
-      <div
-        key={dish._id}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '9px 11px', marginBottom: '6px',
-          background: 'rgba(211,191,162,0.03)',
-          border: '1px solid rgba(211,191,162,0.09)',
-          borderRadius: '12px'
-        }}
-      >
-        {/* Veg / non-veg indicator dot */}
-        <div style={{
-          width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-          background: dish.isVeg !== false
-            ? 'rgba(211,191,162,0.5)'
-            : 'rgba(180,160,140,0.4)',
-          border: '1px solid rgba(211,191,162,0.25)'
-        }} />
-
-        {/* Dish info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: '0.72rem', fontWeight: '700',
-            color: 'rgba(255,255,255,0.72)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-          }}>
-            {language === 'mr' ? (dish.name_mr || dish.name) : dish.name}
-          </div>
-          <div style={{
-            fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)',
-            marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
-          }}>
-            <Star size={7} color="rgba(211,191,162,0.28)" strokeWidth={1.5} />
-            {dish.matchReason}
-          </div>
-        </div>
-
-        {/* Price */}
-        {dish.price > 0 && (
-          <span style={{
-            fontSize: '0.6rem', color: 'rgba(211,191,162,0.62)',
-            fontFamily: 'monospace', fontWeight: '700', flexShrink: 0
-          }}>
-            ₹{dish.price}
-          </span>
-        )}
-
-        {/* Add button */}
-        <button type="button"
-          onClick={() => {
-            setCart(prev => ({ ...prev, [dish._id]: (prev[dish._id] || 0) + 1 }));
-          }}
-          style={{
-            padding: '5px 12px', borderRadius: '8px', flexShrink: 0,
-            background: 'rgba(211,191,162,0.09)',
-            border: '1px solid rgba(211,191,162,0.22)',
-            color: '#d3bfa2', fontSize: '0.62rem',
-            fontWeight: '800', cursor: 'pointer', outline: 'none',
-            fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px',
-            transition: 'all 0.15s'
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.15)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.09)'; }}
-        >
-          + ADD
-        </button>
-      </div>
-    ))}
-  </div>
-)}
+          {!guestConsent && (
+            <div style={{ marginBottom: 12 }}>
+              <ConsentCheck compact checked={guestConsent} onChange={toggleGuestConsent} onOpen={openLegal} language={language} tenantName={restaurantData?.name || 'the restaurant'} />
+            </div>
+          )}
           {/* ── CTA ── */}
           <button type="button"
-            onClick={() => { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
+            disabled={!guestConsent}
+            onClick={() => { if (!guestConsent) return; localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
             style={{
               width: '100%', padding: '14px',
-              background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
+              opacity: guestConsent ? 1 : 0.45,
+              background: PX.gold,
               border: 'none', borderRadius: '13px',
               color: '#0c0c0c', fontWeight: '900', fontSize: '0.84rem',
               cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase',
@@ -8637,8 +8672,9 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         style={{
           width: '100%', maxWidth: '420px',
-          background: '#0d0d0d',
-          border: '1px solid rgba(211,191,162,0.12)',
+          background: 'linear-gradient(180deg, #17140f 0%, #0b0b0c 45%)',
+          border: '1px solid rgba(211,191,162,0.2)',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.6)',
           borderRadius: '24px 24px 18px 18px',
           overflow: 'hidden', margin: '0 14px'
         }}
@@ -8651,7 +8687,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
               <div style={{ fontSize: '0.56rem', color: 'rgba(211,191,162,0.62)', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '5px' }}>
                 {restaurantData?.name}
               </div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.3px' }}>
+              <h3 style={{ margin: 0, fontFamily: PX.serif, fontSize: '1.3rem', fontWeight: 700, color: '#f7f3eb', letterSpacing: '-0.2px', textAlign: 'left' }}>
                 {language === 'mr' ? 'तुम्ही आधी आलेले आहात का?' : 'Been here before?'}
               </h3>
               <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.6 }}>
@@ -8695,9 +8731,12 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             />
           </div>
 
+          <div style={{ marginBottom: 12 }}>
+            <ConsentCheck compact checked={guestConsent} onChange={toggleGuestConsent} onOpen={openLegal} language={language} tenantName={restaurantData?.name || 'the restaurant'} />
+          </div>
           <button type="button"
             id="recognize-btn"
-            disabled={welcomePhoneInput.length !== 10 || welcomeLoading}
+            disabled={welcomePhoneInput.length !== 10 || welcomeLoading || !guestConsent}
             onClick={async () => {
               const phone = welcomePhoneInput;
               localStorage.setItem(`pratyeksha_phone_${tenantId}`, phone);
@@ -8719,13 +8758,13 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             }}
             style={{
               width: '100%', padding: '14px',
-              background: welcomePhoneInput.length === 10
+              background: (welcomePhoneInput.length === 10 && guestConsent)
                 ? 'linear-gradient(135deg,#d3bfa2,#bda88a)'
                 : 'rgba(211,191,162,0.05)',
-              border: welcomePhoneInput.length === 10 ? 'none' : '1px solid rgba(211,191,162,0.1)',
-              color: welcomePhoneInput.length === 10 ? '#0c0c0c' : 'rgba(211,191,162,0.2)',
+              border: (welcomePhoneInput.length === 10 && guestConsent) ? 'none' : '1px solid rgba(211,191,162,0.1)',
+              color: (welcomePhoneInput.length === 10 && guestConsent) ? '#0c0c0c' : 'rgba(211,191,162,0.2)',
               borderRadius: '12px', fontWeight: '900', fontSize: '0.82rem',
-              cursor: welcomePhoneInput.length === 10 ? 'pointer' : 'not-allowed',
+              cursor: (welcomePhoneInput.length === 10 && guestConsent) ? 'pointer' : 'not-allowed',
               letterSpacing: '0.5px', textTransform: 'uppercase',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               transition: 'all 0.2s'
@@ -9144,7 +9183,6 @@ body: {
   WebkitOverflowScrolling: 'touch'  // ← ADD THIS for iOS momentum scroll
 },
 
-header: { padding: '60px 20px 18px', textAlign: 'center', position: 'relative' },
 contentWrapper: { 
   touchAction: 'pan-y',       // keep existing
   overflowY: 'visible',       // ← ADD THIS — don't clip children
@@ -9174,24 +9212,25 @@ contentWrapper: {
   rightFabContainer: { position: 'fixed', bottom: '30px', right: '25px', display: 'flex', flexDirection: 'column', gap: '15px', zIndex: 1000 },
   fabBase: { width: '60px', height: '60px', cursor: 'pointer', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' },
   fabBadge: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '20px', height: '20px', borderRadius: '50%', fontSize: '0.65rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  fullscreenModal: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#1a1a1a', zIndex: 5000, display: 'flex', flexDirection: 'column' },
-  modalHeader: { padding: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211, 191, 162, 0.1)' },
+  fullscreenModal: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0b0b0c', zIndex: 5000, display: 'flex', flexDirection: 'column' },
+  modalHeader: { padding: '24px 22px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211,191,162,0.14)', background: 'rgba(11,11,12,0.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', fontFamily: "'Playfair Display', Georgia, serif" },
   modalScrollBody: { flex: 1, overflowY: 'auto', paddingBottom: '50px' },
-  waiterCardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', padding: '25px' },
-  waiterCountCard: { background: 'rgba(211, 191, 162, 0.05)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid rgba(211, 191, 162, 0.1)' },
-  waiterLabel: { fontSize: '0.8rem', margin: '10px 0', fontWeight: '600' },
-  countControls: { display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,0,0,0.2)', padding: '5px 10px', borderRadius: '12px' },
-  countBtn: { background: 'none', border: 'none', color: '#d3bfa2' },
-  countDisplay: { fontSize: '1rem', fontWeight: '800', minWidth: '20px', textAlign: 'center' },
-  waiterActionRow: { width: '100%', marginBottom: '10px', padding: '18px', borderRadius: '15px', background: 'rgba(211, 191, 162, 0.05)', border: '1px solid rgba(211, 191, 162, 0.2)', color: '#fff', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: '600' },
-  kitchenBtn: { width: '100%', padding: '20px', borderRadius: '15px', fontWeight: '900', border: 'none', color: '#1a1a1a' },
+  waiterCardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', padding: '22px', maxWidth: 480, margin: '0 auto' },
+  waiterCountCard: { background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))', borderRadius: '24px', padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid rgba(211,191,162,0.14)', transition: 'border-color .2s, box-shadow .2s' },
+  waiterLabel: { fontSize: '0.8rem', margin: '12px 0', fontWeight: '700', color: '#f7f3eb' },
+  countControls: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.3)', padding: '5px', borderRadius: '16px', border: '1px solid rgba(211,191,162,0.1)' },
+  countBtn: { width: 32, height: 32, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211,191,162,0.08)', border: 'none', color: '#d3bfa2', cursor: 'pointer' },
+  countDisplay: { fontSize: '1rem', fontWeight: '800', minWidth: '22px', textAlign: 'center', color: '#f7f3eb' },
+  waiterActionIcon: { width: 38, height: 38, borderRadius: 13, background: 'rgba(211,191,162,0.09)', border: '1px solid rgba(211,191,162,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  waiterActionRow: { width: '100%', marginBottom: '10px', padding: '15px 16px', borderRadius: '20px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))', border: '1px solid rgba(211,191,162,0.16)', color: '#f7f3eb', display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.86rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Poppins, sans-serif' },
+  kitchenBtn: { width: '100%', padding: '19px', borderRadius: '18px', fontWeight: '900', border: 'none', color: '#14110c', cursor: 'pointer' },
   input: { padding: '18px', borderRadius: '15px', background: '#222', border: '1px solid #333', color: '#fff', marginBottom: '15px', outline: 'none' },
-  instructionText: { color: '#888', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' },
+  instructionText: { color: 'rgba(247,243,235,0.58)', fontSize: '0.84rem', textAlign: 'center', marginBottom: '20px', lineHeight: 1.6 },
   thankYouWrapperProfessional: { padding: '40px 25px', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  statusIconWrapper: { width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(211, 191, 162, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px' },
-  professionalTitle: { fontSize: '2rem', fontWeight: '800', color: '#fff', margin: '0 0 10px' },
-  professionalSubtitle: { color: '#888', textAlign: 'center', fontSize: '0.95rem', marginBottom: '40px', maxWidth: '300px' },
-  billBriefCard: { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211, 191, 162, 0.1)', borderRadius: '20px', width: '100%', padding: '20px', marginBottom: '40px' },
+  statusIconWrapper: { width: '100px', height: '100px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(211,191,162,0.18), rgba(211,191,162,0.04))', border: '1px solid rgba(211,191,162,0.25)', boxShadow: '0 0 0 10px rgba(211,191,162,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px' },
+  professionalTitle: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: '2rem', fontWeight: '700', color: '#f7f3eb', margin: '0 0 10px', textAlign: 'center' },
+  professionalSubtitle: { color: 'rgba(247,243,235,0.58)', textAlign: 'center', fontSize: '0.92rem', marginBottom: '36px', maxWidth: '300px', lineHeight: 1.6 },
+  billBriefCard: { background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))', border: '1px solid rgba(211,191,162,0.16)', boxShadow: '0 18px 44px rgba(0,0,0,0.38)', borderRadius: '26px', width: '100%', padding: '22px', marginBottom: '32px', boxSizing: 'border-box' },
   billBriefHeader: { color: '#d3bfa2', fontWeight: '800', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' },
   billTableHead: { display: 'flex', paddingBottom: '10px', borderBottom: '1px solid rgba(211, 191, 162, 0.2)', marginBottom: '15px', fontSize: '0.75rem', fontWeight: '800', color: '#777', textTransform: 'uppercase' },
   billTableBody: { display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' },
@@ -9199,7 +9238,7 @@ contentWrapper: {
   billTableFooter: { paddingTop: '15px', borderTop: '1px dashed rgba(211, 191, 162, 0.3)' },
   billLineTotal: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '800' },
   billLine: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' },
-  professionalContinueBtn: { width: '100%', padding: '20px', borderRadius: '18px', background: '#d3bfa2', border: 'none', color: '#1a1a1a', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
+  professionalContinueBtn: { width: '100%', padding: '19px', borderRadius: '20px', background: 'linear-gradient(135deg, #e6d6b8 0%, #d3bfa2 45%, #b99f78 100%)', border: 'none', color: '#14110c', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', fontFamily: 'Poppins, sans-serif' },
   googleProfessionalBtn: { width: '100%', padding: '15px 20px', borderRadius: '18px', background: '#fff', display: 'flex', alignItems: 'center', gap: '15px', textDecoration: 'none', color: '#1a1a1a', fontWeight: '700', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' },
   googleIconCircle: { width: '40px', height: '40px', borderRadius: '12px', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   professionalMenuBack: { marginTop: '30px', background: 'transparent', border: 'none', color: '#555', fontSize: '0.85rem', textDecoration: 'underline' },
@@ -9207,8 +9246,8 @@ contentWrapper: {
   tagContainer: { position: 'absolute', top: '10px', right: '10px' },
   chefTag: { background: 'linear-gradient(135deg, #d3bfa2, #b09c7a)', color: '#1a1a1a', padding: '4px 10px', borderRadius: '15px', fontSize: '0.55rem', fontWeight: '900', display: 'flex', alignItems: 'center' },
   loader: { height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#1a1a1a', fontWeight: 'bold' },
-  sideDrawer: { position: 'fixed', top: 0, right: 0, width: '85%', height: '100%', background: '#1a1a1a', zIndex: 5500, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 30px rgba(0,0,0,0.5)' },
-  drawerHeader: { padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211, 191, 162, 0.1)' },
+  sideDrawer: { position: 'fixed', top: 0, right: 0, width: '88%', maxWidth: 440, height: '100%', background: 'linear-gradient(180deg, #15120d 0%, #0b0b0c 38%)', borderLeft: '1px solid rgba(211,191,162,0.16)', zIndex: 5500, display: 'flex', flexDirection: 'column', boxShadow: '-18px 0 50px rgba(0,0,0,0.6)' },
+  drawerHeader: { padding: '22px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211,191,162,0.14)', fontFamily: "'Playfair Display', Georgia, serif" },
   drawerContent: { flex: 1, overflowY: 'auto', padding: '20px' },
   drawerItemBlock: { padding: '15px 0' },
   drawerRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px' },

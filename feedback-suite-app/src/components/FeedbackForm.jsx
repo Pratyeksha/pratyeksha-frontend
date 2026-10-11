@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Coffee, MessageCircle, ShieldCheck, Star, UtensilsCrossed } from 'lucide-react';
 import { submitFeedback } from '../api';
+import PrivacySheet, { ConsentFields, saveGuestToken } from './GuestPrivacy';
 import { useTenantName } from '../brand';
 import StarRating from './StarRating';
 import pratyekshaLogo from '../assets/pratyeksha-logo.png';
@@ -13,6 +14,10 @@ export default function FeedbackForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', mobile: '', ratings: initialRatings, improve: '' });
+  const [consent, setConsent] = useState(false);
+  const [marketing, setMarketing] = useState(false);
+  const [legal, setLegal] = useState({ open: false, tab: 'privacy' });
+  const openLegal = (tab) => setLegal({ open: true, tab });
 
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const setRating = (key, value) =>
@@ -31,6 +36,10 @@ export default function FeedbackForm() {
       setError('Please rate each part of your experience.');
       return false;
     }
+    if (!consent) {
+      setError('Please accept the privacy notice to continue.');
+      return false;
+    }
     setError('');
     return true;
   };
@@ -42,12 +51,15 @@ export default function FeedbackForm() {
     setSaving(true);
     setError('');
     try {
-      await submitFeedback({
+      const res = await submitFeedback({
         name: form.name.trim(),
         mobile: form.mobile,
         ratings: form.ratings,
         improve: form.improve.trim(),
+        consent: true,
+        whatsappMarketingOptIn: marketing,
       });
+      saveGuestToken(form.mobile, res?.data?.erasureToken);
       setSubmitted(true);
     } catch (err) {
       setError(err?.response?.data?.message || 'We could not save your feedback right now. Please try again.');
@@ -68,6 +80,8 @@ export default function FeedbackForm() {
           <p>Your feedback has been received and will help us improve.</p>
           <div className="success-detail"><Coffee size={17} /><span>Your voice matters.</span></div>
         </section>
+        <button type="button" onClick={() => openLegal('data')} style={{ position: 'relative', zIndex: 1, marginTop: 16, background: 'none', border: 0, color: 'inherit', opacity: .7, textDecoration: 'underline', cursor: 'pointer', font: 'inherit', fontSize: 13 }}>Privacy &amp; my data</button>
+        <PrivacySheet open={legal.open} tab={legal.tab} onTab={(tab) => setLegal((l) => ({ ...l, tab }))} onClose={() => setLegal((l) => ({ ...l, open: false }))} tenantName={tenantName} />
       </main>
     );
   }
@@ -141,6 +155,7 @@ export default function FeedbackForm() {
             </label>
           </div>
 
+          <ConsentFields consent={consent} onConsent={setConsent} marketing={marketing} onMarketing={setMarketing} onOpen={openLegal} tenantName={tenantName} />
           {error && <div className="form-error">{error}</div>}
           <div className="form-action-note"><ShieldCheck size={15} /><span>Your feedback stays secure.</span></div>
           <div className="form-actions form-actions-responsive">
@@ -154,8 +169,10 @@ export default function FeedbackForm() {
         <span><UtensilsCrossed size={15} /> {tenantName || 'Thank you for visiting'}</span>
         <span>Thank you for visiting</span>
         <span><MessageCircle size={15} /> We read every response</span>
+        <span><button type="button" onClick={() => openLegal('privacy')} style={{ background: 'none', border: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Privacy</button> · <button type="button" onClick={() => openLegal('terms')} style={{ background: 'none', border: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Terms</button> · <button type="button" onClick={() => openLegal('data')} style={{ background: 'none', border: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>My data</button></span>
         <span className="powered-by"><small>POWERED BY</small><img src={pratyekshaLogo} alt="Pratyeksha" /></span>
       </footer>
+      <PrivacySheet open={legal.open} tab={legal.tab} onTab={(tab) => setLegal((l) => ({ ...l, tab }))} onClose={() => setLegal((l) => ({ ...l, open: false }))} tenantName={tenantName} />
     </main>
   );
 }

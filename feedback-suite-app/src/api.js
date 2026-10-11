@@ -8,6 +8,8 @@ const api = axios.create({
 
 export const getPublicSettings = () => api.get('/settings/public');
 export const submitFeedback = (payload) => api.post('/feedback', payload);
+export const eraseMyData = (payload) => api.post('/feedback/erase', payload);
+export const exportMyData = (payload) => api.post('/feedback/my-data', payload);
 export const loginAdmin = (payload) => api.post('/auth/login', { ...payload, tenantId: payload?.tenantId || resolveTenantId() });
 
 export const resolveTenantId = () => {
@@ -27,6 +29,7 @@ export const getDashboard = (token, params = {}) => api.get('/feedback/dashboard
 export const getFeedback = (token, params = {}) => api.get('/feedback', { ...authConfig(token), params });
 export const getCustomers = (token, params = {}) => api.get('/feedback/customers', { ...authConfig(token), params });
 export const getCustomerFeedback = (token, id) => api.get(`/feedback/customers/${id}/feedback`, authConfig(token));
+export const eraseCustomer = (token, id) => api.post(`/feedback/customers/${id}/erase`, {}, authConfig(token));
 export const optOutCustomer = (token, id) => api.post(`/feedback/customers/${id}/marketing-opt-out`, {}, authConfig(token));
 
 export const unlockCampaignStudio = (token, password) => api.post('/campaigns/access', { password }, { ...authConfig(token), timeout: 15000 });

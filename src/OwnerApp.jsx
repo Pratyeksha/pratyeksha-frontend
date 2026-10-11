@@ -2233,6 +2233,48 @@ const StaffPage = () => {
 /* ════════════════════════════════════════════════════════════
    MODULE 8 — CUSTOMERS
    ════════════════════════════════════════════════════════════ */
+/* DPDP — guests who could not self-verify their deletion request land here for the owner to verify and complete. */
+const PrivacyRequestsCard = ({ tenantId }) => {
+  const [rows, setRows] = useState([]);
+  const [busyId, setBusyId] = useState('');
+  const [note, setNote] = useState('');
+  const load = useCallback(async () => {
+    try { const r = await api.get(`/api/data-requests/${encodeURIComponent(tenantId)}`); setRows(Array.isArray(r.data) ? r.data : []); } catch { /* optional panel */ }
+  }, [tenantId]);
+  useEffect(() => { if (tenantId) load(); }, [tenantId, load]);
+  const resolve = async (id, action) => {
+    setBusyId(id);
+    try {
+      await api.post(`/api/data-requests/${encodeURIComponent(tenantId)}/${id}/resolve`, { action });
+      setNote(action === 'reject' ? 'Request dismissed' : 'Guest data deleted');
+      await load();
+    } catch (e) { setNote(e?.response?.data?.error || 'Could not update the request'); }
+    finally { setBusyId(''); setTimeout(() => setNote(''), 3500); }
+  };
+  if (!rows.length && !note) return null;
+  return (
+    <Card>
+      <SectionHeading icon={ShieldCheck} title={`Privacy requests (${rows.length})`} />
+      <div style={{ fontSize: 12, color: T.textLow, margin: '2px 0 12px', lineHeight: 1.5 }}>
+        Guests asked to delete their data but this device could not prove the number is theirs. Verify (for example by calling them) and then delete. Bills are kept for tax records, with the guest's name and number removed.
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {rows.map(r => (
+          <div key={r._id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: 12 }}>
+            <div style={{ flex: 1, minWidth: 150 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{r.name || 'Guest'}</div>
+              <div className="pown-mono" style={{ fontSize: 11.5, color: T.textLow }}>{r.phone} · {new Date(r.createdAt).toLocaleDateString('en-IN')}</div>
+            </div>
+            <button type="button" disabled={busyId === r._id} onClick={() => resolve(r._id, 'erase')} style={{ padding: '8px 12px', borderRadius: 10, border: 0, background: T.gold || '#d3bfa2', color: '#14110c', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' }}>Delete data</button>
+            <button type="button" disabled={busyId === r._id} onClick={() => resolve(r._id, 'reject')} style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${T.border}`, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>Dismiss</button>
+          </div>
+        ))}
+      </div>
+      {note && <div style={{ marginTop: 10, fontSize: 12, color: T.textLow }}>{note}</div>}
+    </Card>
+  );
+};
+
 const CustomersPage = () => {
   const { data, loading, error, refetch } = useOwnerData('/api/owner/customers/insights/:tenantId', { refreshMs: 90000 });
   const { tenantId } = useOwner();
@@ -2255,6 +2297,7 @@ const CustomersPage = () => {
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <PrivacyRequestsCard tenantId={tenantId} />
       <DataBoundary loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
