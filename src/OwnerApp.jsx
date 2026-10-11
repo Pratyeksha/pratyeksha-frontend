@@ -30,6 +30,7 @@ import {
   Smartphone, UserCheck, UserX, Award, ThumbsUp, PackageX, PackageCheck, Zap, Activity,
   Receipt, ExternalLink, WifiOff, Loader2, BarChart3, Rocket, Shield, PlayCircle, Quote,
   Lock, ArrowLeftRight
+  , Crosshair
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -2884,6 +2885,60 @@ const GrowthPage = () => {
 /* ════════════════════════════════════════════════════════════
    MODULE 12 — SETTINGS & REMOTE CONTROLS
    ════════════════════════════════════════════════════════════ */
+/* Where guests find this outlet on the home screen: area filter + Google Maps + directions. */
+const LocationCard = ({ tenantId }) => {
+  const [addr, setAddr] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    let alive = true;
+    api.get(`/api/tenant/location/${tenantId}`).then(r => { if (alive) setAddr(r.data?.address || {}); }).catch(() => { if (alive) setAddr({}); });
+    return () => { alive = false; };
+  }, [tenantId]);
+  const set = (k, v) => setAddr(a => ({ ...a, [k]: v }));
+  const useHere = () => {
+    if (!navigator.geolocation) { setMsg('Location is not available on this device'); return; }
+    setMsg('Finding your position…');
+    navigator.geolocation.getCurrentPosition(
+      pos => { set('lat', Number(pos.coords.latitude.toFixed(6))); set('lng', Number(pos.coords.longitude.toFixed(6))); setMsg('Position captured — stand inside the outlet for best accuracy, then save'); },
+      () => setMsg('Allow location access to capture the position'),
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  };
+  const save = async () => {
+    setSaving(true); setMsg('');
+    try {
+      const body = { area: addr.area || '', landmark: addr.landmark || '', mapsUrl: addr.mapsUrl || '', lat: addr.lat ?? '', lng: addr.lng ?? '' };
+      await api.patch(`/api/tenant/profile/${tenantId}`, { address: body });
+      setMsg('Saved — guests now see this on the home screen');
+    } catch (e) { setMsg(e?.response?.data?.error || 'Could not save'); }
+    finally { setSaving(false); }
+  };
+  if (!addr) return null;
+  return (
+    <Card>
+      <SectionHeading icon={MapPin} title="Location & Map" />
+      <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.6, marginBottom: 14 }}>
+        Guests can filter outlets by area and open directions in Google Maps. Street and city come from your onboarding details{addr.city ? ` (${addr.city})` : ''}.
+      </div>
+      <div className="pown-grid-2">
+        <Field label="AREA / NEIGHBOURHOOD"><input value={addr.area || ''} onChange={e => set('area', e.target.value)} placeholder="e.g. Rajarampuri" style={inputStyle} /></Field>
+        <Field label="LANDMARK (OPTIONAL)"><input value={addr.landmark || ''} onChange={e => set('landmark', e.target.value)} placeholder="Opp. city bus stand" style={inputStyle} /></Field>
+      </div>
+      <Field label="GOOGLE MAPS LINK (OPTIONAL)"><input value={addr.mapsUrl || ''} onChange={e => set('mapsUrl', e.target.value)} placeholder="https://maps.app.goo.gl/…" style={inputStyle} /></Field>
+      <div className="pown-grid-2">
+        <Field label="LATITUDE"><input value={addr.lat ?? ''} onChange={e => set('lat', e.target.value)} inputMode="decimal" placeholder="16.7050" style={inputStyle} /></Field>
+        <Field label="LONGITUDE"><input value={addr.lng ?? ''} onChange={e => set('lng', e.target.value)} inputMode="decimal" placeholder="74.2433" style={inputStyle} /></Field>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <GhostBtn icon={Crosshair} onClick={useHere}>Use my current position</GhostBtn>
+        <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save location'}</PrimaryBtn>
+        {msg && <span style={{ fontSize: 11.5, color: T.textMed }}>{msg}</span>}
+      </div>
+    </Card>
+  );
+};
+
 const SettingsPage = () => {
   const { tenantId } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/settings/:tenantId');
@@ -2945,6 +3000,8 @@ const SettingsPage = () => {
                 <GhostBtn icon={Lock} onClick={() => setChangePwOpen(true)}>Change Password</GhostBtn>
               </div>
             </Card>
+
+            <LocationCard tenantId={tenantId} />
 
             <Card>
               <SectionHeading icon={Target} title="Revenue Targets" />

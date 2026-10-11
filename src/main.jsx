@@ -41,7 +41,7 @@ class AppErrorBoundary extends React.Component {
   render() {
     if (!this.state.hasError) return this.props.children;
     return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#0e0e0e',color:'#f7f3eb',fontFamily:'system-ui,sans-serif',textAlign:'center'}}>
-      <div><h1 style={{fontSize:20,marginBottom:8}}>Something went wrong</h1><p style={{opacity:.7}}>Please refresh the page. Your saved data remains on the server.</p><button type="button" onClick={() => window.location.reload()} style={{marginTop:16,padding:'10px 16px',borderRadius:8,border:'1px solid #d3bfa2',background:'#d3bfa2',color:'#111',fontWeight:700,cursor:'pointer'}}>Refresh</button></div>
+      <div><h1 style={{fontSize:20,marginBottom:8,color:"#f7f3eb"}}>Something went wrong</h1><p style={{opacity:.7}}>Please refresh the page. Your saved data remains on the server.</p><button type="button" onClick={() => window.location.reload()} style={{marginTop:16,padding:'10px 16px',borderRadius:8,border:'1px solid #d3bfa2',background:'#d3bfa2',color:'#111',fontWeight:700,cursor:'pointer'}}>Refresh</button></div>
     </div>;
   }
 }

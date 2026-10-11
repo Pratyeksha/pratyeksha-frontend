@@ -745,7 +745,7 @@ export default function PratyekshaMasterAdmin() {
 
   const [onboarding, setOnboarding] = useState({
     name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'',
-    street:'', city:'', state:'', pincode:'',
+    street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'',
     tableCount:'12', taxPercentage:'5',
     username:'', password:'', confirmPassword:'',
     planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:''
@@ -913,7 +913,7 @@ export default function PratyekshaMasterAdmin() {
         tenantId:res.data.tenantId, username:onboarding.username, password:onboarding.password, name:onboarding.name,
         categoriesWritten: res.data.categoriesWritten, menuItemsWritten: res.data.menuItemsWritten
       });
-      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
+      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
       setOnboardCategories(null); setOnboardMenuItems(null);
       fetchData();
     } catch(err) {
@@ -1903,6 +1903,12 @@ export default function PratyekshaMasterAdmin() {
                     <LabeledInput label="Pincode">
                       <input className="p-inp" style={inp} placeholder="416001" value={onboarding.pincode} onChange={e=>setOnboarding(p=>({...p,pincode:e.target.value}))} />
                     </LabeledInput>
+                    <LabeledInput label="Area / Neighbourhood" hint="Used by the guest area filter">
+                      <input className="p-inp" style={inp} placeholder="Rajarampuri" value={onboarding.area} onChange={e=>setOnboarding(p=>({...p,area:e.target.value}))} />
+                    </LabeledInput>
+                    <LabeledInput label="Google Maps Link" hint="Optional share link for directions">
+                      <input className="p-inp" style={inp} placeholder="https://maps.app.goo.gl/..." value={onboarding.mapsUrl} onChange={e=>setOnboarding(p=>({...p,mapsUrl:e.target.value}))} />
+                    </LabeledInput>
                     <LabeledInput label="Tax Percentage (%)">
                       <input className="p-inp" style={inp} type="number" placeholder="5" value={onboarding.taxPercentage} onChange={e=>setOnboarding(p=>({...p,taxPercentage:e.target.value}))} />
                     </LabeledInput>
@@ -2008,7 +2014,7 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
+                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>

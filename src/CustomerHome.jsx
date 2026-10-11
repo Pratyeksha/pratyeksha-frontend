@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   Coffee, UtensilsCrossed, Search, Bell, ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
+  Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -16,6 +17,7 @@ const GOLD = '#d3bfa2';
 const PAGE = 8;
 const FAV_KEY = 'px_home_favs';
 const RECENT_KEY = 'px_home_recent';
+const AREA_KEY = 'px_home_area';
 
 /* localStorage can throw (private mode / blocked) — the page must work without it. */
 const readList = (key) => {
@@ -36,6 +38,25 @@ const SERVICES = [
   { id: 'waitlist', label: 'Waitlist', icon: Clock },
 ];
 
+
+/* ── Location helpers: area filter, Google Maps embed + directions, distance ── */
+const areaOf = (t) => String(t?.address?.area || t?.address?.city || '').trim();
+const hasCoords = (t) => Number.isFinite(Number(t?.address?.lat)) && Number.isFinite(Number(t?.address?.lng)) && t?.address?.lat !== null && t?.address?.lng !== null && t?.address?.lat !== '';
+const addressLine = (t) => [t?.address?.street, t?.address?.area, t?.address?.city, [t?.address?.state, t?.address?.pincode].filter(Boolean).join(' ')].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
+const mapQuery = (t) => (hasCoords(t) ? `${Number(t.address.lat)},${Number(t.address.lng)}` : [t?.name, addressLine(t)].filter(Boolean).join(', '));
+const embedUrl = (t) => `https://www.google.com/maps?q=${encodeURIComponent(mapQuery(t))}&z=16&output=embed`;
+const directionsUrl = (t) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapQuery(t))}&travelmode=driving`;
+const openMapUrl = (t) => (t?.address?.mapsUrl && /^https:\/\//i.test(t.address.mapsUrl) ? t.address.mapsUrl : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery(t))}`);
+const hasPlace = (t) => hasCoords(t) || !!addressLine(t);
+const distanceKm = (pos, t) => {
+  if (!pos || !hasCoords(t)) return null;
+  const R = 6371; const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(Number(t.address.lat) - pos.lat); const dLng = rad(Number(t.address.lng) - pos.lng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(pos.lat)) * Math.cos(rad(Number(t.address.lat))) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+const fmtKm = (km) => (km == null ? '' : km < 1 ? `${Math.max(50, Math.round(km * 10) * 100)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
+
 const css = `
 .pxh-chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:4px 8px 10px;margin:-4px -8px -6px}
 .pxh-chips::-webkit-scrollbar{display:none}
@@ -53,6 +74,22 @@ const css = `
 .pxh-bubble{flex:0 0 auto;width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;color:rgba(255,255,255,.7);cursor:pointer;font-family:inherit;padding:0}
 .pxh-ring{width:58px;height:58px;border-radius:50%;padding:2px;background:conic-gradient(from 210deg,#d3bfa2,#8a704d,#d3bfa2);display:flex}
 .pxh-ring>div{flex:1;border-radius:50%;background:#f7f3eb;display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid #0e0e0e}
+.pxh-areas{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 8px 4px;margin:0 -8px}
+.pxh-areas::-webkit-scrollbar{display:none}
+.pxh-area{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(211,191,162,.14);background:transparent;color:rgba(255,255,255,.6);border-radius:12px;padding:7px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s}
+.pxh-area b{font-size:9.5px;font-weight:900;color:rgba(211,191,162,.7);background:rgba(211,191,162,.1);border-radius:8px;padding:1px 6px}
+.pxh-area.on{border-color:rgba(211,191,162,.55);background:rgba(211,191,162,.12);color:#f7f3eb}
+.pxh-seg{display:inline-flex;border:1px solid rgba(211,191,162,.18);border-radius:13px;padding:3px;background:rgba(255,255,255,.03)}
+.pxh-seg button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:rgba(255,255,255,.55);font-size:11px;font-weight:800;padding:7px 12px;border-radius:10px;cursor:pointer;font-family:inherit}
+.pxh-seg button.on{background:linear-gradient(135deg,#d3bfa2,#bda88a);color:#101010}
+.pxh-nav{position:absolute;right:10px;bottom:10px;width:32px;height:32px;border-radius:11px;border:1px solid rgba(211,191,162,.25);background:rgba(211,191,162,.1);color:#d3bfa2;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:all .18s}
+.pxh-nav:hover{background:rgba(211,191,162,.2)}
+.pxh-mapwrap{display:grid;gap:14px;grid-template-columns:1fr}
+@media(min-width:860px){.pxh-mapwrap{grid-template-columns:minmax(280px,.8fr) 1.4fr;align-items:start}.pxh-mapwrap .pxh-maplist{max-height:560px;overflow-y:auto}.pxh-mapwrap .pxh-detail{position:sticky;top:14px}}
+.pxh-place{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid rgba(211,191,162,.12);background:linear-gradient(160deg,#171717,#101010);color:#fff;border-radius:16px;padding:11px 12px;cursor:pointer;font-family:inherit;transition:all .18s}
+.pxh-place.on{border-color:rgba(211,191,162,.55);background:linear-gradient(160deg,rgba(211,191,162,.14),#121212)}
+.pxh-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:13px;padding:11px 15px;font-size:12px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid rgba(211,191,162,.26);background:rgba(211,191,162,.07);color:#d3bfa2;text-decoration:none;transition:all .18s}
+.pxh-btn.pri{background:linear-gradient(135deg,#e2d3ba,#d3bfa2 55%,#bda88a);color:#101010;border-color:transparent;box-shadow:0 8px 20px -8px rgba(211,191,162,.55)}
 @keyframes pxhShimmer{0%{background-position:-300px 0}100%{background-position:300px 0}}
 .pxh-skel{border-radius:20px;height:132px;border:1px solid rgba(211,191,162,.08);background:linear-gradient(90deg,#141414 0%,#1c1c1c 50%,#141414 100%);background-size:600px 100%;animation:pxhShimmer 1.3s linear infinite}
 @media(prefers-reduced-motion:reduce){.pxh-skel{animation:none}.pxh-card{transition:none}}
@@ -76,6 +113,65 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
   );
 };
 
+/* Map + navigate card for one outlet (used in the Map view and in the quick sheet). */
+function PlaceDetail({ t, pos, onOrder }) {
+  const [note, setNote] = useState('');
+  const km = distanceKm(pos, t);
+  const flash = (m) => { setNote(m); window.setTimeout(() => setNote(''), 2200); };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(`${t.name}${addressLine(t) ? ', ' + addressLine(t) : ''}`); flash('Address copied'); }
+    catch { flash('Copy not available'); }
+  };
+  const share = async () => {
+    const data = { title: t.name, text: `${t.name}${addressLine(t) ? ' — ' + addressLine(t) : ''}`, url: openMapUrl(t) };
+    try {
+      if (navigator.share) await navigator.share(data);
+      else { await navigator.clipboard.writeText(`${data.text}\n${data.url}`); flash('Link copied'); }
+    } catch { /* cancelled */ }
+  };
+  const placeable = hasPlace(t);
+  return (
+    <div className="pxh-detail" style={{ border: '1px solid rgba(211,191,162,.18)', borderRadius: 22, overflow: 'hidden', background: 'linear-gradient(160deg,#181818,#0f0f0f)' }}>
+      <div style={{ position: 'relative', height: 'clamp(210px,38vw,300px)', background: 'linear-gradient(145deg,#1b1b1b,#121212)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'rgba(211,191,162,.45)', fontSize: 11 }}>
+          <MapPin size={26} />{placeable ? 'Loading map…' : 'Location not added yet'}
+        </div>
+        {placeable && (
+          <iframe key={t.tenantId} title={`Map of ${t.name}`} src={embedUrl(t)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, filter: 'saturate(.85) contrast(1.02)' }} />
+        )}
+        {km != null && <span style={{ position: 'absolute', left: 12, top: 12, padding: '5px 10px', borderRadius: 10, background: 'rgba(12,12,12,.82)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 900, backdropFilter: 'blur(6px)' }}>{fmtKm(km)} away</span>}
+      </div>
+      <div style={{ padding: '16px 16px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Avatar t={t} size={46} radius={14} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#f7f3eb', fontFamily: 'Georgia, serif' }}>{t.name}</div>
+            {areaOf(t) && <div style={{ fontSize: 11, color: 'rgba(211,191,162,.8)', fontWeight: 700, marginTop: 2 }}>{areaOf(t)}</div>}
+          </div>
+        </div>
+        {(addressLine(t) || t.address?.landmark) && (
+          <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55, color: 'rgba(255,255,255,.62)' }}>
+            {addressLine(t)}
+            {t.address?.landmark && <div style={{ marginTop: 3, color: 'rgba(211,191,162,.7)' }}>Near {t.address.landmark}</div>}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 14 }}>
+          {placeable && <a className="pxh-btn pri" href={directionsUrl(t)} target="_blank" rel="noopener noreferrer" style={{ flex: '1 1 140px' }}><Navigation size={14} /> Directions</a>}
+          {onOrder && <button type="button" className="pxh-btn" onClick={() => onOrder(t)} style={{ flex: '1 1 110px' }}>Open menu <ChevronRight size={14} /></button>}
+        </div>
+        {placeable && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 9 }}>
+            <a className="pxh-btn" href={openMapUrl(t)} target="_blank" rel="noopener noreferrer" style={{ padding: '8px 12px', fontSize: 11 }}><ExternalLink size={12} /> Google Maps</a>
+            <button type="button" className="pxh-btn" onClick={copy} style={{ padding: '8px 12px', fontSize: 11 }}><Copy size={12} /> Copy</button>
+            <button type="button" className="pxh-btn" onClick={share} style={{ padding: '8px 12px', fontSize: 11 }}><Share2 size={12} /> Share</button>
+            {note && <span role="status" style={{ alignSelf: 'center', fontSize: 11, color: GOLD, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={12} />{note}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerHome() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,7 +191,15 @@ export default function CustomerHome() {
   const [offersLoading, setOffersLoading] = useState(false);
   const [offersError, setOffersError] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [area, setArea] = useState(() => { try { return localStorage.getItem(AREA_KEY) || 'all'; } catch { return 'all'; } });
+  const [view, setView] = useState('list');
+  const [pos, setPos] = useState(null);
+  const [nearMe, setNearMe] = useState(false);
+  const [geoMsg, setGeoMsg] = useState('');
+  const [mapId, setMapId] = useState(null);
+  const [sheetTenant, setSheetTenant] = useState(null);
 
+  const canLocate = typeof navigator !== 'undefined' && !!navigator.geolocation;
   const canScan = typeof window !== 'undefined' && 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
 
   const load = useCallback((signal) => {
@@ -159,18 +263,57 @@ export default function CustomerHome() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return tenants.filter((t) => {
+    const list = tenants.filter((t) => {
       const cafe = isCafe(t);
       if (filter === 'cafe' && !cafe) return false;
       if (filter === 'restaurant' && cafe) return false;
       if (service && (t.config?.customerFeatures || {})[service] === false) return false;
       if (favOnly && !favs.includes(t.tenantId)) return false;
-      return !q || `${t.name} ${t.address?.city || ''}`.toLowerCase().includes(q);
+      if (area !== 'all' && areaOf(t).toLowerCase() !== area) return false;
+      return !q || `${t.name} ${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`.toLowerCase().includes(q);
     });
-  }, [tenants, filter, service, favOnly, favs, query]);
+    if (nearMe && pos) list.sort((a, b) => (distanceKm(pos, a) ?? 1e9) - (distanceKm(pos, b) ?? 1e9));
+    return list;
+  }, [tenants, filter, service, favOnly, favs, query, area, nearMe, pos]);
+
+  // Area chips are built from the real outlets (counts respect the other filters, not the area itself).
+  const areaChips = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const counts = new Map();
+    for (const t of tenants) {
+      const a = areaOf(t); if (!a) continue;
+      const cafe = isCafe(t);
+      if (filter === 'cafe' && !cafe) continue;
+      if (filter === 'restaurant' && cafe) continue;
+      if (service && (t.config?.customerFeatures || {})[service] === false) continue;
+      if (favOnly && !favs.includes(t.tenantId)) continue;
+      if (q && !`${t.name} ${t.address?.area || ''} ${t.address?.city || ''}`.toLowerCase().includes(q)) continue;
+      const k = a.toLowerCase(); const cur = counts.get(k) || { key: k, label: a, n: 0 };
+      cur.n += 1; counts.set(k, cur);
+    }
+    const list = [...counts.values()].sort((x, y) => y.n - x.n || x.label.localeCompare(y.label));
+    if (area !== 'all' && !counts.has(area)) list.unshift({ key: area, label: area.replace(/\b\w/g, (c) => c.toUpperCase()), n: 0 });
+    return list;
+  }, [tenants, filter, service, favOnly, favs, query, area]);
+
+  const chooseArea = (key) => { setArea(key); try { localStorage.setItem(AREA_KEY, key); } catch { /* ignore */ } };
+
+  const toggleNear = () => {
+    if (nearMe) { setNearMe(false); setGeoMsg(''); return; }
+    if (!navigator.geolocation) { setGeoMsg('Location is not available on this device'); return; }
+    setGeoMsg('Finding you…');
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setNearMe(true); setGeoMsg(''); },
+      () => setGeoMsg('Allow location access to sort by distance'),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }
+    );
+  };
 
   // Any filter change goes back to the first page.
-  useEffect(() => { setLimit(PAGE); }, [filter, service, favOnly, query]);
+  useEffect(() => { setLimit(PAGE); }, [filter, service, favOnly, query, area, nearMe]);
+
+  // Map view keeps a valid selection as filters change.
+  const mapTenant = useMemo(() => filtered.find((t) => t.tenantId === mapId) || filtered[0] || null, [filtered, mapId]);
 
   const byId = useMemo(() => new Map(tenants.map((t) => [t.tenantId, t])), [tenants]);
   const jumpBack = useMemo(() => {
@@ -192,8 +335,8 @@ export default function CustomerHome() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const visible = filtered.slice(0, limit);
-  const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setQuery(''); };
-  const hasFilters = filter !== 'all' || service || favOnly || query;
+  const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setQuery(''); chooseArea('all'); };
+  const hasFilters = filter !== 'all' || service || favOnly || query || area !== 'all';
 
   return (
     <main style={{ minHeight: '100dvh', background: 'radial-gradient(900px 420px at 50% -10%, rgba(211,191,162,.10), transparent 60%), #0e0e0e', color: '#fff', fontFamily: 'Poppins, sans-serif', textAlign: 'left', boxShadow: '0 0 0 100vmax #0e0e0e', clipPath: 'inset(0 -100vmax)' }}>
@@ -250,6 +393,22 @@ export default function CustomerHome() {
           <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> Saved</button>
         </div>
 
+        {/* ── Area filter + Near me ── */}
+        {(areaChips.length > 0 || canLocate) && (
+          <div style={{ marginTop: 10 }}>
+            <div className="pxh-areas" role="toolbar" aria-label="Areas">
+              {canLocate && (
+                <button type="button" className={`pxh-area${nearMe ? ' on' : ''}`} onClick={toggleNear} aria-pressed={nearMe}><Crosshair size={12} /> Near me</button>
+              )}
+              {areaChips.length > 0 && <button type="button" className={`pxh-area${area === 'all' ? ' on' : ''}`} onClick={() => chooseArea('all')}><MapPin size={12} /> All areas</button>}
+              {areaChips.map((a) => (
+                <button type="button" key={a.key} className={`pxh-area${area === a.key ? ' on' : ''}`} onClick={() => chooseArea(area === a.key ? 'all' : a.key)}>{a.label} <b>{a.n}</b></button>
+              ))}
+            </div>
+            {geoMsg && <div role="status" style={{ marginTop: 6, fontSize: 11, color: 'rgba(211,191,162,.75)' }}>{geoMsg}</div>}
+          </div>
+        )}
+
         {/* ── Offers rail ── */}
         {offerCards.length > 0 && (
           <section style={{ marginTop: 16 }}>
@@ -284,6 +443,17 @@ export default function CustomerHome() {
 
         {/* ── Restaurants ── */}
         <section style={{ marginTop: 14 }}>
+          {!loading && !loadError && filtered.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '0 0 12px' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontWeight: 700, letterSpacing: .3 }}>
+                {filtered.length} {filtered.length === 1 ? 'place' : 'places'}{area !== 'all' && areaChips.find((a) => a.key === area) ? ` in ${areaChips.find((a) => a.key === area).label}` : ''}{nearMe ? ' · nearest first' : ''}
+              </div>
+              <div className="pxh-seg" role="tablist" aria-label="View">
+                <button type="button" role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}><ListIcon size={13} /> List</button>
+                <button type="button" role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}><MapIcon size={13} /> Map</button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="pxh-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="pxh-skel" />)}</div>
           ) : loadError ? (
@@ -299,6 +469,26 @@ export default function CustomerHome() {
               {hasFilters && <button type="button" onClick={resetFilters} style={{ marginTop: 14, border: '1px solid rgba(211,191,162,.28)', background: 'rgba(211,191,162,.08)', color: GOLD, borderRadius: 12, padding: '9px 16px', fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit' }}>Clear filters</button>}
             </div>
           ) : (
+            view === 'map' && mapTenant ? (
+              <div className="pxh-mapwrap">
+                <div className="pxh-maplist" style={{ display: 'grid', gap: 9, alignContent: 'start', order: 2 }}>
+                  {filtered.map((t) => {
+                    const km = distanceKm(pos, t);
+                    return (
+                      <button type="button" key={t.tenantId} className={`pxh-place${mapTenant.tenantId === t.tenantId ? ' on' : ''}`} onClick={() => setMapId(t.tenantId)} aria-pressed={mapTenant.tenantId === t.tenantId}>
+                        <Avatar t={t} size={40} radius={12} />
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                          <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: 'rgba(255,255,255,.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(t) || 'Location not added'}</span>
+                        </span>
+                        {km != null && <span style={{ fontSize: 10.5, fontWeight: 900, color: GOLD }}>{fmtKm(km)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ order: 1 }}><PlaceDetail t={mapTenant} pos={pos} onOrder={openTenant} /></div>
+              </div>
+            ) : (
             <>
               <div className="pxh-grid">
                 {visible.map((tenant, i) => {
@@ -311,14 +501,17 @@ export default function CustomerHome() {
                         <Avatar t={tenant} size={52} radius={16} />
                         <div style={{ marginTop: 12, fontSize: 14, fontWeight: 800, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tenant.name}</div>
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'rgba(255,255,255,.38)', minHeight: 14 }}>
-                          {tenant.address?.city && <><MapPin size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tenant.address.city}</span></>}
+                          {areaOf(tenant) && <><MapPin size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(tenant)}{distanceKm(pos, tenant) != null ? ` · ${fmtKm(distanceKm(pos, tenant))}` : ''}</span></>}
                         </div>
-                        <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 9, minHeight: 24 }}>
+                        <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 9, minHeight: 24, paddingRight: hasPlace(tenant) ? 36 : 0 }}>
                           {SERVICES.map(({ id, label, icon: Icon }) => features[id] !== false && <span key={id} title={label} style={{ display: 'flex', color: 'rgba(211,191,162,.65)' }}><Icon size={13} /></span>)}
                           <span style={{ flex: 1 }} />
                           {offers > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 10, background: 'rgba(211,191,162,.12)', border: '1px solid rgba(211,191,162,.22)', color: GOLD, fontSize: 9.5, fontWeight: 900 }}><Tag size={10} /> {offers}</span>}
                         </div>
                       </button>
+                      {hasPlace(tenant) && (
+                        <button type="button" className="pxh-nav" onClick={() => setSheetTenant(tenant)} aria-label={`Map and directions for ${tenant.name}`}><Navigation size={14} /></button>
+                      )}
                       <button type="button" className={`pxh-heart${isFav ? ' on' : ''}`} onClick={() => toggleFav(tenant.tenantId)} aria-label={isFav ? 'Remove from saved' : 'Save'} aria-pressed={isFav}>
                         <Heart size={14} fill={isFav ? 'currentColor' : 'none'} />
                       </button>
@@ -334,9 +527,22 @@ export default function CustomerHome() {
                 </div>
               )}
             </>
+            )
           )}
         </section>
       </div>
+
+      {/* ── Map & directions sheet ── */}
+      <AnimatePresence>
+        {sheetTenant && (
+          <motion.div role="dialog" aria-modal="true" aria-label={`Map of ${sheetTenant.name}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSheetTenant(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(5,5,5,.82)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <motion.div initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={(e) => e.stopPropagation()} style={{ width: 'min(560px,100%)', maxHeight: '92dvh', overflowY: 'auto', borderRadius: '24px 24px 0 0', position: 'relative' }}>
+              <button type="button" onClick={() => setSheetTenant(null)} aria-label="Close" style={{ ...iconBtn, position: 'absolute', top: 12, right: 12, zIndex: 3, width: 34, height: 34, background: 'rgba(12,12,12,.8)' }}><X size={16} color={GOLD} /></button>
+              <PlaceDetail t={sheetTenant} pos={pos} onOrder={(t) => { setSheetTenant(null); openTenant(t); }} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── All offers ── */}
       <AnimatePresence>
