@@ -1,0 +1,58 @@
+/* PRATYEKSHa Editorial Theme — inspired exclusively by the supplied café/restaurant references.
+   Ivory, cream, charcoal, olive-sage and brushed-gold; no neon, gradients or dark-glass dashboards. */
+:root{
+  --px-ivory:#FAF6ED; --px-cream:#F2E8D6; --px-cream-deep:#E8D8BD;
+  --px-charcoal:#1E211A; --px-ink:#171813; --px-sage:#5D6845;
+  --px-sage-dark:#414A30; --px-gold:#A77732; --px-gold-light:#C8A365;
+  --px-taupe:#C8B48D; --px-warm-grey:#746D5D; --px-border:#DED1BA;
+  --px-card:#FFFCF5; --px-shadow:0 12px 34px rgba(52,42,25,.08);
+  color-scheme:light;
+}
+html,body,#root{min-height:100%;background:var(--px-ivory)!important;color:var(--px-charcoal);}
+body{font-family:Inter,"Avenir Next",Avenir,system-ui,sans-serif;letter-spacing:.01em;}
+#root{width:100%;max-width:none;margin:0;border:0;text-align:initial;}
+h1,h2,h3,.p-page-title,.pown-gradient-text{color:var(--px-charcoal);}
+button,input,select,textarea{font-family:inherit;}
+button,a,[role=button]{transition:background-color .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease;}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--px-gold)!important;outline-offset:3px;}
+/* Common cards, panels, dialogs and forms */
+.p-operator-shell,.p-master-shell,.p-kitchen-shell,.pown,.customer-directory-shell,.site,
+.p-operator-shell main,.p-master-shell main,.p-kitchen-shell main{background:var(--px-ivory)!important;color:var(--px-charcoal)!important;}
+.p-operator-shell .p-sidebar,.p-master-shell .p-sidebar,.p-kitchen-shell .p-sidebar,
+.p-operator-shell aside,.p-master-shell aside,.p-kitchen-shell aside{background:var(--px-cream)!important;color:var(--px-charcoal)!important;border-color:var(--px-border)!important;box-shadow:none!important;}
+.p-operator-shell .p-top-header,.p-master-shell .p-top-header,.p-kitchen-shell .p-top-header,
+.pown header,.pown .pown-header{background:rgba(250,246,237,.94)!important;color:var(--px-charcoal)!important;border-color:var(--px-border)!important;box-shadow:0 4px 20px rgba(52,42,25,.035)!important;backdrop-filter:blur(14px);}
+.p-operator-shell .p-op-card,.p-master-shell .p-op-card,.p-kitchen-shell .p-op-card,
+.pown .pown-kpi,.pown [class*="card"],.p-master-shell [class*="card"],.p-kitchen-shell [class*="card"],
+.p-operator-shell [class*="card"],.customer-directory-shell [class*= "card"]{background:var(--px-card)!important;color:var(--px-charcoal)!important;border:1px solid var(--px-border)!important;border-radius:16px!important;box-shadow:var(--px-shadow)!important;}
+.p-operator-shell .p-nav-btn,.p-master-shell .p-nav-btn,.p-kitchen-shell .p-nav-btn,.pown .pown-nav-link{color:var(--px-warm-grey)!important;border-radius:10px!important;}
+.p-operator-shell .p-nav-btn:hover,.p-master-shell .p-nav-btn:hover,.p-kitchen-shell .p-nav-btn:hover,.pown .pown-nav-link:hover{background:rgba(93,104,69,.09)!important;color:var(--px-sage-dark)!important;}
+.p-operator-shell .p-nav-btn[aria-current=page],.p-operator-shell .p-nav-btn.active,.p-master-shell .p-nav-btn[aria-current=page],.p-master-shell .p-nav-btn.active,.p-kitchen-shell .p-nav-btn.active,.pown .pown-nav-link.active{background:rgba(93,104,69,.13)!important;color:var(--px-sage-dark)!important;box-shadow:inset 3px 0 var(--px-sage)!important;}
+.p-operator-shell .p-page-title,.p-master-shell .p-page-title,.p-kitchen-shell .p-page-title{font-family:Georgia,"Times New Roman",serif!important;font-weight:600!important;letter-spacing:-.025em!important;}
+.p-operator-shell button,.p-master-shell button,.p-kitchen-shell button,.pown button,.customer-directory-shell button{border-radius:10px;}
+.p-operator-shell input,.p-operator-shell select,.p-operator-shell textarea,.p-master-shell input,.p-master-shell select,.p-master-shell textarea,.p-kitchen-shell input,.p-kitchen-shell select,.p-kitchen-shell textarea,.pown input,.pown select,.pown textarea{background:#FFFCF5!important;color:var(--px-charcoal)!important;border:1px solid var(--px-border)!important;border-radius:10px!important;box-shadow:none!important;}
+.p-operator-shell input::placeholder,.p-master-shell input::placeholder,.pown input::placeholder,textarea::placeholder{color:#938977!important;}
+.p-operator-shell table,.p-master-shell table,.p-kitchen-shell table,.pown table{color:var(--px-charcoal)!important;border-color:var(--px-border)!important;}
+.p-operator-shell th,.p-master-shell th,.p-kitchen-shell th,.pown th{background:var(--px-cream)!important;color:var(--px-warm-grey)!important;border-color:var(--px-border)!important;}
+.p-operator-shell td,.p-master-shell td,.p-kitchen-shell td,.pown td{border-color:#EAE0CF!important;}
+.p-operator-shell tr:hover td,.p-master-shell tr:hover td,.p-kitchen-shell tr:hover td,.pown .pown-row-hover:hover{background:#F7F0E3!important;}
+.p-operator-shell .p-modal-box,.p-master-shell .p-modal-box,.p-kitchen-shell .p-modal-box,.pown [role=dialog]{background:var(--px-card)!important;color:var(--px-charcoal)!important;border:1px solid var(--px-border)!important;box-shadow:0 24px 70px rgba(38,31,19,.18)!important;border-radius:18px!important;}
+/* Buttons: sage primary, restrained gold for premium/important actions */
+.p-operator-shell button[class*=primary],.p-master-shell button[class*=primary],.p-kitchen-shell button[class*=primary],.pown .pown-btn-primary,
+.p-operator-shell .p-primary-btn,.p-master-shell .p-primary-btn{background:var(--px-sage)!important;color:#fffdf7!important;border:1px solid var(--px-sage)!important;box-shadow:0 5px 14px rgba(65,74,48,.14)!important;}
+.p-operator-shell button[class*=primary]:hover,.p-master-shell button[class*=primary]:hover,.p-kitchen-shell button[class*=primary]:hover,.pown .pown-btn-primary:hover{background:var(--px-sage-dark)!important;}
+.px-ambient{background:radial-gradient(ellipse at 70% 0%,#F2E8D6 0%,#FAF6ED 62%,#F7F0E3 100%)!important;}
+.px-ambient::before{background:rgba(200,164,101,.13)!important;filter:blur(90px)!important;}
+.px-ambient::after{background:rgba(93,104,69,.10)!important;filter:blur(90px)!important;}
+.px-glass{background:rgba(255,252,245,.88)!important;border:1px solid var(--px-border)!important;box-shadow:var(--px-shadow)!important;backdrop-filter:blur(12px);}
+.px-gold{background:linear-gradient(135deg,#B88A48,#A77732)!important;color:#fffaf0!important;box-shadow:0 8px 20px rgba(167,119,50,.18)!important;}
+.px-loader{background:var(--px-ivory)!important;color:var(--px-charcoal)!important;}
+.px-loader .card{background:var(--px-card)!important;box-shadow:0 20px 60px rgba(52,42,25,.12)!important;}
+/* Customer menu + landing surfaces */
+.customer-directory-shell,.site{background:var(--px-ivory)!important;color:var(--px-charcoal)!important;}
+.customer-directory-shell [style*="background: rgb(11, 11, 12)"],.customer-directory-shell [style*="background:#0b0b0c"],.customer-directory-shell [style*="background: #0b0b0c"]{background:var(--px-ivory)!important;}
+/* Make inline dark text/surfaces in app shells harmonize without touching status colors or behavior. */
+.p-operator-shell [style*="background: rgb(13, 13, 13)"],.p-master-shell [style*="background: rgb(13, 13, 13)"],.pown [style*="background: rgb(13, 13, 13)"]{background:var(--px-ivory)!important;}
+.p-operator-shell .p-sidebar-logo,.p-master-shell img[alt*=Pratyeksha],.p-operator-shell img[alt*=Pratyeksha]{object-fit:contain;}
+@media(max-width:760px){.p-operator-shell .p-sidebar,.p-master-shell .p-sidebar,.p-kitchen-shell .p-sidebar{box-shadow:8px 0 32px rgba(38,31,19,.12)!important}.p-operator-shell .p-op-card,.p-master-shell .p-op-card,.p-kitchen-shell .p-op-card,.pown .pown-kpi{border-radius:13px!important}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
