@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pratyeksha-operator-shell-v2';
+const CACHE_NAME = 'pratyeksha-operator-shell-v3';
 const SHELL = ['/operator-manifest.webmanifest', '/operator-pwa/icon-192.png', '/operator-pwa/icon-512.png'];
 
 self.addEventListener('install', event => {
