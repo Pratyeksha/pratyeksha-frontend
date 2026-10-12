@@ -19,7 +19,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
   MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye,
   ShoppingCart, Copy,Flame ,
-  PackageX, ShieldAlert, Wrench
+  PackageX, ShieldAlert, Wrench, Maximize2, Minimize2, Search as SearchIcon, WifiOff, CornerDownLeft
 } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
@@ -62,7 +62,7 @@ const OperatorLiveTimer = ({ createdAt }) => {
     const interval = setInterval(calc, 30000);
     return () => clearInterval(interval);
   }, [createdAt]);
-  const getUrgencyColor = () => elapsed >= 15 ? '#d4af37' : '#a59c8e';
+  const getUrgencyColor = () => elapsed >= 15 ? '#d4af37' : '#a3a3ab';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: getUrgencyColor() }}>
       <Timer size={14} />
@@ -139,8 +139,8 @@ const AnnouncementPreviewCard = ({ data }) => {
 
   return (
     <div style={{
-      background: '#1f1b17', borderRadius: '16px', padding: '4px',
-      border: '1px solid #463e34'
+      background: '#101012', borderRadius: '16px', padding: '4px',
+      border: '1px solid #313137'
     }}>
       <div style={{
         background: c.bg, border: `1px solid ${c.border}`, borderRadius: '13px',
@@ -520,7 +520,7 @@ const getTimerStyle = (mins) => {
   if (mins >= 30) return { color: '#d3bfa2', fontWeight: '900' };  // gold primary — critical age
   if (mins >= 15) return { color: '#b8923a', fontWeight: '800' };  // amber warning
   if (mins >= 5)  return { color: '#8a704d', fontWeight: '700' };  // gold-deep — warming up
-  return { color: '#a59c8e',    fontWeight: '600' };                  // muted — fresh
+  return { color: '#a3a3ab',    fontWeight: '600' };                  // muted — fresh
 };
 
 const fetchCounterQueue = useCallback(async () => {
@@ -1927,14 +1927,14 @@ const saveFloorLayout = async (layout) => {
 const revenueColor = (tableNumber) => {
   const rev = (tableRevenueData.revenueByTable || {})[tableNumber] || 0;
   const max = tableRevenueData.maxRevenue || 1;
-  if (rev === 0) return { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', text: '#968d80' };
+  if (rev === 0) return { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)', text: '#92929a' };
   const intensity = Math.min(1, rev / max); // 0 → 1
   // Interpolate from a dim gold to a deep, saturated gold as spend increases
   const alpha = 0.12 + intensity * 0.68;
   return {
     bg: `rgba(211,191,162,${alpha})`,
     border: `rgba(211,191,162,${Math.min(1, alpha + 0.25)})`,
-    text: intensity > 0.5 ? '#1c1814' : '#d3bfa2'
+    text: intensity > 0.5 ? '#0f0f11' : '#d3bfa2'
   };
 };
 
@@ -2470,7 +2470,7 @@ const SectionHeader = ({ icon, title, subtitle }) => (
     }}>{icon}</div>
     <div>
       <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px', textTransform: 'uppercase' }}>{title}</h3>
-      {subtitle && <p style={{ margin: '2px 0 0', fontSize: '0.62rem', color: '#a59c8e', fontWeight: '600' }}>{subtitle}</p>}
+      {subtitle && <p style={{ margin: '2px 0 0', fontSize: '0.62rem', color: '#a3a3ab', fontWeight: '600' }}>{subtitle}</p>}
     </div>
   </div>
 );
@@ -2478,7 +2478,7 @@ const SectionHeader = ({ icon, title, subtitle }) => (
 
 const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
   <div style={{
-    background: urgent ? 'linear-gradient(165deg, rgba(211,191,162,0.07) 0%, rgba(211,191,162,0.02) 100%)' : 'linear-gradient(165deg, #312b25 0%, #2a2520 100%)',
+    background: urgent ? 'linear-gradient(165deg, rgba(211,191,162,0.07) 0%, rgba(211,191,162,0.02) 100%)' : 'linear-gradient(165deg, #222226 0%, #1a1a1d 100%)',
     border: `1px solid ${urgent ? 'rgba(211,191,162,0.22)' : 'rgba(211,191,162,0.08)'}`,
     borderLeft: `3px solid ${rec.color}`,
     borderRadius: '14px', padding: '18px 20px',
@@ -2511,7 +2511,7 @@ const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
     {rec.stat && (
       <div style={{
         display: 'flex', alignItems: 'center', gap: '14px',
-        background: 'linear-gradient(165deg, #1f1b17 0%, #1f1b17 100%)', borderRadius: '10px', padding: '12px 14px',
+        background: 'linear-gradient(165deg, #101012 0%, #101012 100%)', borderRadius: '10px', padding: '12px 14px',
         border: '1px solid rgba(255,255,255,0.05)'
       }}>
         <div style={{
@@ -2520,12 +2520,12 @@ const RecommendationCard = ({ rec, urgent = false, positive = false }) => (
         }}>
           {rec.stat.value}
         </div>
-        <div style={{ fontSize: '0.6rem', color: '#bab1a3', fontWeight: '700', lineHeight: 1.4 }}>
+        <div style={{ fontSize: '0.6rem', color: '#bcbcc3', fontWeight: '700', lineHeight: 1.4 }}>
           {rec.stat.label}
         </div>
         {rec.stat.bar !== undefined && (
           <div style={{ marginLeft: 'auto', width: '70px', flexShrink: 0 }}>
-            <div style={{ height: '5px', background: '#3a342d', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ height: '5px', background: '#2a2a2f', borderRadius: '3px', overflow: 'hidden' }}>
               <div style={{
                 height: '100%', width: `${Math.min(100, rec.stat.bar)}%`,
                 background: rec.color, borderRadius: '3px'
@@ -4501,15 +4501,15 @@ const renderMonthHeatmap = () => {
             ? isProfitable
               ? `rgba(211,191,162,${Math.max(0.2, rev/maxRev)})`
               : 'rgba(138,112,77,0.2)'
-            : '#312b25',
+            : '#222226',
           border: isProfitable && rev>(maxRev*0.7)
             ? '1px solid #d3bfa2'
             : isBreakeven
               ? '1px solid rgba(138,112,77,0.4)'
-              : '1px solid #463e34',
+              : '1px solid #313137',
           position:'relative'
         }}>
-        <span style={{fontSize:'0.75rem',color:rev>(maxRev*0.5)?'#1c1814':'#a59c8e',fontWeight:'800'}}>{i}</span>
+        <span style={{fontSize:'0.75rem',color:rev>(maxRev*0.5)?'#0f0f11':'#a3a3ab',fontWeight:'800'}}>{i}</span>
         {/* Breakeven indicator dot */}
         {isBreakeven && (
           <div style={{
@@ -4532,7 +4532,7 @@ const renderMonthHeatmap = () => {
       <motion.div initial={false} animate={{opacity:1}} style={styles.loginBox}>
         <img src={logoPath} alt="Logo" style={{...styles.sidebarLogo,filter:'none',background:'#f7f3eb',borderRadius:14,padding:'8px 12px',width:170}}/>
         <h2 style={{fontSize:'1.35rem',margin:'18px 0 6px',fontWeight:'600',fontFamily:"'Playfair Display', Georgia, serif",letterSpacing:'0.04em',color:'#f7f3eb',textAlign:'center'}}>Admin Command Center</h2>
-        <div style={{fontSize:'0.62rem',letterSpacing:'0.22em',color:'#a59c8e',fontWeight:'800',marginBottom:'30px'}}>SIGN IN TO CONTINUE</div>
+        <div style={{fontSize:'0.62rem',letterSpacing:'0.22em',color:'#a3a3ab',fontWeight:'800',marginBottom:'30px'}}>SIGN IN TO CONTINUE</div>
         <form onSubmit={handleLogin}>
           <input type="text" placeholder="Username" style={styles.input} onChange={e=>setLoginData(p => ({...p, username:e.target.value}))}/>
           <input type="password" placeholder="Access PIN" style={styles.input} onChange={e=>setLoginData(p => ({...p, password:e.target.value}))}/>
@@ -4621,7 +4621,7 @@ const renderMonthHeatmap = () => {
     style={{
       display: 'none',
       position: 'fixed', inset: 0,
-      background: 'rgba(24,19,15,0.7)',
+      background: 'rgba(8,8,10,0.7)',
       zIndex: 8999,
     }}
     className="p-mob-backdrop"
@@ -4687,7 +4687,7 @@ const renderMonthHeatmap = () => {
       <div key={section} style={{marginBottom:'6px'}}>
         {/* Section label */}
         <div style={{
-          fontSize:'0.44rem',color:'#8d8477',fontWeight:'900',
+          fontSize:'0.44rem',color:'#86868e',fontWeight:'900',
           letterSpacing:'1.8px',padding:'10px 8px 6px',
           textTransform:'uppercase'
         }}>{section}</div>
@@ -4706,13 +4706,13 @@ const renderMonthHeatmap = () => {
                   background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.24), rgba(211,191,162,0.08))' : 'transparent',
                   border: isActive ? '1px solid rgba(211,191,162,0.32)' : '1px solid transparent',
                   boxShadow: isActive ? '0 8px 20px -12px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)' : 'none',
-                  color: isActive ? '#d3bfa2' : '#968d80',
+                  color: isActive ? '#d3bfa2' : '#92929a',
                   transition:'all 0.15s',
                   position:'relative',
                   textAlign:'left',
                 }}
-                onMouseEnter={e=>{if(!isActive){e.currentTarget.style.background='rgba(255,255,255,0.03)';e.currentTarget.style.color='#b0a799';}}}
-                onMouseLeave={e=>{if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#968d80';}}}
+                onMouseEnter={e=>{if(!isActive){e.currentTarget.style.background='rgba(255,255,255,0.03)';e.currentTarget.style.color='#b0b0b8';}}}
+                onMouseLeave={e=>{if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#92929a';}}}
               >
                 {/* Active indicator bar */}
                 {isActive && (
@@ -4724,7 +4724,7 @@ const renderMonthHeatmap = () => {
                 )}
                 <span style={{
                   flexShrink:0,
-                  color: isActive ? '#d3bfa2' : '#968d80',
+                  color: isActive ? '#d3bfa2' : '#92929a',
                   transition:'color 0.15s'
                 }}>{tab.icon}</span>
                 <span className="p-nav-label" style={{
@@ -4738,7 +4738,7 @@ const renderMonthHeatmap = () => {
                     borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center',
                     padding:'0 4px',flexShrink:0,fontFamily:'monospace',
                     background: isActive ? 'rgba(211,191,162,0.15)' : 'rgba(255,255,255,0.05)',
-                    color: isActive ? '#d3bfa2' : '#9b9285',
+                    color: isActive ? '#d3bfa2' : '#97979f',
                     border: isActive ? '1px solid rgba(211,191,162,0.2)' : '1px solid rgba(255,255,255,0.06)'
                   }}>{tab.badge}</span>
                 )}
@@ -4776,17 +4776,17 @@ const renderMonthHeatmap = () => {
       </div>
       <div className="p-op-text" style={{flex:1,minWidth:0}}>
         <div style={{fontSize:'0.68rem',fontWeight:'900',color:'#d3bfa2',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>MANAGER</div>
-        <div style={{fontSize:'0.52rem',color:'#968d80',fontWeight:'700',marginTop:'1px'}}>Session active</div>
+        <div style={{fontSize:'0.52rem',color:'#92929a',fontWeight:'700',marginTop:'1px'}}>Session active</div>
       </div>
     </div>
     <button type="button" onClick={handleLogout} className="p-logout-btn" style={{
       width:'100%',padding:'10px',background:'transparent',
-      border:'1px solid rgba(255,255,255,0.05)',color:'#8d8477',
+      border:'1px solid rgba(255,255,255,0.05)',color:'#86868e',
       borderRadius:'9px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',
       letterSpacing:'1px',transition:'all 0.15s'
     }}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.15)';e.currentTarget.style.color='#b0a799';}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.05)';e.currentTarget.style.color='#8d8477';}}>
+      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.15)';e.currentTarget.style.color='#b0b0b8';}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.05)';e.currentTarget.style.color='#86868e';}}>
       SIGN OUT
     </button>
   </div>
@@ -4798,7 +4798,7 @@ const renderMonthHeatmap = () => {
  
   {/* Hamburger */}
   <button type="button" className="p-hamburger" onClick={()=>setSidebarOpen(true)} style={{
-    display:'none',background:'transparent',border:'1px solid #463e34',color:'#d3bfa2',
+    display:'none',background:'transparent',border:'1px solid #313137',color:'#d3bfa2',
     width:'36px',height:'36px',borderRadius:'9px',cursor:'pointer',
     alignItems:'center',justifyContent:'center',flexShrink:0
   }} aria-label="Open menu">
@@ -4825,7 +4825,7 @@ const renderMonthHeatmap = () => {
          activeTab==='marketing'?'MARKETING':
          activeTab.replace('_',' ').toUpperCase()}
       </h1>
-      <div style={{fontSize:'0.5rem',color:'#968d80',fontWeight:'700',marginTop:'3px',letterSpacing:'0.5px'}}>
+      <div style={{fontSize:'0.5rem',color:'#92929a',fontWeight:'700',marginTop:'3px',letterSpacing:'0.5px'}}>
         {activeTab==='pending'?'Live orders · KDS · Table floor':
          activeTab==='billing'?'Settle bills · Invoices · Payment breakdown':
          activeTab==='menu'?'Dish catalog · Availability · Pricing':
@@ -4843,6 +4843,7 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
   </div>
+  <OperatorQuickBar activeTab={activeTab} onGo={setActiveTab} />
  
   {/* ── BILLING header controls ── */}
   {activeTab==='billing' && (
@@ -4855,7 +4856,7 @@ const renderMonthHeatmap = () => {
           {label:'TAKEAWAY', val:hudLiveCounterBreakdown.takeaway},
           {label:'ONLINE',   val:hudLiveCounterBreakdown.online},
         ].map((s,i)=>(
-          <div key={i} style={{...styles.hudStatBox,borderLeft:i>0?'1px solid #463e34':'none'}}>
+          <div key={i} style={{...styles.hudStatBox,borderLeft:i>0?'1px solid #313137':'none'}}>
             <small style={{...styles.hudStatLabel,color:i===0?'#bda88a':undefined}}>{s.label}</small>
             <div style={{...styles.hudStatValue,color:s.color||'#fff'}} className="mono">
               {typeof s.val==='number'?(s.val<10?`0${s.val}`:s.val):s.val}
@@ -4865,8 +4866,8 @@ const renderMonthHeatmap = () => {
       </motion.div>
       <button type="button" onClick={downloadAllTodaysInvoices} disabled={isDownloadingAllBills} style={{
         marginLeft:'10px',padding:'9px 16px',
-        background:isDownloadingAllBills?'#2a2520':'linear-gradient(135deg,#d3bfa2,#bda88a)',
-        border:'none',color:isDownloadingAllBills?'#a59c8e':'#1c1814',
+        background:isDownloadingAllBills?'#1a1a1d':'linear-gradient(135deg,#d3bfa2,#bda88a)',
+        border:'none',color:isDownloadingAllBills?'#a3a3ab':'#0f0f11',
         borderRadius:'8px',fontSize:'0.6rem',fontWeight:'900',
         cursor:isDownloadingAllBills?'not-allowed':'pointer',
         display:'flex',alignItems:'center',gap:'6px',flexShrink:0
@@ -4892,9 +4893,9 @@ const renderMonthHeatmap = () => {
       </div>
       {['daily','weekly','monthly','annual'].map(p=>(
         <button type="button" key={p} onClick={async()=>{ await refreshOrdersForExport(); exportToExcel(p); }} className="p-xls-btn"
-          style={{padding:'7px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'8px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}
+          style={{padding:'7px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'8px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.2)';e.currentTarget.style.color='#d3bfa2';}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#a59c8e';}}>
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#a3a3ab';}}>
           {p.toUpperCase()} XLS
         </button>
       ))}
@@ -4940,7 +4941,7 @@ const renderMonthHeatmap = () => {
           border:'1px solid rgba(211,191,162,0.1)',borderRadius:'9px'
         }}>
           <div style={{fontSize:'1.05rem',fontWeight:'900',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
-          <div style={{fontSize:'0.46rem',color:'#968d80',fontWeight:'900',marginTop:'2px',letterSpacing:'0.8px'}}>{s.l}</div>
+          <div style={{fontSize:'0.46rem',color:'#92929a',fontWeight:'900',marginTop:'2px',letterSpacing:'0.8px'}}>{s.l}</div>
         </div>
       ))}
     </div>
@@ -4949,13 +4950,13 @@ const renderMonthHeatmap = () => {
   {/* ── MENU header controls ── */}
   {activeTab==='menu' && (
     <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-menu-header-actions">
-      <div style={{display:'flex',background:'#1f1b17',border:'1px solid #463e34',borderRadius:'9px',padding:'3px',gap:'3px'}}>
+      <div style={{display:'flex',background:'#101012',border:'1px solid #313137',borderRadius:'9px',padding:'3px',gap:'3px'}}>
         {[{val:'all',label:'ALL'},{val:'veg',label:'VEG'},{val:'nonveg',label:'NON-VEG'}].map(f=>(
           <button type="button" key={f.val} onClick={()=>setMenuVegFilter(f.val)} style={{
             padding:'6px 12px',border:'none',borderRadius:'6px',cursor:'pointer',
             fontSize:'0.6rem',fontWeight:'900',transition:'all 0.15s',
             background:menuVegFilter===f.val?'#d3bfa2':'transparent',
-            color:menuVegFilter===f.val?'#1c1814':'#a59c8e'
+            color:menuVegFilter===f.val?'#0f0f11':'#a3a3ab'
           }}>
             {f.val==='veg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'7px',height:'7px',borderRadius:'50%',background:menuVegFilter==='veg'?'#a88b4f':'#555',display:'inline-block'}}/>VEG</span>}
             {f.val==='nonveg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:0,height:0,borderLeft:'3px solid transparent',borderRight:'3px solid transparent',borderBottom:`6px solid ${menuVegFilter==='nonveg'?'#9a5a2a':'#555'}`,display:'inline-block'}}/>NON-VEG</span>}
@@ -4970,12 +4971,12 @@ const renderMonthHeatmap = () => {
         <Tag size={11}/> REFRESH BESTSELLERS
       </button>
       {tenantConfig&&(
-        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 12px',background:'#1f1b17',border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.22)':'#463e34'}`,borderRadius:'9px',transition:'all 0.2s'}} className="p-autohide-toggle">
-          <Layers size={12} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#968d80'}/>
-          <span style={{fontSize:'0.58rem',fontWeight:'900',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#968d80'}} className="p-autohide-label">AUTO-HIDE</span>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 12px',background:'#101012',border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.22)':'#313137'}`,borderRadius:'9px',transition:'all 0.2s'}} className="p-autohide-toggle">
+          <Layers size={12} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#92929a'}/>
+          <span style={{fontSize:'0.58rem',fontWeight:'900',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#92929a'}} className="p-autohide-label">AUTO-HIDE</span>
           <button type="button" onClick={async()=>{const nv=!tenantConfig.config?.autoHideDishesOnLowStock;await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);}}
-            style={{width:'36px',height:'19px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#3a342d'}}>
-            <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:tenantConfig.config?.autoHideDishesOnLowStock?'#2a2520':'#444',transition:'left 0.2s'}}/>
+            style={{width:'36px',height:'19px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#2a2a2f'}}>
+            <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:tenantConfig.config?.autoHideDishesOnLowStock?'#1a1a1d':'#444',transition:'left 0.2s'}}/>
           </button>
         </div>
       )}
@@ -4997,9 +4998,9 @@ const renderMonthHeatmap = () => {
           style={{
             padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
             fontSize:'0.6rem',fontWeight:'900',letterSpacing:'0.5px',
-            border:marketingSubTab===st?'none':'1px solid #463e34',
-            background:marketingSubTab===st?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#2a2520',
-            color:marketingSubTab===st?'#1c1814':'#968d80',
+            border:marketingSubTab===st?'none':'1px solid #313137',
+            background:marketingSubTab===st?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#1a1a1d',
+            color:marketingSubTab===st?'#0f0f11':'#92929a',
             transition:'all 0.15s',textTransform:'uppercase'
           }}>
           {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':''}
@@ -5021,7 +5022,7 @@ const renderMonthHeatmap = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 340, damping: 28 }}
                 style={{
-                    background: '#2a2520',
+                    background: '#1a1a1d',
                     border: '1px solid rgba(184,146,58,0.5)',
                     borderLeft: '4px solid #b8923a',
                     borderRadius: '12px',
@@ -5116,13 +5117,13 @@ const renderMonthHeatmap = () => {
  
                         {/* Re-enable dishes if not auto-hidden */}
                         {!alert.autoHidden && (
-                            <span style={{ fontSize: '0.6rem', color: '#a59c8e', fontStyle: 'italic' }}>
+                            <span style={{ fontSize: '0.6rem', color: '#a3a3ab', fontStyle: 'italic' }}>
                                 Dishes still showing — turn on auto-hide in Settings to hide them automatically
                             </span>
                         )}
  
                         {/* Time */}
-                        <span style={{ fontSize: '0.58rem', color: '#968d80', marginLeft: 'auto' }}>
+                        <span style={{ fontSize: '0.58rem', color: '#92929a', marginLeft: 'auto' }}>
                             {new Date(alert.alertAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                         </span>
                     </div>
@@ -5132,7 +5133,7 @@ const renderMonthHeatmap = () => {
                 <button type="button"
                     onClick={() => setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a))}
                     style={{
-                        background: 'transparent', border: 'none', color: '#a59c8e',
+                        background: 'transparent', border: 'none', color: '#a3a3ab',
                         cursor: 'pointer', padding: '2px', flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
@@ -5171,7 +5172,7 @@ const renderMonthHeatmap = () => {
 {/* ── OCCUPANCY DASHBOARD ── */}
 <div style={{
   display:'grid', gridTemplateColumns:'auto 1fr', gap:'14px',
-  background:'#2a2520', border:'1px solid #403930',
+  background:'#1a1a1d', border:'1px solid #2b2b30',
   borderRadius:'16px', padding:'18px 20px', marginBottom:'20px',
   alignItems:'center'
 }}>
@@ -5185,7 +5186,7 @@ const renderMonthHeatmap = () => {
           { key:'occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2' },
           { key:'bill_pending', val:tableOccupancyBreakdown.bill_pending, color:'#b8923a' },
           { key:'reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d' },
-          { key:'free',         val:tableOccupancyBreakdown.free,         color:'#1c1814'  },
+          { key:'free',         val:tableOccupancyBreakdown.free,         color:'#0f0f11'  },
         ];
         let offset = 0;
         return segments.map(seg => {
@@ -5212,14 +5213,14 @@ const renderMonthHeatmap = () => {
       <div style={{ fontSize:'1.4rem', fontWeight:'900', color:'#fff', lineHeight:1, fontFamily:'monospace' }}>
         {tableOccupancyBreakdown.occupancyRate}%
       </div>
-      <div style={{ fontSize:'0.44rem', color:'#b0a799', fontWeight:'900', letterSpacing:'1px', marginTop:'2px' }}>FULL</div>
+      <div style={{ fontSize:'0.44rem', color:'#b0b0b8', fontWeight:'900', letterSpacing:'1px', marginTop:'2px' }}>FULL</div>
     </div>
   </div>
 
   {/* Legend + stats */}
   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
     {[
-      { label:'Free',         val:tableOccupancyBreakdown.free,         color:'#968d80', sub:'tables' },
+      { label:'Free',         val:tableOccupancyBreakdown.free,         color:'#92929a', sub:'tables' },
       { label:'Occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2', sub:'tables' },
       { label:'Bill Pending', val:tableOccupancyBreakdown.bill_pending, color:'#b8923a', sub:'tables' },
       { label:'Reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d', sub:'tables' },
@@ -5227,12 +5228,12 @@ const renderMonthHeatmap = () => {
       <div key={i} style={{
         padding:'10px 12px', borderRadius:'10px',
         background:'rgba(255,255,255,0.02)',
-        border:`1px solid ${s.color === '#968d80' ? '#1c1814' : `${s.color}20`}`,
+        border:`1px solid ${s.color === '#92929a' ? '#0f0f11' : `${s.color}20`}`,
         display:'flex', flexDirection:'column', gap:'2px'
       }}>
         <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
           <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:s.color, flexShrink:0 }}/>
-          <span style={{ fontSize:'0.5rem', color:'#968d80', fontWeight:'900', letterSpacing:'1px', textTransform:'uppercase' }}>{s.label}</span>
+          <span style={{ fontSize:'0.5rem', color:'#92929a', fontWeight:'900', letterSpacing:'1px', textTransform:'uppercase' }}>{s.label}</span>
         </div>
         <div style={{ fontSize:'1.2rem', fontWeight:'900', color:s.color, fontFamily:'monospace', lineHeight:1 }}>{s.val}</div>
       </div>
@@ -5241,7 +5242,7 @@ const renderMonthHeatmap = () => {
   {turnTimeData?.today?.avg != null && (
   <div style={{
     marginTop:'12px', paddingTop:'12px',
-    borderTop:'1px solid #403930',
+    borderTop:'1px solid #2b2b30',
     display:'flex', alignItems:'center', gap:'10px'
   }}>
     <Timer size={13} color="#8a704d" strokeWidth={1.5}/>
@@ -5249,7 +5250,7 @@ const renderMonthHeatmap = () => {
       <span style={{ fontSize:'0.68rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace' }}>
         ~{turnTimeData.today.avg}m
       </span>
-      <span style={{ fontSize:'0.58rem', color:'#a59c8e', fontWeight:'600', marginLeft:'6px' }}>
+      <span style={{ fontSize:'0.58rem', color:'#a3a3ab', fontWeight:'600', marginLeft:'6px' }}>
         avg table turn time today
       </span>
     </div>
@@ -5257,7 +5258,7 @@ const renderMonthHeatmap = () => {
       const diff = turnTimeData.today.avg - turnTimeData.yesterday.avg;
       const faster = diff < 0;
       return (
-        <div title={`Yesterday: ~${turnTimeData.yesterday.avg}m`} style={{ display:'flex', alignItems:'center', gap:'3px', fontSize:'0.56rem', fontWeight:'900', color: faster ? '#ecdcb9' : diff > 0 ? '#b8923a' : '#b0a799' }}>
+        <div title={`Yesterday: ~${turnTimeData.yesterday.avg}m`} style={{ display:'flex', alignItems:'center', gap:'3px', fontSize:'0.56rem', fontWeight:'900', color: faster ? '#ecdcb9' : diff > 0 ? '#b8923a' : '#b0b0b8' }}>
           {diff !== 0 && (faster ? <ArrowDownRight size={11}/> : <ArrowUpRight size={11}/>)}
           {diff === 0 ? 'same as yesterday' : `${Math.abs(diff)}m ${faster ? 'faster' : 'slower'} vs yday`}
         </div>
@@ -5266,7 +5267,7 @@ const renderMonthHeatmap = () => {
   </div>
 )}
 {turnTimeData?.last7Days?.avg != null && (
-  <div style={{ marginTop:'4px', fontSize:'0.5rem', color:'#968d80', fontWeight:'700', paddingLeft:'23px' }}>
+  <div style={{ marginTop:'4px', fontSize:'0.5rem', color:'#92929a', fontWeight:'700', paddingLeft:'23px' }}>
     7-day average: ~{turnTimeData.last7Days.avg}m ({turnTimeData.last7Days.samples} tables)
   </div>
 )}
@@ -5276,13 +5277,13 @@ const renderMonthHeatmap = () => {
 {/* ══════════════════════════════════════════════════
     LIVE FLOOR MAP — revenue heat + status ring + service calls + joins
 ══════════════════════════════════════════════════ */}
-<div style={{ background:'#2a2520', borderRadius:'18px', border:'1px solid rgba(211,191,162,0.07)', padding:'18px 20px' }}>
+<div style={{ background:'#1a1a1d', borderRadius:'18px', border:'1px solid rgba(211,191,162,0.07)', padding:'18px 20px' }}>
   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
     <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
       <div style={{ width:'28px', height:'28px', borderRadius:'8px', background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.12)', display:'flex', alignItems:'center', justifyContent:'center' }}>
         <LayoutGrid size={13} color="#d3bfa2" />
       </div>
-      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#bab1a3', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
+      <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#bcbcc3', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
     <div style={{ display:'flex', gap:'8px' }}>
       {joinMode && (
@@ -5309,12 +5310,12 @@ const renderMonthHeatmap = () => {
   </div>
 
   {floorEditMode && (
-    <div style={{ fontSize:'0.55rem', color:'#b0a799', marginBottom:'10px', fontWeight:'700' }}>
+    <div style={{ fontSize:'0.55rem', color:'#b0b0b8', marginBottom:'10px', fontWeight:'700' }}>
       Drag tables to match your real floor plan, then tap Save Layout.
     </div>
   )}
   {joinMode && (
-    <div style={{ fontSize:'0.55rem', color:'#b0a799', marginBottom:'10px', fontWeight:'700' }}>
+    <div style={{ fontSize:'0.55rem', color:'#b0b0b8', marginBottom:'10px', fontWeight:'700' }}>
       Tap tables to select a party sitting across them, then tap Join.
     </div>
   )}
@@ -5329,7 +5330,7 @@ const renderMonthHeatmap = () => {
     }}
     onMouseUp={() => setDraggingTable(null)}
     onMouseLeave={() => setDraggingTable(null)}
-    style={{ position:'relative', width:'100%', height: 'min(520px, 78vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid #403930', borderRadius:'12px', overflow:'hidden' }}>
+    style={{ position:'relative', width:'100%', height: 'min(520px, 78vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid #2b2b30', borderRadius:'12px', overflow:'hidden' }}>
 
     {/* Connector lines between joined tables */}
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
@@ -5373,13 +5374,13 @@ const renderMonthHeatmap = () => {
           }}>
           {/* Service call pulse */}
           {serviceCall && (
-            <span style={{ position:'absolute', top:-6, right:-6, width:14, height:14, borderRadius:'50%', background:'#e29a58', boxShadow:'0 0 0 3px #2a2520' }}>
+            <span style={{ position:'absolute', top:-6, right:-6, width:14, height:14, borderRadius:'50%', background:'#e29a58', boxShadow:'0 0 0 3px #1a1a1d' }}>
               <span style={{ position:'absolute', inset:0, borderRadius:'50%', background:'#e29a58', animation:'pulseDot 1.4s ease-out infinite' }} />
             </span>
           )}
           {/* Joined-table link icon */}
           {isJoined && !floorEditMode && (
-            <Link2 size={11} color="#d3bfa2" style={{ position:'absolute', top:-6, left:-6, background:'#2a2520', borderRadius:'50%', padding:2 }} />
+            <Link2 size={11} color="#d3bfa2" style={{ position:'absolute', top:-6, left:-6, background:'#1a1a1d', borderRadius:'50%', padding:2 }} />
           )}
           <span style={{ fontSize:'1.05rem', fontWeight:'900', color: colors.text, lineHeight:1 }}>{t.tableNumber}</span>
           {isReserved && !orderStatus && (
@@ -5398,10 +5399,10 @@ const renderMonthHeatmap = () => {
           {floorEditMode && (
             <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{ position:'absolute', bottom:-24, display:'flex', alignItems:'center', gap:'5px' }}>
               <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: Math.max(1, (o.seats||2)-1) } : o))}
-                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#312b25', color:'#888', border:'1px solid #463e34', borderRadius:4, cursor:'pointer' }}>-</button>
+                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#222226', color:'#888', border:'1px solid #313137', borderRadius:4, cursor:'pointer' }}>-</button>
               <span style={{ fontSize:'0.55rem', color:'#888', fontWeight:800 }}>{t.seats || 2}</span>
               <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: (o.seats||2)+1 } : o))}
-                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#312b25', color:'#888', border:'1px solid #463e34', borderRadius:4, cursor:'pointer' }}>+</button>
+                style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'#222226', color:'#888', border:'1px solid #313137', borderRadius:4, cursor:'pointer' }}>+</button>
             </div>
           )}
         </div>
@@ -5411,18 +5412,18 @@ const renderMonthHeatmap = () => {
 
   <div style={{ display:'flex', alignItems:'center', gap:'14px', marginTop:'14px', flexWrap:'wrap' }}>
     <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-      <span style={{ fontSize:'0.5rem', color:'#968d80', fontWeight:'700' }}>SPEND</span>
+      <span style={{ fontSize:'0.5rem', color:'#92929a', fontWeight:'700' }}>SPEND</span>
       <div style={{ width:'50px', height:'6px', borderRadius:'3px', background:'linear-gradient(90deg, rgba(211,191,162,0.06), rgba(211,191,162,0.85))' }} />
     </div>
     {Object.entries(ORDER_STATUS_RING).map(([status, color]) => (
       <div key={status} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
         <div style={{ width:'8px', height:'8px', borderRadius:'3px', border:`2px solid ${color}` }} />
-        <span style={{ fontSize:'0.48rem', color:'#b0a799', fontWeight:'700', textTransform:'capitalize' }}>{status}</span>
+        <span style={{ fontSize:'0.48rem', color:'#b0b0b8', fontWeight:'700', textTransform:'capitalize' }}>{status}</span>
       </div>
     ))}
     <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
       <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#e29a58' }} />
-      <span style={{ fontSize:'0.48rem', color:'#b0a799', fontWeight:'700' }}>Service call</span>
+      <span style={{ fontSize:'0.48rem', color:'#b0b0b8', fontWeight:'700' }}>Service call</span>
     </div>
   </div>
 </div>
@@ -5439,40 +5440,40 @@ const renderMonthHeatmap = () => {
       <>
         <motion.div initial={false} animate={{ opacity: 0.65 }}
           onClick={() => setActiveTableTicket(null)}
-          style={{ position:'fixed', inset:0, background:'#1f1b17', zIndex:9300 }} />
+          style={{ position:'fixed', inset:0, background:'#101012', zIndex:9300 }} />
         <div onClick={() => setActiveTableTicket(null)}
           style={{ position:'fixed', inset:0, zIndex:9301, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
           <motion.div onClick={e => e.stopPropagation()}
             initial={false} animate={{ scale:1, opacity:1, y:0 }}
             transition={{ type:'spring', stiffness:320, damping:28 }}
-            style={{ width:400, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#2a2520', border:'1px solid rgba(211,191,162,0.15)', borderRadius:16, margin:'auto', boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
+            style={{ width:400, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#1a1a1d', border:'1px solid rgba(211,191,162,0.15)', borderRadius:16, margin:'auto', boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
             <div style={{ padding:'16px 18px', borderBottom:'1px solid rgba(211,191,162,0.08)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
               <div>
                 <div style={{ fontSize:'0.85rem', fontWeight:900, color:'#fff' }}>
-                  Table {group.join(' + ')} {t?.seats ? <span style={{ color:'#b0a799', fontWeight:700, fontSize:'0.65rem' }}>· {t.seats} seats</span> : ''}
+                  Table {group.join(' + ')} {t?.seats ? <span style={{ color:'#b0b0b8', fontWeight:700, fontSize:'0.65rem' }}>· {t.seats} seats</span> : ''}
                 </div>
-                <div style={{ fontSize:'0.55rem', color:'#b0a799', fontWeight:700, marginTop:2 }}>
+                <div style={{ fontSize:'0.55rem', color:'#b0b0b8', fontWeight:700, marginTop:2 }}>
                   {groupOrders.length === 0 ? 'No active order' : `${groupOrders.reduce((a,o)=>a+(o.items?.length||0),0)} item(s) on the ticket`}
                 </div>
               </div>
-              <button type="button" onClick={() => setActiveTableTicket(null)} style={{ background:'#312b25', border:'1px solid rgba(211,191,162,0.1)', color:'#888', padding:6, borderRadius:8, cursor:'pointer', display:'flex' }}>
+              <button type="button" onClick={() => setActiveTableTicket(null)} style={{ background:'#222226', border:'1px solid rgba(211,191,162,0.1)', color:'#888', padding:6, borderRadius:8, cursor:'pointer', display:'flex' }}>
                 <X size={13}/>
               </button>
             </div>
 
             <div style={{ padding:'14px 18px' }}>
               {groupOrders.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'30px 10px', color:'#968d80', fontSize:'0.7rem', fontWeight:700 }}>
+                <div style={{ textAlign:'center', padding:'30px 10px', color:'#92929a', fontSize:'0.7rem', fontWeight:700 }}>
                   Table is free right now.
                 </div>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
                   {groupOrders.map(o => (o.items || []).map((it, i) => (
-                    <div key={`${o._id}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', background:'#1f1b17', borderRadius:8, border:'1px solid #403930' }}>
+                    <div key={`${o._id}-${i}`} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', background:'#101012', borderRadius:8, border:'1px solid #2b2b30' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <span style={{ width:6, height:6, borderRadius:'50%', background: ORDER_STATUS_RING[o.status] || '#555' }} />
                         <span style={{ fontSize:'0.7rem', fontWeight:800, color:'#ddd' }}>{it.name}</span>
-                        {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#b0a799' }}>({it.portion})</span>}
+                        {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#b0b0b8' }}>({it.portion})</span>}
                         {o.isModified && !it.isExtraItem && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'#e29a58', color:'#fff', letterSpacing:'0.4px' }}>{it.modChange === 'new' ? 'REPLACED · NEW' : it.modChange === 'qty' ? 'REPLACED · QTY' : 'REPLACED'}</span>}
                       </div>
                       <span style={{ fontSize:'0.65rem', fontWeight:900, color:'#888' }}>×{it.quantity}</span>
@@ -5527,32 +5528,32 @@ const renderMonthHeatmap = () => {
     <>
       <motion.div initial={false} animate={{ opacity: 0.65 }}
         onClick={() => setQuickReserveTable(null)}
-        style={{ position:'fixed', inset:0, background:'#1f1b17', zIndex:9400 }} />
+        style={{ position:'fixed', inset:0, background:'#101012', zIndex:9400 }} />
       <div onClick={() => setQuickReserveTable(null)}
         style={{ position:'fixed', inset:0, zIndex:9401, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflowY:'auto' }}>
         <motion.div onClick={e => e.stopPropagation()}
           initial={false} animate={{ scale:1, opacity:1, y:0 }}
           transition={{ type:'spring', stiffness:320, damping:28 }}
-          style={{ width:360, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#2a2520', border:'1px solid rgba(138,112,77,0.3)', borderRadius:16, margin:'auto', padding:20, boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
+          style={{ width:360, maxWidth:'92vw', maxHeight:'calc(85vh - 40px)', overflowY:'auto', background:'#1a1a1d', border:'1px solid rgba(138,112,77,0.3)', borderRadius:16, margin:'auto', padding:20, boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
           <div style={{ fontSize:'0.8rem', fontWeight:900, color:'#fff', marginBottom:4 }}>Reserve Table {quickReserveTable}</div>
-          <div style={{ fontSize:'0.58rem', color:'#b0a799', fontWeight:700, marginBottom:16 }}>Quick walk-in-style reservation</div>
+          <div style={{ fontSize:'0.58rem', color:'#b0b0b8', fontWeight:700, marginBottom:16 }}>Quick walk-in-style reservation</div>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             <input placeholder="Customer name" value={quickReserveDraft.customerName}
               onChange={e => setQuickReserveDraft(p => ({ ...p, customerName: e.target.value }))}
-              style={{ padding:'10px 12px', background:'#1f1b17', border:'1px solid #463e34', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
+              style={{ padding:'10px 12px', background:'#101012', border:'1px solid #313137', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
             <input placeholder="Phone (optional)" value={quickReserveDraft.customerPhone}
               onChange={e => setQuickReserveDraft(p => ({ ...p, customerPhone: e.target.value }))}
-              style={{ padding:'10px 12px', background:'#1f1b17', border:'1px solid #463e34', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
+              style={{ padding:'10px 12px', background:'#101012', border:'1px solid #313137', color:'#fff', borderRadius:8, fontSize:'0.75rem', outline:'none' }} />
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <span style={{ fontSize:'0.65rem', color:'#888', fontWeight:800 }}>Party size</span>
               <button type="button" onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: Math.max(1, p.partySize-1) }))}
-                style={{ width:26, height:26, background:'#312b25', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>-</button>
+                style={{ width:26, height:26, background:'#222226', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>-</button>
               <span style={{ fontSize:'0.75rem', color:'#fff', fontWeight:900 }}>{quickReserveDraft.partySize}</span>
               <button type="button" onClick={() => setQuickReserveDraft(p => ({ ...p, partySize: p.partySize+1 }))}
-                style={{ width:26, height:26, background:'#312b25', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>+</button>
+                style={{ width:26, height:26, background:'#222226', color:'#888', border:'none', borderRadius:6, cursor:'pointer' }}>+</button>
             </div>
             <button type="button" onClick={submitQuickReserve}
-              style={{ marginTop:6, padding:'12px 0', borderRadius:9, border:'none', background:'#8a704d', color:'#1c1814', fontSize:'0.68rem', fontWeight:900, cursor:'pointer' }}>
+              style={{ marginTop:6, padding:'12px 0', borderRadius:9, border:'none', background:'#8a704d', color:'#0f0f11', fontSize:'0.68rem', fontWeight:900, cursor:'pointer' }}>
               CONFIRM RESERVATION
             </button>
           </div>
@@ -5567,7 +5568,7 @@ const renderMonthHeatmap = () => {
   ══════════════════════════════════════════════════ */}
   <div style={{
     display: 'grid', gridTemplateColumns: '1.4fr 1px 1fr',
-    background: '#2a2520', borderRadius: '18px',
+    background: '#1a1a1d', borderRadius: '18px',
     border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden'
   }} className="p-kds-row">
 
@@ -5579,13 +5580,13 @@ const renderMonthHeatmap = () => {
         <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChefHat size={13} color="#d3bfa2" />
         </div>
-        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#bab1a3', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Kitchen Tickets</span>
+        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#bcbcc3', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Kitchen Tickets</span>
         <div style={{
           fontSize: '0.6rem', fontWeight: '900', minWidth: '24px', height: '24px',
           borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#2a2520',
-          color: filteredOrders.length > 0 ? '#d3bfa2' : '#8d8477',
-          border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #403930',
+          background: filteredOrders.length > 0 ? 'rgba(211,191,162,0.1)' : '#1a1a1d',
+          color: filteredOrders.length > 0 ? '#d3bfa2' : '#86868e',
+          border: filteredOrders.length > 0 ? '1px solid rgba(211,191,162,0.2)' : '1px solid #2b2b30',
           fontFamily: 'monospace'
         }}>
           {filteredOrders.length}
@@ -5618,9 +5619,9 @@ const renderMonthHeatmap = () => {
           return (
             <div key={order._id} style={{
               display: 'flex', alignItems: 'stretch', gap: '0',
-              background: tier === 'over' ? 'rgba(211,191,162,0.025)' : '#2a2520',
+              background: tier === 'over' ? 'rgba(211,191,162,0.025)' : '#1a1a1d',
               borderRadius: '11px',
-              border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.14)' : '#403930'}`,
+              border: `1px solid ${tier === 'over' ? 'rgba(211,191,162,0.14)' : '#2b2b30'}`,
               overflow: 'hidden', flexShrink: 0,
               transition: 'border-color 0.2s'
             }}>
@@ -5631,10 +5632,10 @@ const renderMonthHeatmap = () => {
               <div style={{
                 width: '44px', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: '#2a2520', borderRight: '1px solid #403930',
+                background: '#1a1a1d', borderRight: '1px solid #2b2b30',
                 fontFamily: 'monospace', fontWeight: '900',
                 fontSize: tableLabel.length > 3 ? '0.52rem' : '0.78rem',
-                color: tier === 'over' ? '#d3bfa2' : '#bab1a3',
+                color: tier === 'over' ? '#d3bfa2' : '#bcbcc3',
                 padding: '10px 4px'
               }}>
                 {tableLabel}
@@ -5648,7 +5649,7 @@ const renderMonthHeatmap = () => {
                       {srcMeta.label}
                     </span>
                   )}
-                  <span style={{ fontSize: '0.58rem', color: '#968d80', fontFamily: 'monospace' }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize: '0.58rem', color: '#92929a', fontFamily: 'monospace' }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div style={{ fontSize: '0.64rem', color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
                   {items.map(it => `${it.quantity}× ${it.name}`).join(' · ')}
@@ -5663,8 +5664,8 @@ const renderMonthHeatmap = () => {
               {/* Timer */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', gap: '3px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Timer size={11} color={tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#968d80'} />
-                  <span style={{ fontSize: '0.72rem', fontWeight: '900', color: tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#968d80', fontFamily: 'monospace' }}>{mins}m</span>
+                  <Timer size={11} color={tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#92929a'} />
+                  <span style={{ fontSize: '0.72rem', fontWeight: '900', color: tier === 'over' ? '#d3bfa2' : tier === 'warn' ? '#8a704d' : '#92929a', fontFamily: 'monospace' }}>{mins}m</span>
                 </div>
                 {tier !== 'ok' && (
                   <span style={{ fontSize: '0.42rem', fontWeight: '900', letterSpacing: '0.8px', color: tier === 'over' ? 'rgba(211,191,162,0.5)' : 'rgba(138,112,77,0.5)', textTransform: 'uppercase' }}>
@@ -5675,9 +5676,9 @@ const renderMonthHeatmap = () => {
             </div>
           );
         }) : (
-          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#1f1b17', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
-            <ChefHat size={22} color="#1c1814" style={{ marginBottom: '10px' }} />
-            <div style={{ fontSize: '0.62rem', color: '#8d8477', fontWeight: '700', letterSpacing: '0.5px' }}>Kitchen is clear</div>
+          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#101012', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
+            <ChefHat size={22} color="#0f0f11" style={{ marginBottom: '10px' }} />
+            <div style={{ fontSize: '0.62rem', color: '#86868e', fontWeight: '700', letterSpacing: '0.5px' }}>Kitchen is clear</div>
           </div>
         )}
       </div>
@@ -5691,10 +5692,10 @@ const renderMonthHeatmap = () => {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexShrink: 0 }}>
-        <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: waiterRequests.length > 0 ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.02)', border: waiterRequests.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #403930', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <BellRing size={13} color={waiterRequests.length > 0 ? '#d3bfa2' : '#8d8477'} />
+        <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: waiterRequests.length > 0 ? 'rgba(211,191,162,0.06)' : 'rgba(255,255,255,0.02)', border: waiterRequests.length > 0 ? '1px solid rgba(211,191,162,0.15)' : '1px solid #2b2b30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BellRing size={13} color={waiterRequests.length > 0 ? '#d3bfa2' : '#86868e'} />
         </div>
-        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: waiterRequests.length > 0 ? '#bab1a3' : '#8d8477', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Service Calls</span>
+        <span style={{ fontSize: '0.58rem', fontWeight: '900', color: waiterRequests.length > 0 ? '#bcbcc3' : '#86868e', letterSpacing: '2.5px', textTransform: 'uppercase', flex: 1 }}>Service Calls</span>
         {waiterRequests.length > 0 && (
           <div style={{ fontSize: '0.6rem', fontWeight: '900', minWidth: '24px', height: '24px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.2)', fontFamily: 'monospace' }}>
             {waiterRequests.length}
@@ -5705,13 +5706,13 @@ const renderMonthHeatmap = () => {
       <div style={{ overflowY: 'auto', maxHeight: '340px', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '2px' }} className="custom-scroll">
         {waiterRequests.length > 0 ? [...waiterRequests].reverse().map(req => (
           <motion.div initial={{ x: 10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={req._id}
-            style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#2a2520', padding: '11px 13px', borderRadius: '11px', border: '1px solid rgba(211,191,162,0.08)', borderLeft: '3px solid rgba(211,191,162,0.25)', flexShrink: 0 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#1a1a1d', padding: '11px 13px', borderRadius: '11px', border: '1px solid rgba(211,191,162,0.08)', borderLeft: '3px solid rgba(211,191,162,0.25)', flexShrink: 0 }}>
             <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <BellRing size={11} color="#8a704d" />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: '900', color: '#d3bfa2', fontSize: '0.7rem', marginBottom: '2px', fontFamily: 'monospace' }}>T-{req.tableNumber}</div>
-              <div style={{ fontSize: '0.6rem', color: '#b0a799', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
+              <div style={{ fontSize: '0.6rem', color: '#b0b0b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.serviceRequest}</div>
             </div>
             <button type="button" onClick={() => completeWaiterRequest(req._id)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.15)', color: '#8a704d', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', flexShrink: 0, transition: 'all 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; }}
@@ -5720,9 +5721,9 @@ const renderMonthHeatmap = () => {
             </button>
           </motion.div>
         )) : (
-          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#1f1b17', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
-            <BellRing size={20} color="#1c1814" style={{ marginBottom: '8px' }} />
-            <div style={{ fontSize: '0.6rem', color: '#8d8477', fontWeight: '700', letterSpacing: '0.5px' }}>No pending calls</div>
+          <div style={{ textAlign: 'center', padding: '44px 20px', background: '#101012', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.06)' }}>
+            <BellRing size={20} color="#0f0f11" style={{ marginBottom: '8px' }} />
+            <div style={{ fontSize: '0.6rem', color: '#86868e', fontWeight: '700', letterSpacing: '0.5px' }}>No pending calls</div>
           </div>
         )}
       </div>
@@ -5733,17 +5734,17 @@ const renderMonthHeatmap = () => {
   {/* ══════════════════════════════════════════════════
       ROW 2 — COUNTER QUEUE PANEL
   ══════════════════════════════════════════════════ */}
-  <div style={{ background: '#2a2520', borderRadius: '18px', border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden' }}>
+  <div style={{ background: '#1a1a1d', borderRadius: '18px', border: '1px solid rgba(211,191,162,0.07)', overflow: 'hidden' }}>
 
     {/* Panel header */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid rgba(211,191,162,0.05)', background: '#2a2520' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid rgba(211,191,162,0.05)', background: '#1a1a1d' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: '30px', height: '30px', borderRadius: '9px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Users size={14} color="#d3bfa2" />
         </div>
         <div>
           <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '1px' }}>COUNTER QUEUE</div>
-          <div style={{ fontSize: '0.52rem', color: '#968d80', fontWeight: '700', marginTop: '2px', letterSpacing: '0.5px' }}>Waitlist · Pickup · Reservations</div>
+          <div style={{ fontSize: '0.52rem', color: '#92929a', fontWeight: '700', marginTop: '2px', letterSpacing: '0.5px' }}>Waitlist · Pickup · Reservations</div>
         </div>
         {/* Queue count chips */}
         <div style={{ display: 'flex', gap: '5px', marginLeft: '4px' }}>
@@ -5752,9 +5753,9 @@ const renderMonthHeatmap = () => {
             { icon: <ShoppingBag size={9} />, count: pickupEntries.length, label: 'pickup' },
             { icon: <CalendarClock size={9} />, count: reservationEntries.filter(r => r.status === 'pending').length, label: 'pending' },
           ].map((s, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 9px', background: s.count > 0 ? 'rgba(211,191,162,0.05)' : '#2a2520', border: s.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #403930', borderRadius: '20px' }}>
-              <span style={{ color: s.count > 0 ? '#8a704d' : '#8d8477' }}>{s.icon}</span>
-              <span style={{ fontSize: '0.52rem', fontWeight: '900', color: s.count > 0 ? '#8a704d' : '#8d8477', fontFamily: 'monospace' }}>{s.count} {s.label}</span>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 9px', background: s.count > 0 ? 'rgba(211,191,162,0.05)' : '#1a1a1d', border: s.count > 0 ? '1px solid rgba(211,191,162,0.12)' : '1px solid #2b2b30', borderRadius: '20px' }}>
+              <span style={{ color: s.count > 0 ? '#8a704d' : '#86868e' }}>{s.icon}</span>
+              <span style={{ fontSize: '0.52rem', fontWeight: '900', color: s.count > 0 ? '#8a704d' : '#86868e', fontFamily: 'monospace' }}>{s.count} {s.label}</span>
             </div>
           ))}
         </div>
@@ -5764,29 +5765,29 @@ const renderMonthHeatmap = () => {
         {avgWaitData && (
           <div style={{ display: 'flex', gap: '16px' }}>
             {[
-              { label: 'AVG WAIT', val: `${avgWaitData.avgWait || 0}m`, icon: <Clock3 size={9} color="#968d80" /> },
-              { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={9} color="#968d80" /> },
+              { label: 'AVG WAIT', val: `${avgWaitData.avgWait || 0}m`, icon: <Clock3 size={9} color="#92929a" /> },
+              { label: 'TABLES', val: `${avgWaitData.tablesOccupied}/${avgWaitData.totalTables}`, icon: <CircleDot size={9} color="#92929a" /> },
             ].map(s => (
               <div key={s.label} style={{ textAlign: 'right' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', marginBottom: '2px' }}>
                   {s.icon}
-                  <span style={{ fontSize: '0.44rem', color: '#968d80', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
+                  <span style={{ fontSize: '0.44rem', color: '#92929a', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>{s.label}</span>
                 </div>
-                <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#b0a799', fontFamily: 'monospace' }}>{s.val}</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#b0b0b8', fontFamily: 'monospace' }}>{s.val}</div>
               </div>
             ))}
           </div>
         )}
-        <button type="button" onClick={fetchCounterQueue} style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #463e34', color: '#968d80', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+        <button type="button" onClick={fetchCounterQueue} style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #313137', color: '#92929a', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#968d80'; }}>
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#92929a'; }}>
           <RefreshCw size={12} />
         </button>
       </div>
     </div>
 
     {/* Tab bar + Search */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', background: '#2a2520', borderBottom: '1px solid rgba(211,191,162,0.04)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', background: '#1a1a1d', borderBottom: '1px solid rgba(211,191,162,0.04)' }}>
       <div style={{ display: 'flex' }}>
         {[
           { id: 'waitlist',     label: 'DINE-IN',      icon: <UserCheck size={11} />,    count: waitlistEntries.length },
@@ -5797,24 +5798,24 @@ const renderMonthHeatmap = () => {
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '12px 14px', background: 'transparent', border: 'none',
             cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '1px',
-            color: queueTab === tab.id ? '#d3bfa2' : '#968d80',
+            color: queueTab === tab.id ? '#d3bfa2' : '#92929a',
             borderBottom: `2px solid ${queueTab === tab.id ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
             transition: 'all 0.15s', marginBottom: '-1px'
           }}>
-            <span style={{ color: queueTab === tab.id ? '#8a704d' : '#1c1814' }}>{tab.icon}</span>
+            <span style={{ color: queueTab === tab.id ? '#8a704d' : '#0f0f11' }}>{tab.icon}</span>
             {tab.label}
-            <span style={{ fontSize: '0.48rem', padding: '1px 5px', borderRadius: '8px', fontWeight: '900', fontFamily: 'monospace', background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.03)') : '#2a2520', color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#968d80') : '#1c1814', border: tab.count > 0 ? '1px solid rgba(211,191,162,0.08)' : '1px solid #403930' }}>
+            <span style={{ fontSize: '0.48rem', padding: '1px 5px', borderRadius: '8px', fontWeight: '900', fontFamily: 'monospace', background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.03)') : '#1a1a1d', color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#92929a') : '#0f0f11', border: tab.count > 0 ? '1px solid rgba(211,191,162,0.08)' : '1px solid #2b2b30' }}>
               {tab.count}
             </span>
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#1f1b17', border: '1px solid #403930', borderRadius: '8px', padding: '6px 11px', margin: '7px 0' }}>
-        <Search size={10} color="#968d80" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#101012', border: '1px solid #2b2b30', borderRadius: '8px', padding: '6px 11px', margin: '7px 0' }}>
+        <Search size={10} color="#92929a" />
         <input type="text" placeholder="Search name..." value={queueSearch} onChange={e => setQueueSearch(e.target.value)}
           style={{ background: 'transparent', border: 'none', color: '#c8c0b0', outline: 'none', fontSize: '0.64rem', width: '130px' }} />
         {queueSearch && (
-          <button type="button" onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#968d80', cursor: 'pointer', padding: 0, display: 'flex' }}>
+          <button type="button" onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#92929a', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <X size={10} />
           </button>
         )}
@@ -5829,13 +5830,13 @@ const renderMonthHeatmap = () => {
         const filtered = waitlistEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
         return filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '52px 20px' }}>
-            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#2a2520', border: '1px solid #403930', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <UserCheck size={18} color="#1c1814" />
+            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#1a1a1d', border: '1px solid #2b2b30', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <UserCheck size={18} color="#0f0f11" />
             </div>
-            <div style={{ fontSize: '0.68rem', color: '#8d8477', fontWeight: '700', letterSpacing: '0.3px' }}>
+            <div style={{ fontSize: '0.68rem', color: '#86868e', fontWeight: '700', letterSpacing: '0.3px' }}>
               {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
             </div>
-            <div style={{ fontSize: '0.56rem', color: '#8d8477', marginTop: '5px' }}>
+            <div style={{ fontSize: '0.56rem', color: '#86868e', marginTop: '5px' }}>
               {!queueSearch && 'Customers joining from the counter page appear here'}
             </div>
           </div>
@@ -5848,7 +5849,7 @@ const renderMonthHeatmap = () => {
               const accentText = { critical: '#d3bfa2', high: '#8a704d', medium: '#6a5a3a', low: '#3a3228' }[urgency];
 
               return (
-                <div key={entry._id} style={{ background: '#2a2520', borderRadius: '14px', border: `1px solid ${urgency === 'critical' ? 'rgba(211,191,162,0.12)' : '#403930'}`, borderTop: `2px solid ${accentTop}`, overflow: 'hidden' }}>
+                <div key={entry._id} style={{ background: '#1a1a1d', borderRadius: '14px', border: `1px solid ${urgency === 'critical' ? 'rgba(211,191,162,0.12)' : '#2b2b30'}`, borderTop: `2px solid ${accentTop}`, overflow: 'hidden' }}>
 
                   {/* Card header */}
                   <div style={{ padding: '13px 15px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -5860,14 +5861,14 @@ const renderMonthHeatmap = () => {
                       <div>
                         <div style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0', letterSpacing: '0.2px' }}>{entry.customerName}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                          <Users size={9} color="#968d80" />
-                          <span style={{ fontSize: '0.56rem', color: '#a59c8e', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
-                          {entry.customerPhone && <span style={{ fontSize: '0.54rem', color: '#968d80', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                          <Users size={9} color="#92929a" />
+                          <span style={{ fontSize: '0.56rem', color: '#a3a3ab', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
+                          {entry.customerPhone && <span style={{ fontSize: '0.54rem', color: '#92929a', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                         </div>
                       </div>
                     </div>
                     {/* Wait timer pill */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', borderRadius: '7px', background: urgency === 'critical' ? 'rgba(211,191,162,0.06)' : '#2a2520', border: `1px solid ${urgency !== 'low' ? accentTop : '#403930'}`, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 9px', borderRadius: '7px', background: urgency === 'critical' ? 'rgba(211,191,162,0.06)' : '#1a1a1d', border: `1px solid ${urgency !== 'low' ? accentTop : '#2b2b30'}`, flexShrink: 0 }}>
                       <Hourglass size={9} color={accentText} />
                       <span style={{ fontSize: '0.66rem', fontWeight: '900', color: accentText, fontFamily: 'monospace' }}>{formatDuration(waitMins)}</span>
                     </div>
@@ -5875,15 +5876,15 @@ const renderMonthHeatmap = () => {
 
                   {/* Pre-order items */}
                   {entry.items?.length > 0 && (
-                    <div style={{ margin: '0 15px 10px', padding: '8px 10px', background: '#1f1b17', borderRadius: '9px', border: '1px solid rgba(211,191,162,0.05)' }}>
+                    <div style={{ margin: '0 15px 10px', padding: '8px 10px', background: '#101012', borderRadius: '9px', border: '1px solid rgba(211,191,162,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
-                        <UtensilsCrossed size={8} color="#968d80" />
-                        <span style={{ fontSize: '0.46rem', color: '#968d80', fontWeight: '900', letterSpacing: '1.2px', textTransform: 'uppercase' }}>Pre-order</span>
+                        <UtensilsCrossed size={8} color="#92929a" />
+                        <span style={{ fontSize: '0.46rem', color: '#92929a', fontWeight: '900', letterSpacing: '1.2px', textTransform: 'uppercase' }}>Pre-order</span>
                         <span style={{ marginLeft: 'auto', fontSize: '0.62rem', fontWeight: '900', color: '#8a704d', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</span>
                       </div>
-                      <div style={{ fontSize: '0.61rem', color: '#b0a799', lineHeight: 1.55 }}>
+                      <div style={{ fontSize: '0.61rem', color: '#b0b0b8', lineHeight: 1.55 }}>
                         {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
-                        {entry.items.length > 3 && <span style={{ color: '#968d80' }}> +{entry.items.length - 3}</span>}
+                        {entry.items.length > 3 && <span style={{ color: '#92929a' }}> +{entry.items.length - 3}</span>}
                       </div>
                     </div>
                   )}
@@ -5891,7 +5892,7 @@ const renderMonthHeatmap = () => {
                   {/* Actions */}
                   <div style={{ padding: '0 15px 14px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      <button type="button" onClick={() => setAssignTableModal(entry)} style={{ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#1c1814', fontWeight: '900', fontSize: '0.58rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'opacity 0.15s' }}
+                      <button type="button" onClick={() => setAssignTableModal(entry)} style={{ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#0f0f11', fontWeight: '900', fontSize: '0.58rem', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'opacity 0.15s' }}
                         onMouseEnter={e => e.currentTarget.style.opacity = '0.85'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                         <TableProperties size={11} /> ASSIGN TABLE
                       </button>
@@ -5904,17 +5905,17 @@ const renderMonthHeatmap = () => {
     showNotif(err.response?.data?.error || 'Failed to mark no-show', 'error');
   }
  } })}
-                        style={{ width: '36px', height: '36px', borderRadius: '9px', background: 'transparent', border: '1px solid #463e34', color: '#968d80', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                        style={{ width: '36px', height: '36px', borderRadius: '9px', background: 'transparent', border: '1px solid #313137', color: '#92929a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#968d80'; }}>
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#92929a'; }}>
                         <UserX size={12} />
                       </button>
                     </div>
                     {/* Re-notify */}
                     <button type="button" onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Almost ready!', body: `Hi ${entry.customerName}! Your table will be ready soon. Please stay nearby.`, tenantId }); showNotif(`${entry.customerName} — notified`); } catch { showNotif('Notification failed', 'error'); } }}
-                      style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#968d80', borderRadius: '8px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
+                      style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#92929a', borderRadius: '8px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; e.currentTarget.style.color = '#968d80'; }}>
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; e.currentTarget.style.color = '#92929a'; }}>
                       <BellRing size={10} /> NOTIFY CUSTOMER
                     </button>
                   </div>
@@ -5930,10 +5931,10 @@ const renderMonthHeatmap = () => {
         const filtered = pickupEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
         return filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '52px 20px' }}>
-            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#2a2520', border: '1px solid #403930', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <ShoppingBag size={18} color="#1c1814" />
+            <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#1a1a1d', border: '1px solid #2b2b30', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <ShoppingBag size={18} color="#0f0f11" />
             </div>
-            <div style={{ fontSize: '0.68rem', color: '#8d8477', fontWeight: '700' }}>
+            <div style={{ fontSize: '0.68rem', color: '#86868e', fontWeight: '700' }}>
               {queueSearch ? `No results for "${queueSearch}"` : 'No pickup orders'}
             </div>
           </div>
@@ -5949,7 +5950,7 @@ const renderMonthHeatmap = () => {
               const stepColors = ['rgba(211,191,162,0.2)', 'rgba(138,112,77,0.5)', 'rgba(211,191,162,0.8)'];
 
               return (
-                <div key={entry._id} style={{ background: '#2a2520', borderRadius: '14px', border: `1px solid ${isReady ? 'rgba(211,191,162,0.2)' : '#403930'}`, borderLeft: `3px solid ${stepColors[step]}`, overflow: 'hidden' }}>
+                <div key={entry._id} style={{ background: '#1a1a1d', borderRadius: '14px', border: `1px solid ${isReady ? 'rgba(211,191,162,0.2)' : '#2b2b30'}`, borderLeft: `3px solid ${stepColors[step]}`, overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                     {/* Customer info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -5958,14 +5959,14 @@ const renderMonthHeatmap = () => {
                           <ShoppingBag size={11} color="#8a704d" />
                         </div>
                         <span style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0' }}>{entry.customerName}</span>
-                        {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#968d80', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                        {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#92929a', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                       </div>
 
                       {/* Items */}
                       {entry.items?.length > 0 && (
-                        <div style={{ fontSize: '0.6rem', color: '#b0a799', lineHeight: 1.55, marginBottom: '8px', paddingLeft: '34px' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#b0b0b8', lineHeight: 1.55, marginBottom: '8px', paddingLeft: '34px' }}>
                           {entry.items.slice(0, 3).map(it => `${it.quantity}× ${it.name}`).join(' · ')}
-                          {entry.items.length > 3 && <span style={{ color: '#968d80' }}> +{entry.items.length - 3}</span>}
+                          {entry.items.length > 3 && <span style={{ color: '#92929a' }}> +{entry.items.length - 3}</span>}
                         </div>
                       )}
 
@@ -5973,9 +5974,9 @@ const renderMonthHeatmap = () => {
                       <div style={{ display: 'flex', gap: '4px', paddingLeft: '34px', marginBottom: '10px' }}>
                         {stepLabels.map((s, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i <= step ? stepColors[step] : '#3a342d', transition: 'background 0.3s', flexShrink: 0 }} />
-                            <span style={{ fontSize: '0.44rem', fontWeight: '900', color: i === step ? '#8a704d' : i < step ? '#968d80' : '#1c1814', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{s}</span>
-                            {i < 2 && <div style={{ width: '12px', height: '1px', background: i < step ? 'rgba(211,191,162,0.2)' : '#312b25', marginLeft: '2px' }} />}
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i <= step ? stepColors[step] : '#2a2a2f', transition: 'background 0.3s', flexShrink: 0 }} />
+                            <span style={{ fontSize: '0.44rem', fontWeight: '900', color: i === step ? '#8a704d' : i < step ? '#92929a' : '#0f0f11', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{s}</span>
+                            {i < 2 && <div style={{ width: '12px', height: '1px', background: i < step ? 'rgba(211,191,162,0.2)' : '#222226', marginLeft: '2px' }} />}
                           </div>
                         ))}
                       </div>
@@ -6023,7 +6024,7 @@ const renderMonthHeatmap = () => {
                     {/* Right: Amount + settle */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.46rem', color: '#968d80', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
+                        <div style={{ fontSize: '0.46rem', color: '#92929a', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
                       </div>
                       <button type="button" onClick={() => {
@@ -6031,15 +6032,15 @@ const renderMonthHeatmap = () => {
   setPickupPaymentModal(entry);
 }}
                         disabled={!isKitchenFired}
-                        style={{ padding: '8px 14px', borderRadius: '9px', background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isKitchenFired ? 'rgba(211,191,162,0.05)' : '#2a2520', border: isReady ? 'none' : isKitchenFired ? '1px solid rgba(211,191,162,0.15)' : '1px solid #312b25', color: isReady ? '#1c1814' : isKitchenFired ? '#8a704d' : '#8d8477', fontWeight: '900', fontSize: '0.58rem', cursor: isKitchenFired ? 'pointer' : 'not-allowed', opacity: !isKitchenFired ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}>
+                        style={{ padding: '8px 14px', borderRadius: '9px', background: isReady ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isKitchenFired ? 'rgba(211,191,162,0.05)' : '#1a1a1d', border: isReady ? 'none' : isKitchenFired ? '1px solid rgba(211,191,162,0.15)' : '1px solid #222226', color: isReady ? '#0f0f11' : isKitchenFired ? '#8a704d' : '#86868e', fontWeight: '900', fontSize: '0.58rem', cursor: isKitchenFired ? 'pointer' : 'not-allowed', opacity: !isKitchenFired ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}>
                         <Store size={11} /> SETTLE
                       </button>
                       {/* Cancel */}
                       {!['served','settled','cancelled'].includes(entry.status) && (
                         <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { try { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
-                          style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #403930', color: '#8d8477', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                          style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #2b2b30', color: '#86868e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#403930'; e.currentTarget.style.color = '#8d8477'; }}>
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#2b2b30'; e.currentTarget.style.color = '#86868e'; }}>
                           <X size={9} /> CANCEL
                         </button>
                       )}
@@ -6064,14 +6065,14 @@ const renderMonthHeatmap = () => {
 {pickupPaymentModal && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 9000,
-    background: 'rgba(24,19,15,0.7)',
+    background: 'rgba(8,8,10,0.7)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: '20px'
   }} onClick={() => setPickupPaymentModal(null)}>
     <div
       onClick={e => e.stopPropagation()}
       style={{
-        background: '#2a2520', border: '1px solid rgba(211,191,162,0.2)',
+        background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.2)',
         borderRadius: '18px', padding: '24px', width: '100%', maxWidth: '380px'
       }}
     >
@@ -6173,7 +6174,7 @@ const renderMonthHeatmap = () => {
           style={{
             flex: 2, padding: '12px', borderRadius: '10px',
             background: 'linear-gradient(135deg, #d3bfa2, #bda88a)',
-            border: 'none', color: '#1c1814',
+            border: 'none', color: '#0f0f11',
             fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px',
             cursor: isSettlingPickup ? 'not-allowed' : 'pointer', outline: 'none',
             fontFamily: 'Poppins, sans-serif', opacity: isSettlingPickup ? 0.55 : 1,
@@ -6199,18 +6200,18 @@ const renderMonthHeatmap = () => {
                 {[
                   { onClick: () => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() - 1); setReservationViewDate(d.toISOString().split('T')[0]); }, icon: <ChevronLeft size={13} /> },
                 ].map((btn, i) => (
-                  <button type="button" key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #463e34', color: '#a59c8e', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                  <button type="button" key={i} onClick={btn.onClick} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #313137', color: '#a3a3ab', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#a59c8e'; }}>
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#a3a3ab'; }}>
                     {btn.icon}
                   </button>
                 ))}
-                <div style={{ padding: '7px 16px', background: '#1f1b17', border: '1px solid #403930', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
+                <div style={{ padding: '7px 16px', background: '#101012', border: '1px solid #2b2b30', borderRadius: '9px', fontSize: '0.7rem', fontWeight: '900', color: '#d3bfa2', minWidth: '140px', textAlign: 'center', fontFamily: 'monospace' }}>
                   {new Date(reservationViewDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })}
                 </div>
-                <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #463e34', color: '#a59c8e', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(reservationViewDate); d.setUTCDate(d.getUTCDate() + 1); setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #313137', color: '#a3a3ab', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#a59c8e'; }}>
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#a3a3ab'; }}>
                   <ChevronRight size={13} />
                 </button>
                 <button type="button" onClick={() => { const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */; setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
@@ -6218,9 +6219,9 @@ const renderMonthHeatmap = () => {
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}>
                   TODAY
                 </button>
-                <button type="button" onClick={() => fetchCounterQueue()} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #463e34', color: '#968d80', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => fetchCounterQueue()} style={{ width: '30px', height: '30px', background: 'transparent', border: '1px solid #313137', color: '#92929a', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#968d80'; }}>
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#92929a'; }}>
                   <RefreshCw size={11} />
                 </button>
               </div>
@@ -6230,11 +6231,11 @@ const renderMonthHeatmap = () => {
                 {[
                   { label: 'BOOKINGS (DAY)', val: reservationEntries.length, c: '#d3bfa2' },
                   { label: 'CONFIRMED', val: reservationEntries.filter(r => r.status === 'confirmed').length, c: '#8a704d' },
-                  { label: 'PENDING', val: reservationEntries.filter(r => r.status === 'pending').length, c: '#b0a799' },
+                  { label: 'PENDING', val: reservationEntries.filter(r => r.status === 'pending').length, c: '#b0b0b8' },
                 ].map(s => (
-                  <div key={s.label} style={{ textAlign: 'center', padding: '7px 12px', background: '#2a2520', border: '1px solid rgba(211,191,162,0.06)', borderRadius: '10px' }}>
+                  <div key={s.label} style={{ textAlign: 'center', padding: '7px 12px', background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.06)', borderRadius: '10px' }}>
                     <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c, fontFamily: 'monospace', lineHeight: 1 }}>{s.val}</div>
-                    <div style={{ fontSize: '0.46rem', color: '#968d80', fontWeight: '900', marginTop: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>{s.label}</div>
+                    <div style={{ fontSize: '0.46rem', color: '#92929a', fontWeight: '900', marginTop: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -6243,10 +6244,10 @@ const renderMonthHeatmap = () => {
             {/* Reservation list */}
             {reservationEntries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '52px 20px' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#2a2520', border: '1px solid #403930', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                  <CalendarClock size={18} color="#1c1814" />
+                <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: '#1a1a1d', border: '1px solid #2b2b30', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <CalendarClock size={18} color="#0f0f11" />
                 </div>
-                <div style={{ fontSize: '0.68rem', color: '#8d8477', fontWeight: '700' }}>No reservations for this date</div>
+                <div style={{ fontSize: '0.68rem', color: '#86868e', fontWeight: '700' }}>No reservations for this date</div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -6261,14 +6262,14 @@ const renderMonthHeatmap = () => {
                   const statusMeta = {
                     pending:   { color: '#8a704d', label: 'PENDING',   accent: 'rgba(138,112,77,0.35)' },
                     confirmed: { color: '#d3bfa2', label: 'CONFIRMED', accent: 'rgba(211,191,162,0.5)' },
-                    seated:    { color: '#a59c8e',    label: 'SEATED',    accent: '#1c1814' },
-                    cancelled: { color: '#968d80', label: 'CANCELLED', accent: '#1c1814' },
-                    'no-show': { color: '#968d80', label: 'NO-SHOW',   accent: '#1c1814' },
+                    seated:    { color: '#a3a3ab',    label: 'SEATED',    accent: '#0f0f11' },
+                    cancelled: { color: '#92929a', label: 'CANCELLED', accent: '#0f0f11' },
+                    'no-show': { color: '#92929a', label: 'NO-SHOW',   accent: '#0f0f11' },
                   };
                   const sm = statusMeta[entry.status] || statusMeta.pending;
 
                   return (
-                    <div key={entry._id} style={{ background: isDone ? '#2a2520' : isOverdue ? 'rgba(211,191,162,0.02)' : '#2a2520', border: `1px solid ${isOverdue ? 'rgba(211,191,162,0.15)' : isDone ? '#403930' : 'rgba(211,191,162,0.07)'}`, borderLeft: `3px solid ${isUpcoming ? 'rgba(211,191,162,0.6)' : sm.accent}`, borderRadius: '13px', overflow: 'hidden', opacity: isDone ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+                    <div key={entry._id} style={{ background: isDone ? '#1a1a1d' : isOverdue ? 'rgba(211,191,162,0.02)' : '#1a1a1d', border: `1px solid ${isOverdue ? 'rgba(211,191,162,0.15)' : isDone ? '#2b2b30' : 'rgba(211,191,162,0.07)'}`, borderLeft: `3px solid ${isUpcoming ? 'rgba(211,191,162,0.6)' : sm.accent}`, borderRadius: '13px', overflow: 'hidden', opacity: isDone ? 0.45 : 1, transition: 'opacity 0.2s' }}>
                       <div style={{ padding: '13px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
 
                         {/* Time + info */}
@@ -6287,21 +6288,21 @@ const renderMonthHeatmap = () => {
                             <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#e8e0d0', marginBottom: '4px' }}>{entry.customerName}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Users size={9} color="#968d80" />
-                                <span style={{ fontSize: '0.58rem', color: '#a59c8e', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
+                                <Users size={9} color="#92929a" />
+                                <span style={{ fontSize: '0.58rem', color: '#a3a3ab', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
                               </div>
-                              {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#968d80', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                              {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#92929a', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                               {entry.tablePreference && (
                                 <span style={{ fontSize: '0.52rem', padding: '1px 6px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '4px', color: '#8a704d', fontWeight: '800' }}>T-{entry.tablePreference}</span>
                               )}
                             </div>
                             {entry.specialRequests && (
-                              <div style={{ fontSize: '0.56rem', color: '#a59c8e', fontStyle: 'italic', background: '#1f1b17', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(211,191,162,0.04)', marginBottom: '6px' }}>
+                              <div style={{ fontSize: '0.56rem', color: '#a3a3ab', fontStyle: 'italic', background: '#101012', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(211,191,162,0.04)', marginBottom: '6px' }}>
                                 "{entry.specialRequests}"
                               </div>
                             )}
                             {entry.items?.length > 0 && (
-                              <div style={{ fontSize: '0.56rem', color: '#b0a799' }}>
+                              <div style={{ fontSize: '0.56rem', color: '#b0b0b8' }}>
                                 Pre-order: {entry.items.slice(0, 2).map(it => `${it.quantity}× ${it.name}`).join(' · ')}{entry.items.length > 2 ? ` +${entry.items.length - 2}` : ''}
                               </div>
                             )}
@@ -6319,39 +6320,39 @@ const renderMonthHeatmap = () => {
                             {/* Confirm */}
                             {entry.status === 'pending' && (
                               <button type="button" onClick={async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); } catch (err) { showNotif(err.response?.data?.error || 'Could not confirm reservation', 'error'); } }}
-                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#1c1814', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0f0f11', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
                                 CONFIRM
                               </button>
                             )}
                             {/* Seat */}
                             {entry.status === 'confirmed' && (
                               <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#1c1814', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0f0f11', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <TableProperties size={10} /> SEAT
                               </button>
                             )}
                             {/* Change table */}
                             {entry.status === 'seated' && (
                               <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-                                style={{ padding: '5px 9px', background: 'transparent', border: '1px solid #463e34', color: '#a59c8e', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                style={{ padding: '5px 9px', background: 'transparent', border: '1px solid #313137', color: '#a3a3ab', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#a59c8e'; }}>
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#a3a3ab'; }}>
                                 <TableProperties size={9} /> CHANGE T
                               </button>
                             )}
                             {/* Edit */}
                             <button type="button" onClick={() => setReservationEditModal(entry)}
-                              style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #463e34', color: '#a59c8e', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                              style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #313137', color: '#a3a3ab', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#a59c8e'; }}>
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#a3a3ab'; }}>
                               <SquarePen size={11} />
                             </button>
                             {/* No-show */}
                             {['pending', 'confirmed'].includes(entry.status) && (
                               <button type="button" onClick={() => setConfirmModal({ show: true, title: `No-Show — ${entry.customerName}?`, subtitle: 'Mark this reservation as no-show and free the slot.', onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'no-show', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — marked no-show`); } catch (err) { showNotif(err.response?.data?.error || 'Could not mark no-show', 'error'); } } })}
-                                style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #463e34', color: '#968d80', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                                style={{ width: '28px', height: '28px', background: 'transparent', border: '1px solid #313137', color: '#92929a', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#968d80'; }}>
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#92929a'; }}>
                                 <UserX size={11} />
                               </button>
                             )}
@@ -6361,9 +6362,9 @@ const renderMonthHeatmap = () => {
                           {['pending', 'confirmed'].includes(entry.status) && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
                               <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
-                                style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #403930', color: '#8d8477', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #2b2b30', color: '#86868e', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#403930'; e.currentTarget.style.color = '#8d8477'; }}>
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#2b2b30'; e.currentTarget.style.color = '#86868e'; }}>
                                 <X size={9} /> CANCEL
                               </button>
                               <button type="button" onClick={async () => { try { const fmtTime = resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }); const fmtDate = resTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' }); await axios.post(`${BASE_URL}/reservations/${entry._id}/notify`, { title: entry.status === 'confirmed' ? 'Reservation Confirmed!' : 'Reservation Update', body: entry.status === 'confirmed' ? `Hi ${entry.customerName}! Your table for ${entry.partySize} is confirmed for ${fmtDate} at ${fmtTime}.` : `Hi ${entry.customerName}! Your reservation for ${fmtDate} at ${fmtTime} is being processed.`, tag: 'reservation-notify', tenantId }); showNotif(`${entry.customerName} — notified`, 'success'); } catch { showNotif('Notification failed', 'error'); } }}
@@ -6423,7 +6424,7 @@ const renderMonthHeatmap = () => {
           </div>
           <button type="button"
             onClick={() => setIngredientAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, dismissed: true } : a))}
-            style={{ background: 'transparent', border: 'none', color: '#b0a799', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+            style={{ background: 'transparent', border: 'none', color: '#b0b0b8', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
           >
             <X size={14} />
           </button>
@@ -6436,62 +6437,62 @@ const renderMonthHeatmap = () => {
       {editDishModal && (
         <motion.div
           initial={false} animate={{ opacity: 1 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(24,19,15,0.7)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(8,8,10,0.7)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={e => { if (e.target === e.currentTarget) setEditDishModal(null); }}
         >
           <motion.div
             initial={false} animate={{ scale: 1, opacity: 1 }}
-            style={{ background: '#2a2520', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '580px', maxHeight: '88vh', overflowY: 'auto' }}
+            style={{ background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.15)', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '580px', maxHeight: '88vh', overflowY: 'auto' }}
             className="custom-scroll"
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#d3bfa2' }}>EDIT DISH</h3>
-                <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#a59c8e', fontWeight: '600' }}>{editDishModal.name}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#a3a3ab', fontWeight: '600' }}>{editDishModal.name}</p>
               </div>
-              <button type="button" onClick={() => setEditDishModal(null)} style={{ background: 'transparent', border: '1px solid #463e34', color: '#b0a799', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button type="button" onClick={() => setEditDishModal(null)} style={{ background: 'transparent', border: '1px solid #313137', color: '#b0b0b8', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={14} />
               </button>
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>DISH NAMES</div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>DISH NAMES</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {[{ key: 'name', label: 'English Name' }, { key: 'name_mr', label: 'Marathi Name' }].map(f => (
                   <div key={f.key}>
-                    <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
                     <input value={editDishData[f.key] ?? ''} onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value }))}
-                      style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                 ))}
               </div>
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>PRICING</div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>PRICING</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 {[{ key: 'price', label: 'Base Price (₹)' }, { key: 'priceHalf', label: 'Half Price (₹)' }, { key: 'priceFull', label: 'Full Price (₹)' }].map(f => (
                   <div key={f.key}>
-                    <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
                     <input type="number" value={editDishData[f.key] ?? ''} onChange={e => setEditDishData(p => ({ ...p, [f.key]: e.target.value }))}
-                      style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#d3bfa2', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '900' }} />
+                      style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#d3bfa2', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '900' }} />
                   </div>
                 ))}
               </div>
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CLASSIFICATION</div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CLASSIFICATION</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                  <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>Category</div>
+                  <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>Category</div>
                   <select value={editDishData.categoryId ?? ''} onChange={e => setEditDishData(p => ({ ...p, categoryId: e.target.value }))}
-                    style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}>
+                    style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}>
                     <option value="">— Select —</option>
                     {categories.map(c => <option key={c.categoryId} value={c.categoryId}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>Spice Level</div>
+                  <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>Spice Level</div>
                   <select value={editDishData.spicylevel ?? ''} onChange={e => setEditDishData(p => ({ ...p, spicylevel: e.target.value }))}
-                    style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}>
+                    style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}>
                     <option value="">None</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -6499,23 +6500,23 @@ const renderMonthHeatmap = () => {
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>Serving Size (pax)</div>
+                  <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>Serving Size (pax)</div>
                   <input type="number" min="1" value={editDishData.servingSize ?? 1} onChange={e => setEditDishData(p => ({ ...p, servingSize: e.target.value }))}
-                    style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
+                    style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               </div>
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>FLAGS</div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>FLAGS</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 {[{ key: 'isVeg', label: 'Vegetarian', onColor: '#a88b4f' }, { key: 'isAvailable', label: 'Available', onColor: '#d3bfa2' }, { key: 'isChefSpecial', label: "Chef's Special", onColor: '#c9a84c' }].map(f => {
                   const isOn = !!editDishData[f.key];
                   return (
                     <div key={f.key} onClick={() => setEditDishData(p => ({ ...p, [f.key]: !p[f.key] }))}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: isOn ? `${f.onColor}12` : '#312b25', border: `1px solid ${isOn ? `${f.onColor}40` : '#463e34'}`, borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s' }}>
-                      <span style={{ fontSize: '0.65rem', fontWeight: '800', color: isOn ? f.onColor : '#a59c8e' }}>{f.label}</span>
-                      <div style={{ width: '32px', height: '17px', borderRadius: '9px', position: 'relative', background: isOn ? f.onColor : '#3a342d', transition: 'background 0.2s', flexShrink: 0 }}>
-                        <div style={{ position: 'absolute', top: '3px', left: isOn ? '17px' : '3px', width: '11px', height: '11px', borderRadius: '50%', background: isOn ? '#1f1b17' : '#555', transition: 'left 0.2s' }} />
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: isOn ? `${f.onColor}12` : '#222226', border: `1px solid ${isOn ? `${f.onColor}40` : '#313137'}`, borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '800', color: isOn ? f.onColor : '#a3a3ab' }}>{f.label}</span>
+                      <div style={{ width: '32px', height: '17px', borderRadius: '9px', position: 'relative', background: isOn ? f.onColor : '#2a2a2f', transition: 'background 0.2s', flexShrink: 0 }}>
+                        <div style={{ position: 'absolute', top: '3px', left: isOn ? '17px' : '3px', width: '11px', height: '11px', borderRadius: '50%', background: isOn ? '#101012' : '#555', transition: 'left 0.2s' }} />
                       </div>
                     </div>
                   );
@@ -6523,11 +6524,11 @@ const renderMonthHeatmap = () => {
               </div>
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>TAGS <span style={{ color: '#968d80', fontWeight: '600' }}>(comma separated)</span></div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>TAGS <span style={{ color: '#92929a', fontWeight: '600' }}>(comma separated)</span></div>
               <input value={Array.isArray(editDishData.tags) ? editDishData.tags.join(', ') : (editDishData.tags ?? '')}
                 onChange={e => setEditDishData(p => ({ ...p, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))}
                 placeholder="e.g. popular, must-try, spicy"
-                style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#fff', borderRadius: '8px', padding: '9px 12px', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }} />
               {Array.isArray(editDishData.tags) && editDishData.tags.length > 0 && (
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                   {editDishData.tags.map((tag, ti) => (
@@ -6537,25 +6538,25 @@ const renderMonthHeatmap = () => {
               )}
             </div>
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>INGREDIENTS DESCRIPTION</div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>INGREDIENTS DESCRIPTION</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {[{ key: 'ingredients_en', label: 'English', field: 'en' }, { key: 'ingredients_mr', label: 'Marathi', field: 'mr' }].map(f => (
                   <div key={f.key}>
-                    <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
+                    <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '5px', fontWeight: '700' }}>{f.label}</div>
                     <textarea rows={2}
                       value={Array.isArray(editDishData.ingredients?.[f.field]) ? editDishData.ingredients[f.field].join(', ') : (editDishData.ingredients?.[f.field] ?? '')}
                       onChange={e => setEditDishData(p => ({ ...p, ingredients: { ...(p.ingredients || {}), [f.field]: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } }))}
                       placeholder="e.g. Paneer, Tomato, Spices"
-                      style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#888', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5 }} />
+                      style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#888', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5 }} />
                   </div>
                 ))}
               </div>
             </div>
             <div style={{ marginBottom: '24px' }}>
-              <div style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CHEF MESSAGE <span style={{ color: '#968d80', fontWeight: '600' }}>(shown on menu card)</span></div>
+              <div style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>CHEF MESSAGE <span style={{ color: '#92929a', fontWeight: '600' }}>(shown on menu card)</span></div>
               <textarea rows={2} value={editDishData.chefMessage ?? ''} onChange={e => setEditDishData(p => ({ ...p, chefMessage: e.target.value }))}
                 placeholder="This is my personal favorite! You'll love the flavors."
-                style={{ width: '100%', background: '#312b25', border: '1px solid #463e34', color: '#bab1a3', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.6 }} />
+                style={{ width: '100%', background: '#222226', border: '1px solid #313137', color: '#bcbcc3', borderRadius: '8px', padding: '9px 12px', fontSize: '0.72rem', outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.6 }} />
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button type="button" onClick={async () => {
@@ -6571,10 +6572,10 @@ const renderMonthHeatmap = () => {
                   showNotif(`${editDishData.name || editDishModal.name} — updated`);
                   setEditDishModal(null);
                 } catch { showNotif('Update failed', 'error'); }
-              }} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#1c1814', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
+              }} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0f0f11', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
                 SAVE CHANGES
               </button>
-              <button type="button" onClick={() => setEditDishModal(null)} style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #463e34', color: '#b0a799', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setEditDishModal(null)} style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #313137', color: '#b0b0b8', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer' }}>
                 CANCEL
               </button>
             </div>
@@ -6584,10 +6585,10 @@ const renderMonthHeatmap = () => {
     </AnimatePresence>
 
     {/* ── MENU TOOLBAR ── */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0 20px', borderBottom: '1px solid #403930', gap: '12px', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0 20px', borderBottom: '1px solid #2b2b30', gap: '12px', flexWrap: 'wrap' }}>
       <div>
         <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>MENU REGISTRY</h2>
-        <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#b0a799' }}>
+        <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#b0b0b8' }}>
           {menuItems.length} dishes · {menuItems.filter(i => i.isAvailable).length} available · {menuItems.filter(i => !i.isAvailable).length} hidden
         </p>
       </div>
@@ -6595,33 +6596,33 @@ const renderMonthHeatmap = () => {
 
         {/* AUTO-HIDE TOGGLE */}
         {tenantConfig && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', background: '#1f1b17', border: `1px solid ${tenantConfig.config?.autoHideDishesOnLowStock ? 'rgba(211,191,162,0.3)' : '#463e34'}`, borderRadius: '10px', transition: 'all 0.2s' }}>
-            <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#a59c8e'} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', background: '#101012', border: `1px solid ${tenantConfig.config?.autoHideDishesOnLowStock ? 'rgba(211,191,162,0.3)' : '#313137'}`, borderRadius: '10px', transition: 'all 0.2s' }}>
+            <Layers size={13} color={tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#a3a3ab'} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-              <span style={{ fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px', color: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#a59c8e' }}>AUTO-HIDE ON STOCK OUT</span>
-              <span style={{ fontSize: '0.52rem', color: '#968d80', fontWeight: '600' }}>{tenantConfig.config?.autoHideDishesOnLowStock ? 'Hides when ingredients hit zero' : 'Stays visible regardless of stock'}</span>
+              <span style={{ fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px', color: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#a3a3ab' }}>AUTO-HIDE ON STOCK OUT</span>
+              <span style={{ fontSize: '0.52rem', color: '#92929a', fontWeight: '600' }}>{tenantConfig.config?.autoHideDishesOnLowStock ? 'Hides when ingredients hit zero' : 'Stays visible regardless of stock'}</span>
             </div>
             <button type="button" onClick={async () => {
               const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
               await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
               setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
               showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
-            }} style={{ width: '42px', height: '22px', borderRadius: '11px', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.25s', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#3a342d' }}>
-              <div style={{ position: 'absolute', top: '4px', left: tenantConfig.config?.autoHideDishesOnLowStock ? '22px' : '4px', width: '14px', height: '14px', borderRadius: '50%', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#2a2520' : '#444', transition: 'left 0.25s' }} />
+            }} style={{ width: '42px', height: '22px', borderRadius: '11px', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.25s', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#2a2a2f' }}>
+              <div style={{ position: 'absolute', top: '4px', left: tenantConfig.config?.autoHideDishesOnLowStock ? '22px' : '4px', width: '14px', height: '14px', borderRadius: '50%', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#1a1a1d' : '#444', transition: 'left 0.25s' }} />
             </button>
           </div>
         )}
 
         {/* SEARCH */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#1f1b17', border: '1px solid #403930', borderRadius: '8px', padding: '8px 14px' }}>
-          <Search size={13} color="#a59c8e" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#101012', border: '1px solid #2b2b30', borderRadius: '8px', padding: '8px 14px' }}>
+          <Search size={13} color="#a3a3ab" />
           <input type="text" placeholder="Search dishes..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '0.75rem', width: '160px' }} />
-          {searchQuery && <button type="button" onClick={() => setSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#a59c8e', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={12} /></button>}
+          {searchQuery && <button type="button" onClick={() => setSearchQuery('')} style={{ background: 'transparent', border: 'none', color: '#a3a3ab', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={12} /></button>}
         </div>
 
         {/* ADD DISH */}
-        <button type="button" onClick={() => setShowAddDishModal(true)} style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#1c1814', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px', flexShrink: 0 }}>
+        <button type="button" onClick={() => setShowAddDishModal(true)} style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0f0f11', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px', flexShrink: 0 }}>
           <UtensilsCrossed size={14} /> + ADD DISH
         </button>
       </div>
@@ -6653,12 +6654,12 @@ const renderMonthHeatmap = () => {
 
       if (sortedCatKeys.length === 0) {
         return (
-          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: '#2a2520', borderRadius: '20px', border: '1px dashed #463e34' }}>
-            <UtensilsCrossed size={32} color="#8d8477" style={{ marginBottom: '16px' }} />
-            <div style={{ color: '#968d80', fontSize: '0.85rem', fontWeight: '700' }}>
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px', background: '#1a1a1d', borderRadius: '20px', border: '1px dashed #313137' }}>
+            <UtensilsCrossed size={32} color="#86868e" style={{ marginBottom: '16px' }} />
+            <div style={{ color: '#92929a', fontSize: '0.85rem', fontWeight: '700' }}>
               {searchQuery ? `NO DISHES MATCH "${searchQuery.toUpperCase()}"` : 'NO DISHES YET'}
             </div>
-            <div style={{ color: '#8d8477', fontSize: '0.7rem', marginTop: '8px' }}>{!searchQuery && 'Click + ADD DISH to register your first menu item'}</div>
+            <div style={{ color: '#86868e', fontSize: '0.7rem', marginTop: '8px' }}>{!searchQuery && 'Click + ADD DISH to register your first menu item'}</div>
           </div>
         );
       }
@@ -6678,8 +6679,8 @@ const renderMonthHeatmap = () => {
             <div style={{
               display: 'flex', alignItems: 'center', gap: '12px',
               padding: '10px 14px', marginBottom: '10px',
-              background: '#2a2520', borderRadius: '10px',
-              border: '1px solid #403930'
+              background: '#1a1a1d', borderRadius: '10px',
+              border: '1px solid #2b2b30'
             }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
@@ -6688,8 +6689,8 @@ const renderMonthHeatmap = () => {
                 <span style={{
                   fontSize: '0.52rem', fontWeight: '900', padding: '2px 8px', borderRadius: '8px',
                   background: allHidden ? 'rgba(184,146,58,0.1)' : 'rgba(211,191,162,0.07)',
-                  color: allHidden ? '#b8923a' : '#b0a799',
-                  border: `1px solid ${allHidden ? 'rgba(184,146,58,0.2)' : '#463e34'}`
+                  color: allHidden ? '#b8923a' : '#b0b0b8',
+                  border: `1px solid ${allHidden ? 'rgba(184,146,58,0.2)' : '#313137'}`
                 }}>
                   {availableCount}/{catItems.length} available
                 </span>
@@ -6742,12 +6743,12 @@ const renderMonthHeatmap = () => {
                   position: 'relative',
                   borderTop: `2px solid ${
                     item._autoHiddenByIngredient ? 'rgba(184,146,58,0.5)' :
-                    item.isAvailable ? '#463e34' : '#2a2520'
+                    item.isAvailable ? '#313137' : '#1a1a1d'
                   }`,
                   transition: 'all 0.2s ease'
                 }}>
                   {/* AVAILABILITY DOT */}
-                  <div style={{ position: 'absolute', top: '14px', right: '14px', width: '7px', height: '7px', borderRadius: '50%', background: item.isAvailable ? '#d3bfa2' : '#6a6155', boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none' }} />
+                  <div style={{ position: 'absolute', top: '14px', right: '14px', width: '7px', height: '7px', borderRadius: '50%', background: item.isAvailable ? '#d3bfa2' : '#6c6c74', boxShadow: item.isAvailable ? '0 0 6px rgba(211,191,162,0.4)' : 'none' }} />
 
                   {/* AUTO-HIDDEN BADGE (ingredient depleted) */}
                   {item._autoHiddenByIngredient && !item.isAvailable && (
@@ -6780,15 +6781,15 @@ const renderMonthHeatmap = () => {
                             ? <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#a88b4f' }} />
                             : <span style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '5px solid #9a5a2a' }} />}
                         </span>
-                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '900', color: item.isAvailable ? '#fff' : '#bab1a3', lineHeight: '1.3' }}>{item.name}</h3>
+                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '900', color: item.isAvailable ? '#fff' : '#bcbcc3', lineHeight: '1.3' }}>{item.name}</h3>
                       </div>
-                      {item.name_mr && <div style={{ fontSize: '0.65rem', color: '#a59c8e', marginTop: '3px', fontWeight: '600' }}>{item.name_mr}</div>}
+                      {item.name_mr && <div style={{ fontSize: '0.65rem', color: '#a3a3ab', marginTop: '3px', fontWeight: '600' }}>{item.name_mr}</div>}
                       {item.tags?.length > 0 && (
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '5px' }}>
                           {item.tags.slice(0, 2).map((tag, ti) => (
-                            <span key={ti} style={{ fontSize: '0.52rem', padding: '1px 7px', background: 'rgba(211,191,162,0.05)', border: '1px solid #463e34', borderRadius: '4px', color: '#b0a799', fontWeight: '700' }}>{tag}</span>
+                            <span key={ti} style={{ fontSize: '0.52rem', padding: '1px 7px', background: 'rgba(211,191,162,0.05)', border: '1px solid #313137', borderRadius: '4px', color: '#b0b0b8', fontWeight: '700' }}>{tag}</span>
                           ))}
-                          {item.tags.length > 2 && <span style={{ fontSize: '0.52rem', color: '#968d80' }}>+{item.tags.length - 2}</span>}
+                          {item.tags.length > 2 && <span style={{ fontSize: '0.52rem', color: '#92929a' }}>+{item.tags.length - 2}</span>}
                         </div>
                       )}
                     </div>
@@ -6798,11 +6799,11 @@ const renderMonthHeatmap = () => {
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                     {item.priceHalf ? (
                       <>
-                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#312b25', border: '1px solid #463e34', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>H ₹{item.priceHalf}</span>
-                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#312b25', border: '1px solid #463e34', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>F ₹{item.priceFull || item.price}</span>
+                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#222226', border: '1px solid #313137', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>H ₹{item.priceHalf}</span>
+                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#222226', border: '1px solid #313137', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>F ₹{item.priceFull || item.price}</span>
                       </>
                     ) : (
-                      <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#312b25', border: '1px solid #463e34', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>₹{item.price}</span>
+                      <span style={{ fontSize: '0.72rem', padding: '3px 10px', background: '#222226', border: '1px solid #313137', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800' }}>₹{item.price}</span>
                     )}
                     {item.isChefSpecial && (
                       <span style={{ fontSize: '0.62rem', padding: '3px 10px', background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '6px', color: '#d3bfa2', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -6840,12 +6841,12 @@ const renderMonthHeatmap = () => {
                         } catch {
                           setMenuItems(prev => prev.map(i => i._id === item._id ? { ...i, isAvailable: !newVal } : i));
                         }
-                      }} style={{ flex: 1, padding: '9px 8px', background: item.isAvailable ? '#312b25' : 'rgba(211,191,162,0.06)', border: item.isAvailable ? '1px solid #463e34' : '1px solid rgba(211,191,162,0.2)', color: item.isAvailable ? '#a59c8e' : '#d3bfa2', borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}>
+                      }} style={{ flex: 1, padding: '9px 8px', background: item.isAvailable ? '#222226' : 'rgba(211,191,162,0.06)', border: item.isAvailable ? '1px solid #313137' : '1px solid rgba(211,191,162,0.2)', color: item.isAvailable ? '#a3a3ab' : '#d3bfa2', borderRadius: '9px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', transition: 'all 0.15s' }}>
                         {item.isAvailable ? 'HIDE' : 'SHOW'}
                       </button>
-                      <button type="button" onClick={() => setPendingDeleteDish(item)} style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #463e34', color: '#968d80', borderRadius: '9px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                      <button type="button" onClick={() => setPendingDeleteDish(item)} style={{ width: '36px', height: '36px', background: 'transparent', border: '1px solid #313137', color: '#92929a', borderRadius: '9px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#8a704d'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#968d80'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#92929a'; }}
                         title="Remove dish"><X size={14} /></button>
                     </div>
                   </div>
@@ -6873,12 +6874,12 @@ const renderMonthHeatmap = () => {
         { label:'CHAMPION',        val: customerDir.summary?.champion || 0, color:'#d3bfa2' },
       ].map(({label,val,color}) => (
         <div key={label} style={{
-          background:'linear-gradient(165deg, #312b25 0%, #2a2520 100%)', border:'1px solid rgba(255,255,255,0.06)',
+          background:'linear-gradient(165deg, #222226 0%, #1a1a1d 100%)', border:'1px solid rgba(255,255,255,0.06)',
           borderTop:`2px solid ${color}`, borderRadius:'12px',
           padding:'14px 14px 12px', boxShadow:'0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02)'
         }}>
           <div style={{fontSize:'1.4rem',fontWeight:'900',color,fontFamily:'monospace'}}>{val}</div>
-          <div style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
+          <div style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
         </div>
       ))}
     </div>
@@ -6891,13 +6892,13 @@ const renderMonthHeatmap = () => {
       boxShadow:'0 10px 28px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03)'
     }}>
       <div>
-        <div style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>LIFETIME CUSTOMER REVENUE</div>
+        <div style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>LIFETIME CUSTOMER REVENUE</div>
         <div style={{fontSize:'2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>
           ₹{(customerDir.summary?.totalRevenue || 0).toLocaleString()}
         </div>
       </div>
       <div style={{textAlign:'right'}}>
-        <div style={{fontSize:'0.58rem',color:'#a59c8e',fontStyle:'italic'}}>
+        <div style={{fontSize:'0.58rem',color:'#a3a3ab',fontStyle:'italic'}}>
           Avg ₹{customerDir.summary?.total > 0 ? Math.round((customerDir.summary?.totalRevenue||0)/customerDir.summary.total).toLocaleString() : 0} per customer
         </div>
         <button type="button"
@@ -6925,8 +6926,8 @@ const renderMonthHeatmap = () => {
             padding:'7px 14px', borderRadius:'20px', border:'none',
             cursor:'pointer', fontWeight:'900', fontSize:'0.62rem',
             letterSpacing:'1px', textTransform:'uppercase', transition:'all 0.15s',
-            background: customerSegFilter === seg ? meta.color : '#312b25',
-            color:      customerSegFilter === seg ? '#1c1814'  : meta.color,
+            background: customerSegFilter === seg ? meta.color : '#222226',
+            color:      customerSegFilter === seg ? '#0f0f11'  : meta.color,
             boxShadow:  customerSegFilter === seg ? `0 0 12px ${meta.color}40` : 'none',
           }}
         >
@@ -6936,14 +6937,14 @@ const renderMonthHeatmap = () => {
       ))}
       {/* Search */}
       <div style={{flex:1, position:'relative', minWidth:'200px'}}>
-        <Search size={13} color="#b0a799" style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)'}}/>
+        <Search size={13} color="#b0b0b8" style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)'}}/>
         <input
           value={customerSearch}
           onChange={e => { setCustomerSearch(e.target.value); fetchCustomerDir(customerSegFilter, e.target.value); }}
           placeholder="Search name or phone..."
           style={{
             width:'100%', padding:'9px 12px 9px 34px',
-            background:'#312b25', border:'1px solid #554b3e',
+            background:'#222226', border:'1px solid #3b3b42',
             borderRadius:'8px', color:'#fff', fontSize:'0.78rem', outline:'none'
           }}
         />
@@ -6952,23 +6953,23 @@ const renderMonthHeatmap = () => {
 
     {/* ── CUSTOMER TABLE ── */}
     {customerLoading ? (
-      <div style={{textAlign:'center',padding:'48px',color:'#968d80',fontSize:'0.78rem'}}>Loading customers...</div>
+      <div style={{textAlign:'center',padding:'48px',color:'#92929a',fontSize:'0.78rem'}}>Loading customers...</div>
     ) : (
-      <div style={{background:'#2a2520',border:'1px solid #463e34',borderRadius:'14px',overflow:'hidden'}}>
+      <div style={{background:'#1a1a1d',border:'1px solid #313137',borderRadius:'14px',overflow:'hidden'}}>
         {/* Header */}
         <div style={{
           display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
-          padding:'10px 16px', borderBottom:'1px solid #463e34', background:'#2a2520'
+          padding:'10px 16px', borderBottom:'1px solid #313137', background:'#1a1a1d'
         }}>
           {['CUSTOMER','SEGMENT','VISITS','TOTAL SPENT','AVG ORDER','LAST SEEN','TOP DISH'].map(h => (
-            <div key={h} style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px'}}>{h}</div>
+            <div key={h} style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px'}}>{h}</div>
           ))}
         </div>
         {/* Rows */}
         <div style={{maxHeight:'480px',overflowY:'auto'}} className="custom-scroll">
           {(customerDir.customers || []).length === 0 ? (
-            <div style={{padding:'48px',textAlign:'center',color:'#968d80',fontSize:'0.78rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'12px'}}>
-              <Users size={32} color="#554b3e"/>
+            <div style={{padding:'48px',textAlign:'center',color:'#92929a',fontSize:'0.78rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'12px'}}>
+              <Users size={32} color="#3b3b42"/>
               No customers found
             </div>
           ) : (customerDir.customers || []).map((c, i) => {
@@ -6993,7 +6994,7 @@ const renderMonthHeatmap = () => {
                     {c.segment === 'champion' && <Crown size={12} color="#C9A84C"/>}
                     {c.name}
                   </div>
-                  <div style={{fontSize:'0.6rem',color:'#b0a799',marginTop:'2px',fontFamily:'monospace'}}>{c.phone}</div>
+                  <div style={{fontSize:'0.6rem',color:'#b0b0b8',marginTop:'2px',fontFamily:'monospace'}}>{c.phone}</div>
                 </div>
                 {/* Segment */}
                 <div style={{display:'flex',alignItems:'center'}}>
@@ -7021,13 +7022,13 @@ const renderMonthHeatmap = () => {
                 </div>
                 {/* Last seen */}
                 <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{fontSize:'0.72rem',color:c.daysSinceVisit > 21 ? '#b8923a' : '#bab1a3'}}>
+                  <span style={{fontSize:'0.72rem',color:c.daysSinceVisit > 21 ? '#b8923a' : '#bcbcc3'}}>
                     {c.daysSinceVisit > 365 ? 'Long ago' : `${c.daysSinceVisit}d ago`}
                   </span>
                 </div>
                 {/* Top dish */}
                 <div style={{display:'flex',alignItems:'center',overflow:'hidden'}}>
-                  <span style={{fontSize:'0.68rem',color:'#bab1a3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.topDish || '—'}</span>
+                  <span style={{fontSize:'0.68rem',color:'#bcbcc3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.topDish || '—'}</span>
                 </div>
               </div>
             );
@@ -7043,26 +7044,26 @@ const renderMonthHeatmap = () => {
           <motion.div
             initial={false} animate={{opacity:0.6}}
             onClick={() => setCustomerProfile(null)}
-            style={{position:'fixed',inset:0,background:'#1f1b17',zIndex:3000}}
+            style={{position:'fixed',inset:0,background:'#101012',zIndex:3000}}
           />
           <motion.div
             initial={false} animate={{x:0}}
             transition={{type:'spring',stiffness:300,damping:32}}
             style={{
               position:'fixed',right:0,top:0,bottom:0,width:'420px',
-              background:'#312b25', border:'1px solid #554b3e',
+              background:'#222226', border:'1px solid #3b3b42',
               borderRadius:'20px 0 0 20px', zIndex:3001,
               display:'flex', flexDirection:'column', overflow:'hidden'
             }}
           >
             {/* Drawer header */}
-            <div style={{padding:'20px 24px',borderBottom:'1px solid #463e34',background:'#2a2520'}}>
+            <div style={{padding:'20px 24px',borderBottom:'1px solid #313137',background:'#1a1a1d'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div>
                   <div style={{fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>
                     {customerProfile.customer?.name || 'Guest'}
                   </div>
-                  <div style={{fontSize:'0.68rem',color:'#b0a799',fontFamily:'monospace',marginTop:'3px'}}>
+                  <div style={{fontSize:'0.68rem',color:'#b0b0b8',fontFamily:'monospace',marginTop:'3px'}}>
                     {customerProfile.customer?.phone}
                   </div>
                   {customerProfile.customer?.segment && (
@@ -7079,8 +7080,8 @@ const renderMonthHeatmap = () => {
                   )}
                 </div>
                 <button type="button" onClick={() => setCustomerProfile(null)} style={{
-                  background:'#312b25', border:'1px solid #554b3e',
-                  color:'#b0a799', padding:'8px', borderRadius:'9px', cursor:'pointer',
+                  background:'#222226', border:'1px solid #3b3b42',
+                  color:'#b0b0b8', padding:'8px', borderRadius:'9px', cursor:'pointer',
                   display:'flex', alignItems:'center', justifyContent:'center'
                 }}>
                   <X size={16}/>
@@ -7097,9 +7098,9 @@ const renderMonthHeatmap = () => {
                   { label:'Avg Order',     val: `₹${customerProfile.avgOrderValue?.toLocaleString() || 0}` },
                   { label:'Last Seen',     val: `${customerProfile.daysSinceVisit || '—'}d ago` },
                 ].map(({label,val}) => (
-                  <div key={label} style={{background:'#312b25',border:'1px solid #554b3e',borderRadius:'10px',padding:'14px'}}>
+                  <div key={label} style={{background:'#222226',border:'1px solid #3b3b42',borderRadius:'10px',padding:'14px'}}>
                     <div style={{fontSize:'1.2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>{val}</div>
-                    <div style={{fontSize:'0.52rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
+                    <div style={{fontSize:'0.52rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -7107,20 +7108,20 @@ const renderMonthHeatmap = () => {
               {/* Dish preferences */}
               {(customerProfile.allDishes || []).length > 0 && (
                 <div style={{marginBottom:'20px'}}>
-                  <div style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>DISH PREFERENCES</div>
+                  <div style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>DISH PREFERENCES</div>
                   {customerProfile.allDishes.slice(0,5).map((d, i) => (
                     <div key={d.name} style={{
                       display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'9px 0', borderBottom:'1px solid #403930'
+                      padding:'9px 0', borderBottom:'1px solid #2b2b30'
                     }}>
                       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                         <span style={{
                           width:'22px', height:'22px', borderRadius:'6px',
-                          background: i === 0 ? 'rgba(201,168,76,0.15)' : '#312b25',
-                          border:`1px solid ${i === 0 ? 'rgba(201,168,76,0.3)' : '#554b3e'}`,
+                          background: i === 0 ? 'rgba(201,168,76,0.15)' : '#222226',
+                          border:`1px solid ${i === 0 ? 'rgba(201,168,76,0.3)' : '#3b3b42'}`,
                           display:'flex', alignItems:'center', justifyContent:'center',
                           fontSize:'0.55rem', fontWeight:'900',
-                          color: i === 0 ? '#C9A84C' : '#a59c8e', fontFamily:'monospace'
+                          color: i === 0 ? '#C9A84C' : '#a3a3ab', fontFamily:'monospace'
                         }}>{i + 1}</span>
                         <span style={{fontSize:'0.8rem',color:'#d9d1c4'}}>{d.name}</span>
                       </div>
@@ -7133,10 +7134,10 @@ const renderMonthHeatmap = () => {
               {/* Recent orders */}
               {(customerProfile.recentOrders || []).length > 0 && (
                 <div>
-                  <div style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>RECENT ORDERS</div>
+                  <div style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>RECENT ORDERS</div>
                   {customerProfile.recentOrders.slice(0,5).map((o) => (
                     <div key={o._id} style={{
-                      background:'#312b25', border:'1px solid #554b3e',
+                      background:'#222226', border:'1px solid #3b3b42',
                       borderRadius:'10px', padding:'12px 14px', marginBottom:'8px',
                       display:'flex', justifyContent:'space-between', alignItems:'center'
                     }}>
@@ -7144,7 +7145,7 @@ const renderMonthHeatmap = () => {
                         <div style={{fontSize:'0.72rem',color:'#d3bfa2',fontWeight:'800'}}>
                           Table {o.tableNumber} · {o.items?.length || 0} items
                         </div>
-                        <div style={{fontSize:'0.6rem',color:'#a59c8e',marginTop:'3px'}}>
+                        <div style={{fontSize:'0.6rem',color:'#a3a3ab',marginTop:'3px'}}>
                           {new Date(o.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
                         </div>
                       </div>
@@ -7172,7 +7173,7 @@ const renderMonthHeatmap = () => {
   <div style={{
     display:'flex',alignItems:'center',gap:'0px',
     padding:'20px 0 0',marginBottom:'24px',
-    borderBottom:'1px solid #403930'
+    borderBottom:'1px solid #2b2b30'
   }}>
     {[
       {id:'announcements', label:'Menu Banners',  icon:<Megaphone size={13}/>,
@@ -7190,19 +7191,19 @@ const renderMonthHeatmap = () => {
             padding:'10px 20px',
             background:'transparent',border:'none',
             borderBottom: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
-            color: isActive ? '#d3bfa2' : '#968d80',
+            color: isActive ? '#d3bfa2' : '#92929a',
             fontSize:'0.68rem',fontWeight:'900',cursor:'pointer',
             letterSpacing:'0.5px',transition:'all 0.15s',
             marginBottom:'-1px'
           }}>
-          <span style={{color: isActive?'#d3bfa2':'#968d80'}}>{st.icon}</span>
+          <span style={{color: isActive?'#d3bfa2':'#92929a'}}>{st.icon}</span>
           {st.label}
           {st.badge > 0 && (
             <span style={{
               fontSize:'0.5rem',fontWeight:'900',
               padding:'1px 6px',borderRadius:'8px',
               background: isActive?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.04)',
-              color: isActive?'#d3bfa2':'#968d80',
+              color: isActive?'#d3bfa2':'#92929a',
               border:`1px solid ${isActive?'rgba(211,191,162,0.25)':'rgba(255,255,255,0.06)'}`,
               fontFamily:'monospace'
             }}>{st.badge}</span>
@@ -7244,11 +7245,11 @@ const renderMonthHeatmap = () => {
         {l:'Scheduled',     v:announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length,      c:'#b8923a', icon:<Clock size={13}/>},
         {l:'Total Views',   v:announcements.reduce((acc,x)=>acc+(x.viewCount||0),0),                                        c:'#8a704d', icon:<Eye size={13}/>},
       ].map((s,i)=>(
-        <div key={i} style={{background:'#2a2520',border:'1px solid #403930',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+        <div key={i} style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
           <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
           <div>
             <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
-            <div style={{fontSize:'0.48rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+            <div style={{fontSize:'0.48rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
           </div>
         </div>
       ))}
@@ -7258,16 +7259,16 @@ const renderMonthHeatmap = () => {
     <div style={{display:'grid',gridTemplateColumns:'390px 1fr',gap:'22px',alignItems:'start'}}>
  
       {/* ── COMPOSE FORM ── */}
-      <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'16px',overflow:'hidden',position:'sticky',top:'20px'}}>
-        <div style={{padding:'16px 20px',borderBottom:'1px solid #403930',background:'#1f1b17'}}>
+      <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'16px',overflow:'hidden',position:'sticky',top:'20px'}}>
+        <div style={{padding:'16px 20px',borderBottom:'1px solid #2b2b30',background:'#101012'}}>
           <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>COMPOSE BANNER</div>
-          <div style={{fontSize:'0.54rem',color:'#968d80',marginTop:'2px'}}>Shown on every customer's QR menu in real-time</div>
+          <div style={{fontSize:'0.54rem',color:'#92929a',marginTop:'2px'}}>Shown on every customer's QR menu in real-time</div>
         </div>
         <div style={{padding:'18px 20px',display:'flex',flexDirection:'column',gap:'13px'}}>
  
           {/* Type picker */}
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'7px',textTransform:'uppercase'}}>Banner Type</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'7px',textTransform:'uppercase'}}>Banner Type</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
               {[
                 {id:'offer',        label:'Offer',        icon:<Tag size={12}/>},
@@ -7279,9 +7280,9 @@ const renderMonthHeatmap = () => {
                   style={{
                     display:'flex',alignItems:'center',gap:'7px',padding:'9px 10px',
                     borderRadius:'8px',cursor:'pointer',transition:'all 0.15s',
-                    border:newAnnouncement.type===opt.id?'1px solid rgba(211,191,162,0.3)':'1px solid #463e34',
-                    background:newAnnouncement.type===opt.id?'rgba(211,191,162,0.07)':'#2a2520',
-                    color:newAnnouncement.type===opt.id?'#d3bfa2':'#a59c8e',
+                    border:newAnnouncement.type===opt.id?'1px solid rgba(211,191,162,0.3)':'1px solid #313137',
+                    background:newAnnouncement.type===opt.id?'rgba(211,191,162,0.07)':'#1a1a1d',
+                    color:newAnnouncement.type===opt.id?'#d3bfa2':'#a3a3ab',
                     fontSize:'0.65rem',fontWeight:'800'
                   }}>
                   {opt.icon}{opt.label}
@@ -7292,43 +7293,43 @@ const renderMonthHeatmap = () => {
  
           {/* Headline */}
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
-              <span>Headline *</span><span style={{color:'#968d80'}}>{newAnnouncement.title.length}/60</span>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+              <span>Headline *</span><span style={{color:'#92929a'}}>{newAnnouncement.title.length}/60</span>
             </div>
             <input value={newAnnouncement.title}
               onChange={e=>setNewAnnouncement(p=>({...p,title:e.target.value}))}
               placeholder="e.g. Weekend Special — 20% Off"
               maxLength={60}
-              style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',fontWeight:'700',boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',fontWeight:'700',boxSizing:'border-box'}}/>
           </div>
  
           {/* Message */}
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
-              <span>Message *</span><span style={{color:'#968d80'}}>{newAnnouncement.message.length}/140</span>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+              <span>Message *</span><span style={{color:'#92929a'}}>{newAnnouncement.message.length}/140</span>
             </div>
             <textarea value={newAnnouncement.message}
               onChange={e=>setNewAnnouncement(p=>({...p,message:e.target.value}))}
               placeholder="e.g. Enjoy 20% off on all main course dishes this weekend!"
               rows={3} maxLength={140}
-              style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
           </div>
  
           {/* Discount fields */}
           {(newAnnouncement.type==='offer'||newAnnouncement.type==='discount') && (
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
               <div>
-                <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Value (optional)</div>
+                <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Value (optional)</div>
                 <input type="number" value={newAnnouncement.discountValue}
                   onChange={e=>setNewAnnouncement(p=>({...p,discountValue:e.target.value}))}
                   placeholder="e.g. 20"
-                  style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
+                  style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
               </div>
               <div>
-                <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
+                <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
                 <select value={newAnnouncement.discountType}
                   onChange={e=>setNewAnnouncement(p=>({...p,discountType:e.target.value}))}
-                  style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}>
+                  style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer',appearance:'none'}}>
                   <option value="percent">% Off</option>
                   <option value="fixed">₹ Off</option>
                 </select>
@@ -7341,21 +7342,21 @@ const renderMonthHeatmap = () => {
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
               <div style={{fontSize:'0.48rem',color:'#b8923a',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',textTransform:'uppercase'}}>
                 <Clock size={9}/> Goes Live At
-                <span style={{color:'#a59c8e',fontWeight:'600',marginLeft:'3px'}}>(blank = now)</span>
+                <span style={{color:'#a3a3ab',fontWeight:'600',marginLeft:'3px'}}>(blank = now)</span>
               </div>
               {(newAnnouncement.startDate||newAnnouncement.startTime) && (
                 <button type="button" onClick={()=>setNewAnnouncement(p=>({...p,startDate:'',startTime:''}))}
-                  style={{fontSize:'0.48rem',color:'#a59c8e',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}>CLEAR</button>
+                  style={{fontSize:'0.48rem',color:'#a3a3ab',background:'transparent',border:'none',cursor:'pointer',fontWeight:'800'}}>CLEAR</button>
               )}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
               <input type="date" value={newAnnouncement.startDate}
                 min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
                 onChange={e=>setNewAnnouncement(p=>({...p,startDate:e.target.value}))}
-                style={{width:'100%',padding:'8px 10px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'8px 10px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
               <input type="time" value={newAnnouncement.startTime}
                 onChange={e=>setNewAnnouncement(p=>({...p,startTime:e.target.value}))}
-                style={{width:'100%',padding:'8px 10px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'8px 10px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
             </div>
             {/* Quick presets */}
             <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
@@ -7382,16 +7383,16 @@ const renderMonthHeatmap = () => {
           {/* Expiry */}
           <div style={{background:'rgba(211,191,162,0.03)',border:'1px solid rgba(211,191,162,0.09)',borderRadius:'10px',padding:'12px'}}>
             <div style={{fontSize:'0.48rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',marginBottom:'8px',textTransform:'uppercase'}}>
-              <Clock size={9}/> Expires At <span style={{color:'#a59c8e',fontWeight:'600',marginLeft:'3px'}}>(required)</span>
+              <Clock size={9}/> Expires At <span style={{color:'#a3a3ab',fontWeight:'600',marginLeft:'3px'}}>(required)</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
               <input type="date" value={newAnnouncement.expiryDate}
                 min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
                 onChange={e=>setNewAnnouncement(p=>({...p,expiryDate:e.target.value}))}
-                style={{width:'100%',padding:'8px 10px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'8px 10px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
               <input type="time" value={newAnnouncement.expiryTime}
                 onChange={e=>setNewAnnouncement(p=>({...p,expiryTime:e.target.value}))}
-                style={{width:'100%',padding:'8px 10px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'8px 10px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'7px',fontSize:'0.72rem',outline:'none',colorScheme:'dark',boxSizing:'border-box'}}/>
             </div>
             <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
               {[
@@ -7401,16 +7402,16 @@ const renderMonthHeatmap = () => {
                 {label:'+7 days',fn:()=>new Date(Date.now()+7*86400000)},
               ].map(p=>(
                 <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,expiryTime:d.toTimeString().slice(0,5)}));}}
-                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid #463e34',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
+                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid #313137',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
           </div>
  
           {/* Live preview */}
           {(newAnnouncement.title||newAnnouncement.message) && (
-            <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'10px',padding:'12px'}}>
-              <div style={{fontSize:'0.48rem',color:'#968d80',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'9px',textTransform:'uppercase'}}>Customer Preview</div>
-              <div style={{background:'#312b25',borderRadius:'9px',padding:'13px',borderLeft:'3px solid #C9A84C',display:'flex',alignItems:'flex-start',gap:'11px'}}>
+            <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'10px',padding:'12px'}}>
+              <div style={{fontSize:'0.48rem',color:'#92929a',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'9px',textTransform:'uppercase'}}>Customer Preview</div>
+              <div style={{background:'#222226',borderRadius:'9px',padding:'13px',borderLeft:'3px solid #C9A84C',display:'flex',alignItems:'flex-start',gap:'11px'}}>
                 <div style={{width:'32px',height:'32px',borderRadius:'7px',flexShrink:0,background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
                   {newAnnouncement.type==='offer'?<Tag size={14} color="#C9A84C"/>:newAnnouncement.type==='discount'?<Percent size={14} color="#C9A84C"/>:newAnnouncement.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
                 </div>
@@ -7466,8 +7467,8 @@ const renderMonthHeatmap = () => {
               padding:'12px',borderRadius:'9px',border:'none',
               background:(newAnnouncement.title&&newAnnouncement.message)
                 ?(newAnnouncement.startDate?'linear-gradient(135deg,#8a6a22,#b8923a)':'linear-gradient(135deg,#bda88a,#d3bfa2)')
-                :'#312b25',
-              color:(newAnnouncement.title&&newAnnouncement.message)?'#1c1814':'#968d80',
+                :'#222226',
+              color:(newAnnouncement.title&&newAnnouncement.message)?'#0f0f11':'#92929a',
               fontWeight:'900',fontSize:'0.72rem',letterSpacing:'0.5px',
               cursor:(newAnnouncement.title&&newAnnouncement.message)?'pointer':'not-allowed',
               display:'flex',alignItems:'center',justifyContent:'center',gap:'7px',transition:'all 0.2s'
@@ -7482,11 +7483,11 @@ const renderMonthHeatmap = () => {
       {/* ── ANNOUNCEMENTS LIST ── */}
       <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
         {announcements.length===0 ? (
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'14px',padding:'70px 20px',border:'1px dashed #403930',borderRadius:'14px',color:'#8d8477'}}>
-            <Megaphone size={30} color="#8d8477"/>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'14px',padding:'70px 20px',border:'1px dashed #2b2b30',borderRadius:'14px',color:'#86868e'}}>
+            <Megaphone size={30} color="#86868e"/>
             <div>
-              <div style={{fontSize:'0.78rem',fontWeight:'700',color:'#8d8477',textAlign:'center'}}>No banners yet</div>
-              <div style={{fontSize:'0.62rem',color:'#8d8477',textAlign:'center',marginTop:'4px'}}>Compose on the left · publish instantly or schedule</div>
+              <div style={{fontSize:'0.78rem',fontWeight:'700',color:'#86868e',textAlign:'center'}}>No banners yet</div>
+              <div style={{fontSize:'0.62rem',color:'#86868e',textAlign:'center',marginTop:'4px'}}>Compose on the left · publish instantly or schedule</div>
             </div>
           </div>
         ) : announcements.map(a=>{
@@ -7501,9 +7502,9 @@ const renderMonthHeatmap = () => {
             <motion.div key={a._id} initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
               style={{
                 position:'relative',
-                background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(184,146,58,0.03)':'#2a2520',
-                border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(184,146,58,0.15)':'#403930'}`,
-                borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(184,146,58,0.45)':'#463e34'}`,
+                background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(184,146,58,0.03)':'#1a1a1d',
+                border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(184,146,58,0.15)':'#2b2b30'}`,
+                borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(184,146,58,0.45)':'#313137'}`,
                 borderRadius:'13px',padding:'16px 18px',
                 boxShadow: isLive ? '0 8px 22px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.02)' : '0 4px 12px rgba(0,0,0,0.15)',
                 opacity:isEnded?0.42:1,transition:'all 0.2s',overflow:'hidden'
@@ -7520,10 +7521,10 @@ const renderMonthHeatmap = () => {
                     <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.82rem'}}>{a.title}</span>
                     {isLive&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(236,220,185,0.07)',color:'#ecdcb9',border:'1px solid rgba(236,220,185,0.18)',letterSpacing:'1px'}}>● LIVE</span>}
                     {isScheduled&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(184,146,58,0.07)',color:'#b8923a',border:'1px solid rgba(184,146,58,0.18)',letterSpacing:'1px'}}>◷ SCHEDULED</span>}
-                    {isEnded&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(255,255,255,0.02)',color:'#968d80',border:'1px solid rgba(255,255,255,0.04)',letterSpacing:'1px'}}>ENDED</span>}
+                    {isEnded&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(255,255,255,0.02)',color:'#92929a',border:'1px solid rgba(255,255,255,0.04)',letterSpacing:'1px'}}>ENDED</span>}
                   </div>
-                  <div style={{fontSize:'0.7rem',color:'#b0a799',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
-                  <div style={{display:'flex',gap:'10px',flexWrap:'wrap',fontSize:'0.56rem',color:'#968d80',alignItems:'center'}}>
+                  <div style={{fontSize:'0.7rem',color:'#b0b0b8',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
+                  <div style={{display:'flex',gap:'10px',flexWrap:'wrap',fontSize:'0.56rem',color:'#92929a',alignItems:'center'}}>
                     {a.discountValue&&(
                       <span style={{padding:'2px 8px',borderRadius:'4px',background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.13)',color:'#C9A84C',fontWeight:'900',fontFamily:'monospace'}}>
                         {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
@@ -7547,13 +7548,13 @@ const renderMonthHeatmap = () => {
                     )}
                     {isScheduled&&(
                       <button type="button" onClick={()=>setConfirmModal({show:true,title:'Cancel this scheduled announcement?',subtitle:'It will not go live.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();showNotif('Schedule cancelled');}catch{showNotif('Failed','error');}}})}
-                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid #463e34',background:'transparent',color:'#a59c8e',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
+                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid #313137',background:'transparent',color:'#a3a3ab',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
                         <X size={8}/> CANCEL
                       </button>
                     )}
                     {isEnded&&(
                       <button type="button" onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();}catch{}}})}
-                        style={{width:'26px',height:'26px',padding:0,borderRadius:'6px',cursor:'pointer',background:'transparent',border:'1px solid #463e34',color:'#968d80',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={10}/></button>
+                        style={{width:'26px',height:'26px',padding:0,borderRadius:'6px',cursor:'pointer',background:'transparent',border:'1px solid #313137',color:'#92929a',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={10}/></button>
                     )}
                   </div>
                   {isEnded&&(
@@ -7597,43 +7598,43 @@ const renderMonthHeatmap = () => {
         {l:'Percent Off',   v:(Array.isArray(offers)?offers:[]).filter(o=>o.type==='percent_off').length,     c:'#b8923a', icon:<Percent size={13}/>},
         {l:'Total Redeemed',v:(Array.isArray(offers)?offers:[]).reduce((a,o)=>a+(o.usageCount||0),0),         c:'#8a704d', icon:<ShoppingCart size={13}/>},
       ].map((s,i)=>(
-        <div key={i} style={{background:'#2a2520',border:'1px solid #403930',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+        <div key={i} style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
           <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
           <div>
             <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
-            <div style={{fontSize:'0.48rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+            <div style={{fontSize:'0.48rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
           </div>
         </div>
       ))}
     </div>
  
     {/* Create offer form */}
-    <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'16px',overflow:'hidden'}}>
-      <div style={{padding:'15px 20px',borderBottom:'1px solid #403930',background:'#1f1b17',display:'flex',alignItems:'center',gap:'9px'}}>
+    <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'16px',overflow:'hidden'}}>
+      <div style={{padding:'15px 20px',borderBottom:'1px solid #2b2b30',background:'#101012',display:'flex',alignItems:'center',gap:'9px'}}>
         <Tag size={13} color="#d3bfa2"/>
         <div>
           <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>CREATE OFFER</div>
-          <div style={{fontSize:'0.52rem',color:'#968d80',marginTop:'1px'}}>Coupon codes, happy hours, discounts — trackable usage</div>
+          <div style={{fontSize:'0.52rem',color:'#92929a',marginTop:'1px'}}>Coupon codes, happy hours, discounts — trackable usage</div>
         </div>
       </div>
       <div style={{padding:'18px 20px'}}>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'12px'}}>
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Offer Title *</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Offer Title *</div>
             <input type="text" placeholder="e.g. Happy Hour Special"
               value={newOffer.title} onChange={e=>setNewOffer(p=>({...p,title:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
           </div>
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Coupon Code</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Coupon Code</div>
             <input type="text" placeholder="e.g. HAPPY20 (optional)"
               value={newOffer.code||''} onChange={e=>setNewOffer(p=>({...p,code:e.target.value.toUpperCase()}))}
-              style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#C9A84C',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}/>
+              style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#C9A84C',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}/>
           </div>
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Type</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Type</div>
             <select value={newOffer.type} onChange={e=>setNewOffer(p=>({...p,type:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}>
+              style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}>
               <option value="percent_off">% Off</option>
               <option value="fixed_off">₹ Off</option>
               <option value="free_item">Free Item</option>
@@ -7641,38 +7642,38 @@ const renderMonthHeatmap = () => {
             </select>
           </div>
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>
               {newOffer.type==='free_item'?'Free Item Name':newOffer.type==='happy_hour'?'Happy Hour Start':'Value'}
             </div>
             {newOffer.type==='free_item'?(
               <input type="text" placeholder="e.g. Masala Papad"
                 value={newOffer.freeItem} onChange={e=>setNewOffer(p=>({...p,freeItem:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
             ):(
               <input type={newOffer.type==='happy_hour'?'time':'number'} placeholder="e.g. 20"
                 value={newOffer.type==='happy_hour'?newOffer.happyStart:newOffer.value}
                 onChange={e=>setNewOffer(p=>({...p,[newOffer.type==='happy_hour'?'happyStart':'value']:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+                style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
             )}
           </div>
           {newOffer.type==='happy_hour'&&(
             <div>
-              <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Happy Hour End</div>
+              <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Happy Hour End</div>
               <input type="time" value={newOffer.happyEnd} onChange={e=>setNewOffer(p=>({...p,happyEnd:e.target.value}))}
-                style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+                style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
             </div>
           )}
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Min Order (₹)</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Min Order (₹)</div>
             <input type="number" placeholder="0 = no min"
               value={newOffer.minOrder} onChange={e=>setNewOffer(p=>({...p,minOrder:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}/>
           </div>
           <div>
-            <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Expires At (optional)</div>
+            <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Expires At (optional)</div>
             <input type="date" value={newOffer.expiresAt} min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
               onChange={e=>setNewOffer(p=>({...p,expiresAt:e.target.value}))}
-              style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+              style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
           </div>
         </div>
         <button type="button" onClick={async()=>{
@@ -7695,7 +7696,7 @@ const renderMonthHeatmap = () => {
             showNotif(`Offer "${payload.title}" created`);
             fetchOffers();
           }catch(err){showNotif(err.response?.data?.error||'Failed to create offer','error');}
-        }} style={{padding:'10px 24px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#1c1814',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer',letterSpacing:'0.5px',display:'flex',alignItems:'center',gap:'6px'}}>
+        }} style={{padding:'10px 24px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#0f0f11',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer',letterSpacing:'0.5px',display:'flex',alignItems:'center',gap:'6px'}}>
           <Tag size={12}/> CREATE OFFER
         </button>
       </div>
@@ -7703,17 +7704,17 @@ const renderMonthHeatmap = () => {
  
     {/* Offers grid */}
     {(Array.isArray(offers)?offers:[]).length===0?(
-      <div style={{textAlign:'center',padding:'50px',background:'#2a2520',borderRadius:'13px',border:'1px dashed #403930'}}>
-        <Tag size={26} color="#8d8477" style={{marginBottom:'12px'}}/>
-        <div style={{color:'#8d8477',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
+      <div style={{textAlign:'center',padding:'50px',background:'#1a1a1d',borderRadius:'13px',border:'1px dashed #2b2b30'}}>
+        <Tag size={26} color="#86868e" style={{marginBottom:'12px'}}/>
+        <div style={{color:'#86868e',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
       </div>
     ):(
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'13px'}}>
         {(Array.isArray(offers)?offers:[]).map(offer=>(
           <div key={offer._id} style={{
-            background:'#2a2520',
-            border:`1px solid ${offer.isActive?'rgba(236,220,185,0.1)':'#403930'}`,
-            borderTop:`2px solid ${offer.isActive?'rgba(236,220,185,0.28)':'#463e34'}`,
+            background:'#1a1a1d',
+            border:`1px solid ${offer.isActive?'rgba(236,220,185,0.1)':'#2b2b30'}`,
+            borderTop:`2px solid ${offer.isActive?'rgba(236,220,185,0.28)':'#313137'}`,
             borderRadius:'13px',padding:'17px',opacity:offer.isActive?1:0.5,transition:'all 0.2s'
           }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
@@ -7724,8 +7725,8 @@ const renderMonthHeatmap = () => {
                 )}
               </div>
               <div style={{display:'flex',alignItems:'center',gap:'5px',padding:'3px 8px',borderRadius:'6px',background:offer.isActive?'rgba(236,220,185,0.05)':'rgba(255,255,255,0.02)',border:`1px solid ${offer.isActive?'rgba(236,220,185,0.14)':'rgba(255,255,255,0.04)'}`}}>
-                <div style={{width:'5px',height:'5px',borderRadius:'50%',background:offer.isActive?'#ecdcb9':'#3a342d'}}/>
-                <span style={{fontSize:'0.48rem',fontWeight:'900',color:offer.isActive?'#ecdcb9':'#968d80'}}>{offer.isActive?'ACTIVE':'PAUSED'}</span>
+                <div style={{width:'5px',height:'5px',borderRadius:'50%',background:offer.isActive?'#ecdcb9':'#2a2a2f'}}/>
+                <span style={{fontSize:'0.48rem',fontWeight:'900',color:offer.isActive?'#ecdcb9':'#92929a'}}>{offer.isActive?'ACTIVE':'PAUSED'}</span>
               </div>
             </div>
  
@@ -7733,12 +7734,12 @@ const renderMonthHeatmap = () => {
               <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#d3bfa2',padding:'4px 10px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'6px',fontFamily:'monospace'}}>
                 {offer.type==='percent_off'?`${offer.value}% OFF`:offer.type==='fixed_off'?`₹${offer.value} OFF`:offer.type==='free_item'?`FREE: ${offer.freeItem||'Item'}`:`${offer.happyStart||'?'}–${offer.happyEnd||'?'}`}
               </span>
-              {offer.minOrder>0&&<span style={{fontSize:'0.58rem',color:'#a59c8e'}}>min ₹{offer.minOrder}</span>}
+              {offer.minOrder>0&&<span style={{fontSize:'0.58rem',color:'#a3a3ab'}}>min ₹{offer.minOrder}</span>}
               {offer.usageCount>0&&(
-                <span style={{fontSize:'0.58rem',color:'#b0a799',display:'flex',alignItems:'center',gap:'3px'}}><ShoppingCart size={9}/>{offer.usageCount} used</span>
+                <span style={{fontSize:'0.58rem',color:'#b0b0b8',display:'flex',alignItems:'center',gap:'3px'}}><ShoppingCart size={9}/>{offer.usageCount} used</span>
               )}
               {offer.expiresAt&&(
-                <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#e29a58':'#b0a799',display:'flex',alignItems:'center',gap:'3px'}}>
+                <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#e29a58':'#b0b0b8',display:'flex',alignItems:'center',gap:'3px'}}>
                   <Clock size={8}/>{new Date(offer.expiresAt).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short'})}
                 </span>
               )}
@@ -7751,14 +7752,14 @@ await axios.patch(`${BASE_URL}/offers/${offer._id}`, {isActive:!offer.isActive, 
                   fetchOffers();
                   showNotif(`"${offer.title}" ${!offer.isActive?'activated':'paused'}`);
                 }catch{showNotif('Update failed','error');}
-              }} style={{flex:1,padding:'8px',background:offer.isActive?'#2a2520':'rgba(236,220,185,0.05)',border:offer.isActive?'1px solid #463e34':'1px solid rgba(236,220,185,0.16)',color:offer.isActive?'#a59c8e':'#ecdcb9',borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}>
+              }} style={{flex:1,padding:'8px',background:offer.isActive?'#1a1a1d':'rgba(236,220,185,0.05)',border:offer.isActive?'1px solid #313137':'1px solid rgba(236,220,185,0.16)',color:offer.isActive?'#a3a3ab':'#ecdcb9',borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'}}>
                 {offer.isActive?'PAUSE':'ACTIVATE'}
               </button>
               <button type="button" onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${offer._id}`, { data: { tenantId } });
 fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
-                style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #463e34',color:'#968d80',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #313137',color:'#92929a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.25)';e.currentTarget.style.color='#e29a58';}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#968d80';}}><X size={12} /></button>
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#92929a';}}><X size={12} /></button>
             </div>
           </div>
         ))}
@@ -7780,30 +7781,30 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         {l:'Total Reached',  v:(Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0),          c:'#ecdcb9', icon:<Users size={13}/>},
         {l:'Avg Reach',      v:(Array.isArray(campaigns)?campaigns:[]).length>0?Math.round((Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0)/(Array.isArray(campaigns)?campaigns:[]).length):0, c:'#8a704d', icon:<BarChart2 size={13}/>},
       ].map((s,i)=>(
-        <div key={i} style={{background:'#2a2520',border:'1px solid #403930',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+        <div key={i} style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
           <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
           <div>
             <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
-            <div style={{fontSize:'0.48rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+            <div style={{fontSize:'0.48rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
           </div>
         </div>
       ))}
     </div>
  
     {/* Send campaign */}
-    <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'16px',overflow:'hidden'}}>
-      <div style={{padding:'15px 20px',borderBottom:'1px solid #403930',background:'#1f1b17',display:'flex',alignItems:'center',gap:'9px'}}>
+    <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'16px',overflow:'hidden'}}>
+      <div style={{padding:'15px 20px',borderBottom:'1px solid #2b2b30',background:'#101012',display:'flex',alignItems:'center',gap:'9px'}}>
         <Send size={13} color="#d3bfa2"/>
         <div>
           <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>{newCampaign.segment==='all'?'SEND CUSTOMER BROADCAST':'SEND PUSH CAMPAIGN'}</div>
-          <div style={{fontSize:'0.52rem',color:'#968d80',marginTop:'1px'}}>Push notification to customer segments who opted in</div>
+          <div style={{fontSize:'0.52rem',color:'#92929a',marginTop:'1px'}}>Push notification to customer segments who opted in</div>
         </div>
       </div>
       <div style={{padding:'18px 20px',display:'flex',flexDirection:'column',gap:'14px'}}>
  
         {/* Segment selector */}
         <div>
-          <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Target Segment</div>
+          <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Target Segment</div>
           <div style={{display:'flex',gap:'7px',flexWrap:'wrap'}}>
             {[
               {id:'all',     label:'Broadcast — All',   icon:<Users size={11}/>,       desc:'Every opted-in customer for this restaurant'},
@@ -7818,9 +7819,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                   style={{
                     display:'flex',alignItems:'center',gap:'6px',
                     padding:'8px 14px',borderRadius:'8px',cursor:'pointer',
-                    border:isActive?'none':'1px solid #463e34',
-                    background:isActive?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#2a2520',
-                    color:isActive?'#1c1814':'#a59c8e',fontSize:'0.65rem',fontWeight:'900',transition:'all 0.15s'
+                    border:isActive?'none':'1px solid #313137',
+                    background:isActive?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#1a1a1d',
+                    color:isActive?'#0f0f11':'#a3a3ab',fontSize:'0.65rem',fontWeight:'900',transition:'all 0.15s'
                   }}>
                   {seg.icon}{seg.label}
                 </button>
@@ -7831,28 +7832,28 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
  
         {/* Title */}
         <div>
-          <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Notification Title *</div>
+          <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Notification Title *</div>
           <input type="text" placeholder="e.g. Weekend Special"
             value={newCampaign.title} onChange={e=>setNewCampaign(p=>({...p,title:e.target.value}))}
-            style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',fontWeight:'700',outline:'none',boxSizing:'border-box'}}/>
+            style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',fontWeight:'700',outline:'none',boxSizing:'border-box'}}/>
         </div>
  
         {/* Body */}
         <div>
-          <div style={{fontSize:'0.48rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
-            <span>Message *</span><span style={{color:'#968d80'}}>{newCampaign.body.length}/200</span>
+          <div style={{fontSize:'0.48rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'flex',justifyContent:'space-between',textTransform:'uppercase'}}>
+            <span>Message *</span><span style={{color:'#92929a'}}>{newCampaign.body.length}/200</span>
           </div>
           <textarea rows={3} maxLength={200}
             placeholder="e.g. 20% off your next visit this weekend. Show this notification to our staff."
             value={newCampaign.body} onChange={e=>setNewCampaign(p=>({...p,body:e.target.value}))}
-            style={{width:'100%',padding:'9px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
+            style={{width:'100%',padding:'9px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
         </div>
  
         {/* Preview */}
         {(newCampaign.title||newCampaign.body)&&(
-          <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'10px',padding:'12px'}}>
-            <div style={{fontSize:'0.46rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
-            <div style={{background:'#3a342d',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
+          <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'10px',padding:'12px'}}>
+            <div style={{fontSize:'0.46rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
+            <div style={{background:'#2a2a2f',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
               <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}><Bell size={14} color="#d3bfa2" /></div>
               <div>
                 <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
@@ -7882,8 +7883,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           finally{setCampaignSending(false);}
         }} style={{
           padding:'11px 24px',
-          background:campaignSending?'#312b25':'linear-gradient(135deg,#d3bfa2,#bda88a)',
-          border:'none',color:campaignSending?'#968d80':'#1c1814',
+          background:campaignSending?'#222226':'linear-gradient(135deg,#d3bfa2,#bda88a)',
+          border:'none',color:campaignSending?'#92929a':'#0f0f11',
           borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',
           cursor:campaignSending?'not-allowed':'pointer',
           display:'flex',alignItems:'center',gap:'6px',letterSpacing:'0.5px',
@@ -7895,18 +7896,18 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     </div>
  
     {/* Campaign history */}
-    <div style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'14px',overflow:'hidden'}}>
-      <div style={{padding:'13px 18px',borderBottom:'1px solid #403930',background:'#1f1b17',display:'flex',alignItems:'center',gap:'8px'}}>
+    <div style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'14px',overflow:'hidden'}}>
+      <div style={{padding:'13px 18px',borderBottom:'1px solid #2b2b30',background:'#101012',display:'flex',alignItems:'center',gap:'8px'}}>
         <Clock size={12} color="#8a704d"/>
         <div style={{fontSize:'0.56rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px'}}>SEND HISTORY</div>
-        <span style={{marginLeft:'auto',fontSize:'0.52rem',color:'#968d80'}}>{(Array.isArray(campaigns)?campaigns:[]).length} campaigns</span>
+        <span style={{marginLeft:'auto',fontSize:'0.52rem',color:'#92929a'}}>{(Array.isArray(campaigns)?campaigns:[]).length} campaigns</span>
       </div>
       {(Array.isArray(campaigns)?campaigns:[]).length===0?(
-        <div style={{textAlign:'center',padding:'40px',color:'#1c1814',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
+        <div style={{textAlign:'center',padding:'40px',color:'#0f0f11',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
       ):(
         <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
           {[...(Array.isArray(campaigns)?campaigns:[])].map(c=>( /* server already returns newest first; .reverse() put the oldest campaign on top */
-            <div key={c._id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#1f1b17',border:'1px solid #403930'}}>
+            <div key={c._id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#101012',border:'1px solid #2b2b30'}}>
               <div style={{width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Send size={11} color="#8a704d"/>
               </div>
@@ -7916,10 +7917,10 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                     <span style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff'}}>{c.title||'Campaign'}</span>
                     <span style={{fontSize:'0.52rem',fontWeight:'900',padding:'2px 8px',borderRadius:'5px',background:'rgba(211,191,162,0.07)',border:'1px solid rgba(211,191,162,0.12)',color:'#8a704d',textTransform:'uppercase'}}>{c.segment||'all'}</span>
                   </div>
-                  <span style={{fontSize:'0.58rem',color:'#968d80',display:'flex',alignItems:'center',gap:'3px',flexShrink:0,whiteSpace:'nowrap'}}><Users size={8}/>{c.sentCount||0} reached</span>
+                  <span style={{fontSize:'0.58rem',color:'#92929a',display:'flex',alignItems:'center',gap:'3px',flexShrink:0,whiteSpace:'nowrap'}}><Users size={8}/>{c.sentCount||0} reached</span>
                 </div>
-                <div style={{fontSize:'0.68rem',color:'#b0a799',lineHeight:1.5,marginBottom:'5px'}}>{c.body||c.message||''}</div>
-                <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',fontSize:'0.54rem',color:'#968d80'}}>
+                <div style={{fontSize:'0.68rem',color:'#b0b0b8',lineHeight:1.5,marginBottom:'5px'}}>{c.body||c.message||''}</div>
+                <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',fontSize:'0.54rem',color:'#92929a'}}>
                   <span style={{color:'#8a704d',fontWeight:'800'}}>SENT BY: {c.tenantName || tenantConfig?.name || tenantId}</span>
                   <span>•</span>
                   <span>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
@@ -7994,21 +7995,21 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               ? 'rgba(211,191,162,0.15)'
               : mood
               ? mood.color
-              : '#2a2520',
+              : '#1a1a1d',
             color: isSel
-              ? '#1f1b17'
+              ? '#101012'
               : hasChk
               ? '#d3bfa2'
               : isOcc
               ? 'rgba(211,191,162,0.7)'
-              : '#968d80',
+              : '#92929a',
             border: isSel
               ? '1px solid #d3bfa2'
               : hasChk
               ? '1px dashed #d3bfa2'
               : isOcc
               ? '1px solid rgba(211,191,162,0.25)'
-              : '1px solid #312b25',
+              : '1px solid #222226',
           }}
         >
           {/* Bill-request bell */}
@@ -8052,7 +8053,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                 ? '#b8923a'
                 : mood.level === 'warm'
                 ? '#8a704d'
-                : '#b0a799',
+                : '#b0b0b8',
             }}>
               {mood.level === 'critical'
                 ? 'CRITICAL'
@@ -8097,15 +8098,15 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     );
   })}
 </div>
-                <div style={{...styles.biCard,marginTop:'25px',borderTop:'2px solid #d3bfa2',background:'#2a2520',padding:'20px'}}>
+                <div style={{...styles.biCard,marginTop:'25px',borderTop:'2px solid #d3bfa2',background:'#1a1a1d',padding:'20px'}}>
   <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px',textAlign:'center'}}>
     {[
       ['CASH',     dailySettlementBreakdown.cash],
       ['UPI',      dailySettlementBreakdown.upi],
       ['CARD',     dailySettlementBreakdown.card],
     ].map(([label,val])=>(
-      <div key={label} style={{borderRight:'1px solid #463e34',paddingRight:'12px'}}>
-        <small style={{...styles.statLabel,color:'#b0a799',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
+      <div key={label} style={{borderRight:'1px solid #313137',paddingRight:'12px'}}>
+        <small style={{...styles.statLabel,color:'#b0b0b8',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
           DAILY {label}
         </small>
         <div style={{fontSize:'1rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>
@@ -8126,7 +8127,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
   const sgst     = Math.round(subtotal * sgstRate);
   return (
     <>
-      <div style={{ borderRight:'1px solid #463e34', paddingRight:'12px' }}>
+      <div style={{ borderRight:'1px solid #313137', paddingRight:'12px' }}>
         <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
           CGST {(cgstRate * 100).toFixed(1)}%
         </small>
@@ -8134,7 +8135,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           ₹{cgst.toLocaleString()}
         </div>
       </div>
-      <div style={{ borderRight:'1px solid #463e34', paddingRight:'12px' }}>
+      <div style={{ borderRight:'1px solid #313137', paddingRight:'12px' }}>
         <small style={{...styles.statLabel, color:'#8a704d', fontSize:'0.52rem', letterSpacing:'0.5px'}}>
           SGST {(sgstRate * 100).toFixed(1)}%
         </small>
@@ -8149,7 +8150,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         <div style={{ fontSize:'1.2rem', fontWeight:'900', color:'#d3bfa2', marginTop:'2px' }}>
           ₹{gross.toLocaleString()}
         </div>
-        <div style={{ fontSize:'0.52rem', color:'#b0a799', marginTop:'2px' }}>
+        <div style={{ fontSize:'0.52rem', color:'#b0b0b8', marginTop:'2px' }}>
           NET ₹{Math.round(subtotal).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
         </div>
       </div>
@@ -9574,7 +9575,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         <>
           {/* ═══ HERO: BUSINESS HEALTH SCORE ═══ */}
           <div style={{
-            background: 'linear-gradient(135deg, #312b25 0%, #312b25 100%)',
+            background: 'linear-gradient(135deg, #222226 0%, #222226 100%)',
             border: '1px solid rgba(211,191,162,0.15)',
             borderRadius: '20px', padding: '32px', marginBottom: '24px',
             position: 'relative', overflow: 'hidden'
@@ -9596,7 +9597,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                     ? `${opportunityCount} growth opportunit${opportunityCount > 1 ? 'ies' : 'y'} identified`
                     : `Operations are running smoothly`}
                 </h2>
-                <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: '#bab1a3', maxWidth: '520px', lineHeight: 1.6 }}>
+                <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: '#bcbcc3', maxWidth: '520px', lineHeight: 1.6 }}>
                   Analyzed across menu engineering, wastage, staffing, customer retention, waitlist conversion, and financial health for {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}.
                 </p>
               </div>
@@ -9605,17 +9606,17 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               <div style={{ textAlign: 'center', flexShrink: 0 }}>
                 <div style={{
                   width: '110px', height: '110px', borderRadius: '50%',
-                  background: `conic-gradient(${healthColor} ${healthScore * 3.6}deg, #3a342d 0deg)`,
+                  background: `conic-gradient(${healthColor} ${healthScore * 3.6}deg, #2a2a2f 0deg)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
                 }}>
                   <div style={{
-                    width: '88px', height: '88px', borderRadius: '50%', background: '#312b25',
+                    width: '88px', height: '88px', borderRadius: '50%', background: '#222226',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                   }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: '900', color: healthColor }}>
                       {healthScore}
                     </span>
-                    <span style={{ fontSize: '0.48rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '1px' }}>HEALTH SCORE</span>
+                    <span style={{ fontSize: '0.48rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '1px' }}>HEALTH SCORE</span>
                   </div>
                 </div>
               </div>
@@ -9630,7 +9631,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                 { l: 'REPEAT RATE', v: `${stats.loyaltyRate}%`, c: stats.loyaltyRate >= 35 ? tone.positive : tone.warning },
               ].map(s => (
                 <div key={s.l} style={{ background: 'rgba(0,0,0,0.3)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(211,191,162,0.06)' }}>
-                  <div style={{ fontSize: '0.5rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '1px', marginBottom: '5px' }}>{s.l}</div>
+                  <div style={{ fontSize: '0.5rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '1px', marginBottom: '5px' }}>{s.l}</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '900', color: s.c }}>{s.v}</div>
                 </div>
               ))}
@@ -9699,8 +9700,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
           {recs.length === 0 && (
             <div style={{ textAlign: 'center', padding: '60px 20px', opacity: 0.4 }}>
-              <Sparkles size={32} color="#a59c8e" style={{ marginBottom: '12px' }} />
-              <p style={{ fontSize: '0.85rem', color: '#bab1a3' }}>Gathering more data to generate recommendations. Check back after a few days of operations.</p>
+              <Sparkles size={32} color="#a3a3ab" style={{ marginBottom: '12px' }} />
+              <p style={{ fontSize: '0.85rem', color: '#bcbcc3' }}>Gathering more data to generate recommendations. Check back after a few days of operations.</p>
             </div>
           )}
         </>
@@ -9746,7 +9747,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
   // Reusable stat card
   const SC = ({ label, value, sub, c = '#fff', accent = false }) => (
     <div style={{
-      background: accent ? 'linear-gradient(165deg, rgba(211,191,162,0.1) 0%, rgba(211,191,162,0.04) 100%)' : 'linear-gradient(165deg, #2a2520 0%, #1f1b17 100%)',
+      background: accent ? 'linear-gradient(165deg, rgba(211,191,162,0.1) 0%, rgba(211,191,162,0.04) 100%)' : 'linear-gradient(165deg, #1a1a1d 0%, #101012 100%)',
       border: `1px solid ${accent ? 'rgba(211,191,162,0.28)' : 'rgba(255,255,255,0.07)'}`,
       borderRadius: '13px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '5px',
       boxShadow: accent ? '0 6px 18px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.03)' : 'inset 0 1px 0 rgba(255,255,255,0.02)',
@@ -9761,7 +9762,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
   // Reusable biCard container
   const BC = ({ children, style = {} }) => (
     <div style={{
-      background: 'linear-gradient(165deg, #2a2520 0%, #1f1b17 100%)', border: '1px solid rgba(255,255,255,0.07)',
+      background: 'linear-gradient(165deg, #1a1a1d 0%, #101012 100%)', border: '1px solid rgba(255,255,255,0.07)',
       borderRadius: '16px', padding: '20px', boxShadow: '0 8px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02)', ...style
     }}>{children}</div>
   );
@@ -9795,7 +9796,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     {/* ════ AI BRAIN PANEL ════ */}
     {aiBrain && (
       <div style={{
-        background: 'linear-gradient(135deg, #2a2520 0%, #2a2520 100%)',
+        background: 'linear-gradient(135deg, #1a1a1d 0%, #1a1a1d 100%)',
         border: '1px solid rgba(211,191,162,0.2)', borderRadius: '18px',
         padding: '20px', marginBottom: '24px'
       }}>
@@ -9893,13 +9894,13 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     {(() => {
       const GOLD = '#d3bfa2', BLUE = '#cdbb98', AX = 'rgba(255,255,255,0.35)', GRID = 'rgba(255,255,255,0.06)';
       const money = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${Math.round(v)}`;
-      const tip = { background: '#2a2520', border: '1px solid rgba(211,191,162,0.25)', borderRadius: 10, fontSize: 12, color: '#fff' };
+      const tip = { background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.25)', borderRadius: 10, fontSize: 12, color: '#fff' };
       const daily = [...currentMonthAnalytics].sort((a, b) => a._id.localeCompare(b._id)).map(d => ({ day: d._id.slice(8), revenue: d.revenue || 0, orders: d.count || 0 }));
       const hourly = (hourlyAnalytics.hourly || []).filter(h => h.orderCount > 0 || (h.hour >= 8 && h.hour <= 23)).map(h => ({ hour: `${h.hour}h`, orders: h.orderCount, revenue: h.revenue }));
       const dow = hourlyAnalytics.dayOfWeek || [];
       const hasHourly = hourly.some(h => h.orders > 0);
       const hasDow = dow.some(d => d.revenue > 0);
-      const card = { background: 'linear-gradient(165deg, #2a2520 0%, #1f1b17 100%)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 };
+      const card = { background: 'linear-gradient(165deg, #1a1a1d 0%, #101012 100%)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 };
       const ttl = { fontSize: '0.6rem', fontWeight: 900, color: GOLD, letterSpacing: 2, marginBottom: 4 };
       const sub = { fontSize: '0.55rem', color: 'rgba(255,255,255,0.3)', marginBottom: 12 };
       const empty = <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '0.7rem' }}>No data yet</div>;
@@ -9964,7 +9965,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
     {/* ════ SMART DIGEST ════ */}
     <div style={{
-      background: '#2a2520', border: '1px solid rgba(211,191,162,0.15)',
+      background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.15)',
       borderLeft: '3px solid #d3bfa2', borderRadius: '14px',
       padding: '18px 20px', marginBottom: '24px',
       display: 'flex', gap: '14px', alignItems: 'flex-start'
@@ -10459,7 +10460,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       <div style={styles.calendarGrid}>{renderMonthHeatmap()}</div>
       <div style={styles.heatmapLegend}>
         <span>Less</span>
-        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#312b25'}}/>
+        <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'#222226'}}/>
         <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,0.4)'}}/>
         <div style={{...styles.heatSquare,width:'12px',height:'12px',background:'rgba(211,191,162,1)'}}/>
         <span>More</span>
@@ -11231,7 +11232,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               const afterStr  = log.after  ? JSON.stringify(log.after).replace(/[{}"]/g, '').slice(0, 50)  : null;
 
               return (
-                <div key={log._id || idx} style={{ background: '#1f1b17', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '12px 16px', transition: 'border-color 0.15s' }}>
+                <div key={log._id || idx} style={{ background: '#101012', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '12px 16px', transition: 'border-color 0.15s' }}>
 
                   {/* Row 1: action + timestamp */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '7px' }}>
@@ -11555,7 +11556,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
               ? 'rgba(211,191,162,0.09)'
               : msg.role === 'system'
               ? 'rgba(255,255,255,0.02)'
-              : '#2a2520',
+              : '#1a1a1d',
             border: `1px solid ${msg.role === 'user'
               ? 'rgba(211,191,162,0.2)'
               : 'rgba(255,255,255,0.06)'}`,
@@ -11721,7 +11722,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       },
     ].map((s,i)=>(
       <div key={i} style={{
-        background:'#2a2520', border:'1px solid #403930',
+        background:'#1a1a1d', border:'1px solid #2b2b30',
         borderTop:`2px solid ${s.accent}22`,
         borderRadius:'14px', padding:'18px 20px',
         display:'flex', flexDirection:'column', gap:'10px'
@@ -11733,11 +11734,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             display:'flex',alignItems:'center',justifyContent:'center',
             color:s.accent
           }}>{s.icon}</div>
-          <span style={{fontSize:'0.5rem',color:'#968d80',fontWeight:'900',letterSpacing:'1.5px',textTransform:'uppercase'}}>{s.label}</span>
+          <span style={{fontSize:'0.5rem',color:'#92929a',fontWeight:'900',letterSpacing:'1.5px',textTransform:'uppercase'}}>{s.label}</span>
         </div>
         <div>
           <div style={{fontSize:'1.7rem',fontWeight:'900',color:'#fff',lineHeight:1,fontFamily:'monospace'}}>{s.val}</div>
-          <div style={{fontSize:'0.58rem',color:'#a59c8e',marginTop:'5px',fontWeight:'600'}}>{s.sub}</div>
+          <div style={{fontSize:'0.58rem',color:'#a3a3ab',marginTop:'5px',fontWeight:'600'}}>{s.sub}</div>
         </div>
       </div>
     ))}
@@ -11747,15 +11748,15 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       SECTION A — WORKFORCE REGISTER TERMINAL
   ═══════════════════════════════════════════════════════ */}
   <div style={{
-    background:'#2a2520', border:'1px solid #403930',
+    background:'#1a1a1d', border:'1px solid #2b2b30',
     borderRadius:'18px', overflow:'hidden'
   }}>
     {/* Section header */}
     <div style={{
       display:'flex',alignItems:'center',gap:'14px',
       padding:'20px 26px',
-      borderBottom:'1px solid #403930',
-      background:'#1f1b17'
+      borderBottom:'1px solid #2b2b30',
+      background:'#101012'
     }}>
       <div style={{
         width:'36px',height:'36px',borderRadius:'10px',
@@ -11766,7 +11767,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       </div>
       <div>
         <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2.5px'}}>WORKFORCE REGISTER TERMINAL</div>
-        <div style={{fontSize:'0.6rem',color:'#968d80',marginTop:'2px',fontWeight:'600'}}>Enroll new staff — role, shift, table assignments, pay scale</div>
+        <div style={{fontSize:'0.6rem',color:'#92929a',marginTop:'2px',fontWeight:'600'}}>Enroll new staff — role, shift, table assignments, pay scale</div>
       </div>
     </div>
  
@@ -11780,18 +11781,18 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           {l:'Monthly Salary (₹)',k:'baseSalary',p:'25,000',t:'number'}
         ].map(f=>(
           <div key={f.k}>
-            <label style={{fontSize:'0.52rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>{f.l}</label>
+            <label style={{fontSize:'0.52rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>{f.l}</label>
             <input type={f.t} placeholder={f.p}
-              style={{width:'100%',padding:'10px 13px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box',fontWeight:'600'}}
+              style={{width:'100%',padding:'10px 13px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box',fontWeight:'600'}}
               value={newStaff[f.k]} onChange={e=>setNewStaff(p => ({ ...p, [f.k]: e.target.value }))}/>
           </div>
         ))}
  
         {/* Role */}
         <div>
-          <label style={{fontSize:'0.52rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Role</label>
+          <label style={{fontSize:'0.52rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Role</label>
           <select
-            style={{width:'100%',padding:'10px 13px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+            style={{width:'100%',padding:'10px 13px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
             value={newStaff.role} onChange={e=>setNewStaff(prev => ({...prev, role:e.target.value,assignedTables:[]}))}>
             {['Waiter','Chef','Manager','Cashier','Helper'].map(r=><option key={r} value={r}>{r}</option>)}
           </select>
@@ -11799,9 +11800,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
  
         {/* Shift */}
         <div>
-          <label style={{fontSize:'0.52rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Shift</label>
+          <label style={{fontSize:'0.52rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Shift</label>
           <select
-            style={{width:'100%',padding:'10px 13px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+            style={{width:'100%',padding:'10px 13px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
             value={newStaff.shiftType} onChange={e=>setNewStaff(p => ({ ...p, shiftType: e.target.value }))}>
             <option value="Day Shift">Day Shift</option>
             <option value="Night Shift">Night Shift</option>
@@ -11811,9 +11812,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
  
         {/* Joining Date */}
         <div>
-          <label style={{fontSize:'0.52rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Joining Date</label>
+          <label style={{fontSize:'0.52rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Joining Date</label>
           <input type="date"
-            style={{width:'100%',padding:'10px 13px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark',cursor:'pointer',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 13px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'9px',fontSize:'0.82rem',outline:'none',colorScheme:'dark',cursor:'pointer',boxSizing:'border-box'}}
             value={newStaff.joiningDate} onChange={e=>setNewStaff(p => ({ ...p, joiningDate: e.target.value }))}/>
         </div>
       </div>
@@ -11821,7 +11822,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       {/* Table assignments — Waiter only */}
       {newStaff.role==='Waiter' && (
         <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
-          style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
+          style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
           <div style={{fontSize:'0.52rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1px',marginBottom:'12px',textTransform:'uppercase'}}>Table Assignments</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'7px'}}>
             {Array.from({length:tableCount},(_,i)=>(i+1).toString()).map(t=>{
@@ -11831,14 +11832,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                   onClick={()=>setNewStaff(prev => ({...prev, assignedTables:isSel?prev.assignedTables.filter(x=>x!==t):[...prev.assignedTables,t]}))}
                   style={{
                     padding:'7px 14px',borderRadius:'7px',border:'none',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s',
-                    background:isSel?'linear-gradient(135deg,#8a704d,#d3bfa2)':'#312b25',
-                    color:isSel?'#1c1814':'#a59c8e'
+                    background:isSel?'linear-gradient(135deg,#8a704d,#d3bfa2)':'#222226',
+                    color:isSel?'#0f0f11':'#a3a3ab'
                   }}>T{t}</button>
               );
             })}
           </div>
           {newStaff.assignedTables.length>0 && (
-            <div style={{fontSize:'0.58rem',color:'#b0a799',marginTop:'8px'}}>
+            <div style={{fontSize:'0.58rem',color:'#b0b0b8',marginTop:'8px'}}>
               Assigned: {newStaff.assignedTables.map(t=>`T${t}`).join(', ')}
             </div>
           )}
@@ -11848,7 +11849,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       {/* Chef cuisine specializations */}
       {newStaff.role==='Chef' && (
         <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
-          style={{background:'#2a2520',border:'1px solid #403930',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
+          style={{background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'12px',padding:'16px',marginBottom:'16px'}}>
           <div style={{fontSize:'0.52rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1px',marginBottom:'12px',textTransform:'uppercase'}}>Cuisine Specialization</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'7px'}}>
             {[...new Set(menuItems.map(item=>item.categoryId))].filter(Boolean).map(catId=>{
@@ -11861,8 +11862,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                   setNewStaff(prev => ({...prev, cookingRole:updated.join(', ')}));
                 }} style={{
                   padding:'6px 14px',borderRadius:'6px',fontSize:'0.62rem',fontWeight:'900',
-                  border:isChecked?'none':'1px solid #463e34',cursor:'pointer',transition:'all 0.15s',
-                  background:isChecked?'#d3bfa2':'#312b25',color:isChecked?'#1c1814':'#b0a799'
+                  border:isChecked?'none':'1px solid #313137',cursor:'pointer',transition:'all 0.15s',
+                  background:isChecked?'#d3bfa2':'#222226',color:isChecked?'#0f0f11':'#b0b0b8'
                 }}>
                   {displayName.toUpperCase()}
                 </button>
@@ -11880,9 +11881,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       {/* Address + Submit */}
       <div style={{display:'flex',gap:'14px',alignItems:'flex-end'}}>
         <div style={{flex:1}}>
-          <label style={{fontSize:'0.52rem',color:'#b0a799',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Residential Address</label>
+          <label style={{fontSize:'0.52rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'1px',marginBottom:'7px',display:'block',textTransform:'uppercase'}}>Residential Address</label>
           <input type="text" placeholder="Full residential address"
-            style={{width:'100%',padding:'10px 13px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'9px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 13px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'9px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
             value={newStaff.address} onChange={e=>setNewStaff(p => ({ ...p, address: e.target.value }))}/>
         </div>
         <button type="button" onClick={async(ev)=>{
@@ -11905,7 +11906,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         }} style={{
           padding:'10px 28px',
           background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
-          border:'none',color:'#1c1814',borderRadius:'10px',
+          border:'none',color:'#0f0f11',borderRadius:'10px',
           fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',
           whiteSpace:'nowrap',letterSpacing:'0.5px',flexShrink:0
         }}>AUTHORIZE ROSTER</button>
@@ -11917,38 +11918,38 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       SECTION B — ROSTER REGISTRY TABLE
   ═══════════════════════════════════════════════════════ */}
   <div style={{
-    background:'#2a2520', border:'1px solid #403930',
+    background:'#1a1a1d', border:'1px solid #2b2b30',
     borderRadius:'18px', overflow:'hidden'
   }}>
     {/* Header */}
     <div style={{
       display:'flex',alignItems:'center',justifyContent:'space-between',
-      padding:'18px 26px', borderBottom:'1px solid #403930',
-      background:'#1f1b17', gap:'16px', flexWrap:'wrap'
+      padding:'18px 26px', borderBottom:'1px solid #2b2b30',
+      background:'#101012', gap:'16px', flexWrap:'wrap'
     }}>
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
         <Layers size={16} color="#d3bfa2"/>
         <div>
           <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>ROSTER REGISTRY</div>
-          <div style={{fontSize:'0.58rem',color:'#968d80',marginTop:'1px'}}>{filteredStaff.length} staff members</div>
+          <div style={{fontSize:'0.58rem',color:'#92929a',marginTop:'1px'}}>{filteredStaff.length} staff members</div>
         </div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
         {/* Search */}
-        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#2a2520',border:'1px solid #403930',borderRadius:'8px',padding:'8px 13px'}}>
-          <Search size={12} color="#968d80"/>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'8px',padding:'8px 13px'}}>
+          <Search size={12} color="#92929a"/>
           <input type="text" placeholder="Filter by name..."
             style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'160px'}}
             value={rosterSearchQuery} onChange={e=>setRosterSearchQuery(e.target.value)}/>
-          {rosterSearchQuery && <button type="button" onClick={()=>setRosterSearchQuery('')} style={{background:'transparent',border:'none',color:'#968d80',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
+          {rosterSearchQuery && <button type="button" onClick={()=>setRosterSearchQuery('')} style={{background:'transparent',border:'none',color:'#92929a',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
         </div>
         {/* Month nav */}
-        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#2a2520',border:'1px solid #403930',borderRadius:'8px',padding:'6px 12px'}}>
-          <button type="button" onClick={()=>changeMonth(-1)} style={{background:'transparent',border:'none',color:'#a59c8e',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronLeft size={13}/></button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'8px',padding:'6px 12px'}}>
+          <button type="button" onClick={()=>changeMonth(-1)} style={{background:'transparent',border:'none',color:'#a3a3ab',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronLeft size={13}/></button>
           <span style={{fontSize:'0.7rem',fontWeight:'900',color:'#d3bfa2',minWidth:'80px',textAlign:'center'}}>
             {viewDate.toLocaleString('default',{month:'short',year:'numeric'}).toUpperCase()}
           </span>
-          <button type="button" onClick={()=>changeMonth(1)} style={{background:'transparent',border:'none',color:'#a59c8e',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronRight size={13}/></button>
+          <button type="button" onClick={()=>changeMonth(1)} style={{background:'transparent',border:'none',color:'#a3a3ab',cursor:'pointer',display:'flex',alignItems:'center',padding:'2px'}}><ChevronRight size={13}/></button>
         </div>
       </div>
     </div>
@@ -11957,7 +11958,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     <div style={{overflowX:'auto'}} className="custom-scroll">
       <table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead>
-          <tr style={{background:'#1f1b17',fontSize:'0.52rem',color:'#968d80',letterSpacing:'1.2px',textTransform:'uppercase'}}>
+          <tr style={{background:'#101012',fontSize:'0.52rem',color:'#92929a',letterSpacing:'1.2px',textTransform:'uppercase'}}>
             {[
               ['name','Staff Member'],['','Assignments'],['','Shift'],
               ['monthlyAttendance','Attendance',true],['joiningDate','Tenure'],
@@ -11967,8 +11968,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                 style={{
                   padding:'12px 16px',textAlign:center?'center':'left',
                   cursor:k?'pointer':'default',fontWeight:'900',
-                  color:ledgerSortConfig.key===k?'#d3bfa2':'#968d80',
-                  borderBottom:'1px solid #403930',
+                  color:ledgerSortConfig.key===k?'#d3bfa2':'#92929a',
+                  borderBottom:'1px solid #2b2b30',
                   whiteSpace:'nowrap'
                 }}>
                 {l} {ledgerSortConfig.key===k&&(ledgerSortConfig.direction==='asc'?'↑':'↓')}
@@ -11983,7 +11984,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             return (
               <React.Fragment key={role}>
                 <tr>
-                  <td colSpan="8" style={{padding:'8px 16px',background:'#1f1b17',borderBottom:'1px solid #403930',borderTop:'1px solid #403930'}}>
+                  <td colSpan="8" style={{padding:'8px 16px',background:'#101012',borderBottom:'1px solid #2b2b30',borderTop:'1px solid #2b2b30'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                       <span style={{width:'3px',height:'14px',background:'#d3bfa2',borderRadius:'2px',flexShrink:0}}/>
                       <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#8a704d',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({bucket.length})</span>
@@ -11998,8 +11999,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                   const totalHrs=staffLogs.reduce((a,l)=>a+(l.totalWorkingHours||0),0);
                   const overtimeHrs=Math.max(0,totalHrs-(days*8));
                   return (
-                    <tr key={m._id} style={{borderBottom:'1px solid #403930',transition:'background 0.15s'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#2a2520'}
+                    <tr key={m._id} style={{borderBottom:'1px solid #2b2b30',transition:'background 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#1a1a1d'}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
  
                       {/* Staff name */}
@@ -12015,9 +12016,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                           </div>
                           <div>
                             <div style={{fontSize:'0.8rem',fontWeight:'800',color:'#fff'}}>{pureName}</div>
-                            <div style={{fontSize:'0.58rem',color:'#a59c8e',marginTop:'1px'}}>
+                            <div style={{fontSize:'0.58rem',color:'#a3a3ab',marginTop:'1px'}}>
                               {m.role}{m.age?` · ${m.age}y`:''}
-                              {m.contact&&<span style={{color:'#968d80'}}> · {m.contact}</span>}
+                              {m.contact&&<span style={{color:'#92929a'}}> · {m.contact}</span>}
                             </div>
                           </div>
                         </div>
@@ -12028,7 +12029,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                         {m.role==='Waiter'&&m.assignedTables?.length>0?(
                           <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
                             {m.assignedTables.map(t=>(
-                              <span key={t} style={{fontSize:'0.58rem',padding:'2px 6px',background:'#312b25',border:'1px solid #463e34',borderRadius:'4px',color:'#888',fontFamily:'monospace'}}>T{t}</span>
+                              <span key={t} style={{fontSize:'0.58rem',padding:'2px 6px',background:'#222226',border:'1px solid #313137',borderRadius:'4px',color:'#888',fontFamily:'monospace'}}>T{t}</span>
                             ))}
                           </div>
                         ):m.role==='Chef'&&m.cookingRole?(
@@ -12040,7 +12041,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                             ))}
                           </div>
                         ):(
-                          <span style={{fontSize:'0.62rem',color:'#968d80'}}>—</span>
+                          <span style={{fontSize:'0.62rem',color:'#92929a'}}>—</span>
                         )}
                       </td>
  
@@ -12064,7 +12065,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                           <span style={{
                             fontSize:'0.8rem',fontWeight:'900',color:'#fff',
                             fontFamily:'monospace'
-                          }}>{days}<span style={{fontSize:'0.55rem',color:'#a59c8e',marginLeft:'3px'}}>days</span></span>
+                          }}>{days}<span style={{fontSize:'0.55rem',color:'#a3a3ab',marginLeft:'3px'}}>days</span></span>
                           {overtimeHrs>0&&(
                             <span style={{fontSize:'0.52rem',fontWeight:'900',color:'#b8923a',background:'rgba(184,146,58,0.08)',padding:'1px 6px',borderRadius:'4px',border:'1px solid rgba(184,146,58,0.2)'}}>
                               +{overtimeHrs.toFixed(1)}h OT
@@ -12075,7 +12076,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
  
                       {/* Tenure */}
                       <td style={{padding:'14px 8px'}}>
-                        <span style={{fontSize:'0.68rem',color:'#b0a799',fontWeight:'600'}}>{calculateTenure(m.joiningDate)}</span>
+                        <span style={{fontSize:'0.68rem',color:'#b0b0b8',fontWeight:'600'}}>{calculateTenure(m.joiningDate)}</span>
                       </td>
  
                       {/* Salary */}
@@ -12083,7 +12084,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                         <span style={{fontSize:'0.8rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>
                           ₹{Number(m.baseSalary).toLocaleString()}
                         </span>
-                        <span style={{fontSize:'0.55rem',color:'#968d80',display:'block'}}>per month</span>
+                        <span style={{fontSize:'0.55rem',color:'#92929a',display:'block'}}>per month</span>
                       </td>
  
                       {/* Payroll */}
@@ -12095,7 +12096,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                           const isFutureMonth=selectedMonthDate>currentMonthDate;
                           const monthStr=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
                           if(isFutureMonth) return (
-                            <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'#2a2520',color:'#8d8477',border:'1px solid #403930',display:'inline-block'}}>PENDING</span>
+                            <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'#1a1a1d',color:'#86868e',border:'1px solid #2b2b30',display:'inline-block'}}>PENDING</span>
                           );
                           const salRecord=monthlySalaryRecords.find(r=>(r.staffId===m._id||r.staffId?.toString()===m._id?.toString())&&r.monthStr===monthStr);
                           if(salRecord?.paidAt||salRecord?.status==='Paid') return (
@@ -12103,7 +12104,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                               <span style={{fontSize:'0.6rem',padding:'4px 9px',borderRadius:'6px',fontWeight:'900',background:'rgba(236,220,185,0.07)',color:'#ecdcb9',border:'1px solid rgba(236,220,185,0.18)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
                                 <CheckCircle2 size={9}/>PAID
                               </span>
-                              <div style={{fontSize:'0.52rem',color:'#968d80',marginTop:'3px'}}>
+                              <div style={{fontSize:'0.52rem',color:'#92929a',marginTop:'3px'}}>
                                 ₹{Number(salRecord.netSalary||m.baseSalary).toLocaleString()}
                               </div>
                             </div>
@@ -12153,12 +12154,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                           }
                         })} style={{
                           width:'30px',height:'30px',background:'transparent',
-                          border:'1px solid #403930',color:'#968d80',borderRadius:'7px',
+                          border:'1px solid #2b2b30',color:'#92929a',borderRadius:'7px',
                           cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
                           transition:'all 0.15s'
                         }}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.3)';e.currentTarget.style.color='#e29a58';}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#403930';e.currentTarget.style.color='#968d80';}}>
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#2b2b30';e.currentTarget.style.color='#92929a';}}>
                           <X size={12}/>
                         </button>
                       </td>
@@ -12168,7 +12169,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               </React.Fragment>
             );
           }) : (
-            <tr><td colSpan="8" style={{padding:'50px',textAlign:'center',color:'#8d8477',fontSize:'0.78rem'}}>
+            <tr><td colSpan="8" style={{padding:'50px',textAlign:'center',color:'#86868e',fontSize:'0.78rem'}}>
               {rosterSearchQuery?`No staff matching "${rosterSearchQuery}"`:'No staff enrolled yet'}
             </td></tr>
           )}
@@ -12181,34 +12182,34 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       SECTION C — ATTENDANCE TERMINAL (side-by-side layout)
   ═══════════════════════════════════════════════════════ */}
   <div style={{
-    background:'#2a2520', border:'1px solid #403930',
+    background:'#1a1a1d', border:'1px solid #2b2b30',
     borderRadius:'18px', overflow:'hidden'
   }}>
     {/* Header */}
     <div style={{
       display:'flex',alignItems:'center',justifyContent:'space-between',
-      padding:'18px 26px', borderBottom:'1px solid #403930',
-      background:'#1f1b17', gap:'16px', flexWrap:'wrap'
+      padding:'18px 26px', borderBottom:'1px solid #2b2b30',
+      background:'#101012', gap:'16px', flexWrap:'wrap'
     }}>
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
         <CalendarCog size={16} color="#d3bfa2"/>
         <div>
           <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>ATTENDANCE TERMINAL</div>
-          <div style={{fontSize:'0.58rem',color:'#968d80',marginTop:'1px'}}>Clock in/out · Session logs · Overtime detection</div>
+          <div style={{fontSize:'0.58rem',color:'#92929a',marginTop:'1px'}}>Clock in/out · Session logs · Overtime detection</div>
         </div>
       </div>
       {/* Date picker */}
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#2a2520',border:'1px solid #403930',borderRadius:'8px',padding:'6px 13px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'8px',padding:'6px 13px'}}>
           <Calendar size={12} color="#8a704d"/>
           <input type="date" value={attendanceDate}
             onChange={e=>{setAttendanceDate(e.target.value);fetchAttendanceForDate(e.target.value);}}
             style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',fontWeight:'700',colorScheme:'dark',cursor:'pointer'}}/>
         </div>
         <button type="button" onClick={()=>fetchAttendanceForDate(attendanceDate)}
-          style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #403930',color:'#a59c8e',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
+          style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #2b2b30',color:'#a3a3ab',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor='#403930';e.currentTarget.style.color='#a59c8e';}}>
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#2b2b30';e.currentTarget.style.color='#a3a3ab';}}>
           <RefreshCw size={13}/>
         </button>
       </div>
@@ -12222,20 +12223,20 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       const completedToday=dayLogs.filter(l=>l.clockIn&&l.clockOut).length;
       const absent=staff.length-presentStaffIds.length;
       return (
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',borderBottom:'1px solid #403930'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',borderBottom:'1px solid #2b2b30'}}>
           {[
             {l:'Present',v:presentStaffIds.length,c:'#d3bfa2'},
             {l:'On Duty',v:onDuty,c:'#ecdcb9'},
             {l:'Completed',v:completedToday,c:'#8a704d'},
-            {l:'Absent',v:Math.max(0,absent),c:'#b0a799'},
+            {l:'Absent',v:Math.max(0,absent),c:'#b0b0b8'},
           ].map((s,i)=>(
             <div key={i} style={{
               padding:'14px 20px',
-              borderRight:i<3?'1px solid #403930':'none',
+              borderRight:i<3?'1px solid #2b2b30':'none',
               textAlign:'center'
             }}>
               <div style={{fontSize:'1.4rem',fontWeight:'900',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
-              <div style={{fontSize:'0.52rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginTop:'3px'}}>{s.l.toUpperCase()}</div>
+              <div style={{fontSize:'0.52rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginTop:'3px'}}>{s.l.toUpperCase()}</div>
             </div>
           ))}
         </div>
@@ -12251,7 +12252,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           <div key={role} style={{marginBottom:'24px'}}>
             <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
               <span style={{width:'3px',height:'14px',background:'#8a704d',borderRadius:'2px'}}/>
-              <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#b0a799',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({roleStaff.length})</span>
+              <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#b0b0b8',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({roleStaff.length})</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'12px'}}>
               {roleStaff.map(m=>{
@@ -12263,13 +12264,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 const hasAnyPunch=dayLogs.length>0;
                 const latestActiveLog=activeLogs[activeLogs.length-1];
                 const name=m.name.includes(' (')?m.name.split(' (')[0]:m.name;
-                let statusLabel='Not punched'; let statusColor='#968d80';
+                let statusLabel='Not punched'; let statusColor='#92929a';
                 if(isCurrentlyClockedIn){statusLabel='On duty';statusColor='#ecdcb9';}
                 else if(completedLogs.length>0){statusLabel=`Done · ${totalHoursToday.toFixed(1)}h`;statusColor='#8a704d';}
                 return (
                   <div key={m._id} style={{
-                    padding:'14px',borderRadius:'12px',background:'#1f1b17',
-                    border:isCurrentlyClockedIn?'1px solid rgba(236,220,185,0.15)':completedLogs.length>0?'1px solid rgba(138,112,77,0.12)':'1px solid #2a2520',
+                    padding:'14px',borderRadius:'12px',background:'#101012',
+                    border:isCurrentlyClockedIn?'1px solid rgba(236,220,185,0.15)':completedLogs.length>0?'1px solid rgba(138,112,77,0.12)':'1px solid #1a1a1d',
                     transition:'all 0.2s'
                   }}>
                     {/* Header */}
@@ -12278,10 +12279,10 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                         <div style={{
                           width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,
                           background:isCurrentlyClockedIn?'rgba(236,220,185,0.08)':'rgba(255,255,255,0.03)',
-                          border:`1px solid ${isCurrentlyClockedIn?'rgba(236,220,185,0.2)':'#403930'}`,
+                          border:`1px solid ${isCurrentlyClockedIn?'rgba(236,220,185,0.2)':'#2b2b30'}`,
                           display:'flex',alignItems:'center',justifyContent:'center',
                           fontSize:'0.68rem',fontWeight:'900',
-                          color:isCurrentlyClockedIn?'#ecdcb9':'#968d80'
+                          color:isCurrentlyClockedIn?'#ecdcb9':'#92929a'
                         }}>{name.charAt(0).toUpperCase()}</div>
                         <div>
                           <div style={{fontSize:'0.78rem',fontWeight:'800',color:'#fff'}}>{name}</div>
@@ -12306,7 +12307,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                         }}
                         style={{
                           background:isCurrentlyClockedIn?'rgba(138,112,77,0.1)':'rgba(211,191,162,0.9)',
-                          color:isCurrentlyClockedIn?'#8a704d':'#1c1814',
+                          color:isCurrentlyClockedIn?'#8a704d':'#0f0f11',
                           border:isCurrentlyClockedIn?'1px solid rgba(138,112,77,0.25)':'none',
                           padding:'7px 14px',borderRadius:'7px',
                           fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',
@@ -12326,17 +12327,17 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                           return (
                             <div key={log._id} style={{
                               display:'flex',alignItems:'center',gap:'7px',
-                              padding:'5px 8px',background:'#2a2520',borderRadius:'6px',border:'1px solid #403930'
+                              padding:'5px 8px',background:'#1a1a1d',borderRadius:'6px',border:'1px solid #2b2b30'
                             }}>
-                              <span style={{fontSize:'0.5rem',color:'#968d80',fontWeight:'900',minWidth:'16px',fontFamily:'monospace'}}>#{idx+1}</span>
+                              <span style={{fontSize:'0.5rem',color:'#92929a',fontWeight:'900',minWidth:'16px',fontFamily:'monospace'}}>#{idx+1}</span>
                               <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{inTime}</span>
-                              <span style={{fontSize:'0.5rem',color:'#968d80'}}>→</span>
+                              <span style={{fontSize:'0.5rem',color:'#92929a'}}>→</span>
                               {outTime?(
                                 <>
                                   <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{outTime}</span>
                                   <span style={{
                                     marginLeft:'auto',fontSize:'0.58rem',fontWeight:'900',
-                                    color:hrs>=9?'#b8923a':'#b0a799',
+                                    color:hrs>=9?'#b8923a':'#b0b0b8',
                                     padding:'1px 6px',borderRadius:'4px',
                                     background:hrs>=9?'rgba(184,146,58,0.08)':'transparent',
                                     border:hrs>=9?'1px solid rgba(184,146,58,0.2)':'none'
@@ -12352,7 +12353,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                         })}
                         {completedLogs.length>0&&(
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
-                            <span style={{fontSize:'0.6rem',color:'#b0a799',fontWeight:'700'}}>Total: {totalHoursToday.toFixed(2)}h</span>
+                            <span style={{fontSize:'0.6rem',color:'#b0b0b8',fontWeight:'700'}}>Total: {totalHoursToday.toFixed(2)}h</span>
                             {totalHoursToday>=9&&(
                               <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(184,146,58,0.08)',color:'#b8923a',border:'1px solid rgba(184,146,58,0.2)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
                                 <AlertTriangle size={9} /> {(totalHoursToday-8).toFixed(1)}h overtime
@@ -12364,8 +12365,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     )}
  
                     {!hasAnyPunch&&(
-                      <div style={{padding:'8px',background:'#2a2520',borderRadius:'6px',border:'1px solid #403930',textAlign:'center'}}>
-                        <span style={{fontSize:'0.58rem',color:'#8d8477',fontWeight:'700'}}>No punch recorded</span>
+                      <div style={{padding:'8px',background:'#1a1a1d',borderRadius:'6px',border:'1px solid #2b2b30',textAlign:'center'}}>
+                        <span style={{fontSize:'0.58rem',color:'#86868e',fontWeight:'700'}}>No punch recorded</span>
                       </div>
                     )}
                   </div>
@@ -12390,7 +12391,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 {/* ── SMART PURCHASE ASSISTANT ── */}
 {purchaseRecommendations.length > 0 && (
   <div style={{
-    background: '#2a2520',
+    background: '#1a1a1d',
     border: '1px solid rgba(211,191,162,0.18)',
     borderRadius: '14px',
     padding: '17px 18px'
@@ -12573,7 +12574,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       <button type="button" onClick={() => {
         setSelectedExistingItem(null);
         setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
-      }} style={{ background: 'transparent', border: '1px solid #554b3e', color: '#b0a799', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
+      }} style={{ background: 'transparent', border: '1px solid #3b3b42', color: '#b0b0b8', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}>CLEAR <X size={10} /></span>
       </button>
     )}
@@ -12584,23 +12585,23 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
         <div>
-          <div style={{ fontSize: '0.54rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
+          <div style={{ fontSize: '0.54rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
           <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>{selectedExistingItem.currentStock} {selectedExistingItem.unit}</div>
         </div>
         <div>
-          <div style={{ fontSize: '0.54rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>WAC (CURRENT)</div>
+          <div style={{ fontSize: '0.54rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>WAC (CURRENT)</div>
           <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
             ₹{(selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: '0.54rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>LAST BUY PRICE</div>
+          <div style={{ fontSize: '0.54rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>LAST BUY PRICE</div>
           <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
             ₹{(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: '0.54rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>STOCK VALUE</div>
+          <div style={{ fontSize: '0.54rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>STOCK VALUE</div>
           <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#8a704d' }}>
             ₹{((selectedExistingItem.currentStock || 0) * (selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0)).toFixed(0)}
           </div>
@@ -12616,10 +12617,10 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         const newWAC = newStock > 0 ? ((oldStock * oldWAC) + (addQty * buyPrice)) / newStock : buyPrice;
         const changePct = oldWAC > 0 ? ((buyPrice - oldWAC) / oldWAC) * 100 : 0;
         return (
-          <div style={{ marginTop: '12px', padding: '10px 12px', background: '#2a2520', borderRadius: '8px', border: '1px solid #463e34', display: 'flex', gap: '24px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.62rem', color: '#b0a799' }}>NEW WAC PREVIEW</span>
+          <div style={{ marginTop: '12px', padding: '10px 12px', background: '#1a1a1d', borderRadius: '8px', border: '1px solid #313137', display: 'flex', gap: '24px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.62rem', color: '#b0b0b8' }}>NEW WAC PREVIEW</span>
             <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{newWAC.toFixed(2)}/{selectedExistingItem.unit}</span>
-            <span style={{ fontSize: '0.62rem', color: '#b0a799' }}>New stock: {newStock} {selectedExistingItem.unit}</span>
+            <span style={{ fontSize: '0.62rem', color: '#b0b0b8' }}>New stock: {newStock} {selectedExistingItem.unit}</span>
             {Math.abs(changePct) > 0.5 && (
               <span style={{ fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
                 color: changePct > 25 ? '#b8923a' : changePct > 10 ? '#d3bfa2' : '#ecdcb9',
@@ -12639,13 +12640,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
     {/* NAME with autocomplete */}
     <div style={{ position: 'relative' }}>
-      <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+      <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         NAME {selectedExistingItem && <span style={{ color: '#d3bfa2', display:'inline-flex', alignItems:'center', gap:'3px' }}><CheckCircle2 size={10} /> MATCHED</span>}
       </label>
       <input type="text" placeholder="e.g. Tomato" style={{
         width: '100%', padding: '10px 12px',
-        background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#1f1b17',
-        border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#463e34'}`,
+        background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#101012',
+        border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#313137'}`,
         color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box'
       }}
         value={newInventoryItem.itemName}
@@ -12666,8 +12667,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         onFocus={() => { if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) setShowSuggestions(true); }}
       />
       {showSuggestions && inventorySuggestions.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: '#2a2520', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '8px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
-          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid #403930' }}>EXISTING — CLICK TO RESTOCK</div>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '8px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid #2b2b30' }}>EXISTING — CLICK TO RESTOCK</div>
           {inventorySuggestions.map(item => {
             const wac = item.weightedAvgCost || item.costPrice || 0;
             const lastPrice = item.lastPurchasePrice || wac;
@@ -12678,18 +12679,18 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 setNewInventoryItem({ itemName: item.itemName, unit: item.unit, currentStock: '', minThreshold: item.minThreshold, costPrice: item.costPrice, purchasePrice: '', vendor: '' });
                 setShowSuggestions(false);
                 setInventorySuggestions([]);
-              }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #403930', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #2b2b30', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
                 <div>
                   <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff' }}>{item.itemName}</div>
-                  <div style={{ fontSize: '0.62rem', color: '#b0a799', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.62rem', color: '#b0b0b8', marginTop: '2px' }}>
                     {item.currentStock} {item.unit} · WAC ₹{wac.toFixed(2)}
                     {Math.abs(drift) > 0.5 && <span style={{ color: drift > 0 ? '#b8923a' : '#ecdcb9', marginLeft: '6px' }}>({drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(1)}% drift)</span>}
                   </div>
                 </div>
-                <span style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#b8923a' : '#b0a799', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(184,146,58,0.25)' : '#463e34'}` }}>
+                <span style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#b8923a' : '#b0b0b8', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(184,146,58,0.25)' : '#313137'}` }}>
                   {item.currentStock <= item.minThreshold ? 'LOW' : 'OK'}
                 </span>
               </div>
@@ -12701,11 +12702,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
     {/* QTY TO ADD */}
     <div>
-      <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+      <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         {selectedExistingItem ? 'QTY TO ADD' : 'STOCK'}
       </label>
       <input type="number" placeholder={selectedExistingItem ? `+ to ${selectedExistingItem.currentStock}` : '500'}
-        style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        style={{ width: '100%', padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.currentStock}
         onChange={e => setNewInventoryItem(p => ({ ...p, currentStock: e.target.value }))}
       />
@@ -12713,12 +12714,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
     {/* PURCHASE PRICE — replaces "cost/unit" in restock mode */}
     <div>
-      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#d3bfa2' : '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#d3bfa2' : '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         {selectedExistingItem ? 'BUY PRICE (₹/unit) *' : 'COST (₹/unit)'}
       </label>
       <input type="number" step="0.01"
         placeholder={selectedExistingItem ? `last: ₹${(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}` : '2.50'}
-        style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#463e34'}`, color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        style={{ width: '100%', padding: '10px 12px', background: '#101012', border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : '#313137'}`, color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={selectedExistingItem ? newInventoryItem.purchasePrice : newInventoryItem.costPrice}
         onChange={e => {
           if (selectedExistingItem) {
@@ -12733,9 +12734,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     {/* VENDOR (restock only) OR MIN THRESHOLD (new item) */}
     {selectedExistingItem ? (
       <div>
-        <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>VENDOR (optional)</label>
+        <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>VENDOR (optional)</label>
         <input type="text" placeholder="e.g. Rajesh Traders" list="vendor-name-list"
-          style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+          style={{ width: '100%', padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
           value={newInventoryItem.vendor || ''}
           onChange={e => setNewInventoryItem(p => ({ ...p, vendor: e.target.value }))}
         />
@@ -12746,16 +12747,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     ) : (
       <>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>MIN THRESHOLD</label>
+          <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>MIN THRESHOLD</label>
           <input type="number" placeholder="100"
-            style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
             value={newInventoryItem.minThreshold}
             onChange={e => setNewInventoryItem(p => ({ ...p, minThreshold: e.target.value }))}
           />
         </div>
         <div>
-          <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
-          <select style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
+          <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
+          <select style={{ width: '100%', padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
             value={newInventoryItem.unit}
             onChange={e => setNewInventoryItem(p => ({ ...p, unit: e.target.value }))}>
             {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
@@ -12766,12 +12767,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
     {/* EXPIRY DATE — FEFO tracking: alerts fire 2 days before this batch expires */}
     <div>
-      <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+      <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
         <CalendarClock size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
         BATCH EXPIRY (optional)
       </label>
       <input type="date" min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
-        style={{ width: '100%', padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+        style={{ width: '100%', padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
         value={newInventoryItem.expiryDate || ''}
         onChange={e => setNewInventoryItem(p => ({ ...p, expiryDate: e.target.value }))}
       />
@@ -12816,13 +12817,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           fetchManagementData();
         } catch { showNotif("Failed to add ingredient", "error"); }
         finally { setIsSubmittingRestock(false); }
-      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#1c1814', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: isSubmittingRestock ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isSubmittingRestock ? 0.55 : 1 }}>
+      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#0f0f11', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: isSubmittingRestock ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isSubmittingRestock ? 0.55 : 1 }}>
         {isSubmittingRestock ? 'SAVING…' : selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
       </button>
     </div>
   </div>
 
-  <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#968d80', fontWeight: '600' }}>
+  <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#92929a', fontWeight: '600' }}>
     {selectedExistingItem
       ? 'Enter the price you paid THIS time — WAC auto-recalculates weighted average across all batches.'
       : 'Type an ingredient name to see existing matches and restock with WAC calculation.'}
@@ -12832,7 +12833,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               <div style={styles.biCard}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: showVendorPanel ? '20px' : '0'}}>
                   <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'8px'}}>
-                    <Truck size={14} color="#d3bfa2" /> VENDORS <span style={{color:'#b0a799',fontWeight:'500'}}>({vendors.length})</span>
+                    <Truck size={14} color="#d3bfa2" /> VENDORS <span style={{color:'#b0b0b8',fontWeight:'500'}}>({vendors.length})</span>
                   </h4>
                   <button type="button" onClick={() => setShowVendorPanel(p => !p)}
                     style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px', borderRadius:'8px', border:'1px solid rgba(211,191,162,0.25)', background:'rgba(211,191,162,0.06)', color:'#d3bfa2', fontSize:'0.65rem', fontWeight:'900', cursor:'pointer' }}>
@@ -12846,29 +12847,29 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr 0.7fr auto', gap: '8px', marginBottom: '16px' }}>
                       <input placeholder="Vendor name *" value={newVendorDraft.name}
                         onChange={e => setNewVendorDraft(p => ({ ...p, name: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                        style={{ padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
                       <input placeholder="Contact person" value={newVendorDraft.contactPerson}
                         onChange={e => setNewVendorDraft(p => ({ ...p, contactPerson: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                        style={{ padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
                       <input placeholder="Phone" value={newVendorDraft.phone}
                         onChange={e => setNewVendorDraft(p => ({ ...p, phone: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                        style={{ padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
                       <select value={newVendorDraft.paymentTerms} onChange={e => setNewVendorDraft(p => ({ ...p, paymentTerms: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
+                        style={{ padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
                         {['COD', 'Net 7', 'Net 15', 'Net 30'].map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                       <input type="number" placeholder="Lead days" value={newVendorDraft.leadTimeDays}
                         onChange={e => setNewVendorDraft(p => ({ ...p, leadTimeDays: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
+                        style={{ padding: '10px 12px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
                       <button type="button" onClick={saveVendor}
-                        style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: '#d3bfa2', color: '#1c1814', fontSize: '0.68rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: '0.68rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         {editingVendorId ? 'UPDATE' : 'ADD'}
                       </button>
                     </div>
 
                     {/* Vendor list */}
                     {vendors.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '30px', color: '#968d80', fontSize: '0.75rem', fontWeight: '700' }}>
+                      <div style={{ textAlign: 'center', padding: '30px', color: '#92929a', fontSize: '0.75rem', fontWeight: '700' }}>
                         NO VENDORS YET — ADD ONE ABOVE
                       </div>
                     ) : (
@@ -12877,17 +12878,17 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                           const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
                           const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
                           return (
-                            <div key={v._id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: '#2a2520', border: '1px solid #403930' }}>
+                            <div key={v._id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: '#1a1a1d', border: '1px solid #2b2b30' }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{v.name}</div>
-                                <div style={{ fontSize: '0.6rem', color: '#b0a799', marginTop: '2px' }}>
+                                <div style={{ fontSize: '0.6rem', color: '#b0b0b8', marginTop: '2px' }}>
                                   {v.contactPerson && `${v.contactPerson} · `}{v.phone || 'no phone'} · {v.paymentTerms} · {v.leadTimeDays}d lead · {linkedCount} ingredient{linkedCount !== 1 ? 's' : ''} linked
                                 </div>
                               </div>
                               <button type="button" onClick={() => generatePurchaseOrderPDF(v)}
                                 title={dueCount === 0 ? 'Nothing due for reorder' : `${dueCount} item(s) due for reorder`}
                                 disabled={dueCount === 0}
-                                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${dueCount > 0 ? 'rgba(236,220,185,0.35)' : 'rgba(255,255,255,0.08)'}`, background: dueCount > 0 ? 'rgba(236,220,185,0.1)' : 'transparent', color: dueCount > 0 ? '#ecdcb9' : '#968d80', fontSize: '0.6rem', fontWeight: '900', cursor: dueCount === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${dueCount > 0 ? 'rgba(236,220,185,0.35)' : 'rgba(255,255,255,0.08)'}`, background: dueCount > 0 ? 'rgba(236,220,185,0.1)' : 'transparent', color: dueCount > 0 ? '#ecdcb9' : '#92929a', fontSize: '0.6rem', fontWeight: '900', cursor: dueCount === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
                                 <FileText size={11} /> PO {dueCount > 0 ? `(${dueCount})` : ''}
                               </button>
                               <button type="button" onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
@@ -12911,24 +12912,24 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               <div style={styles.biCard}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
                   <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem'}}>
-                    CURRENT STOCK LEDGER <span style={{color:'#b0a799',fontWeight:'500'}}>({inventory.filter(i=>i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).length} items)</span>
+                    CURRENT STOCK LEDGER <span style={{color:'#b0b0b8',fontWeight:'500'}}>({inventory.filter(i=>i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).length} items)</span>
                   </h4>
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#1f1b17',border:'1px solid #403930',borderRadius:'8px',padding:'8px 14px'}}>
-                    <Search size={13} color="#a59c8e"/>
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#101012',border:'1px solid #2b2b30',borderRadius:'8px',padding:'8px 14px'}}>
+                    <Search size={13} color="#a3a3ab"/>
                     <input type="text" placeholder="Search ingredient..." value={inventorySearchQuery}
                       onChange={e=>setInventorySearchQuery(e.target.value)}
                       style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'140px'}}/>
                   </div>
                 </div>
                 {inventory.length===0 ? (
-                  <div style={{textAlign:'center',padding:'50px',color:'#968d80',fontSize:'0.8rem',fontWeight:'700'}}>
+                  <div style={{textAlign:'center',padding:'50px',color:'#92929a',fontSize:'0.8rem',fontWeight:'700'}}>
                     NO INGREDIENTS ADDED YET — USE THE FORM ABOVE TO ADD YOUR FIRST ITEM
                   </div>
                 ) : (
                   <div style={{overflowX:'auto'}} className="custom-scroll">
 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
   <thead>
-    <tr style={{ fontSize: '0.58rem', color: '#a59c8e', borderBottom: '1px solid #463e34', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+    <tr style={{ fontSize: '0.58rem', color: '#a3a3ab', borderBottom: '1px solid #313137', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Ingredient</th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Unit</th>
       <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Current Stock</th>
@@ -12952,14 +12953,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         const isLow = item.currentStock <= item.minThreshold;
         const sv = Math.round(item.currentStock * item.costPrice);
         return (
-          <tr key={item._id} style={{ borderBottom: '1px solid #403930' }}>
+          <tr key={item._id} style={{ borderBottom: '1px solid #2b2b30' }}>
  
             {/* INGREDIENT NAME */}
             <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>
               {item.itemName}
               <div>
                 <select value={item.vendorId || ''} onChange={e => linkIngredientVendor(item._id, e.target.value)}
-                  style={{ marginTop: '4px', background: 'transparent', border: 'none', color: item.vendorId ? '#8a704d' : '#968d80', fontSize: '0.55rem', fontWeight: '700', outline: 'none', cursor: 'pointer', padding: 0 }}>
+                  style={{ marginTop: '4px', background: 'transparent', border: 'none', color: item.vendorId ? '#8a704d' : '#92929a', fontSize: '0.55rem', fontWeight: '700', outline: 'none', cursor: 'pointer', padding: 0 }}>
                   <option value="">+ link vendor</option>
                   {vendors.map(v => <option key={v._id} value={v._id}>{v.name}</option>)}
                 </select>
@@ -12978,7 +12979,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             </td>
  
             {/* UNIT */}
-            <td style={{ color: '#b0a799', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>
+            <td style={{ color: '#b0b0b8', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>
               {item.unit}
             </td>
  
@@ -12990,7 +12991,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   key={`${item._id}-stock-${item.currentStock}`}
                   defaultValue={Math.max(0, item.currentStock)}
                   title="Edit current stock level directly"
-                  style={{ width: '80px', background: '#1f1b17', border: `1px solid ${item.currentStock < 0 ? 'rgba(184,146,58,0.4)' : '#463e34'}`, color: item.currentStock < 0 ? '#b8923a' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
+                  style={{ width: '80px', background: '#101012', border: `1px solid ${item.currentStock < 0 ? 'rgba(184,146,58,0.4)' : '#313137'}`, color: item.currentStock < 0 ? '#b8923a' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
                   onBlur={async e => {
                     const raw = String(e.target.value).trim();
                     const val = Number(raw);
@@ -13019,7 +13020,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 key={`${item._id}-thresh-${item.minThreshold}`}
                 defaultValue={item.minThreshold}
                 title="Click to edit minimum threshold — saves on click-away"
-                style={{ width: '70px', background: '#1f1b17', border: '1px solid rgba(211,191,162,0.15)', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
+                style={{ width: '70px', background: '#101012', border: '1px solid rgba(211,191,162,0.15)', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
                 onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
                 onBlur={async e => {
                   e.target.style.borderColor = 'rgba(211,191,162,0.15)';
@@ -13042,16 +13043,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
     {/* WAC — editable */}
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <span style={{ position: 'absolute', left: '8px', color: '#b0a799', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
+      <span style={{ position: 'absolute', left: '8px', color: '#b0b0b8', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
       <input type="number" step="0.01"
         key={`${item._id}-wac-${item.weightedAvgCost || item.costPrice}`}
         defaultValue={(item.weightedAvgCost || item.costPrice || 0).toFixed(2)}
         title="Weighted Average Cost — auto-updated on every restock. Edit to manually correct."
-        style={{ width: '82px', paddingLeft: '18px', padding: '6px 10px 6px 18px', background: '#1f1b17', border: '1px solid rgba(211,191,162,0.15)', color: '#bab1a3', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
+        style={{ width: '82px', paddingLeft: '18px', padding: '6px 10px 6px 18px', background: '#101012', border: '1px solid rgba(211,191,162,0.15)', color: '#bcbcc3', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
         onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
         onBlur={async e => {
           e.target.style.borderColor = 'rgba(211,191,162,0.15)';
-          e.target.style.color = '#bab1a3';
+          e.target.style.color = '#bcbcc3';
           const rawW = String(e.target.value).trim();
           const val = Number(rawW);
           const current = item.weightedAvgCost || item.costPrice || 0;
@@ -13072,16 +13073,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       const drift = wac > 0 ? ((last - wac) / wac) * 100 : 0;
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ fontSize: '0.52rem', color: '#a59c8e' }}>last ₹{last.toFixed(2)}</span>
+          <span style={{ fontSize: '0.52rem', color: '#a3a3ab' }}>last ₹{last.toFixed(2)}</span>
           <span style={{ fontSize: '0.5rem', fontWeight: '900',
-            color: Math.abs(drift) > 25 ? '#b8923a' : Math.abs(drift) > 10 ? '#d3bfa2' : '#b0a799'
+            color: Math.abs(drift) > 25 ? '#b8923a' : Math.abs(drift) > 10 ? '#d3bfa2' : '#b0b0b8'
           }}>
             {drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(0)}%
           </span>
         </div>
       );
     })()}
-    <span style={{ fontSize: '0.5rem', color: '#968d80', letterSpacing: '0.5px' }}>WAC <SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /></span>
+    <span style={{ fontSize: '0.5rem', color: '#92929a', letterSpacing: '0.5px' }}>WAC <SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /></span>
   </div>
 </td>
  
@@ -13097,8 +13098,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     <span style={{
       fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
       background: isLow ? 'rgba(184,146,58,0.12)' : 'rgba(211,191,162,0.04)',
-      color: isLow ? '#b8923a' : '#a59c8e',
-      border: `1px solid ${isLow ? 'rgba(184,146,58,0.25)' : '#463e34'}`
+      color: isLow ? '#b8923a' : '#a3a3ab',
+      border: `1px solid ${isLow ? 'rgba(184,146,58,0.25)' : '#313137'}`
     }}>
       {isLow ? 'LOW STOCK' : 'OK'}
     </span>
@@ -13177,9 +13178,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           showNotif(`${item.itemName} removed`);
         }
       })}
-      style={{ background: 'transparent', border: '1px solid #463e34', color: '#a59c8e', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer' }}
+      style={{ background: 'transparent', border: '1px solid #313137', color: '#a3a3ab', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer' }}
       onMouseEnter={e => { e.currentTarget.style.color = '#b8923a'; e.currentTarget.style.borderColor = 'rgba(184,146,58,0.3)'; }}
-      onMouseLeave={e => { e.currentTarget.style.color = '#a59c8e'; e.currentTarget.style.borderColor = '#463e34'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = '#a3a3ab'; e.currentTarget.style.borderColor = '#313137'; }}
     >
       REMOVE
     </button>
@@ -13190,7 +13191,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       })}
   </tbody>
   <tfoot>
-    <tr style={{ borderTop: '2px solid #463e34' }}>
+    <tr style={{ borderTop: '2px solid #313137' }}>
       <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.65rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
       <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
         ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0).toLocaleString()}
@@ -13207,17 +13208,17 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         initial={false} animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'tween', duration: 0.25 }}
         onClick={e => e.stopPropagation()}
-        style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '420px', background: '#2a2520', borderLeft: '1px solid #403930', display: 'flex', flexDirection: 'column', zIndex: 9100 }}
+        style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '420px', background: '#1a1a1d', borderLeft: '1px solid #2b2b30', display: 'flex', flexDirection: 'column', zIndex: 9100 }}
       >
         {/* HEADER */}
-        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #403930', flexShrink: 0 }}>
+        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #2b2b30', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '0.58rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>PURCHASE LEDGER</div>
+              <div style={{ fontSize: '0.58rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>PURCHASE LEDGER</div>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>{purchaseHistoryItem.itemName}</h3>
               <div style={{ fontSize: '0.75rem', color: '#8a704d', marginTop: '3px' }}>{purchaseHistoryItem.unit}</div>
             </div>
-            <button type="button" onClick={() => setPurchaseHistoryItem(null)} style={{ background: '#312b25', border: '1px solid #463e34', color: '#b0a799', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
+            <button type="button" onClick={() => setPurchaseHistoryItem(null)} style={{ background: '#222226', border: '1px solid #313137', color: '#b0b0b8', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
               <X size={16} />
             </button>
           </div>
@@ -13230,8 +13231,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 { l: 'LAST BUY', v: `₹${(purchaseHistoryData.lastPurchasePrice || 0).toFixed(2)}` },
                 { l: 'STOCK VALUE', v: `₹${((purchaseHistoryData.currentStock || 0) * (purchaseHistoryData.weightedAvgCost || 0)).toFixed(0)}` },
               ].map(s => (
-                <div key={s.l} style={{ background: '#2a2520', padding: '10px', borderRadius: '8px', border: '1px solid #463e34' }}>
-                  <div style={{ fontSize: '0.52rem', color: '#a59c8e', fontWeight: '900', marginBottom: '3px' }}>{s.l}</div>
+                <div key={s.l} style={{ background: '#1a1a1d', padding: '10px', borderRadius: '8px', border: '1px solid #313137' }}>
+                  <div style={{ fontSize: '0.52rem', color: '#a3a3ab', fontWeight: '900', marginBottom: '3px' }}>{s.l}</div>
                   <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>{s.v}</div>
                 </div>
               ))}
@@ -13242,15 +13243,15 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* HISTORY LIST */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 40px' }} className="custom-scroll">
           {purchaseHistoryLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#968d80', fontSize: '0.8rem' }}>LOADING...</div>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#92929a', fontSize: '0.8rem' }}>LOADING...</div>
           ) : !purchaseHistoryData?.purchaseHistory?.length ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#8d8477', fontSize: '0.8rem', fontWeight: '700' }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#86868e', fontSize: '0.8rem', fontWeight: '700' }}>
               NO PURCHASE HISTORY YET<br/>
-              <span style={{ fontSize: '0.65rem', color: '#1c1814', marginTop: '8px', display: 'block' }}>History recorded from next restock</span>
+              <span style={{ fontSize: '0.65rem', color: '#0f0f11', marginTop: '8px', display: 'block' }}>History recorded from next restock</span>
             </div>
           ) : (
             <>
-              <div style={{ fontSize: '0.58rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>
+              <div style={{ fontSize: '0.58rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>
                 {purchaseHistoryData.purchaseHistory.length} PURCHASE{purchaseHistoryData.purchaseHistory.length > 1 ? 'S' : ''} RECORDED
               </div>
               {purchaseHistoryData.purchaseHistory.map((entry, idx) => {
@@ -13259,33 +13260,33 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   : 0;
                 const isFirst = idx === purchaseHistoryData.purchaseHistory.length - 1;
                 return (
-                  <div key={idx} style={{ padding: '16px', background: '#2a2520', border: '1px solid #403930', borderRadius: '12px', marginBottom: '10px' }}>
+                  <div key={idx} style={{ padding: '16px', background: '#1a1a1d', border: '1px solid #2b2b30', borderRadius: '12px', marginBottom: '10px' }}>
                     {/* DATE + VENDOR */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                       <div>
                         <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>
                           {new Date(entry.purchaseDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
                         </div>
-                        {entry.vendor && <div style={{ fontSize: '0.65rem', color: '#b0a799', marginTop: '2px' }}>{entry.vendor}</div>}
-                        {entry.batchId && <div style={{ fontSize: '0.58rem', color: '#968d80', marginTop: '1px' }}>Batch: {entry.batchId}</div>}
+                        {entry.vendor && <div style={{ fontSize: '0.65rem', color: '#b0b0b8', marginTop: '2px' }}>{entry.vendor}</div>}
+                        {entry.batchId && <div style={{ fontSize: '0.58rem', color: '#92929a', marginTop: '1px' }}>Batch: {entry.batchId}</div>}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.unitPrice?.toFixed(2)}/{purchaseHistoryItem.unit}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#a59c8e', marginTop: '2px' }}>× {entry.qty} {purchaseHistoryItem.unit} = ₹{entry.totalCost?.toFixed(0)}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#a3a3ab', marginTop: '2px' }}>× {entry.qty} {purchaseHistoryItem.unit} = ₹{entry.totalCost?.toFixed(0)}</div>
                       </div>
                     </div>
                     {/* WAC MOVEMENT */}
                     {!isFirst && entry.wacBefore > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: '#1f1b17', borderRadius: '8px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '0.62rem', color: '#a59c8e' }}>WAC</span>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#bab1a3' }}>₹{entry.wacBefore?.toFixed(2)}</span>
-                        <span style={{ fontSize: '0.6rem', color: '#968d80' }}>→</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: '#101012', borderRadius: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.62rem', color: '#a3a3ab' }}>WAC</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#bcbcc3' }}>₹{entry.wacBefore?.toFixed(2)}</span>
+                        <span style={{ fontSize: '0.6rem', color: '#92929a' }}>→</span>
                         <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.wacAfter?.toFixed(2)}</span>
                         {Math.abs(driftPct) > 0.5 && (
                           <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px',
-                            color: driftPct > 25 ? '#b8923a' : driftPct > 10 ? '#d3bfa2' : driftPct < -10 ? '#ecdcb9' : '#b0a799',
+                            color: driftPct > 25 ? '#b8923a' : driftPct > 10 ? '#d3bfa2' : driftPct < -10 ? '#ecdcb9' : '#b0b0b8',
                             background: driftPct > 25 ? 'rgba(184,146,58,0.1)' : driftPct > 10 ? 'rgba(211,191,162,0.06)' : driftPct < -10 ? 'rgba(236,220,185,0.06)' : 'transparent',
-                            border: `1px solid ${driftPct > 25 ? 'rgba(184,146,58,0.3)' : driftPct > 10 ? 'rgba(211,191,162,0.15)' : driftPct < -10 ? 'rgba(236,220,185,0.2)' : '#463e34'}`
+                            border: `1px solid ${driftPct > 25 ? 'rgba(184,146,58,0.3)' : driftPct > 10 ? 'rgba(211,191,162,0.15)' : driftPct < -10 ? 'rgba(236,220,185,0.2)' : '#313137'}`
                           }}>
                             {driftPct > 0 ? '▲' : '▼'} {Math.abs(driftPct).toFixed(1)}%
                           </span>
@@ -13293,7 +13294,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       </div>
                     )}
                     {/* STOCK BEFORE */}
-                    <div style={{ fontSize: '0.58rem', color: '#968d80' }}>
+                    <div style={{ fontSize: '0.58rem', color: '#92929a' }}>
                       Stock before: {entry.stockBefore} → {(entry.stockBefore || 0) + (entry.qty || 0)} {purchaseHistoryItem.unit}
                     </div>
                   </div>
@@ -13348,8 +13349,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
         return (
           <div key={item._id} style={{
-            background: '#1f1b17',
-            border: `1px solid ${isUrg ? 'rgba(184,146,58,0.4)' : needsOrder ? 'rgba(184,146,58,0.2)' : '#312b25'}`,
+            background: '#101012',
+            border: `1px solid ${isUrg ? 'rgba(184,146,58,0.4)' : needsOrder ? 'rgba(184,146,58,0.2)' : '#222226'}`,
             padding: '14px', borderRadius: '12px', position: 'relative',
             boxShadow: isUrg ? '0 0 12px rgba(184,146,58,0.08)' : 'none'
           }}>
@@ -13368,26 +13369,26 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 <span style={{
                   fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
                   background: isUrg ? 'rgba(184,146,58,0.18)' : isWrn ? 'rgba(184,146,58,0.08)' : 'rgba(211,191,162,0.04)',
-                  color: isUrg ? '#b8923a' : isWrn ? '#d3bfa2' : '#b0a799'
+                  color: isUrg ? '#b8923a' : isWrn ? '#d3bfa2' : '#b0b0b8'
                 }}>
                   {item.daysRemaining}d left
                 </span>
               ) : (
-                <span style={{ fontSize: '0.58rem', color: '#968d80' }}>No usage data</span>
+                <span style={{ fontSize: '0.58rem', color: '#92929a' }}>No usage data</span>
               )}
             </div>
 
             {/* Stock bar */}
             <div style={{ marginBottom: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.6rem', color: '#a59c8e' }}>{item.currentStock} {item.unit} remaining</span>
-                <span style={{ fontSize: '0.6rem', color: '#968d80' }}>min: {item.minThreshold} {item.unit}</span>
+                <span style={{ fontSize: '0.6rem', color: '#a3a3ab' }}>{item.currentStock} {item.unit} remaining</span>
+                <span style={{ fontSize: '0.6rem', color: '#92929a' }}>min: {item.minThreshold} {item.unit}</span>
               </div>
-              <div style={{ height: '3px', background: '#312b25', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '3px', background: '#222226', borderRadius: '2px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
                   width: `${Math.min(100, item.minThreshold > 0 ? Math.round((item.currentStock / (item.minThreshold * 3)) * 100) : 50)}%`,
-                  background: isUrg ? '#b8923a' : isWrn ? '#8a704d' : '#3a342d',
+                  background: isUrg ? '#b8923a' : isWrn ? '#8a704d' : '#2a2a2f',
                   borderRadius: '2px', transition: 'width 0.5s'
                 }}/>
               </div>
@@ -13395,7 +13396,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
             {/* Usage rate */}
             {item.avgDailyUsage > 0 && (
-              <div style={{ fontSize: '0.58rem', color: '#b0a799', marginBottom: '8px' }}>
+              <div style={{ fontSize: '0.58rem', color: '#b0b0b8', marginBottom: '8px' }}>
                 Avg usage: {item.avgDailyUsage} {item.unit}/day
                 {suggestedQty > 0 && <span style={{ color: '#8a704d', marginLeft: '6px' }}>· Reorder: ~{suggestedQty} {item.unit}</span>}
               </div>
@@ -13403,9 +13404,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
             {/* Last vendor */}
             {lastVendor && (
-              <div style={{ fontSize: '0.58rem', color: '#a59c8e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Truck size={8} color="#b0a799"/> {lastVendor}
-                {lastPrice > 0 && <span style={{ color: '#b0a799' }}>· ₹{lastPrice.toFixed(2)}/{item.unit}</span>}
+              <div style={{ fontSize: '0.58rem', color: '#a3a3ab', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Truck size={8} color="#b0b0b8"/> {lastVendor}
+                {lastPrice > 0 && <span style={{ color: '#b0b0b8' }}>· ₹{lastPrice.toFixed(2)}/{item.unit}</span>}
               </div>
             )}
 
@@ -13539,7 +13540,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     : [{ inventoryId: '', quantityUsed: '' }]);
                 }
               }}
-              style={{ width: '100%', padding: '11px 14px', background: '#2a2520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '11px 14px', background: '#1a1a1d', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
               <option value="">— Select a dish —</option>
               {menuItems.map(m => (
                 <option key={m._id} value={m._id}>
@@ -13567,7 +13568,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             const marginColor = marginPct >= 55 ? '#d3bfa2' : marginPct >= 35 ? '#c8a84b' : '#e29a58';
 
             return (
-              <div style={{ background: '#2a2520', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', overflow: 'hidden' }}>
+              <div style={{ background: '#1a1a1d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', overflow: 'hidden' }}>
 
                 {/* Dish name bar */}
                 <div style={{ padding: '13px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(211,191,162,0.04)' }}>
@@ -13685,7 +13686,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       <select
                         value={row.inventoryId}
                         onChange={e => { const u = [...recipeIngredientRows]; u[idx].inventoryId = e.target.value; setRecipeIngredientRows(u); }}
-                        style={{ width: '100%', padding: '9px 11px', background: '#2a2520', border: `1px solid ${isZero ? 'rgba(200,168,75,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#c8a84b' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
+                        style={{ width: '100%', padding: '9px 11px', background: '#1a1a1d', border: `1px solid ${isZero ? 'rgba(200,168,75,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#c8a84b' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
                         <option value="">— Select —</option>
                         {inventory.map(i => (
                           <option key={i._id} value={i._id}>
@@ -13707,7 +13708,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                         type="number" placeholder="Qty" min="0" step="0.01"
                         value={row.quantityUsed}
                         onChange={e => { const u = [...recipeIngredientRows]; u[idx].quantityUsed = e.target.value; setRecipeIngredientRows(u); }}
-                        style={{ padding: inv ? '9px 40px 9px 10px' : '9px 10px', background: '#2a2520', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                        style={{ padding: inv ? '9px 40px 9px 10px' : '9px 10px', background: '#1a1a1d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }} />
                       {inv && (
                         <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.6rem', fontWeight: '800', color: 'rgba(211,191,162,0.5)', pointerEvents: 'none' }}>
                           {inv.unit}
@@ -13787,7 +13788,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   fetchManagementData();
                 } catch (err) { showNotif(err.response?.data?.error || 'Failed to save recipe', 'error'); }
               }}
-              style={{ flex: 2, padding: '11px', borderRadius: '10px', border: 'none', background: activeRecipeItemId ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : 'rgba(255,255,255,0.04)', color: activeRecipeItemId ? '#1c1814' : 'rgba(255,255,255,0.2)', fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px', cursor: activeRecipeItemId ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.2s' }}>
+              style={{ flex: 2, padding: '11px', borderRadius: '10px', border: 'none', background: activeRecipeItemId ? 'linear-gradient(135deg, #d3bfa2, #bda88a)' : 'rgba(255,255,255,0.04)', color: activeRecipeItemId ? '#0f0f11' : 'rgba(255,255,255,0.2)', fontSize: '0.62rem', fontWeight: '900', letterSpacing: '1px', cursor: activeRecipeItemId ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.2s' }}>
               <PackageCheck size={14} strokeWidth={2} />
               SAVE RECIPE
             </button>
@@ -13810,7 +13811,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             · {recipes.filter(r => r.ingredients?.length > 0).length} / {menuItems.length} mapped
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: '#2a2520', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: '#1a1a1d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px' }}>
           <Search size={12} color="rgba(255,255,255,0.3)" strokeWidth={1.8} />
           <input type="text" placeholder="Search dish..." value={recipeSearchQuery || ''}
             onChange={e => setRecipeSearchQuery(e.target.value)}
@@ -13855,7 +13856,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 style={{
-                  background: isActive ? 'rgba(211,191,162,0.07)' : hasRecipe ? 'rgba(255,255,255,0.03)' : '#1f1b17',
+                  background: isActive ? 'rgba(211,191,162,0.07)' : hasRecipe ? 'rgba(255,255,255,0.03)' : '#101012',
                   border: `1px solid ${isActive ? 'rgba(211,191,162,0.4)' : hasRecipe ? 'rgba(211,191,162,0.15)' : 'rgba(255,255,255,0.07)'}`,
                   borderRadius: '13px', padding: '15px', cursor: 'pointer',
                   transition: 'all 0.2s', position: 'relative'
@@ -13961,11 +13962,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     style={{display:'flex',flexDirection:'column',gap:'24px',paddingBottom:'100px',width:'100%'}}>
 
     {/* Header */}
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'20px',borderBottom:'1px solid #403930'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',paddingBottom:'20px',borderBottom:'1px solid #2b2b30'}}>
       <div>
-        <div style={{fontSize:'0.58rem',color:'#b0a799',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>BOOKING MANAGEMENT</div>
+        <div style={{fontSize:'0.58rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>BOOKING MANAGEMENT</div>
         <h2 style={{margin:0,fontSize:'1.2rem',fontWeight:'900',color:'#fff'}}>RESERVATION CALENDAR</h2>
-        <p style={{margin:'5px 0 0',fontSize:'0.7rem',color:'#a59c8e',lineHeight:'1.5'}}>
+        <p style={{margin:'5px 0 0',fontSize:'0.7rem',color:'#a3a3ab',lineHeight:'1.5'}}>
           Manage advance bookings, table assignments and guest pre-orders.
         </p>
       </div>
@@ -13975,21 +13976,21 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           const d = new Date(reservationViewDate);
           d.setUTCDate(d.getUTCDate() - 1);
           setReservationViewDate(d.toISOString().split('T')[0]);
-        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#a59c8e';}}>
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#a3a3ab';}}>
           <ChevronLeft size={14}/>
         </button>
         <input type="date" value={reservationViewDate}
           onChange={e => setReservationViewDate(e.target.value)}
-          style={{padding:'8px 12px',background:'#1f1b17',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.75rem',fontWeight:'900',outline:'none',colorScheme:'dark',cursor:'pointer'}}/>
+          style={{padding:'8px 12px',background:'#101012',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.75rem',fontWeight:'900',outline:'none',colorScheme:'dark',cursor:'pointer'}}/>
         <button type="button" onClick={() => {
           const d = new Date(reservationViewDate);
           d.setUTCDate(d.getUTCDate() + 1);
           setReservationViewDate(d.toISOString().split('T')[0]);
-        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+        }} style={{width:'32px',height:'32px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.3)';e.currentTarget.style.color='#d3bfa2';}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#a59c8e';}}>
+          onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#a3a3ab';}}>
           <ChevronRight size={14}/>
         </button>
         <button type="button" onClick={fetchCounterQueue}
@@ -14007,16 +14008,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         { l:'PENDING',         v: reservationEntries.filter(r=>r.status==='pending').length,            c:'#8a704d' },
         { l:'TOTAL COVERS',    v: reservationEntries.filter(r=>!['cancelled','no-show'].includes(r.status)).reduce((a,r)=>a+(r.partySize||0),0), c:'#fff' },
       ].map(s=>(
-        <div key={s.l} style={{background:'#2a2520',border:'1px solid #463e34',borderRadius:'14px',padding:'16px'}}>
-          <div style={{fontSize:'0.52rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'1px',marginBottom:'6px'}}>{s.l}</div>
+        <div key={s.l} style={{background:'#1a1a1d',border:'1px solid #313137',borderRadius:'14px',padding:'16px'}}>
+          <div style={{fontSize:'0.52rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'1px',marginBottom:'6px'}}>{s.l}</div>
           <div style={{fontSize:'1.6rem',fontWeight:'900',color:s.c}}>{s.v}</div>
         </div>
       ))}
     </div>
 
     {/* Timeline — hourly slots */}
-    <div style={{background:'#2a2520',border:'1px solid rgba(211,191,162,0.07)',borderRadius:'20px',overflow:'hidden'}}>
-      <div style={{padding:'16px 20px',borderBottom:'1px solid #403930',background:'#2a2520',display:'flex',alignItems:'center',gap:'10px'}}>
+    <div style={{background:'#1a1a1d',border:'1px solid rgba(211,191,162,0.07)',borderRadius:'20px',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid #2b2b30',background:'#1a1a1d',display:'flex',alignItems:'center',gap:'10px'}}>
         <CalendarClock size={16} color="#d3bfa2"/>
         <span style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>
           {new Date(reservationViewDate).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'long',day:'numeric',month:'long',year:'numeric'})}
@@ -14036,7 +14037,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             <div key={hour} style={{
               display:'flex',gap:'14px',
               paddingBottom:'14px',marginBottom:'14px',
-              borderBottom:'1px solid #403930',
+              borderBottom:'1px solid #2b2b30',
               background: isCurrentHour ? 'rgba(211,191,162,0.02)' : 'transparent',
               borderRadius: isCurrentHour ? '8px' : '0',
               padding: isCurrentHour ? '8px' : '0 0 14px 0'
@@ -14045,7 +14046,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               <div style={{
                 minWidth:'70px',textAlign:'right',
                 fontSize:'0.65rem',fontWeight:'900',
-                color: isCurrentHour ? '#d3bfa2' : '#968d80',
+                color: isCurrentHour ? '#d3bfa2' : '#92929a',
                 paddingTop:'2px',flexShrink:0
               }}>
                 {fmt(hour)}
@@ -14057,15 +14058,15 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               {/* Slot content */}
               <div style={{flex:1,display:'flex',flexDirection:'column',gap:'6px'}}>
                 {slotEntries.length === 0 ? (
-                  <div style={{height:'32px',border:'1px dashed #403930',borderRadius:'8px',display:'flex',alignItems:'center',paddingLeft:'12px'}}>
-                    <span style={{fontSize:'0.58rem',color:'#8d8477',fontWeight:'700'}}>Available</span>
+                  <div style={{height:'32px',border:'1px dashed #2b2b30',borderRadius:'8px',display:'flex',alignItems:'center',paddingLeft:'12px'}}>
+                    <span style={{fontSize:'0.58rem',color:'#86868e',fontWeight:'700'}}>Available</span>
                   </div>
                 ) : slotEntries.map(entry => {
                   const sc = {
                     pending:   {bg:'rgba(211,191,162,0.05)',border:'rgba(211,191,162,0.12)',text:'#8a704d'},
                     confirmed: {bg:'rgba(211,191,162,0.1)', border:'rgba(211,191,162,0.3)', text:'#d3bfa2'},
-                    seated:    {bg:'rgba(211,191,162,0.03)',border:'#463e34',               text:'#a59c8e'},
-                    cancelled: {bg:'#2a2520',               border:'#463e34',               text:'#968d80'},
+                    seated:    {bg:'rgba(211,191,162,0.03)',border:'#313137',               text:'#a3a3ab'},
+                    cancelled: {bg:'#1a1a1d',               border:'#313137',               text:'#92929a'},
                   }[entry.status] || {bg:'rgba(211,191,162,0.05)',border:'rgba(211,191,162,0.12)',text:'#8a704d'};
                   return (
                     <div key={entry._id} style={{
@@ -14078,8 +14079,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                         <div style={{fontWeight:'900',fontSize:'0.82rem',color:'#fff'}}>{entry.customerName}</div>
                         <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                          <Users size={10} color="#a59c8e"/>
-                          <span style={{fontSize:'0.6rem',color:'#a59c8e',fontWeight:'700'}}>{entry.partySize}p</span>
+                          <Users size={10} color="#a3a3ab"/>
+                          <span style={{fontSize:'0.6rem',color:'#a3a3ab',fontWeight:'700'}}>{entry.partySize}p</span>
                         </div>
                         {entry.tablePreference && (
                           <span style={{fontSize:'0.58rem',padding:'2px 7px',background:'rgba(211,191,162,0.06)',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'4px',color:'#8a704d',fontWeight:'800'}}>
@@ -14096,7 +14097,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                             await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed', tenantId});
                             fetchCounterQueue();
                             showNotif(`${entry.customerName} confirmed`);
-                          }} style={{padding:'4px 10px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#1c1814',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
+                          }} style={{padding:'4px 10px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#0f0f11',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
                             CONFIRM
                           </button>
                         )}
@@ -14107,9 +14108,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                           </button>
                         )}
                         <button type="button" onClick={()=>setReservationEditModal(entry)}
-                          style={{width:'26px',height:'26px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'6px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem'}}
+                          style={{width:'26px',height:'26px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'6px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem'}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#a59c8e';}}>
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#a3a3ab';}}>
                           <SquarePen size={12} />
                         </button>
                       </div>
@@ -14136,32 +14137,32 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
   <AnimatePresence>
     {extraItemEditModal&&(
       <motion.div initial={false} animate={{opacity:1}}
-        style={{position:'fixed',inset:0,background:'rgba(24,19,15,0.7)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+        style={{position:'fixed',inset:0,background:'rgba(8,8,10,0.7)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
         onClick={e=>{if(e.target===e.currentTarget)setExtraItemEditModal(null);}}>
         <motion.div initial={false} animate={{scale:1,opacity:1}}
-          style={{background:'#2a2520',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.35)',borderRadius:'20px',padding:'28px',width:'100%',maxWidth:'540px',maxHeight:'88vh',overflowY:'auto'}}
+          style={{background:'#1a1a1d',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.35)',borderRadius:'20px',padding:'28px',width:'100%',maxWidth:'540px',maxHeight:'88vh',overflowY:'auto'}}
           className="custom-scroll">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'24px'}}>
             <div>
               <h3 style={{margin:0,fontSize:'0.95rem',fontWeight:'900',color:'#d3bfa2'}}>EDIT ITEM</h3>
-              <p style={{margin:'3px 0 0',fontSize:'0.62rem',color:'#a59c8e'}}>{extraItemEditModal.name}</p>
+              <p style={{margin:'3px 0 0',fontSize:'0.62rem',color:'#a3a3ab'}}>{extraItemEditModal.name}</p>
             </div>
             <button type="button" onClick={()=>setExtraItemEditModal(null)}
-              style={{background:'transparent',border:'1px solid #463e34',color:'#a59c8e',width:'30px',height:'30px',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              style={{background:'transparent',border:'1px solid #313137',color:'#a3a3ab',width:'30px',height:'30px',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
               <X size={13}/>
             </button>
           </div>
  
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'14px'}}>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Item Name *</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Item Name *</div>
               <input value={extraItemEditData.name||''} onChange={e=>setExtraItemEditData(p=>({...p,name:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
             </div>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Category</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Category</div>
               <select value={extraItemEditData.category||'Cold Drinks'} onChange={e=>setExtraItemEditData(p=>({...p,category:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
                 {['Cold Drinks','Ice Cream','Packaged Snacks','Juices','Mineral Water','Tobacco','Dairy','Sweets','Other'].map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -14169,14 +14170,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
  
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'14px'}}>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Sell Price (₹) *</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Sell Price (₹) *</div>
               <input type="number" value={extraItemEditData.price??''} onChange={e=>setExtraItemEditData(p=>({...p,price:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}/>
             </div>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Cost Price (₹)</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Cost Price (₹)</div>
               <input type="number" value={extraItemEditData.costPrice??''} onChange={e=>setExtraItemEditData(p=>({...p,costPrice:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.9rem',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.9rem',outline:'none',boxSizing:'border-box'}}/>
               {extraItemEditData.price>0&&extraItemEditData.costPrice!==''&&(
                 <div style={{fontSize:'0.58rem',color:'#ecdcb9',marginTop:'4px',fontWeight:'700'}}>
                   Margin: {Math.round(((Number(extraItemEditData.price)-Number(extraItemEditData.costPrice))/Number(extraItemEditData.price))*100)}%
@@ -14187,39 +14188,39 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
  
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'12px',marginBottom:'14px'}}>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Unit</div>
               <select value={extraItemEditData.unit||'piece'} onChange={e=>setExtraItemEditData(p=>({...p,unit:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
                 {['piece','bottle','can','pack','cup','cone','bar','pouch','litre','ml'].map(u=><option key={u} value={u}>{u}</option>)}
               </select>
             </div>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Current Stock</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Current Stock</div>
               <input type="number" value={extraItemEditData.currentStock??''} onChange={e=>setExtraItemEditData(p=>({...p,currentStock:e.target.value}))}
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
             </div>
             <div>
-              <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Alert At</div>
+              <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Alert At</div>
               <input type="number" value={extraItemEditData.lowStockThreshold??''} onChange={e=>setExtraItemEditData(p=>({...p,lowStockThreshold:e.target.value}))}
                 placeholder="e.g. 5"
-                style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
+                style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}/>
             </div>
           </div>
  
           <div style={{marginBottom:'16px'}}>
-            <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Description</div>
+            <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Description</div>
             <input value={extraItemEditData.description||''} onChange={e=>setExtraItemEditData(p=>({...p,description:e.target.value}))}
               placeholder="Optional short description"
-              style={{width:'100%',padding:'10px 12px',background:'#312b25',border:'1px solid #463e34',color:'#888',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'10px 12px',background:'#222226',border:'1px solid #313137',color:'#888',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}/>
           </div>
  
           <div onClick={()=>setExtraItemEditData(p=>({...p,isAvailable:!p.isAvailable}))}
-            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:extraItemEditData.isAvailable?'rgba(236,220,185,0.04)':'#2a2520',border:`1px solid ${extraItemEditData.isAvailable?'rgba(236,220,185,0.18)':'#463e34'}`,borderRadius:'10px',cursor:'pointer',marginBottom:'20px',transition:'all 0.15s'}}>
-            <span style={{fontSize:'0.68rem',fontWeight:'800',color:extraItemEditData.isAvailable?'#ecdcb9':'#968d80'}}>
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:extraItemEditData.isAvailable?'rgba(236,220,185,0.04)':'#1a1a1d',border:`1px solid ${extraItemEditData.isAvailable?'rgba(236,220,185,0.18)':'#313137'}`,borderRadius:'10px',cursor:'pointer',marginBottom:'20px',transition:'all 0.15s'}}>
+            <span style={{fontSize:'0.68rem',fontWeight:'800',color:extraItemEditData.isAvailable?'#ecdcb9':'#92929a'}}>
               {extraItemEditData.isAvailable?'Visible on menu':'Hidden from menu'}
             </span>
-            <div style={{width:'36px',height:'19px',borderRadius:'10px',position:'relative',background:extraItemEditData.isAvailable?'#ecdcb9':'#3a342d',transition:'background 0.2s',flexShrink:0}}>
-              <div style={{position:'absolute',top:'3px',left:extraItemEditData.isAvailable?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:extraItemEditData.isAvailable?'#1f1b17':'#444',transition:'left 0.2s'}}/>
+            <div style={{width:'36px',height:'19px',borderRadius:'10px',position:'relative',background:extraItemEditData.isAvailable?'#ecdcb9':'#2a2a2f',transition:'background 0.2s',flexShrink:0}}>
+              <div style={{position:'absolute',top:'3px',left:extraItemEditData.isAvailable?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:extraItemEditData.isAvailable?'#101012':'#444',transition:'left 0.2s'}}/>
             </div>
           </div>
  
@@ -14240,11 +14241,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 setExtraItems(prev=>prev.map(i=>(i._id===res.data.item._id?res.data.item:i)));
                 showNotif(`${payload.name} — updated`);setExtraItemEditModal(null);
               } catch(err){showNotif(err.response?.data?.error||'Update failed','error');}
-            }} style={{flex:1,padding:'12px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#1c1814',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
+            }} style={{flex:1,padding:'12px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#0f0f11',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer',letterSpacing:'0.5px'}}>
               SAVE CHANGES
             </button>
             <button type="button" onClick={()=>setExtraItemEditModal(null)}
-              style={{padding:'12px 20px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
+              style={{padding:'12px 20px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'10px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
               CANCEL
             </button>
           </div>
@@ -14257,16 +14258,16 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
   <AnimatePresence>
     {extraRestockModal&&(
       <motion.div initial={false} animate={{opacity:1}}
-        style={{position:'fixed',inset:0,background:'rgba(24,19,15,0.7)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+        style={{position:'fixed',inset:0,background:'rgba(8,8,10,0.7)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
         onClick={e=>{if(e.target===e.currentTarget){setExtraRestockModal(null);setExtraRestockQty('');}}}>
         <motion.div initial={false} animate={{scale:1,opacity:1}}
-          style={{background:'#2a2520',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.3)',borderRadius:'16px',padding:'26px',width:'100%',maxWidth:'340px'}}>
+          style={{background:'#1a1a1d',border:'1px solid rgba(211,191,162,0.12)',borderTop:'2px solid rgba(211,191,162,0.3)',borderRadius:'16px',padding:'26px',width:'100%',maxWidth:'340px'}}>
           <div style={{marginBottom:'20px'}}>
             <h3 style={{margin:'0 0 4px',fontSize:'0.9rem',fontWeight:'900',color:'#d3bfa2'}}>RESTOCK</h3>
-            <p style={{margin:0,fontSize:'0.62rem',color:'#a59c8e',fontWeight:'600'}}>{extraRestockModal.name} · current: {extraRestockModal.currentStock} {extraRestockModal.unit}s</p>
+            <p style={{margin:0,fontSize:'0.62rem',color:'#a3a3ab',fontWeight:'600'}}>{extraRestockModal.name} · current: {extraRestockModal.currentStock} {extraRestockModal.unit}s</p>
           </div>
           <div style={{marginBottom:'18px'}}>
-            <div style={{fontSize:'0.5rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Quantity to Add</div>
+            <div style={{fontSize:'0.5rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'8px',textTransform:'uppercase'}}>Quantity to Add</div>
             <input type="number" min="1"
               value={extraRestockQty} onChange={e=>setExtraRestockQty(e.target.value)}
               onKeyDown={e=>{
@@ -14275,20 +14276,20 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 }
               }}
               placeholder="e.g. 24"
-              style={{width:'100%',padding:'14px',background:'#312b25',border:'1px solid rgba(211,191,162,0.18)',color:'#d3bfa2',borderRadius:'8px',fontSize:'1.2rem',fontWeight:'900',outline:'none',boxSizing:'border-box',textAlign:'center'}}/>
+              style={{width:'100%',padding:'14px',background:'#222226',border:'1px solid rgba(211,191,162,0.18)',color:'#d3bfa2',borderRadius:'8px',fontSize:'1.2rem',fontWeight:'900',outline:'none',boxSizing:'border-box',textAlign:'center'}}/>
             {extraRestockQty&&Number(extraRestockQty)>0&&(
-              <div style={{fontSize:'0.62rem',color:'#b0a799',marginTop:'7px',textAlign:'center'}}>
+              <div style={{fontSize:'0.62rem',color:'#b0b0b8',marginTop:'7px',textAlign:'center'}}>
                 New total: <span style={{color:'#d3bfa2',fontWeight:'800'}}>{extraRestockModal.currentStock+Number(extraRestockQty)} {extraRestockModal.unit}s</span>
               </div>
             )}
           </div>
           <div style={{display:'flex',gap:'8px'}}>
             <button type="button" disabled={isSubmittingExtraRestock} onClick={submitExtraRestock}
-              style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#1c1814',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:isSubmittingExtraRestock?'not-allowed':'pointer',letterSpacing:'0.5px',opacity:isSubmittingExtraRestock?0.55:1}}>
+              style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#0f0f11',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:isSubmittingExtraRestock?'not-allowed':'pointer',letterSpacing:'0.5px',opacity:isSubmittingExtraRestock?0.55:1}}>
               {isSubmittingExtraRestock ? 'SAVING…' : '+ ADD STOCK'}
             </button>
             <button type="button" onClick={()=>{setExtraRestockModal(null);setExtraRestockQty('');}}
-              style={{padding:'11px 16px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
+              style={{padding:'11px 16px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'8px',fontSize:'0.72rem',fontWeight:'900',cursor:'pointer'}}>
               CANCEL
             </button>
           </div>
@@ -14302,12 +14303,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     {[
       {l:'Total Items',v:extraItems.length,c:'#d3bfa2',icon:<Package size={14}/>},
       {l:'Available',v:extraItems.filter(i=>i.isAvailable).length,c:'#ecdcb9',icon:<CheckCircle2 size={14}/>},
-      {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#b0a799',icon:<EyeOff size={14}/>},
+      {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#b0b0b8',icon:<EyeOff size={14}/>},
       {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:'#b8923a',icon:<AlertTriangle size={14}/>},
       {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||i.price)),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
     ].map((s,i)=>(
       <div key={i} style={{
-        background:'linear-gradient(165deg, #2a2520 0%, #2a2520 100%)',border:'1px solid rgba(255,255,255,0.06)',
+        background:'linear-gradient(165deg, #1a1a1d 0%, #1a1a1d 100%)',border:'1px solid rgba(255,255,255,0.06)',
         borderTop:`2px solid ${s.c}33`,
         borderRadius:'13px',padding:'16px 18px',
         display:'flex',alignItems:'center',gap:'12px',
@@ -14320,7 +14321,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         }}>{s.icon}</div>
         <div>
           <div style={{fontSize:typeof s.v==='string'&&s.v.length>6?'1rem':'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
-          <div style={{fontSize:'0.5rem',color:'#968d80',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{s.l.toUpperCase()}</div>
+          <div style={{fontSize:'0.5rem',color:'#92929a',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{s.l.toUpperCase()}</div>
         </div>
       </div>
     ))}
@@ -14328,44 +14329,44 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
  
   {/* ── ADD ITEM FORM ── */}
   <div style={{
-    background:'#2a2520',border:'1px solid #403930',
+    background:'#1a1a1d',border:'1px solid #2b2b30',
     borderRadius:'16px',overflow:'hidden'
   }}>
     <div style={{
       display:'flex',alignItems:'center',gap:'12px',
-      padding:'16px 22px',borderBottom:'1px solid #403930',background:'#1f1b17'
+      padding:'16px 22px',borderBottom:'1px solid #2b2b30',background:'#101012'
     }}>
       <Package2 size={14} color="#d3bfa2"/>
       <div>
         <div style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>REGISTER NEW ITEM</div>
-        <div style={{fontSize:'0.56rem',color:'#968d80',marginTop:'1px'}}>Add beverage, snack or any retail item to your catalog</div>
+        <div style={{fontSize:'0.56rem',color:'#92929a',marginTop:'1px'}}>Add beverage, snack or any retail item to your catalog</div>
       </div>
     </div>
     <div style={{padding:'20px 22px'}}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:'12px',marginBottom:'12px'}}>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Item Name *</label>
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Item Name *</label>
           <input type="text" placeholder="e.g. Thums Up 750ml"
-            style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
             value={newExtraItem.name} onChange={e=>setNewExtraItem(prev => ({...prev, name:e.target.value}))}/>
         </div>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Category</label>
-          <select style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Category</label>
+          <select style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
             value={newExtraItem.category} onChange={e=>setNewExtraItem(prev => ({...prev, category:e.target.value}))}>
             {['Cold Drinks','Ice Cream','Packaged Snacks','Juices','Mineral Water','Tobacco','Dairy','Sweets','Other'].map(c=><option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Sell Price (₹) *</label>
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Sell Price (₹) *</label>
           <input type="number" placeholder="e.g. 40"
-            style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box'}}
             value={newExtraItem.price} onChange={e=>setNewExtraItem(prev => ({...prev, price:e.target.value}))}/>
         </div>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Cost Price (₹)</label>
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Cost Price (₹)</label>
           <input type="number" placeholder="e.g. 28"
-            style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
             value={newExtraItem.costPrice} onChange={e=>setNewExtraItem(prev => ({...prev, costPrice:e.target.value}))}/>
           {newExtraItem.price&&newExtraItem.costPrice&&Number(newExtraItem.price)>0&&(
             <div style={{fontSize:'0.56rem',color:'#ecdcb9',marginTop:'4px',fontWeight:'700'}}>
@@ -14374,24 +14375,24 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           )}
         </div>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Unit</label>
-          <select style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Unit</label>
+          <select style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',cursor:'pointer'}}
             value={newExtraItem.unit} onChange={e=>setNewExtraItem(prev => ({...prev, unit:e.target.value}))}>
             {['piece','bottle','can','pack','cup','cone','bar','pouch','litre','ml'].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
         <div>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Opening Stock</label>
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Opening Stock</label>
           <input type="number" placeholder="e.g. 24"
-            style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}}
             value={newExtraItem.currentStock} onChange={e=>setNewExtraItem(prev => ({...prev, currentStock:e.target.value}))}/>
         </div>
       </div>
       <div style={{display:'flex',gap:'12px',alignItems:'flex-end'}}>
         <div style={{flex:1}}>
-          <label style={{fontSize:'0.5rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Description (optional)</label>
+          <label style={{fontSize:'0.5rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',display:'block',textTransform:'uppercase'}}>Description (optional)</label>
           <input type="text" placeholder="e.g. Chilled carbonated drink, served in bottle"
-            style={{width:'100%',padding:'10px 12px',background:'#2a2520',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'10px 12px',background:'#1a1a1d',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
             value={newExtraItem.description} onChange={e=>setNewExtraItem(prev => ({...prev, description:e.target.value}))}/>
         </div>
         <button type="button" onClick={async()=>{
@@ -14410,7 +14411,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         }} style={{
           padding:'10px 24px',
           background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
-          color:'#1c1814',border:'none',borderRadius:'8px',
+          color:'#0f0f11',border:'none',borderRadius:'8px',
           fontWeight:'900',fontSize:'0.72rem',cursor:'pointer',
           whiteSpace:'nowrap',letterSpacing:'0.5px',flexShrink:0
         }}>+ REGISTER ITEM</button>
@@ -14424,9 +14425,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       {['All',...new Set(extraItems.map(i=>i.category))].map(cat=>(
         <button type="button" key={cat} onClick={()=>setActiveExtraCategory(cat)} style={{
           padding:'7px 16px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
-          border:activeExtraCategory===cat?'none':'1px solid #463e34',
-          background:activeExtraCategory===cat?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#2a2520',
-          color:activeExtraCategory===cat?'#1c1814':'#a59c8e',transition:'all 0.15s',
+          border:activeExtraCategory===cat?'none':'1px solid #313137',
+          background:activeExtraCategory===cat?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#1a1a1d',
+          color:activeExtraCategory===cat?'#0f0f11':'#a3a3ab',transition:'all 0.15s',
           whiteSpace:'nowrap'
         }}>
           {cat} {cat!=='All'&&<span style={{opacity:0.7}}>({extraItems.filter(i=>i.category===cat).length})</span>}
@@ -14441,25 +14442,25 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           padding:'7px 14px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
           border:activeExtraCategory==='__lowstock__'?'none':'1px solid rgba(184,146,58,0.2)',
           background:activeExtraCategory==='__lowstock__'?'linear-gradient(135deg,#8a6a22,#b8923a)':'rgba(184,146,58,0.05)',
-          color:activeExtraCategory==='__lowstock__'?'#1c1814':'#b8923a',transition:'all 0.15s'
+          color:activeExtraCategory==='__lowstock__'?'#0f0f11':'#b8923a',transition:'all 0.15s'
         }}>
         <AlertTriangle size={10}/>
         LOW STOCK ({extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length})
       </button>
       {/* Search */}
-      <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#2a2520',border:'1px solid #403930',borderRadius:'8px',padding:'8px 13px'}}>
-        <Search size={12} color="#968d80"/>
+      <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#1a1a1d',border:'1px solid #2b2b30',borderRadius:'8px',padding:'8px 13px'}}>
+        <Search size={12} color="#92929a"/>
         <input type="text" placeholder="Search items..." value={extraItemSearchQuery}
           onChange={e=>setExtraItemSearchQuery(e.target.value)}
           style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.72rem',width:'150px'}}/>
-        {extraItemSearchQuery&&<button type="button" onClick={()=>setExtraItemSearchQuery('')} style={{background:'transparent',border:'none',color:'#968d80',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
+        {extraItemSearchQuery&&<button type="button" onClick={()=>setExtraItemSearchQuery('')} style={{background:'transparent',border:'none',color:'#92929a',cursor:'pointer',padding:0,display:'flex'}}><X size={11}/></button>}
       </div>
     </div>
   </div>
  
   {/* ── ITEMS GRID ── */}
   {extraItemsLoading?(
-    <div style={{textAlign:'center',padding:'60px',color:'#8d8477',fontSize:'0.78rem',fontWeight:'700'}}>LOADING CATALOG...</div>
+    <div style={{textAlign:'center',padding:'60px',color:'#86868e',fontSize:'0.78rem',fontWeight:'700'}}>LOADING CATALOG...</div>
   ):(()=>{
     const filtered=extraItems.filter(i=>{
       if(activeExtraCategory==='__lowstock__') return i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0;
@@ -14469,9 +14470,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
     });
  
     if(filtered.length===0) return (
-      <div style={{textAlign:'center',padding:'60px',background:'#2a2520',borderRadius:'16px',border:'1px dashed #403930'}}>
-        <Package2 size={28} color="#1c1814" style={{marginBottom:'12px'}}/>
-        <div style={{color:'#8d8477',fontSize:'0.8rem',fontWeight:'700'}}>
+      <div style={{textAlign:'center',padding:'60px',background:'#1a1a1d',borderRadius:'16px',border:'1px dashed #2b2b30'}}>
+        <Package2 size={28} color="#0f0f11" style={{marginBottom:'12px'}}/>
+        <div style={{color:'#86868e',fontSize:'0.8rem',fontWeight:'700'}}>
           {extraItemSearchQuery?`No items matching "${extraItemSearchQuery}"`:'No items in this category'}
         </div>
       </div>
@@ -14488,12 +14489,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         <div style={{
           display:'flex',alignItems:'center',justifyContent:'space-between',
           padding:'9px 14px',marginBottom:'12px',
-          background:'#1f1b17',borderRadius:'10px',border:'1px solid #403930'
+          background:'#101012',borderRadius:'10px',border:'1px solid #2b2b30'
         }}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span style={{width:'3px',height:'14px',background:'#d3bfa2',borderRadius:'2px'}}/>
             <span style={{fontSize:'0.6rem',fontWeight:'900',color:'#8a704d',letterSpacing:'1.5px',textTransform:'uppercase'}}>{cat}</span>
-            <span style={{fontSize:'0.52rem',color:'#968d80',fontWeight:'700'}}>{items.length} items</span>
+            <span style={{fontSize:'0.52rem',color:'#92929a',fontWeight:'700'}}>{items.length} items</span>
           </div>
           <div style={{display:'flex',gap:'6px'}}>
             <span style={{fontSize:'0.52rem',color:'#ecdcb9',fontWeight:'700',padding:'2px 8px',background:'rgba(236,220,185,0.06)',border:'1px solid rgba(236,220,185,0.12)',borderRadius:'6px'}}>
@@ -14515,9 +14516,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             const margin=item.costPrice>0?Math.round(((item.price-item.costPrice)/item.price)*100):null;
             return (
               <div key={item._id} style={{
-                background:'#2a2520',
-                border:`1px solid ${isOut?'rgba(226,154,88,0.2)':isLow?'rgba(184,146,58,0.2)':'#403930'}`,
-                borderTop:`2px solid ${isOut?'rgba(226,154,88,0.4)':isLow?'rgba(184,146,58,0.35)':item.isAvailable?'rgba(211,191,162,0.12)':'#312b25'}`,
+                background:'#1a1a1d',
+                border:`1px solid ${isOut?'rgba(226,154,88,0.2)':isLow?'rgba(184,146,58,0.2)':'#2b2b30'}`,
+                borderTop:`2px solid ${isOut?'rgba(226,154,88,0.4)':isLow?'rgba(184,146,58,0.35)':item.isAvailable?'rgba(211,191,162,0.12)':'#222226'}`,
                 borderRadius:'14px',padding:'18px',
                 opacity:item.isAvailable?1:0.55,
                 position:'relative',
@@ -14527,7 +14528,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 <div style={{
                   position:'absolute',top:'14px',right:'14px',
                   width:'7px',height:'7px',borderRadius:'50%',
-                  background:item.isAvailable?'#d3bfa2':'#3a342d',
+                  background:item.isAvailable?'#d3bfa2':'#2a2a2f',
                   boxShadow:item.isAvailable?'0 0 6px rgba(211,191,162,0.4)':'none'
                 }}/>
  
@@ -14549,9 +14550,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 {/* Name + category */}
                 <div style={{paddingTop:isOut||isLow?'18px':'0',marginBottom:'10px'}}>
                   <div style={{fontSize:'0.9rem',fontWeight:'900',color:'#fff',marginBottom:'2px',paddingRight:'20px'}}>{item.name}</div>
-                  <div style={{fontSize:'0.58rem',color:'#a59c8e',fontWeight:'600'}}>{item.category}</div>
+                  <div style={{fontSize:'0.58rem',color:'#a3a3ab',fontWeight:'600'}}>{item.category}</div>
                   {item.description&&(
-                    <div style={{fontSize:'0.6rem',color:'#968d80',marginTop:'4px',lineHeight:1.4}}>{item.description}</div>
+                    <div style={{fontSize:'0.6rem',color:'#92929a',marginTop:'4px',lineHeight:1.4}}>{item.description}</div>
                   )}
                 </div>
  
@@ -14563,7 +14564,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     border:'1px solid rgba(211,191,162,0.12)',borderRadius:'6px',fontFamily:'monospace'
                   }}>₹{item.price}</span>
                   {item.costPrice>0&&(
-                    <span style={{fontSize:'0.6rem',color:'#b0a799',fontFamily:'monospace'}}>cost ₹{item.costPrice}</span>
+                    <span style={{fontSize:'0.6rem',color:'#b0b0b8',fontFamily:'monospace'}}>cost ₹{item.costPrice}</span>
                   )}
                   {margin!==null&&(
                     <span style={{
@@ -14579,12 +14580,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 {/* Stock gauge */}
                 <div style={{marginBottom:'14px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'5px'}}>
-                    <span style={{fontSize:'0.55rem',color:'#968d80',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>Stock</span>
+                    <span style={{fontSize:'0.55rem',color:'#92929a',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>Stock</span>
                     <span style={{fontSize:'0.7rem',fontWeight:'900',color:isOut?'#e29a58':isLow?'#b8923a':'#d3bfa2',fontFamily:'monospace'}}>
-                      {item.currentStock} <span style={{fontSize:'0.55rem',color:'#a59c8e'}}>{item.unit}s</span>
+                      {item.currentStock} <span style={{fontSize:'0.55rem',color:'#a3a3ab'}}>{item.unit}s</span>
                     </span>
                   </div>
-                  <div style={{height:'4px',background:'#312b25',borderRadius:'4px',overflow:'hidden'}}>
+                  <div style={{height:'4px',background:'#222226',borderRadius:'4px',overflow:'hidden'}}>
                     <div style={{
                       height:'100%',borderRadius:'4px',transition:'width 0.3s',
                       width:`${Math.min(100,Math.max(0,(item.currentStock/(item.lowStockThreshold||5)*100)))}%`,
@@ -14592,7 +14593,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     }}/>
                   </div>
                   {item.lowStockThreshold>0&&(
-                    <div style={{fontSize:'0.52rem',color:'#968d80',marginTop:'3px',textAlign:'right'}}>alert at {item.lowStockThreshold}</div>
+                    <div style={{fontSize:'0.52rem',color:'#92929a',marginTop:'3px',textAlign:'right'}}>alert at {item.lowStockThreshold}</div>
                   )}
                 </div>
  
@@ -14621,24 +14622,24 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       showNotif(`${item.name} ${!item.isAvailable?'shown on menu':'hidden'}`);
                     }} style={{
                       flex:1,padding:'8px 6px',
-                      background:item.isAvailable?'#2a2520':'rgba(236,220,185,0.05)',
-                      border:item.isAvailable?'1px solid #463e34':'1px solid rgba(236,220,185,0.18)',
-                      color:item.isAvailable?'#a59c8e':'#ecdcb9',
+                      background:item.isAvailable?'#1a1a1d':'rgba(236,220,185,0.05)',
+                      border:item.isAvailable?'1px solid #313137':'1px solid rgba(236,220,185,0.18)',
+                      color:item.isAvailable?'#a3a3ab':'#ecdcb9',
                       borderRadius:'7px',fontSize:'0.6rem',fontWeight:'900',cursor:'pointer',transition:'all 0.15s'
                     }}>
                       {item.isAvailable?'HIDE':'SHOW'}
                     </button>
                     <button type="button" onClick={()=>{setExtraItemEditModal(item);setExtraItemEditData({...item});}}
-                      style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #463e34',color:'#968d80',borderRadius:'7px',fontSize:'0.7rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                      style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #313137',color:'#92929a',borderRadius:'7px',fontSize:'0.7rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.25)';e.currentTarget.style.color='#d3bfa2';}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#968d80';}}><SquarePen size={12} /></button>
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#92929a';}}><SquarePen size={12} /></button>
                     <button type="button" onClick={()=>setConfirmModal({
                       show:true,title:`Remove "${item.name}"?`,
                       subtitle:'This permanently removes the item from your catalog.',
                       onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}?tenantId=${encodeURIComponent(tenantId)}`);fetchExtraItems();showNotif(`${item.name} removed`);}
-                    })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #463e34',color:'#968d80',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+                    })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid #313137',color:'#92929a',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.25)';e.currentTarget.style.color='#e29a58';}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#463e34';e.currentTarget.style.color='#968d80';}}><X size={12} /></button>
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#313137';e.currentTarget.style.color='#92929a';}}><X size={12} /></button>
                   </div>
                 </div>
               </div>
@@ -14671,11 +14672,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'24px'}}>
           <div>
-            <div style={{fontSize:'0.58rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>RESERVATION</div>
+            <div style={{fontSize:'0.58rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>RESERVATION</div>
             <h3 style={{color:'#fff',margin:0,fontSize:'1rem',fontWeight:'900'}}>{reservationEditModal.customerName}</h3>
           </div>
           <button type="button" onClick={() => setReservationEditModal(null)}
-            style={{background:'#312b25',border:'1px solid #463e34',color:'#b0a799',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
+            style={{background:'#222226',border:'1px solid #313137',color:'#b0b0b8',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
             <X size={16} />
           </button>
         </div>
@@ -14683,11 +14684,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
           {/* Status */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Status</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Status</label>
             <select
               defaultValue={reservationEditModal.status}
               onChange={e => setReservationEditModal(prev => ({...prev, status: e.target.value}))}
-              style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid rgba(211,191,162,0.2)',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
+              style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid rgba(211,191,162,0.2)',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}>
               {['pending','confirmed','seated','cancelled','no-show'].map(s => (
                 <option key={s} value={s}>{s.toUpperCase()}</option>
               ))}
@@ -14696,7 +14697,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
           {/* Table preference */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Table Assignment</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Table Assignment</label>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
               {Array.from({length:tableCount},(_,i)=>(i+1).toString()).map(t => {
                 const isOcc = occupiedTables.includes(t);
@@ -14706,8 +14707,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     style={{
                       padding:'8px 14px',borderRadius:'8px',
                       border:'none',fontSize:'0.7rem',fontWeight:'800',cursor:isOcc?'not-allowed':'pointer',
-                      background: isSel ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isOcc ? '#2a2520' : '#312b25',
-                      color: isSel ? '#1c1814' : isOcc ? '#8d8477' : '#b0a799',
+                      background: isSel ? 'linear-gradient(135deg,#d3bfa2,#bda88a)' : isOcc ? '#1a1a1d' : '#222226',
+                      color: isSel ? '#0f0f11' : isOcc ? '#86868e' : '#b0b0b8',
                       opacity: isOcc ? 0.4 : 1
                     }}>
                     T{t}{isOcc ? ' •' : ''}
@@ -14719,14 +14720,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
           {/* Special requests */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Special Requests</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>Special Requests</label>
             <input type="text"
               defaultValue={reservationEditModal.specialRequests || ''}
               onChange={e => setReservationEditModal(prev => ({...prev, specialRequests: e.target.value}))}
-              style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}} />
+              style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}} />
           </div>
 
-          <div style={{display:'flex',gap:'12px',paddingTop:'16px',borderTop:'1px solid #403930'}}>
+          <div style={{display:'flex',gap:'12px',paddingTop:'16px',borderTop:'1px solid #2b2b30'}}>
             <button type="button" onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
             <button type="button" onClick={async () => {
               await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
@@ -14758,12 +14759,12 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
           <div>
-            <div style={{ fontSize: '0.58rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>EXTRA ITEMS CATALOG</div>
+            <div style={{ fontSize: '0.58rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>EXTRA ITEMS CATALOG</div>
             <h3 style={{ color: '#fff', margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>EDIT ITEM</h3>
-            <div style={{ fontSize: '0.65rem', color: '#b0a799', marginTop: '4px' }}>{extraItemEditModal.name}</div>
+            <div style={{ fontSize: '0.65rem', color: '#b0b0b8', marginTop: '4px' }}>{extraItemEditModal.name}</div>
           </div>
           <button type="button" onClick={() => setExtraItemEditModal(null)}
-            style={{ background: '#312b25', border: '1px solid #463e34', color: '#b0a799', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}>
+            style={{ background: '#222226', border: '1px solid #313137', color: '#b0b0b8', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}>
             <X size={16} />
           </button>
         </div>
@@ -14774,26 +14775,26 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             <label style={{ fontSize: '0.55rem', color: '#d3bfa2', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Item Name *</label>
             <input type="text" value={extraItemEditData.name || ''}
               onChange={e => setExtraItemEditData(prev => ({...prev, name: e.target.value }))}
-              style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid rgba(211,191,162,0.2)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
           {/* Category + Unit */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category</label>
+              <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Category</label>
               <select value={extraItemEditData.category || 'Cold Drinks'}
                 onChange={e => setExtraItemEditData(prev => ({...prev, category: e.target.value }))}
-                style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
+                style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
                 {['Cold Drinks', 'Ice Cream', 'Packaged Snacks', 'Juices', 'Mineral Water', 'Tobacco', 'Dairy', 'Sweets', 'Other'].map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
+              <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Unit</label>
               <select value={extraItemEditData.unit || 'piece'}
                 onChange={e => setExtraItemEditData(prev => ({...prev, unit: e.target.value }))}
-                style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
+                style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
                 {['piece', 'bottle', 'can', 'pack', 'cup', 'cone', 'bar', 'pouch', 'litre', 'ml'].map(u => (
                   <option key={u} value={u}>{u}</option>
                 ))}
@@ -14804,19 +14805,19 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           {/* Price + Stock */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
+              <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Price (₹) *</label>
               <input type="number" value={extraItemEditData.price || ''}
                 onChange={e => setExtraItemEditData(prev => ({...prev, price: e.target.value }))}
-                style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
 
             
             {/* Add after Price field in edit modal */}
 <div>
-  <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
+  <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Cost Price (₹)</label>
   <input type="number" value={extraItemEditData.costPrice ?? ''}
     onChange={e => setExtraItemEditData(prev => ({...prev, costPrice: e.target.value }))}
-    style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+    style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
   {extraItemEditData.price && extraItemEditData.costPrice && (
     <div style={{ fontSize: '0.58rem', color: '#ecdcb9', marginTop: '4px' }}>
       Margin: {Math.round(((extraItemEditData.price - extraItemEditData.costPrice) / extraItemEditData.price) * 100)}%
@@ -14825,35 +14826,35 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 </div>
 
             <div>
-              <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
+              <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Current Stock</label>
               <input type="number" value={extraItemEditData.currentStock ?? ''}
                 onChange={e => setExtraItemEditData(prev => ({...prev, currentStock: e.target.value }))}
-                style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
           </div>
 
           {/* Description */}
           <div>
-            <label style={{ fontSize: '0.55rem', color: '#b0a799', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description</label>
+            <label style={{ fontSize: '0.55rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '7px', textTransform: 'uppercase' }}>Description</label>
             <input type="text" value={extraItemEditData.description || ''}
               onChange={e => setExtraItemEditData(prev => ({...prev, description: e.target.value }))}
-              style={{ width: '100%', padding: '11px 13px', background: '#1f1b17', border: '1px solid #463e34', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '11px 13px', background: '#101012', border: '1px solid #313137', color: '#fff', borderRadius: '8px', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
           {/* Availability toggle */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', background: '#1f1b17', border: '1px solid #463e34', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', background: '#101012', border: '1px solid #313137', borderRadius: '10px' }}>
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>ITEM AVAILABILITY</div>
-              <div style={{ fontSize: '0.6rem', color: '#a59c8e', marginTop: '3px' }}>Toggle to show or hide from active catalog</div>
+              <div style={{ fontSize: '0.6rem', color: '#a3a3ab', marginTop: '3px' }}>Toggle to show or hide from active catalog</div>
             </div>
             <button type="button" onClick={() => setExtraItemEditData(prev => ({...prev, isAvailable: !prev.isAvailable }))}
-              style={{ width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: extraItemEditData.isAvailable ? '#d3bfa2' : '#3a342d', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: '4px', left: extraItemEditData.isAvailable ? '22px' : '4px', width: '16px', height: '16px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#1f1b17' : '#444', transition: 'left 0.2s' }} />
+              style={{ width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: extraItemEditData.isAvailable ? '#d3bfa2' : '#2a2a2f', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', top: '4px', left: extraItemEditData.isAvailable ? '22px' : '4px', width: '16px', height: '16px', borderRadius: '50%', background: extraItemEditData.isAvailable ? '#101012' : '#444', transition: 'left 0.2s' }} />
             </button>
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', paddingTop: '20px', borderTop: '1px solid #403930' }}>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', paddingTop: '20px', borderTop: '1px solid #2b2b30' }}>
             <button type="button" onClick={() => setExtraItemEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
             <button type="button"
               onClick={async () => {
@@ -14889,7 +14890,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           <div style={styles.modalBackdrop}>
             <motion.div initial={false} animate={{scale:1,opacity:1}} style={styles.confirmBox}>
               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>{confirmModal.title}</h3>
-              <p style={{color:'#bab1a3',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>{confirmModal.subtitle}</p>
+              <p style={{color:'#bcbcc3',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>{confirmModal.subtitle}</p>
               <div style={{display:'flex',gap:'12px'}}>
                 <button type="button" onClick={()=>setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null})} style={styles.cancelBtn}>CANCEL</button>
                 <button type="button" onClick={()=>{if(confirmModal.onConfirm)confirmModal.onConfirm();setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null});}} style={styles.confirmBtn}>CONFIRM</button>
@@ -14909,13 +14910,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 <UtensilsCrossed size={20} color="#d3bfa2"/>
                 <h3 style={{color:'#fff',margin:0,fontSize:'1.1rem',fontWeight:'900'}}>EDIT PRICING</h3>
               </div>
-              <p style={{color:'#bab1a3',fontSize:'0.8rem',marginTop:'-10px',marginBottom:'20px'}}>
+              <p style={{color:'#bcbcc3',fontSize:'0.8rem',marginTop:'-10px',marginBottom:'20px'}}>
                 Modifying: <b>{activePriceEditItem.name}</b>
               </p>
               {!activePriceEditItem.priceHalf ? (
                 <div style={{marginBottom:'20px'}}>
                   <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>PRICE (₹)</label>
-                  <input type="number" style={{...styles.input,marginBottom:0,background:'#1f1b17',borderColor:'#463e34'}}
+                  <input type="number" style={{...styles.input,marginBottom:0,background:'#101012',borderColor:'#313137'}}
                     value={activePriceEditItem.price||''} onChange={e=>setActivePriceEditItem(prev => ({...prev, price:e.target.value}))}/>
                 </div>
               ) : (
@@ -14923,7 +14924,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   {[['HALF (₹)','priceHalf'],['FULL (₹)','priceFull']].map(([l,k])=>(
                     <div key={k}>
                       <label style={{...styles.statLabel,color:'#888',display:'block',marginBottom:'8px'}}>{l}</label>
-                      <input type="number" style={{...styles.input,marginBottom:0,background:'#1f1b17',borderColor:'#463e34'}}
+                      <input type="number" style={{...styles.input,marginBottom:0,background:'#101012',borderColor:'#313137'}}
                         value={activePriceEditItem[k]||''} onChange={e=>setActivePriceEditItem(prev => ({...prev, [k]:e.target.value,price:k==='priceFull'?e.target.value:activePriceEditItem.price}))}/>
                     </div>
                   ))}
@@ -14960,11 +14961,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* HEADER */}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
           <div>
-            <div style={{fontSize:'0.58rem',color:'#a59c8e',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>MENU REGISTRY</div>
+            <div style={{fontSize:'0.58rem',color:'#a3a3ab',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>MENU REGISTRY</div>
             <h3 style={{color:'#fff',margin:0,fontSize:'1.15rem',fontWeight:'900'}}>ADD NEW DISH</h3>
           </div>
           <button type="button" onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:''});}}
-            style={{background:'#312b25',border:'1px solid #463e34',color:'#b0a799',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
+            style={{background:'#222226',border:'1px solid #313137',color:'#b0b0b8',padding:'8px',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center'}}>
             <X size={16}/>
           </button>
         </div>
@@ -14975,24 +14976,24 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           {/* NAME ROW */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
             <div>
-              <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (English) *</label>
+              <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (English) *</label>
               <input type="text" placeholder="e.g. Paneer Tikka"
-                style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
                 value={newDish.name} onChange={e=>setNewDish(prev => ({...prev, name:e.target.value}))}/>
             </div>
             <div>
-              <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (Marathi)</label>
+              <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>DISH NAME (Marathi)</label>
               <input type="text" placeholder="e.g. पनीर टिक्का"
-                style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
                 value={newDish.name_mr} onChange={e=>setNewDish(prev => ({...prev, name_mr:e.target.value}))}/>
             </div>
           </div>
 
           {/* CATEGORY */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>CATEGORY *</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>CATEGORY *</label>
             <select
-              style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:newDish.categoryId?'#fff':'#a59c8e',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
+              style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:newDish.categoryId?'#fff':'#a3a3ab',borderRadius:'8px',fontSize:'0.82rem',outline:'none',cursor:'pointer'}}
               value={newDish.categoryId} onChange={e=>setNewDish(prev => ({...prev, categoryId:e.target.value}))}>
               <option value="">-- Select category --</option>
               {categories.map(c=><option key={c.categoryId} value={c.categoryId}>{c.name}</option>)}
@@ -15001,7 +15002,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
           {/* PRICING MODE TOGGLE */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>PRICING MODE</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>PRICING MODE</label>
             <div style={{display:'flex',gap:'8px',marginBottom:'14px'}}>
               {['single','half-full'].map(mode=>(
                 <button key={mode} type="button"
@@ -15009,8 +15010,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   style={{
                     padding:'8px 18px',borderRadius:'8px',fontSize:'0.65rem',fontWeight:'900',cursor:'pointer',
                     background: (newDish._priceMode||'single')===mode ? 'rgba(211,191,162,0.1)' : 'transparent',
-                    border: (newDish._priceMode||'single')===mode ? '1px solid rgba(211,191,162,0.3)' : '1px solid #8d8477',
-                    color: (newDish._priceMode||'single')===mode ? '#d3bfa2' : '#a59c8e',
+                    border: (newDish._priceMode||'single')===mode ? '1px solid rgba(211,191,162,0.3)' : '1px solid #86868e',
+                    color: (newDish._priceMode||'single')===mode ? '#d3bfa2' : '#a3a3ab',
                     transition:'all 0.15s'
                   }}>
                   {mode === 'single' ? 'SINGLE PRICE' : 'HALF / FULL'}
@@ -15020,23 +15021,23 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
             {(newDish._priceMode||'single') === 'single' ? (
               <div>
-                <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>PRICE (₹) *</label>
+                <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>PRICE (₹) *</label>
                 <input type="number" placeholder="e.g. 180"
-                  style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                  style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
                   value={newDish.price} onChange={e=>setNewDish(prev => ({...prev, price:e.target.value}))}/>
               </div>
             ) : (
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
                 <div>
-                  <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>HALF PRICE (₹) *</label>
+                  <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>HALF PRICE (₹) *</label>
                   <input type="number" placeholder="e.g. 120"
-                    style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                    style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
                     value={newDish.priceHalf} onChange={e=>setNewDish(prev => ({...prev, priceHalf:e.target.value}))}/>
                 </div>
                 <div>
-                  <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>FULL PRICE (₹) *</label>
+                  <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>FULL PRICE (₹) *</label>
                   <input type="number" placeholder="e.g. 220"
-                    style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
+                    style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.82rem',outline:'none',boxSizing:'border-box'}}
                     value={newDish.priceFull} onChange={e=>setNewDish(prev => ({...prev, priceFull:e.target.value,price:e.target.value}))}/>
                 </div>
               </div>
@@ -15045,7 +15046,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
           {/* SPICE LEVEL */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>SPICE LEVEL</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>SPICE LEVEL</label>
             <div style={{display:'flex',gap:'8px'}}>
               {['','Low','Medium','High'].map(level=>(
                 <button key={level} type="button"
@@ -15053,8 +15054,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   style={{
                     flex:1,padding:'8px 6px',borderRadius:'8px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
                     background: newDish.spicylevel===level ? 'rgba(211,191,162,0.08)' : 'transparent',
-                    border: newDish.spicylevel===level ? '1px solid rgba(211,191,162,0.25)' : '1px solid #463e34',
-                    color: newDish.spicylevel===level ? '#d3bfa2' : '#a59c8e',
+                    border: newDish.spicylevel===level ? '1px solid rgba(211,191,162,0.25)' : '1px solid #313137',
+                    color: newDish.spicylevel===level ? '#d3bfa2' : '#a3a3ab',
                     transition:'all 0.15s'
                   }}>
                   {level === '' ? 'NONE' : level.toUpperCase()}
@@ -15084,7 +15085,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           background: (newDish.servingSize || 1) === n
             ? 'linear-gradient(135deg, #d3bfa2, #bda88a)'
             : 'rgba(211,191,162,0.05)',
-          color: (newDish.servingSize || 1) === n ? '#1c1814' : 'rgba(255,255,255,0.3)',
+          color: (newDish.servingSize || 1) === n ? '#0f0f11' : 'rgba(255,255,255,0.3)',
           outline: (newDish.servingSize || 1) === n
             ? 'none'
             : '1px solid rgba(211,191,162,0.1)',
@@ -15105,15 +15106,15 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           {/* INGREDIENTS */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
             <div>
-              <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (English, comma separated)</label>
+              <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (English, comma separated)</label>
               <input type="text" placeholder="e.g. Paneer, Tomato, Capsicum"
-                style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+                style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
                 value={newDish.ingredients.en} onChange={e=>setNewDish(prev => ({...prev, ingredients:{...(prev.ingredients || {}),en:e.target.value}}))}/>
             </div>
             <div>
-              <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (Marathi)</label>
+              <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>INGREDIENTS (Marathi)</label>
               <input type="text" placeholder="e.g. पनीर, टोमॅटो, कॅप्सिकम"
-                style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+                style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
                 value={newDish.ingredients.mr} onChange={e=>setNewDish(prev => ({...prev, ingredients:{...(prev.ingredients || {}),mr:e.target.value}}))}/>
             </div>
           </div>
@@ -15123,13 +15124,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
   {/* VEG / NON-VEG SELECTOR */}
   <div>
-    <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>DISH TYPE *</label>
+    <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'10px',textTransform:'uppercase'}}>DISH TYPE *</label>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
       <button type="button"
         onClick={() => setNewDish(prev => ({...prev, isVeg: true}))}
         style={{
           padding: '14px', borderRadius: '10px', cursor: 'pointer',
-          border: newDish.isVeg === true ? '1px solid rgba(168,139,79,0.5)' : '1px solid #463e34',
+          border: newDish.isVeg === true ? '1px solid rgba(168,139,79,0.5)' : '1px solid #313137',
           background: newDish.isVeg === true ? 'rgba(168,139,79,0.08)' : 'transparent',
           display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s'
         }}
@@ -15143,8 +15144,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#a88b4f' }} />
         </div>
         <div style={{textAlign:'left'}}>
-          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === true ? '#fff' : '#b0a799'}}>VEGETARIAN</div>
-          <div style={{fontSize:'0.58rem',color:'#a59c8e',marginTop:'2px'}}>No meat or eggs</div>
+          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === true ? '#fff' : '#b0b0b8'}}>VEGETARIAN</div>
+          <div style={{fontSize:'0.58rem',color:'#a3a3ab',marginTop:'2px'}}>No meat or eggs</div>
         </div>
         {newDish.isVeg === true && (
           <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(168,139,79,0.2)',border:'1px solid #a88b4f',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -15157,7 +15158,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         onClick={() => setNewDish(prev => ({...prev, isVeg: false}))}
         style={{
           padding: '14px', borderRadius: '10px', cursor: 'pointer',
-          border: newDish.isVeg === false ? '1px solid rgba(154,90,42,0.5)' : '1px solid #463e34',
+          border: newDish.isVeg === false ? '1px solid rgba(154,90,42,0.5)' : '1px solid #313137',
           background: newDish.isVeg === false ? 'rgba(154,90,42,0.06)' : 'transparent',
           display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s'
         }}
@@ -15174,8 +15175,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           }} />
         </div>
         <div style={{textAlign:'left'}}>
-          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === false ? '#fff' : '#b0a799'}}>NON-VEGETARIAN</div>
-          <div style={{fontSize:'0.58rem',color:'#a59c8e',marginTop:'2px'}}>Contains meat or eggs</div>
+          <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === false ? '#fff' : '#b0b0b8'}}>NON-VEGETARIAN</div>
+          <div style={{fontSize:'0.58rem',color:'#a3a3ab',marginTop:'2px'}}>Contains meat or eggs</div>
         </div>
         {newDish.isVeg === false && (
           <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(154,90,42,0.15)',border:'1px solid #9a5a2a',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -15189,23 +15190,23 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
   {/* CHEF'S SPECIAL TOGGLE */}
   <div style={{
     display:'flex',justifyContent:'space-between',alignItems:'center',
-    padding:'14px',background:'#1f1b17',border:'1px solid #463e34',borderRadius:'10px'
+    padding:'14px',background:'#101012',border:'1px solid #313137',borderRadius:'10px'
   }}>
     <div>
       <div style={{fontSize:'0.72rem',fontWeight:'900',color:'#fff'}}>CHEF'S SPECIAL</div>
-      <div style={{fontSize:'0.58rem',color:'#a59c8e',marginTop:'3px'}}>Highlighted with Sparkle badge on customer menu</div>
+      <div style={{fontSize:'0.58rem',color:'#a3a3ab',marginTop:'3px'}}>Highlighted with Sparkle badge on customer menu</div>
     </div>
     <button type="button" onClick={()=>setNewDish(prev => ({...prev, isChefSpecial:!prev.isChefSpecial}))}
       style={{
         width:'40px',height:'22px',borderRadius:'11px',border:'none',cursor:'pointer',
-        background:newDish.isChefSpecial?'#d3bfa2':'#3a342d',
+        background:newDish.isChefSpecial?'#d3bfa2':'#2a2a2f',
         position:'relative',transition:'background 0.2s',flexShrink:0
       }}>
       <div style={{
         position:'absolute',top:'3px',
         left:newDish.isChefSpecial?'20px':'3px',
         width:'16px',height:'16px',borderRadius:'50%',
-        background:newDish.isChefSpecial?'#1f1b17':'#444',
+        background:newDish.isChefSpecial?'#101012':'#444',
         transition:'left 0.2s'
       }}/>
     </button>
@@ -15215,14 +15216,14 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
 
           {/* TAGS */}
           <div>
-            <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>TAGS (optional, comma separated)</label>
+            <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>TAGS (optional, comma separated)</label>
             <input type="text" placeholder="e.g. bestseller, must-try, new"
-              style={{width:'100%',padding:'11px 13px',background:'#1f1b17',border:'1px solid #463e34',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
+              style={{width:'100%',padding:'11px 13px',background:'#101012',border:'1px solid #313137',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',boxSizing:'border-box'}}
               value={newDish.tags} onChange={e=>setNewDish(prev => ({...prev, tags:e.target.value}))}/>
           </div>
 
           {/* ACTIONS */}
-          <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid #403930'}}>
+          <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid #2b2b30'}}>
             <button type="button"
               onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});}}
               style={styles.cancelBtn}>
@@ -15285,10 +15286,10 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
           </div>
         </div>
         <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.05rem',fontWeight:'900'}}>REMOVE DISH</h3>
-        <p style={{color:'#b0a799',fontSize:'0.82rem',marginBottom:'8px',lineHeight:'1.5'}}>
+        <p style={{color:'#b0b0b8',fontSize:'0.82rem',marginBottom:'8px',lineHeight:'1.5'}}>
           Permanently delete <b style={{color:'#d3bfa2'}}>{pendingDeleteDish.name}</b> from the menu?
         </p>
-        <p style={{color:'#968d80',fontSize:'0.72rem',marginBottom:'28px',lineHeight:'1.5'}}>
+        <p style={{color:'#92929a',fontSize:'0.72rem',marginBottom:'28px',lineHeight:'1.5'}}>
           This will remove the dish from customer menus immediately. Settled order history is unaffected.
         </p>
         <div style={{display:'flex',gap:'12px'}}>
@@ -15306,7 +15307,7 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
                 setPendingDeleteDish(null);
               }
             }}
-            style={{...styles.confirmBtn,background:'#8a704d',color:'#1c1814'}}>
+            style={{...styles.confirmBtn,background:'#8a704d',color:'#0f0f11'}}>
             REMOVE
           </button>
         </div>
@@ -15321,7 +15322,7 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
             <motion.div initial={false} animate={{scale:1,opacity:1}} style={styles.confirmBox}>
               <div style={{display:'flex',justifyContent:'center',color:'#e29a58',marginBottom:'15px'}}><AlertTriangle size={32}/></div>
               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>PERMANENT WIPEOUT</h3>
-              <p style={{color:'#bab1a3',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>
+              <p style={{color:'#bcbcc3',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>
                 Delete <b style={{color:'#fff'}}>{pendingDeleteStaff.name.split(' (')[0]}</b> and all their records?
               </p>
               <div style={{display:'flex',gap:'12px'}}>
@@ -15364,22 +15365,22 @@ style={{
         style={{ ...styles.confirmBox, width: '480px', textAlign: 'left', padding: '0', overflow: 'hidden' }}
       >
         {/* Modal header */}
-        <div style={{ padding: '24px 28px', borderBottom: '1px solid #403930', background: '#2a2520' }}>
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #2b2b30', background: '#1a1a1d' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <TableProperties size={18} color="#d3bfa2" />
             </div>
             <div>
               <h3 style={{ color: '#fff', margin: 0, fontSize: '1rem', fontWeight: '900', letterSpacing: '0.3px' }}>ASSIGN TABLE</h3>
-              <div style={{ fontSize: '0.62rem', color: '#a59c8e', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '0.62rem', color: '#a3a3ab', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ color: '#d3bfa2', fontWeight: '800' }}>{assignTableModal.customerName}</span>
                 <span>·</span>
-                <Users size={10} color="#b0a799" />
+                <Users size={10} color="#b0b0b8" />
                 <span>{assignTableModal.partySize} pax</span>
                 {assignTableModal.items?.length > 0 && (
                   <>
                     <span>·</span>
-                    <UtensilsCrossed size={10} color="#b0a799" />
+                    <UtensilsCrossed size={10} color="#b0b0b8" />
                     <span>{assignTableModal.items.length} items pre-ordered</span>
                   </>
                 )}
@@ -15390,12 +15391,12 @@ style={{
  
         {/* Pre-order summary */}
         {assignTableModal.items?.length > 0 && (
-          <div style={{ margin: '16px 28px 0', padding: '12px 14px', background: '#1f1b17', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '12px' }}>
+          <div style={{ margin: '16px 28px 0', padding: '12px 14px', background: '#101012', border: '1px solid rgba(211,191,162,0.08)', borderRadius: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
               <ArrowRightCircle size={12} color="#8a704d" />
               <span style={{ fontSize: '0.56rem', color: '#8a704d', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>Pre-order fires to KDS immediately on assign</span>
             </div>
-            <div style={{ fontSize: '0.68rem', color: '#bab1a3', lineHeight: 1.7 }}>
+            <div style={{ fontSize: '0.68rem', color: '#bcbcc3', lineHeight: 1.7 }}>
               {assignTableModal.items.map(i => `${i.quantity}× ${i.name}`).join('  ·  ')}
             </div>
             <div style={{ textAlign: 'right', marginTop: '6px', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d' }}>
@@ -15406,8 +15407,8 @@ style={{
  
         {/* Instruction */}
         <div style={{ padding: '14px 28px 10px' }}>
-          <p style={{ margin: 0, fontSize: '0.68rem', color: '#968d80', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Hash size={11} color="#968d80" />
+          <p style={{ margin: 0, fontSize: '0.68rem', color: '#92929a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Hash size={11} color="#92929a" />
             Select a free table below — occupied tables are disabled
           </p>
         </div>
@@ -15481,10 +15482,10 @@ onClick={async () => {
                     padding: '16px 8px', borderRadius: '12px', cursor: isOcc ? 'not-allowed' : 'pointer',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
                     transition: 'all 0.15s',
-                    background: isOcc ? '#2a2520' : 'rgba(211,191,162,0.05)',
-                    border: isOcc ? '1px solid #403930' : '1px solid rgba(211,191,162,0.18)',
+                    background: isOcc ? '#1a1a1d' : 'rgba(211,191,162,0.05)',
+                    border: isOcc ? '1px solid #2b2b30' : '1px solid rgba(211,191,162,0.18)',
                     opacity: isOcc ? 0.35 : 1,
-                    color: isOcc ? '#8d8477' : '#d3bfa2',
+                    color: isOcc ? '#86868e' : '#d3bfa2',
                   }}
                   onMouseEnter={e => { if (!isOcc) { e.currentTarget.style.background = 'rgba(211,191,162,0.12)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.4)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}}
                   onMouseLeave={e => { if (!isOcc) { e.currentTarget.style.background = 'rgba(211,191,162,0.05)'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.18)'; e.currentTarget.style.transform = 'none'; }}}
@@ -15492,7 +15493,7 @@ onClick={async () => {
                   <span style={{ fontSize: '1rem', fontWeight: '900', fontFamily: 'monospace', lineHeight: 1 }}>
                     {n}
                   </span>
-                  <span style={{ fontSize: '0.46rem', fontWeight: '900', letterSpacing: '1px', color: isOcc ? '#968d80' : '#b0a799', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.46rem', fontWeight: '900', letterSpacing: '1px', color: isOcc ? '#92929a' : '#b0b0b8', textTransform: 'uppercase' }}>
                     {isOcc ? 'OCCUPIED' : 'FREE'}
                   </span>
                   {!isOcc && (
@@ -15507,19 +15508,19 @@ onClick={async () => {
         </div>
  
         {/* Footer */}
-        <div style={{ padding: '16px 28px', borderTop: '1px solid #403930', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2a2520' }}>
+        <div style={{ padding: '16px 28px', borderTop: '1px solid #2b2b30', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a1a1d' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <CircleDot size={10} color="#a59c8e" />
-            <span style={{ fontSize: '0.58rem', color: '#968d80', fontWeight: '700' }}>
+            <CircleDot size={10} color="#a3a3ab" />
+            <span style={{ fontSize: '0.58rem', color: '#92929a', fontWeight: '700' }}>
               {Array.from({ length: tableCount }, (_, i) => (i + 1).toString()).filter(id => !occupiedTables.includes(id)).length} tables free
             </span>
           </div>
           <button type="button" onClick={() => setAssignTableModal(null)} style={{
-            padding: '10px 22px', background: 'transparent', border: '1px solid #463e34',
-            color: '#a59c8e', borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer'
+            padding: '10px 22px', background: 'transparent', border: '1px solid #313137',
+            color: '#a3a3ab', borderRadius: '10px', fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer'
           }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#554b3e'; e.currentTarget.style.color = '#bab1a3'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#463e34'; e.currentTarget.style.color = '#a59c8e'; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b3b42'; e.currentTarget.style.color = '#bcbcc3'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#313137'; e.currentTarget.style.color = '#a3a3ab'; }}
           >
             CANCEL
           </button>
@@ -15533,12 +15534,12 @@ onClick={async () => {
   {activeAggregatorPopup && (
     <motion.div
       initial={false} animate={{ opacity: 1 }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(24,19,15,0.7)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(8,8,10,0.7)', zIndex: 9500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
     >
       <motion.div
         initial={false} animate={{ scale: 1, opacity: 1 }}
         style={{
-          background: '#2a2520', border: '1px solid rgba(211,191,162,0.25)',
+          background: '#1a1a1d', border: '1px solid rgba(211,191,162,0.25)',
           borderTop: `4px solid ${activeAggregatorPopup.platform === 'zomato' ? '#cb202d' : '#fc8019'}`,
           borderRadius: '22px', padding: '32px', width: '100%', maxWidth: '460px',
           boxShadow: '0 0 60px rgba(211,191,162,0.08)'
@@ -15574,14 +15575,14 @@ onClick={async () => {
             {activeAggregatorPopup.customerName || 'Online Customer'}
           </div>
           {activeAggregatorPopup.customerPhone && (
-            <div style={{ fontSize: '0.7rem', color: '#b0a799', marginTop: '2px' }}>{activeAggregatorPopup.customerPhone}</div>
+            <div style={{ fontSize: '0.7rem', color: '#b0b0b8', marginTop: '2px' }}>{activeAggregatorPopup.customerPhone}</div>
           )}
         </div>
 
         {/* Items */}
-        <div style={{ background: '#1f1b17', border: '1px solid #463e34', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scroll">
+        <div style={{ background: '#101012', border: '1px solid #313137', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scroll">
           {(activeAggregatorPopup.items || []).map((it, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < activeAggregatorPopup.items.length - 1 ? '1px solid #403930' : 'none' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < activeAggregatorPopup.items.length - 1 ? '1px solid #2b2b30' : 'none' }}>
               <span style={{ fontSize: '0.78rem', color: '#ccc', fontWeight: '700' }}>{it.quantity}× {it.name}</span>
               <span style={{ fontSize: '0.78rem', color: '#888', fontWeight: '700' }}>₹{it.subtotal}</span>
             </div>
@@ -15590,7 +15591,7 @@ onClick={async () => {
 
         {/* Total */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '0 4px' }}>
-          <span style={{ fontSize: '0.7rem', color: '#b0a799', fontWeight: '800', letterSpacing: '0.5px' }}>ORDER TOTAL</span>
+          <span style={{ fontSize: '0.7rem', color: '#b0b0b8', fontWeight: '800', letterSpacing: '0.5px' }}>ORDER TOTAL</span>
           <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#d3bfa2' }}>₹{activeAggregatorPopup.grandTotal?.toLocaleString()}</span>
         </div>
 
@@ -15604,7 +15605,7 @@ onClick={async () => {
           </button>
           <button type="button"
             onClick={() => handleAggregatorAccept(activeAggregatorPopup)}
-            style={{ flex: 2, padding: '14px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#1c1814', borderRadius: '12px', fontSize: '0.78rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
+            style={{ flex: 2, padding: '14px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0f0f11', borderRadius: '12px', fontSize: '0.78rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}
           >
             ACCEPT & SEND TO KITCHEN
           </button>
@@ -15612,7 +15613,7 @@ onClick={async () => {
 
         {/* Queue indicator if more are waiting */}
         {incomingAggregatorOrders.length > 1 && (
-          <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.62rem', color: '#a59c8e', fontWeight: '700' }}>
+          <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.62rem', color: '#a3a3ab', fontWeight: '700' }}>
             +{incomingAggregatorOrders.length - 1} more order{incomingAggregatorOrders.length - 1 > 1 ? 's' : ''} waiting
           </div>
         )}
@@ -15638,18 +15639,18 @@ onClick={async () => {
           }}>₹</div>
           <div>
             <h3 style={{color:'#fff',margin:0,fontSize:'1rem',fontWeight:'900'}}>EDIT BASE SALARY</h3>
-            <div style={{fontSize:'0.62rem',color:'#b0a799',marginTop:'2px'}}>{salaryEditModal.name}</div>
+            <div style={{fontSize:'0.62rem',color:'#b0b0b8',marginTop:'2px'}}>{salaryEditModal.name}</div>
           </div>
         </div>
 
-        <p style={{fontSize:'0.7rem',color:'#a59c8e',marginBottom:'20px',lineHeight:'1.6',borderLeft:'2px solid #463e34',paddingLeft:'10px'}}>
+        <p style={{fontSize:'0.7rem',color:'#a3a3ab',marginBottom:'20px',lineHeight:'1.6',borderLeft:'2px solid #313137',paddingLeft:'10px'}}>
           Changing base salary requires authorization.<br/>
 
         </p>
 
         {/* NEW SALARY */}
         <div style={{marginBottom:'16px'}}>
-          <label style={{fontSize:'0.55rem',color:'#b0a799',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>
+          <label style={{fontSize:'0.55rem',color:'#b0b0b8',fontWeight:'900',letterSpacing:'0.8px',display:'block',marginBottom:'7px',textTransform:'uppercase'}}>
             NEW BASE SALARY (₹)
           </label>
           <input
@@ -15658,13 +15659,13 @@ onClick={async () => {
             onChange={e => setSalaryEditValue(e.target.value)}
             placeholder="e.g. 28000"
             style={{
-              width:'100%',padding:'12px 14px',background:'#1f1b17',
+              width:'100%',padding:'12px 14px',background:'#101012',
               border:'1px solid rgba(211,191,162,0.2)',color:'#fff',
               borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',
               outline:'none',boxSizing:'border-box'
             }}
           />
-          <div style={{fontSize:'0.6rem',color:'#968d80',marginTop:'4px'}}>
+          <div style={{fontSize:'0.6rem',color:'#92929a',marginTop:'4px'}}>
             Current: ₹{Number(salaryEditModal.currentSalary).toLocaleString()}/mo
           </div>
         </div>
@@ -15680,7 +15681,7 @@ onClick={async () => {
             onChange={e => setSalaryEditPassword(e.target.value)}
 
             style={{
-              width:'100%',padding:'12px 14px',background:'#1f1b17',
+              width:'100%',padding:'12px 14px',background:'#101012',
               border:'1px solid rgba(211,191,162,0.2)',color:'#fff',
               borderRadius:'8px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box'
             }}
@@ -15741,7 +15742,7 @@ onClick={async () => {
       <motion.div
         initial={false} animate={{ opacity: 0.65 }}
         onClick={() => setPurchaseOrderModal(null)}
-        style={{ position: 'fixed', inset: 0, background: '#1f1b17', zIndex: 9200 }}
+        style={{ position: 'fixed', inset: 0, background: '#101012', zIndex: 9200 }}
       />
 
       {/* Centering + scroll wrapper — kept transform-free so it doesn't fight
@@ -15761,7 +15762,7 @@ onClick={async () => {
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
         style={{
           width: '520px', maxWidth: '95vw', maxHeight: 'calc(90vh - 48px)', overflowY: 'auto',
-          background: '#2a2520', border: '1px solid rgba(184,146,58,0.3)',
+          background: '#1a1a1d', border: '1px solid rgba(184,146,58,0.3)',
           borderRadius: '18px', margin: 'auto',
           boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(184,146,58,0.1)'
         }}
@@ -15769,8 +15770,8 @@ onClick={async () => {
         {/* Modal header */}
         <div style={{
           padding: '22px 24px 18px',
-          borderBottom: '1px solid #403930',
-          background: '#2a2520',
+          borderBottom: '1px solid #2b2b30',
+          background: '#1a1a1d',
           borderRadius: '18px 18px 0 0',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between'
         }}>
@@ -15784,7 +15785,7 @@ onClick={async () => {
             <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>
               {purchaseOrderModal.item?.itemName}
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#b0a799', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.65rem', color: '#b0b0b8', marginTop: '2px' }}>
               Current stock: {purchaseOrderModal.item?.currentStock} {purchaseOrderModal.item?.unit}
               {purchaseOrderModal.daysLeft !== null && purchaseOrderModal.daysLeft !== undefined && (
                 <span style={{ color: '#b8923a', marginLeft: '8px' }}>
@@ -15794,8 +15795,8 @@ onClick={async () => {
             </div>
           </div>
           <button type="button" onClick={() => setPurchaseOrderModal(null)} style={{
-            background: '#312b25', border: '1px solid #463e34',
-            color: '#b0a799', padding: '7px', borderRadius: '8px', cursor: 'pointer',
+            background: '#222226', border: '1px solid #313137',
+            color: '#b0b0b8', padding: '7px', borderRadius: '8px', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <X size={15}/>
@@ -15811,8 +15812,8 @@ onClick={async () => {
               { l: 'LAST BUY PRICE', v: purchaseOrderModal.lastPrice > 0 ? `₹${purchaseOrderModal.lastPrice.toFixed(2)}/${purchaseOrderModal.item?.unit}` : 'Not recorded' },
               { l: 'ESTIMATED COST', v: (purchaseOrderModal.lastPrice > 0 && Number(purchaseOrderModal.customQty) > 0) ? `₹${(purchaseOrderModal.lastPrice * Number(purchaseOrderModal.customQty)).toFixed(0)}` : '—' },
             ].map(s => (
-              <div key={s.l} style={{ background: '#312b25', border: '1px solid #463e34', borderRadius: '10px', padding: '12px' }}>
-                <div style={{ fontSize: '0.5rem', color: '#a59c8e', fontWeight: '900', letterSpacing: '1px', marginBottom: '4px' }}>{s.l}</div>
+              <div key={s.l} style={{ background: '#222226', border: '1px solid #313137', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '0.5rem', color: '#a3a3ab', fontWeight: '900', letterSpacing: '1px', marginBottom: '4px' }}>{s.l}</div>
                 <div style={{ fontSize: '0.82rem', fontWeight: '900', color: '#d3bfa2' }}>{s.v}</div>
               </div>
             ))}
@@ -15824,7 +15825,7 @@ onClick={async () => {
             {/* Quantity */}
             <div>
               <label style={{
-                fontSize: '0.52rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px',
+                fontSize: '0.52rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px',
                 textTransform: 'uppercase', display: 'block', marginBottom: '6px'
               }}>
                 ORDER QUANTITY ({purchaseOrderModal.item?.unit})
@@ -15839,12 +15840,12 @@ onClick={async () => {
                   onChange={e => setPurchaseOrderModal(p => ({ ...p, customQty: e.target.value, copySuccess: false }))}
                   style={{
                     flex: 1, padding: '10px 14px',
-                    background: '#312b25', border: '1px solid rgba(184,146,58,0.35)',
+                    background: '#222226', border: '1px solid rgba(184,146,58,0.35)',
                     color: '#fff', borderRadius: '9px', fontSize: '0.9rem',
                     fontWeight: '900', outline: 'none', fontFamily: 'monospace'
                   }}
                 />
-                <span style={{ fontSize: '0.75rem', color: '#b0a799', fontWeight: '700' }}>{purchaseOrderModal.item?.unit}</span>
+                <span style={{ fontSize: '0.75rem', color: '#b0b0b8', fontWeight: '700' }}>{purchaseOrderModal.item?.unit}</span>
               </div>
               {/* Quick quantity buttons */}
               <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
@@ -15856,9 +15857,9 @@ onClick={async () => {
                       onClick={() => setPurchaseOrderModal(p => ({ ...p, customQty: String(qty), copySuccess: false }))}
                       style={{
                         padding: '4px 10px', borderRadius: '5px', cursor: 'pointer',
-                        background: purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.2)' : '#312b25',
-                        border: `1px solid ${purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.5)' : '#463e34'}`,
-                        color: purchaseOrderModal.customQty === String(qty) ? '#b8923a' : '#b0a799',
+                        background: purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.2)' : '#222226',
+                        border: `1px solid ${purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.5)' : '#313137'}`,
+                        color: purchaseOrderModal.customQty === String(qty) ? '#b8923a' : '#b0b0b8',
                         fontSize: '0.62rem', fontWeight: '800', fontFamily: 'monospace'
                       }}
                     >
@@ -15872,7 +15873,7 @@ onClick={async () => {
             {/* Vendor */}
             <div>
               <label style={{
-                fontSize: '0.52rem', color: '#b0a799', fontWeight: '900', letterSpacing: '1.5px',
+                fontSize: '0.52rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '1.5px',
                 textTransform: 'uppercase', display: 'block', marginBottom: '6px'
               }}>
                 VENDOR / SUPPLIER
@@ -15889,7 +15890,7 @@ onClick={async () => {
                 placeholder="e.g. Rajesh Traders, Mumbai Market, etc."
                 style={{
                   width: '100%', padding: '10px 14px',
-                  background: '#312b25', border: '1px solid #554b3e',
+                  background: '#222226', border: '1px solid #3b3b42',
                   color: '#fff', borderRadius: '9px', fontSize: '0.82rem',
                   outline: 'none', fontFamily: 'inherit'
                 }}
@@ -15899,11 +15900,11 @@ onClick={async () => {
 
           {/* ── PURCHASE ORDER PREVIEW ── */}
           <div style={{
-            background: '#1f1b17', border: '1px solid rgba(184,146,58,0.2)',
+            background: '#101012', border: '1px solid rgba(184,146,58,0.2)',
             borderRadius: '12px', padding: '18px', marginBottom: '16px',
             fontFamily: 'monospace'
           }}>
-            <div style={{ fontSize: '0.52rem', color: '#b0a799', fontWeight: '900', letterSpacing: '2px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '0.52rem', color: '#b0b0b8', fontWeight: '900', letterSpacing: '2px', marginBottom: '14px' }}>
               PURCHASE ORDER PREVIEW
             </div>
 
@@ -15945,7 +15946,7 @@ onClick={async () => {
                 return lines.map((line, i) => (
                   <div key={i} style={{
                     color: line.startsWith('PURCHASE ORDER') ? '#b8923a'
-                      : line.startsWith('─') ? '#8d8477'
+                      : line.startsWith('─') ? '#86868e'
                       : line.startsWith('Item:') || line.startsWith('Quantity:') || line.startsWith('Total:') ? '#fff'
                       : '#a89f90'
                   }}>
@@ -16070,8 +16071,8 @@ onClick={async () => {
               onClick={() => setPurchaseOrderModal(null)}
               style={{
                 padding: '13px 16px', borderRadius: '10px',
-                background: 'transparent', border: '1px solid #554b3e',
-                color: '#b0a799', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '800'
+                background: 'transparent', border: '1px solid #3b3b42',
+                color: '#b0b0b8', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '800'
               }}
             >
               <X size={14}/>
@@ -16079,7 +16080,7 @@ onClick={async () => {
           </div>
 
           {/* Tip */}
-          <div style={{ marginTop: '10px', fontSize: '0.6rem', color: '#968d80', lineHeight: 1.5 }}>
+          <div style={{ marginTop: '10px', fontSize: '0.6rem', color: '#92929a', lineHeight: 1.5 }}>
             Copy and paste into WhatsApp, SMS, or email to your supplier. Edit quantity and vendor above before copying.
           </div>
         </div>
@@ -16105,6 +16106,7 @@ section[style*="overflow-y: auto"]>*{animation:pxOpRise .35s ease both;}
 @media (max-width:1024px){
   .p-sidebar{margin:0!important;border-radius:0 24px 24px 0!important;}
   .p-top-header .p-eyebrow{display:none;}
+  .p-quickbar-label,.p-quickbar kbd{display:none;}
 }
 @keyframes moodPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.03);}}
 @keyframes pulseDot{0%{transform:scale(1);opacity:0.9;}70%{transform:scale(2.2);opacity:0;}100%{transform:scale(2.2);opacity:0;}}
@@ -16112,14 +16114,14 @@ section[style*="overflow-y: auto"]>*{animation:pxOpRise .35s ease both;}
 @keyframes p-slide-in{from{transform:translateX(-100%);}to{transform:translateX(0);}}
  
 .custom-scroll::-webkit-scrollbar{width:4px;height:4px;}
-.custom-scroll::-webkit-scrollbar-thumb{background:#3a342d;border-radius:10px;}
+.custom-scroll::-webkit-scrollbar-thumb{background:#2a2a2f;border-radius:10px;}
 .custom-scroll::-webkit-scrollbar-track{background:transparent;}
 .sidebar-nav::-webkit-scrollbar{width:2px;}
-.sidebar-nav::-webkit-scrollbar-thumb{background:#3a342d;border-radius:10px;}
+.sidebar-nav::-webkit-scrollbar-thumb{background:#2a2a2f;border-radius:10px;}
 .kds-scroll::-webkit-scrollbar{width:3px;}
-.kds-scroll::-webkit-scrollbar-thumb{background:#3a342d;border-radius:10px;}
+.kds-scroll::-webkit-scrollbar-thumb{background:#2a2a2f;border-radius:10px;}
  
-.spinner{border:3px solid #403930;border-top:3px solid #d3bfa2;border-radius:50%;width:32px;height:32px;animation:spin .8s linear infinite;}
+.spinner{border:3px solid #2b2b30;border-top:3px solid #d3bfa2;border-radius:50%;width:32px;height:32px;animation:spin .8s linear infinite;}
 tr:hover td{background:rgba(255,255,255,.01);}
 .mono{font-family:'JetBrains Mono','Courier New',monospace;}
  
@@ -16531,96 +16533,161 @@ tr:hover td{background:rgba(255,255,255,.01);}
   );
 };
 
+/* Header quick bar: live IST clock, connection state, fullscreen and a Ctrl/⌘+K command palette. Presentation only. */
+const OP_QUICK_TABS = [
+  ['pending','Live Kitchen','orders kds tables floor'],['billing','Billing Hub','bills invoices payments settle'],['menu','Menu Editor','dishes catalog pricing availability'],
+  ['insights','Insights','revenue analytics trends'],['intelligence','AI Intelligence','recommendations'],['assist','Assist','ask data'],['audit','Audit','history settlement log'],
+  ['inventory','Inventory','stock procurement wastage'],['extras','Extra Items','beverages snacks retail'],['recipes','Recipes','costing ingredients'],
+  ['management','Management','staff roster attendance payroll'],['customers','Customers','crm segments visits'],['marketing','Marketing','announcements offers campaigns']
+];
+const OperatorQuickBar = ({ activeTab, onGo }) => {
+  const [now, setNow] = useState(() => new Date());
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [full, setFull] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [idx, setIdx] = useState(0);
+  const inputRef = useRef(null);
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false), fs = () => setFull(!!document.fullscreenElement);
+    window.addEventListener('online', on); window.addEventListener('offline', off); document.addEventListener('fullscreenchange', fs);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); document.removeEventListener('fullscreenchange', fs); };
+  }, []);
+  useEffect(() => {
+    const k = (e) => { if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') { e.preventDefault(); setOpen(o => !o); setQ(''); setIdx(0); } else if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, []);
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 30); }, [open]);
+  const list = OP_QUICK_TABS.filter(([id, label, kw]) => !q.trim() || `${label} ${kw} ${id}`.toLowerCase().includes(q.trim().toLowerCase()))
+    .sort((x, y) => (y[1].toLowerCase().includes(q.trim().toLowerCase()) ? 1 : 0) - (x[1].toLowerCase().includes(q.trim().toLowerCase()) ? 1 : 0));
+  const go = (id) => { onGo(id); setOpen(false); };
+  const toggleFull = () => { try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); } catch (e) { /* unsupported */ } };
+  const chip = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 11px', borderRadius: 10, border: '1px solid rgba(211,191,162,0.18)', background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))', color: '#cfc7b8', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };
+  return (
+    <>
+      <div className="p-quickbar" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ ...chip, cursor: 'default' }} title={online ? 'Connected' : 'Offline — changes may not sync'}>
+          {online ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ecdcb9', boxShadow: '0 0 8px rgba(236,220,185,.7)' }} /> : <WifiOff size={13} color="#e29a58" />}
+          <span className="p-quickbar-clock" style={{ fontVariantNumeric: 'tabular-nums' }}>{now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}</span>
+        </span>
+        <button type="button" style={chip} onClick={() => { setOpen(true); setQ(''); setIdx(0); }} aria-label="Open command palette"><SearchIcon size={13} /><span className="p-quickbar-label">Jump to</span><kbd style={{ fontSize: 9, padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2' }}>Ctrl K</kbd></button>
+        <button type="button" style={{ ...chip, padding: '0 10px' }} onClick={toggleFull} aria-label={full ? 'Exit full screen' : 'Enter full screen'} title={full ? 'Exit full screen' : 'Full screen'}>{full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
+      </div>
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,8,10,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '14vh 14px 0' }}>
+          <div role="dialog" aria-label="Jump to" onClick={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '100%', borderRadius: 18, border: '1px solid rgba(211,191,162,0.22)', background: 'linear-gradient(160deg, #222226, #1a1a1d)', boxShadow: '0 30px 80px -20px rgba(0,0,0,0.8)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid #2b2b30' }}>
+              <SearchIcon size={16} color="#d3bfa2" />
+              <input ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setIdx(0); }} placeholder="Jump to a section…" aria-label="Search sections"
+                onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(list.length - 1, i + 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setIdx(i => Math.max(0, i - 1)); } else if (e.key === 'Enter' && list[idx]) go(list[idx][0]); }}
+                style={{ flex: 1, background: 'transparent', border: 0, outline: 0, color: '#f1ede4', fontSize: 14, fontFamily: 'inherit', boxShadow: 'none' }} />
+            </div>
+            <div style={{ maxHeight: 340, overflowY: 'auto', padding: 8 }}>
+              {list.length === 0 && <div style={{ padding: 18, textAlign: 'center', color: '#86868e', fontSize: 12 }}>No matching section</div>}
+              {list.map(([id, label], i) => (
+                <button key={id} type="button" onMouseEnter={() => setIdx(i)} onClick={() => go(id)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 12px', borderRadius: 11, border: '1px solid ' + (i === idx ? 'rgba(211,191,162,0.3)' : 'transparent'), background: i === idx ? 'rgba(211,191,162,0.1)' : 'transparent', color: id === activeTab ? '#d3bfa2' : '#e8e2d8', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                  <span>{label}</span>{i === idx ? <CornerDownLeft size={13} color="#d3bfa2" /> : id === activeTab ? <span style={{ fontSize: 9, letterSpacing: 1, color: '#86868e' }}>CURRENT</span> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 const styles = {
-  dashboard:{display:'flex',width:'100vw',height:'100vh',background:'radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.16), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(138,112,77,0.16), transparent 60%), #25201b',color:'#f7f3eb',position:'fixed',top:0,left:0,fontFamily:"'Inter', sans-serif"},
-  sidebar:{width:'272px',background:'linear-gradient(180deg, rgba(52,45,38,0.92), rgba(40,34,29,0.96))',backdropFilter:'blur(14px)',display:'flex',flexDirection:'column',border:'1px solid rgba(211,191,162,0.16)',margin:'12px 0 12px 12px',borderRadius:'24px',boxShadow:'0 24px 60px -24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)',overflow:'hidden'},
+  dashboard:{display:'flex',width:'100vw',height:'100vh',background:'radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.09), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(211,191,162,0.05), transparent 60%), #141416',color:'#f7f3eb',position:'fixed',top:0,left:0,fontFamily:"'Inter', sans-serif"},
+  sidebar:{width:'272px',background:'linear-gradient(180deg, rgba(34,34,38,0.92), rgba(24,24,27,0.96))',backdropFilter:'blur(14px)',display:'flex',flexDirection:'column',border:'1px solid rgba(211,191,162,0.16)',margin:'12px 0 12px 12px',borderRadius:'24px',boxShadow:'0 24px 60px -24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)',overflow:'hidden'},
   
   logoWrapper:{marginBottom:'40px',paddingLeft:'10px'},
   sidebarLogo:{width:'140px',filter:'brightness(1.5)'},
   navStack:{display:'flex',flexDirection:'column',gap:'8px'},
-  navBtn:{padding:'14px 20px',background:'transparent',border:'none',color:'#a59c8e',textAlign:'left',cursor:'pointer',borderRadius:'12px',fontWeight:'bold',fontSize:'0.78rem',display:'flex',alignItems:'center',transition:'0.3s'},
-  activeTab:{padding:'14px 20px',background:'#312b25',border:'1px solid #463e34',color:'#d3bfa2',textAlign:'left',borderRadius:'12px',fontWeight:'900',fontSize:'0.78rem',display:'flex',alignItems:'center'},
-  sidebarBottom:{padding:'25px',borderTop:'1px solid #403930'},
-  operatorCard:{display:'flex',alignItems:'center',gap:'12px',marginBottom:'20px',padding:'15px',background:'#2a2520',borderRadius:'12px',border:'1px solid #463e34'},
-  logoutBtn:{padding:'15px',width:'100%',background:'transparent',border:'1px solid #463e34',color:'#968d80',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'900',cursor:'pointer'},
+  navBtn:{padding:'14px 20px',background:'transparent',border:'none',color:'#a3a3ab',textAlign:'left',cursor:'pointer',borderRadius:'12px',fontWeight:'bold',fontSize:'0.78rem',display:'flex',alignItems:'center',transition:'0.3s'},
+  activeTab:{padding:'14px 20px',background:'#222226',border:'1px solid #313137',color:'#d3bfa2',textAlign:'left',borderRadius:'12px',fontWeight:'900',fontSize:'0.78rem',display:'flex',alignItems:'center'},
+  sidebarBottom:{padding:'25px',borderTop:'1px solid #2b2b30'},
+  operatorCard:{display:'flex',alignItems:'center',gap:'12px',marginBottom:'20px',padding:'15px',background:'#1a1a1d',borderRadius:'12px',border:'1px solid #313137'},
+  logoutBtn:{padding:'15px',width:'100%',background:'transparent',border:'1px solid #313137',color:'#92929a',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'900',cursor:'pointer'},
   mainContent:{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'},
-  topHeader:{height:'84px',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 36px',background:'rgba(42,37,32,0.55)',backdropFilter:'blur(14px)',borderBottom:'1px solid rgba(211,191,162,0.14)',flexShrink:0},
+  topHeader:{height:'84px',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 36px',background:'rgba(22,22,25,0.55)',backdropFilter:'blur(14px)',borderBottom:'1px solid rgba(211,191,162,0.14)',flexShrink:0},
   pageTitle:{fontSize:'1.2rem',fontWeight:'900',letterSpacing:'1px'},
-  zoneControl:{display:'flex',gap:'10px',background:'#1f1b17',padding:'5px',borderRadius:'12px',border:'1px solid #463e34'},
-  zoneBtn:{padding:'8px 18px',background:'transparent',border:'none',color:'#968d80',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
+  zoneControl:{display:'flex',gap:'10px',background:'#101012',padding:'5px',borderRadius:'12px',border:'1px solid #313137'},
+  zoneBtn:{padding:'8px 18px',background:'transparent',border:'none',color:'#92929a',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
   activeZoneBtn:{padding:'8px 18px',background:'#d3bfa215',border:'none',color:'#d3bfa2',fontSize:'0.7rem',fontWeight:'900',borderRadius:'8px'},
-  searchWrapper:{position:'relative',background:'#2a2520',padding:'10px 20px',borderRadius:'30px',border:'1px solid #463e34',display:'flex',alignItems:'center',gap:'10px'},
+  searchWrapper:{position:'relative',background:'#1a1a1d',padding:'10px 20px',borderRadius:'30px',border:'1px solid #313137',display:'flex',alignItems:'center',gap:'10px'},
   searchInput:{background:'transparent',border:'none',color:'#fff',outline:'none',width:'220px',fontSize:'0.8rem'},
   // ── KEY FIX: scrollArea fills remaining height and scrolls independently
   scrollArea:{flex:1,padding:'32px 36px',overflowY:'auto',overflowX:'hidden'},
-  orderRow:{display:'flex',alignItems:'center',gap:'25px',background:'#2a2520',padding:'25px',borderRadius:'20px',border:'1px solid #463e34',marginBottom:'15px'},
-  tableCircle:{width:'45px',height:'45px',background:'#312b25',borderRadius:'12px',border:'1px solid #463e34',display:'flex',alignItems:'center',justifyContent:'center',color:'#d3bfa2',fontSize:'1.1rem',fontWeight:'900'},
+  orderRow:{display:'flex',alignItems:'center',gap:'25px',background:'#1a1a1d',padding:'25px',borderRadius:'20px',border:'1px solid #313137',marginBottom:'15px'},
+  tableCircle:{width:'45px',height:'45px',background:'#222226',borderRadius:'12px',border:'1px solid #313137',display:'flex',alignItems:'center',justifyContent:'center',color:'#d3bfa2',fontSize:'1.1rem',fontWeight:'900'},
   tableGrid:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'},
-  tableBtn:{padding:'30px',background:'#2a2520',border:'1px solid #403930',color:'#8d8477',borderRadius:'15px',fontWeight:'900',cursor:'pointer',position:'relative'},
+  tableBtn:{padding:'30px',background:'#1a1a1d',border:'1px solid #2b2b30',color:'#86868e',borderRadius:'15px',fontWeight:'900',cursor:'pointer',position:'relative'},
   receipt:{width:'450px',background:'#fff',color:'#000',padding:'50px',borderRadius:'2px',boxShadow:'0 30px 90px rgba(0,0,0,0.6)',margin:'0 auto',flexShrink:0,maxHeight:'calc(100vh - 200px)',overflowY:'auto'},
   receiptRow:{display:'flex',justifyContent:'space-between',marginBottom:'12px',fontSize:'0.9rem'},
   discountInput:{width:'50px',padding:'8px',border:'1px solid #ddd',textAlign:'center',borderRadius:'4px',fontWeight:'bold'},
   settleBtn:{width:'100%',padding:'20px',background:'#000',color:'#fff',border:'none',fontWeight:'900',letterSpacing:'1px',cursor:'pointer'},
   insightsWrapper:{maxWidth:'1000px',margin:'0 auto'},
   statsRow:{display:'flex',gap:'20px',marginBottom:'40px'},
-  glassStat:{flex:1,padding:'30px',background:'#2a2520',borderRadius:'24px',border:'1px solid #463e34'},
-  statLabel:{color:'#9b9285',fontWeight:'800',fontSize:'0.65rem',letterSpacing:'0.4px'},
+  glassStat:{flex:1,padding:'30px',background:'#1a1a1d',borderRadius:'24px',border:'1px solid #313137'},
+  statLabel:{color:'#97979f',fontWeight:'800',fontSize:'0.65rem',letterSpacing:'0.4px'},
   statVal:{fontSize:'2rem',fontWeight:'900',margin:'8px 0 0'},
-  heatmapCard:{background:'#2a2520',padding:'40px',borderRadius:'30px',border:'1px solid #463e34'},
+  heatmapCard:{background:'#1a1a1d',padding:'40px',borderRadius:'30px',border:'1px solid #313137'},
   calendarGridHeader:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',marginBottom:'25px'},
-  dayHeader:{fontSize:'0.6rem',fontWeight:'900',color:'#8d8477',letterSpacing:'1px'},
+  dayHeader:{fontSize:'0.6rem',fontWeight:'900',color:'#86868e',letterSpacing:'1px'},
   calendarGrid:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'10px'},
   heatSquare:{height:'70px',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',cursor:'pointer',transition:'0.2s'},
   heatSquareEmpty:{height:'70px'},
   heatmapLegend:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',marginTop:'40px',fontSize:'0.6rem',fontWeight:'bold'},
   marketingLayout:{display:'flex',gap:'30px',justifyContent:'center'},
-  botCard:{background:'#2a2520',padding:'40px',borderRadius:'30px',border:'1px solid #463e34',width:'100%',maxWidth:'450px',textAlign:'center'},
+  botCard:{background:'#1a1a1d',padding:'40px',borderRadius:'30px',border:'1px solid #313137',width:'100%',maxWidth:'450px',textAlign:'center'},
   cardHeaderSmall:{display:'flex',alignItems:'center',gap:'10px',justifyContent:'center',marginBottom:'20px',fontWeight:'900',fontSize:'0.8rem',color:'#d3bfa2'},
   qrContainer:{marginTop:'30px',padding:'30px',background:'#fff',borderRadius:'20px',display:'inline-block'},
-  loginOverlay:{width:'100vw',height:'100vh',background:'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.22), transparent 62%), radial-gradient(700px 420px at 90% 110%, rgba(138,112,77,0.22), transparent 60%), #25201b',display:'flex',justifyContent:'center',alignItems:'center'},
-  loginBox:{width:'440px',maxWidth:'92vw',background:'linear-gradient(165deg, rgba(58,52,45,0.92), rgba(42,37,32,0.96))',padding:'52px 44px',borderRadius:'32px',textAlign:'center',border:'1px solid rgba(211,191,162,0.22)',boxShadow:'0 40px 90px -30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)'},
-  input:{width:'100%',padding:'16px 18px',background:'linear-gradient(165deg, #2a2520 0%, #2a2520 100%)',border:'1px solid rgba(255,255,255,0.09)',color:'#fff',borderRadius:'14px',marginBottom:'20px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s, box-shadow 0.15s'},
-  mainBtn:{width:'100%',padding:'20px',background:'#d3bfa2',color:'#1c1814',border:'none',borderRadius:'14px',fontWeight:'900',cursor:'pointer'},
-  toast:{position:'fixed',bottom:'40px',right:'40px',background:'#312b25',padding:'18px 30px',borderRadius:'16px',border:'1px solid #463e34',display:'flex',alignItems:'center',gap:'15px',zIndex:9999,fontWeight:'900',fontSize:'0.85rem',color:'#d3bfa2',boxShadow:'0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02)'},
-  modalBackdrop:{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(24,19,15,0.7)',backdropFilter:'blur(10px)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:9000,padding:'20px',overflowY:'auto',boxSizing:'border-box'},
-  confirmBox:{width:'380px',maxWidth:'100%',background:'linear-gradient(165deg, #312b25 0%, #2a2520 100%)',padding:'50px',borderRadius:'35px',textAlign:'center',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'},
-  confirmBtn:{flex:1,padding:'18px',background:'linear-gradient(165deg, #ddc9a8 0%, #d3bfa2 100%)',color:'#1c1814',border:'none',borderRadius:'12px',fontWeight:'900',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',boxShadow:'0 8px 20px rgba(211,191,162,0.18)',transition:'transform 0.1s'},
-  cancelBtn:{flex:1,padding:'18px',background:'#312b25',color:'#bab1a3',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'12px',fontWeight:'800',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',transition:'color 0.15s, border-color 0.15s'},
-  premiumCard:{background:'linear-gradient(165deg, #312b25 0%, #2a2520 100%)',padding:'26px',borderRadius:'22px',border:'1px solid rgba(255,255,255,0.07)',boxShadow:'0 10px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)'},
-  ghostBtn:{flex:1,padding:'12px',background:'transparent',border:'1px solid #463e34',color:'#a59c8e',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
-  toggleShowBtn:{flex:1,padding:'12px',background:'#d3bfa2',color:'#1c1814',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
-  toggleHideBtn:{flex:1,padding:'12px',background:'#3a342d',color:'#968d80',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+  loginOverlay:{width:'100vw',height:'100vh',background:'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.11), transparent 62%), radial-gradient(700px 420px at 90% 110%, rgba(211,191,162,0.06), transparent 60%), #141416',display:'flex',justifyContent:'center',alignItems:'center'},
+  loginBox:{width:'440px',maxWidth:'92vw',background:'linear-gradient(165deg, rgba(38,38,42,0.92), rgba(22,22,25,0.96))',padding:'52px 44px',borderRadius:'32px',textAlign:'center',border:'1px solid rgba(211,191,162,0.22)',boxShadow:'0 40px 90px -30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)'},
+  input:{width:'100%',padding:'16px 18px',background:'linear-gradient(165deg, #1a1a1d 0%, #1a1a1d 100%)',border:'1px solid rgba(255,255,255,0.09)',color:'#fff',borderRadius:'14px',marginBottom:'20px',fontSize:'0.85rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s, box-shadow 0.15s'},
+  mainBtn:{width:'100%',padding:'20px',background:'#d3bfa2',color:'#0f0f11',border:'none',borderRadius:'14px',fontWeight:'900',cursor:'pointer'},
+  toast:{position:'fixed',bottom:'40px',right:'40px',background:'#222226',padding:'18px 30px',borderRadius:'16px',border:'1px solid #313137',display:'flex',alignItems:'center',gap:'15px',zIndex:9999,fontWeight:'900',fontSize:'0.85rem',color:'#d3bfa2',boxShadow:'0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02)'},
+  modalBackdrop:{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(8,8,10,0.7)',backdropFilter:'blur(10px)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:9000,padding:'20px',overflowY:'auto',boxSizing:'border-box'},
+  confirmBox:{width:'380px',maxWidth:'100%',background:'linear-gradient(165deg, #222226 0%, #1a1a1d 100%)',padding:'50px',borderRadius:'35px',textAlign:'center',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'},
+  confirmBtn:{flex:1,padding:'18px',background:'linear-gradient(165deg, #ddc9a8 0%, #d3bfa2 100%)',color:'#0f0f11',border:'none',borderRadius:'12px',fontWeight:'900',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',boxShadow:'0 8px 20px rgba(211,191,162,0.18)',transition:'transform 0.1s'},
+  cancelBtn:{flex:1,padding:'18px',background:'#222226',color:'#bcbcc3',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'12px',fontWeight:'800',fontSize:'0.8rem',letterSpacing:'0.5px',cursor:'pointer',transition:'color 0.15s, border-color 0.15s'},
+  premiumCard:{background:'linear-gradient(165deg, #222226 0%, #1a1a1d 100%)',padding:'26px',borderRadius:'22px',border:'1px solid rgba(255,255,255,0.07)',boxShadow:'0 10px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)'},
+  ghostBtn:{flex:1,padding:'12px',background:'transparent',border:'1px solid #313137',color:'#a3a3ab',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
+  toggleShowBtn:{flex:1,padding:'12px',background:'#d3bfa2',color:'#0f0f11',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+  toggleHideBtn:{flex:1,padding:'12px',background:'#2a2a2f',color:'#92929a',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
   fullWidthGrid:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'25px'},
-  gridLabel:{color:'#8d8477',fontSize:'0.7rem',fontWeight:'900',marginBottom:'20px',letterSpacing:'1.5px'},
+  gridLabel:{color:'#86868e',fontSize:'0.7rem',fontWeight:'900',marginBottom:'20px',letterSpacing:'1.5px'},
   specialModeRow:{display:'flex',gap:'15px',marginBottom:'30px'},
-  specBtn:{flex:1,padding:'18px',background:'#2a2520',border:'1px solid #463e34',color:'#968d80',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
-  activeSpecBtn:{flex:1,padding:'18px',background:'#d3bfa2',border:'none',color:'#1c1814',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
-  waiterRequestRow:{display:'flex',alignItems:'center',gap:'20px',background:'#312b25',padding:'15px 20px',borderRadius:'15px',border:'1px solid #d4af37',marginBottom:'12px'},
+  specBtn:{flex:1,padding:'18px',background:'#1a1a1d',border:'1px solid #313137',color:'#92929a',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
+  activeSpecBtn:{flex:1,padding:'18px',background:'#d3bfa2',border:'none',color:'#0f0f11',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
+  waiterRequestRow:{display:'flex',alignItems:'center',gap:'20px',background:'#222226',padding:'15px 20px',borderRadius:'15px',border:'1px solid #d4af37',marginBottom:'12px'},
   goldCircle:{width:'40px',height:'40px',background:'#d4af3715',borderRadius:'10px',border:'1px solid #d4af37',display:'flex',alignItems:'center',justifyContent:'center',color:'#d4af37'},
-  doneBtn:{background:'#d3bfa2',color:'#1c1814',border:'none',padding:'8px 15px',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
-  biCard:{background:'linear-gradient(165deg, #312b25 0%, #2a2520 100%)',padding:'26px',borderRadius:'20px',border:'1px solid rgba(211,191,162,0.09)',boxShadow:'0 12px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.02)'},
-  biTitle:{fontSize:'0.75rem',fontWeight:'900',color:'#bab1a3',marginBottom:'20px',display:'flex',alignItems:'center',gap:'10px',letterSpacing:'1.2px',textTransform:'uppercase'},
+  doneBtn:{background:'#d3bfa2',color:'#0f0f11',border:'none',padding:'8px 15px',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+  biCard:{background:'linear-gradient(165deg, #222226 0%, #1a1a1d 100%)',padding:'26px',borderRadius:'20px',border:'1px solid rgba(211,191,162,0.09)',boxShadow:'0 12px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.02)'},
+  biTitle:{fontSize:'0.75rem',fontWeight:'900',color:'#bcbcc3',marginBottom:'20px',display:'flex',alignItems:'center',gap:'10px',letterSpacing:'1.2px',textTransform:'uppercase'},
   sourceRow:{display:'flex',alignItems:'center',gap:'15px',marginBottom:'12px',fontSize:'0.8rem',color:'#999'},
-  progressBg:{flex:1,height:'6px',background:'#312b25',borderRadius:'10px',overflow:'hidden'},
+  progressBg:{flex:1,height:'6px',background:'#222226',borderRadius:'10px',overflow:'hidden'},
   progressFill:{height:'100%',background:'linear-gradient(90deg,#8a704d,#d3bfa2)',borderRadius:'10px'},
-  headerMonthSelector:{display:'flex',alignItems:'center',gap:'12px',background:'#1f1b17',padding:'5px 15px',borderRadius:'12px',border:'1px solid #463e34'},
-  headerMonthNav:{background:'transparent',border:'none',color:'#a59c8e',cursor:'pointer',display:'flex',alignItems:'center'},
+  headerMonthSelector:{display:'flex',alignItems:'center',gap:'12px',background:'#101012',padding:'5px 15px',borderRadius:'12px',border:'1px solid #313137'},
+  headerMonthNav:{background:'transparent',border:'none',color:'#a3a3ab',cursor:'pointer',display:'flex',alignItems:'center'},
   headerMonthDisplay:{display:'flex',alignItems:'center',gap:'8px',minWidth:'100px',justifyContent:'center'},
   miniTab:{flex:1,padding:'10px',border:'none',background:'transparent',fontSize:'0.7rem',fontWeight:'900',cursor:'pointer',color:'#888',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'},
   activeMiniTab:{flex:1,padding:'10px',border:'none',background:'#fff',borderRadius:'8px',fontSize:'0.7rem',fontWeight:'900',boxShadow:'0 4px 12px rgba(0,0,0,0.08)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'},
   billInput:{width:'100px',padding:'10px',border:'1px solid #eee',background:'#fafafa',borderRadius:'8px',textAlign:'right',fontWeight:'900',color:'#000',outline:'none'},
   modeBtn:{padding:'15px 5px',background:'#f9f9f9',border:'1px solid #eee',borderRadius:'12px',display:'flex',flexDirection:'column',alignItems:'center',gap:'8px',fontSize:'0.65rem',fontWeight:'900',color:'#999',cursor:'pointer'},
   activeModeBtn:{padding:'15px 5px',background:'#000',border:'1px solid #000',borderRadius:'12px',display:'flex',flexDirection:'column',alignItems:'center',gap:'8px',fontSize:'0.65rem',fontWeight:'900',color:'#fff',cursor:'pointer'},
-  hudCountersRow:{display:'flex',alignItems:'center',gap:'0',background:'#2a2520',padding:'8px 0',borderRadius:'12px',border:'1px solid #463e34',marginRight:'20px',boxShadow:'inset 0 2px 8px rgba(0,0,0,0.8)'},
+  hudCountersRow:{display:'flex',alignItems:'center',gap:'0',background:'#1a1a1d',padding:'8px 0',borderRadius:'12px',border:'1px solid #313137',marginRight:'20px',boxShadow:'inset 0 2px 8px rgba(0,0,0,0.8)'},
   hudStatBox:{padding:'4px 18px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minWidth:'110px'},
-  hudStatLabel:{fontSize:'0.58rem',fontWeight:'800',color:'#a59c8e',letterSpacing:'1.5px',textTransform:'uppercase',marginBottom:'4px',textAlign:'center'},
+  hudStatLabel:{fontSize:'0.58rem',fontWeight:'800',color:'#a3a3ab',letterSpacing:'1.5px',textTransform:'uppercase',marginBottom:'4px',textAlign:'center'},
   hudStatValue:{fontSize:'1.4rem',fontWeight:'900',fontFamily:'JetBrains Mono, monospace',color:'#ffffff',lineHeight:'1.1',letterSpacing:'-0.5px'},
 sidebarTop: { 
   padding: '30px 20px', 
   flex: 1, 
   overflowY: 'auto',
   scrollbarWidth: 'thin',
-  scrollbarColor: '#8d8477 transparent'
+  scrollbarColor: '#86868e transparent'
 },
 
 };

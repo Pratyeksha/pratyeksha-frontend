@@ -43,18 +43,18 @@ import {
 const T = {
   primary: '#d3bfa2',
   primarySoft: 'rgba(211,191,162,0.14)',
-  bg: '#060606',
-  surface: '#0a0a0a',
-  surfaceRaised: '#0d0d0d',
+  bg: '#101012',
+  surface: '#1a1a1d',
+  surfaceRaised: '#1a1a1d',
   border: 'rgba(211,191,162,0.12)',
   borderStrong: 'rgba(211,191,162,0.24)',
   textHigh: '#ffffff',
   textMed: 'rgba(255,255,255,0.55)',
-  textLow: 'rgba(255,255,255,0.20)',
+  textLow: 'rgba(255,255,255,0.42)',
   danger: 'rgba(214,109,39,0.92)',
   dangerSoft: 'rgba(214,109,39,0.14)',
-  warning: 'rgba(240,165,0,0.85)',
-  warningSoft: 'rgba(240,165,0,0.12)',
+  warning: 'rgba(226,154,88,0.9)',
+  warningSoft: 'rgba(226,154,88,0.12)',
   success: '#d3bfa2',
   successSoft: 'rgba(211,191,162,0.14)',
   mono: "'JetBrains Mono', 'SF Mono', ui-monospace, monospace",
@@ -442,7 +442,7 @@ function usePwaInstall() {
     }
     if (!document.querySelector('meta[name="theme-color"]')) {
       const meta = document.createElement('meta');
-      meta.name = 'theme-color'; meta.content = '#0a0a0a';
+      meta.name = 'theme-color'; meta.content = '#1a1a1d';
       document.head.appendChild(meta);
     }
     if (!document.querySelector('link[rel="apple-touch-icon"]')) {
@@ -694,7 +694,7 @@ const PillTabs = ({ options, value, onChange }) => (
       <button type="button" key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
         padding: '7px 13px', borderRadius: 100, fontSize: 12, fontWeight: 700,
         background: value === opt.value ? T.primary : 'transparent',
-        color: value === opt.value ? '#0a0a0a' : T.textMed,
+        color: value === opt.value ? '#0f0f11' : T.textMed,
         border: `1px solid ${value === opt.value ? T.primary : T.border}`
       }}>{opt.label}</button>
     ))}
@@ -708,7 +708,7 @@ const Toggle = ({ checked, onChange }) => (
   }}>
     <span style={{
       position: 'absolute', top: 2, left: checked ? 19 : 2, width: 19, height: 19, borderRadius: '50%',
-      background: checked ? '#0a0a0a' : '#fff', transition: 'left .18s ease'
+      background: checked ? '#1a1a1d' : '#fff', transition: 'left .18s ease'
     }} />
   </button>
 );
@@ -742,14 +742,14 @@ const Field = ({ label, children }) => (
 );
 
 const inputStyle = {
-  width: '100%', background: '#050505', border: `1px solid ${T.border}`, borderRadius: 10,
+  width: '100%', background: '#101012', border: `1px solid ${T.border}`, borderRadius: 10,
   padding: '10px 12px', color: T.textHigh, fontSize: 13, fontFamily: T.font, outline: 'none'
 };
 
 const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style, type = 'button' }) => (
   <button type={type} onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
     background: disabled ? 'rgba(211,191,162,0.35)' : `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`,
-    color: '#0a0a0a', border: 'none', boxShadow: disabled ? 'none' : '0 8px 20px -8px rgba(211,191,162,0.55)',
+    color: '#0f0f11', border: 'none', boxShadow: disabled ? 'none' : '0 8px 20px -8px rgba(211,191,162,0.55)',
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 800, display: 'inline-flex',
     alignItems: 'center', gap: 7, opacity: disabled ? 0.6 : 1, ...style
   }}>{Icon && <Icon size={14} />}{children}</button>
@@ -985,7 +985,7 @@ const InstallAppButton = () => {
     <>
       <button type="button" onClick={() => isIos ? setShowIosHelp(true) : promptInstall()} className="pown-btn pown-shimmer-btn" style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, padding: '11px 12px',
-        borderRadius: 12, background: `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`, color: '#0a0a0a',
+        borderRadius: 12, background: `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`, color: '#0f0f11',
         border: 'none', fontSize: 12.5, fontWeight: 800, boxShadow: '0 8px 20px -8px rgba(211,191,162,0.55)'
       }}><Download size={14} /> Install App</button>
       <IosInstallModal open={showIosHelp} onClose={() => setShowIosHelp(false)} />
@@ -1014,7 +1014,7 @@ const InstallBanner = () => {
         width: 44, height: 44, borderRadius: 13, flexShrink: 0,
         background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px -6px rgba(211,191,162,0.5)'
-      }}><Smartphone size={20} color="#0a0a0a" strokeWidth={2.25} /></div>
+      }}><Smartphone size={20} color="#0f0f11" strokeWidth={2.25} /></div>
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700 }}>Install Pratyeksha Owner</div>
         <div style={{ fontSize: 11.5, color: T.textLow, marginTop: 2 }}>One tap, no app store — live on your home screen like any other app.</div>
@@ -1032,10 +1032,11 @@ const Sidebar = () => {
   const { tenantId, ownerName, logout } = useOwner();
   return (
     <aside style={{
-      width: 262, flexShrink: 0,
-      borderRight: `1px solid ${T.border}`,
-      background: `linear-gradient(180deg, ${T.surfaceRaised} 0%, ${T.bg} 100%)`,
-      display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden'
+      width: 262, flexShrink: 0, margin: 12, marginRight: 0, height: 'calc(100% - 24px)',
+      border: `1px solid ${T.border}`, borderRadius: 24,
+      background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))',
+      backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 24px 60px -28px rgba(0,0,0,0.7)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden'
     }}>
       {/* Pinned header — logo + owner chip, never scrolls */}
       <div style={{ padding: '26px 22px 18px', flexShrink: 0 }}>
@@ -1378,7 +1379,7 @@ const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color 
 
 const AxisTick = { fill: 'rgba(255,255,255,0.35)', fontSize: 10.5, fontFamily: T.mono };
 const chartTooltipStyle = {
-  contentStyle: { background: '#0d0d0d', border: `1px solid ${T.borderStrong}`, borderRadius: 10, fontSize: 12, fontFamily: T.mono },
+  contentStyle: { background: '#1a1a1d', border: `1px solid ${T.borderStrong}`, borderRadius: 10, fontSize: 12, fontFamily: T.mono },
   labelStyle: { color: T.textMed }, itemStyle: { color: T.primary }
 };
 
@@ -1387,7 +1388,7 @@ const chartTooltipStyle = {
    Categorical hues are the validated dark-surface set (blue, orange, aqua, violet, amber, magenta) assigned in fixed order;
    single-series charts use the brand gold. Every chart ships a value legend/list (never colour alone) and a hover tooltip.
    ════════════════════════════════════════════════════════════ */
-const VIZ = ['#3987e5', '#d95926', '#199e70', '#9085e9', '#c98500', '#d55181'];
+const VIZ = ['#cdbb98', '#e29a58', '#ecdcb9', '#b8a47f', '#8a704d', '#e29a58'];
 const fmtINRc = (v) => `₹${Math.round(Number(v) || 0).toLocaleString('en-IN')}`;
 const clipLabel = (s, n = 17) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 /** Top-N rows kept, the rest folded into one "Other" row (a 7th+ hue is never generated). */
@@ -1415,7 +1416,7 @@ const DonutChart = ({ items, valueFormat = (v) => v, centerValue, centerLabel, s
       <div style={{ position: 'relative', width: size, height: size, flex: '0 0 auto', margin: '0 auto' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={rows} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="98%" paddingAngle={rows.length > 1 ? 2 : 0} stroke="#0a0a0a" strokeWidth={2} isAnimationActive={false}>
+            <Pie data={rows} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="98%" paddingAngle={rows.length > 1 ? 2 : 0} stroke="#2b2b30" strokeWidth={2} isAnimationActive={false}>
               {rows.map((r, i) => <Cell key={r.label} fill={r.color || VIZ[i % VIZ.length]} />)}
             </Pie>
             <Tooltip {...chartTooltipStyle} formatter={(v, n) => [valueFormat(v), n]} />
@@ -2266,7 +2267,7 @@ const PrivacyRequestsCard = ({ tenantId }) => {
               <div style={{ fontSize: 13, fontWeight: 700 }}>{r.name || 'Guest'}</div>
               <div className="pown-mono" style={{ fontSize: 11.5, color: T.textLow }}>{r.phone} · {new Date(r.createdAt).toLocaleDateString('en-IN')}</div>
             </div>
-            <button type="button" disabled={busyId === r._id} onClick={() => resolve(r._id, 'erase')} style={{ padding: '8px 12px', borderRadius: 10, border: 0, background: T.gold || '#d3bfa2', color: '#14110c', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' }}>Delete data</button>
+            <button type="button" disabled={busyId === r._id} onClick={() => resolve(r._id, 'erase')} style={{ padding: '8px 12px', borderRadius: 10, border: 0, background: T.gold || '#d3bfa2', color: '#0f0f11', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' }}>Delete data</button>
             <button type="button" disabled={busyId === r._id} onClick={() => resolve(r._id, 'reject')} style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${T.border}`, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>Dismiss</button>
           </div>
         ))}

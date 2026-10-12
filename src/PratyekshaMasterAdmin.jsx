@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import API_BASE_URL from './apiBase.js';
 import LeadCRM from './LeadCRM.jsx';
+import MasterTracking from './MasterTracking.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -13,7 +14,7 @@ import {
   BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
   Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send, Receipt,
   Globe, Server, MessageSquare, QrCode, CreditCard, Wrench, Megaphone as MegaphoneIcon,
-  TrendingDown, PlusCircle, Edit3, FileText
+  TrendingDown, PlusCircle, Edit3, FileText, Radar
 } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
@@ -31,15 +32,15 @@ const EXPENSE_CATEGORY_LABELS_FRONTEND = {
 ───────────────────────────────────────── */
 const C = {
   /* backgrounds */
-  bg:      '#0a0a0a',
-  bgDark:  '#060606',
-  bgCard:  '#111111',
-  bgCard2: '#151515',
-  bgInput: '#0d0d0d',
+  bg:      '#141416',
+  bgDark:  '#101012',
+  bgCard:  '#1b1b1e',
+  bgCard2: '#232327',
+  bgInput: '#17171a',
 
   /* borders */
-  border:    '#1e1e1e',
-  borderMid: '#252525',
+  border:    '#2e2e34',
+  borderMid: '#3b3b42',
 
   /* ── TWO-TONE GOLD SYSTEM ── */
   goldPrimary: '#d3bfa2',          /* light warm gold  — active nav, CTA buttons, key numbers */
@@ -52,14 +53,14 @@ const C = {
   /* text */
   text:      '#e8e8e8',   /* near-white primary body */
   textMid:   '#a8a8a8',   /* secondary body */
-  textDim:   '#606060',   /* labels, placeholders */
-  textFaint: '#2a2a2a',   /* very dim */
+  textDim:   '#8a8a92',   /* labels, placeholders */
+  textFaint: '#6e6e76',   /* very dim */
 
   /* status colors — kept neutral, no gold bleed */
   warning:  '#d4903a',
-  danger:   '#c06040',
-  success:  '#5a9e6a',
-  green:    '#4ade80',
+  danger:   '#e29a58',
+  success:  '#ecdcb9',
+  green:    '#ecdcb9',
   amber:    '#b87c33',
 };
 
@@ -70,7 +71,7 @@ const GLOBAL_CSS = `
   body, html {
     overflow: hidden !important;
     width: 100vw; height: 100vh;
-    background: #0a0a0a;
+    background: #1a1a1d;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     color: #e8e8e8;
     -webkit-font-smoothing: antialiased;
@@ -85,8 +86,10 @@ const GLOBAL_CSS = `
   a { text-decoration: none; color: inherit; }
 
   .p-sidebar {
-    width: 248px; min-width: 248px; height: 100vh;
-    background: #060606; border-right: 1px solid #1a1a1a;
+    width: 256px; min-width: 256px; height: calc(100vh - 24px); margin: 12px 0 12px 12px;
+    background: linear-gradient(180deg, rgba(34,34,38,0.92), rgba(22,22,25,0.96)); border: 1px solid rgba(211,191,162,0.16);
+    border-radius: 24px; box-shadow: 0 24px 60px -24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+    backdrop-filter: blur(14px);
     display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
     transition: transform 0.26s cubic-bezier(.4,0,.2,1);
     position: relative; z-index: 149;
@@ -95,7 +98,7 @@ const GLOBAL_CSS = `
 
   .p-topbar {
     display: none; position: fixed; top: 0; left: 0; right: 0;
-    height: 50px; background: #060606; border-bottom: 1px solid #1a1a1a;
+    height: 50px; background: #101012; border-bottom: 1px solid #313137;
     z-index: 160; align-items: center; justify-content: space-between; padding: 0 14px;
   }
   .p-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 148; }
@@ -110,7 +113,7 @@ const GLOBAL_CSS = `
   .p-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .p-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
   .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .p-filterbar { display: flex; border-bottom: 1px solid #1a1a1a; flex-shrink: 0; background: #060606; overflow-x: auto; }
+  .p-filterbar { display: flex; border-bottom: 1px solid #313137; flex-shrink: 0; background: #101012; overflow-x: auto; }
   .p-filterbar::-webkit-scrollbar { display: none; }
   .p-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .p-main { min-height: 0; }
@@ -118,7 +121,7 @@ const GLOBAL_CSS = `
   .p-pad { padding: 24px 32px 48px; }
 
   .p-row { transition: background 0.1s; }
-  .p-row:hover { background: #141414 !important; }
+  .p-row:hover { background: #222226 !important; }
 
   /* Card hover — light gold border + gentle lift */
   .p-card { transition: border-color 0.18s, transform 0.2s cubic-bezier(.4,0,.2,1), box-shadow 0.2s; }
@@ -126,7 +129,7 @@ const GLOBAL_CSS = `
   .p-card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -14px rgba(0,0,0,0.55); }
 
   .p-demo-card { transition: background 0.1s, border-color 0.1s; cursor: pointer; }
-  .p-demo-card:hover { background: #141414 !important; }
+  .p-demo-card:hover { background: #222226 !important; }
 
   /* Nav hover — subtle light gold tint */
   .p-nav-item:hover { background: rgba(211,191,162,0.04) !important; color: #d3bfa2 !important; }
@@ -141,15 +144,15 @@ const GLOBAL_CSS = `
 
   /* Modal overlay */
   .p-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .p-modal { background: #111111; border: 1px solid #252525; border-radius: 16px; padding: 22px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; }
+  .p-modal { background: #222226; border: 1px solid #3b3b42; border-radius: 16px; padding: 22px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; }
 
   /* Table horizontal scroll + hint */
   .p-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .p-scroll-hint { display: none; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; color: #606060; padding: 8px 32px 0; }
+  .p-scroll-hint { display: none; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; color: #a9a9ad; padding: 8px 32px 0; }
   @media (max-width: 780px) { .p-scroll-hint { display: flex; } }
 
   /* Dropzone */
-  .p-dropzone { border: 1.5px dashed #252525; border-radius: 12px; transition: border-color .15s, background .15s; cursor: pointer; }
+  .p-dropzone { border: 1.5px dashed #3b3b42; border-radius: 12px; transition: border-color .15s, background .15s; cursor: pointer; }
   .p-dropzone:hover, .p-dropzone.drag { border-color: rgba(211,191,162,0.45); background: rgba(211,191,162,0.03); }
 
   .p-btn-shimmer { position: relative; overflow: hidden; }
@@ -171,7 +174,7 @@ const GLOBAL_CSS = `
     .p-form-grid > * { grid-column: auto !important; }
     .p-sidebar {
       position: fixed; top: 0; left: 0; bottom: 0;
-      width: 80vw; max-width: 260px;
+      width: 80vw; max-width: 260px; height: auto; margin: 0; border-radius: 0 24px 24px 0;
       transform: translateX(-100%); z-index: 160;
     }
     .p-sidebar.open { transform: translateX(0); }
@@ -201,11 +204,18 @@ const GLOBAL_CSS = `
   }
 `;
 
-if (typeof document !== 'undefined' && !document.getElementById('p-admin-styles')) {
-  const s = document.createElement('style');
-  s.id = 'p-admin-styles';
-  s.textContent = GLOBAL_CSS;
-  document.head.appendChild(s);
+/* These rules lock html/body and reset every element's margin/padding, so they must only exist while the
+   admin console is mounted. Injecting at import time leaked them into every other route (the guest home
+   could not scroll). */
+function useAdminGlobalStyles() {
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const s = document.createElement('style');
+    s.id = 'p-admin-styles';
+    s.textContent = GLOBAL_CSS;
+    document.head.appendChild(s);
+    return () => { s.remove(); };
+  }, []);
 }
 
 /* ─────────────────────────────────────────
@@ -221,7 +231,7 @@ const StatusChip = ({ status }) => {
   const map = {
     'Pending':    { color: '#d3bfa2', bg: 'rgba(211,191,162,0.08)', border: 'rgba(211,191,162,0.2)',  label: 'Pending' },
     'Contacted':  { color: '#8a704d', bg: 'rgba(138,112,77,0.10)',  border: 'rgba(138,112,77,0.22)', label: 'Contacted' },
-    'Demo Given': { color: '#606060', bg: 'rgba(96,96,96,0.07)',    border: 'rgba(96,96,96,0.16)',   label: 'Done' },
+    'Demo Given': { color: '#a9a9ad', bg: 'rgba(96,96,96,0.07)',    border: 'rgba(96,96,96,0.16)',   label: 'Done' },
   };
   const s = map[status] || map['Pending'];
   return (
@@ -305,7 +315,7 @@ function usePwaInstall() {
     }
     if (!document.querySelector('meta[name="theme-color"]')) {
       const meta = document.createElement('meta');
-      meta.name = 'theme-color'; meta.content = '#0a0a0a';
+      meta.name = 'theme-color'; meta.content = '#1a1a1d';
       document.head.appendChild(meta);
     }
     if (!document.querySelector('link[rel="apple-touch-icon"]')) {
@@ -397,7 +407,7 @@ const InstallButton = ({ compact }) => {
     <>
       <button type="button" onClick={() => isIos ? setShowIos(true) : promptInstall()} className="p-btn-shimmer" style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px',
-        borderRadius: 9, background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a',
+        borderRadius: 9, background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0f0f11',
         border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
       }}><Download size={13} /> Install App</button>
       <AnimatePresence>
@@ -437,7 +447,7 @@ const Toast = ({ toast }) => (
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
         style={{
           position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 400,
-          background: '#151515', border: `1px solid ${toast.tone === 'error' ? 'rgba(192,96,64,0.4)' : 'rgba(211,191,162,0.3)'}`,
+          background: '#222226', border: `1px solid ${toast.tone === 'error' ? 'rgba(226,154,88,0.4)' : 'rgba(211,191,162,0.3)'}`,
           borderRadius: 11, padding: '11px 18px', fontSize: 12.5, fontWeight: 600, color: C.text,
           display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 16px 40px -12px rgba(0,0,0,0.6)', maxWidth: '90vw'
         }}>
@@ -458,7 +468,7 @@ const ConfirmModal = ({ data, onClose, onConfirm }) => {
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="button" onClick={run} disabled={busy} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
-          background: data.tone === 'danger' ? C.danger : '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+          background: data.tone === 'danger' ? C.danger : '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
         }}>{busy ? <Loader2 size={14} className="p-spin" style={{ animation: 'spin 0.8s linear infinite' }} /> : null}{busy ? 'Working…' : (data.confirmLabel || 'Confirm')}</button>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -513,7 +523,7 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="button" onClick={submit} disabled={busy || !months || !amount || (!products.pratyeksha && !products.feedbackSuite)} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
-          background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+          background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: busy ? 0.6 : 1
         }}>{busy ? 'Renewing…' : 'Confirm Renewal'}</button>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -641,14 +651,14 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           <div style={{ fontSize: 12.5, color: C.textMid, marginBottom: 20 }}>
             {result.counts.categories} categories &middot; {result.counts.menuItems} menu items written ({mode})
           </div>
-          <button type="button" onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0a0a0a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <button type="button" onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
       ) : (
         <>
           <DualJsonUpload onChange={setPending} />
 
           {error && (
-            <div style={{ background: 'rgba(192,96,64,0.06)', border: '1px solid rgba(192,96,64,0.2)', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 11.5, color: C.danger, whiteSpace: 'pre-wrap', maxHeight: 140, overflowY: 'auto' }}>
+            <div style={{ background: 'rgba(226,154,88,0.06)', border: '1px solid rgba(226,154,88,0.2)', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 11.5, color: C.danger, whiteSpace: 'pre-wrap', maxHeight: 140, overflowY: 'auto' }}>
               {error}
             </div>
           )}
@@ -664,8 +674,8 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
               }}>Append / Update</button>
               <button type="button" onClick={() => setMode('replace')} style={{
                 flex: 1, padding: '9px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                background: mode === 'replace' ? 'rgba(192,96,64,0.1)' : 'transparent',
-                border: `1px solid ${mode === 'replace' ? 'rgba(192,96,64,0.4)' : C.border}`,
+                background: mode === 'replace' ? 'rgba(226,154,88,0.1)' : 'transparent',
+                border: `1px solid ${mode === 'replace' ? 'rgba(226,154,88,0.4)' : C.border}`,
                 color: mode === 'replace' ? C.danger : C.textDim
               }}>Replace Entire Menu</button>
             </div>
@@ -679,7 +689,7 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <button type="button" onClick={runImport} disabled={!hasContent || importing} className="p-btn-shimmer" style={{
               flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!hasContent || importing) ? 'not-allowed' : 'pointer',
-              background: (!hasContent || importing) ? C.bgCard2 : '#d3bfa2', color: (!hasContent || importing) ? C.textDim : '#0a0a0a',
+              background: (!hasContent || importing) ? C.bgCard2 : '#d3bfa2', color: (!hasContent || importing) ? C.textDim : '#0f0f11',
               fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
             }}>{importing ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Importing…</> : <><Upload size={14} /> Import</>}</button>
             <button type="button" onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -702,7 +712,7 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
   const run = async () => { if (!matches) return; setBusy(true); try { await onConfirm(typed); } finally { setBusy(false); } };
   return (
     <ModalShell title="Delete Client — Permanent" icon={Trash2} onClose={onClose} width={420}>
-      <div style={{ background: 'rgba(192,96,64,0.06)', border: '1px solid rgba(192,96,64,0.25)', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10 }}>
+      <div style={{ background: 'rgba(226,154,88,0.06)', border: '1px solid rgba(226,154,88,0.25)', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10 }}>
         <AlertTriangle size={16} color={C.danger} style={{ flexShrink: 0, marginTop: 1 }} />
         <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.6 }}>
           This permanently deletes <b style={{ color: C.text }}>{client.name}</b> and every record tied to it — orders, menu, inventory, staff, customers, everything. There is no undo.
@@ -728,6 +738,7 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
    MAIN COMPONENT
 ════════════════════════════════════════ */
 export default function PratyekshaMasterAdmin() {
+  useAdminGlobalStyles();
   const [activeSection, setActiveSection] = useState('demos');
   const [docsClientId, setDocsClientId] = useState(null);
   const [clients,       setClients]       = useState([]);
@@ -1105,7 +1116,7 @@ export default function PratyekshaMasterAdmin() {
      RENDER
   ════════════════════════════════════════ */
   return (
-    <div style={{ display:'flex', width:'100vw', height:'100vh', background:C.bg, color:C.text, overflow:'hidden', position:'fixed', top:0, left:0 }}>
+    <div style={{ display:'flex', width:'100vw', height:'100vh', background:'radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.09), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(211,191,162,0.05), transparent 60%), #141416', color:C.text, overflow:'hidden', position:'fixed', top:0, left:0 }}>
 
       {/* Mobile topbar */}
       <div className="p-topbar">
@@ -1164,11 +1175,12 @@ export default function PratyekshaMasterAdmin() {
 
           {/* Nav */}
           <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6, paddingLeft:10, flexShrink:0 }}>Navigation</div>
-          <div className="no-sb" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, overflowY:'auto', minHeight:0, flex:'0 1 auto', maxHeight:190, paddingRight:2 }}>
+          <div className="no-sb" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, overflowY:'auto', minHeight:0, flex:'0 1 auto', maxHeight:236, paddingRight:2 }}>
             <NavItem id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
             <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
             <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
+            <NavItem id="tracking" label="Tracking" icon={Radar} />
             <NavItem id="crm" label="Lead CRM" icon={Users} />
             <NavItem id="notifications" label="Notifications" icon={Bell} />
             <NavItem id="expenses" label="Operating Costs" icon={Receipt} />
@@ -1429,7 +1441,7 @@ export default function PratyekshaMasterAdmin() {
                     <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
                       <a href={`tel:${selectedDemo.phone}`} style={{
                         display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-                        padding:'12px', background:'#d3bfa2', borderRadius:9, fontSize:13, fontWeight:600, color:'#0a0a0a',
+                        padding:'12px', background:'#d3bfa2', borderRadius:9, fontSize:13, fontWeight:600, color:'#0f0f11',
                       }}>
                         <Phone size={13} /> Call Now
                       </a>
@@ -1470,7 +1482,7 @@ export default function PratyekshaMasterAdmin() {
                 {/* primary CTA: light gold bg */}
                 <button type="button" onClick={()=>navTo('onboard')} style={{
                   display:'flex', alignItems:'center', gap:7, padding:'9px 16px',
-                  background:'#d3bfa2', color:'#0a0a0a', border:'none', borderRadius:9,
+                  background:'#d3bfa2', color:'#0f0f11', border:'none', borderRadius:9,
                   fontSize:13, fontWeight:600, cursor:'pointer',
                 }}>
                   <UserPlus size={13} /> Onboard Client
@@ -1597,7 +1609,7 @@ export default function PratyekshaMasterAdmin() {
                   <div style={{ display:'flex', gap:8, marginTop:'auto' }}>
                     {/* primary action: light gold */}
                     <button type="button" onClick={()=>navTo('onboard')} style={{
-                      flex:1, padding:'10px', background:'#d3bfa2', border:'none', color:'#0a0a0a',
+                      flex:1, padding:'10px', background:'#d3bfa2', border:'none', color:'#0f0f11',
                       borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
                       display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                     }}>
@@ -1638,7 +1650,7 @@ export default function PratyekshaMasterAdmin() {
                   </div>
                   <button type="button" onClick={()=>navTo('onboard')} style={{
                     display:'flex', alignItems:'center', gap:6, padding:'9px 14px',
-                    background:'#d3bfa2', border:'none', color:'#0a0a0a',
+                    background:'#d3bfa2', border:'none', color:'#0f0f11',
                     borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap',
                   }}>
                     <Plus size={13} /> New Client
@@ -1768,7 +1780,7 @@ export default function PratyekshaMasterAdmin() {
                               /* expired/disabled → solid light gold; active → dark amber outline */
                               background: (st.label==='Expired'||st.label==='Disabled') ? '#d3bfa2' : 'transparent',
                               border: (st.label==='Expired'||st.label==='Disabled') ? 'none' : `1px solid rgba(138,112,77,0.3)`,
-                              color: (st.label==='Expired'||st.label==='Disabled') ? '#0a0a0a' : '#8a704d',
+                              color: (st.label==='Expired'||st.label==='Disabled') ? '#0f0f11' : '#8a704d',
                             }}>
                               {(st.label==='Active'||st.label==='Expiring') ? 'Renew' : 'Activate'}
                             </button>
@@ -1843,7 +1855,7 @@ export default function PratyekshaMasterAdmin() {
                     ) : null}
                     <button type="button" onClick={() => setImportTarget({ tenantId: onboardSuccess.tenantId, tenantName: onboardSuccess.name })} className="p-btn-shimmer" style={{
                       width: '100%', padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                      background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0a0a0a', fontSize: 13, fontWeight: 700,
+                      background: 'linear-gradient(135deg,#e9dcc4,#d3bfa2 55%,#b3986f)', color: '#0f0f11', fontSize: 13, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                     }}><FileJson size={14} /> {(onboardSuccess.categoriesWritten || onboardSuccess.menuItemsWritten) ? 'Import More Menu Items' : `Import Menu for ${onboardSuccess.name}`} (JSON)</button>
                   </motion.div>
@@ -1851,7 +1863,7 @@ export default function PratyekshaMasterAdmin() {
               </AnimatePresence>
 
               {onboardError && (
-                <div style={{ background:'rgba(192,96,64,0.06)', border:`1px solid rgba(192,96,64,0.2)`, borderRadius:9, padding:'11px 14px', marginBottom:18, fontSize:13, color:C.danger, display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ background:'rgba(226,154,88,0.06)', border:`1px solid rgba(226,154,88,0.2)`, borderRadius:9, padding:'11px 14px', marginBottom:18, fontSize:13, color:C.danger, display:'flex', alignItems:'center', gap:8 }}>
                   <AlertTriangle size={14}/> {onboardError}
                 </div>
               )}
@@ -2004,7 +2016,7 @@ export default function PratyekshaMasterAdmin() {
                   <button type="button" onClick={handleOnboard} disabled={onboardLoading} style={{
                     flex:2, padding:'13px', borderRadius:10, border:'none',
                     background: onboardLoading ? C.bgCard2 : '#d3bfa2',
-                    color: onboardLoading ? C.textDim : '#0a0a0a',
+                    color: onboardLoading ? C.textDim : '#0f0f11',
                     cursor: onboardLoading ? 'not-allowed' : 'pointer',
                     fontSize:14, fontWeight:600,
                     display:'flex', alignItems:'center', justifyContent:'center', gap:9,
@@ -2023,6 +2035,8 @@ export default function PratyekshaMasterAdmin() {
             </div>
           </div>
         )}
+
+        {activeSection==='tracking' && <MasterTracking onOpenClients={() => navTo('clients')} onOpenCrm={() => navTo('crm')} />}
 
         {activeSection==='crm' && <LeadCRM />}
 
@@ -2113,7 +2127,7 @@ export default function PratyekshaMasterAdmin() {
               </div>
               <button type="button" onClick={sendNotification} disabled={notifSending} className="p-btn-shimmer" style={{
                 padding:'11px 20px', borderRadius:9, border:'none', cursor: notifSending ? 'not-allowed' : 'pointer',
-                background: notifSending ? C.bgCard2 : '#d3bfa2', color: notifSending ? C.textDim : '#0a0a0a',
+                background: notifSending ? C.bgCard2 : '#d3bfa2', color: notifSending ? C.textDim : '#0f0f11',
                 fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
               }}>
                 {notifSending ? <><Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }} /> Sending…</> : <><Send size={14} /> {notifCompose.sendMode==='schedule' ? 'Schedule Notification' : 'Send Now'}</>}
@@ -2243,7 +2257,7 @@ export default function PratyekshaMasterAdmin() {
               <div style={{ display:'flex', gap:10 }}>
                 <button type="button" onClick={submitExpense} disabled={expenseSaving} className="p-btn-shimmer" style={{
                   padding:'11px 20px', borderRadius:9, border:'none', cursor: expenseSaving ? 'not-allowed' : 'pointer',
-                  background: expenseSaving ? C.bgCard2 : '#d3bfa2', color: expenseSaving ? C.textDim : '#0a0a0a',
+                  background: expenseSaving ? C.bgCard2 : '#d3bfa2', color: expenseSaving ? C.textDim : '#0f0f11',
                   fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:8
                 }}>
                   {expenseSaving ? <Loader2 size={14} style={{ animation:'spin 0.8s linear infinite' }} /> : (editingExpenseId ? <Check size={14} /> : <Plus size={14} />)}
