@@ -1,6 +1,7 @@
 /* PRATYEKSHa Lead CRM — scoped premium finish */
 .pr-crm { text-align: left; color-scheme: dark; scrollbar-width: thin; scrollbar-color: #514638 #0f0f11; }
 .pr-crm * { box-sizing: border-box; }
+.pr-crm h1, .pr-crm h2, .pr-crm h3 { color: #f1ede4; }
 .pr-crm button, .pr-crm input, .pr-crm select, .pr-crm textarea { font: inherit; }
 .pr-crm button { transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
 .pr-crm button:hover:not(:disabled) { border-color: #9e8a6c !important; box-shadow: 0 5px 18px rgba(0,0,0,.18); }

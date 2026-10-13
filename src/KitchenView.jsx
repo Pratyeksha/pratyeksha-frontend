@@ -6,6 +6,7 @@
    sage green  #d3bfa2   accents, active states, buttons
    (Swiggy / Zomato brand colours and alert red are kept on purpose) */
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import SupportContact from './SupportContact.jsx';
 import { io } from "socket.io-client";
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
@@ -646,11 +647,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
   const SidebarContent = ({ inDrawer = false }) => (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', gap:0 }}>
       {/* top */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:14, borderBottom:'1px solid rgba(211,191,162,0.21)', marginBottom:14, flexShrink:0 }}>
-        <div style={rs.sidebarHeaderIcon}><Layers size={14} color="#d3bfa2" /></div>
+      <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:14, borderBottom:'1px solid rgba(255,255,255,0.116)', marginBottom:14, flexShrink:0 }}>
+        <div style={rs.sidebarHeaderIcon}><Layers size={14} color="#cfcac0" /></div>
         <span style={{ fontSize:'0.56rem', fontWeight:900, color:'rgba(211,191,162,0.59)', letterSpacing:'2.5px', flex:1, textTransform:'uppercase' }}>STATIONS</span>
         {inDrawer && (
-          <button type="button" onClick={() => setSidebarOpen(false)} style={{ background:'rgba(211,191,162,0.12)', border:'1px solid rgba(211,191,162,0.3)', color:'#a2a2a2', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setSidebarOpen(false)} style={{ background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.165)', color:'#a2a2a2', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
             <X size={14} />
           </button>
         )}
@@ -658,7 +659,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
       {/* veg / non-veg toggle */}
       {!tenantOnlyVeg && (
-        <div style={{ display:'flex', background:'#171717', borderRadius:9, border:'1px solid rgba(211,191,162,0.21)', padding:3, marginBottom:10, flexShrink:0 }}>
+        <div style={{ display:'flex', background:'#171717', borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', padding:3, marginBottom:10, flexShrink:0 }}>
           {[false,true].map(nv => (
             <button type="button" key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
               style={{ flex:1, padding:'7px 4px', borderRadius:7, border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all 0.15s',
@@ -683,7 +684,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           return (
             <button type="button" onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <Coffee size={12} color={sel?'#0c0c0c':'#a2a2a2'} />
+                <Coffee size={12} color={sel?'#f7f3eb':'#a2a2a2'} />
                 <span>ALL SECTIONS</span>
               </div>
               <span style={{ ...rs.countChip(sel, total>0), minWidth:24, textAlign:'center' }}>{total<10?`0${total}`:total}</span>
@@ -698,14 +699,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           return (
             <button type="button" key={cat._id} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-                <Flame size={12} color={sel?'#0c0c0c':count>0?'#d3bfa2':'#9a9a9a'} style={{ flexShrink:0 }} />
+                <Flame size={12} color={sel?'#f7f3eb':count>0?'#cfcac0':'#9a9a9a'} style={{ flexShrink:0 }} />
                 <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase', fontSize:'0.62rem' }}>{cat.name}</span>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
                 <span title={`86 a dish in "${cat.name}"`} onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
-                  style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'rgba(211,191,162,0.09)', border:'1px solid rgba(211,191,162,0.21)', borderRadius:4, cursor:'pointer', color:'#9a9a9a', transition:'0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.45)'; e.currentTarget.style.color='#d3bfa2'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.21)'; e.currentTarget.style.color='#9a9a9a'; }}>
+                  style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.116)', borderRadius:4, cursor:'pointer', color:'#9a9a9a', transition:'0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.45)'; e.currentTarget.style.color='#cfcac0'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; e.currentTarget.style.color='#9a9a9a'; }}>
                   <EyeOff size={9} />
                 </span>
                 <span style={{ ...rs.countChip(sel, count>0), minWidth:22, textAlign:'center' }}>{count<10?`0${count}`:count}</span>
@@ -715,10 +716,10 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         })}
 
         {/* Speed Logs node */}
-        <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid rgba(211,191,162,0.18)', display:'flex', flexDirection:'column', gap:4 }}>
+        <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.099)', display:'flex', flexDirection:'column', gap:4 }}>
           <button type="button" onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(showMetricsDashboard), justifyContent:'space-between' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <TrendingUp size={12} color={showMetricsDashboard?'#0c0c0c':'#a2a2a2'} />
+              <TrendingUp size={12} color={showMetricsDashboard?'#f7f3eb':'#a2a2a2'} />
               SPEED LOGS
             </div>
             {dispatchedToday > 0 && (
@@ -726,14 +727,15 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             )}
           </button>
           {/* Refresh */}
-          <button type="button" onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(211,191,162,0.21)', background:'transparent', color:'#9a9a9a', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.color='#d3bfa2'; e.currentTarget.style.borderColor='rgba(211,191,162,0.38)'; }}
-            onMouseLeave={e => { e.currentTarget.style.color='#9a9a9a'; e.currentTarget.style.borderColor='rgba(211,191,162,0.21)'; }}>
+          <button type="button" onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', background:'transparent', color:'#9a9a9a', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.color='#cfcac0'; e.currentTarget.style.borderColor='rgba(255,255,255,0.209)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color='#9a9a9a'; e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; }}>
             <RefreshCw size={12} /> REFRESH ORDERS
           </button>
         </div>
       </div>
-      <div style={{ paddingTop:10, marginTop:10, borderTop:'1px solid rgba(211,191,162,0.18)', flexShrink:0 }}>
+      <div style={{ paddingTop:10, marginTop:10, borderTop:'1px solid rgba(255,255,255,0.099)', flexShrink:0 }}>
+        <SupportContact style={{ marginBottom: 8 }} />
         <PwaInstallButton kind="kitchen" compact light />
       </div>
     </div>
@@ -769,12 +771,12 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
           {showDrawerToggle && (
             <button type="button" onClick={() => setSidebarOpen(true)} style={rs.iconBtn}>
-              <AlignJustify size={18} color="#d3bfa2" />
+              <AlignJustify size={18} color="#cfcac0" />
             </button>
           )}
           <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            <div style={{ width:isMobile?28:34, height:isMobile?28:34, borderRadius:10, background:'rgba(211,191,162,0.18)', border:'1px solid rgba(211,191,162,0.42)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <ChefHat size={isMobile?15:18} color="#d3bfa2" />
+            <div style={{ width:isMobile?28:34, height:isMobile?28:34, borderRadius:10, background:'rgba(255,255,255,0.099)', border:'1px solid rgba(211,191,162,0.42)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <ChefHat size={isMobile?15:18} color="#cfcac0" />
             </div>
             <div>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -800,14 +802,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
           {/* Station filter — tablet/desktop */}
           {!isMobile && (
-            <div style={{ display:'flex', background:'#171717', padding:3, borderRadius:9, border:'1px solid rgba(211,191,162,0.24)', flexShrink:0 }}>
+            <div style={{ display:'flex', background:'#171717', padding:3, borderRadius:9, border:'1px solid rgba(255,255,255,0.132)', flexShrink:0 }}>
               {[
                 { val:'ALL',    lbl:'ALL',      icon:<Monitor size={11} /> },
                 { val:'DINEIN', lbl:'DINE-IN',  icon:<UtensilsCrossed size={11} /> },
                 { val:'PARCEL', lbl:'PARCEL',   icon:<Package size={11} /> },
               ].map(s => (
-                <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(211,191,162,0.3)' : 'transparent', border:'none', color: stationFilter===s.val ? '#d3bfa2' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
-                  <span style={{ color: stationFilter===s.val ? '#d3bfa2' : '#9a9a9a' }}>{s.icon}</span>
+                <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(255,255,255,0.165)' : 'transparent', border:'none', color: stationFilter===s.val ? '#cfcac0' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
+                  <span style={{ color: stationFilter===s.val ? '#cfcac0' : '#9a9a9a' }}>{s.icon}</span>
                   {s.lbl}
                 </button>
               ))}
@@ -815,35 +817,35 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           )}
 
           {/* Search toggle */}
-          <button type="button" onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(211,191,162,0.52)' : 'rgba(211,191,162,0.24)', background: showSearch ? 'rgba(211,191,162,0.21)' : '#121212' }}>
-            <Search size={14} color={showSearch?'#d3bfa2':'#a2a2a2'} />
+          <button type="button" onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)', background: showSearch ? 'rgba(255,255,255,0.116)' : '#121212' }}>
+            <Search size={14} color={showSearch?'#cfcac0':'#a2a2a2'} />
           </button>
 
           {/* Voice */}
-          <button type="button" onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(211,191,162,0.73)' : 'rgba(211,191,162,0.24)', background: isListening ? 'rgba(211,191,162,0.3)' : '#121212' }}>
-            <Mic size={14} color={isListening?'#d3bfa2':'#a2a2a2'} />
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isListening?'#d3bfa2':'#a2a2a2' }}>{isListening ? 'LIVE' : 'VOICE'}</span>}
+          <button type="button" onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(211,191,162,0.73)' : 'rgba(255,255,255,0.132)', background: isListening ? 'rgba(255,255,255,0.165)' : '#121212' }}>
+            <Mic size={14} color={isListening?'#cfcac0':'#a2a2a2'} />
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isListening?'#cfcac0':'#a2a2a2' }}>{isListening ? 'LIVE' : 'VOICE'}</span>}
           </button>
 
           {/* Aggregate toggle */}
-          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(211,191,162,0.21)' : '#121212', borderColor: isAggregateView ? 'rgba(211,191,162,0.52)' : 'rgba(211,191,162,0.24)' }}>
-            {isAggregateView ? <LayoutGrid size={14} color="#d3bfa2" /> : <BarChart3 size={14} color="#a2a2a2" />}
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isAggregateView?'#d3bfa2':'#a2a2a2' }}>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
+          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(255,255,255,0.116)' : '#121212', borderColor: isAggregateView ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)' }}>
+            {isAggregateView ? <LayoutGrid size={14} color="#cfcac0" /> : <BarChart3 size={14} color="#a2a2a2" />}
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isAggregateView?'#cfcac0':'#a2a2a2' }}>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
           </button>
 
           {/* Recall */}
           {recallQueue.length > 0 && (
-            <button type="button" onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(211,191,162,0.45)', background:'rgba(211,191,162,0.15)', position:'relative' }}>
-              <History size={14} color="#d3bfa2" />
-              {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color:'#d3bfa2' }}>RECALL</span>}
+            <button type="button" onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(211,191,162,0.45)', background:'rgba(255,255,255,0.083)', position:'relative' }}>
+              <History size={14} color="#cfcac0" />
+              {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color:'#cfcac0' }}>RECALL</span>}
               <div style={{ position:'absolute', top:-6, right:-6, width:16, height:16, borderRadius:'50%', background:'linear-gradient(135deg,#d3bfa2,#b99f78)', color:'#0c0c0c', fontSize:'0.48rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>{recallQueue.length}</div>
             </button>
           )}
 
           {/* Wastage */}
-          <button type="button" onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(211,191,162,0.52)' : 'rgba(211,191,162,0.24)', background: showWastagePanel ? 'rgba(211,191,162,0.21)' : '#121212', position:'relative' }}>
-            <Trash2 size={14} color={showWastagePanel?'#d3bfa2':'#a2a2a2'} />
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: showWastagePanel?'#d3bfa2':'#a2a2a2' }}>WASTAGE</span>}
+          <button type="button" onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)', background: showWastagePanel ? 'rgba(255,255,255,0.116)' : '#121212', position:'relative' }}>
+            <Trash2 size={14} color={showWastagePanel?'#cfcac0':'#a2a2a2'} />
+            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: showWastagePanel?'#cfcac0':'#a2a2a2' }}>WASTAGE</span>}
             {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length > 0 && (
               <div style={{ position:'absolute', top:-5, right:-5, width:14, height:14, borderRadius:'50%', background:'rgba(211,191,162,1.0)', color:'#0c0c0c', fontSize:'0.44rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
                 {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length}
@@ -864,11 +866,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       <AnimatePresence>
         {showSearch && (
           <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            style={{ display:'flex', alignItems:'center', gap:9, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.3)', borderRadius:11, padding:'9px 14px', flexShrink:0 }}>
+            style={{ display:'flex', alignItems:'center', gap:9, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.165)', borderRadius:11, padding:'9px 14px', flexShrink:0 }}>
             <Search size={13} color="#b9a27e" />
             <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source, or dish name…" style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#f7f3eb', fontSize:'0.82rem', fontFamily:"'Outfit',sans-serif" }} />
             {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery('')} style={{ background:'rgba(211,191,162,0.18)', border:'1px solid rgba(211,191,162,0.36)', color:'#a6a6a6', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
+              <button type="button" onClick={() => setSearchQuery('')} style={{ background:'rgba(255,255,255,0.099)', border:'1px solid rgba(255,255,255,0.198)', color:'#a6a6a6', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
                 <X size={11} /> CLEAR
               </button>
             )}
@@ -883,15 +885,15 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       <AnimatePresence>
         {masterPrepMarqueeList.length > 0 && !isAggregateView && !showMetricsDashboard && (
           <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-            style={{ display:'flex', alignItems:'center', background:'#171717', border:'1px solid rgba(211,191,162,0.21)', padding:'7px 14px', borderRadius:10, gap:10, overflow:'hidden', flexShrink:0 }}>
+            style={{ display:'flex', alignItems:'center', background:'#171717', border:'1px solid rgba(255,255,255,0.116)', padding:'7px 14px', borderRadius:10, gap:10, overflow:'hidden', flexShrink:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:'0.52rem', fontWeight:900, color:'#b9a27e', letterSpacing:'1.5px', flexShrink:0 }}>
               <Activity size={10} /> PREP QUEUE
             </div>
-            <div style={{ width:'1px', height:'14px', background:'rgba(211,191,162,0.3)', flexShrink:0 }} />
+            <div style={{ width:'1px', height:'14px', background:'rgba(255,255,255,0.165)', flexShrink:0 }} />
             <div style={{ display:'flex', gap:7, overflowX:'auto' }} className="no-scrollbar">
               {masterPrepMarqueeList.map(([name,qty]) => (
-                <div key={name} style={{ background:'#121212', border:'1px solid rgba(211,191,162,0.3)', padding:'3px 10px', borderRadius:6, display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                  <span style={{ color:'#d3bfa2', fontWeight:900, fontFamily:'monospace', fontSize:'0.72rem' }}>{qty}×</span>
+                <div key={name} style={{ background:'#121212', border:'1px solid rgba(255,255,255,0.165)', padding:'3px 10px', borderRadius:6, display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
+                  <span style={{ color:'#cfcac0', fontWeight:900, fontFamily:'monospace', fontSize:'0.72rem' }}>{qty}×</span>
                   <span style={{ fontSize:'0.65rem', fontWeight:800, color:'#cfc7b8', whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.3px' }}>{name}</span>
                 </div>
               ))}
@@ -904,12 +906,12 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       <AnimatePresence>
         {recallQueue.length > 0 && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(211,191,162,0.06)', border:'1px solid rgba(211,191,162,0.21)', borderRadius:9, padding:'6px 13px', flexShrink:0, overflow:'hidden' }}>
+            style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.033)', border:'1px solid rgba(255,255,255,0.116)', borderRadius:9, padding:'6px 13px', flexShrink:0, overflow:'hidden' }}>
             <History size={10} color="rgba(211,191,162,0.45)" />
             <span style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.45)', fontWeight:900, letterSpacing:'1px', flexShrink:0 }}>RECALL ({recallQueue.length}/10)</span>
             <div style={{ display:'flex', gap:5, overflowX:'auto' }} className="no-scrollbar">
               {recallQueue.map((o,i) => (
-                <span key={i} style={{ fontSize:'0.56rem', fontWeight:900, padding:'2px 8px', borderRadius:5, background: i===0 ? 'rgba(211,191,162,0.3)' : '#080808', border:`1px solid ${i===0?'rgba(211,191,162,0.38)':'rgba(211,191,162,0.2)'}`, color: i===0?'#d3bfa2':'#9a9a9a', whiteSpace:'nowrap', flexShrink:0, fontFamily:'monospace' }}>
+                <span key={i} style={{ fontSize:'0.56rem', fontWeight:900, padding:'2px 8px', borderRadius:5, background: i===0 ? 'rgba(255,255,255,0.165)' : '#080808', border:`1px solid ${i===0?'rgba(255,255,255,0.209)':'rgba(255,255,255,0.11)'}`, color: i===0?'#cfcac0':'#9a9a9a', whiteSpace:'nowrap', flexShrink:0, fontFamily:'monospace' }}>
                   {getOrderType(o)==='parcel' ? 'PARCEL' : `T-${o.tableNumber}`} · {o.items?.length}
                 </span>
               ))}
@@ -954,14 +956,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
           {/* KITCHEN HEALTH */}
           {kitchenHealth?.stations?.length > 0 && !showMetricsDashboard && (
-            <div style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.21)', borderRadius:13, padding:'13px 15px', flexShrink:0 }}>
+            <div style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)', borderRadius:13, padding:'13px 15px', flexShrink:0 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                  <Activity size={12} color="#d3bfa2" />
+                  <Activity size={12} color="#cfcac0" />
                   <span style={{ color:'rgba(211,191,162,0.8)', fontSize:'0.53rem', fontWeight:900, letterSpacing:'2px', textTransform:'uppercase' }}>KITCHEN HEALTH</span>
                 </div>
-                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:5, background: kitchenHealth.bottleneck ? 'rgba(226,154,88,0.08)' : 'rgba(211,191,162,0.12)', border:`1px solid ${kitchenHealth.bottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(211,191,162,0.24)'}` }}>
-                  {kitchenHealth.bottleneck ? <AlertTriangle size={9} color="#e29a58" /> : <CheckCircle2 size={9} color="#d3bfa2" />}
+                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:5, background: kitchenHealth.bottleneck ? 'rgba(226,154,88,0.08)' : 'rgba(255,255,255,0.066)', border:`1px solid ${kitchenHealth.bottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(247,243,235,0.264)'}` }}>
+                  {kitchenHealth.bottleneck ? <AlertTriangle size={9} color="#e29a58" /> : <CheckCircle2 size={9} color="#cfcac0" />}
                   <span style={{ fontSize:'0.5rem', fontWeight:900, color: kitchenHealth.bottleneck ? '#e29a58' : '#b9a27e', letterSpacing:'0.5px' }}>
                     {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck?.name || kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
                   </span>
@@ -969,19 +971,19 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               </div>
               <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(kitchenHealth.stations.slice(0,5).length, isMobile?2:5)},1fr)`, gap:8 }}>
                 {kitchenHealth.stations.slice(0,5).map(s => (
-                  <div key={s.name} style={{ background:'#121212', border:`1px solid ${s.isBottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(211,191,162,0.18)'}`, borderRadius:8, padding:'9px 10px' }}>
+                  <div key={s.name} style={{ background:'#121212', border:`1px solid ${s.isBottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(255,255,255,0.099)'}`, borderRadius:8, padding:'9px 10px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                       <span style={{ fontSize:'0.55rem', color: s.isBottleneck ? '#e29a58' : '#a6a6a6', fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1, marginRight:4 }}>{s.name}</span>
                       <span style={{ fontSize:'0.54rem', fontFamily:'monospace', fontWeight:900, color: s.isBottleneck ? '#e29a58' : '#9a9a9a', flexShrink:0 }}>{s.orderCount ?? s.pending ?? 0}</span>
                     </div>
-                    <div style={{ height:3, background:'rgba(211,191,162,0.18)', borderRadius:2, overflow:'hidden' }}>
+                    <div style={{ height:3, background:'rgba(255,255,255,0.099)', borderRadius:2, overflow:'hidden' }}>
                       <div style={{ height:'100%', width:`${Math.min(100, Math.max(0, Math.round(Number(s.loadPct ?? 0) || 0)))}%`, background: s.isBottleneck ? '#e29a58' : 'rgba(211,191,162,0.66)', borderRadius:2, transition:'width 0.5s ease' }} />
                     </div>
                   </div>
                 ))}
               </div>
               {kitchenHealth.recommendation && (
-                <div style={{ display:'flex', alignItems:'flex-start', gap:7, marginTop:10, padding:'8px 11px', background:'rgba(211,191,162,0.09)', border:'1px solid rgba(211,191,162,0.18)', borderRadius:8 }}>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:7, marginTop:10, padding:'8px 11px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.099)', borderRadius:8 }}>
                   <Zap size={11} color="#b9a27e" style={{ flexShrink:0, marginTop:1 }} />
                   <span style={{ fontSize:'0.6rem', color:'#a2a2a2', lineHeight:1.55 }}>{kitchenHealth.recommendation}</span>
                 </div>
@@ -992,9 +994,9 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           {/* SPEED METRICS PANEL */}
           {showMetricsDashboard && (
             <motion.div initial={{ opacity:0, y:15 }} animate={{ opacity:1, y:0 }}
-              style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.24)', borderRadius:16, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding: isMobile ? '36px 20px' : '52px 30px', minHeight:300 }}>
+              style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.132)', borderRadius:16, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding: isMobile ? '36px 20px' : '52px 30px', minHeight:300 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                <TrendingUp size={22} color="#d3bfa2" />
+                <TrendingUp size={22} color="#cfcac0" />
                 <h2 style={{ margin:0, fontSize: isMobile ? '0.9rem' : '1.1rem', fontWeight:900, letterSpacing:'3px', color:'#f7f3eb', textTransform:'uppercase' }}>Speed Metrics</h2>
               </div>
               <p style={{ color:'#8c8c8c', fontSize:'0.6rem', marginBottom:32, letterSpacing:'0.5px', textAlign:'center' }}>Session performance — resets at midnight IST</p>
@@ -1004,15 +1006,15 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                   { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
                   { label:'CURRENTLY PENDING',   value:filteredOrders.length, sub:'active tickets', big:true },
                 ].map(s => (
-                  <div key={s.label} style={{ background:'#121212', border:'1px solid rgba(211,191,162,0.24)', borderTop:'2px solid rgba(211,191,162,0.31)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
+                  <div key={s.label} style={{ background:'#121212', border:'1px solid rgba(255,255,255,0.132)', borderTop:'2px solid rgba(255,255,255,0.171)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
                     <div style={{ fontSize:'0.5rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:10 }}>{s.label}</div>
-                    <div style={{ fontSize: s.big ? '2.8rem' : '1.8rem', fontWeight:950, color:'#d3bfa2', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:6 }}>{s.value}</div>
+                    <div style={{ fontSize: s.big ? '2.8rem' : '1.8rem', fontWeight:950, color:'#cfcac0', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:6 }}>{s.value}</div>
                     <div style={{ fontSize:'0.58rem', color:'#8c8c8c', fontWeight:700 }}>{s.sub}</div>
                   </div>
                 ))}
               </div>
               <button type="button" onClick={() => setShowMetricsDashboard(false)}
-                style={{ background:'transparent', border:'1px solid rgba(211,191,162,0.38)', color:'#d3bfa2', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
+                style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.209)', color:'#cfcac0', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><ChevronLeft size={13} /> BACK TO KITCHEN</span>
               </button>
             </motion.div>
@@ -1039,10 +1041,10 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                     const [namePart, typePart] = key.split('__');
                     const isParcel = typePart === 'P';
                     return (
-                      <div key={key} style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:`1px solid ${isParcel?'rgba(211,191,162,0.42)':'rgba(211,191,162,0.21)'}`, borderTop:`2px solid ${isParcel?'rgba(211,191,162,0.73)':'rgba(211,191,162,0.31)'}`, borderRadius:13, padding: isMobile ? '16px 12px' : '20px 14px', textAlign:'center' }}>
-                        <div style={{ fontSize: isMobile ? '2.4rem' : '2.8rem', fontWeight:900, color:'#d3bfa2', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:8 }}>{qty<10?`0${qty}`:qty}</div>
+                      <div key={key} style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:`1px solid ${isParcel?'rgba(211,191,162,0.42)':'rgba(255,255,255,0.116)'}`, borderTop:`2px solid ${isParcel?'rgba(211,191,162,0.73)':'rgba(255,255,255,0.171)'}`, borderRadius:13, padding: isMobile ? '16px 12px' : '20px 14px', textAlign:'center' }}>
+                        <div style={{ fontSize: isMobile ? '2.4rem' : '2.8rem', fontWeight:900, color:'#cfcac0', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:8 }}>{qty<10?`0${qty}`:qty}</div>
                         <div style={{ fontSize: isMobile ? '0.62rem' : '0.67rem', color:'#a6a6a6', fontWeight:800, textTransform:'uppercase', lineHeight:1.4, marginBottom:7 }}>{namePart}</div>
-                        <div style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:'0.47rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background: isParcel ? 'rgba(211,191,162,0.24)' : 'rgba(211,191,162,0.03)', color: isParcel ? '#d3bfa2' : '#a6a6a6', border:`1px solid ${isParcel?'rgba(211,191,162,0.31)':'rgba(211,191,162,0.12)'}` }}>
+                        <div style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:'0.47rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background: isParcel ? 'rgba(255,255,255,0.132)' : 'rgba(255,255,255,0.017)', color: isParcel ? '#cfcac0' : '#a6a6a6', border:`1px solid ${isParcel?'rgba(255,255,255,0.171)':'rgba(255,255,255,0.066)'}` }}>
                           {isParcel ? <Package size={8} /> : <UtensilsCrossed size={8} />}
                           {isParcel ? 'PARCEL' : 'DINE-IN'}
                         </div>
@@ -1058,7 +1060,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           {!showMetricsDashboard && !isAggregateView && useCardView && (
             filteredOrders.length === 0 ? (
               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
-                <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.18)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
+                <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
                 <div style={{ textAlign:'center' }}>
                   <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
                   <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Waiting for next order…</p>
@@ -1102,7 +1104,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               </AnimatePresence>
               {filteredOrders.length === 0 && (
                 <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
-                  <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.18)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
+                  <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
                   <div style={{ textAlign:'center' }}>
                     <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
                     <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>All tickets dispatched</p>
@@ -1116,13 +1118,13 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
       {/* MOBILE BOTTOM NAV */}
       {isMobile && (
-        <nav style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.21)', borderRadius:14, padding:'3px', flexShrink:0, gap:2 }}>
+        <nav style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)', borderRadius:14, padding:'3px', flexShrink:0, gap:2 }}>
           {[
             { val:'ALL',    lbl:'ALL',     icon:<Monitor size={16} /> },
             { val:'DINEIN', lbl:'DINE-IN', icon:<UtensilsCrossed size={16} /> },
             { val:'PARCEL', lbl:'PARCEL',  icon:<Package size={16} /> },
           ].map(s => (
-            <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(211,191,162,0.24)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#d3bfa2' : '#9a9a9a', transition:'all 0.15s' }}>
+            <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
               {s.icon}
               <span style={{ fontSize:'0.48rem', fontWeight:900, letterSpacing:'0.3px' }}>{s.lbl}</span>
               {s.val !== 'ALL' && (() => {
@@ -1134,11 +1136,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               })()}
             </button>
           ))}
-          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(211,191,162,0.24)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#d3bfa2' : '#9a9a9a', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
             <BarChart3 size={16} />
             <span style={{ fontSize:'0.48rem', fontWeight:900 }}>SUMMARY</span>
           </button>
-          <button type="button" onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(211,191,162,0.24)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#d3bfa2' : '#9a9a9a', transition:'all 0.15s' }}>
+          <button type="button" onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
             <TrendingUp size={16} />
             <span style={{ fontSize:'0.48rem', fontWeight:900 }}>METRICS</span>
           </button>
@@ -1154,28 +1156,28 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               style={{ position:'fixed', inset:0, background:'#050505', zIndex:3000, backdropFilter:'blur(4px)' }} />
             <motion.div initial={{ x:'100%' }} animate={{ x:0 }} exit={{ x:'100%' }}
               transition={{ type:'spring', stiffness:300, damping:32 }}
-              style={{ position:'fixed', right:0, top:0, bottom:0, width: isMobile ? '100vw' : isTablet ? 420 : 500, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderLeft:'1px solid rgba(211,191,162,0.24)', borderRadius: isMobile ? 0 : '16px 0 0 16px', zIndex:3001, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+              style={{ position:'fixed', right:0, top:0, bottom:0, width: isMobile ? '100vw' : isTablet ? 420 : 500, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderLeft:'1px solid rgba(255,255,255,0.132)', borderRadius: isMobile ? 0 : '16px 0 0 16px', zIndex:3001, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
               {/* Panel header */}
-              <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(211,191,162,0.18)', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.099)', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(211,191,162,0.15)', border:'1px solid rgba(211,191,162,0.36)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <Trash2 size={16} color="#d3bfa2" />
+                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <Trash2 size={16} color="#cfcac0" />
                   </div>
                   <div>
                     <div style={{ fontWeight:900, fontSize:'0.88rem', color:'#f7f3eb', letterSpacing:0.3 }}>WASTAGE LOG</div>
                     <div style={{ fontSize:'0.5rem', color:'#9a9a9a', fontWeight:900, letterSpacing:'1.5px', marginTop:2, textTransform:'uppercase' }}>Spoilage · Overcooked · Dropped · Excess</div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setShowWastagePanel(false)} style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.3)', color:'#9a9a9a', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
+                <button type="button" onClick={() => setShowWastagePanel(false)} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.165)', color:'#9a9a9a', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
                   <X size={16} />
                 </button>
               </div>
 
               {/* Tabs */}
-              <div style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderBottom:'1px solid rgba(211,191,162,0.18)', flexShrink:0 }}>
+              <div style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderBottom:'1px solid rgba(255,255,255,0.099)', flexShrink:0 }}>
                 {[['log','LOG ENTRY'],['report','MONTHLY REPORT']].map(([t,lbl]) => (
-                  <button type="button" key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#d3bfa2' : '#9a9a9a', borderBottom:`2px solid ${wastageTab===t ? 'rgba(211,191,162,0.8)' : 'transparent'}`, transition:'all 0.15s' }}>
+                  <button type="button" key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#cfcac0' : '#9a9a9a', borderBottom:`2px solid ${wastageTab===t ? 'rgba(211,191,162,0.8)' : 'transparent'}`, transition:'all 0.15s' }}>
                     {lbl}
                   </button>
                 ))}
@@ -1186,8 +1188,8 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 {wastageTab === 'log' ? (
                   <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                     {/* NEW ENTRY FORM */}
-                    <div style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.24)', borderRadius:14, padding:'16px', display:'flex', flexDirection:'column', gap:12 }}>
-                      <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#a6a6a6', letterSpacing:'2px', textTransform:'uppercase', paddingBottom:10, borderBottom:'1px solid rgba(211,191,162,0.15)' }}>NEW ENTRY</div>
+                    <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.132)', borderRadius:14, padding:'16px', display:'flex', flexDirection:'column', gap:12 }}>
+                      <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#a6a6a6', letterSpacing:'2px', textTransform:'uppercase', paddingBottom:10, borderBottom:'1px solid rgba(255,255,255,0.083)' }}>NEW ENTRY</div>
 
                       {/* item name */}
                       <div style={{ position:'relative' }}>
@@ -1202,11 +1204,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                           onBlur={() => setTimeout(() => setShowWastageSuggest(false), 150)}
                           placeholder="Type ingredient name…" style={wInput} />
                         {showWastageSuggest && wastageSuggestions.length > 0 && (
-                          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.36)', borderRadius:9, zIndex:10, overflow:'hidden', marginTop:2, boxShadow:'0 8px 24px rgba(211,191,162,0.12)' }}>
+                          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.198)', borderRadius:9, zIndex:10, overflow:'hidden', marginTop:2, boxShadow:'0 8px 24px rgba(255,255,255,0.066)' }}>
                             {wastageSuggestions.map(s => (
                               <button type="button" key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName:s.itemName, inventoryId:s._id, unit:s.unit||'kg' })); setShowWastageSuggest(false); }}
                                 style={{ width:'100%', padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#cfc7b8', fontSize:'0.75rem', fontWeight:700, textAlign:'left', transition:'background 0.1s' }}
-                                onMouseEnter={e => e.currentTarget.style.background='rgba(211,191,162,0.18)'}
+                                onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.099)'}
                                 onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                                 <span>{s.itemName}</span>
                                 <span style={{ fontSize:'0.58rem', color:'#a6a6a6', fontFamily:'monospace' }}>{s.currentStock}{s.unit}</span>
@@ -1236,7 +1238,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                           {REASON_OPTIONS.map(r => (
                             <button type="button" key={r} onClick={() => setWastageForm(p => ({ ...p, reason:r }))}
-                              style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${wastageForm.reason===r?'rgba(211,191,162,0.59)':'rgba(211,191,162,0.24)'}`, background: wastageForm.reason===r ? 'rgba(211,191,162,0.3)' : 'transparent', color: wastageForm.reason===r ? '#d3bfa2' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', transition:'all 0.15s' }}>
+                              style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${wastageForm.reason===r?'rgba(211,191,162,0.59)':'rgba(255,255,255,0.132)'}`, background: wastageForm.reason===r ? 'rgba(255,255,255,0.165)' : 'transparent', color: wastageForm.reason===r ? '#cfcac0' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', transition:'all 0.15s' }}>
                               {r}
                             </button>
                           ))}
@@ -1257,7 +1259,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
                       {/* save button */}
                       <button type="button" onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
-                        style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#171717' : 'linear-gradient(135deg,#d3bfa2,#b99f78)', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#9a9a9a' : '#0c0c0c', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
+                        style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#171717' : 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#9a9a9a' : '#f7f3eb', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
                         {wastageSaving ? <><RotateCcw size={13} style={{ animation:'spin 1s linear infinite' }} /> SAVING…</> : <><Trash2 size={13} /> LOG WASTAGE</>}
                       </button>
                     </div>
@@ -1270,22 +1272,22 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'2px', textTransform:'uppercase', marginBottom:10 }}>TODAY'S ENTRIES — {wastageLog.length}</div>
                         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                           {[...wastageLog].reverse().map(e => (
-                            <div key={e._id} style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.18)', borderLeft:'3px solid rgba(211,191,162,0.31)', borderRadius:10, padding:'11px 14px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                            <div key={e._id} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.099)', borderLeft:'3px solid rgba(255,255,255,0.171)', borderRadius:10, padding:'11px 14px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
                                   <span style={{ fontWeight:800, fontSize:'0.76rem', color:'#cfc7b8' }}>{e.itemName}</span>
-                                  <span style={{ fontSize:'0.52rem', fontFamily:'monospace', color:'#b9a27e', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'rgba(211,191,162,0.09)', border:'1px solid rgba(211,191,162,0.225)' }}>{e.quantity}{e.unit}</span>
-                                  {Number(e.totalCost) > 0 && <span style={{ fontSize:'0.54rem', color:'#d3bfa2', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{Number(e.totalCost).toFixed(0)}</span>}
+                                  <span style={{ fontSize:'0.52rem', fontFamily:'monospace', color:'#b9a27e', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.124)' }}>{e.quantity}{e.unit}</span>
+                                  {Number(e.totalCost) > 0 && <span style={{ fontSize:'0.54rem', color:'#cfcac0', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{Number(e.totalCost).toFixed(0)}</span>}
                                 </div>
                                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                                  <span style={{ fontSize:'0.5rem', padding:'1px 6px', borderRadius:4, background:'rgba(211,191,162,0.12)', color:'#a2a2a2', border:'1px solid rgba(211,191,162,0.21)', fontWeight:700 }}>{e.reason}</span>
+                                  <span style={{ fontSize:'0.5rem', padding:'1px 6px', borderRadius:4, background:'rgba(255,255,255,0.066)', color:'#a2a2a2', border:'1px solid rgba(255,255,255,0.116)', fontWeight:700 }}>{e.reason}</span>
                                   <span style={{ fontSize:'0.5rem', color:'#9a9a9a', fontWeight:700 }}>{e.loggedBy}</span>
                                   {e.notes && <span style={{ fontSize:'0.5rem', color:'#8c8c8c', fontStyle:'italic' }}>{e.notes}</span>}
                                 </div>
                               </div>
-                              <button type="button" onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(211,191,162,0.18)', color:'#9a9a9a', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
-                                onMouseEnter={ev => { ev.currentTarget.style.borderColor='rgba(211,191,162,0.38)'; ev.currentTarget.style.color='#d3bfa2'; }}
-                                onMouseLeave={ev => { ev.currentTarget.style.borderColor='rgba(211,191,162,0.18)'; ev.currentTarget.style.color='#9a9a9a'; }}>
+                              <button type="button" onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.099)', color:'#9a9a9a', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
+                                onMouseEnter={ev => { ev.currentTarget.style.borderColor='rgba(255,255,255,0.209)'; ev.currentTarget.style.color='#cfcac0'; }}
+                                onMouseLeave={ev => { ev.currentTarget.style.borderColor='rgba(255,255,255,0.099)'; ev.currentTarget.style.color='#9a9a9a'; }}>
                                 <X size={12} />
                               </button>
                             </div>
@@ -1293,7 +1295,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         </div>
                       </div>
                     ) : (
-                      <div style={{ textAlign:'center', padding:'30px 20px', background:'#080808', borderRadius:12, border:'1px dashed rgba(211,191,162,0.18)' }}>
+                      <div style={{ textAlign:'center', padding:'30px 20px', background:'#080808', borderRadius:12, border:'1px dashed rgba(255,255,255,0.099)' }}>
                         <div style={{ fontSize:'0.64rem', color:'#8c8c8c', fontWeight:700 }}>No wastage entries today</div>
                       </div>
                     )}
@@ -1309,16 +1311,16 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                             { l:'ENTRIES',   v:wastageAnalytics.totalEntries||0 },
                             { l:'TOP ITEM',  v:wastageAnalytics.topWasted?.[0]?.name||'—' },
                           ].map(s => (
-                            <div key={s.l} style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.21)', borderRadius:11, padding:'12px 10px', textAlign:'center' }}>
+                            <div key={s.l} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:11, padding:'12px 10px', textAlign:'center' }}>
                               <div style={{ fontSize:'0.48rem', color:'#9a9a9a', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:6 }}>{s.l}</div>
-                              <div style={{ fontSize:'1.05rem', fontWeight:900, color:'#d3bfa2', fontFamily:'monospace' }}>{s.v}</div>
+                              <div style={{ fontSize:'1.05rem', fontWeight:900, color:'#cfcac0', fontFamily:'monospace' }}>{s.v}</div>
                             </div>
                           ))}
                         </div>
 
                         {wastageAnalytics.byReason && Object.keys(wastageAnalytics.byReason).length > 0 && (
-                          <div style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.21)', borderRadius:12, padding:'14px 16px' }}>
-                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.8px', textTransform:'uppercase', marginBottom:14, paddingBottom:10, borderBottom:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', gap:6 }}>
+                          <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:12, padding:'14px 16px' }}>
+                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.8px', textTransform:'uppercase', marginBottom:14, paddingBottom:10, borderBottom:'1px solid rgba(255,255,255,0.083)', display:'flex', alignItems:'center', gap:6 }}>
                               <Scale size={11} color="#a6a6a6" /> BY REASON
                             </div>
                             {Object.entries(wastageAnalytics.byReason).sort((a,b) => b[1].cost - a[1].cost).map(([reason, data]) => {
@@ -1327,12 +1329,12 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                                 <div key={reason} style={{ marginBottom:10 }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
                                     <span style={{ fontSize:'0.64rem', fontWeight:800, color:'#a6a6a6' }}>{reason}</span>
-                                    <span style={{ fontSize:'0.62rem', fontWeight:900, color:'#d3bfa2', fontFamily:'monospace' }}>
+                                    <span style={{ fontSize:'0.62rem', fontWeight:900, color:'#cfcac0', fontFamily:'monospace' }}>
                                       {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
                                       <span style={{ color:'#9a9a9a', fontWeight:600, marginLeft:6 }}>{pct}%</span>
                                     </span>
                                   </div>
-                                  <div style={{ height:4, background:'rgba(211,191,162,0.15)', borderRadius:2, overflow:'hidden' }}>
+                                  <div style={{ height:4, background:'rgba(255,255,255,0.083)', borderRadius:2, overflow:'hidden' }}>
                                     <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.52)', borderRadius:2, transition:'width 0.6s ease' }} />
                                   </div>
                                 </div>
@@ -1342,7 +1344,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         )}
 
                         {(wastageAnalytics.dailyTrend||[]).length > 0 && (
-                          <div style={{ background:'#080808', border:'1px solid rgba(211,191,162,0.21)', borderRadius:12, padding:'14px 16px' }}>
+                          <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:12, padding:'14px 16px' }}>
                             <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
                               <TrendingDown size={11} color="#b9a27e" /> DAILY COST TREND (30 days)
                             </div>
@@ -1358,13 +1360,13 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                           </div>
                         )}
 
-                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(211,191,162,0.36)', color:'#b9a27e', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(255,255,255,0.198)', color:'#b9a27e', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                           <RefreshCw size={12} /> REFRESH REPORT
                         </button>
                       </>
                     ) : (
                       <div style={{ textAlign:'center', padding:'40px 20px' }}>
-                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(211,191,162,0.15)', border:'1px solid rgba(211,191,162,0.36)', color:'#b9a27e', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
+                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)', color:'#b9a27e', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
                       </div>
                     )}
                   </div>
@@ -1390,11 +1392,11 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               style={{ position: 'fixed', inset: 0, zIndex: 3101, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
             <motion.div onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
               transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-              style={{ width: isMobile ? '92vw' : 420, maxHeight: 'calc(82vh - 40px)', background: 'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border: '1px solid rgba(211,191,162,0.36)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: 'auto', boxShadow: '0 30px 80px rgba(211,191,162,0.18)' }}>
+              style={{ width: isMobile ? '92vw' : 420, maxHeight: 'calc(82vh - 40px)', background: 'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border: '1px solid rgba(255,255,255,0.198)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: 'auto', boxShadow: '0 30px 80px rgba(255,255,255,0.099)' }}>
 
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(211,191,162,0.24)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.132)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(8,8,10,0.17)', border: '1px solid rgba(8,8,10,0.51)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(226,154,88,0.12)', border: '1px solid rgba(226,154,88,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <PackageX size={15} color="#f7f3eb" />
                   </div>
                   <div>
@@ -1402,7 +1404,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                     <div style={{ fontSize: '0.5rem', color: '#9a9a9a', fontWeight: 800, letterSpacing: '0.5px', marginTop: 2, textTransform: 'uppercase' }}>{eightySixModal.categoryName}</div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setEightySixModal(null)} style={{ background: '#080808', border: '1px solid rgba(211,191,162,0.3)', color: '#9a9a9a', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
+                <button type="button" onClick={() => setEightySixModal(null)} style={{ background: '#080808', border: '1px solid rgba(255,255,255,0.165)', color: '#9a9a9a', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
                   <X size={14} />
                 </button>
               </div>
@@ -1412,7 +1414,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 200, overflowY: 'auto' }}>
                   {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).map(dish => (
                     <button type="button" key={dish._id} onClick={() => setSelectedDish86(dish)}
-                      style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: selectedDish86?._id === dish._id ? '#d3bfa2' : '#a6a6a6', background: selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.27)' : 'transparent', border: `1px solid ${selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.59)' : 'rgba(211,191,162,0.21)'}`, transition: 'all 0.15s' }}>
+                      style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: selectedDish86?._id === dish._id ? '#cfcac0' : '#a6a6a6', background: selectedDish86?._id === dish._id ? 'rgba(255,255,255,0.149)' : 'transparent', border: `1px solid ${selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.59)' : 'rgba(247,243,235,0.231)'}`, transition: 'all 0.15s' }}>
                       {dish.name}
                     </button>
                   ))}
@@ -1430,7 +1432,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                         const active = selectedReason86 === r.id;
                         return (
                           <button type="button" key={r.id} onClick={() => setSelectedReason86(r.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: active ? '#d3bfa2' : '#a6a6a6', background: active ? 'rgba(211,191,162,0.27)' : 'transparent', border: `1px solid ${active ? 'rgba(211,191,162,0.59)' : 'rgba(211,191,162,0.21)'}`, transition: 'all 0.15s' }}>
+                            style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: active ? '#cfcac0' : '#a6a6a6', background: active ? 'rgba(255,255,255,0.149)' : 'transparent', border: `1px solid ${active ? 'rgba(211,191,162,0.59)' : 'rgba(255,255,255,0.116)'}`, transition: 'all 0.15s' }}>
                             <RIcon size={13} />
                             {r.label}
                           </button>
@@ -1439,7 +1441,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                     </div>
 
                     <button type="button" onClick={confirm86}
-                      style={{ width: '100%', padding: '13px 0', borderRadius: 11, border: '1px solid rgba(8,8,10,0.68)', background: 'rgba(8,8,10,0.238)', color: '#f7f3eb', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      style={{ width: '100%', padding: '13px 0', borderRadius: 11, border: '1px solid rgba(226,154,88,0.5)', background: 'rgba(226,154,88,0.12)', color: '#f7f3eb', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <EyeOff size={14} /> 86 "{selectedDish86.name}"
                     </button>
                   </>
@@ -1460,24 +1462,23 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .custom-scroll::-webkit-scrollbar { width: 3px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(211,191,162,0.36); border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.198); border-radius: 10px; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes strobePulse { 0% { box-shadow: 0 0 0 0 rgba(211,191,162,0.73); } 70% { box-shadow: 0 0 0 10px rgba(211,191,162,0.0); } 100% { box-shadow: 0 0 0 0 rgba(211,191,162,0.0); } }
+        @keyframes strobePulse { 0% { box-shadow: 0 0 0 0 rgba(211,191,162,0.73); } 70% { box-shadow: 0 0 0 10px rgba(255,255,255,0.0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } }
         .voice-pulse { animation: strobePulse 1.8s infinite; border-radius: 9px; }
         @keyframes urgentPulse { 0%,100% { border-color: rgba(226,154,88,0.45); box-shadow: 0 0 0 0 rgba(226,154,88,0); } 50% { border-color: rgba(226,154,88,1); box-shadow: 0 0 22px rgba(226,154,88,0.28); } }
         .flash-card-pulse { animation: urgentPulse 1.8s ease-in-out infinite; }
-        @keyframes newOrder { 0% { transform: scale(0.97); box-shadow: 0 0 0 0 rgba(211,191,162,0.59); } 50% { transform: scale(1); box-shadow: 0 0 20px 4px rgba(211,191,162,0.36); } 100% { transform: scale(1); box-shadow: none; } }
+        @keyframes newOrder { 0% { transform: scale(0.97); box-shadow: 0 0 0 0 rgba(211,191,162,0.59); } 50% { transform: scale(1); box-shadow: 0 0 20px 4px rgba(255,255,255,0.198); } 100% { transform: scale(1); box-shadow: none; } }
         .new-order-flash { animation: newOrder 0.6s ease forwards; }
         @keyframes kdsRise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
         @keyframes kdsSheen { 0% { background-position: -140% 0; } 100% { background-position: 240% 0; } }
-        @keyframes kdsGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(211,191,162,0); } 50% { box-shadow: 0 0 26px -4px rgba(211,191,162,0.35); } }
+        @keyframes kdsGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } 50% { box-shadow: 0 0 26px -4px rgba(255,255,255,0.193); } }
         main > div > div, section > div > div { animation: kdsRise .45s cubic-bezier(.22,1,.36,1) both; }
         button { transition: transform .18s cubic-bezier(.22,1,.36,1), filter .18s, box-shadow .18s, border-color .18s, background .18s; }
         button:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.08); }
         button:not(:disabled):active { transform: translateY(0) scale(0.98); }
-        button[style*="linear-gradient(135deg, rgb(211, 191, 162)"], button[style*="linear-gradient(135deg,#d3bfa2"] { background-size: 220% 100%; background-image: linear-gradient(110deg, #b99f78 0%, #e6d6b8 38%, #fff3d6 50%, #e6d6b8 62%, #b99f78 100%) !important; animation: kdsSheen 5.5s linear infinite; color: #0c0c0c !important; }
-        input:focus, textarea:focus, select:focus { border-color: rgba(211,191,162,0.6) !important; box-shadow: 0 0 0 4px rgba(211,191,162,0.1) !important; outline: none; }
-        ::selection { background: rgba(211,191,162,0.35); }
+        input:focus, textarea:focus, select:focus { border-color: rgba(211,191,162,0.6) !important; box-shadow: 0 0 0 4px rgba(255,255,255,0.055) !important; outline: none; }
+        ::selection { background: rgba(255,255,255,0.193); }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
       `}</style>
     </div>
@@ -1557,15 +1558,15 @@ const KDSOrderCard = ({
     zomato:   '#cb202d',
     high:     'rgba(211,191,162,1.0)',
     medium:   'rgba(211,191,162,0.622)',
-    low:      'rgba(211,191,162,0.3)',
+    low:      'rgba(247,243,235,0.33)',
   };
   const topBarColor = isAggOrder
     ? accentColor[otype]
     : urgency === 'high'
-      ? 'linear-gradient(90deg,#f7f3eb,#d3bfa2)'
+      ? 'linear-gradient(90deg,#f7f3eb,#cfcac0)'
       : urgency === 'medium'
         ? 'rgba(211,191,162,0.562)'
-        : 'rgba(211,191,162,0.24)';
+        : 'rgba(247,243,235,0.264)';
 
   const kitchenItems = (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
   const checkedCount  = (order.items || []).reduce((n, it, idx) => (!it.isExtraItem && it.extraItemId == null && checkedItemsGlobal[`${order._id}-${idx}`]) ? n + 1 : n, 0);
@@ -1628,17 +1629,17 @@ const KDSOrderCard = ({
   /* Header label */
   const tableLabel = otype === 'swiggy' ? <span style={{ color:'#fc8019' }}>SWIGGY</span>
     : otype === 'zomato'  ? <span style={{ color:'#cb202d' }}>ZOMATO</span>
-    : isParcelOrder ? <span style={{ color:'#d3bfa2' }}>PARCEL</span>
-    : <span style={{ color:'#f7f3eb' }}>T-{order.tableNumber}</span>;
+    : isParcelOrder ? <span style={{ color:'#17120c' }}>PARCEL</span>
+    : <span style={{ color:'#17120c' }}>T-{order.tableNumber}</span>;
 
   const sourceMeta = {
-    waitlist:        { label:'WAITLIST',   color:'#b9a27e', bg:'rgba(211,191,162,0.09)', border:'rgba(211,191,162,0.247)' },
-    reservation:     { label:'RESERVATION',color:'#d3bfa2', bg:'rgba(211,191,162,0.16)',border:'rgba(211,191,162,0.44)' },
-    'counter-pickup':{ label:'PICKUP',     color:'#d3bfa2', bg:'rgba(211,191,162,0.21)',border:'rgba(211,191,162,0.38)' },
+    waitlist: { label:'WAITLIST', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
+    reservation: { label:'RESERVATION', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
+    'counter-pickup': { label:'PICKUP', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
     swiggy:          { label:'SWIGGY',     color:'#fc8019', bg:'rgba(252,128,25,0.1)',  border:'rgba(252,128,25,0.3)' },
     zomato:          { label:'ZOMATO',     color:'#cb202d', bg:'rgba(203,32,45,0.1)',   border:'rgba(203,32,45,0.3)' },
-    takeaway:        { label:'TAKEAWAY',   color:'#d3bfa2', bg:'rgba(211,191,162,0.16)',border:'rgba(211,191,162,0.4)' },
-    direct:          { label:'DINE-IN',    color:'#a6a6a6', bg:'rgba(211,191,162,0.09)',border:'rgba(211,191,162,0.21)' },
+    takeaway: { label:'TAKEAWAY', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
+    direct: { label:'DINE-IN', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
   };
   const sm = sourceMeta[order.source] || sourceMeta.direct;
 
@@ -1654,10 +1655,10 @@ const KDSOrderCard = ({
         padding: isMobile ? '14px' : isTablet ? '14px' : '16px',
         display:'flex', flexDirection:'column',
         height: isMobile ? '100%' : isTablet ? 390 : 420,
-        border: `1px solid ${isAggOrder ? accentColor[otype]+'40' : isNewest ? 'rgba(211,191,162,0.41)' : 'rgba(211,191,162,0.21)'}`,
+        border: `1px solid ${isAggOrder ? accentColor[otype]+'40' : isNewest ? 'rgba(233,220,195,0.55)' : 'rgba(233,220,195,0.2)'}`,
         position:'relative', overflow:'hidden',
-        background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909',
-        boxShadow: isAggOrder ? `0 0 28px ${accentColor[otype]}14` : isNewest ? '0 0 22px rgba(211,191,162,0.15)' : '0 4px 18px rgba(211,191,162,0.083)',
+        background:'linear-gradient(160deg, rgba(233,220,195,0.06), rgba(233,220,195,0.015)), #0c0a08',
+        boxShadow: isAggOrder ? `0 0 28px ${accentColor[otype]}14` : isNewest ? '0 0 22px rgba(247,243,235,0.165)' : '0 4px 18px rgba(247,243,235,0.091)',
         transition:'border-color 0.3s',
       }}>
 
@@ -1665,18 +1666,18 @@ const KDSOrderCard = ({
       <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:topBarColor, flexShrink:0 }} />
 
       {/* ── CARD HEADER ── */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10, gap:8 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', margin:(isMobile||isTablet)?'-14px -14px 12px':'-16px -16px 12px', padding:(isMobile||isTablet)?'17px 14px 12px':'19px 16px 13px', gap:8, background:'linear-gradient(135deg, #f1e8d4 0%, #e6d9bd 55%, #dccdad 100%)', borderBottom:'1px solid rgba(23,18,12,0.12)', color:'#17120c' }}>
         {/* Left — table / platform */}
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
-            <h2 style={{ fontSize: isMobile?'1.7rem':isTablet?'1.6rem':'1.9rem', margin:0, fontWeight:900, lineHeight:1, letterSpacing:'-0.5px' }}>
+            <h2 style={{ fontSize: isMobile?'1.7rem':isTablet?'1.6rem':'1.9rem', margin:0, fontWeight:900, lineHeight:1, letterSpacing:'-0.5px', color:'#17120c' }}>
               {tableLabel}
             </h2>
             {isNewest && (
-              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'rgba(211,191,162,0.3)', color:'#d3bfa2', border:'1px solid rgba(211,191,162,0.41)', letterSpacing:'0.5px', flexShrink:0 }}>NEW</span>
+              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#17120c', color:'#ecdcb9', border:'1px solid #17120c', letterSpacing:'0.5px', flexShrink:0 }}>NEW</span>
             )}
             {order.isModified && (
-              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#e29a58', color:'#0c0c0c', letterSpacing:'0.5px', flexShrink:0 }}>REPLACED</span>
+              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#e29a58', color:'#f7f3eb', letterSpacing:'0.5px', flexShrink:0 }}>REPLACED</span>
             )}
           </div>
           {/* Source + order ID row */}
@@ -1684,7 +1685,7 @@ const KDSOrderCard = ({
             <span style={{ fontSize:'0.47rem', fontWeight:900, padding:'2px 6px', borderRadius:4, letterSpacing:'0.5px', textTransform:'uppercase', background:sm.bg, color:sm.color, border:`1px solid ${sm.border}` }}>
               {sm.label}
             </span>
-            <span style={{ fontSize:'0.48rem', color:'#9a9a9a', fontFamily:'monospace', fontWeight:900 }}>
+            <span style={{ fontSize:'0.48rem', color:'#6f624c', fontFamily:'monospace', fontWeight:900 }}>
               #{order._id.slice(-4).toUpperCase()}
             </span>
             {order.aggregatorOrderId && (
@@ -1697,14 +1698,14 @@ const KDSOrderCard = ({
 
         {/* Right — timer */}
         <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1.5px solid ${urgency==='high' ? '#f1ede4' : urgency==='medium' ? 'rgba(211,191,162,0.52)' : 'rgba(211,191,162,0.24)'}`, background: urgency==='high' ? 'rgba(8,8,10,0.272)' : urgency==='medium' ? 'rgba(211,191,162,0.18)' : '#0c0c0c' }}>
-            <Clock size={12} color={urgency==='high'?'#f7f3eb':urgency==='medium'?'#d3bfa2':'#9a9a9a'} />
-            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#f7f3eb':urgency==='medium'?'#b9a27e':'#a2a2a2', letterSpacing:'-0.3px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1.5px solid ${urgency==='high' ? '#17120c' : urgency==='medium' ? '#8a704d' : 'rgba(23,18,12,0.28)'}`, background: urgency==='high' ? '#17120c' : urgency==='medium' ? 'rgba(138,112,77,0.14)' : 'rgba(23,18,12,0.06)' }}>
+            <Clock size={12} color={urgency==='high'?'#e29a58':urgency==='medium'?'#6b5334':'#4a3f2e'} />
+            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#f1e3c4':urgency==='medium'?'#5c4527':'#2c2418', letterSpacing:'-0.3px' }}>
               {fmt(seconds)}
             </span>
           </div>
           {urgency !== 'low' && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? 'rgba(211,191,162,0.87)' : 'rgba(211,191,162,0.622)', letterSpacing:'0.5px', textTransform:'uppercase' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? '#8a4f12' : '#6b5334', letterSpacing:'0.5px', textTransform:'uppercase' }}>
               {urgency==='high' && <Zap size={8} />} {urgency==='high' ? 'OVERDUE' : 'DELAYED'}
             </span>
           )}
@@ -1746,10 +1747,10 @@ const KDSOrderCard = ({
         <div style={{ marginBottom:10 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
             <span style={{ fontSize:'0.47rem', color:'#9a9a9a', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px' }}>PREP PROGRESS</span>
-            <span style={{ fontSize:'0.52rem', fontWeight:900, color: allDone ? '#d3bfa2' : '#9a9a9a', fontFamily:'monospace' }}>{checkedCount}/{totalItems}</span>
+            <span style={{ fontSize:'0.52rem', fontWeight:900, color: allDone ? '#cfcac0' : '#9a9a9a', fontFamily:'monospace' }}>{checkedCount}/{totalItems}</span>
           </div>
-          <div style={{ height:3, background:'rgba(211,191,162,0.15)', borderRadius:2, overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${progressPct}%`, background: allDone ? 'linear-gradient(90deg,#e6d6b8,#b99f78)' : urgency==='high' ? 'rgba(211,191,162,0.8)' : 'rgba(211,191,162,0.38)', borderRadius:2, transition:'width 0.4s ease' }} />
+          <div style={{ height:3, background:'rgba(255,255,255,0.083)', borderRadius:2, overflow:'hidden' }}>
+            <div style={{ height:'100%', width:`${progressPct}%`, background: allDone ? 'linear-gradient(90deg,#e6d6b8,#b99f78)' : urgency==='high' ? 'rgba(211,191,162,0.8)' : 'rgba(247,243,235,0.418)', borderRadius:2, transition:'width 0.4s ease' }} />
           </div>
         </div>
       )}
@@ -1778,8 +1779,8 @@ const KDSOrderCard = ({
           const itemTag = isAggOrder
             ? { label: otype.toUpperCase(), color: accentColor[otype], bg:`${accentColor[otype]}10`, border:`${accentColor[otype]}30`, icon:<Zap size={9}/> }
             : isParcelOrder
-              ? { label:'PARCEL',  color:'#d3bfa2', bg:'rgba(211,191,162,0.14)', border:'rgba(211,191,162,0.36)', icon:<Package size={9}/> }
-              : { label:'DINE-IN', color:'#a6a6a6', bg:'rgba(211,191,162,0.03)', border:'rgba(211,191,162,0.15)', icon:<UtensilsCrossed size={9}/> };
+              ? { label:'PARCEL',  color:'#cfcac0', bg:'rgba(247,243,235,0.154)', border:'rgba(255,255,255,0.198)', icon:<Package size={9}/> }
+              : { label:'DINE-IN', color:'#a6a6a6', bg:'rgba(247,243,235,0.033)', border:'rgba(255,255,255,0.083)', icon:<UtensilsCrossed size={9}/> };
 
           return (
             <div
@@ -1790,27 +1791,27 @@ const KDSOrderCard = ({
                 display:'flex', alignItems:'flex-start', gap:10,
                 padding: isMobile?'10px 11px':'11px 12px',
                 borderRadius:10,
-                background: crossed ? '#080808' : hasStarted ? '#14120f' : '#0d0d0d',
-                border: `1px solid ${crossed ? 'rgba(211,191,162,0.12)' : hasStarted ? 'rgba(211,191,162,0.42)' : 'rgba(211,191,162,0.18)'}`,
-                borderLeft: `3px solid ${crossed ? 'rgba(211,191,162,0.12)' : hasStarted ? 'rgba(211,191,162,0.66)' : 'rgba(211,191,162,0.24)'}`,
+                background: crossed ? '#080808' : hasStarted ? '#101010' : '#0d0d0d',
+                border: `1px solid ${crossed ? 'rgba(255,255,255,0.066)' : hasStarted ? 'rgba(211,191,162,0.42)' : 'rgba(247,243,235,0.198)'}`,
+                borderLeft: `3px solid ${crossed ? 'rgba(255,255,255,0.066)' : hasStarted ? 'rgba(211,191,162,0.66)' : 'rgba(247,243,235,0.264)'}`,
                 cursor:'pointer', transition:'all 0.15s', userSelect:'none',
                 opacity: crossed ? 0.5 : 1,
               }}>
 
               {/* Qty badge */}
-              <div style={{ width:28, height:28, borderRadius:7, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize:'0.85rem', background: crossed ? 'rgba(211,191,162,0.09)' : 'rgba(211,191,162,0.27)', border:`1px solid ${crossed?'rgba(211,191,162,0.12)':'rgba(211,191,162,0.31)'}`, color: crossed ? '#9a9a9a' : '#d3bfa2' }}>
+              <div style={{ width:28, height:28, borderRadius:7, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize:'0.85rem', background: crossed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.149)', border:`1px solid ${crossed?'rgba(255,255,255,0.066)':'rgba(255,255,255,0.171)'}`, color: crossed ? '#9a9a9a' : '#cfcac0' }}>
                 {item.quantity}
               </div>
 
               <div style={{ flex:1, minWidth:0 }}>
                 {/* Name row */}
                 <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:3 }}>
-                  <span style={{ fontSize: isMobile?'0.86rem':isTablet?'0.83rem':'0.9rem', fontWeight:700, lineHeight:1.25, textDecoration: crossed ? 'line-through' : 'none', color: crossed ? '#9a9a9a' : item.isChefSpecial ? '#0c0c0c' : '#f7f3eb', background: item.isChefSpecial && !crossed ? 'linear-gradient(135deg,#d3bfa2,#d3bfa2)' : 'transparent', padding: item.isChefSpecial && !crossed ? '1px 6px' : 0, borderRadius: item.isChefSpecial ? 4 : 0 }}>
+                  <span style={{ fontSize: isMobile?'0.86rem':isTablet?'0.83rem':'0.9rem', fontWeight:700, lineHeight:1.25, textDecoration: crossed ? 'line-through' : 'none', color: crossed ? '#9a9a9a' : item.isChefSpecial ? '#f7f3eb' : '#f7f3eb', background: item.isChefSpecial && !crossed ? 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))' : 'transparent', padding: item.isChefSpecial && !crossed ? '1px 6px' : 0, borderRadius: item.isChefSpecial ? 4 : 0 }}>
                     {item.isChefSpecial && !crossed && <Sparkles size={10} style={{ display:'inline', marginRight:3 }} />}
                     {item.name}
                   </span>
                   {item.modChange && !crossed && (
-                    <span style={{ fontSize:'0.43rem', fontWeight:900, padding:'1px 6px', borderRadius:4, background:'#e29a58', color:'#0c0c0c', letterSpacing:'0.4px', flexShrink:0 }}>
+                    <span style={{ fontSize:'0.43rem', fontWeight:900, padding:'1px 6px', borderRadius:4, background:'#e29a58', color:'#f7f3eb', letterSpacing:'0.4px', flexShrink:0 }}>
                       {item.modChange === 'new' ? 'NEW' : `QTY ${item.modPrevQty}→${item.quantity}`}
                     </span>
                   )}
@@ -1834,14 +1835,14 @@ const KDSOrderCard = ({
 
                 {/* Portion */}
                 {!crossed && (
-                  <div style={{ fontSize:'0.58rem', fontWeight:900, color: item.portion?.toLowerCase()==='half' ? '#d3bfa2' : '#a6a6a6', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.3px' }}>
+                  <div style={{ fontSize:'0.58rem', fontWeight:900, color: item.portion?.toLowerCase()==='half' ? '#cfcac0' : '#a6a6a6', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.3px' }}>
                     {item.portion?.toUpperCase() || 'STANDARD'}
                   </div>
                 )}
 
                 {/* Cook timer */}
                 {hasStarted && !crossed && (
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', fontWeight:900, color: isSlow ? '#d3bfa2' : 'rgba(211,191,162,0.52)', background: isSlow ? 'rgba(211,191,162,0.21)' : 'transparent', padding: isSlow ? '2px 6px' : 0, borderRadius:4, border: isSlow ? '1px solid rgba(211,191,162,0.31)' : 'none', fontFamily:'monospace' }}>
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', fontWeight:900, color: isSlow ? '#cfcac0' : 'rgba(211,191,162,0.52)', background: isSlow ? 'rgba(255,255,255,0.116)' : 'transparent', padding: isSlow ? '2px 6px' : 0, borderRadius:4, border: isSlow ? '1px solid rgba(255,255,255,0.171)' : 'none', fontFamily:'monospace' }}>
                     <Timer size={9} />
                     {`${Math.floor(elapsedSecs/60)}:${(elapsedSecs%60).toString().padStart(2,'0')}`}
                     {isSlow && <span style={{ display:'inline-flex', alignItems:'center', gap:2, fontSize:'0.44rem' }}><AlertTriangle size={8} strokeWidth={2.5} /> SLOW</span>}
@@ -1857,14 +1858,14 @@ const KDSOrderCard = ({
 
                 {/* Long-press hint — only on first unchecked */}
                 {!hasStarted && !crossed && idx === order.items.findIndex(i => !checkedItemsGlobal[`${order._id}-${order.items.indexOf(i)}`] && !i.isExtraItem && i.extraItemId == null) && (
-                  <div style={{ fontSize:'0.46rem', color:'rgba(211,191,162,0.31)', marginTop:2, fontStyle:'italic' }}>Hold to start cook timer</div>
+                  <div style={{ fontSize:'0.46rem', color:'rgba(247,243,235,0.341)', marginTop:2, fontStyle:'italic' }}>Hold to start cook timer</div>
                 )}
 
                 {/* Suggestion note */}
                 {item.suggestion && !crossed && (
-                  <div style={{ display:'flex', alignItems:'flex-start', gap:5, marginTop:5, padding:'5px 8px', borderRadius:7, background:'rgba(211,191,162,0.12)', border:'1px solid rgba(211,191,162,0.24)' }}>
+                  <div style={{ display:'flex', alignItems:'flex-start', gap:5, marginTop:5, padding:'5px 8px', borderRadius:7, background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.132)' }}>
                     <StickyNote size={9} color="#b9a27e" style={{ flexShrink:0, marginTop:1 }} />
-                    <span style={{ fontSize:'0.6rem', color:'#d3bfa2', fontWeight:700, textTransform:'uppercase', lineHeight:1.4 }}>{item.suggestion}</span>
+                    <span style={{ fontSize:'0.6rem', color:'#cfcac0', fontWeight:700, textTransform:'uppercase', lineHeight:1.4 }}>{item.suggestion}</span>
                   </div>
                 )}
               </div>
@@ -1878,10 +1879,10 @@ const KDSOrderCard = ({
 
       {/* CHEF NOTE PANEL */}
       {showNote && (
-        <div style={{ marginTop:8, background:'rgba(211,191,162,0.12)', border:'1px solid rgba(211,191,162,0.3)', borderRadius:9, padding:'10px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
+        <div style={{ marginTop:8, background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.165)', borderRadius:9, padding:'10px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
           <StickyNote size={12} color="#b9a27e" style={{ flexShrink:0, marginTop:2 }} />
           <textarea value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Add a kitchen note for this ticket…"
-            style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#d3bfa2', fontSize:'0.72rem', resize:'none', fontFamily:"'Outfit', sans-serif", lineHeight:1.5, minHeight:52 }} rows={2} />
+            style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#cfcac0', fontSize:'0.72rem', resize:'none', fontFamily:"'Outfit', sans-serif", lineHeight:1.5, minHeight:52 }} rows={2} />
         </div>
       )}
 
@@ -1889,9 +1890,9 @@ const KDSOrderCard = ({
       <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
         {/* Note toggle — small secondary action */}
         <div style={{ display:'flex', justifyContent:'flex-end' }}>
-          <button type="button" onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(211,191,162,0.21)', color:'#a6a6a6', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.41)'; e.currentTarget.style.color='#d3bfa2'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.21)'; e.currentTarget.style.color='#a6a6a6'; }}>
+          <button type="button" onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(255,255,255,0.116)', color:'#a6a6a6', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.41)'; e.currentTarget.style.color='#cfcac0'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; e.currentTarget.style.color='#a6a6a6'; }}>
             <StickyNote size={10} /> {showNote ? 'HIDE NOTE' : 'ADD NOTE'}
           </button>
         </div>
@@ -1903,22 +1904,21 @@ const KDSOrderCard = ({
             width:'100%',
             padding: isMobile?'15px':isTablet?'13px':'14px',
             borderRadius:12,
-            border: allDone ? 'none' : `1px solid ${urgency==='high' ? 'rgba(211,191,162,0.66)' : 'rgba(211,191,162,0.31)'}`,
+            border: urgency==='high' ? '1px solid #e29a58' : '1px solid rgba(233,220,195,0.55)',
             fontWeight:900,
             fontSize: isMobile?'0.86rem':isTablet?'0.75rem':'0.78rem',
             cursor:'pointer',
             textTransform:'uppercase', letterSpacing:'0.8px',
             transition:'all 0.2s',
             background: urgency==='high'
-              ? '#050505'
-              : allDone
-                ? 'rgba(211,191,162,0.16)'
-                : 'transparent',
-            color: urgency==='high' ? '#0c0c0c' : '#d3bfa2',
+              ? '#17120c'
+              : 'linear-gradient(135deg, #f1e8d4, #e3d5b8 55%, #d6c5a0)',
+            boxShadow: allDone ? '0 8px 22px -8px rgba(233,220,195,0.55)' : 'none',
+            color: urgency==='high' ? '#f1e3c4' : '#17120c',
             minHeight: isMobile?50:44,
             display:'flex', alignItems:'center', justifyContent:'center', gap:8,
           }}>
-          {urgency === 'high' && <Flame size={14} color="#0c0c0c" strokeWidth={2.5} />}
+          {urgency === 'high' && <Flame size={14} color="#e29a58" strokeWidth={2.5} />}
           {urgency === 'high'
             ? 'OVERDUE — DISPATCH NOW'
             : allDone
@@ -1937,24 +1937,24 @@ const rs = {
   root: {
     position:'fixed', inset:0,
     display:'flex', flexDirection:'column',
-    background:'radial-gradient(ellipse 900px 520px at 12% -6%, rgba(211,191,162,0.10), transparent 60%), radial-gradient(ellipse 760px 480px at 100% 0%, rgba(211,191,162,0.06), transparent 55%), radial-gradient(ellipse 1100px 700px at 50% 112%, rgba(211,191,162,0.05), transparent 60%), #060606', padding:'12px', gap:10,
+    background:'radial-gradient(ellipse 900px 520px at 12% -6%, rgba(233,220,195,0.07), transparent 60%), radial-gradient(ellipse 760px 480px at 100% 0%, rgba(233,220,195,0.06), transparent 55%), radial-gradient(ellipse 1100px 700px at 50% 112%, rgba(233,220,195,0.05), transparent 60%), #080706', padding:'12px', gap:10,
     overflow:'hidden',
   },
   header: {
     display:'flex', justifyContent:'space-between', alignItems:'center',
     background:'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))', backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)', padding:'9px 13px',
-    borderRadius:18, border:'1px solid rgba(211,191,162,0.2)', boxShadow:'0 18px 44px -24px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)',
+    borderRadius:18, border:'1px solid rgba(255,255,255,0.11)', boxShadow:'0 18px 44px -24px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)',
     flexShrink:0, zIndex:10, gap:8, minHeight:52,
     overflowX:'hidden',
   },
   iconBtn: {
-    background:'#121212', border:'1px solid rgba(211,191,162,0.3)',
+    background:'#121212', border:'1px solid rgba(255,255,255,0.165)',
     padding:'8px', borderRadius:9, cursor:'pointer',
     display:'flex', alignItems:'center', flexShrink:0,
     transition:'all 0.15s',
   },
   utilBtn: {
-    background:'#121212', border:'1px solid rgba(211,191,162,0.24)',
+    background:'#121212', border:'1px solid rgba(255,255,255,0.132)',
     color:'#f7f3eb', padding:'7px 11px', borderRadius:9,
     cursor:'pointer', display:'flex', alignItems:'center',
     gap:5, transition:'all 0.15s', flexShrink:0, minHeight:36,
@@ -1969,39 +1969,39 @@ const rs = {
   },
   body: { display:'flex', flex:1, gap:10, overflow:'hidden', minHeight:0 },
   sidebar: {
-    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.21)',
+    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)',
     borderRadius:13, display:'flex', flexDirection:'column',
     padding:'15px 12px', flexShrink:0, height:'100%', overflowY:'auto',
   },
   sidebarHeaderIcon: {
     width:28, height:28, borderRadius:8,
-    background:'rgba(211,191,162,0.15)', border:'1px solid rgba(211,191,162,0.36)',
+    background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)',
     display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
   },
   sidebarBtn: (active) => ({
     display:'flex', alignItems:'center', padding:'10px 10px',
-    borderRadius:9, border: active ? 'none' : '1px solid rgba(211,191,162,0.21)',
-    background: active ? 'linear-gradient(135deg,#d3bfa2,#b99f78)' : 'rgba(211,191,162,0.06)',
-    color: active ? '#0c0c0c' : '#a6a6a6',
+    borderRadius:9, border: active ? 'none' : '1px solid rgba(255,255,255,0.116)',
+    background: active ? 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))' : 'rgba(255,255,255,0.033)',
+    color: active ? '#f7f3eb' : '#a6a6a6',
     cursor:'pointer', fontSize:'0.64rem', fontWeight: active ? 900 : 800,
     width:'100%', textAlign:'left', transition:'all 0.15s',
     letterSpacing:'0.3px', minHeight:40, gap:0,
-    boxShadow: active ? '0 4px 12px rgba(211,191,162,0.28)' : 'none',
+    boxShadow: active ? '0 4px 12px rgba(255,255,255,0.154)' : 'none',
   }),
   countChip: (active, hasItems) => ({
     fontSize:'0.54rem', fontFamily:'monospace', padding:'1px 6px',
     borderRadius:5, fontWeight:900,
-    background: active ? 'rgba(255,255,255,0.22)' : hasItems ? 'rgba(211,191,162,0.24)' : 'rgba(211,191,162,0.09)',
-    color: active ? '#0c0c0c' : hasItems ? '#d3bfa2' : '#9a9a9a',
-    border: active ? 'none' : hasItems ? '1px solid rgba(211,191,162,0.31)' : '1px solid rgba(211,191,162,0.15)',
+    background: active ? 'rgba(255,255,255,0.22)' : hasItems ? 'rgba(255,255,255,0.132)' : 'rgba(247,243,235,0.099)',
+    color: active ? '#f7f3eb' : hasItems ? '#cfcac0' : '#9a9a9a',
+    border: active ? 'none' : hasItems ? '1px solid rgba(255,255,255,0.171)' : '1px solid rgba(247,243,235,0.165)',
   }),
   workspace: {
     flex:1, overflowY:'auto', minWidth:0,
   },
   navBtn: {
     display:'flex', alignItems:'center', gap:5,
-    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(211,191,162,0.3)',
-    color:'#d3bfa2', padding:'10px 14px', borderRadius:9,
+    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.165)',
+    color:'#cfcac0', padding:'10px 14px', borderRadius:9,
     cursor:'pointer', fontSize:'0.7rem', fontWeight:800, minHeight:44,
     transition:'all 0.15s',
   },
@@ -2009,7 +2009,7 @@ const rs = {
 
 const wInput = {
   width:'100%', padding:'10px 12px',
-  background:'#080808', border:'1px solid rgba(211,191,162,0.3)',
+  background:'#080808', border:'1px solid rgba(255,255,255,0.165)',
   color:'#f7f3eb', borderRadius:9, fontSize:'0.8rem',
   outline:'none', boxSizing:'border-box',
   fontFamily:"'Outfit', sans-serif",

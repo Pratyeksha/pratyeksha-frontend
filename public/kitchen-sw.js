@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pratyeksha-kitchen-shell-v3';
+const CACHE_NAME = 'pratyeksha-kitchen-shell-v4';
 const SHELL = ['/kitchen-manifest.webmanifest', '/kitchen-pwa/icon-192.png', '/kitchen-pwa/icon-512.png'];
 
 self.addEventListener('install', event => {

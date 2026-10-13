@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useMemo, useCallback,useRef  } from 'react';
+import SupportContact from './SupportContact.jsx';
 import axios from 'axios';
 import { io } from "socket.io-client";
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
+import { ForgotLink } from './ForgotPassword.jsx';
  
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -180,7 +183,7 @@ const AnnouncementPreviewCard = ({ data }) => {
   );
 };
 
-const OperatorPortal = () => {
+const OperatorPortalInner = () => {
   const socket = useMemo(() => io(SOCKET_BASE_URL, {
     withCredentials: true,
     transports: ['polling', 'websocket'], 
@@ -191,6 +194,7 @@ const OperatorPortal = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
   const [loginData, setLoginData] = useState({ username: '', password: '' });
+  const [expiredInfo, setExpiredInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('pending'); 
   const [orderZone, setOrderZone] = useState('all'); 
   const [searchQuery, setSearchQuery] = useState("");
@@ -2184,7 +2188,11 @@ const removeDiscountPreset = (idx) => {
       localStorage.setItem('table_count', res.data.tableCount);
       setIsAuthenticated(true);
       window.location.reload();
-    } catch { showNotif("Invalid Credentials", "error"); }
+    } catch (err) {
+      const d = err?.response?.data;
+      if (err?.response?.status === 402 && d?.code === 'SUBSCRIPTION_EXPIRED') setExpiredInfo(d);
+      else showNotif("Invalid Credentials", "error");
+    }
   };
 
   const handleLogout = () => {
@@ -4527,6 +4535,9 @@ const renderMonthHeatmap = () => {
   // ─────────────────────────────────────────────────────
   // LOGIN SCREEN
   // ─────────────────────────────────────────────────────
+  if (!isAuthenticated && expiredInfo) return (
+    <ExpiredPage name={expiredInfo.name} planExpiry={expiredInfo.planExpiry} onSignOut={() => setExpiredInfo(null)} />
+  );
   if (!isAuthenticated) return (
     <div style={{ ...styles.loginOverlay, position:'fixed', top:0, left:0, zIndex:50 }}>
       <motion.div initial={false} animate={{opacity:1}} style={styles.loginBox}>
@@ -4537,6 +4548,7 @@ const renderMonthHeatmap = () => {
           <input type="text" placeholder="Username" style={styles.input} onChange={e=>setLoginData(p => ({...p, username:e.target.value}))}/>
           <input type="password" placeholder="Access PIN" style={styles.input} onChange={e=>setLoginData(p => ({...p, password:e.target.value}))}/>
           <button type="submit" style={styles.mainBtn}>INITIALIZE</button>
+          <div style={{ textAlign: 'center', marginTop: 12 }}><ForgotLink scope="operator" label="Forgot PIN?" defaultUsername={loginData.username} /></div>
         </form>
       </motion.div>
     </div>
@@ -4779,6 +4791,7 @@ const renderMonthHeatmap = () => {
         <div style={{fontSize:'0.52rem',color:'#969696',fontWeight:'700',marginTop:'1px'}}>Session active</div>
       </div>
     </div>
+    <SupportContact />
     <button type="button" onClick={handleLogout} className="p-logout-btn" style={{
       width:'100%',padding:'10px',background:'transparent',
       border:'1px solid rgba(255,255,255,0.05)',color:'#8a8a8a',
@@ -5149,6 +5162,7 @@ const renderMonthHeatmap = () => {
             NOT inside any modal/AnimatePresence wrapper
             ════════════════════════════════════════════════ */}
         <section style={styles.scrollArea} className="custom-scroll">
+<RenewalReminder tenantId={tenantId} style={{ margin: '0 0 14px' }} />
 
 {activeTab === 'pending' && (
   
@@ -16636,6 +16650,17 @@ sidebarTop: {
   scrollbarColor: '#8a8a8a transparent'
 },
 
+};
+
+// Expired subscriptions lock the Operator app behind a renewal page (also catches a session that was already open).
+const OperatorPortal = () => {
+  let tid = '';
+  try { tid = localStorage.getItem('pratyeksha_token') ? (localStorage.getItem('active_tenant') || '') : ''; } catch { /* storage unavailable */ }
+  return (
+    <SubscriptionGate tenantId={tid} onSignOut={() => { try { localStorage.clear(); } catch { /* ignore */ } window.location.reload(); }}>
+      <OperatorPortalInner />
+    </SubscriptionGate>
+  );
 };
 
 export default OperatorPortal;

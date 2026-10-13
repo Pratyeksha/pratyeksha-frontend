@@ -1,6 +1,6 @@
 import React, { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import OperatorPortal from './OperatorPortal.jsx'
@@ -13,6 +13,15 @@ import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
 import { configurePwa } from './pwa.js'
 import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
+import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
+
+installSubscriptionInterceptor();
+
+/* Expired subscriptions lock the customer app, KDS and Owner app behind a renewal page. */
+function Gated({ children }) {
+  const { tenantId } = useParams();
+  return <SubscriptionGate tenantId={tenantId}>{children}</SubscriptionGate>;
+}
 
 /* Premium launch screen: shown once per page load / PWA launch, continues the static splash in index.html. */
 function SplashGate({ children }) {
@@ -70,7 +79,7 @@ createRoot(document.getElementById('root')).render(
 
         {/* 3. Kitchen Route */}
         <Route path="/kitchen" element={<KitchenLauncher />} />
-        <Route path="/kitchen/:tenantId" element={<KitchenView />} />
+        <Route path="/kitchen/:tenantId" element={<Gated><KitchenView /></Gated>} />
 
         {/* 4. Operator Portal Route */}
         <Route path="/operator" element={<OperatorPortal />} />
@@ -80,14 +89,14 @@ createRoot(document.getElementById('root')).render(
         <Route path="/owner" element={<OwnerLauncher />} />
 
         {/* 5b. Owner App Route (Live Dashboard, P&L, Inventory, Staff, etc.) */}
-        <Route path="/owner/:tenantId/*" element={<OwnerApp />} />
+        <Route path="/owner/:tenantId/*" element={<Gated><OwnerApp /></Gated>} />
 
         {/* 6. Feedback Suite — isolated sub-app; original feedback UI and CSS remain unchanged */}
         <Route path="/feedback-suite/*" element={<FeedbackSuiteFrame />} />
 
         {/* 7. Customer Menu Route (Dynamic) */}
         {/* Must stay near the bottom — catches /:tenantId */}
-        <Route path="/:tenantId" element={<App />} />
+        <Route path="/:tenantId" element={<Gated><App /></Gated>} />
 
         {/* 8. Customer PWA Home — installed app opens here unless a restaurant QR route is active */}
         <Route path="/" element={<CustomerHome />} />

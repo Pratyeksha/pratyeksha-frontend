@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Coffee, UtensilsCrossed, Search, Bell, ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
-  Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check,
+  Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check, ArrowUp, ArrowUpDown, History,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -15,6 +15,21 @@ const BASE_URL = API_BASE_URL;
 const logo = '/pratyeksha-logo.png';
 const GOLD = '#d3bfa2';
 const PAGE = 8;
+const SORT_KEY = 'px_home_sort';
+const SEARCHES_KEY = 'px_home_searches';
+/** First word of the guest's remembered name (saved per outlet by the ordering app). Display only; nothing is sent anywhere. */
+const readGuestFirstName = () => {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith('pratyeksha_customer_history_')) continue;
+      const v = JSON.parse(localStorage.getItem(k) || 'null');
+      const first = String(v?.name || '').trim().split(/\s+/)[0];
+      if (first && first.toLowerCase() !== 'guest') return first.charAt(0).toUpperCase() + first.slice(1);
+    }
+  } catch { /* storage unavailable */ }
+  return '';
+};
 const FAV_KEY = 'px_home_favs';
 const RECENT_KEY = 'px_home_recent';
 const AREA_KEY = 'px_home_area';
@@ -58,6 +73,13 @@ const distanceKm = (pos, t) => {
 const fmtKm = (km) => (km == null ? '' : km < 1 ? `${Math.max(50, Math.round(km * 10) * 100)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
 
 const css = `
+html,body{scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;height:0;display:none}
+.pxh-sort{display:inline-flex;align-items:center;gap:6px;margin-left:auto;margin-right:8px;border:1px solid rgba(211,191,162,.18);border-radius:13px;padding:0 4px 0 10px;background:rgba(255,255,255,.03);color:rgba(211,191,162,.8)}
+.pxh-sort select{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:11px;font-weight:800;padding:9px 18px 9px 2px;font-family:inherit;cursor:pointer;outline:none}
+.pxh-sort select:disabled{opacity:.45;cursor:not-allowed}
+.pxh-sort select option{background:#141414;color:#f7f3eb}
+.pxh-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:44px;height:44px;border-radius:50%;border:1px solid rgba(211,191,162,.35);background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03)),#121212;color:#d3bfa2;display:grid;place-items:center;cursor:pointer;box-shadow:0 14px 34px rgba(0,0,0,.5);z-index:40;backdrop-filter:blur(10px)}
 .pxh-chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:4px 8px 10px;margin:-4px -8px -6px}
 .pxh-chips::-webkit-scrollbar{display:none}
 .pxh-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(211,191,162,.16);background:rgba(255,255,255,.03);color:rgba(255,255,255,.62);border-radius:22px;padding:8px 13px;font-size:11px;font-weight:800;cursor:pointer;transition:all .18s}
@@ -193,6 +215,11 @@ export default function CustomerHome() {
   const [scanning, setScanning] = useState(false);
   const [area, setArea] = useState(() => { try { return localStorage.getItem(AREA_KEY) || 'all'; } catch { return 'all'; } });
   const [view, setView] = useState('list');
+  const [sort, setSort] = useState(() => { try { return localStorage.getItem(SORT_KEY) || 'recommended'; } catch { return 'recommended'; } });
+  const [guestName] = useState(readGuestFirstName);
+  const [showTop, setShowTop] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searches, setSearches] = useState(() => readList(SEARCHES_KEY));
   const [pos, setPos] = useState(null);
   const [nearMe, setNearMe] = useState(false);
   const [geoMsg, setGeoMsg] = useState('');
@@ -273,8 +300,25 @@ export default function CustomerHome() {
       return !q || `${t.name} ${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`.toLowerCase().includes(q);
     });
     if (nearMe && pos) list.sort((a, b) => (distanceKm(pos, a) ?? 1e9) - (distanceKm(pos, b) ?? 1e9));
+    else if (sort === 'az') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    else if (sort === 'offers') list.sort((a, b) => (b.activeOffers?.length || 0) - (a.activeOffers?.length || 0));
+    else if (sort === 'saved') list.sort((a, b) => Number(favs.includes(b.tenantId)) - Number(favs.includes(a.tenantId)));
     return list;
-  }, [tenants, filter, service, favOnly, favs, query, area, nearMe, pos]);
+  }, [tenants, filter, service, favOnly, favs, query, area, nearMe, pos, sort]);
+
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 520);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  const chooseSort = (v) => { setSort(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* ignore */ } };
+  const rememberSearch = (term) => {
+    const t = String(term || '').trim();
+    if (t.length < 2) return;
+    const next = [t, ...searches.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 5);
+    setSearches(next); writeList(SEARCHES_KEY, next);
+  };
 
   // Area chips are built from the real outlets (counts respect the other filters, not the area itself).
   const areaChips = useMemo(() => {
@@ -334,6 +378,7 @@ export default function CustomerHome() {
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetingLine = guestName ? `${greeting}, ${guestName}` : greeting;
   const visible = filtered.slice(0, limit);
   const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setQuery(''); chooseArea('all'); };
   const hasFilters = filter !== 'all' || service || favOnly || query || area !== 'all';
@@ -347,7 +392,7 @@ export default function CustomerHome() {
         <header style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <PwaInstallButton kind="customer" compact />
           <div style={{ background: '#f7f3eb', borderRadius: 12, padding: '5px 9px', display: 'flex', alignItems: 'center' }}>
-            <img src={logo} alt="Pratyeksha" style={{ width: 104, height: 'auto', display: 'block' }} />
+            <img src={logo} alt="Pratyeksha" style={{ width: 132, height: 'auto', display: 'block' }} />
           </div>
           <div style={{ flex: 1 }} />
           {canScan && (
@@ -370,17 +415,26 @@ export default function CustomerHome() {
         {/* ── Greeting + search ── */}
         <section style={{ padding: '26px 0 14px' }}>
           <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
-            {greeting}<span style={{ color: GOLD }}>.</span>
+            {greetingLine}<span style={{ color: GOLD }}>.</span>
           </h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <Search size={16} color="rgba(211,191,162,.55)" style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)' }} />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search restaurants" style={{ width: '100%', boxSizing: 'border-box', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
+              <input value={query} onFocus={() => setSearchOpen(true)} onBlur={() => { rememberSearch(query); setTimeout(() => setSearchOpen(false), 150); }} onKeyDown={(e) => { if (e.key === 'Enter') { rememberSearch(query); e.currentTarget.blur(); } }} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search restaurants" style={{ width: '100%', boxSizing: 'border-box', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
               {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex', padding: 4 }}><X size={15} /></button>}
             </div>
             <button type="button" onClick={surprise} disabled={!filtered.length} aria-label="Surprise me" title="Surprise me" style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, opacity: filtered.length ? 1 : .4 }}><Shuffle size={18} color={GOLD} /></button>
           </div>
         </section>
+
+        {searchOpen && !query && searches.length > 0 && (
+          <div className="pxh-areas" role="list" aria-label="Recent searches" style={{ marginTop: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 800, letterSpacing: 1.4, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', flex: '0 0 auto' }}><History size={12} /> Recent</span>
+            {searches.map((t) => (
+              <button type="button" key={t} role="listitem" className="pxh-area" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(t); setSearchOpen(false); }}>{t}</button>
+            ))}
+          </div>
+        )}
 
         {/* ── Filter chips (single scrollable row) ── */}
         <div className="pxh-chips" role="toolbar" aria-label="Filters">
@@ -448,6 +502,15 @@ export default function CustomerHome() {
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontWeight: 700, letterSpacing: .3 }}>
                 {filtered.length} {filtered.length === 1 ? 'place' : 'places'}{area !== 'all' && areaChips.find((a) => a.key === area) ? ` in ${areaChips.find((a) => a.key === area).label}` : ''}{nearMe ? ' · nearest first' : ''}
               </div>
+              <label className="pxh-sort" title="Sort">
+                <ArrowUpDown size={12} />
+                <select aria-label="Sort places" value={nearMe ? 'recommended' : sort} disabled={nearMe} onChange={(e) => chooseSort(e.target.value)}>
+                  <option value="recommended">Recommended</option>
+                  <option value="az">A – Z</option>
+                  <option value="offers">Most offers</option>
+                  <option value="saved">Saved first</option>
+                </select>
+              </label>
               <div className="pxh-seg" role="tablist" aria-label="View">
                 <button type="button" role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}><ListIcon size={13} /> List</button>
                 <button type="button" role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}><MapIcon size={13} /> Map</button>
@@ -585,6 +648,9 @@ export default function CustomerHome() {
       </AnimatePresence>
 
       {scanning && <QrScanner onClose={() => setScanning(false)} onPath={(path) => { setScanning(false); navigate(path); }} />}
+      {showTop && (
+        <button type="button" className="pxh-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top"><ArrowUp size={18} /></button>
+      )}
     </main>
   );
 }

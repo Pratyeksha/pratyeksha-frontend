@@ -4,7 +4,7 @@
 // (Vite: /public/sw.js → deploys to https://yourapp.com/sw.js)
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'pratyeksha-menu-v3';
+const CACHE_NAME = 'pratyeksha-menu-v4';
 const API_HOST = 'pratyeksha-backend.onrender.com';
 
 // Only these read-only, "browse the menu" endpoints are cached.

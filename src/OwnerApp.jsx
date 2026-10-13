@@ -13,12 +13,15 @@
  * lucide-react (all already in the Pratyeksha dependency tree).
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
+import SupportContact from './SupportContact.jsx';
 import { Routes, Route, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { RenewalReminder } from './SubscriptionGate.jsx';
+import { ForgotLink } from './ForgotPassword.jsx';
 import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
   Users, UserCircle2, Bell, ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
@@ -789,14 +792,9 @@ const AuthShell = ({ children }) => (
     <div className="pown-auth-glow" style={{ top: '8%', left: '12%' }} />
     <div className="pown-auth-glow" style={{ bottom: '6%', right: '10%', animationDelay: '-4s' }} />
     <div className="pown-fade-in" style={{ width: 400, maxWidth: '100%', position: 'relative' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 26 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 24px -6px rgba(211,191,162,0.5)'
-        }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:6, background:'#fff', borderRadius:10 }} /></div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+        <div style={{ width: 188, height: 78, borderRadius: 20, background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 14px', boxShadow: '0 16px 40px -10px rgba(211,191,162,0.38)' }}>
+          <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
       </div>
       {children}
@@ -808,9 +806,9 @@ const AuthSplash = () => (
   <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
     <GlobalStyles />
     <div className="pown-pulse" style={{
-      width: 40, height: 40, borderRadius: 12, background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:6, background:'#fff', borderRadius:10 }} /></div>
+      width: 150, height: 62, borderRadius: 18, background: '#f7f3eb',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px'
+    }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></div>
   </div>
 );
 
@@ -875,6 +873,7 @@ const LoginScreen = () => {
           <PrimaryBtn type="submit" icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
             {loading ? 'Signing in…' : 'Sign In'}
           </PrimaryBtn>
+          <div style={{ textAlign: 'center', marginTop: 10 }}><ForgotLink scope="owner" tenantId={tenantId} defaultUsername={username} /></div>
         </form>
       </Card>
       <div style={{ textAlign: 'center', fontSize: 11, color: T.textLow, marginTop: 16 }}>Wrong outlet? Close the app and open it again from a fresh link.</div>
@@ -888,6 +887,7 @@ const SetupScreen = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -898,7 +898,7 @@ const SetupScreen = () => {
     if (!canSubmit) return;
     setLoading(true); setError(null);
     try {
-      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName });
+      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName, email: recoveryEmail.trim() || undefined });
       completeAuth(res.data.token, res.data.ownerName);
     } catch (err) {
       setError(err?.response?.data?.error || 'Could not complete setup');
@@ -913,6 +913,7 @@ const SetupScreen = () => {
         <form onSubmit={submit}>
           <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" autoFocus /></Field>
           <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" /></Field>
+          <Field label="RECOVERY EMAIL (FOR FORGOT PASSWORD)"><input type="email" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" autoComplete="email" autoCapitalize="none" /></Field>
           <Field label="CHOOSE A PASSWORD"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
           <Field label="CONFIRM PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
           {password && password.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Password needs at least 6 characters.</div>}
@@ -1040,14 +1041,8 @@ const Sidebar = () => {
     }}>
       {/* Pinned header — logo + owner chip, never scrolls */}
       <div style={{ padding: '26px 22px 18px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{ width: 42, height: 34, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5, boxShadow: `0 6px 18px -4px rgba(211,191,162,0.28)`, flexShrink: 0 }}>
-            <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.4 }}>PRATYEKSHA</div>
-            <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 2, color: T.primary }}>OWNER SUITE</div>
-          </div>
+        <div style={{ width: '100%', height: 64, borderRadius: 16, background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 14px', boxShadow: '0 8px 22px -6px rgba(211,191,162,0.3)' }}>
+          <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
         {ownerName && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '9px 11px', background: 'rgba(255,255,255,0.03)', borderRadius: 11 }}>
@@ -1079,6 +1074,7 @@ const Sidebar = () => {
       {/* Pinned footer — install / logout, never scrolls */}
       <div style={{ padding: 18, borderTop: `1px solid ${T.border}`, display: 'grid', gap: 10, flexShrink: 0 }}>
         <InstallAppButton />
+        <SupportContact style={{ marginBottom: 0, borderRadius: 12 }} />
         <button type="button" onClick={logout} className="pown-btn" style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
           borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
@@ -1107,12 +1103,8 @@ const MobileDrawer = ({ open, onClose }) => {
         display: 'flex', flexDirection: 'column', boxShadow: open ? '20px 0 60px -20px rgba(0,0,0,0.6)' : 'none'
       }}>
         <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 40, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5 }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></div>
-            <div>
-              <div style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: 1.2 }}>PRATYEKSHA</div>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.8, color: T.primary }}>OWNER SUITE</div>
-            </div>
+          <div style={{ width: 148, height: 54, borderRadius: 14, background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 12px' }}>
+            <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textLow }}><X size={18} /></button>
         </div>
@@ -1139,7 +1131,8 @@ const MobileDrawer = ({ open, onClose }) => {
             </NavLink>
           ))}
         </nav>
-        <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, flexShrink: 0, display: 'grid', gap: 10 }}>
+          <SupportContact style={{ marginBottom: 0 }} />
           <button type="button" onClick={logout} className="pown-btn" style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
             borderRadius: 12, background: 'transparent', border: `1px solid ${T.border}`, color: T.textMed, fontSize: 12.5, fontWeight: 700
@@ -1235,6 +1228,7 @@ const TopBar = ({ onMenu }) => {
  * because scrolling never depends on document/body height calculations.
  */
 const OwnerShell = ({ children }) => {
+  const { tenantId: ownerTenantId } = useOwner();
   const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
@@ -1302,6 +1296,7 @@ const OwnerShell = ({ children }) => {
             flex: '1 1 auto', minHeight: 0, width: '100%',
             padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
           }}>
+          <RenewalReminder tenantId={ownerTenantId} />
           <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
             {children}
           </div>
@@ -3260,10 +3255,10 @@ export function OwnerLauncher() {
       <GlobalStyles />
       <Card style={{ width: 360, maxWidth: '100%', textAlign: 'center' }}>
         <div style={{
-          width: 52, height: 52, borderRadius: 15, margin: '0 auto 18px',
-          background: `linear-gradient(140deg, ${T.primary}, #b89f7c)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 26px -6px rgba(211,191,162,0.5)'
-        }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain', padding:7, background:'#fff', borderRadius:15 }} /></div>
+          width: 168, height: 70, borderRadius: 18, margin: '0 auto 18px', padding: '6px 12px',
+          background: '#f7f3eb',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 26px -6px rgba(211,191,162,0.4)'
+        }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></div>
         <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Welcome to Pratyeksha Owner</div>
         <div style={{ fontSize: 12, color: T.textLow, marginBottom: 20, lineHeight: 1.6 }}>Enter your outlet ID to open your dashboard. You'll only need to do this once on this device.</div>
         <input value={outletInput} onChange={e => setOutletInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && go()}

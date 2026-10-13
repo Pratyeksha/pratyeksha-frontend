@@ -12,6 +12,11 @@ export const eraseMyData = (payload) => api.post('/feedback/erase', payload);
 export const exportMyData = (payload) => api.post('/feedback/my-data', payload);
 export const loginAdmin = (payload) => api.post('/auth/login', { ...payload, tenantId: payload?.tenantId || resolveTenantId() });
 
+// Forgot / reset password live on the main API (/api/auth/*), next to the feedback-suite routes.
+const authApi = () => String(api.defaults.baseURL || '').replace(/\/feedback-suite$/, '');
+export const forgotAdminPassword = (payload) => axios.post(`${authApi()}/auth/forgot`, { scope: 'feedback', tenantId: resolveTenantId(), ...payload }, { timeout: 30000 });
+export const resetAdminPassword = (payload) => axios.post(`${authApi()}/auth/reset`, { scope: 'feedback', tenantId: resolveTenantId(), ...payload }, { timeout: 30000 });
+
 export const resolveTenantId = () => {
   const queryTenant = new URLSearchParams(window.location.search).get('tenantId');
   return queryTenant || localStorage.getItem('active_tenant') || localStorage.getItem('feedbackTenantId') || '';
