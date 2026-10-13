@@ -832,26 +832,29 @@ function InstagramProfileSection() {
     <section className="ig-showcase-section" id="instagram" aria-labelledby="ig-showcase-title">
       <div className="ig-showcase-inner">
         <div className="ig-showcase-heading">
-          <span className="eyebrow">A LITTLE MORE SOCIAL</span>
-          <p className="ig-overline">FOLLOW THE JOURNEY <span> / </span> @PRATYEKSHA.IO</p>
-          <h2 id="ig-showcase-title">The PRATYEKSHa Instagram, <em>right here.</em></h2>
-          <p className="ig-heading-copy">A closer look at the ideas, product stories and details shaping better café and restaurant experiences.</p>
+          <span className="eyebrow">CONNECT WITH Pratyeksha</span>
+          <p className="ig-overline">OUR WORLD, BEHIND THE EXPERIENCE <span> / </span> @PRATYEKSHA.IO</p>
+          <h2 id="ig-showcase-title">Get to know <em>Pratyeksha.</em></h2>
+          <p className="ig-heading-copy">Product updates, practical ideas and a closer look at how Pratyeksha helps cafés and restaurants deliver better experiences.</p>
         </div>
         <div className="ig-profile-card">
-          <div className="ig-profile-topline"><span className="ig-live-dot" /> INSTAGRAM PROFILE PREVIEW <a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">OPEN PROFILE <I name="arrowUpRight" size={13} /></a></div>
+          <div className="ig-profile-topline"><span className="ig-live-dot" /> <span>OFFICIAL INSTAGRAM PROFILE</span><a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">VISIT INSTAGRAM <I name="arrowUpRight" size={13} /></a></div>
           <div className="ig-profile-main">
-            <a className="ig-avatar-ring" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer" aria-label="Open @pratyeksha.io on Instagram">
-              <span className="ig-avatar-inner"><BrandLogo className="ig-profile-logo" alt="PRATYEKSHa crossed spoon-and-fork logo" /></span>
+            <a className="ig-avatar-ring" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer" aria-label="Open Pratyeksha on Instagram">
+              <span className="ig-avatar-inner"><BrandLogo className="ig-profile-logo" alt="Pratyeksha crossed spoon-and-fork brand logo" /></span>
             </a>
             <div className="ig-profile-info">
-              <div className="ig-username-row"><h3>pratyeksha.io</h3><span className="ig-profile-label">BRAND PROFILE</span></div>
-              <div className="ig-stats"><span><strong>PRATYEKSHa</strong> <small>brand</small></span><span><strong>7</strong> <small>highlights</small></span><span><strong>01</strong> <small>ecosystem</small></span></div>
-              <p className="ig-bio"><strong>PRATYEKSHa | Restaurant Experience System</strong><br />A smarter way to run cafés &amp; restaurants.<br />Digital menus • Kitchen • Operations • Insights<br />One ecosystem. Every connection.</p>
+              <div className="ig-username-row"><h3>pratyeksha.io</h3><span className="ig-profile-label">OFFICIAL PROFILE</span></div>
+              <div className="ig-value-line"><span>Digital guest experience</span><i /> <span>Connected operations</span><i /> <span>Smarter decisions</span></div>
+              <div className="ig-bio-block">
+                <p className="ig-bio-name">Pratyeksha <span>· Restaurant technology platform</span></p>
+                <p className="ig-bio">Run your café or restaurant with more clarity.<br />Digital menus · QR ordering · Kitchen · Operations · Insights<br /><strong>One connected platform. Better guest experiences.</strong></p>
+              </div>
               <a className="ig-bio-link" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer"><I name="globe" size={14} /> instagram.com/pratyeksha.io</a>
-              <a className="ig-profile-cta" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">View Instagram profile <I name="arrowUpRight" size={15} /></a>
+              <a className="ig-profile-cta" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">Discover Pratyeksha on Instagram <I name="arrowUpRight" size={15} /></a>
             </div>
           </div>
-          <div className="ig-divider"><span>THE HIGHLIGHTS</span><span>SELECT A STORY TO EXPLORE</span></div>
+          <div className="ig-divider"><span>EXPLORE OUR HIGHLIGHTS</span><span>SEVEN WAYS INTO THE Pratyeksha WORLD</span></div>
           <div className="ig-highlights-grid">
             {INSTAGRAM_HIGHLIGHTS.map((highlight, index) => (
               <a key={highlight.title} className={`ig-highlight ig-tone-${highlight.tone}`} href={highlight.url} target="_blank" rel="noreferrer" aria-label={`Open Instagram highlight: ${highlight.title}`}>
@@ -861,9 +864,9 @@ function InstagramProfileSection() {
               </a>
             ))}
           </div>
-          <div className="ig-card-bottom"><span>VISUALIZE. ORDER. RELISH.</span><a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">FOLLOW @PRATYEKSHA.IO <I name="arrowUpRight" size={13} /></a></div>
+          <div className="ig-card-bottom"><span>VISUALIZE. ORDER. RELISH.</span><a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">FOLLOW @pratyeksha.io <I name="arrowUpRight" size={13} /></a></div>
         </div>
-        <p className="ig-section-footnote">Stories and highlight links open on Instagram. Follow the profile for the latest updates.</p>
+        <p className="ig-section-footnote">Follow Pratyeksha for product stories, hospitality insights and updates from our connected restaurant platform.</p>
       </div>
     </section>
   );
@@ -8212,54 +8215,56 @@ input, select, textarea, button{
 
 @media(prefers-reduced-motion:reduce){.special-page-glow{display:none}.mobile-sticky-cta button{transition:none}}
 
-/* PRATYEKSHa Instagram profile + highlight showcase */
-.ig-showcase-section{position:relative;overflow:hidden;padding:clamp(76px,9vw,132px) 6vw;background:#f7f3ea;color:#24251e;border-top:1px solid rgba(52,55,40,.08)}
-.ig-showcase-inner{width:min(1180px,100%);margin:0 auto}
-.ig-showcase-heading{max-width:760px;margin:0 auto 48px;text-align:center}
+/* Pratyeksha Instagram profile + highlight showcase — aligned, responsive and brand-consistent */
+.ig-showcase-section{position:relative;overflow:hidden;padding:clamp(68px,8vw,112px) 6vw;background:#f7f3ea;color:#24251e;border-top:1px solid rgba(52,55,40,.08)}
+.ig-showcase-inner{width:min(1080px,100%);margin:0 auto}
+.ig-showcase-heading{max-width:720px;margin:0 auto 40px;text-align:center}
 .ig-showcase-heading .eyebrow{color:#73785a}
-.ig-overline{margin:17px 0 13px;font-size:10px;letter-spacing:2.2px;font-weight:700;color:#88816f}
+.ig-overline{margin:15px 0 12px;font-size:10px;letter-spacing:1.9px;font-weight:700;color:#88816f}
 .ig-overline span{color:#b18b4f;padding:0 7px}
-.ig-showcase-heading h2{margin:0;font-family:inherit;font-size:clamp(2.1rem,4.7vw,4.1rem);line-height:1.05;letter-spacing:-.055em;font-weight:500;color:#24251e}
+.ig-showcase-heading h2{margin:0;font-family:inherit;font-size:clamp(2.1rem,4.5vw,3.8rem);line-height:1.08;letter-spacing:-.05em;font-weight:500;color:#24251e}
 .ig-showcase-heading h2 em{font-family:Georgia,serif;font-weight:400;color:#737b58}
-.ig-heading-copy{max-width:520px;margin:20px auto 0;font-size:15px;line-height:1.8;color:#777365}
-.ig-profile-card{background:#fffdf8;border:1px solid #e7dfcf;border-radius:24px;overflow:hidden;box-shadow:0 24px 70px rgba(47,42,29,.07)}
-.ig-profile-topline{min-height:50px;padding:0 28px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #eee7da;color:#8c877a;font-size:9px;letter-spacing:1.6px;font-weight:700}
-.ig-live-dot{width:7px;height:7px;border-radius:50%;background:#7a835b;box-shadow:0 0 0 4px #edf0e4}
-.ig-profile-topline>a{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:#6e7650;text-decoration:none}
-.ig-profile-main{display:grid;grid-template-columns:190px 1fr;gap:clamp(26px,5vw,70px);align-items:center;padding:clamp(28px,5vw,58px) clamp(25px,6vw,76px) 48px}
-.ig-avatar-ring{width:154px;height:154px;padding:5px;display:grid;place-items:center;border-radius:50%;background:conic-gradient(from 210deg,#b38a4a,#e4d7b7,#78815b,#b38a4a);text-decoration:none;justify-self:center}
+.ig-heading-copy{max-width:560px;margin:17px auto 0;font-size:15px;line-height:1.75;color:#777365}
+.ig-profile-card{background:#fffdf8;border:1px solid #e7dfcf;border-radius:22px;overflow:hidden;box-shadow:0 22px 60px rgba(47,42,29,.065)}
+.ig-profile-topline{min-height:52px;padding:0 clamp(18px,3.5vw,34px);display:flex;align-items:center;gap:10px;border-bottom:1px solid #eee7da;color:#8c877a;font-size:9px;letter-spacing:1.35px;font-weight:700}
+.ig-live-dot{flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:#7a835b;box-shadow:0 0 0 4px #edf0e4}
+.ig-profile-topline>a{display:inline-flex;align-items:center;gap:6px;margin-left:auto;white-space:nowrap;color:#6e7650;text-decoration:none}
+.ig-profile-main{display:grid;grid-template-columns:180px minmax(0,1fr);gap:clamp(28px,5vw,62px);align-items:center;padding:clamp(30px,4.5vw,52px) clamp(25px,6vw,72px) 42px}
+.ig-avatar-ring{width:150px;height:150px;padding:5px;display:grid;place-items:center;border-radius:50%;background:conic-gradient(from 210deg,#b38a4a,#e4d7b7,#78815b,#b38a4a);text-decoration:none;justify-self:center;box-shadow:0 8px 24px rgba(93,104,69,.12)}
 .ig-avatar-inner{width:100%;height:100%;display:grid;place-items:center;border-radius:50%;background:#f7f3ea;border:4px solid #fffdf8;overflow:hidden}
 .ig-profile-logo{width:77%;height:77%;object-fit:contain;display:block}
-.ig-profile-info{min-width:0}
-.ig-username-row{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
-.ig-username-row h3{margin:0;font-size:clamp(23px,3vw,31px);font-weight:500;letter-spacing:-1.1px;color:#28291f}
-.ig-profile-label{padding:6px 9px;border-radius:5px;background:#f0ecdf;color:#77704e;font-size:8px;font-weight:700;letter-spacing:1.2px}
-.ig-stats{display:flex;gap:clamp(18px,3.5vw,42px);margin:22px 0 20px;padding-bottom:19px;border-bottom:1px solid #eee7da}
-.ig-stats span{display:flex;align-items:baseline;gap:5px;color:#8a8476;font-size:12px}
-.ig-stats strong{color:#2e3026;font-size:15px;font-weight:700}
-.ig-stats small{font-size:11px}
-.ig-bio{margin:0;color:#615f54;font-size:13px;line-height:1.9}
-.ig-bio strong{font-size:14px;color:#303126}
-.ig-bio-link{display:inline-flex;align-items:center;gap:7px;margin-top:12px;color:#727b53;font-size:12px;font-weight:600;text-decoration:none}
-.ig-profile-cta{display:flex;width:max-content;max-width:100%;align-items:center;justify-content:center;gap:10px;margin-top:20px;padding:12px 17px;border-radius:8px;background:#282a21;color:#f9f5eb;text-decoration:none;font-size:12px;font-weight:600;transition:transform .2s,background .2s}
+.ig-profile-info{min-width:0;text-align:left}
+.ig-username-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ig-username-row h3{margin:0;font-size:clamp(23px,2.8vw,30px);font-weight:550;letter-spacing:-.9px;color:#28291f}
+.ig-profile-label{padding:6px 9px;border-radius:5px;background:#f0ecdf;color:#77704e;font-size:8px;font-weight:700;letter-spacing:1px}
+.ig-value-line{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:16px 0 18px;padding:0 0 16px;border-bottom:1px solid #eee7da;color:#777365;font-size:11px;line-height:1.5}.ig-value-line i{width:3px;height:3px;flex:0 0 3px;border-radius:50%;background:#b38a4a}
+.ig-bio-block{max-width:590px}
+.ig-bio-name{margin:0 0 5px;color:#303126;font-size:14px;font-weight:750;line-height:1.6}
+.ig-bio-name span{font-weight:500;color:#777365}
+.ig-bio{margin:0;color:#615f54;font-size:13px;line-height:1.85;overflow-wrap:anywhere}
+.ig-bio strong{display:inline-block;margin-top:3px;color:#50583a;font-size:13px;font-weight:700}
+.ig-bio-link{display:inline-flex;align-items:center;gap:7px;margin-top:12px;color:#727b53;font-size:12px;font-weight:650;text-decoration:none;overflow-wrap:anywhere}
+.ig-profile-cta{display:flex;width:max-content;max-width:100%;align-items:center;justify-content:center;gap:10px;margin-top:18px;padding:12px 16px;border-radius:8px;background:#282a21;color:#f9f5eb;text-decoration:none;font-size:12px;font-weight:650;transition:transform .2s,background .2s}
 .ig-profile-cta:hover{transform:translateY(-2px);background:#535a3d}
-.ig-divider{display:flex;justify-content:space-between;gap:20px;margin:0 clamp(25px,6vw,76px);padding:20px 0;border-top:1px solid #eae3d6;color:#8b8578;font-size:9px;font-weight:700;letter-spacing:1.6px}
+.ig-divider{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 clamp(24px,5vw,64px);padding:19px 0;border-top:1px solid #eae3d6;color:#8b8578;font-size:9px;font-weight:700;letter-spacing:1.35px}
 .ig-divider span:first-child{color:#626b48}
-.ig-highlights-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;padding:18px clamp(25px,5vw,64px) 34px}
+.ig-highlights-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:14px;padding:22px clamp(25px,4vw,52px) 34px}
 .ig-highlight{min-width:0;text-align:center;text-decoration:none;color:#333328;display:flex;flex-direction:column;align-items:center;transition:transform .22s}
-.ig-highlight:hover{transform:translateY(-5px)}
-.ig-highlight-orbit{width:clamp(70px,8vw,98px);aspect-ratio:1;border-radius:50%;padding:4px;display:grid;place-items:center;position:relative;border:1px solid #d9cfb8;background:#fbf8f0;transition:box-shadow .2s,border-color .2s}
+.ig-highlight:hover{transform:translateY(-4px)}
+.ig-highlight-orbit{width:clamp(74px,8vw,92px);aspect-ratio:1;border-radius:50%;padding:4px;display:grid;place-items:center;position:relative;border:1px solid #d9cfb8;background:#fbf8f0;transition:box-shadow .2s,border-color .2s}
 .ig-highlight:hover .ig-highlight-orbit{border-color:#b38a4a;box-shadow:0 0 0 4px rgba(179,138,74,.11)}
 .ig-highlight-icon{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;background:#ebe5d5;color:#5c6244}
-.ig-highlight-index{position:absolute;right:-1px;bottom:0;width:23px;height:23px;display:grid;place-items:center;border:2px solid #fffdf8;border-radius:50%;background:#292b22;color:#f8f3e8;font-size:8px;font-weight:700}
-.ig-highlight strong{margin-top:13px;font-size:12px;font-weight:650;line-height:1.4}
+.ig-highlight-index{position:absolute;right:-1px;bottom:0;width:22px;height:22px;display:grid;place-items:center;border:2px solid #fffdf8;border-radius:50%;background:#292b22;color:#f8f3e8;font-size:8px;font-weight:700}
+.ig-highlight strong{margin-top:11px;font-size:12px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
 .ig-highlight small{margin-top:4px;font-size:10px;line-height:1.5;color:#918a7a}
 .ig-tone-ivory .ig-highlight-icon{background:#f2eddf;color:#6d7650}.ig-tone-sage .ig-highlight-icon{background:#e5e9da;color:#596342}.ig-tone-gold .ig-highlight-icon{background:#f1e3c9;color:#98723b}.ig-tone-charcoal .ig-highlight-icon{background:#303127;color:#e8d8b3}.ig-tone-taupe .ig-highlight-icon{background:#e8dfd0;color:#77705e}
-.ig-card-bottom{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:20px clamp(25px,6vw,76px);border-top:1px solid #eee7da;background:#fbf8f1;color:#8b8578;font-size:9px;letter-spacing:1.5px;font-weight:700}
+.ig-card-bottom{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:19px clamp(24px,5vw,64px);border-top:1px solid #eee7da;background:#fbf8f1;color:#8b8578;font-size:9px;letter-spacing:1.35px;font-weight:700}
 .ig-card-bottom>a{display:inline-flex;align-items:center;gap:7px;color:#6b744e;text-decoration:none}
-.ig-section-footnote{margin:17px 0 0;text-align:center;color:#8d8779;font-size:11px;line-height:1.7}
-@media(max-width:760px){.ig-showcase-section{padding:76px 5vw}.ig-showcase-heading{margin-bottom:32px}.ig-profile-topline{padding:0 17px;font-size:8px;letter-spacing:1px}.ig-profile-main{grid-template-columns:1fr;gap:24px;padding:30px 22px 32px;text-align:center}.ig-avatar-ring{width:128px;height:128px}.ig-username-row{justify-content:center}.ig-stats{justify-content:center;margin:17px 0;padding-bottom:16px}.ig-bio{font-size:12px}.ig-bio-link{justify-content:center}.ig-profile-cta{margin:18px auto 0}.ig-divider{margin:0 22px;font-size:8px}.ig-highlights-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 8px;padding:20px 16px 28px}.ig-highlight-orbit{width:clamp(64px,17vw,86px)}.ig-highlight strong{font-size:11px}.ig-highlight small{display:none}.ig-card-bottom{padding:18px 20px;font-size:8px;letter-spacing:1px}}
-@media(max-width:390px){.ig-highlights-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.ig-profile-topline>a{font-size:0}.ig-profile-topline>a svg{width:16px;height:16px}.ig-stats{gap:13px}.ig-card-bottom{align-items:flex-start;flex-direction:column}}
+.ig-section-footnote{margin:16px 0 0;text-align:center;color:#8d8779;font-size:11px;line-height:1.7}
+@media(max-width:900px){.ig-highlights-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 12px}}
+@media(max-width:760px){.ig-showcase-section{padding:64px 5vw}.ig-showcase-heading{margin-bottom:30px}.ig-profile-topline{padding:0 16px;font-size:8px;letter-spacing:.8px}.ig-profile-main{grid-template-columns:1fr;gap:23px;padding:28px 22px 30px;text-align:center}.ig-avatar-ring{width:126px;height:126px}.ig-profile-info{text-align:center}.ig-username-row{justify-content:center}.ig-value-line{justify-content:center;gap:8px;margin:15px 0;padding-bottom:14px}.ig-bio-block{margin:0 auto}.ig-bio{font-size:12px}.ig-bio-link{justify-content:center}.ig-profile-cta{margin:17px auto 0}.ig-divider{margin:0 20px;font-size:8px;letter-spacing:.8px}.ig-highlights-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 8px;padding:20px 16px 27px}.ig-highlight-orbit{width:clamp(62px,16vw,80px)}.ig-highlight strong{font-size:11px}.ig-highlight small{display:none}.ig-card-bottom{padding:17px 20px;font-size:8px;letter-spacing:.8px}}
+@media(max-width:440px){.ig-highlights-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 8px}.ig-profile-topline{gap:8px}.ig-profile-topline>a{font-size:0}.ig-profile-topline>a svg{width:16px;height:16px}.ig-value-line{font-size:10px;gap:7px}.ig-card-bottom{align-items:flex-start;flex-direction:column}.ig-divider span:last-child{max-width:45%;text-align:right;line-height:1.5}}
+@media(prefers-reduced-motion:reduce){.ig-highlight,.ig-profile-cta,.ig-highlight-orbit{transition:none}}
 
 `;
 export default function Pratyeksha() {
