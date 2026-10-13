@@ -22,6 +22,20 @@ const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
 // Premium design tokens shared by every guest screen (champagne on ink — no green / red).
+// `new Notification()` throws "Illegal constructor" on Android Chrome (it only allows ServiceWorkerRegistration.showNotification).
+// Raw calls sat inside the same try as the API request, so a reservation that WAS saved still showed an error, and the
+// "table almost ready" socket handler threw before it could show its in-app alert. Never throws.
+const safeNotify = (title, options) => {
+  try { new Notification(title, options); return true; } catch { /* fall through to the service worker */ }
+  try {
+    if (navigator.serviceWorker?.getRegistration) navigator.serviceWorker.getRegistration().then((r) => r && r.showNotification(title, options)).catch(() => {});
+  } catch { /* notifications unavailable */ }
+  return false;
+};
+// Guest-typed text (name, special requests, table preference) and outlet fields were interpolated raw into the printable
+// token / receipt HTML, which is opened from a blob: URL (same origin as the app). A name like `<b>` broke the layout and
+// `<img onerror=…>` executed script with the app's storage access. Escape every dynamic value that goes into those documents.
+const escapeHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const PX = {
   card: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))',
   gold: 'linear-gradient(135deg, #e6d6b8 0%, #d3bfa2 45%, #b99f78 100%)',
@@ -157,6 +171,9 @@ const SuccessHero = ({ icon: Icon = CheckCircle2, title, subtitle }) => (
 const PratyekshaPremiumMenu = () => {
   const { tenantId: urlTenantId } = useParams();
   const [restaurantData, setRestaurantData] = useState(null);
+  // Set when the server says this table link / session is invalid (or the outlet is gone). Kept separate from restaurantData:
+  // the menu fetch re-sets restaurantData and used to silently undo the block, and a null restaurantData only rendered an empty menu.
+  const [sessionBlocked, setSessionBlocked] = useState(false);
   const [categoryList, setCategoryList] = useState([]);
   const [allMenuItems, setAllMenuItems] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
@@ -175,8 +192,9 @@ const PratyekshaPremiumMenu = () => {
              'Seventeen','Eighteen','Nineteen'];
   const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
   if (!num || num === 0) return 'Zero Only';
-  if (num.toString().length > 9) return 'Overflow';
-  const rounded = Math.round(num);
+  const rounded = Math.round(Number(num));
+  if (!Number.isFinite(rounded) || rounded <= 0) return 'Zero Only';
+  if (rounded.toString().length > 9) return 'Overflow';
   const n = ('000000000' + rounded).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
   
   if (!n) return '';
@@ -186,7 +204,7 @@ const PratyekshaPremiumMenu = () => {
   str += n[3] != 0 ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + ' Thousand ' : '';
   str += n[4] != 0 ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + ' Hundred ' : '';
   str += n[5] != 0 ? (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + ' ' : '';
-  return str.trim() + ' Only';
+  return str.replace(/\s+/g, ' ').trim() + ' Only';
 };
   // ADD near your other state declarations — generates a random 6-char alphanumeric token
 const generateToken = useCallback(() => {
@@ -254,6 +272,15 @@ const etaRefreshRef = useRef(null);
 const [isPlacingOrder, _setIsPlacingOrder] = useState(false);
 const placingRef = useRef(false);
 const setIsPlacingOrder = (v) => { placingRef.current = !!v; _setIsPlacingOrder(!!v); };
+// The "order placed" screen auto-hides, but each placement used to start its own uncancelled timer: a second order placed
+// within 60 s had its confirmation screen dismissed early by the FIRST order's timer (and timers fired after unmount).
+const placedScreenTimer = useRef(null);
+const showPlacedScreen = (ms) => {
+  setOrderPlacedScreen(true);
+  if (placedScreenTimer.current) clearTimeout(placedScreenTimer.current);
+  placedScreenTimer.current = setTimeout(() => setOrderPlacedScreen(false), ms);
+};
+useEffect(() => () => { if (placedScreenTimer.current) clearTimeout(placedScreenTimer.current); }, []);
 // { orderId: 'pending' | 'ready' | 'served' }
 
   const [alert, setAlert] = useState({ show: false, msg: '', type: 'success' });
@@ -455,15 +482,16 @@ const waitlistSocket = useMemo(() => io(SOCKET_BASE_URL, { transports: ['websock
   // =========================================================================
 
 const filteredMenuItems = useMemo(() => {
-  const isSearching = searchQuery.length >= 2;
+  // A query of spaces ("  ") used to count as a 2-character search and matched nothing.
+  const sq = searchQuery.trim();
+  const isSearching = sq.length >= 2;
 
 return allMenuItems
   .filter(i => {
-    const isSearching = searchQuery.length >= 2;
     const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
     const nameEn = i.name?.toLowerCase() || '';
     const nameMr = i.name_mr || '';
-    const matchesSearch = !searchQuery || nameEn.includes(searchQuery.toLowerCase()) || nameMr.includes(searchQuery);
+    const matchesSearch = !sq || nameEn.includes(sq.toLowerCase()) || nameMr.includes(sq);
     const matchesVeg = isSearching ? true : (filterVegOnly ? i.isVeg === true : i.isVeg !== true);
     return matchesCategory && matchesSearch && matchesVeg && i.isAvailable !== false;
   })
@@ -493,12 +521,13 @@ const cartUnavailableCheck = useMemo(() => {
 
 // All matching search results across ALL categories (for search suggestion dropdown)
 const globalSearchResults = useMemo(() => {
-  if (!searchQuery || searchQuery.length < 2) return [];
-  const q = searchQuery.toLowerCase();
+  const sq = (searchQuery || '').trim();
+  if (sq.length < 2) return [];
+  const q = sq.toLowerCase();
   return allMenuItems.filter(i => {
     const matchesVeg = filterVegOnly ? i.isVeg === true : i.isVeg !== true;
     return matchesVeg && i.isAvailable !== false &&
-      (i.name?.toLowerCase().includes(q) || (i.name_mr || '').includes(searchQuery));
+      (i.name?.toLowerCase().includes(q) || (i.name_mr || '').includes(sq));
   }).slice(0, 8);
 }, [allMenuItems, searchQuery, filterVegOnly]);
 
@@ -546,7 +575,7 @@ waitlistSocket.on('operator_notify', (data) => {
   const fireNotification = (title, body, tag) => {
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') {
-      new Notification(title, {
+      safeNotify(title, {
         body,
         icon: '/pratyeksha-logo.png',
         badge: '/pratyeksha-logo.png',
@@ -558,7 +587,7 @@ waitlistSocket.on('operator_notify', (data) => {
     } else if (Notification.permission === 'default') {
       Notification.requestPermission().then(perm => {
         if (perm === 'granted') {
-          new Notification(title, {
+          safeNotify(title, {
             body,
             icon: '/pratyeksha-logo.png',
             badge: '/pratyeksha-logo.png',
@@ -819,11 +848,15 @@ useEffect(() => {
   useEffect(() => {
     if (!notificationBanner || !('Notification' in window)) return;
     const isTableBanner = notificationBanner.type === 'table';
+    const isResBanner = notificationBanner.type === 'reservation_confirmed';
     const send = () => {
-      new Notification(
-        isTableBanner ? 'आपले टेबल तयार आहे! | Your table is ready!' : 'तुमची ऑर्डर तयार आहे! | Your order is ready!',
+      // The reservation-confirmed banner used to fire the "order is ready" notification.
+      safeNotify(
+        isResBanner ? 'तुमचे आरक्षण निश्चित झाले! | Reservation confirmed!' : isTableBanner ? 'आपले टेबल तयार आहे! | Your table is ready!' : 'तुमची ऑर्डर तयार आहे! | Your order is ready!',
         {
-          body: isTableBanner
+          body: isResBanner
+            ? `Your table at ${notificationBanner.restaurantName} is confirmed.`
+            : isTableBanner
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
           icon: '/pratyeksha-logo.png', badge: '/pratyeksha-logo.png',
@@ -885,7 +918,9 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           background: 'rgba(211,191,162,0.05)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isTable
+            {isReservation
+              ? <CalendarClock size={36} color="#d3bfa2" strokeWidth={1.5} />
+              : isTable
               ? <Armchair size={36} color="#d3bfa2" strokeWidth={1.5} />
               : <ShoppingBag size={36} color="#d3bfa2" strokeWidth={1.5} />}
           </div>
@@ -907,10 +942,10 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
         marginBottom: '6px', lineHeight: 1.2,
         letterSpacing: '-0.5px'
       }}>
-        {isTable ? 'आपले टेबल' : 'तुमची ऑर्डर'}
+        {isReservation ? 'तुमचे आरक्षण' : isTable ? 'आपले टेबल' : 'तुमची ऑर्डर'}
         <br />
         <span style={{ color: '#fff' }}>
-          {isTable ? 'तयार आहे!' : 'तयार आहे!'}
+          {isReservation ? 'निश्चित झाले!' : 'तयार आहे!'}
         </span>
       </h1>
 
@@ -920,7 +955,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
         marginBottom: '40px', lineHeight: 1.5,
         letterSpacing: '0.2px'
       }}>
-        {isTable ? 'Your table is ready' : 'Your order is ready for pickup'}
+        {isReservation ? 'Your reservation is confirmed' : isTable ? 'Your table is ready' : 'Your order is ready for pickup'}
       </h2>
 
       {/* Detail card */}
@@ -937,7 +972,7 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase',
           marginBottom: '10px', margin: '0 0 10px'
         }}>
-          {isTable ? 'Table Number' : 'Pickup Location'}
+          {isReservation ? 'Reservation Time' : isTable ? 'Table Number' : 'Pickup Location'}
         </p>
         <p style={{
           fontSize: isTable ? '2.8rem' : '1.2rem',
@@ -945,13 +980,17 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
           fontFamily: 'monospace', letterSpacing: isTable ? '-2px' : '0',
           margin: '0 0 6px', lineHeight: 1
         }}>
-          {isTable ? `T${notificationBanner.tableNumber}` : 'Counter'}
+          {isReservation
+            ? (notificationBanner.time ? (() => { const d = new Date(notificationBanner.time); return isNaN(d) ? String(notificationBanner.time) : d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }); })() : 'Confirmed')
+            : isTable ? `T${notificationBanner.tableNumber}` : 'Counter'}
         </p>
         <p style={{
           fontSize: '0.72rem', color: 'rgba(255,255,255,0.52)',
           margin: 0, fontWeight: '600'
         }}>
-          {isTable
+          {isReservation
+            ? 'वेळेवर या — आम्ही तुमची वाट पाहत आहोत'
+            : isTable
             ? `टेबल नंबर ${notificationBanner.tableNumber} वर जा`
             : 'काउंटरवर येऊन ऑर्डर घ्या'}
         </p>
@@ -970,7 +1009,9 @@ onClick={() => setNotificationBanner(null)}
           boxShadow: '0 8px 32px rgba(211,191,162,0.15)'
         }}
       >
-        {isTable
+        {isReservation
+          ? 'Got it →'
+          : isTable
           ? `Go to Table ${notificationBanner.tableNumber} →`
           : "I'm On My Way →"}
       </button>
@@ -981,7 +1022,9 @@ onClick={() => setNotificationBanner(null)}
         color: 'rgba(255,255,255,0.52)', fontWeight: '600',
         letterSpacing: '0.3px'
       }}>
-        {isTable
+        {isReservation
+          ? 'See you soon!'
+          : isTable
           ? 'Your pre-order is already in the kitchen'
           : 'Please proceed to the counter'}
       </p>
@@ -1139,23 +1182,31 @@ const getSpiceLevel = (item, lang) => {
 // The current dish itself is excluded.
 // ─────────────────────────────────────────────────────────────
 const getRecommendedDish = (item) => {
+  // Never pair a vegetarian guest's dish (or a veg-only menu) with a non-veg suggestion.
+  const wantVeg = filterVegOnly || item.isVeg === true;
   const available = allMenuItems.filter(m =>
     m &&
     m._id !== item._id &&
-    m.isAvailable !== false
+    m.isAvailable !== false &&
+    (!wantVeg || m.isVeg === true)
   );
 
   if (!available.length) return null;
 
   const currentCategory = String(item.categoryId || '');
 
-  // Category-aware combinations.
-  // We don't create fake recommendations.
-  const currentCategoryName = String(
-    categoryList.find(c => String(c._id) === currentCategory)?.name ||
-    categoryList.find(c => String(c.id) === currentCategory)?.name ||
+  // Menu items reference their category by `categoryId` (the same field the tabs use). The old lookup only compared
+  // `_id` / `id`, so the category name was always empty and every pairing fell through to the generic fallback.
+  const catNameOf = (cid) => String(
+    categoryList.find(c => String(c.categoryId) === String(cid))?.name ||
+    categoryList.find(c => String(c._id) === String(cid))?.name ||
+    categoryList.find(c => String(c.id) === String(cid))?.name ||
     ''
   ).toLowerCase();
+
+  // Category-aware combinations.
+  // We don't create fake recommendations.
+  const currentCategoryName = catNameOf(currentCategory);
 
   const categoryText = currentCategoryName;
 
@@ -1183,11 +1234,7 @@ const getRecommendedDish = (item) => {
   }
 
   const categoryMatch = available.find(m => {
-    const cat = String(
-      categoryList.find(c => String(c._id) === String(m.categoryId))?.name ||
-      categoryList.find(c => String(c.id) === String(m.categoryId))?.name ||
-      ''
-    ).toLowerCase();
+    const cat = catNameOf(m.categoryId);
 
     return preferredCategoryWords.some(word => cat.includes(word));
   });
@@ -1447,7 +1494,10 @@ const speakDish = (item) => {
     return voices.find(v => v.lang?.startsWith(lc)) || null;
   };
  
+  let _spoken = false;
   const loadAndSpeak = () => {
+    if (_spoken || speechRef.current !== utterance) return; // already started, or the guest picked another dish meanwhile
+    _spoken = true;
     const voices = window.speechSynthesis.getVoices();
     const voice  = selectVoice(voices);
     if (voice) utterance.voice = voice;
@@ -1460,7 +1510,10 @@ const speakDish = (item) => {
     setVoicePaused(false);
   };
  
+  // cancel() (called when switching dishes) fires onend/onerror for the OLD utterance AFTER the new one may already have
+  // started; unguarded, that cleared the new dish's "speaking" state while its audio kept playing.
   utterance.onend = () => {
+    if (speechRef.current && speechRef.current !== utterance) return;
     setSpeakingItemId(null);
     setVoicePaused(false);
     setCurrentSpeechWordIndex(-1);
@@ -1468,9 +1521,11 @@ const speakDish = (item) => {
   };
  
   utterance.onerror = (event) => {
+    if (speechRef.current && speechRef.current !== utterance) return;
     console.warn('Voice error:', event?.error);
     setSpeakingItemId(null);
     setVoicePaused(false);
+    setCurrentSpeechWordIndex(-1);
     speechRef.current = null;
   };
  
@@ -1483,6 +1538,8 @@ const speakDish = (item) => {
       window.speechSynthesis.onvoiceschanged = null;
       loadAndSpeak();
     };
+    // Safari / some Android WebViews never fire voiceschanged: the dish was silently never read out. Speak with the default voice.
+    setTimeout(() => { if (!_spoken) { window.speechSynthesis.onvoiceschanged = null; loadAndSpeak(); } }, 1200);
   } else {
     loadAndSpeak();
   }
@@ -1524,7 +1581,7 @@ useEffect(() => {
       setFilterVegOnly(true);
     }
   }
-}, [selectedCategoryId, allMenuItems, isOnlyVegTenant]);
+}, [selectedCategoryId, allMenuItems, isOnlyVegTenant, filterVegOnly]);
 
 // 🚀 UNIFIED ENGINE: HANDLES INITIAL HTTP REST CONTENT LOADS & LIVE REAL-TIME SOCKET BROADCASTS
   useEffect(() => {
@@ -1556,6 +1613,8 @@ const fetchMenuContent = async () => {
     setServingFromCache(!navigator.onLine);
   } catch (error) {
     console.error("Setup error:", error);
+    // Unknown / removed outlet: the API answers 404 { error: 'Tenant not found' }. Previously the guest got an empty menu shell.
+    if (!_disposedMenu && error?.response?.status === 404) setSessionBlocked(true);
     // Offline with nothing cached yet for this tenant — surface it plainly
     // instead of leaving the customer on a blank/loading screen forever.
     if (!navigator.onLine) setIsOffline(true);
@@ -1578,11 +1637,13 @@ const fetchMenuContent = async () => {
 
 socket.on("menu_updated", (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
-    setAllMenuItems((prevItems) =>
-      prevItems.map((item) =>
-        item._id === updatedItem._id ? { ...item, ...updatedItem } : item
-      )
-    );
+    // The backend broadcasts a NEWLY created dish (POST /api/menu, menu import) on this same event. The old map() only merged
+    // into dishes the guest already had, so a new dish stayed invisible until a manual reload. Append full documents.
+    setAllMenuItems((prevItems) => {
+      const exists = prevItems.some((item) => String(item._id) === String(updatedItem._id));
+      if (exists) return prevItems.map((item) => (String(item._id) === String(updatedItem._id) ? { ...item, ...updatedItem } : item));
+      return updatedItem._id && updatedItem.name ? [...prevItems, updatedItem] : prevItems;
+    });
     // ── Dish just went out of stock while it might be sitting in someone's cart ──
     if (updatedItem.isAvailable === false) {
       const inCart = Object.entries(cartRef.current).some(([key, qty]) =>
@@ -1730,13 +1791,18 @@ useEffect(() => {
   // ── QR Session Validation — prevents URL injection ──
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
+  setSessionBlocked(false);
+  let stale = false; // a slow answer for the previous table/outlet must not blank the page the guest has since moved to
   axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken })
     .then(r => {
-      if (!r.data.valid) {
-        setRestaurantData(null); // triggers "not found" UI — blocks ordering
-      }
+      if (!stale && r.data && r.data.valid === false) setSessionBlocked(true);
     })
-    .catch(() => {}); // non-fatal — menu still loads on network error
+    .catch((err) => {
+      // The server answers an invalid table/token with HTTP 403 { valid:false }. axios REJECTS on 403, so the .then() above
+      // never saw it and a forged / expired QR link was never blocked. Network errors and 5xx stay non-fatal.
+      if (!stale && err?.response?.status === 403 && err.response.data?.valid === false) setSessionBlocked(true);
+    });
+  return () => { stale = true; };
 }, [tenantId, tableNumber, isCounterScan, sessionToken]);
 
   const handleSwipe = (direction) => {
@@ -1815,10 +1881,11 @@ const openTokenWindow = (html, filename) => {
   const url  = URL.createObjectURL(blob);
   const win  = window.open(url, '_blank');
   if (win) {
-    win.onload = () => setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 800);
-    setTimeout(() => {
-      if (win && !win.closed) { try { win.print(); } catch(e) {} URL.revokeObjectURL(url); }
-    }, 2000);
+    // onload AND the 2 s fallback both called print(): guests got two print dialogs on every token.
+    let printed = false;
+    const printOnce = () => { if (printed) return; printed = true; try { win.print(); } catch (e) { /* popup closed */ } setTimeout(() => URL.revokeObjectURL(url), 60000); };
+    win.onload = () => setTimeout(printOnce, 800);
+    setTimeout(() => { if (win && !win.closed) printOnce(); }, 2000);
   } else {
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
@@ -1861,12 +1928,12 @@ const nowStamp = () => new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolk
 const tenantContactLine = (rd) => {
   const parts = [];
   if (rd?.contact)
-    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('phone','#bbb',10)} ${rd.contact}</span>`);
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('phone','#bbb',10)} ${escapeHtml(rd.contact)}</span>`);
   const addr = [rd?.address?.city, rd?.address?.state].filter(Boolean).join(', ');
   if (addr)
-    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('mappin','#bbb',10)} ${addr}</span>`);
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('mappin','#bbb',10)} ${escapeHtml(addr)}</span>`);
   if (rd?.gstin && rd.gstin !== 'GSTIN PENDING')
-    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('gstin','#bbb',10)} GSTIN: ${rd.gstin}</span>`);
+    parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;">${ic('gstin','#bbb',10)} GSTIN: ${escapeHtml(rd.gstin)}</span>`);
   if (!parts.length) return '';
   return `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:5px;font-size:9px;color:#aaa;font-family:'Courier New',monospace;">
     ${parts.join('')}
@@ -2124,9 +2191,9 @@ const footerHTML = () => `
 // ── Shared right-column header (issued time + contact only — NO address/city) ──
 const headerRight = (rd) => {
   const contact = rd?.contact
-    ? `<span>${ic('phone','#bbb',10)} ${rd.contact}</span>` : '';
+    ? `<span>${ic('phone','#bbb',10)} ${escapeHtml(rd.contact)}</span>` : '';
   const gstin = (rd?.gstin && rd.gstin !== 'GSTIN PENDING')
-    ? `<span>${ic('gstin','#bbb',10)} GSTIN: ${rd.gstin}</span>` : '';
+    ? `<span>${ic('gstin','#bbb',10)} GSTIN: ${escapeHtml(rd.gstin)}</span>` : '';
   return `
   <div class="header-right">
     <div class="issued-label">Issued</div>
@@ -2148,7 +2215,7 @@ const orderTableHTML = (items, totalAmount) => `
     <tbody>
       ${items.map(i => `
       <tr>
-        <td>${i.name}${i.portion && i.portion !== 'Single' ? `<span class="portion-tag">(${i.portion})</span>` : ''}</td>
+        <td>${escapeHtml(i.name)}${i.portion && i.portion !== 'Single' ? `<span class="portion-tag">(${escapeHtml(i.portion)})</span>` : ''}</td>
         <td>${i.quantity}</td>
         <td>&#8377;${i.subtotal}</td>
       </tr>`).join('')}
@@ -2188,8 +2255,8 @@ const downloadWaitlistToken = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('chair','#7a5a20',13)}&nbsp; Dine-In Waitlist</div>
-      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
-      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
+      <div class="rest-name">${escapeHtml(rd?.name || 'Restaurant')}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${escapeHtml(fullAddr)}</div>` : ''}
     </div>
     ${headerRight(rd)}
   </div>
@@ -2221,7 +2288,7 @@ const downloadWaitlistToken = () => {
   <div class="detail-grid">
     <div class="d-cell">
       <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Name</div>
-      <div class="d-val">${entry.customerName || '—'}</div>
+      <div class="d-val">${escapeHtml(entry.customerName || '—')}</div>
     </div>
     <div class="d-cell">
       <div class="d-label">${ic('users','#c0a050',11)}&nbsp;Party Size</div>
@@ -2230,7 +2297,7 @@ const downloadWaitlistToken = () => {
     ${entry.customerPhone ? `
     <div class="d-cell">
       <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
-      <div class="d-val mono">+91 ${entry.customerPhone}</div>
+      <div class="d-val mono">+91 ${escapeHtml(entry.customerPhone)}</div>
     </div>` : ''}
     <div class="d-cell">
       <div class="d-label">${ic('clock','#c0a050',11)}&nbsp;Est. Wait</div>
@@ -2240,7 +2307,7 @@ const downloadWaitlistToken = () => {
 
   ${entry.specialRequests ? `
   <div class="special">
-    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${escapeHtml(entry.specialRequests)}"</span>
   </div>` : ''}
 
   ${hasOrder ? `
@@ -2289,8 +2356,8 @@ const downloadPickupToken = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('bag','#7a5a20',13)}&nbsp; Pickup &amp; Takeaway</div>
-      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
-      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
+      <div class="rest-name">${escapeHtml(rd?.name || 'Restaurant')}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${escapeHtml(fullAddr)}</div>` : ''}
     </div>
     ${headerRight(rd)}
   </div>
@@ -2327,12 +2394,12 @@ const downloadPickupToken = () => {
   <div class="detail-grid">
     <div class="d-cell">
       <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Name</div>
-      <div class="d-val">${entry.customerName || '—'}</div>
+      <div class="d-val">${escapeHtml(entry.customerName || '—')}</div>
     </div>
     ${entry.customerPhone ? `
     <div class="d-cell">
       <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
-      <div class="d-val mono">+91 ${entry.customerPhone}</div>
+      <div class="d-val mono">+91 ${escapeHtml(entry.customerPhone)}</div>
     </div>` : ''}
     <div class="d-cell">
       <div class="d-label">${ic('mappin','#c0a050',11)}&nbsp;Collection</div>
@@ -2347,7 +2414,7 @@ const downloadPickupToken = () => {
 
   ${entry.specialRequests ? `
   <div class="special">
-    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${escapeHtml(entry.specialRequests)}"</span>
   </div>` : ''}
 
   ${hasOrder ? `
@@ -2406,8 +2473,8 @@ const downloadReservationPDF = () => {
   <div class="header">
     <div>
       <div class="mode-chip">${ic('calendar','#7a5a20',13)}&nbsp; ${hasPreOrder ? 'Reservation + Pre-Order' : 'Table Reservation'}</div>
-      <div class="rest-name">${rd?.name || 'Restaurant'}</div>
-      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${fullAddr}</div>` : ''}
+      <div class="rest-name">${escapeHtml(rd?.name || 'Restaurant')}</div>
+      ${fullAddr ? `<div style="font-size:9px;color:#999;font-style:italic;margin-top:3px;">${escapeHtml(fullAddr)}</div>` : ''}
     </div>
     ${headerRight(rd)}
   </div>
@@ -2439,7 +2506,7 @@ const downloadReservationPDF = () => {
   <div class="detail-grid">
     <div class="d-cell">
       <div class="d-label">${ic('user','#c0a050',11)}&nbsp;Guest Name</div>
-      <div class="d-val">${entry.customerName || '—'}</div>
+      <div class="d-val">${escapeHtml(entry.customerName || '—')}</div>
     </div>
     <div class="d-cell">
       <div class="d-label">${ic('users','#c0a050',11)}&nbsp;Party Size</div>
@@ -2448,7 +2515,7 @@ const downloadReservationPDF = () => {
     ${entry.customerPhone ? `
     <div class="d-cell">
       <div class="d-label">${ic('phone','#c0a050',11)}&nbsp;Mobile</div>
-      <div class="d-val mono">+91 ${entry.customerPhone}</div>
+      <div class="d-val mono">+91 ${escapeHtml(entry.customerPhone)}</div>
     </div>` : ''}
     <div class="d-cell">
       <div class="d-label">${ic('calendar','#c0a050',11)}&nbsp;Date</div>
@@ -2457,7 +2524,7 @@ const downloadReservationPDF = () => {
     ${entry.tablePreference ? `
     <div class="d-cell">
       <div class="d-label">${ic('hash','#c0a050',11)}&nbsp;Table Pref.</div>
-      <div class="d-val" style="color:#7a5a30;">${entry.tablePreference}</div>
+      <div class="d-val" style="color:#7a5a30;">${escapeHtml(entry.tablePreference)}</div>
     </div>` : ''}
     <div class="d-cell">
       <div class="d-label">${ic('clock','#c0a050',11)}&nbsp;Time</div>
@@ -2467,7 +2534,7 @@ const downloadReservationPDF = () => {
 
   ${entry.specialRequests ? `
   <div class="special">
-    ${ic('note','#c9a84c',13)}&nbsp;<span>"${entry.specialRequests}"</span>
+    ${ic('note','#c9a84c',13)}&nbsp;<span>"${escapeHtml(entry.specialRequests)}"</span>
   </div>` : ''}
 
   <!-- PRE-ORDER (if any) — else table-only message -->
@@ -2601,6 +2668,14 @@ useEffect(() => {
  
   let savedPhone = null;
   try { savedPhone = localStorage.getItem(`pratyeksha_phone_${tenantId}`); } catch {}
+  // A guest already remembered from a previous bill / registration is not asked "Been here before?" again.
+  if (!savedPhone) {
+    try {
+      const h = JSON.parse(localStorage.getItem(`pratyeksha_customer_history_${tenantId}`) || 'null');
+      const hp = String(h?.phone || '').replace(/\D/g, '');
+      if (h?.name && hp.length === 10) savedPhone = hp;
+    } catch {}
+  }
  
   if (savedPhone && savedPhone.length === 10) {
     // ── RETURNING CUSTOMER: try to recognize and show full welcome card ──
@@ -2714,7 +2789,7 @@ if (unavailableItems.length > 0) {
         setModifyingOrderId(null);
         setCart({}); setSuggestions({}); setRecommendedDishes([]);
         setIsDrawerOpen(false);
-        if (!mres.data?.unchanged) { setOrderPlacedScreen(true); setTimeout(() => setOrderPlacedScreen(false), 15000); }
+        if (!mres.data?.unchanged) showPlacedScreen(15000);
       } catch (merr) {
         const code = merr?.response?.data?.code;
         triggerAlert(merr?.response?.data?.error || 'Could not update the order. Please try again.', 'error');
@@ -2781,12 +2856,14 @@ setPrepPct(0);
     setSuggestions({});
     setRecommendedDishes([]);
     setIsDrawerOpen(false);
-    setOrderPlacedScreen(true);
-    setTimeout(() => setOrderPlacedScreen(false), 60000);
+    showPlacedScreen(60000);
  
   } catch (error) {
     console.error(error);
-    triggerAlert("orderError", "error");
+    // The server explains refusals ("<dish> is currently unavailable", "Insufficient stock for …", "Duplicate order detected").
+    // Showing only a generic failure made guests retry blindly (and a retry of a duplicate is blocked again).
+    const st = error?.response?.status;
+    triggerAlert((st === 400 || st === 409) && error.response.data?.error ? error.response.data.error : "orderError", "error");
   }
   finally{
      setIsPlacingOrder(false);    
@@ -2795,6 +2872,7 @@ setPrepPct(0);
  
 const placeWaitlistOrder = async () => {
   if (!customerInfo.name.trim()) return;
+  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('Please enter a valid 10-digit mobile number.', 'error'); return; }
   if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);             // ← ADD
   const summary = {};
@@ -2833,7 +2911,11 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
+    setIsPlacingOrder(false); // the order is saved; don't keep the button locked while the guest answers permission prompts below
 
+    // Everything below is best-effort. An exception here used to jump to the catch and show "order error" even though the
+    // waitlist entry had just been saved.
+    try {
     // ── ADD THIS: upsert customer into CustomerSchema ──
     const phone = customerInfo.phone?.replace(/\D/g, '') || '';
     if (phone.length === 10) {
@@ -2860,7 +2942,7 @@ const askNotificationPermission = async () => {
   if (Notification.permission === 'default') {
     const perm = await Notification.requestPermission();
     if (perm === 'granted') {
-      new Notification(
+      safeNotify(
         counterMode === 'dine-in'
           ? '✓ You\'re in the queue!'
           : '✓ Pickup order placed!',
@@ -2874,12 +2956,14 @@ const askNotificationPermission = async () => {
       );
     }
   } else if (Notification.permission === 'granted') {
-    new Notification(
+    safeNotify(
       counterMode === 'dine-in' ? '✓ Queue confirmed!' : '✓ Pickup confirmed!',
       {
         body: counterMode === 'dine-in'
           ? `Hi ${customerInfo.name}! You're in the queue.`
-          : `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`,
+          : (scheduledPickupTime && !isNaN(new Date(scheduledPickupTime))
+              ? `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`
+              : 'Your pickup order has been placed.'),
         icon: '/pratyeksha-logo.png',
       }
     );
@@ -2913,9 +2997,11 @@ askNotificationPermission();
         }
       } catch (e) { console.warn('Push subscription failed:', e); }
     }
+    } catch (postErr) { console.warn('Post-order follow-up failed:', postErr); }
   } catch (err) {
     console.error('Waitlist order error:', err);
-    triggerAlert('orderError', 'error');
+    // The API answers precise 400s ("Valid 10-digit phone number required", "scheduledPickupTime is in the past"); the guest only ever saw a generic failure.
+    triggerAlert(err?.response?.status === 400 && err.response.data?.error ? err.response.data.error : 'orderError', 'error');
   } finally {
     setIsPlacingOrder(false);           // ← ADD
   }
@@ -2923,6 +3009,7 @@ askNotificationPermission();
 
 const placeReservation = async () => {
   if (!customerInfo.name.trim() || !customerInfo.phone || !reservationDate || !reservationTime) return;
+  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('Please enter a valid 10-digit mobile number.', 'error'); return; }
 
   if (waitlistEntry?._id && waitlistEntry?.mode === 'reservation') {
     setRegistrationStep('confirm');
@@ -2976,6 +3063,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
     setRegistrationStep('confirm');
     setIsDrawerOpen(false);
     triggerAlert('orderSuccess');
+    setIsPlacingOrder(false);
 
     // ── Auto-save / upsert customer in DB with visit count ──
     const phone = customerInfo.phone?.replace(/\D/g, '') || '';
@@ -2988,21 +3076,21 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
       }).catch(() => {}); // silent — don't block UI
     }
 
-    // ── Notification ──
-    if ('Notification' in window) {
+    // ── Notification ── (best-effort: a throwing permission prompt must not turn a saved reservation into an error)
+    if ('Notification' in window) try {
       const perm = Notification.permission === 'default'
         ? await Notification.requestPermission()
         : Notification.permission;
       if (perm === 'granted') {
-        new Notification('Reservation Requested!', {
+        safeNotify('Reservation Requested!', {
           body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
           icon: '/pratyeksha-logo.png',
         });
       }
-    }
+    } catch { /* notifications unavailable */ }
   } catch (err) {
     console.error(err);
-    triggerAlert('orderError', 'error');
+    triggerAlert(err?.response?.status === 400 && err.response.data?.error ? err.response.data.error : 'orderError', 'error');
   } finally {
     setIsPlacingOrder(false);
   }
@@ -3091,7 +3179,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const itemRows = finalBillItems.map((item, idx) => `
     <tr>
       <td class="desc">
-        <span class="item-name">${item.quantity}x ${escHtml(item.name)}${item.portion && item.portion !== 'Single' ? ` (${item.portion})` : ''}${item.isExtraItem ? ' *' : ''}</span>
+        <span class="item-name">${item.quantity}x ${escHtml(item.name)}${item.portion && item.portion !== 'Single' ? ` (${escHtml(item.portion)})` : ''}${item.isExtraItem ? ' *' : ''}</span>
         <span class="item-rate">@ ₹${item.pricePerUnit} / item</span>
       </td>
       <td class="num">₹${(item.pricePerUnit * item.quantity).toFixed(2)}</td>
@@ -3217,12 +3305,12 @@ const autoDownloadInvoicePDF = useCallback(() => {
   <!-- RESTAURANT HEADER -->
   <div class="header-meta">
     <div class="invoice-label">Tax Invoice</div>
-    <div class="rest-name">${rd?.name || 'RESTAURANT'}</div>
+    <div class="rest-name">${escapeHtml(rd?.name || 'RESTAURANT')}</div>
     <div class="rest-sub">
-      ${addr ? `${addr}<br/>` : ''}
-      ${rd?.contact ? `Tel: ${rd.contact}<br/>` : ''}
+      ${addr ? `${escapeHtml(addr)}<br/>` : ''}
+      ${rd?.contact ? `Tel: ${escapeHtml(rd.contact)}<br/>` : ''}
       ${rd?.gstin && rd.gstin !== 'GSTIN PENDING'
-        ? `<strong>GSTIN: ${rd.gstin}</strong><br/>`
+        ? `<strong>GSTIN: ${escapeHtml(rd.gstin)}</strong><br/>`
         : '<strong>GSTIN: GSTIN PENDING</strong><br/>'}
       <span style="font-size:10px;color:#888;">SAC Code: 996331 · GST Rate: ${(cgstPct+sgstPct).toFixed(1)}% (CGST ${cgstPct}% + SGST ${sgstPct}%)</span>
     </div>
@@ -3242,9 +3330,9 @@ const autoDownloadInvoicePDF = useCallback(() => {
 
   <!-- CUSTOMER -->
   <div class="customer-block">
-    <div>Customer: ${customerInfo.name || 'Guest'}</div>
-    ${customerInfo.phone ? `<div>Phone: ${customerInfo.phone}</div>` : ''}
-    <div>Table: ${tableNumber}</div>
+    <div>Customer: ${escapeHtml(customerInfo.name || 'Guest')}</div>
+    ${customerInfo.phone ? `<div>Phone: ${escapeHtml(customerInfo.phone)}</div>` : ''}
+    <div>Table: ${escapeHtml(tableNumber)}</div>
   </div>
 
   <!-- ITEMS TABLE -->
@@ -3297,7 +3385,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
     var element = document.getElementById('invoice-root');
     var opt = {
       margin:      [8, 8, 8, 8],
-      filename:    'TaxInvoice_Table${tableNumber}_${invoiceNo}.pdf',
+      filename:    'TaxInvoice_Table${String(tableNumber).replace(/[^A-Za-z0-9_-]/g, '')}_${invoiceNo}.pdf',
       image:       { type: 'jpeg', quality: 1.0 },
       html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
       jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -3314,7 +3402,8 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const blob = new Blob([html], { type: 'text/html' });
   const url  = URL.createObjectURL(blob);
   const win  = window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  if (!win) triggerAlert('Please allow pop-ups to download your invoice.', 'error'); // a blocked pop-up used to fail silently
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient]);
 
   // Add this useEffect to ask notification permission early, before order is placed
@@ -3395,15 +3484,19 @@ const requestFinalBill = async () => {
     }
 
     // ── CLEAR everything after checkout ──
-    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+    try {
+      localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+      localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+    } catch { /* storage unavailable */ }
     setBillRequested(true);
     // placedOrders intentionally NOT cleared here — still needed for the bill summary display
     // They clear when modal closes (see isBillOpen X handler below)
 
   } catch (error) {
-    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-    localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+    try {
+      localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+      localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+    } catch { /* storage unavailable */ }
     setBillRequested(true);
   }
 };
@@ -3428,7 +3521,13 @@ const registerCustomerPushSubscription = async (phoneOverride) => {
     const keyRes = await axios.get(`${BASE_URL}/waitlist/vapid-public-key`);
     const vapidKey = keyRes.data?.publicKey;
     if (!vapidKey) return;
-    const reg = await navigator.serviceWorker.ready;
+    // navigator.serviceWorker.ready never resolves when no worker is registered (sw.js missing, plain-http dev, blocked).
+    // Callers `await` this, so the bill / waitlist confirmation used to hang forever. Give up after 4 s.
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+    if (!reg) return;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       if (typeof Notification === 'undefined') return;
@@ -3470,12 +3569,10 @@ useEffect(() => {
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
   const key = `pratyeksha_placed_${tenantId}_${tableNumber}`;
+  // Only ever WRITE here. Removing on an empty list ran on mount (placedOrders starts empty) and erased the saved bill
+  // before anything could read it; the explicit clears (bill closed / requested) already remove the key.
   try {
-    if (placedOrders.length > 0) {
-      localStorage.setItem(key, JSON.stringify(placedOrders));
-    } else {
-      localStorage.removeItem(key);
-    }
+    if (placedOrders.length > 0) localStorage.setItem(key, JSON.stringify(placedOrders));
   } catch { /* persistence is best-effort */ }
 }, [placedOrders, tenantId, tableNumber, isCounterScan]);
 
@@ -3489,8 +3586,14 @@ try {
   const savedCart = localStorage.getItem(cartKey);
   if (savedCart) {
     const parsedCart = JSON.parse(savedCart);
-    if (parsedCart && Object.keys(parsedCart).length > 0) {
-      setCart(parsedCart);
+    // A hand-edited / corrupted / older-format entry (NaN, 0, negative, string, array) used to be restored as-is and
+    // inflated the cart badge and total; keep only positive whole quantities.
+    const cleanCart = {};
+    if (parsedCart && typeof parsedCart === 'object' && !Array.isArray(parsedCart)) {
+      Object.entries(parsedCart).forEach(([k, q]) => { const n = Math.floor(Number(q)); if (k && Number.isFinite(n) && n > 0) cleanCart[k] = n; });
+    }
+    if (Object.keys(cleanCart).length > 0) {
+      setCart(cleanCart);
     }
   }
 } catch { /* ignore */ }
@@ -3609,7 +3712,16 @@ useEffect(() => {
       }
     })
     .catch(() => {
-      // Silently fall back to localStorage (already handled above)
+      // Server unreachable: fall back to the bill saved on this device so the guest can still see / request it.
+      try {
+        const saved = JSON.parse(localStorage.getItem(`pratyeksha_placed_${tenantId}_${tableNumber}`) || '[]');
+        if (Array.isArray(saved) && saved.length > 0) {
+          const clean = saved
+            .filter(i => i && typeof i === 'object' && Number.isFinite(Number(i.subtotal)) && Number(i.quantity) > 0)
+            .map(i => ({ ...i, quantity: Number(i.quantity), subtotal: Number(i.subtotal), pricePerUnit: Number(i.pricePerUnit) || 0 }));
+          if (clean.length) { setPlacedOrders(prev => (prev.length ? prev : clean)); setHasPlacedInitialOrder(true); }
+        }
+      } catch { /* ignore */ }
     });
 }, [tenantId, tableNumber, isCounterScan]);
 
@@ -3665,6 +3777,24 @@ const legalSheetEl = (
 
 // ── Fullscreen table/order-ready banner — safe to return here: every hook is declared above ──
 if (notificationBannerView) return notificationBannerView;
+
+// An unknown / removed outlet (menu API 404) used to be blocked only on the table-QR path; the counter / directory flow
+// returned before that check and let a guest register, order and reserve at an outlet that does not exist.
+if (sessionBlocked && isCounterScan) {
+  return (
+    <CustomerShell>
+      <div style={{ marginTop: '18vh', maxWidth: '340px' }}>
+        <AlertCircle size={34} color="#d3bfa2" />
+        <h2 style={{ margin: '16px 0 8px', fontFamily: 'Georgia, serif', fontWeight: 500, color: '#f7f3eb', fontSize: '1.35rem' }}>
+          {language === 'mr' ? 'हे रेस्टॉरंट सापडले नाही' : "We couldn't find this restaurant"}
+        </h2>
+        <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: 1.6 }}>
+          {language === 'mr' ? 'कृपया लिंक तपासा किंवा रेस्टॉरंटच्या QR कोडमधून पुन्हा उघडा.' : 'Please check the link, or open it again from the restaurant\'s QR code.'}
+        </p>
+      </div>
+    </CustomerShell>
+  );
+}
 
 // ── COUNTER / DIRECTORY FLOW — early return (all hooks already declared above) ──
 if (isCounterScan && registrationStep !== 'menu') {
@@ -3882,7 +4012,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             padding: '12px', borderRadius: '11px', fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.15s'
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = 'rgba(211,191,162,0.3)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.15)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.52)'; }}
           >
             {language === 'mr' ? 'बुकिंग रद्द करा' : 'Cancel Reservation'}
           </button>
@@ -3894,7 +4024,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
  // ── DINE-IN / PICKUP CONFIRM ──
   const isDineIn = waitlistEntry.mode === 'dine-in';
   const hasItems = waitlistEntry.items?.length > 0;
-  const estWait  = waitlistEntry.waitlistPosition * 20;
+  const estWait  = (Number(waitlistEntry.waitlistPosition) || 1) * 20;
 
 
   return (
@@ -4075,7 +4205,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           padding: '13px', borderRadius: '16px', fontWeight: '700', letterSpacing: '0.5px', transition: 'all 0.2s'
         }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.18)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.52)'; }}
         >
           {language === 'mr' ? 'रद्द करा' : 'Leave Queue'}
         </button>
@@ -4101,7 +4231,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
 
               <button type="button" onClick={() => setReservationAskOrder(false)} style={{ width: '100%', padding: '14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', color: 'rgba(255,255,255,0.52)', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = 'rgba(211,191,162,0.35)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; }}>
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.52)'; }}>
                 {language === 'mr' ? 'नाही, नंतर ठरवतो' : "No, I'll decide later"}
               </button>
             </motion.div>
@@ -4118,7 +4248,9 @@ if (registrationStep === 'confirm' && waitlistEntry) {
   if (registrationStep === 'register') {
     const isDineIn = counterMode === 'dine-in';
     const pickupOptions = [];
-    const base = new Date();
+    // The first slot used to be "now" rounded up, i.e. possibly a minute away or already past by the time the guest tapped
+    // Continue — the server then rejected it as "scheduledPickupTime is in the past". Start at least 10 minutes out.
+    const base = new Date(Date.now() + 10 * 60000);
     base.setMinutes(Math.ceil(base.getMinutes() / 15) * 15, 0, 0);
     for (let i = 0; i < 12; i++) {
       const slot = new Date(base.getTime() + i * 15 * 60000);
@@ -4764,9 +4896,12 @@ if (registrationStep === 'confirm' && waitlistEntry) {
                   {/* NO — just reserve, place with empty items, go to confirm */}
                   <button type="button"
                     onClick={async () => {
+                      if (placingRef.current) return; // double-tap guard: a second tap booked the table twice
                       const [hours, minutes] = reservationTime.split(':').map(Number);
-                      const resDateTime = new Date(reservationDate);
-                      resDateTime.setHours(hours, minutes, 0, 0);
+                      // Restaurant time is IST. `new Date('YYYY-MM-DD')` + setHours() uses the device zone and booked the wrong
+                      // time (even the wrong day) outside IST; placeReservation() already built it this way.
+                      const resDateTime = new Date(`${reservationDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`);
+                      setIsPlacingOrder(true);
                       try {
                         const res = await axios.post(`${BASE_URL}/reservations/${tenantId}`, {
                           sessionId,
@@ -4795,14 +4930,16 @@ if (phone.length === 10) {
   }).catch(() => {});
 }
                         if ('Notification' in window && Notification.permission === 'granted') {
-                          new Notification('Reservation Requested!', {
+                          safeNotify('Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
                             icon: '/pratyeksha-logo.png'
                           });
                         }
                       } catch(err) {
                         console.error(err);
-                        triggerAlert('orderError','error');
+                        triggerAlert(err?.response?.status === 400 && err.response.data?.error ? err.response.data.error : 'orderError','error');
+                      } finally {
+                        setIsPlacingOrder(false);
                       }
                     }}
                     style={{
@@ -4814,7 +4951,7 @@ if (phone.length === 10) {
                       transition: 'all 0.15s', letterSpacing: '0.3px'
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.22)'; e.currentTarget.style.color='rgba(255,255,255,0.5)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.1)'; e.currentTarget.style.color='rgba(255,255,255,0.25)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.1)'; e.currentTarget.style.color='rgba(255,255,255,0.52)'; }}
                   >
                     {language === 'mr' ? 'नाही, फक्त टेबल बुक करा' : 'No, just reserve the table'}
                   </button>
@@ -4968,6 +5105,22 @@ if (phone.length === 10) {
 
 // ── LOADER ──
 if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू लोड होत आहे' : 'Preparing your menu'} />;
+
+if (sessionBlocked) {
+  return (
+    <CustomerShell>
+      <div style={{ marginTop: '18vh', maxWidth: '340px' }}>
+        <AlertCircle size={34} color="#d3bfa2" />
+        <h2 style={{ margin: '16px 0 8px', fontFamily: 'Georgia, serif', fontWeight: 500, color: '#f7f3eb', fontSize: '1.35rem' }}>
+          {language === 'mr' ? 'हा टेबल लिंक वैध नाही' : "This table link isn't valid"}
+        </h2>
+        <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: 1.6 }}>
+          {language === 'mr' ? 'कृपया तुमच्या टेबलवरील QR कोड पुन्हा स्कॅन करा किंवा स्टाफला विचारा.' : 'Please scan the QR code on your table again, or ask a member of staff for help.'}
+        </p>
+      </div>
+    </CustomerShell>
+  );
+}
 
   return (
     <div style={{...styles.body, backgroundColor: '#0b0b0c', position: 'relative', isolation: 'isolate'}}>
@@ -5400,7 +5553,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                     transition: 'all 0.15s'
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = cfg.borderCol; e.currentTarget.style.color = cfg.accentFg; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.52)'; }}
                 >
                   <X size={12} />
                 </button>
@@ -5725,7 +5878,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             transition: 'color 0.15s'
           }}
           onMouseEnter={e => e.currentTarget.style.color = 'rgba(211,191,162,0.6)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.3)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.62)'}
         >
           <Search size={11} />
           {language === 'mr'
@@ -7044,7 +7197,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                                   whileTap={{ scale: 0.88 }}
                                   onClick={() => {
                                     const current = extraItemCart[item._id] || 0;
-                                    if (current >= item.currentStock) return;
+                                    if (Number.isFinite(Number(item.currentStock)) && item.currentStock !== null && current >= item.currentStock) return;
                                     setExtraItemCart(prev => ({ ...prev, [item._id]: current + 1 }));
                                   }}
                                   style={{
@@ -7218,8 +7371,10 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
   setSuggestions({});setRecommendedDishes([]);
   setCustomerInfo({ name: '', phone: '' });
   resetCredit();
-  localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
-  localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+  try {
+    localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
+    localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
+  } catch { /* storage unavailable */ }
 }} />            </div>
             
             <div style={styles.modalScrollBody}>
@@ -7408,16 +7563,31 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
 </div>
 
 {/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
-<div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{(() => { const r=(restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5); return (calculateGrandTotal() / (1+r/100)).toFixed(2); })()}</span></div>
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST ({restaurantData?.config?.cgstPercentage ?? 2.5}%)</span><span>₹{(calculateGrandTotal() / (1+((restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5)) / 100) * ((restaurantData?.config?.cgstPercentage ?? 2.5) / 100)).toFixed(2)}</span></div>
-  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST ({restaurantData?.config?.sgstPercentage ?? 2.5}%)</span><span>₹{(calculateGrandTotal() / (1+((restaurantData?.config?.cgstPercentage ?? 2.5)+(restaurantData?.config?.sgstPercentage ?? 2.5)) / 100) * ((restaurantData?.config?.sgstPercentage ?? 2.5) / 100)).toFixed(2)}</span></div>
-</div>
+{/* Items are priced ex-tax and GST is added on top (same as the bill table, the invoice PDF and the server). This block
+    used to treat the item sum as tax-INCLUSIVE, so it showed a smaller subtotal and a grand total with no tax at all. */}
+{(() => {
+  const cgstPct = restaurantData?.config?.cgstPercentage ?? 2.5;
+  const sgstPct = restaurantData?.config?.sgstPercentage ?? 2.5;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const sub = r2(calculateGrandTotal());
+  const cgstAmt = r2(sub * (cgstPct / 100));
+  const sgstAmt = r2(sub * (sgstPct / 100));
+  const grand = r2(sub + cgstAmt + sgstAmt);
+  return (
+    <>
+      <div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{sub.toFixed(2)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST ({cgstPct}%)</span><span>₹{cgstAmt.toFixed(2)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST ({sgstPct}%)</span><span>₹{sgstAmt.toFixed(2)}</span></div>
+      </div>
 
-<div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
-  <span>GRAND TOTAL</span>
-  <span>₹{convertToMrNumber(calculateGrandTotal())}</span>
-</div>
+      <div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
+        <span>GRAND TOTAL</span>
+        <span>₹{convertToMrNumber(Number.isInteger(grand) ? grand : grand.toFixed(2))}</span>
+      </div>
+    </>
+  );
+})()}
 {/* 6. Branding Footer */}
         <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '0.6rem', fontWeight: '900', color: '#888', borderTop: '1px dashed #ccc', paddingTop: '15px' }}>
           <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
@@ -7674,7 +7844,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
                       transition: 'color 0.15s'
                     }}
                     onMouseEnter={e => e.currentTarget.style.color = 'rgba(211,191,162,0.7)'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.25)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(211,191,162,0.62)'}
                   >
                     <X size={15} />
                   </button>
@@ -7784,10 +7954,12 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
     </div>
     <div style={{ display:'flex', gap:'10px', overflowX:'auto', paddingBottom:'4px' }} className="no-scrollbar">
       {comboSuggestions.map(item => {
-        const isMulti = !!(item.priceHalf || item.priceFull);
-        const price = isMulti ? (item.priceHalf || item.price) : item.price;
-        const portion = isMulti ? 'Half' : 'Single';
-        const key = `${item._id}-${portion}`;
+        // Same rules as the dish cards: a dish with a half price is added as Half; every other dish is a single portion whose
+        // cart key is the bare id and whose price is priceFull || price. It used to add a "Half" line (at the single price)
+        // for Full-only dishes and a `${id}-Single` key for plain dishes, which the menu card then showed as a second line.
+        const portion = item.priceHalf ? 'Half' : 'Single';
+        const price = portion === 'Half' ? item.priceHalf : (item.priceFull || item.price);
+        const key = portion === 'Single' ? String(item._id) : `${item._id}-${portion}`;
         const inCart = cart[key] > 0;
         const nm = language === 'mr' ? (item.name_mr || item.name) : item.name;
         return (
@@ -8626,7 +8798,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
           {/* ── CTA ── */}
           <button type="button"
             disabled={!guestConsent}
-            onClick={() => { if (!guestConsent) return; localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); setWelcomeDismissed(true); }}
+            onClick={() => { if (!guestConsent) return; try { localStorage.setItem(`pratyeksha_phone_${tenantId}`, welcomePhone); } catch { /* storage unavailable */ } setWelcomeDismissed(true); }}
             style={{
               width: '100%', padding: '14px',
               opacity: guestConsent ? 1 : 0.45,
@@ -8715,7 +8887,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
               maxLength={10}
               placeholder="9876543210"
               value={welcomePhoneInput}
-              onInput={e => setWelcomePhoneInput(e.target.value.replace(/\D/g,'').slice(0,10))}
+              onChange={e => setWelcomePhoneInput(e.target.value.replace(/\D/g,'').slice(0,10))}
               style={{
                 width: '100%', padding: '14px 16px 14px 52px',
                 background: '#111', border: '1px solid rgba(211,191,162,0.15)',
@@ -8739,7 +8911,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
             disabled={welcomePhoneInput.length !== 10 || welcomeLoading || !guestConsent}
             onClick={async () => {
               const phone = welcomePhoneInput;
-              localStorage.setItem(`pratyeksha_phone_${tenantId}`, phone);
+              try { localStorage.setItem(`pratyeksha_phone_${tenantId}`, phone); } catch { /* storage unavailable (private mode) — the button used to do nothing */ }
               setWelcomeLoading(true);
               try {
                 const res = await axios.get(`${BASE_URL}/customers/recognize/${tenantId}/${phone}`);
@@ -9319,4 +9491,4 @@ arCustomBtn: {
   suggestionInput: { background: 'none', border: 'none', color: '#fff', fontSize: '0.75rem', width: '100%', outline: 'none' }
 };
 
-export default PratyekshaPremiumMenu;
+export default PratyekshaPremiumMenu;

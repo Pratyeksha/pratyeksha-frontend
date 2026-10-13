@@ -44,7 +44,7 @@ const readList = (key) => {
 const writeList = (key, list) => { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* ignore */ } };
 
 const typeOf = (t) => String(t?.businessType || 'Restaurant').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const isCafe = (t) => typeOf(t) === 'cafe' || /caf[eé]|coffee/i.test(String(t?.name || ''));
+const isCafe = (t) => typeOf(t) === 'cafe' || /\bcaf[eé]s?\b|\bcoffee\b/i.test(String(t?.name || '')); // word match: "Cafeteria Grill" is not a café
 const offerValue = (o) => (o.type === 'percent_off' ? `${o.value}% OFF` : o.type === 'fixed_off' ? `₹${o.value} OFF` : o.type === 'free_item' ? `FREE ${o.freeItem || 'ITEM'}` : 'HAPPY HOUR');
 
 const SERVICES = [
@@ -70,7 +70,12 @@ const distanceKm = (pos, t) => {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(pos.lat)) * Math.cos(rad(Number(t.address.lat))) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 };
-const fmtKm = (km) => (km == null ? '' : km < 1 ? `${Math.max(50, Math.round(km * 10) * 100)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
+const fmtKm = (km) => {
+  if (km == null || !Number.isFinite(km)) return '';
+  const m = Math.max(50, Math.round(km * 10) * 100); // nearest 100 m, never below 50 m
+  if (km < 1 && m < 1000) return `${m} m`; // 0.95-0.999 km used to print "1000 m"
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+};
 
 const css = `
 html,body{scrollbar-width:none;-ms-overflow-style:none}
@@ -118,6 +123,7 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 `;
 
 const Avatar = ({ t, size = 50, radius = 15 }) => {
+  const [imgBroken, setImgBroken] = useState(false);
   // Every café gets the coffee mark (consistent, instantly recognisable); other places show their logo.
   if (isCafe(t)) {
     return (
@@ -128,8 +134,8 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
   }
   return (
     <div style={{ width: size, height: size, borderRadius: radius, background: '#f7f3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-      {t.branding?.logoUrl
-        ? <img src={t.branding.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {t.branding?.logoUrl && !imgBroken
+        ? <img src={t.branding.logoUrl} alt="" onError={() => setImgBroken(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         : <UtensilsCrossed size={size * 0.42} color="#8a704d" />}
     </div>
   );
@@ -139,7 +145,13 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
 function PlaceDetail({ t, pos, onOrder }) {
   const [note, setNote] = useState('');
   const km = distanceKm(pos, t);
-  const flash = (m) => { setNote(m); window.setTimeout(() => setNote(''), 2200); };
+  const flashTimer = useRef(null);
+  useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
+  const flash = (m) => {
+    setNote(m);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current); // a second tap used to be wiped by the first timer
+    flashTimer.current = window.setTimeout(() => setNote(''), 2200);
+  };
   const copy = async () => {
     try { await navigator.clipboard.writeText(`${t.name}${addressLine(t) ? ', ' + addressLine(t) : ''}`); flash('Address copied'); }
     catch { flash('Copy not available'); }
@@ -248,26 +260,35 @@ export default function CustomerHome() {
     return () => ctrl.abort();
   }, [load]);
 
+  const offersReq = useRef(0);
   const loadAllOffers = async () => {
-    if (offersLoading) return;
+    // The sheet must open even if a previous request is still running: closing it mid-load and tapping the tag again used
+    // to do nothing at all (the early return came before setShowAllOffers(true)).
     setShowAllOffers(true);
+    const reqId = (offersReq.current += 1);
     setOffersLoading(true);
     setOffersError('');
     try {
       const res = await axios.get(`${BASE_URL}/offers/current/all?limit=500`, { timeout: 10000 });
+      if (reqId !== offersReq.current) return;
       setAllOffers(Array.isArray(res.data?.offers) ? res.data.offers : []);
     } catch (err) {
+      if (reqId !== offersReq.current) return;
       setAllOffers([]);
       setOffersError(err?.response?.data?.error || 'Unable to load offers.');
     } finally {
-      setOffersLoading(false);
+      if (reqId === offersReq.current) setOffersLoading(false);
     }
   };
 
+  // A dismissed banner used to come straight back whenever the restaurant list reloaded (Retry, refresh). Remember the dismissal
+  // for the current link; a new notification link shows again.
+  const dismissedNote = useRef('');
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tenantId = params.get('tenantId');
     if (params.get('notification') === '1' && tenantId) {
+      if (dismissedNote.current === location.search) return;
       const tenant = tenants.find((t) => t.tenantId === tenantId);
       setNotification(tenant ? `Update from ${tenant.name}` : 'You have a restaurant update');
     }
@@ -331,7 +352,7 @@ export default function CustomerHome() {
       if (filter === 'restaurant' && cafe) continue;
       if (service && (t.config?.customerFeatures || {})[service] === false) continue;
       if (favOnly && !favs.includes(t.tenantId)) continue;
-      if (q && !`${t.name} ${t.address?.area || ''} ${t.address?.city || ''}`.toLowerCase().includes(q)) continue;
+      if (q && !`${t.name} ${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`.toLowerCase().includes(q)) continue;
       const k = a.toLowerCase(); const cur = counts.get(k) || { key: k, label: a, n: 0 };
       cur.n += 1; counts.set(k, cur);
     }
@@ -342,13 +363,15 @@ export default function CustomerHome() {
 
   const chooseArea = (key) => { setArea(key); try { localStorage.setItem(AREA_KEY, key); } catch { /* ignore */ } };
 
+  const geoReq = useRef(0);
   const toggleNear = () => {
-    if (nearMe) { setNearMe(false); setGeoMsg(''); return; }
+    if (nearMe || geoMsg === 'Finding you…') { geoReq.current += 1; setNearMe(false); setGeoMsg(''); return; }
     if (!navigator.geolocation) { setGeoMsg('Location is not available on this device'); return; }
     setGeoMsg('Finding you…');
+    const reqId = (geoReq.current += 1);
     navigator.geolocation.getCurrentPosition(
-      (p) => { setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setNearMe(true); setGeoMsg(''); },
-      () => setGeoMsg('Allow location access to sort by distance'),
+      (p) => { if (reqId !== geoReq.current) return; setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setNearMe(true); setGeoMsg(''); },
+      () => { if (reqId === geoReq.current) setGeoMsg('Allow location access to sort by distance'); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }
     );
   };
@@ -408,7 +431,7 @@ export default function CustomerHome() {
           <div style={{ marginTop: 14, padding: '11px 14px', border: '1px solid rgba(211,191,162,.18)', background: 'rgba(211,191,162,.06)', borderRadius: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
             <Bell size={15} color={GOLD} />
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,.78)', flex: 1 }}>{notification}</div>
-            <button type="button" onClick={() => setNotification(null)} aria-label="Dismiss" style={{ border: 0, background: 'transparent', color: GOLD, cursor: 'pointer', display: 'flex' }}><X size={15} /></button>
+            <button type="button" onClick={() => { dismissedNote.current = location.search; setNotification(null); }} aria-label="Dismiss" style={{ border: 0, background: 'transparent', color: GOLD, cursor: 'pointer', display: 'flex' }}><X size={15} /></button>
           </div>
         )}
 
@@ -468,7 +491,7 @@ export default function CustomerHome() {
           <section style={{ marginTop: 16 }}>
             <div className="pxh-rail">
               {offerCards.map((offer) => (
-                <button type="button" key={`${offer._tenant.tenantId}-${offer._id}`} onClick={() => openTenant(offer._tenant)} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
+                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => openTenant(offer._tenant)} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
                   <Avatar t={offer._tenant} size={38} radius={11} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: GOLD, letterSpacing: .3 }}>{offerValue(offer)}</div>
@@ -549,7 +572,7 @@ export default function CustomerHome() {
                     );
                   })}
                 </div>
-                <div style={{ order: 1 }}><PlaceDetail t={mapTenant} pos={pos} onOrder={openTenant} /></div>
+                <div style={{ order: 1 }}><PlaceDetail key={mapTenant.tenantId} t={mapTenant} pos={pos} onOrder={openTenant} /></div>
               </div>
             ) : (
             <>
@@ -676,7 +699,7 @@ function QrScanner({ onClose, onPath }) {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
         if (!alive) { stream.getTracks().forEach((t) => t.stop()); return; }
         const video = videoRef.current;
-        if (!video) return;
+        if (!video) { stream.getTracks().forEach((t) => t.stop()); return; } // camera light used to stay on
         video.srcObject = stream;
         await video.play().catch(() => {});
         timer = window.setInterval(async () => {

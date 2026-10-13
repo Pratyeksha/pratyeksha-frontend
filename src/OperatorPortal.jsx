@@ -4536,7 +4536,7 @@ const renderMonthHeatmap = () => {
   // LOGIN SCREEN
   // ─────────────────────────────────────────────────────
   if (!isAuthenticated && expiredInfo) return (
-    <ExpiredPage name={expiredInfo.name} planExpiry={expiredInfo.planExpiry} onSignOut={() => setExpiredInfo(null)} />
+    <ExpiredPage name={expiredInfo.name} planExpiry={expiredInfo.planExpiry} reason={expiredInfo.reason} onSignOut={() => setExpiredInfo(null)} />
   );
   if (!isAuthenticated) return (
     <div style={{ ...styles.loginOverlay, position:'fixed', top:0, left:0, zIndex:50 }}>

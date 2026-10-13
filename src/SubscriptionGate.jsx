@@ -61,7 +61,8 @@ const shell = { minHeight: '100vh', width: '100%', display: 'grid', placeItems: 
 const linkRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: '1px solid rgba(211,191,162,0.16)', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))', color: IVORY, textDecoration: 'none', fontSize: 13.5, fontWeight: 600, textAlign: 'left' };
 const ico = { width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.22)', color: GOLD };
 
-export function ExpiredPage({ name, planExpiry, logoUrl, onRetry, onSignOut }) {
+export function ExpiredPage({ name, planExpiry, logoUrl, reason, onRetry, onSignOut }) {
+  const paused = reason === 'disabled';
   const [busy, setBusy] = useState(false);
   const retry = async () => { if (!onRetry) return; setBusy(true); try { await onRetry(); } finally { setBusy(false); } };
   return (
@@ -70,12 +71,12 @@ export function ExpiredPage({ name, planExpiry, logoUrl, onRetry, onSignOut }) {
         <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 20, display: 'grid', placeItems: 'center', background: 'rgba(226,154,88,0.1)', border: '1px solid rgba(226,154,88,0.35)', color: COPPER }}>
           <CalendarClock size={28} />
         </div>
-        <div style={{ fontSize: 10, letterSpacing: 2.8, fontWeight: 800, color: GOLD, textTransform: 'uppercase' }}>Subscription ended</div>
+        <div style={{ fontSize: 10, letterSpacing: 2.8, fontWeight: 800, color: GOLD, textTransform: 'uppercase' }}>{paused ? 'Account paused' : 'Subscription ended'}</div>
         <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 30, fontWeight: 700, margin: '10px 0 10px', color: IVORY, lineHeight: 1.15 }}>
-          {name ? `${name}’s plan has expired` : 'Your plan has expired'}
+          {paused ? (name ? `${name} is paused` : 'Your account is paused') : (name ? `${name}’s plan has expired` : 'Your plan has expired')}
         </h1>
         <p style={{ margin: '0 auto 22px', maxWidth: 360, fontSize: 13.5, lineHeight: 1.65, color: 'rgba(247,243,235,0.66)' }}>
-          {planExpiry ? `Access ended on ${fmtDate(planExpiry)}. ` : ''}Your menu, orders and data are safe — contact the Pratyeksha team to renew and everything switches back on.
+          {!paused && planExpiry ? `Access ended on ${fmtDate(planExpiry)}. ` : ''}Your menu, orders and data are safe — contact the Pratyeksha team {paused ? 'to switch the account back on.' : 'to renew and everything switches back on.'}
         </p>
         <div style={{ display: 'grid', gap: 9, marginBottom: 18 }}>
           {SUPPORT.phones.map((p) => (
@@ -105,8 +106,8 @@ export function ExpiredPage({ name, planExpiry, logoUrl, onRetry, onSignOut }) {
 /** Wrap any module. Children render until the tenant is known to be expired. */
 export function SubscriptionGate({ tenantId, children, onSignOut }) {
   const { status, reload } = useSubscription(tenantId);
-  if (status?.state === 'expired') {
-    return <ExpiredPage name={status.name} planExpiry={status.planExpiry} logoUrl={status.logoUrl} onRetry={reload} onSignOut={onSignOut} />;
+  if (status?.blocked) {
+    return <ExpiredPage name={status.name} planExpiry={status.planExpiry} logoUrl={status.logoUrl} reason={status.reason} onRetry={reload} onSignOut={onSignOut} />;
   }
   return children;
 }
@@ -141,7 +142,7 @@ const message = (s) => {
 export function RenewalReminder({ tenantId, style }) {
   const { status } = useSubscription(tenantId);
   const [popup, setPopup] = useState(false);
-  const lvl = status && status.state === 'active' ? LEVELS[status.level] : null;
+  const lvl = status && !status.blocked ? LEVELS[status.level] : null;
 
   useEffect(() => {
     if (!lvl || !tenantId) return undefined;

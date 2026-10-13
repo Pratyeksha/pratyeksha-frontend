@@ -105,6 +105,9 @@ const GLOBAL_CSS = `
 
   /* Input focus — light gold ring */
   .p-inp { transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
+  .p-modal { text-align: left; }
+  .p-modal input[type=checkbox], .p-modal input[type=radio] { accent-color: #d3bfa2; }
+  .p-modal input[type=date] { color-scheme: dark; }
   .p-inp:focus {
     border-color: rgba(211,191,162,0.45) !important;
     box-shadow: 0 0 0 3px rgba(211,191,162,0.06) !important;
@@ -244,16 +247,11 @@ const StatusChip = ({ status }) => {
 };
 
 /* Status dot on client row */
-const ClientStatusDot = ({ client, now }) => {
+const ClientStatusDot = ({ client }) => {
   const base = { width: 7, height: 7, borderRadius: '50%', display: 'inline-block', flexShrink: 0 };
-  if (!client.isActive) return <span style={{ ...base, background: C.danger }} />;
-  const exp = client.config?.planExpiry;
-  if (!exp || new Date(exp) < now) return <span style={{ ...base, background: C.warning }} />;
-  const soon = new Date(now); soon.setDate(soon.getDate() + 30);
-  /* expiring soon → dark amber pulse */
-  if (new Date(exp) <= soon) return <span style={{ ...base, background: '#8a704d', animation: 'pulse-slow 2s infinite' }} />;
-  /* active → light gold */
-  return <span style={{ ...base, background: '#d3bfa2' }} />;
+  const st = subOf(client).state;
+  if (st === 'expiring') return <span style={{ ...base, background: STATE_META.expiring.color, animation: 'pulse-slow 2s infinite' }} />;
+  return <span style={{ ...base, background: STATE_META[st].color }} />;
 };
 
 /* Section heading inside forms/drawers */
@@ -295,6 +293,27 @@ const inp = {
   color: C.text, borderRadius: 8, fontSize: 13,
   outline: 'none', boxSizing: 'border-box',
 };
+
+/* ── Subscription state: the server computes it once (subscriptionView) and every screen reads that. ── */
+const DAY_MS = 86400000;
+const subOf = (c) => {
+  if (c?.subscriptionView) return c.subscriptionView;
+  const now = new Date();
+  const exp = c?.config?.planExpiry ? new Date(c.config.planExpiry) : null;
+  const state = exp && exp <= now ? 'expired' : c?.isActive === false ? 'disabled' : !exp ? 'unset' : (exp - now) / DAY_MS <= 30 ? 'expiring' : 'active';
+  return { state, planExpiry: exp ? exp.toISOString() : null, daysLeft: exp && exp > now ? Math.ceil((exp - now) / DAY_MS) : exp ? 0 : null, isActive: c?.isActive !== false, startedAt: c?.createdAt || null, lastPaymentAt: null, lastPaymentAmount: 0, lastPaymentMonths: 0, deactivatedReason: '' };
+};
+const STATE_META = {
+  active:   { label: 'Active',    color: '#d3bfa2' },
+  expiring: { label: 'Expiring',  color: '#8a704d' },
+  expired:  { label: 'Expired',   color: C.warning },
+  disabled: { label: 'Disabled',  color: C.danger },
+  unset:    { label: 'No expiry', color: C.textDim },
+};
+const fmtDay = (v) => (v ? new Date(v).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+const todayIST = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const addMonthsClamped = (from, m) => { const d = new Date(from); const day = d.getUTCDate(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + m); d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate())); return d; };
+const PAY_METHODS = ['UPI', 'Cash', 'Bank transfer', 'Card', 'Other'];
 
 /* ─────────────────────────────────────────
    PWA — installable app support
@@ -485,11 +504,14 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
   const [feedbackAdminPassword, setFeedbackAdminPassword] = useState('');
   const [campaignStudioPassword, setCampaignStudioPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [paidAt, setPaidAt] = useState(todayIST());
+  const [method, setMethod] = useState('UPI');
+  const [note, setNote] = useState('');
   // This component stays mounted while closed, so the previous client's duration/amount were pre-filled for the next one
   // and could be confirmed by mistake as that client's payment. Reset whenever a different client is opened.
-  useEffect(() => { if (client) { setMonths('12'); setAmount('1200'); setProducts({ pratyeksha: client.config?.products?.pratyeksha !== false, feedbackSuite: client.config?.products?.feedbackSuite === true, whatsappCampaigns: client.config?.products?.whatsappCampaigns === true }); setFeedbackAdminEmail(client.config?.feedbackAdmin?.email || ''); setFeedbackAdminPassword(''); setCampaignStudioPassword(''); setBusy(false); } }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (client) { setMonths('12'); setAmount('1200'); setProducts({ pratyeksha: client.config?.products?.pratyeksha !== false, feedbackSuite: client.config?.products?.feedbackSuite === true, whatsappCampaigns: client.config?.products?.whatsappCampaigns === true }); setFeedbackAdminEmail(client.config?.feedbackAdmin?.email || ''); setFeedbackAdminPassword(''); setCampaignStudioPassword(''); setPaidAt(todayIST()); setMethod('UPI'); setNote(''); setBusy(false); } }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!client) return null;
-  const submit = async () => { if (!products.pratyeksha && !products.feedbackSuite) return; if (products.feedbackSuite && (!feedbackAdminEmail || (!client.config?.feedbackAdmin?.passwordConfigured && feedbackAdminPassword.length < 10))) return; if (products.whatsappCampaigns && (!client.config?.feedbackAdmin?.campaignPasswordConfigured && campaignStudioPassword.length < 10)) return; setBusy(true); await onSubmit(Number(months), Number(amount), products, { feedbackAdminEmail, feedbackAdminPassword, campaignStudioPassword }); setBusy(false); };
+  const submit = async () => { if (!products.pratyeksha && !products.feedbackSuite) return; if (products.feedbackSuite && (!feedbackAdminEmail || (!client.config?.feedbackAdmin?.passwordConfigured && feedbackAdminPassword.length < 10))) return; if (products.whatsappCampaigns && (!client.config?.feedbackAdmin?.campaignPasswordConfigured && campaignStudioPassword.length < 10)) return; setBusy(true); await onSubmit(Number(months), Number(amount), products, { feedbackAdminEmail, feedbackAdminPassword, campaignStudioPassword }, { paidAt, paymentMethod: method, paymentNote: note }); setBusy(false); };
   return (
     <ModalShell title={`Renew — ${client.name}`} icon={RotateCcw} onClose={onClose} width={380}>
       <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
@@ -499,6 +521,25 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
         <LabeledInput label="Amount Received (₹)">
           <input className="p-inp" style={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} />
         </LabeledInput>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <LabeledInput label="Payment Date">
+            <input className="p-inp" style={inp} type="date" max={todayIST()} value={paidAt} onChange={e => setPaidAt(e.target.value)} />
+          </LabeledInput>
+          <LabeledInput label="Method">
+            <select className="p-inp" style={{ ...inp, cursor: 'pointer' }} value={method} onChange={e => setMethod(e.target.value)}>{PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}</select>
+          </LabeledInput>
+        </div>
+        <LabeledInput label="Note (optional)">
+          <input className="p-inp" style={inp} maxLength={300} placeholder="e.g. GPay ref / discount given" value={note} onChange={e => setNote(e.target.value)} />
+        </LabeledInput>
+        {(() => {
+          const sub = subOf(client); const m = Math.round(Number(months));
+          if (!Number.isFinite(m) || m < 1 || m > 120) return null;
+          const base = sub.planExpiry && new Date(sub.planExpiry) > new Date() ? new Date(sub.planExpiry) : new Date();
+          return <div style={{ fontSize: 12, color: C.textMid, padding: '9px 12px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.bgCard }}>
+            Current expiry <b style={{ color: C.text }}>{fmtDay(sub.planExpiry)}</b> → new expiry <b style={{ color: '#d3bfa2' }}>{fmtDay(addMonthsClamped(base, m))}</b>
+          </div>;
+        })()}
         <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 9, padding: 12, border: `1px solid ${C.border}`, borderRadius: 9 }}>
           <div style={{ fontSize: 11, color: C.textDim, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Products included</div>
           {[['pratyeksha','PRATYEKSHa Restaurant Suite'],['feedbackSuite','Feedback Suite'],['whatsappCampaigns','WhatsApp Offer Campaigns']].map(([key,label]) => (
@@ -528,6 +569,103 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
         }}>{busy ? 'Renewing…' : 'Confirm Renewal'}</button>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
       </div>
+    </ModalShell>
+  );
+};
+
+/* Per-client subscription card: dates, state, payment history and the controls to change them. */
+const SubscriptionModal = ({ client, onClose, onChanged, onRenew, onToggle, flash }) => {
+  const [data, setData] = useState(null);
+  const [loadErr, setLoadErr] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API_BASE_URL}/admin/master/subscription/${client._id}`);
+      setData(r.data); setLoadErr('');
+      setExpiry(r.data.planExpiry ? new Date(new Date(r.data.planExpiry).getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10) : '');
+    } catch (e) { setLoadErr(e?.response?.data?.error || 'Could not load the subscription'); }
+  }, [client._id]);
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (value, successMsg) => {
+    setBusy(true);
+    try {
+      await axios.patch(`${API_BASE_URL}/admin/master/subscription/${client._id}/expiry`, { planExpiry: value, note });
+      flash(successMsg); setNote(''); await load(); await onChanged();
+    } catch (e) { flash(e?.response?.data?.error || 'Could not update the expiry', 'error'); }
+    finally { setBusy(false); }
+  };
+  const meta = STATE_META[data?.state] || STATE_META.active;
+  const cell = (label, value, sub) => (
+    <div style={{ padding: '10px 12px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.bgCard }}>
+      <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+  return (
+    <ModalShell title={`Subscription — ${client.name}`} icon={Wallet} onClose={onClose} width={560}>
+      {loadErr && <div style={{ color: C.danger, fontSize: 12.5, marginBottom: 12 }}>{loadErr}</div>}
+      {!data && !loadErr && <div style={{ color: C.textDim, fontSize: 12.5 }}>Loading…</div>}
+      {data && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 11px', borderRadius: 7, background: `${meta.color}14`, color: meta.color, border: `1px solid ${meta.color}40` }}>{meta.label}</span>
+            <span style={{ fontSize: 12, color: C.textDim }}>
+              {data.state === 'expired' ? 'Apps are locked for this client until it is renewed.' : data.state === 'disabled' ? 'Switched off by you; apps are locked.' : data.state === 'unset' ? 'No expiry on record — access is not limited. Set an expiry below.' : 'Apps are running normally.'}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {cell('Subscribed since', fmtDay(data.startedAt))}
+            {cell('Last payment', data.lastPaymentAt ? fmtDay(data.lastPaymentAt) : 'No date on record', data.lastPaymentAt ? `₹${Number(data.lastPaymentAmount || 0).toLocaleString('en-IN')} · ${data.lastPaymentMonths || 0} mo` : null)}
+            {cell('Expires', fmtDay(data.planExpiry), data.planExpiry ? (data.daysLeft > 0 ? `${data.daysLeft} day${data.daysLeft === 1 ? '' : 's'} left` : 'Expired') : null)}
+            {cell('Total received', `₹${Number(data.totalPaidAmount || 0).toLocaleString('en-IN')}`)}
+          </div>
+
+          <div style={{ padding: 12, borderRadius: 10, border: `1px solid ${C.border}`, display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 11, color: C.textDim, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Set expiry date</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10 }}>
+              <input className="p-inp" style={inp} type="date" value={expiry} onChange={e => setExpiry(e.target.value)} />
+              <input className="p-inp" style={inp} maxLength={300} placeholder="Reason (optional)" value={note} onChange={e => setNote(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" disabled={busy || !expiry} onClick={() => save(expiry, 'Expiry updated')} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !expiry ? 0.6 : 1 }}>Save expiry</button>
+              <button type="button" disabled={busy} onClick={() => save(todayIST(), 'Plan ended — client is now locked')} style={{ padding: '9px 14px', borderRadius: 8, border: `1px solid ${C.borderMid}`, background: 'transparent', color: C.textMid, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Expire today</button>
+              <span style={{ fontSize: 11, color: C.textDim, alignSelf: 'center' }}>A date means the end of that day (India time).</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" onClick={onRenew} style={{ flex: 1, minWidth: 140, padding: '10px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><RotateCcw size={14} /> Record payment / renew</button>
+            <button type="button" onClick={onToggle} style={{ flex: 1, minWidth: 140, padding: '10px', borderRadius: 9, border: `1px solid ${C.borderMid}`, background: 'transparent', color: data.isActive ? C.danger : '#d3bfa2', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Power size={14} /> {data.isActive ? 'Disable client' : 'Enable client'}</button>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, color: C.textDim, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Payment & expiry history</div>
+            {data.payments?.length ? (
+              <div style={{ display: 'grid', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                {data.payments.map((p, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: '9px 11px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bgCard }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
+                        {p.kind === 'onboard' ? 'Onboarding' : p.kind === 'manual-expiry' ? 'Expiry changed' : 'Renewal'}
+                        {p.kind !== 'manual-expiry' && <span style={{ color: C.textDim, fontWeight: 500 }}> · {p.months} mo{p.method ? ` · ${p.method}` : ''}</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>
+                        {p.kind !== 'manual-expiry' ? `Paid ${fmtDay(p.paidAt || p.at)} · ` : `${fmtDay(p.at)} · `}{p.expiryBefore ? `${fmtDay(p.expiryBefore)} → ` : ''}{fmtDay(p.expiryAfter)}
+                      </div>
+                      {p.note ? <div style={{ fontSize: 11, color: C.textMid, marginTop: 2, wordBreak: 'break-word' }}>{p.note}</div> : null}
+                    </div>
+                    {p.kind !== 'manual-expiry' && <div style={{ fontSize: 13, fontWeight: 700, color: '#8a704d', fontFamily: 'JetBrains Mono, monospace' }}>₹{Number(p.amount || 0).toLocaleString('en-IN')}</div>}
+                  </div>
+                ))}
+              </div>
+            ) : <div style={{ fontSize: 12, color: C.textDim }}>No payments recorded yet. Payments made from now on are saved here with their date.</div>}
+          </div>
+        </div>
+      )}
     </ModalShell>
   );
 };
@@ -759,7 +897,7 @@ export default function PratyekshaMasterAdmin() {
     street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'',
     tableCount:'12', taxPercentage:'5',
     username:'', password:'', confirmPassword:'',
-    planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:''
+    planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:''
   });
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardSuccess, setOnboardSuccess] = useState(null);
@@ -776,6 +914,7 @@ export default function PratyekshaMasterAdmin() {
   }, []);
   const [confirmModal, setConfirmModal] = useState(null);
   const [renewClient,  setRenewClient]  = useState(null);
+  const [planClient,   setPlanClient]   = useState(null);
   const [importTarget, setImportTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -824,16 +963,7 @@ export default function PratyekshaMasterAdmin() {
   useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); fetchExpenses(); }, []);
 
   /* ── helpers ── */
-  const getClientStatus = (c) => {
-    if (!c.isActive) return { label: 'Disabled', color: C.danger };
-    const exp = c.config?.planExpiry;
-    if (!exp || new Date(exp) < now) return { label: 'Expired', color: C.warning };
-    const soon = new Date(now); soon.setDate(soon.getDate() + 30);
-    /* expiring soon → dark amber */
-    if (new Date(exp) <= soon) return { label: 'Expiring', color: '#8a704d' };
-    /* fully active → light gold */
-    return { label: 'Active', color: '#d3bfa2' };
-  };
+  const getClientStatus = (c) => STATE_META[subOf(c).state] || STATE_META.active;
 
   const getDaysLeft = (c) => {
     const exp = c.config?.planExpiry;
@@ -841,9 +971,9 @@ export default function PratyekshaMasterAdmin() {
     return Math.ceil((new Date(exp) - now) / (1000*60*60*24));
   };
 
-  const submitRenew = async (client, months, amount, products, credentials) => {
+  const submitRenew = async (client, months, amount, products, credentials, payment = {}) => {
     try {
-      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: months, paidAmount: amount, products, ...credentials });
+      await axios.patch(`${BASE_URL}/admin/master/renew-subscription/${client._id}`, { planMonths: months, paidAmount: amount, products, ...credentials, ...payment });
       await fetchData();
       setRenewClient(null);
       flash(`${client.name} renewed for ${months} month${months === 1 ? '' : 's'}`);
@@ -856,18 +986,21 @@ export default function PratyekshaMasterAdmin() {
       await fetchData();
       setConfirmModal(null);
       flash(`${client.name} ${client.isActive ? 'disabled' : 'enabled'}`);
-    } catch { flash('Action failed.', 'error'); }
+    } catch (err) { setConfirmModal(null); flash(err?.response?.data?.error || 'Action failed.', 'error'); await fetchData(); }
   };
 
   const handleRenew = (client) => setRenewClient(client);
 
-  const handleToggle = (client) => setConfirmModal({
+  const handleToggle = (client) => {
+    if (!client.isActive && subOf(client).state === 'expired') { setRenewClient(client); flash('Subscription expired — renew (or set a new expiry) to switch this client back on', 'error'); return; }
+    setConfirmModal({
     title: client.isActive ? 'Disable Client' : 'Enable Client',
     icon: Power, tone: client.isActive ? 'danger' : 'default',
     message: `${client.isActive ? 'Disable' : 'Enable'} account access for "${client.name}"? ${client.isActive ? 'Their staff and customers will lose access immediately.' : ''}`,
     confirmLabel: client.isActive ? 'Disable' : 'Enable',
     onConfirm: () => submitToggle(client),
-  });
+    });
+  };
 
   const markDone = async (id) => {
     try {
@@ -924,7 +1057,7 @@ export default function PratyekshaMasterAdmin() {
         tenantId:res.data.tenantId, username:onboarding.username, password:onboarding.password, name:onboarding.name,
         categoriesWritten: res.data.categoriesWritten, menuItemsWritten: res.data.menuItemsWritten
       });
-      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
+      setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
       setOnboardCategories(null); setOnboardMenuItems(null);
       fetchData();
     } catch(err) {
@@ -1032,9 +1165,12 @@ export default function PratyekshaMasterAdmin() {
   /* ── derived ── */
   const filteredClients = clients
     .filter(c => {
-      if (clientFilter==='active')   return c.isActive && c.config?.planExpiry && new Date(c.config.planExpiry) > now;
-      if (clientFilter==='expired')  return c.isActive && (!c.config?.planExpiry || new Date(c.config.planExpiry) <= now);
-      if (clientFilter==='disabled') return !c.isActive;
+      const st = subOf(c).state;
+      if (clientFilter==='active')   return st === 'active' || st === 'expiring';
+      if (clientFilter==='expiring') return st === 'expiring';
+      if (clientFilter==='expired')  return st === 'expired';
+      if (clientFilter==='disabled') return st === 'disabled';
+      if (clientFilter==='unset')    return st === 'unset';
       return true;
     })
     .filter(c => !searchTerm ||
@@ -1196,8 +1332,8 @@ export default function PratyekshaMasterAdmin() {
           <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
             {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).map(c => (
               <div key={c._id || c.tenantId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard, border:`1px solid ${C.border}` }}>
-                <div style={{ width:7, height:7, borderRadius:'50%', background:c.isActive ? '#d3bfa2' : C.danger, flexShrink:0 }} />
-                <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ width:7, height:7, borderRadius:'50%', background:STATE_META[subOf(c).state].color, flexShrink:0 }} />
+                <div style={{ flex:1, minWidth:0, textAlign:'left' }}>
                   <div style={{ fontSize:11.5, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:10, color:C.textDim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.tenantId}</div>
                 </div>
@@ -1664,8 +1800,10 @@ export default function PratyekshaMasterAdmin() {
               {[
                 { id:'all',      label:'All',      count:clients.length },
                 { id:'active',   label:'Active',   count:stats.activeCount  ||0 },
+                { id:'expiring', label:'Expiring', count:stats.expiringSoon  ||0 },
                 { id:'expired',  label:'Expired',  count:stats.expiredCount ||0 },
                 { id:'disabled', label:'Disabled', count:stats.disabledCount||0 },
+                ...((stats.unsetCount||0) > 0 ? [{ id:'unset', label:'No expiry', count:stats.unsetCount }] : []),
               ].map(f => (
                 <button type="button" key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(clientFilter===f.id)}>
                   {f.label}
@@ -1701,7 +1839,7 @@ export default function PratyekshaMasterAdmin() {
                       <motion.tr layout key={client._id} className="p-row" style={{ background:C.bgCard }}>
                         <td style={{ paddingLeft:14, paddingTop:12, paddingBottom:12, borderRadius:'10px 0 0 10px' }}>
                           <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                            <ClientStatusDot client={client} now={now} />
+                            <ClientStatusDot client={client} />
                             <div>
                               <div style={{ fontWeight:600, fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:155 }}>{client.name}</div>
                               <div style={{ fontSize:11, color:C.textDim, marginTop:1, fontFamily:'JetBrains Mono, monospace' }}>{client.tenantId}</div>
@@ -1721,13 +1859,16 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td className="hide-mob">
                           <div style={{ fontSize:13, fontWeight:500, color:C.text }}>
-                            {client.config?.planExpiry ? new Date(client.config.planExpiry).toLocaleDateString('en-GB',{ timeZone: 'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric'}) : '—'}
+                            {fmtDay(client.config?.planExpiry)}
                           </div>
                           {dl!==null && (
                             <div style={{ fontSize:11, fontWeight:500, marginTop:2, color: dl<=0?C.danger:dl<=30?'#8a704d':C.textDim }}>
                               {dl<=0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`}
                             </div>
                           )}
+                          <div style={{ fontSize:10.5, marginTop:3, color:C.textDim }}>
+                            {subOf(client).lastPaymentAt ? `Paid ${fmtDay(subOf(client).lastPaymentAt)} · ₹${Number(subOf(client).lastPaymentAmount||0).toLocaleString('en-IN')}` : 'No payment date on record'}
+                          </div>
                         </td>
                         <td>
                           <span style={{ fontSize:11, fontWeight:500, padding:'3px 9px', borderRadius:6, background:`${st.color}12`, color:st.color, border:`1px solid ${st.color}30` }}>
@@ -1763,6 +1904,14 @@ export default function PratyekshaMasterAdmin() {
                               display:'flex', alignItems:'center', gap:4,
                             }}>
                               <Trash2 size={12} />
+                            </button>
+                            <button type="button" onClick={()=>setPlanClient(client)} title="Subscription: dates, payments, set expiry" style={{
+                              padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
+                              cursor:'pointer', background:'transparent',
+                              border:`1px solid ${C.border}`, color: C.textDim,
+                              display:'flex', alignItems:'center', gap:4,
+                            }}>
+                              <Wallet size={12} /><span className="hide-sm">Plan</span>
                             </button>
                             <button type="button" onClick={()=>handleToggle(client)} style={{
                               padding:'5px 10px', borderRadius:7, fontSize:12, fontWeight:500,
@@ -1967,6 +2116,14 @@ export default function PratyekshaMasterAdmin() {
                         <input className="p-inp" style={{...inp,paddingLeft:24}} type="number" placeholder="1200" value={onboarding.paidAmount} onChange={e=>setOnboarding(p=>({...p,paidAmount:e.target.value}))} />
                       </div>
                     </LabeledInput>
+                    <LabeledInput label="Payment Date" hint="Leave empty for today">
+                      <input className="p-inp" style={inp} type="date" max={todayIST()} value={onboarding.paidAt} onChange={e=>setOnboarding(p=>({...p,paidAt:e.target.value}))} />
+                    </LabeledInput>
+                    <LabeledInput label="Payment Method">
+                      <select className="p-inp" style={{...inp,cursor:'pointer'}} value={onboarding.paymentMethod} onChange={e=>setOnboarding(p=>({...p,paymentMethod:e.target.value}))}>
+                        {PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </LabeledInput>
                     <LabeledInput label="Google Review Link">
                       <input className="p-inp" style={inp} placeholder="https://g.page/..." value={onboarding.googleReview} onChange={e=>setOnboarding(p=>({...p,googleReview:e.target.value}))} />
                     </LabeledInput>
@@ -2026,7 +2183,7 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
+                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>
@@ -2339,8 +2496,12 @@ export default function PratyekshaMasterAdmin() {
         {confirmModal && (
           <ConfirmModal data={confirmModal} onClose={() => setConfirmModal(null)} onConfirm={confirmModal.onConfirm} />
         )}
+        {planClient && (
+          <SubscriptionModal client={planClient} onClose={() => setPlanClient(null)} onChanged={fetchData}
+            onRenew={() => { const c = planClient; setPlanClient(null); setRenewClient(c); }} onToggle={() => { const c = planClient; setPlanClient(null); handleToggle(c); }} flash={flash} />
+        )}
         {renewClient && (
-          <RenewModal client={renewClient} onClose={() => setRenewClient(null)} onSubmit={(m, a, products, credentials) => submitRenew(renewClient, m, a, products, credentials)} />
+          <RenewModal client={renewClient} onClose={() => setRenewClient(null)} onSubmit={(m, a, products, credentials, payment) => submitRenew(renewClient, m, a, products, credentials, payment)} />
         )}
         {importTarget && (
           <ImportMenuModal target={importTarget} onClose={() => setImportTarget(null)} onDone={fetchData} flash={flash} />
