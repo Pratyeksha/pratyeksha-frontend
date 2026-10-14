@@ -118,6 +118,7 @@ const KitchenView = () => {
   const [wastageLog,           setWastageLog]           = useState([]);
   const [wastageAnalytics,     setWastageAnalytics]     = useState(null);
   const [wastageSaving,        setWastageSaving]        = useState(false);
+  const [wastageError,         setWastageError]         = useState('');
   const [wastageLoading,       setWastageLoading]       = useState(false);
   const [kitchenHealth,        setKitchenHealth]        = useState(null);
   const [serverKdsToday,       setServerKdsToday]       = useState(null); // { count, avgSeconds } from the database
@@ -397,6 +398,17 @@ const KitchenView = () => {
 
   /* ── actions ── */
   const [processingOrderIds, setProcessingOrderIds] = useState(new Set());
+  // Fold the server's authoritative copy of one dish (incl. kdsTimingVersion) back into state. Without this the next tap
+  // sent a stale version, got a 409, and the handler reverted the chef's click until a socket event happened to arrive.
+  const mergeServerItem = useCallback((orderId, idx, item, orderTiming) => {
+    if (!item) return;
+    setOrders(prev => prev.map(o => {
+      if (String(o._id) !== String(orderId)) return o;
+      const items = (o.items || []).map((it, i) => i === idx ? { ...it, ...item } : it);
+      return { ...o, items, ...(orderTiming || {}) };
+    }));
+  }, []);
+
   const markAsReady = async orderId => {
     if (processingOrderIds.has(orderId)) return; // block a double-tap while the request is in flight
     const order = orders.find(o => o._id === orderId);
@@ -416,6 +428,7 @@ const KitchenView = () => {
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
         // localStorage can throw (private mode / quota). Inside a state updater that crashed the screen, and in this try it
         // wrongly put an already-dispatched ticket back on the board.
+        setRecallQueue(prev => prev.map(o => o._id === orderId ? { ...o, _kdsCountedSeconds: authoritativeSeconds } : o));
         setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
         setCompletedTicketsCount(prev => { const n = prev + 1; try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch {} return n; });
       }
@@ -433,15 +446,27 @@ const KitchenView = () => {
     const recalled = recallQueue[0];
     // Persist the recall: it only re-appeared locally, so the order stayed 'ready' on the server and vanished again
     // on the next refresh / on every other device.
+    let recallRes;
     try {
-      await axios.patch(`${BASE_URL}/admin/orders/${recalled._id}`, { status: 'pending', recall: true, tenantId });
+      recallRes = await axios.patch(`${BASE_URL}/admin/orders/${recalled._id}`, { status: 'pending', recall: true, tenantId });
     } catch (err) {
       console.error('Recall failed:', err);
       return;
     }
-    setOrders(prev => prev.some(o => String(o._id) === String(recalled._id)) ? prev : [recalled, ...prev]);
+    // The server answers { skipped: true } when the ticket already moved on (served/settled/rejected) or was recalled
+    // elsewhere. Putting it back on the board then showed a ticket that is no longer pending.
+    if (recallRes?.data?.skipped || recallRes?.data?.order?.status !== 'pending') {
+      setRecallQueue(prev => prev.slice(1));
+      return;
+    }
+    // Use the server's copy, not the snapshot taken when the ticket was dispatched (stale items / crossed state).
+    const fresh = recallRes.data.order || recalled;
+    setOrders(prev => prev.some(o => String(o._id) === String(recalled._id)) ? prev : [fresh, ...prev]);
     setRecallQueue(prev => prev.slice(1));
     setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); try { localStorage.setItem(`kds_completed_count_${tenantId}`,n); } catch {} return n; });
+    // The average is total/count, so the recalled ticket's time has to leave the total together with its count.
+    const counted = Number(recalled._kdsCountedSeconds);
+    if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
   };
 
   const trigger86 = (categoryKey, categoryName) => {
@@ -613,8 +638,9 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
   const saveWastageEntry = async () => {
     const { itemName,quantity,unit,reason,loggedBy } = wastageForm;
-    if (!itemName.trim() || !quantity || !loggedBy.trim()) return;
-    setWastageSaving(true);
+    // "0" is a truthy string and slipped through; the server then refused it and the chef saw nothing happen.
+    if (!itemName.trim() || !(Number(quantity) > 0) || !loggedBy.trim()) { setWastageError('Enter an item, a quantity above 0 and your name.'); return; }
+    setWastageSaving(true); setWastageError('');
     try {
       await axios.post(`${BASE_URL}/wastage/${tenantId}`, {
         itemName: itemName.trim(), inventoryId: wastageForm.inventoryId||undefined,
@@ -623,7 +649,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       setWastageForm(p => ({ itemName:'', inventoryId:null, quantity:'', unit:'kg', reason:'Spoiled / Expired', loggedBy:p.loggedBy, notes:'' }));
       setWastageSuggestions([]); setShowWastageSuggest(false);
       fetchWastageLog(); fetchWastageInventory();
-    } catch (err) { console.error(err.message); }
+    } catch (err) { console.error(err.message); setWastageError(err?.response?.data?.error || 'Could not log wastage. Check the connection and try again.'); }
     finally { setWastageSaving(false); }
   };
 
@@ -759,7 +785,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             <motion.aside initial={{ x:-310 }} animate={{ x:0 }} exit={{ x:-310 }}
               transition={{ type:'spring', stiffness:320, damping:32 }}
               style={{ ...rs.sidebar, position:'fixed', left:0, top:0, bottom:0, width: isSmallTablet?290:270, borderRadius:'0 16px 16px 0', zIndex:100, padding:'18px 14px' }}>
-              <SidebarContent inDrawer />
+              {SidebarContent({ inDrawer: true })}
             </motion.aside>
           </>
         )}
@@ -947,7 +973,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         {/* PERMANENT SIDEBAR */}
         {showPermanentSide && (
           <aside style={{ ...rs.sidebar, width: isLargeTablet ? 210 : 240 }}>
-            <SidebarContent />
+            {SidebarContent({})}
           </aside>
         )}
 
@@ -1079,7 +1105,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                   <AnimatePresence mode="wait">
                     <motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity:0, x:50 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-50 }} style={{ height:'100%' }}>
                       {filteredOrders[safeCardIndex] && (
-                        <KDSOrderCard order={filteredOrders[safeCardIndex]} isNewest={safeCardIndex===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={true} isTablet={false} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} />
+                        <KDSOrderCard order={filteredOrders[safeCardIndex]} isNewest={safeCardIndex===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={true} isTablet={false} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
                       )}
                     </motion.div>
                   </AnimatePresence>
@@ -1099,7 +1125,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             <div style={{ flex:1, overflowY:'auto', display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isSmallTablet?'240px':'300px'},1fr))`, gap: isTablet ? 12 : 16, alignContent:'flex-start' }} className="no-scrollbar">
               <AnimatePresence mode="popLayout">
                 {filteredOrders.map((order,i) => (
-                  <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} />
+                  <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
                 ))}
               </AnimatePresence>
               {filteredOrders.length === 0 && (
@@ -1258,6 +1284,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                       </div>
 
                       {/* save button */}
+                      {wastageError && <div style={{ fontSize:'0.62rem', color:'#d98b8b', fontWeight:700, marginBottom:8 }}>{wastageError}</div>}
                       <button type="button" onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
                         style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#171717' : 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#9a9a9a' : '#f7f3eb', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
                         {wastageSaving ? <><RotateCcw size={13} style={{ animation:'spin 1s linear infinite' }} /> SAVING…</> : <><Trash2 size={13} /> LOG WASTAGE</>}
@@ -1494,7 +1521,7 @@ const KDSOrderCard = ({
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
   socketInstance, isNonVegMode, tenantOnlyVeg,
   isMobile, isTablet,
-  itemFinalTimes, setItemFinalTimes
+  itemFinalTimes, setItemFinalTimes, onItemSynced
 }) => {
   // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
   const tenantId     = order.tenantId;
@@ -1587,6 +1614,7 @@ const KDSOrderCard = ({
         itemIndex: idx, completed: next, tenantId,
         timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
       });
+      onItemSynced?.(order._id, idx, r.data?.item, r.data?.order ? { prepTimeSeconds: r.data.order.prepTimeSeconds, prepTimeMinutes: r.data.order.prepTimeMinutes } : null);
       if (next && r.data?.item?.kdsPrepTimeSeconds != null) {
         setItemFinalTimes(prev => ({ ...prev, [`${order._id}-${idx}`]: Number(r.data.item.kdsPrepTimeSeconds) }));
         setItemStartTimes(prev => ({ ...prev, [idx]: new Date(r.data.item.kdsStartedAt || startMs).getTime() }));
@@ -1594,6 +1622,7 @@ const KDSOrderCard = ({
     } catch (err) {
       const authoritative = err?.response?.data?.item;
       if (err?.response?.status === 409 && authoritative) {
+        onItemSynced?.(order._id, idx, authoritative, null);
         setCheckedItemsGlobal(prev => ({ ...prev, [key]: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal }));
         if (authoritative.kdsPrepTimeSeconds != null) {
           setItemFinalTimes(prev => ({ ...prev, [key]: Number(authoritative.kdsPrepTimeSeconds) }));
@@ -1616,11 +1645,13 @@ const KDSOrderCard = ({
     setItemStartTimes(p => ({ ...p, [idx]: now }));
     try {
       const currentItem = order.items?.[idx] || {};
-      await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
+      const sr = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
         itemIndex: idx, action: 'start', tenantId,
         timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
       });
+      onItemSynced?.(order._id, idx, sr.data?.item, null);
     } catch (err) {
+      if (err?.response?.status === 409 && err.response.data?.item) onItemSynced?.(order._id, idx, err.response.data.item, null);
       setItemStartTimes(p => { const n = { ...p }; delete n[idx]; return n; });
       console.error('KDS item start save failed:', err?.message || err);
     }

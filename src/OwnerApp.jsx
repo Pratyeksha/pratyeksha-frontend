@@ -758,11 +758,11 @@ const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style, type = 'bu
   }}>{Icon && <Icon size={14} />}{children}</button>
 );
 
-const GhostBtn = ({ children, onClick, icon: Icon, style }) => (
-  <button type="button" onClick={onClick} className="pown-btn" style={{
+const GhostBtn = ({ children, onClick, icon: Icon, style, disabled }) => (
+  <button type="button" onClick={onClick} disabled={disabled} className="pown-btn" style={{
     background: 'transparent', color: T.textMed, border: `1px solid ${T.border}`,
     borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex',
-    alignItems: 'center', gap: 7, ...style
+    alignItems: 'center', gap: 7, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer', ...style
   }}>{Icon && <Icon size={14} className={Icon === Loader2 ? 'pown-pulse' : ''} />}{children}</button>
 );
 
@@ -1599,7 +1599,13 @@ const dateRangeFor = (key) => {
 
 const RevenuePage = () => {
   const [range, setRange] = useState('today');
-  const dates = useMemo(() => dateRangeFor(range), [range]);
+  // `dates` was memoised on `range` alone, so a page left open past midnight kept asking for yesterday as "today".
+  const [dayKey, setDayKey] = useState(() => dateRangeFor('today').from);
+  useEffect(() => {
+    const t = setInterval(() => setDayKey(prev => { const d = dateRangeFor('today').from; return d === prev ? prev : d; }), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const dates = useMemo(() => dateRangeFor(range), [range, dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const { liveOrderEvent } = useOwner();
   // No refreshMs was set here before — meaning this page only ever fetched
   // once and then sat stale indefinitely if left open. Now it polls as a
@@ -1901,14 +1907,25 @@ const MenuPage = () => {
 };
 
 const RepriceForm = ({ item, onSave }) => {
-  const [price, setPrice] = useState(item.price);
+  const [price, setPrice] = useState(item.price ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    // An empty field is Number('') === 0, which the server accepts as a valid price: the dish silently became free.
+    const n = Number(price);
+    if (String(price).trim() === '' || !Number.isFinite(n) || n <= 0) { setErr('Enter a price greater than 0'); return; }
+    setBusy(true); setErr('');
+    try { await onSave(item._id, n); }
+    catch (e) { setErr(e?.response?.data?.error || e?.message || 'Could not update the price'); setBusy(false); }
+  };
   return (
     <div>
-      <Field label="NEW PRICE (\u20B9)">
-        <input type="number" value={price} onChange={e => setPrice(e.target.value)} style={inputStyle} />
+      <Field label="NEW PRICE (₹)">
+        <input type="number" min="0" step="0.01" value={price} onChange={e => { setPrice(e.target.value); setErr(''); }} style={inputStyle} />
       </Field>
-      <div style={{ fontSize: 11.5, color: T.textLow, marginBottom: 16 }}>Current: \u20B9{item.price} · {item.sold} sold this month</div>
-      <PrimaryBtn icon={Check} onClick={() => onSave(item._id, price)}>Update Price</PrimaryBtn>
+      <div style={{ fontSize: 11.5, color: T.textLow, marginBottom: 16 }}>Current: ₹{item.price} · {item.sold} sold this month</div>
+      {err && <div style={{ fontSize: 12, color: T.danger, marginBottom: 10 }}>{err}</div>}
+      <PrimaryBtn icon={Check} disabled={busy} onClick={submit}>{busy ? 'Saving…' : 'Update Price'}</PrimaryBtn>
     </div>
   );
 };
@@ -2038,7 +2055,7 @@ const KitchenPage = () => {
                 <ScoreLine label="Avg prep time" value={`${data.avgPrepTime} min`} pass={data.avgPrepTime < 15} target="< 15 min" />
                 <ScoreLine label="Delayed tickets" value={data.delayedTickets} pass={data.delayedTickets < 5} target="< 5" />
                 <ScoreLine label="Rejection rate" value={`${data.rejectionRate}%`} pass={data.rejectionRate === 0} target="0%" />
-                <ScoreLine label="Wastage cost" value={`\u20B9${data.wastageCost}`} pass={data.wastageCost < 1000} target="< \u20B91000" />
+                <ScoreLine label="Wastage cost" value={`\u20B9${data.wastageCost}`} pass={data.wastageCost < 1000} target="< ₹1000" />
               </div>
             </Card>
 
@@ -2475,8 +2492,8 @@ const CompliancePage = () => {
     if (!data) return;
     // GSTR-1 (outward supplies) — B2C summary derived from settled invoices this month.
     downloadExcel(`GSTR1-${month}.xlsx`, [
-      { name: 'B2C (Others)', rows: [{ 'Place of Supply': 'Intra-state', 'Rate %': (data.cgstPct + data.sgstPct), 'Taxable Value': data.revenue, 'CGST': data.cgst, 'SGST': data.sgst, 'Total Invoices': data.invoiceRegister.length }] },
-      { name: 'Invoice-wise', rows: data.invoiceRegister.map(r => ({ 'Invoice No': r.billNo, Date: r.date, 'Taxable Value': Math.round(r.amount - r.gst), GST: r.gst, 'Invoice Value': r.amount })) },
+      { name: 'B2C (Others)', rows: [{ 'Place of Supply': 'Intra-state', 'Rate %': (Number(data.cgstPct) + Number(data.sgstPct)), 'Taxable Value': Number((Number(data.revenue) - Number(data.totalGST)).toFixed(2)), 'CGST': data.cgst, 'SGST': data.sgst, 'Invoice Value': data.revenue, 'Total Invoices': data.invoiceRegister.length }] },
+      { name: 'Invoice-wise', rows: data.invoiceRegister.map(r => ({ 'Invoice No': r.billNo, Date: r.date, 'Taxable Value': Number((r.amount - r.gst).toFixed(2)), GST: r.gst, 'Invoice Value': r.amount })) },
     ]);
     flash('GSTR-1 data downloaded');
   };
@@ -3002,10 +3019,10 @@ const SettingsPage = () => {
             <Card>
               <SectionHeading icon={Target} title="Revenue Targets" />
               <div className="pown-grid-2">
-                <Field label="DAILY TARGET (\u20B9)">
+                <Field label="DAILY TARGET (₹)">
                   <input type="number" value={form.dailyTarget} onChange={e => setForm(f => ({ ...f, dailyTarget: e.target.value }))} style={inputStyle} />
                 </Field>
-                <Field label="MONTHLY TARGET (\u20B9)">
+                <Field label="MONTHLY TARGET (₹)">
                   <input type="number" value={form.monthlyTarget} onChange={e => setForm(f => ({ ...f, monthlyTarget: e.target.value }))} style={inputStyle} />
                 </Field>
               </div>
@@ -3091,18 +3108,22 @@ const AnnouncementForm = ({ tenantId, onDone }) => {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
   const send = async () => {
-    setSending(true);
+    if (sending) return;
+    setSending(true); setError('');
     try {
-      await api.post(`/api/owner/announcement/${tenantId}`, { title, message, expiresAt: new Date(Date.now() + 4 * 3600000).toISOString() });
+      await api.post(`/api/owner/announcement/${tenantId}`, { title: title.trim(), message: message.trim(), expiresAt: new Date(Date.now() + 4 * 3600000).toISOString() });
       onDone();
-    } finally { setSending(false); }
+    } catch (e) { setError(e?.response?.data?.error || 'Could not send the announcement'); }
+    finally { setSending(false); }
   };
   return (
     <div>
       <Field label="TITLE"><input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="e.g. Weekend Special" /></Field>
       <Field label="MESSAGE"><textarea value={message} onChange={e => setMessage(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Shown on every table's menu for 4 hours" /></Field>
-      <PrimaryBtn icon={Send} onClick={send} disabled={sending || !title || !message}>{sending ? 'Sending…' : 'Push to All Tables'}</PrimaryBtn>
+      {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 12 }}>{error}</div>}
+      <PrimaryBtn icon={Send} onClick={send} disabled={sending || !title.trim() || !message.trim()}>{sending ? 'Sending…' : 'Push to All Tables'}</PrimaryBtn>
     </div>
   );
 };
@@ -3111,15 +3132,18 @@ const EightySixForm = ({ tenantId, onDone }) => {
   const { data, loading } = useOwnerData('/api/owner/menu/insights/:tenantId');
   const [query, setQuery] = useState('');
   const [hiding, setHiding] = useState(null);
+  const [hideError, setHideError] = useState('');
 
-  const dishes = (data?.dishTable || []).filter(d => d.name.toLowerCase().includes(query.toLowerCase()));
+  const dishes = (data?.dishTable || []).filter(d => String(d.name || '').toLowerCase().includes(query.toLowerCase()));
 
   const hideDish = async (dish) => {
-    setHiding(dish._id);
+    if (hiding) return;
+    setHiding(dish._id); setHideError('');
     try {
       await api.patch(`/api/owner/menu/hide/${tenantId}/${dish._id}`, { isAvailable: false });
       onDone(`"${dish.name}" hidden from the menu`);
-    } finally { setHiding(null); }
+    } catch (e) { setHideError(e?.response?.data?.error || `Could not hide "${dish.name}"`); }
+    finally { setHiding(null); }
   };
 
   return (
@@ -3130,6 +3154,7 @@ const EightySixForm = ({ tenantId, onDone }) => {
           <input value={query} onChange={e => setQuery(e.target.value)} style={{ ...inputStyle, paddingLeft: 32 }} placeholder="Type to filter…" autoFocus />
         </div>
       </Field>
+      {hideError && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 10 }}>{hideError}</div>}
       <div className="pown-scroll" style={{ maxHeight: 280, overflowY: 'auto', display: 'grid', gap: 6 }}>
         {loading ? <Skeleton h={40} /> : dishes.length === 0 ? (
           <div style={{ fontSize: 12, color: T.textLow, padding: '10px 0' }}>No matching dishes</div>

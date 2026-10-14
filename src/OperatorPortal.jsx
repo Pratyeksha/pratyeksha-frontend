@@ -183,6 +183,21 @@ const AnnouncementPreviewCard = ({ data }) => {
   );
 };
 
+// One source of truth for the amount payable after a discount. The same maths was copy-pasted four times (settle confirm,
+// final settle, amount-in-words, bill total) and had drifted: the two on-screen copies let a >100% discount show a NEGATIVE
+// total while the settle handlers clamped it, and none of them stopped a negative discount from INCREASING the bill.
+const billFinalAmount = (bill, discountType, discount) => {
+  const subtotal = Number(bill?.subtotal) || 0;
+  const cgstPct = (parseFloat(bill?.cgstPct) || 0) / 100;
+  const sgstPct = (parseFloat(bill?.sgstPct) || 0) / 100;
+  const preDiscountTotal = subtotal + (Number(bill?.cgst) || 0) + (Number(bill?.sgst) || 0);
+  const d = Math.max(0, Number(discount) || 0);
+  const amt = discountType === 'flat'
+    ? Math.max(0, preDiscountTotal - d)
+    : subtotal * (1 - Math.min(100, d) / 100) * (1 + cgstPct + sgstPct);
+  return Math.round(amt * 100) / 100;
+};
+
 const OperatorPortalInner = () => {
   const socket = useMemo(() => io(SOCKET_BASE_URL, {
     withCredentials: true,
@@ -205,6 +220,7 @@ const OperatorPortalInner = () => {
   const [analytics, setAnalytics] = useState([]);
   const [checkoutRequests, setCheckoutRequests] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
+  // (kept in sync below) lets delayed callbacks check which table is open NOW instead of the one from when they were created
   const [tableBill, setTableBill] = useState(null);
   const [discount, setDiscount] = useState(0); 
   const [paymentModes, setPaymentModes] = useState({ cash: 0, upi: 0, card: 0 });
@@ -305,9 +321,13 @@ const [campaignSending, setCampaignSending]   = useState(false);
  
   // ── IST today string — used for billing HUD and daily breakdowns
 const [istTodayStr, setIstTodayStr] = useState(() => new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]);
+const [minuteTick, setMinuteTick] = useState(0); // re-evaluates time-based lists (e.g. the "Delayed" orders filter) as minutes pass
 useEffect(() => {
   // keep "today" correct if the portal stays open past IST midnight
-  const id = setInterval(() => setIstTodayStr(new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]), 60000);
+  const id = setInterval(() => {
+    setIstTodayStr(new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]);
+    setMinuteTick(t => t + 1);
+  }, 60000);
   return () => clearInterval(id);
 }, []);
 
@@ -360,6 +380,8 @@ const [newInventoryItem, setNewInventoryItem] = useState({ itemName: '', unit: '
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
 
   const [isSettling, setIsSettling] = useState(false);
+  const selectedTableRef = useRef(null);
+  selectedTableRef.current = selectedTable;
   const settlingRef = useRef(false); // state is async: two taps in one tick both saw isSettling=false
 const [isSubmittingRestock, setIsSubmittingRestock] = useState(false);
 const [isSubmittingExtraRestock, setIsSubmittingExtraRestock] = useState(false);
@@ -688,11 +710,13 @@ const results = await Promise.allSettled([
   } catch (err) { console.error("Analytics fetch error:", err); }
 }, [tenantId, viewDate]); 
 
+const salaryFetchSeq = useRef(0);
 const fetchMonthlySalary = useCallback(async (monthStr) => {
+  const mySeq = ++salaryFetchSeq.current; // a slow answer for an earlier month used to overwrite the month now on screen
   try {
     const res = await axios.get(`${BASE_URL}/staff/salary/${tenantId}/${monthStr}`);
-    setMonthlySalaryRecords(asArr(res.data));
-  } catch { setMonthlySalaryRecords([]); }
+    if (mySeq === salaryFetchSeq.current) setMonthlySalaryRecords(asArr(res.data));
+  } catch { if (mySeq === salaryFetchSeq.current) setMonthlySalaryRecords([]); }
 }, [tenantId]);
 
 const fetchManagementData = useCallback(async () => {
@@ -754,15 +778,8 @@ const submitExtraRestock = async () => {
 };
 
 
-const deductExtraItemStock = useCallback(async (itemId, qty) => {
-  try {
-    await axios.patch(`${BASE_URL}/extra-items/item/${itemId}/restock`, { 
-      addQty: Math.abs(qty), tenantId  // this endpoint is restock-only; deductions use the server-side order flow
-    });
-  } catch (err) {
-    console.error('Extra item stock deduction failed:', err);
-  }
-}, [tenantId]);
+// (removed) deductExtraItemStock: it PATCHed /restock, so calling it would have ADDED stock. Deductions happen server-side with the order.
+
 
 useEffect(() => {
   if (!isAuthenticated) return;
@@ -792,6 +809,14 @@ useEffect(() => {
   useEffect(() => {
     const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
     const ingredientAlertTimers = new Set();
+    const ingredientAlertByName = new Map(); // ingredientName -> its auto-dismiss timer
+    // inventory_updated / low_stock_alert fire once per ingredient touched by an order; each one re-downloaded inventory, staff,
+    // menu, categories, tenant and salary. Coalesce a burst into one refresh.
+    let mgmtRefreshTimer = null;
+    const refreshManagementSoon = () => {
+      if (mgmtRefreshTimer) clearTimeout(mgmtRefreshTimer);
+      mgmtRefreshTimer = setTimeout(() => { mgmtRefreshTimer = null; fetchManagementData(); }, 700);
+    };
     // Events emitted while the socket was down are never replayed: refetch on every RE-connect.
     let hasConnectedOnce = socket.connected;
     const resyncOnReconnect = () => {
@@ -821,7 +846,7 @@ useEffect(() => {
         showNotif("Roster sync updated.", "info");
       });
       socket.on('inventory_updated', () => {
-        fetchManagementData();
+        refreshManagementSoon();
       });
 
       socket.on("low_stock_alert", (data) => {
@@ -830,7 +855,7 @@ useEffect(() => {
           const exists = prev.find(a => a.itemName === data.itemName);
           return exists ? prev : [...prev, data];
         });
-        fetchManagementData(); // refresh inventory numbers
+        refreshManagementSoon(); // refresh inventory numbers
       });
       socket.on('inventory_expiry_alert', (data) => {
   showNotif(`${data.itemName} expires in ${data.daysLeft} day${data.daysLeft>1?'s':''} — use first (FEFO)`, 'error');
@@ -857,11 +882,16 @@ useEffect(() => {
     });
  
     // Auto-dismiss after 60 seconds so the screen doesn't fill up
+    // A repeat alert for the same ingredient replaces the card, but the FIRST alert's timer still fired and removed the NEW card early.
+    const prevTimer = ingredientAlertByName.get(data.ingredientName);
+    if (prevTimer) { clearTimeout(prevTimer); ingredientAlertTimers.delete(prevTimer); }
     const alertTimer = setTimeout(() => {
         ingredientAlertTimers.delete(alertTimer);
+        ingredientAlertByName.delete(data.ingredientName);
         setIngredientAlerts(prev => prev.filter(a => a.ingredientName !== data.ingredientName));
     }, 60000);
     ingredientAlertTimers.add(alertTimer);
+    ingredientAlertByName.set(data.ingredientName, alertTimer);
 });
       socket.on("new_waiter_request", (request) => {
         playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -979,7 +1009,7 @@ socket.on("order_status_updated", (data) => {
     setCheckoutRequests(prev => prev.filter(t => t !== data.tableNumber?.toString()));
     fetchInitialData({ skipMenu: true });
     fetchAnalytics();
-  } else if (['pending', 'ready', 'served'].includes(data?.status)) {
+  } else if (['pending', 'ready', 'served', 'rejected'].includes(data?.status)) {
     // Only refresh orders list — skip analytics
     fetchInitialData({ skipMenu: true });
   }
@@ -1033,6 +1063,8 @@ socket.on('aggregator_session_restored', (data) => {
       ].forEach(event => socket.off(event));
       ingredientAlertTimers.forEach(clearTimeout);
       ingredientAlertTimers.clear();
+      ingredientAlertByName.clear();
+      if (mgmtRefreshTimer) clearTimeout(mgmtRefreshTimer);
       socket.disconnect();
     };
 }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData, fetchCounterQueue]);
@@ -1049,17 +1081,31 @@ socket.on('aggregator_session_restored', (data) => {
     } catch (err) { console.error(err); }
   }, [tenantId]);
 
+// Month logs (drives payroll) and the selected day's logs used to be fetched together and the month response REPLACED the whole list.
+// If it landed after the day response, a selected day outside the viewed month vanished; and every change of the attendance date
+// re-downloaded the entire month. Now: month effect merges only that month's rows; day effect has its own dependency.
 useEffect(() => {
-  if (activeTab === 'management') {
-    const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-    axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`)
-      .then(r => setAttendanceLogs(asArr(r.data)))
-      .catch(()=>{});
-    fetchAttendanceForDate(attendanceDate);
-    fetchMonthlySalary(monthPrefix); // ← ADD THIS
-  }
-}, [activeTab, viewDate, attendanceDate, fetchAttendanceForDate, fetchMonthlySalary, tenantId]);
+  if (activeTab !== 'management') return;
+  let stale = false;
+  const monthPrefix = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
+  axios.get(`${BASE_URL}/staff/attendance/log/${tenantId}/${monthPrefix}`)
+    .then(r => { if (!stale) setAttendanceLogs(prev => [...prev.filter(l => !String(l.date || '').startsWith(monthPrefix)), ...asArr(r.data)]); })
+    .catch(()=>{});
+  fetchMonthlySalary(monthPrefix);
+  return () => { stale = true; };
+}, [activeTab, viewDate, fetchMonthlySalary, tenantId]);
 
+useEffect(() => {
+  if (activeTab === 'management') fetchAttendanceForDate(attendanceDate);
+}, [activeTab, attendanceDate, fetchAttendanceForDate]);
+
+// The floor view's "on duty now" counts need TODAY's punches even when the Management tab was never opened this session.
+useEffect(() => {
+  if (isAuthenticated) fetchAttendanceForDate(istTodayStr);
+}, [isAuthenticated, istTodayStr, fetchAttendanceForDate]);
+
+const customerSearchTimer = useRef(null);
+useEffect(() => () => { if (customerSearchTimer.current) clearTimeout(customerSearchTimer.current); }, []);
 const customerDirSeq = useRef(0);
 const fetchCustomerDir = useCallback(async (seg = 'all', search = '') => {
   // Every keystroke in the search box fires a request; a slow earlier response could overwrite the newer one (stale list for the typed text).
@@ -1075,12 +1121,18 @@ const fetchCustomerDir = useCallback(async (seg = 'all', search = '') => {
   finally { if (mySeq === customerDirSeq.current) setCustomerLoading(false); }
 }, [tenantId]);
  
+const customerProfileSeq = useRef(0);
 const fetchCustomerProfile = useCallback(async (phone) => {
+  const mySeq = ++customerProfileSeq.current; // click customer A then B: A's slower reply used to replace B's profile
   try {
-    const res = await axios.get(`${BASE_URL}/customers/profile/${tenantId}/${phone}`);
-    setCustomerProfile(res.data);
-  } catch { setCustomerProfile(null); }
-}, [tenantId]);
+    const res = await axios.get(`${BASE_URL}/customers/profile/${encodeURIComponent(tenantId)}/${encodeURIComponent(phone)}`);
+    if (mySeq === customerProfileSeq.current) setCustomerProfile(res.data);
+  } catch (err) {
+    if (mySeq !== customerProfileSeq.current) return;
+    setCustomerProfile(null);
+    showNotif(err?.response?.data?.error || 'Could not load this customer', 'error'); // used to do nothing at all
+  }
+}, [tenantId]); // NOT [.., showNotif]: showNotif is declared far below, so naming it here would hit its temporal dead zone at render time
  
 const fetchOffers = useCallback(async () => {
   try {
@@ -1242,7 +1294,7 @@ const filteredOrders = useMemo(() => {
     if (orderZone === 'fresh')   return minutes < 15;
     return true;
   });
-}, [orders, orderZone]);
+}, [orders, orderZone, minuteTick]); // minuteTick: an order turning 15 min old never moved into "Delayed" until the next order event
 
 // Separate list: orders marked READY by kitchen — awaiting waiter to serve
 const readyOrders = useMemo(() => (
@@ -1312,6 +1364,18 @@ const refreshAssistRealtimeData = useCallback(async () => {
   const liveAttendance = asArr(val(9, []));
   const liveInventory = asArr(val(10, []));
 
+  // "Revenue over the last 7 days" only had the CURRENT month's rows, so in the first 6 days of a month it silently left out the
+  // days that fall in the previous month. Fetch the previous month too (for that one answer only - not stored in state).
+  let livePrevMonthAnalytics = [];
+  if (Number(today.slice(8, 10)) < 7) {
+    const [yy, mm] = today.slice(0, 7).split('-').map(Number);
+    const prevMonthStr = new Date(Date.UTC(yy, mm - 2, 1)).toISOString().slice(0, 7);
+    try {
+      const pr = await axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${prevMonthStr}`);
+      livePrevMonthAnalytics = asArr(pr.data?.salesData);
+    } catch { /* answer with what we have */ }
+  }
+
   setOrders(liveOrders);
   setMenuItems(liveMenu);
   setWaiterRequests(liveWaiterRequests);
@@ -1341,6 +1405,7 @@ const refreshAssistRealtimeData = useCallback(async () => {
     menuItems: liveMenu,
     extraItems: liveExtraItems,
     extraAnalytics: liveExtraAnalytics,
+    prevMonthAnalytics: livePrevMonthAnalytics,
   };
 }, [tenantId, orders, menuItems, waiterRequests, profitabilityData, procurementData,
     staff, extraItems, extraAnalytics, viewDate]);
@@ -1370,6 +1435,7 @@ const handleAssistQuery = useCallback(async (question) => {
       menuItems: liveMenuItems,
       extraItems: liveExtraItems,
       extraAnalytics: liveExtraAnalytics,
+      prevMonthAnalytics: livePrevMonthAnalytics,
     } = live;
 
     // Shadow the state snapshots used by the existing intent handlers.
@@ -1414,7 +1480,7 @@ const handleAssistQuery = useCallback(async (question) => {
     const avgOrder     = monthOrders > 0 ? Math.round(monthRev / monthOrders) : 0;
 
     // Week revenue (last 7 days)
-    const weekRev = analytics
+    const weekRev = [...(livePrevMonthAnalytics || []), ...analytics]
       .filter(d => {
         if (!d._id) return false;
         const diff = (new Date(todayKey) - new Date(d._id)) / 86400000;
@@ -1503,7 +1569,7 @@ const pendingOrders = orders.filter(o =>
       answer = `Revenue over the last 7 days: ₹${weekRev.toLocaleString()}.`;
 
     // 4. Pending / live orders
-    } else if (qL.includes('pending') || (qL.includes('live') && qL.includes('order')) || qL.includes('kitchen now')) {
+    } else if ((qL.includes('pending') && !qL.includes('request')) || (qL.includes('live') && qL.includes('order')) || qL.includes('kitchen now')) { // "pending service requests" used to land here
       const tableList = [...new Set(pendingOrders.map(o => `Table ${o.tableNumber}`))].slice(0, 5).join(', ');
       answer = `Right now: ${pendingOrders.length} pending, ${readyOrders.length} ready to serve, ${servedOrders.length} served.\n${tableList ? `Active tables: ${tableList}${pendingOrders.length > 5 ? ' and more.' : '.'}` : ''}`;
 
@@ -1586,12 +1652,12 @@ const pendingOrders = orders.filter(o =>
       }`;
 
     // 12. Salary query
-    } else if (qL.includes('salary') || qL.includes('payroll') || qL.includes('pay')) {
+    } else if (qL.includes('salary') || qL.includes('payroll') || /\bpay(s|ing)?\b/.test(qL)) { // plain includes('pay') also matched "payment" and hid the payment-split answer
       const thisMonthSalary = (staff || []).reduce((a, s) => a + (Number(s.baseSalary) || 0), 0);
       answer = `Total monthly payroll across ${staff?.length || 0} staff members: ₹${thisMonthSalary.toLocaleString()}.`;
 
     // 13. Service / waiter requests
-    } else if (qL.includes('waiter') || qL.includes('service request') || qL.includes('request') || qL.includes('call')) {
+    } else if (qL.includes('waiter') || qL.includes('service request') || qL.includes('request') || /\bcalls?\b/.test(qL)) {
       answer = pendingRequests.length > 0
         ? `${pendingRequests.length} pending service request${pendingRequests.length > 1 ? 's' : ''}: ${pendingRequests.slice(0, 3).map(w => `Table ${w.tableNumber} — ${w.serviceRequest?.slice(0, 30)}`).join('; ')}.`
         : 'No pending service requests right now.';
@@ -1615,7 +1681,7 @@ const pendingOrders = orders.filter(o =>
     // 17. Wastage
     } else if (qL.includes('wastage') || qL.includes('waste') || qL.includes('spoil')) {
       try {
-        const wData = await axios.get(`${BASE_URL}/wastage/${tenantId}`).catch(() => ({ data: [] }));
+        const wData = await axios.get(`${BASE_URL}/wastage/${tenantId}?date=${todayKey}&limit=500`).catch(() => ({ data: [] })); // without ?date this returned the latest 50 entries of ALL time but the answer said "today"
         const wArr   = Array.isArray(wData.data) ? wData.data : [];
         const wCost  = wArr.reduce((a, w) => a + Number(w.totalCost || 0), 0);
         answer = wArr.length > 0
@@ -1658,13 +1724,15 @@ const pendingOrders = orders.filter(o =>
         hourMap[h] = (hourMap[h] || 0) + 1;
       });
       const peak = Object.entries(hourMap).sort((a, b) => b[1] - a[1])[0];
+      // `orders` is only the OPEN (pending/ready/served) list, not the day's settled orders, so this was claimed as "today's busiest hour".
       answer = peak
-        ? `Today's busiest hour so far: ${Number(peak[0]) % 12 || 12}:00 ${Number(peak[0]) < 12 ? 'AM' : 'PM'} with ${peak[1]} order${peak[1] > 1 ? 's' : ''}.`
-        : 'Insufficient order data to calculate peak hour today.';
+        ? `Among the orders currently open, the busiest hour is ${Number(peak[0]) % 12 || 12}:00 ${Number(peak[0]) < 12 ? 'AM' : 'PM'} (${peak[1]} order${peak[1] > 1 ? 's' : ''}). For a full-day view, open the Analytics hourly chart.`
+        : 'No open orders to estimate a busy hour from right now.';
 
     // 22. Inventory total value
     } else if (qL.includes('inventory value') || qL.includes('stock value') || qL.includes('total stock worth')) {
-      const invTotal = (procurementData || []).reduce((a, p) => a + ((p.currentStock || 0) * (p.weightedAvgCost || p.costPrice || 0)), 0);
+      // procurement forecast rows can be empty (no usage history yet) -> the old answer said Rs 0; use the real stock rows
+      const invTotal = stockWithForecast.reduce((a, p) => a + (Math.max(0, Number(p.currentStock) || 0) * (Number(p.weightedAvgCost) || Number(p.costPrice) || 0)), 0);
       answer = `Estimated current inventory value: ₹${Math.round(invTotal).toLocaleString()} based on weighted average cost.`;
 
     // 23. Menu count / items
@@ -1779,8 +1847,9 @@ const totalPayrollValue = useMemo(() => {
 
 const liveFloorIntelligence = useMemo(() => {
   // Only use TODAY's attendance for live count
+  // Used the attendance-panel's date picker value: browsing yesterday's attendance changed the "on duty now" counts on the floor view.
   const todayPunches = attendanceLogs.filter(l =>
-    l.date === attendanceDate && l.clockIn && !l.clockOut
+    l.date === istTodayStr && l.clockIn && !l.clockOut
   );
   const presentIds = todayPunches.map(l => l.staffId?.toString());
   const present = staff.filter(s => presentIds.includes(s._id?.toString()));
@@ -1795,7 +1864,7 @@ const liveFloorIntelligence = useMemo(() => {
     coveredCount: covered.length,
     coveredList: covered.map(t => `T${t}`).join(', ') || 'NONE'
   };
-}, [staff, attendanceLogs, attendanceDate]);
+}, [staff, attendanceLogs, istTodayStr]);
 
   const insightsData = useMemo(() => {
 const margins = menuItems.map(m => {
@@ -1813,7 +1882,7 @@ const margins = menuItems.map(m => {
       : 0;
     const digest = `Monthly revenue: ₹${stats.revenue.toLocaleString()}. Peak activity around ${peakHour}:00. ${margins[0]?.name||'Top dish'} leads margins at ${margins[0]?.margin}%.`;
     return { margins, digest };
-  }, [menuItems, stats.revenue, hourlyAnalytics]);
+  }, [menuItems, stats.revenue, hourlyAnalytics, profitabilityData]);
 
   const hotDishes = useMemo(() => {
   const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
@@ -1920,12 +1989,15 @@ const floorLayout = useMemo(() => {
   }));
 }, [localFloorLayout, tenantConfig]);
 
+// Returns true only when the layout was really saved. Callers used to announce "Tables joined" (and clear their selection)
+// even when the save had just failed, leaving the floor map and the real layout out of step.
 const saveFloorLayout = async (layout) => {
   try {
     await axios.patch(`${BASE_URL}/tenant/floor-layout/${tenantId}`, { floorLayout: layout });
     setTenantConfig(p => ({ ...p, floorLayout: layout }));
     setLocalFloorLayout(null);
-  } catch { showNotif('Could not save floor layout', 'error'); }
+    return true;
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not save floor layout', 'error'); return false; }
 };
 
 const revenueColor = (tableNumber) => {
@@ -1964,7 +2036,8 @@ const hasServiceCall = (tableNumber) =>
   waiterRequests.some(r => r.tableNumber?.toString() === tableNumber?.toString());
 
 const getJoinedGroup = (tableNumber, layout) => {
-  const table = layout.find(t => t.tableNumber === tableNumber);
+  // Strict === meant table 5 (number) never matched layout entry '5' (string): the joined group was silently ignored when billing.
+  const table = layout.find(t => String(t.tableNumber) === String(tableNumber));
   if (!table?.groupId) return [tableNumber];
   return layout.filter(t => t.groupId === table.groupId).map(t => t.tableNumber);
 };
@@ -1981,7 +2054,7 @@ const confirmJoinTables = async () => {
   const next = floorLayout.map(t =>
     pendingJoinSelection.includes(t.tableNumber) ? { ...t, groupId } : t
   );
-  await saveFloorLayout(next);
+  if (!(await saveFloorLayout(next))) return; // keep the selection so the operator can retry
   setPendingJoinSelection([]);
   setJoinMode(false);
   showNotif(`Tables ${pendingJoinSelection.join(', ')} joined`);
@@ -1989,7 +2062,7 @@ const confirmJoinTables = async () => {
 
 const unjoinTable = async (tableNumber) => {
   const next = floorLayout.map(t => t.tableNumber === tableNumber ? { ...t, groupId: '' } : t);
-  await saveFloorLayout(next);
+  if (!(await saveFloorLayout(next))) return;
   showNotif(`Table ${tableNumber} unjoined`);
 };
 
@@ -1998,7 +2071,7 @@ const cancelReservation = async (reservationId) => {
     await axios.patch(`${BASE_URL}/reservations/${reservationId}`, { status: 'cancelled', tenantId });
     showNotif('Reservation cancelled');
     fetchCounterQueue();
-  } catch { showNotif('Could not cancel reservation', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not cancel reservation', 'error'); }
 };
 
 const submitQuickReserve = async () => {
@@ -2008,7 +2081,7 @@ const submitQuickReserve = async () => {
     setQuickReserveTable(null);
     setQuickReserveDraft({ customerName: '', customerPhone: '', partySize: 2 });
     fetchCounterQueue();   // ← this is what actually populates reservationEntries (fetchInitialData does not touch it)
-  } catch { showNotif('Could not reserve table', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not reserve table', 'error'); }
 };
 
   // ─────────────────────────────────────────────────────
@@ -2191,7 +2264,10 @@ const removeDiscountPreset = (idx) => {
     } catch (err) {
       const d = err?.response?.data;
       if (err?.response?.status === 402 && d?.code === 'SUBSCRIPTION_EXPIRED') setExpiredInfo(d);
-      else showNotif("Invalid Credentials", "error");
+      // Every failure (server asleep, no network, 500) was reported as "Invalid Credentials", so operators kept retyping a correct password.
+      else if (!err?.response) showNotif("Cannot reach the server — check your internet connection and try again", "error");
+      else if (err.response.status === 401 || err.response.status === 403 || err.response.status === 404) showNotif("Invalid Credentials", "error");
+      else showNotif(d?.error || "Login failed — please try again in a moment", "error");
     }
   };
 
@@ -2200,12 +2276,14 @@ const removeDiscountPreset = (idx) => {
       onConfirm: ()=>{ localStorage.clear(); window.location.reload(); } });
   };
 
+const billLoadSeq = useRef(0);
 const generateBill = async (id) => {
+  const mySeq = ++billLoadSeq.current; // tapping Table A then Table B: A's slower reply used to overwrite B's bill
   setSelectedTable(id);
   setDiscount(0); setDiscountReason('');
   setPaymentModes({ cash: 0, upi: 0, card: 0 });
   try {
-    const joinedForBill = getJoinedGroup(id, floorLayout).filter(t => t !== id);
+    const joinedForBill = getJoinedGroup(id, floorLayout).filter(t => String(t) !== String(id));
     const joinedQuery = joinedForBill.length > 0 ? `?joined=${encodeURIComponent(joinedForBill.join(','))}` : '';
     const [res, countRes, tenantRes] = await Promise.all([
       axios.get(`${BASE_URL}/admin/bill/${tenantId}/${id}${joinedQuery}`),
@@ -2213,6 +2291,7 @@ const generateBill = async (id) => {
       axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null }))
     ]);
 
+    if (mySeq !== billLoadSeq.current) return; // a newer table was opened while this bill was loading
     // Always refresh tenantConfig so cgst/sgst/address are fresh
     if (tenantRes.data) setTenantConfig(tenantRes.data);
     const freshTenant = tenantRes.data || tenantConfig;
@@ -2282,7 +2361,7 @@ const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
       totalBillCount: (freshTenant?.totalBillCount || 0) + 1,
       fssaiNumber:   freshTenant?.fssaiNumber || '',
       address:       freshTenant?.address
-                       ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
+                       ? [freshTenant.address.street, freshTenant.address.city, [freshTenant.address.state, freshTenant.address.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', ') /* partial address used to print 'undefined' */
                        : '',
       date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
@@ -2290,6 +2369,7 @@ const grandTotal = Math.round((subtotal + cgst + sgst) * 100) / 100;
   } catch (err) {
     console.error('Bill Error:', err);
     // The bill modal just vanished with no message when the bill request failed; tell the operator why.
+    if (mySeq !== billLoadSeq.current) return;
     showNotif(err?.response?.data?.error || 'Could not load the bill. Please try again.', 'error');
     setSelectedTable(null);
   }
@@ -2347,7 +2427,7 @@ const generateOnlineBill = async () => {
       totalBillCount: (freshTenant?.totalBillCount || 0) + 1,
       fssaiNumber: freshTenant?.fssaiNumber || '',
       address: freshTenant?.address
-        ? `${freshTenant.address.street}, ${freshTenant.address.city}, ${freshTenant.address.state} - ${freshTenant.address.pincode}`
+        ? [freshTenant.address.street, freshTenant.address.city, [freshTenant.address.state, freshTenant.address.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', ') /* partial address used to print 'undefined' */
         : '',
       date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).toUpperCase(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
@@ -2371,9 +2451,7 @@ const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
 // left, which silently produces a different, smaller final number than the ₹ amount
 // the operator actually typed in. A % discount is mathematically identical either way,
 // so it's still computed off the subtotal for a clean line-item breakdown.
-const finalAmt = discountType === 'flat'
-  ? Math.max(0, Math.round((preDiscountTotal - Number(discount || 0)) * 100) / 100)
-  : Math.round(tableBill.subtotal * (1 - (Math.min(100, Number(discount) || 0)) / 100) * (1 + cgstPct + sgstPct) * 100) / 100;
+const finalAmt = billFinalAmount(tableBill, discountType, discount);
 const discountedSub  = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 
 if (activePaymentType === 'split') {
@@ -2576,9 +2654,7 @@ const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
 // off the pre-tax subtotal with tax then recomputed on the reduced amount — those two
 // approaches give different final numbers, and only the first matches what "₹50 off"
 // actually means to an operator typing it in.
-const finalAmt = discountType === 'flat'
-  ? Math.max(0, Math.round((preDiscountTotal - Number(discount || 0)) * 100) / 100)
-  : Math.round(tableBill.subtotal * (1 - (Math.min(100, Number(discount) || 0)) / 100) * (1 + cgstPct + sgstPct) * 100) / 100;
+const finalAmt = billFinalAmount(tableBill, discountType, discount);
 const discountedSub   = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 100;
 const discountedCgst  = Math.round(discountedSub * cgstPct * 100) / 100;
 const discountedSgst  = Math.round(discountedSub * sgstPct * 100) / 100;
@@ -2591,7 +2667,7 @@ const paymentMethodDetails = activePaymentType === 'split'
     setConfirmModal({ show: false, title: '', subtitle: '', onConfirm: null });
     
     try {
-const joinedTables = getJoinedGroup(selectedTable, floorLayout).filter(t => t !== selectedTable);
+const joinedTables = getJoinedGroup(selectedTable, floorLayout).filter(t => String(t) !== String(selectedTable));
 const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTable}`, {
     discount,
     discountType,
@@ -2618,24 +2694,28 @@ const res = await axios.patch(`${BASE_URL}/admin/settle/${tenantId}/${selectedTa
         }
         
         if (res.data?.billNo) {
-            setTableBill(p => ({ ...p, billNo: res.data.billNo }));
+            const settledTable = selectedTable; // the table this settlement was for (the cashier may open another during the 1.5 s below)
+            if (selectedTableRef.current === settledTable) setTableBill(p => ({ ...p, billNo: res.data.billNo }));
             showNotif(`Invoice #${res.data.billNo} Generated`, "success");
             
             // Immediately remove from local state so table goes dark NOW
             // Joined tables were billed in the same settlement: drop their orders too (they lingered as live tables until the refetch).
             setOrders(prev => prev.filter(o =>
-                !(o.tableNumber === selectedTable || joinedTables.includes(o.tableNumber))
+                !(String(o.tableNumber) === String(selectedTable) || joinedTables.map(String).includes(String(o.tableNumber)))
             ));
             
             // Delay cleanup to show success briefly
             setTimeout(async () => {
-
-                setTableBill(null);
-                setSelectedTable(null);
-                setPaymentModes({ cash: 0, upi: 0, card: 0 });
-                setActivePaymentType('full');
-                setDiscount(0);
-                setDiscountReason('');
+                // This used to close and reset whatever table was open 1.5 s later - including the NEXT table the cashier had
+                // already started billing (their bill, discount and payment split vanished mid-entry).
+                if (selectedTableRef.current === settledTable) {
+                    setTableBill(null);
+                    setSelectedTable(null);
+                    setPaymentModes({ cash: 0, upi: 0, card: 0 });
+                    setActivePaymentType('full');
+                    setDiscount(0);
+                    setDiscountReason('');
+                }
                 await fetchInitialData();
                 await fetchAnalytics();
                 fetchManagementData();
@@ -2703,8 +2783,11 @@ const refreshOrdersForExport = useCallback(async () => {
     const list = Array.isArray(r.data) ? r.data : [];
     ordersDataRef.current = list;
     setOrdersData(list);
+    // The API caps this at the 5000 NEWEST orders. Hitting the cap means older bills are silently missing from the invoice register
+    // (annual / long-month exports), so say so instead of exporting an incomplete register as if it were complete.
+    if (list.length >= 5000) showNotif('Invoice register is limited to the newest 5000 orders — older bills are not included. Export a shorter period.', 'error');
   } catch { /* keep whatever was loaded */ }
-}, [tenantId]);
+}, [tenantId, showNotif]);
 
 useEffect(() => {
   if (!tenantId) return;
@@ -2960,7 +3043,21 @@ const exportToExcel = useCallback(async (type = 'daily') => {
       periodLabel = `Monthly · ${viewDate.toLocaleString('default',{month:'long',year:'numeric'})}`;
     } else if (type === 'annual') {
       const year = viewDate.getFullYear();
-      filteredData = analytics.filter(d => d._id?.startsWith(`${year}-`));
+      // `analytics` only holds the month selected in the header, so this "Calendar Year" report used to contain a single month
+      // (a wrong revenue / GST figure in a tax export). Pull every month of the year up to today.
+      const lastMonth = year === Number(todayStr.slice(0, 4)) ? Number(todayStr.slice(5, 7)) : 12;
+      const yearMonths = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+      const pool = new Map();
+      analytics.filter(d => d._id?.startsWith(`${year}-`)).forEach(d => pool.set(d._id, d));
+      const others = yearMonths.filter(m => m !== exportMonthStr);
+      const settled = await Promise.allSettled(others.map(m => axios.get(`${BASE_URL}/admin/analytics/${tenantId}?month=${m}`)));
+      let failedMonths = 0;
+      settled.forEach(r => {
+        if (r.status === 'fulfilled') (r.value.data?.salesData || []).forEach(d => { if (d._id) pool.set(d._id, d); });
+        else failedMonths += 1;
+      });
+      if (failedMonths > 0) showNotif(`${failedMonths} month${failedMonths > 1 ? 's' : ''} could not be loaded — the annual totals are incomplete`, 'error');
+      filteredData = [...pool.values()].sort((a, b) => String(a._id).localeCompare(String(b._id)));
       periodLabel = `Annual · Calendar Year ${year}`; // data is Jan–Dec; "FY 2026-27" (an Apr–Mar year) was wrong in a tax/accounting export
     }
 
@@ -2970,9 +3067,12 @@ const exportToExcel = useCallback(async (type = 'daily') => {
     const totalUPI       = filteredData.reduce((a,b)=>a+(b.upi||0),0);
     const totalCard      = filteredData.reduce((a,b)=>a+(b.card||0),0);
     const avgOrder       = totalOrders>0 ? Math.round(totalRev/totalOrders) : 0;
-    const totalInvValue  = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*i.costPrice)),0);
+    const totalInvValue  = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
     const totalGrossProfit = profitabilityData.reduce((a,b)=>a+(b.grossProfit||0),0);
-    const overallMargin  = totalRev>0 ? Math.round((totalGrossProfit/totalRev)*100) : 0;
+    // profitabilityData covers the whole selected month, so divide by that month's revenue. Dividing by a single day's (daily/weekly
+    // export) revenue produced margins like 900%.
+    const monthRevForMargin = analytics.filter(d=>d._id?.startsWith(exportMonthStr)).reduce((a,b)=>a+(b.revenue||0),0);
+    const overallMargin  = monthRevForMargin>0 ? Math.round((totalGrossProfit/monthRevForMargin)*100) : 0;
     const totalIngredientCost = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
 
     // ══════════════════════════════════
@@ -2996,10 +3096,10 @@ const exportToExcel = useCallback(async (type = 'daily') => {
 
       const payRow = [
         ['PAYMENT BREAKDOWN','','','','','','',''],
-        ['Mode','Amount (₹)','% of Revenue','','CHANNEL BREAKDOWN','','',''],
-        ['Cash',totalCash,totalRev>0?`${Math.round((totalCash/totalRev)*100)}%`:'0%','','Dine-In','','',''],
-        ['UPI', totalUPI,totalRev>0?`${Math.round((totalUPI/totalRev)*100)}%`:'0%','','Takeaway','','',''],
-        ['Card',totalCard,totalRev>0?`${Math.round((totalCard/totalRev)*100)}%`:'0%','','Online','','',''],
+        ['Mode','Amount (₹)','% of Revenue','','','','',''],
+        ['Cash',totalCash,totalRev>0?`${Math.round((totalCash/totalRev)*100)}%`:'0%','','','','',''],
+        ['UPI', totalUPI,totalRev>0?`${Math.round((totalUPI/totalRev)*100)}%`:'0%','','','','',''],
+        ['Card',totalCard,totalRev>0?`${Math.round((totalCard/totalRev)*100)}%`:'0%','','','','',''],
       ];
       XLSX.utils.sheet_add_aoa(ws, payRow, { origin: 'A8' });
       styleCell(ws,'A8',hdrStyle());
@@ -3143,7 +3243,7 @@ const exportToExcel = useCallback(async (type = 'daily') => {
     // ══════════════════════════════════
     if (profitabilityData.length > 0) {
       const ws = {};
-      addTitleBlock(ws, `${tenantConfig?.name||tenantId} — P&L & BREAK-EVEN`, `Financial health summary for ${periodLabel}`, todayStr);
+      addTitleBlock(ws, `${tenantConfig?.name||tenantId} — P&L & BREAK-EVEN`, `Full-month statement for ${viewDate.toLocaleString('en-IN',{month:'long',year:'numeric'})} (not limited to ${periodLabel})`, todayStr);
 
       const monthStr = exportMonthStr;
       const monthlyPayroll = staffEfficiency.reduce((a,s)=>{
@@ -4162,7 +4262,7 @@ const sgst       = taxable * _sgstPct;
     showNotif(`${type.toUpperCase()} report exported — ${Object.keys(wb.Sheets).length} sheets`);
 
   }).catch(err=>{ console.error(err); showNotif('Export failed — check xlsx install','error'); });
-},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData,aggregatorAnalytics]);
+},[analytics,inventory,topPerformers,profitabilityData,staffEfficiency,staff,filteredStaff,monthlySalaryRecords,attendanceDate,tenantConfig,tenantId,viewDate,showNotif,extraAnalytics,wastageAnalytics,waitlistAnalytics,trendsData,hourlyAnalytics,ordersData,aggregatorAnalytics,canonicalMonthRevenue,_cgstPct,_sgstPct,_totalGstPct]);
 
 
 const downloadAllTodaysInvoices = useCallback(async () => {
@@ -4179,6 +4279,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
     }
 
     // ── Builds ONE invoice's inner HTML (no page-break styling — each is captured separately) ──
+    const escInv = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const buildInvoiceHTML = (bill) => {
       const itemRows = (bill.items || []).map(it => {
         const unitPrice = it.pricePerUnit
@@ -4187,7 +4288,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
         return `
           <div style="display:flex;justify-content:space-between;margin-bottom:9px;font-size:14px;">
             <span style="font-weight:700;">
-              ${it.quantity}x ${it.name}${it.portion && it.portion !== 'Single' ? ` <span style="font-size:11px;color:#999;">(${it.portion})</span>` : ''}
+              ${it.quantity}x ${escInv(it.name)}${it.portion && it.portion !== 'Single' ? ` <span style="font-size:11px;color:#999;">(${escInv(it.portion)})</span>` : ''}
               <br/><span style="color:#999;font-size:11px;">@ ₹${unitPrice}</span>
             </span>
             <b>₹${Number(it.subtotal || 0).toFixed(2)}</b>
@@ -4211,17 +4312,19 @@ const downloadAllTodaysInvoices = useCallback(async () => {
         ? '—'
         : settledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
-      const grandTotal = Math.round(bill.grandTotal || 0);
+      const exactTotal = Number(bill.grandTotal || 0);
+      const grandTotal = Math.round(exactTotal);
+      const roundOff = Math.round((grandTotal - exactTotal) * 100) / 100;
       const tableOrCustomerLabel = bill.isAggregator ? 'CUSTOMER' : 'TABLE';
-      const tableOrCustomerValue = bill.isAggregator ? (bill.customerName || 'Online') : (bill.tableNumber || '—');
+      const tableOrCustomerValue = escInv(bill.isAggregator ? (bill.customerName || 'Online') : (bill.tableNumber || '—'));
 
       return `
         <div style="width:794px;background:#ffffff;padding:68px;font-family:Arial,sans-serif;color:#000000;box-sizing:border-box;">
 
           <div style="text-align:center;margin-bottom:16px;">
             <h4 style="margin:0;font-size:10px;letter-spacing:2px;font-weight:800;color:#888;">TAX INVOICE${sourceTag}</h4>
-            <h1 style="margin:5px 0;color:#555;font-size:26px;font-weight:900;text-transform:uppercase;">${bill.businessName || ''}</h1>
-            <p style="font-size:10px;color:#555;margin:0 0 3px;font-weight:600;">${bill.address || 'Address not configured'}</p>
+            <h1 style="margin:5px 0;color:#555;font-size:26px;font-weight:900;text-transform:uppercase;">${escInv(bill.businessName || '')}</h1>
+            <p style="font-size:10px;color:#555;margin:0 0 3px;font-weight:600;">${escInv(bill.address || 'Address not configured')}</p>
             <p style="font-size:11px;font-weight:800;margin:2px 0;">GSTIN: ${bill.gstin || '—'}</p>
             ${bill.fssaiNumber ? `<p style="font-size:10px;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${bill.fssaiNumber}</p>` : ''}
           </div>
@@ -4261,9 +4364,10 @@ const downloadAllTodaysInvoices = useCallback(async () => {
             </div>
             ${bill.discountValue > 0 ? `
             <div style="display:flex;justify-content:space-between;padding:4px 0;color:#8a704d;">
-              <span>Discount${bill.discountReason ? ` · ${bill.discountReason}` : ''}</span>
+              <span>Discount${bill.discountReason ? ` · ${escInv(bill.discountReason)}` : ''}</span>
               <span>- ${bill.discountType === 'percent' ? `${bill.discountValue}%` : `₹${Number(bill.discountValue).toFixed(2)}`}</span>
             </div>` : ''}
+            ${roundOff !== 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;color:#888;"><span>Round off</span><span>${roundOff > 0 ? '+' : '-'}₹${Math.abs(roundOff).toFixed(2)}</span></div>` : ''}
             <p style="font-size:9px;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
           </div>
 
@@ -4278,7 +4382,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
           </div>
 
           <div style="text-align:center;margin-top:24px;font-size:9px;font-weight:900;color:#ccc;letter-spacing:1px;">
-            <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:'115px',height:'auto',background:'#f7f3eb',borderRadius:'5px',padding:'3px 5px'}} />
+            <img src="/pratyeksha-logo.png" alt="Pratyeksha" style="width:115px;height:auto;background:#f7f3eb;border-radius:5px;padding:3px 5px;" />
           </div>
         </div>
       `;
@@ -4302,7 +4406,8 @@ const downloadAllTodaysInvoices = useCallback(async () => {
       background: #ffffff;
     `;
     document.body.appendChild(renderHost);
-
+    let renderedCount = 0;
+    try {
     for (let i = 0; i < bills.length; i++) {
       renderHost.innerHTML = buildInvoiceHTML(bills[i]);
 
@@ -4334,16 +4439,19 @@ const downloadAllTodaysInvoices = useCallback(async () => {
       const imgWidth = pdfPageWidth;
       const imgHeight = (canvas.height * pdfPageWidth) / canvas.width;
 
-      if (i > 0) pdf.addPage();
+      if (renderedCount > 0) pdf.addPage(); // was `i > 0`: a skipped first bill left a blank first page / mis-paged PDF
       pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+      renderedCount += 1;
     }
-
-    document.body.removeChild(renderHost);
+    } finally {
+      if (renderHost.parentNode) renderHost.parentNode.removeChild(renderHost); // was only removed on the success path
+    }
+    if (renderedCount === 0) { showNotif('No invoices could be rendered', 'error'); return; }
 
     const todayStr = new Date(new Date().getTime() + 330 * 60 * 1000).toISOString().split('T')[0];
     pdf.save(`Pratyeksha_All_Invoices_${todayStr}.pdf`);
 
-    showNotif(`${bills.length} invoice${bills.length !== 1 ? 's' : ''} downloaded`, 'success');
+    showNotif(`${renderedCount} invoice${renderedCount !== 1 ? 's' : ''} downloaded${renderedCount < bills.length ? ` (${bills.length - renderedCount} skipped)` : ''}`, renderedCount < bills.length ? 'info' : 'success');
   } catch (err) {
     console.error('Download all invoices error:', err);
     showNotif('Failed to generate invoice PDF', 'error');
@@ -4478,8 +4586,13 @@ const netPay = salaryForSlip - deductions;
       document.body.removeChild(container);
       showNotif(`Salary slip generated for ${pureName}`);
     });
+  }).catch((err) => {
+    // A failed html2pdf import/render used to leave the hidden slip in <body> forever and tell the operator nothing.
+    console.error('Salary slip error:', err);
+    if (container.parentNode) container.parentNode.removeChild(container);
+    showNotif('Could not generate the salary slip — please try again', 'error');
   });
-}, [viewDate, attendanceLogs, tenantConfig, tenantId]);
+}, [viewDate, attendanceLogs, tenantConfig, tenantId, monthlySalaryRecords, showNotif]);
 
 const renderMonthHeatmap = () => {
   const year=viewDate.getFullYear(), month=viewDate.getMonth();
@@ -4985,7 +5098,7 @@ const renderMonthHeatmap = () => {
         <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 12px',background:'#070707',border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.22)':'rgba(211,191,162,0.16)'}`,borderRadius:'9px',transition:'all 0.2s'}} className="p-autohide-toggle">
           <Layers size={12} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#969696'}/>
           <span style={{fontSize:'0.58rem',fontWeight:'900',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#969696'}} className="p-autohide-label">AUTO-HIDE</span>
-          <button type="button" onClick={async()=>{const nv=!tenantConfig.config?.autoHideDishesOnLowStock;await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);}}
+          <button type="button" onClick={async()=>{try{const nv=!tenantConfig.config?.autoHideDishesOnLowStock;await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);}catch(err){showNotif(err.response?.data?.error||'Could not change auto-hide','error');}}}
             style={{width:'36px',height:'19px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#171717'}}>
             <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:tenantConfig.config?.autoHideDishesOnLowStock?'#0d0d0d':'#444',transition:'left 0.2s'}}/>
           </button>
@@ -6166,7 +6279,8 @@ const renderMonthHeatmap = () => {
         <button type="button"
           disabled={isSettlingPickup}
           onClick={async () => {
-            if (isSettlingPickup) return;
+            if (isSettlingPickup || pickupFiringRef.current.has('pickup-settle')) return; // state is async: two taps in one tick both passed
+            pickupFiringRef.current.add('pickup-settle');
             setIsSettlingPickup(true);
             try {
               await axios.patch(
@@ -6180,6 +6294,7 @@ const renderMonthHeatmap = () => {
             } catch (err) {
               showNotif(err.response?.data?.error || 'Settlement failed', 'error');
             } finally {
+              pickupFiringRef.current.delete('pickup-settle');
               setIsSettlingPickup(false);
             }
           }}
@@ -6572,6 +6687,10 @@ const renderMonthHeatmap = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button type="button" onClick={async () => {
+                if (pickupFiringRef.current.has('edit-dish')) return;
+                if (editDishData.price !== undefined && editDishData.price !== '' && !(Number(editDishData.price) > 0)) { showNotif('Price must be greater than 0', 'error'); return; }
+                if (!String(editDishData.name ?? editDishModal.name ?? '').trim()) { showNotif('Dish name cannot be empty', 'error'); return; }
+                pickupFiringRef.current.add('edit-dish');
                 try {
                   const payload = { ...editDishData };
                   if (payload.priceHalf === '') delete payload.priceHalf;
@@ -6583,7 +6702,8 @@ const renderMonthHeatmap = () => {
                   setMenuItems(prev => prev.map(i => i._id === editDishModal._id ? res.data : i));
                   showNotif(`${editDishData.name || editDishModal.name} — updated`);
                   setEditDishModal(null);
-                } catch { showNotif('Update failed', 'error'); }
+                } catch (err) { showNotif(err?.response?.data?.error || 'Update failed', 'error'); }
+                finally { pickupFiringRef.current.delete('edit-dish'); }
               }} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0c0c0c', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px' }}>
                 SAVE CHANGES
               </button>
@@ -6615,10 +6735,12 @@ const renderMonthHeatmap = () => {
               <span style={{ fontSize: '0.52rem', color: '#969696', fontWeight: '600' }}>{tenantConfig.config?.autoHideDishesOnLowStock ? 'Hides when ingredients hit zero' : 'Stays visible regardless of stock'}</span>
             </div>
             <button type="button" onClick={async () => {
-              const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
-              await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
-              setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
-              showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
+              try {
+                const nv = !tenantConfig.config?.autoHideDishesOnLowStock;
+                await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`, { key: 'autoHideDishesOnLowStock', value: nv });
+                setTenantConfig(p => ({ ...p, config: { ...p.config, autoHideDishesOnLowStock: nv } }));
+                showNotif(`Auto-hide ${nv ? 'enabled' : 'disabled'}`);
+              } catch (err) { showNotif(err.response?.data?.error || 'Could not change auto-hide', 'error'); }
             }} style={{ width: '42px', height: '22px', borderRadius: '11px', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.25s', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#d3bfa2' : '#171717' }}>
               <div style={{ position: 'absolute', top: '4px', left: tenantConfig.config?.autoHideDishesOnLowStock ? '22px' : '4px', width: '14px', height: '14px', borderRadius: '50%', background: tenantConfig.config?.autoHideDishesOnLowStock ? '#0d0d0d' : '#444', transition: 'left 0.25s' }} />
             </button>
@@ -6952,7 +7074,13 @@ const renderMonthHeatmap = () => {
         <Search size={13} color="#b4b4b4" style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)'}}/>
         <input
           value={customerSearch}
-          onChange={e => { setCustomerSearch(e.target.value); fetchCustomerDir(customerSegFilter, e.target.value); }}
+          onChange={e => {
+            const v = e.target.value;
+            setCustomerSearch(v);
+            // one request per keystroke hammered the directory endpoint (300 rows each); wait for a short pause in typing
+            if (customerSearchTimer.current) clearTimeout(customerSearchTimer.current);
+            customerSearchTimer.current = setTimeout(() => fetchCustomerDir(customerSegFilter, v), 300);
+          }}
           placeholder="Search name or phone..."
           style={{
             width:'100%', padding:'9px 12px 9px 34px',
@@ -7386,7 +7514,7 @@ const renderMonthHeatmap = () => {
               <div style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'5px',padding:'5px 9px',borderRadius:'6px',background:'rgba(184,146,58,0.07)',border:'1px solid rgba(184,146,58,0.15)'}}>
                 <Clock size={9} color="#b8923a"/>
                 <span style={{fontSize:'0.56rem',color:'#b8923a',fontWeight:'800'}}>
-                  Goes live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`).toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
+                  Goes live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00+05:30`).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
                 </span>
               </div>
             )}
@@ -7446,14 +7574,21 @@ const renderMonthHeatmap = () => {
               if(!newAnnouncement.title||!newAnnouncement.message||!newAnnouncement.expiryDate||!newAnnouncement.expiryTime){
                 showNotif('Headline, message and expiry are required','error');return;
               }
-              const expiresAt=new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00`);
+              // Parsed in the DEVICE timezone: a laptop/tablet not set to IST published the announcement hours early or late. Times are entered as IST.
+              const expiresAt=new Date(`${newAnnouncement.expiryDate}T${newAnnouncement.expiryTime}:00+05:30`);
               if(expiresAt<=new Date()){showNotif('Expiry must be in the future','error');return;}
               let startsAt=null;
               if(newAnnouncement.startDate&&newAnnouncement.startTime){
-                startsAt=new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00`);
+                startsAt=new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00+05:30`);
                 if(startsAt>=expiresAt){showNotif('Start time must be before expiry time','error');return;}
               }
               const isScheduled=startsAt&&startsAt>new Date();
+              if(newAnnouncement.discountValue!==''&&newAnnouncement.discountValue!=null&&newAnnouncement.type!=='wish'){
+                const dv=Number(newAnnouncement.discountValue);
+                if(!(dv>0)||(newAnnouncement.discountType==='percent'&&dv>100)){showNotif('Discount must be above 0 (and at most 100%)','error');return;}
+              }
+              if(pickupFiringRef.current.has('announce')) return; // double-click published it twice
+              pickupFiringRef.current.add('announce');
               try{
                 await axios.post(`${BASE_URL}/announcements/${tenantId}`,{
                   title:newAnnouncement.title,
@@ -7473,6 +7608,7 @@ const renderMonthHeatmap = () => {
                 setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
                 fetchAnnouncements();
               }catch(err){showNotif(err.response?.data?.error||'Failed to publish','error');}
+              finally{pickupFiringRef.current.delete('announce');}
             }}
             disabled={!newAnnouncement.title||!newAnnouncement.message}
             style={{
@@ -7690,6 +7826,12 @@ const renderMonthHeatmap = () => {
         </div>
         <button type="button" onClick={async()=>{
           if(!newOffer.title?.trim()){showNotif('Offer title is required','error');return;}
+          {
+            const v=Number(newOffer.value);
+            if(newOffer.type==='percent_off'&&!(v>0&&v<=100)){showNotif('A % offer needs a value between 1 and 100','error');return;}
+            if(newOffer.type==='fixed_off'&&!(v>0)){showNotif('A flat offer needs an amount greater than 0','error');return;}
+            if(Number(newOffer.minOrder)<0){showNotif('Minimum order cannot be negative','error');return;}
+          }
           try{
             const payload={
               title:newOffer.title.trim(),
@@ -7700,7 +7842,7 @@ const renderMonthHeatmap = () => {
               minOrder:Number(newOffer.minOrder)||0,
               happyStart:newOffer.happyStart||undefined,
               happyEnd:newOffer.happyEnd||undefined,
-              expiresAt:newOffer.expiresAt?new Date(newOffer.expiresAt).toISOString():undefined,
+              expiresAt:newOffer.expiresAt?new Date(`${newOffer.expiresAt}T23:59:59+05:30`).toISOString():undefined, // end of that day in IST (was UTC midnight = 05:30 AM IST)
               isActive:true
             };
             await axios.post(`${BASE_URL}/offers/${tenantId}`,payload);
@@ -8255,9 +8397,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
           const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
           // Flat ₹ discount comes off the final bill directly — see settleBill() for why.
-          return discountType === 'flat'
-            ? Math.max(0, preDiscountTotal - Number(discount || 0))
-            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct);
+          return billFinalAmount(tableBill, discountType, discount);
         })()))}
       </p>
     </div>
@@ -8400,9 +8540,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
           const cgstPct = parseFloat(tableBill.cgstPct) / 100;
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
           const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
-          const total = discountType === 'flat'
-            ? Math.max(0, preDiscountTotal - Number(discount || 0))
-            : tableBill.subtotal * (1 - (Number(discount) || 0) / 100) * (1 + cgstPct + sgstPct);
+          const total = billFinalAmount(tableBill, discountType, discount);
           return (Math.round(total * 100) / 100).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', maximumFractionDigits: 2 });
         })()}</span>
       </div>
@@ -11900,9 +12038,10 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         </div>
         <button type="button" onClick={async(ev)=>{
           if(!newStaff.name||!newStaff.contact||!newStaff.baseSalary) return showNotif('Fill all required fields','error');
+          if(!(Number(newStaff.baseSalary)>0)) return showNotif('Enter a valid monthly salary','error'); // a negative / non-numeric salary was accepted and broke payroll totals
           const enrollBtn=ev.currentTarget; if(enrollBtn.dataset.busy) return; enrollBtn.dataset.busy='1';
           try {
-            const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
+            const res=await axios.post(`${BASE_URL}/staff/register`,{...newStaff,tenantId,age:newStaff.age===''?undefined:Number(newStaff.age),baseSalary:Number(newStaff.baseSalary)});
             if(newStaff.role==='Waiter'&&newStaff.assignedTables.length>0){
               // If only the table assignment failed the staff member already exists: the generic "Failed to enroll" made operators
               // register them again (duplicate roster entry).
@@ -12131,6 +12270,8 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                               const perDay=Number(m.baseSalary)/26;
                               // 30/31 attended days of a /26 per-day rate paid MORE than the monthly salary; pay is capped at the base salary.
                               const net=Math.min(Math.round(Number(m.baseSalary)||0),Math.round(perDay*workDays));
+                              // No attendance rows (not recorded, or the month failed to load) would have recorded a ₹0 salary as PAID.
+                              if(workDays===0||net<=0){showNotif('No attendance found for this month — nothing to pay yet','error');return;}
                               setConfirmModal({
                                 show:true,
                                 title:`Pay ${pureName}?`,
@@ -12796,6 +12937,10 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       <button type="button" disabled={isSubmittingRestock} onClick={async () => {
         if (isSubmittingRestock) return;
         if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif("Name and quantity are required", "error");
+        // "0", "-5" and non-numeric text are all truthy strings: they used to be sent and could REDUCE stock / poison the weighted-average cost.
+        if (!(Number(newInventoryItem.currentStock) > 0)) return showNotif("Quantity must be a number greater than 0", "error");
+        if (newInventoryItem.purchasePrice !== '' && newInventoryItem.purchasePrice != null && !(Number(newInventoryItem.purchasePrice) >= 0)) return showNotif("Purchase price can't be negative", "error");
+        if (newInventoryItem.costPrice !== '' && newInventoryItem.costPrice != null && !(Number(newInventoryItem.costPrice) >= 0)) return showNotif("Cost price can't be negative", "error");
         if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
         setIsSubmittingRestock(true);
         try {
@@ -12827,7 +12972,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           setInventorySuggestions([]);
           setShowSuggestions(false);
           fetchManagementData();
-        } catch { showNotif("Failed to add ingredient", "error"); }
+        } catch (err) { showNotif(err?.response?.data?.error || "Failed to add ingredient", "error"); }
         finally { setIsSubmittingRestock(false); }
       }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#0c0c0c', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: isSubmittingRestock ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isSubmittingRestock ? 0.55 : 1 }}>
         {isSubmittingRestock ? 'SAVING…' : selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
@@ -13789,8 +13934,13 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 if (!activeRecipeItemId) return showNotif('Select a menu item first', 'error');
                 const valid = recipeIngredientRows.filter(r => r.inventoryId && r.quantityUsed);
                 if (!valid.length) return showNotif('Add at least one ingredient', 'error');
+                // "-5" / "abc" / "0" are truthy strings: a bad quantity made every sale of this dish ADD stock back or deduct NaN.
+                if (valid.some(r => !(Number(r.quantityUsed) > 0))) return showNotif('Each ingredient quantity must be a number greater than 0', 'error');
+                // The same ingredient picked on two rows is one ingredient: add the quantities instead of sending two entries.
+                const mergedIngredients = [...valid.reduce((m, r) => m.set(String(r.inventoryId), (m.get(String(r.inventoryId)) || 0) + Number(r.quantityUsed)), new Map())]
+                  .map(([inventoryId, quantityUsed]) => ({ inventoryId, quantityUsed }));
                 try {
-                  await axios.post(`${BASE_URL}/recipes/save`, { tenantId, menuItemId: activeRecipeItemId, ingredients: valid.map(r => ({ inventoryId: r.inventoryId, quantityUsed: Number(r.quantityUsed) })) });
+                  await axios.post(`${BASE_URL}/recipes/save`, { tenantId, menuItemId: activeRecipeItemId, ingredients: mergedIngredients });
                   const recipesRes = await axios.get(`${BASE_URL}/recipes/${tenantId}`);
                   setRecipes(recipesRes.data || []);
                   showNotif('Recipe saved');
@@ -14106,9 +14256,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       <div style={{display:'flex',gap:'5px'}}>
                         {entry.status==='pending' && (
                           <button type="button" onClick={async()=>{
-                            await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed', tenantId});
-                            fetchCounterQueue();
-                            showNotif(`${entry.customerName} confirmed`);
+                            try {
+                              await axios.patch(`${BASE_URL}/reservations/${entry._id}`,{status:'confirmed', tenantId});
+                              fetchCounterQueue();
+                              showNotif(`${entry.customerName} confirmed`);
+                            } catch (err) { showNotif(err.response?.data?.error || 'Could not confirm the reservation', 'error'); }
                           }} style={{padding:'4px 10px',background:'linear-gradient(135deg,#d3bfa2,#bda88a)',border:'none',color:'#0c0c0c',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
                             CONFIRM
                           </button>
@@ -14410,6 +14562,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         <button type="button" onClick={async()=>{
           if(!newExtraItem.name?.trim())return showNotif('Item name is required','error');
           if(!newExtraItem.price||Number(newExtraItem.price)<=0)return showNotif('Valid price is required','error');
+          if(Number(newExtraItem.currentStock)<0||Number(newExtraItem.costPrice)<0)return showNotif('Stock and cost cannot be negative','error'); // negative opening stock was accepted
+          if(pickupFiringRef.current.has('extra-create'))return; // double-click registered the item twice
+          pickupFiringRef.current.add('extra-create');
           try {
             await axios.post(`${BASE_URL}/extra-items/${tenantId}`,{
               name:newExtraItem.name.trim(),category:newExtraItem.category,
@@ -14420,6 +14575,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             setNewExtraItem({name:'',category:'Cold Drinks',price:'',costPrice:'',unit:'piece',currentStock:'',description:'',isAvailable:true,image:''});
             showNotif(`${newExtraItem.name} added to catalog`);fetchExtraItems();
           } catch(err){showNotif(err.response?.data?.error||'Failed to add item','error');}
+          finally{pickupFiringRef.current.delete('extra-create');}
         }} style={{
           padding:'10px 24px',
           background:'linear-gradient(135deg,#d3bfa2,#bda88a)',
@@ -14629,9 +14785,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   {/* Hide/Show + Edit + Delete */}
                   <div style={{display:'flex',gap:'6px'}}>
                     <button type="button" onClick={async()=>{
-                      await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`,{isAvailable:!item.isAvailable,tenantId});
-                      fetchExtraItems();
-                      showNotif(`${item.name} ${!item.isAvailable?'shown on menu':'hidden'}`);
+                      try {
+                        await axios.patch(`${BASE_URL}/extra-items/item/${item._id}`,{isAvailable:!item.isAvailable,tenantId});
+                        fetchExtraItems();
+                        showNotif(`${item.name} ${!item.isAvailable?'shown on menu':'hidden'}`);
+                      } catch (err) { showNotif(err.response?.data?.error || 'Could not update the item', 'error'); }
                     }} style={{
                       flex:1,padding:'8px 6px',
                       background:item.isAvailable?'#0d0d0d':'rgba(236,220,185,0.05)',
@@ -14742,15 +14900,20 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           <div style={{display:'flex',gap:'12px',paddingTop:'16px',borderTop:'1px solid rgba(211,191,162,0.12)'}}>
             <button type="button" onClick={() => setReservationEditModal(null)} style={styles.cancelBtn}>CANCEL</button>
             <button type="button" onClick={async () => {
-              await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
-                tenantId,
-                status: reservationEditModal.status,
-                tablePreference: reservationEditModal.tablePreference,
-                specialRequests: reservationEditModal.specialRequests
-              });
-              fetchCounterQueue();
-              showNotif(`Reservation updated for ${reservationEditModal.customerName}`);
-              setReservationEditModal(null);
+              if (pickupFiringRef.current.has('res-edit')) return; // double-click saved twice
+              pickupFiringRef.current.add('res-edit');
+              try {
+                await axios.patch(`${BASE_URL}/reservations/${reservationEditModal._id}`, {
+                  tenantId,
+                  status: reservationEditModal.status,
+                  tablePreference: reservationEditModal.tablePreference,
+                  specialRequests: reservationEditModal.specialRequests
+                });
+                fetchCounterQueue();
+                showNotif(`Reservation updated for ${reservationEditModal.customerName}`);
+                setReservationEditModal(null);
+              } catch (err) { showNotif(err.response?.data?.error || 'Could not save the reservation', 'error'); }
+              finally { pickupFiringRef.current.delete('res-edit'); }
             }} style={{...styles.confirmBtn, flex:2}}>SAVE CHANGES</button>
           </div>
         </div>
@@ -14905,7 +15068,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               <p style={{color:'#c2c2c2',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>{confirmModal.subtitle}</p>
               <div style={{display:'flex',gap:'12px'}}>
                 <button type="button" onClick={()=>setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null})} style={styles.cancelBtn}>CANCEL</button>
-                <button type="button" onClick={()=>{if(confirmModal.onConfirm)confirmModal.onConfirm();setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null});}} style={styles.confirmBtn}>CONFIRM</button>
+                <button type="button" onClick={()=>{const run=confirmModal.onConfirm;setConfirmModal({show:false,title:'',subtitle:'',onConfirm:null});if(run){Promise.resolve().then(run).catch(err=>{console.error('Confirm action failed:',err);showNotif(err?.response?.data?.error||'That action failed — please try again','error');});}}} style={styles.confirmBtn}>CONFIRM</button>
               </div>
             </motion.div>
           </div>
@@ -15248,6 +15411,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 const priceMode = newDish._priceMode || 'single';
                 if(priceMode==='single' && !newDish.price) return showNotif("Price is required","error");
                 if(priceMode==='half-full' && (!newDish.priceHalf||!newDish.priceFull)) return showNotif("Both Half and Full prices required","error");
+                // "-50" / "abc" are truthy: dishes could be created with a negative or NaN price.
+                if(priceMode==='single' && !(Number(newDish.price)>0)) return showNotif("Price must be greater than 0","error");
+                if(priceMode==='half-full' && (!(Number(newDish.priceHalf)>0)||!(Number(newDish.priceFull)>0))) return showNotif("Half and Full prices must be greater than 0","error");
+                if(pickupFiringRef.current.has('add-dish')) return; // a double-click created the dish twice
+                pickupFiringRef.current.add('add-dish');
                 try {
                   const payload = {
                     tenantId,
@@ -15274,8 +15442,8 @@ setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',
                   fetchManagementData();
                 } catch(err) {
                   console.error(err);
-                  showNotif("Failed to add dish","error");
-                }
+                  showNotif(err?.response?.data?.error || "Failed to add dish","error");
+                } finally { pickupFiringRef.current.delete('add-dish'); }
               }}
               style={{...styles.confirmBtn,flex:2,letterSpacing:'1px'}}>
               REGISTER DISH
@@ -15939,7 +16107,7 @@ onClick={async () => {
                   `PURCHASE ORDER`,
                   `Date: ${today}`,
                   `─────────────────────────────`,
-                  `From: Jay Ambe Multi Fusion`,
+                  `From: ${tenantConfig?.name || tenantId}`,
                   `To:   ${vendor}`,
                   `─────────────────────────────`,
                   `Item:     ${item?.itemName}`,
@@ -15990,7 +16158,7 @@ onClick={async () => {
                   `PURCHASE ORDER`,
                   `Date: ${today}`,
                   `─────────────────────────────`,
-                  `From: Jay Ambe Multi Fusion`,
+                  `From: ${tenantConfig?.name || tenantId}`,
                   `To:   ${vendor}`,
                   `─────────────────────────────`,
                   `Item:     ${item?.itemName}`,
@@ -16006,8 +16174,8 @@ onClick={async () => {
                   `Generated via Pratyeksha POS`,
                 ].filter(Boolean).join('\n');
 
-                navigator.clipboard.writeText(text).then(() => {
-                  setPurchaseOrderModal(p => ({ ...p, copySuccess: true }));
+                (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard API'))).then(() => {
+                  setPurchaseOrderModal(p => p ? ({ ...p, copySuccess: true }) : null);
                   setTimeout(() => setPurchaseOrderModal(p => p ? { ...p, copySuccess: false } : null), 3000);
                 }).catch(() => {
                   // Fallback for browsers without clipboard API
@@ -16017,7 +16185,7 @@ onClick={async () => {
                   el.select();
                   document.execCommand('copy');
                   document.body.removeChild(el);
-                  setPurchaseOrderModal(p => ({ ...p, copySuccess: true }));
+                  setPurchaseOrderModal(p => p ? ({ ...p, copySuccess: true }) : null);
                   setTimeout(() => setPurchaseOrderModal(p => p ? { ...p, copySuccess: false } : null), 3000);
                 });
               }}
@@ -16050,7 +16218,7 @@ onClick={async () => {
 
                 const waText = encodeURIComponent(
                   `*PURCHASE ORDER* — ${today}\n` +
-                  `*From:* Jay Ambe Multi Fusion\n` +
+                  `*From:* ${tenantConfig?.name || tenantId}\n` +
                   (vendor ? `*To:* ${vendor}\n` : '') +
                   `\n` +
                   `*Item:* ${item?.itemName}\n` +
@@ -16063,7 +16231,7 @@ onClick={async () => {
                   `\n_Sent via Pratyeksha POS_`
                 );
 
-                window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, '_blank');
+                window.open(`https://wa.me/?text=${waText}`, '_blank', 'noopener'); // waText is already encoded: encoding it again sent literal %0A / %20 to the supplier
               }}
               style={{
                 flex: 1, padding: '13px', borderRadius: '10px',

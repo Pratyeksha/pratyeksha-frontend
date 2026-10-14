@@ -251,7 +251,7 @@ const ClientStatusDot = ({ client }) => {
   const base = { width: 7, height: 7, borderRadius: '50%', display: 'inline-block', flexShrink: 0 };
   const st = subOf(client).state;
   if (st === 'expiring') return <span style={{ ...base, background: STATE_META.expiring.color, animation: 'pulse-slow 2s infinite' }} />;
-  return <span style={{ ...base, background: STATE_META[st].color }} />;
+  return <span style={{ ...base, background: (STATE_META[st] || STATE_META.unset).color }} />;
 };
 
 /* Section heading inside forms/drawers */
@@ -761,9 +761,11 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
   };
 
   const hasContent = (pending.categories?.length > 0) || (pending.menuItems?.length > 0);
+  const canImport = hasContent;
 
   const runImport = async () => {
-    if (!hasContent) return;
+    if (!canImport) return;
+    if (mode === 'replace' && !window.confirm(`Replace the menu for ${target.tenantName}?\n\nDishes that are not in the uploaded file will be removed (dishes that are in it keep their recipes). This cannot be undone.`)) return;
     setImporting(true); setError('');
     try {
       const res = await axios.post(`${BASE_URL}/admin/master/import-menu/${encodeURIComponent(target.tenantId)}?mode=${encodeURIComponent(mode)}`, {
@@ -819,15 +821,15 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
             </div>
             {mode === 'replace' && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 8, fontSize: 11, color: C.danger }}>
-                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> This deletes every existing category and menu item for this client first. Cannot be undone.
+                <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} /> Dishes that are not in the uploaded files are removed (dishes in the file keep their recipes). Cannot be undone.
               </div>
             )}
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <button type="button" onClick={runImport} disabled={!hasContent || importing} className="p-btn-shimmer" style={{
-              flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!hasContent || importing) ? 'not-allowed' : 'pointer',
-              background: (!hasContent || importing) ? C.bgCard2 : '#d3bfa2', color: (!hasContent || importing) ? C.textDim : '#0f0f11',
+            <button type="button" onClick={runImport} disabled={!canImport || importing} className="p-btn-shimmer" style={{
+              flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: (!canImport || importing) ? 'not-allowed' : 'pointer',
+              background: (!canImport || importing) ? C.bgCard2 : '#d3bfa2', color: (!canImport || importing) ? C.textDim : '#0f0f11',
               fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
             }}>{importing ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Importing…</> : <><Upload size={14} /> Import</>}</button>
             <button type="button" onClick={onClose} disabled={importing} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -1029,8 +1031,16 @@ export default function PratyekshaMasterAdmin() {
 
   /* ── onboard ── */
   const handleOnboard = async () => {
-    if (!onboarding.name || !onboarding.username || !onboarding.password) {
+    if (!String(onboarding.name || '').trim() || !String(onboarding.username || '').trim() || !onboarding.password) {
       setOnboardError('Restaurant name, username and password are required.'); return;
+    }
+    // A blank field is Number('') === 0: the tenant would be created billing 0% GST (or with no tables).
+    const taxNum = Number(onboarding.taxPercentage), tablesNum = Number(onboarding.tableCount);
+    if (String(onboarding.taxPercentage).trim() === '' || !Number.isFinite(taxNum) || taxNum < 0 || taxNum > 40) {
+      setOnboardError('Enter a GST percentage between 0 and 40.'); return;
+    }
+    if (String(onboarding.tableCount).trim() === '' || !Number.isInteger(tablesNum) || tablesNum < 1) {
+      setOnboardError('Number of tables must be a whole number of at least 1.'); return;
     }
     if (onboarding.password !== onboarding.confirmPassword) {
       setOnboardError('Passwords do not match.'); return;
@@ -1092,6 +1102,13 @@ export default function PratyekshaMasterAdmin() {
     if (notifCompose.target === 'all') tenantIds = 'ALL';
     else if (!notifCompose.tenantId) { flash('Pick a client to notify', 'error'); return; }
     else tenantIds = notifCompose.tenantId;
+
+    // "Schedule" with no (or an unparsable / past) time used to fall through to scheduledAt = undefined, i.e. send NOW to everyone.
+    if (notifCompose.sendMode === 'schedule') {
+      const when = notifCompose.scheduledAt ? new Date(notifCompose.scheduledAt) : null;
+      if (!when || Number.isNaN(when.getTime())) { flash('Pick the date and time to send this', 'error'); return; }
+      if (when.getTime() <= Date.now()) { flash('Scheduled time must be in the future', 'error'); return; }
+    }
 
     setNotifSending(true);
     try {
@@ -1332,7 +1349,7 @@ export default function PratyekshaMasterAdmin() {
           <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
             {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).map(c => (
               <div key={c._id || c.tenantId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard, border:`1px solid ${C.border}` }}>
-                <div style={{ width:7, height:7, borderRadius:'50%', background:STATE_META[subOf(c).state].color, flexShrink:0 }} />
+                <div style={{ width:7, height:7, borderRadius:'50%', background:(STATE_META[subOf(c).state] || STATE_META.unset).color, flexShrink:0 }} />
                 <div style={{ flex:1, minWidth:0, textAlign:'left' }}>
                   <div style={{ fontSize:11.5, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:10, color:C.textDim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.tenantId}</div>
