@@ -375,17 +375,21 @@ function usePwaInstall() {
 function useCountUp(target, duration = 700) {
   const numericTarget = Number(target) || 0;
   const [display, setDisplay] = useState(numericTarget);
-  const prevRef = useRef(numericTarget);
+  // Start every animation from what is on screen. It used to start from the last *completed* target, so changing the
+  // value again mid-animation jumped, and returning to the previous value left the half-animated number stuck.
+  const displayRef = useRef(numericTarget);
   useEffect(() => {
-    const start = prevRef.current, end = numericTarget;
-    if (start === end) return;
+    const start = displayRef.current, end = numericTarget;
+    if (start === end) { setDisplay(end); return undefined; }
     let startTime = null, raf;
     const step = (ts) => {
       if (!startTime) startTime = ts;
       const progress = Math.min(1, (ts - startTime) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(start + (end - start) * eased));
-      if (progress < 1) raf = requestAnimationFrame(step); else prevRef.current = end;
+      const v = progress >= 1 ? end : Math.round(start + (end - start) * eased);
+      displayRef.current = v;
+      setDisplay(v);
+      if (progress < 1) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
@@ -480,7 +484,7 @@ const Toast = ({ toast }) => (
 const ConfirmModal = ({ data, onClose, onConfirm }) => {
   const [busy, setBusy] = useState(false);
   if (!data) return null;
-  const run = async () => { setBusy(true); await onConfirm(); setBusy(false); };
+  const run = async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }; // a throwing onConfirm left the button locked on "Working…" forever
   return (
     <ModalShell title={data.title} icon={data.icon || AlertTriangle} onClose={onClose} width={380}>
       <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.6, marginBottom: 20 }}>{data.message}</div>
@@ -507,11 +511,26 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
   const [paidAt, setPaidAt] = useState(todayIST());
   const [method, setMethod] = useState('UPI');
   const [note, setNote] = useState('');
+  const [formErr, setFormErr] = useState('');
   // This component stays mounted while closed, so the previous client's duration/amount were pre-filled for the next one
   // and could be confirmed by mistake as that client's payment. Reset whenever a different client is opened.
-  useEffect(() => { if (client) { setMonths('12'); setAmount('1200'); setProducts({ pratyeksha: client.config?.products?.pratyeksha !== false, feedbackSuite: client.config?.products?.feedbackSuite === true, whatsappCampaigns: client.config?.products?.whatsappCampaigns === true }); setFeedbackAdminEmail(client.config?.feedbackAdmin?.email || ''); setFeedbackAdminPassword(''); setCampaignStudioPassword(''); setPaidAt(todayIST()); setMethod('UPI'); setNote(''); setBusy(false); } }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (client) { setMonths('12'); setAmount('1200'); setProducts({ pratyeksha: client.config?.products?.pratyeksha !== false, feedbackSuite: client.config?.products?.feedbackSuite === true, whatsappCampaigns: client.config?.products?.whatsappCampaigns === true }); setFeedbackAdminEmail(client.config?.feedbackAdmin?.email || ''); setFeedbackAdminPassword(''); setCampaignStudioPassword(''); setPaidAt(todayIST()); setMethod('UPI'); setNote(''); setFormErr(''); setBusy(false); } }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!client) return null;
-  const submit = async () => { if (!products.pratyeksha && !products.feedbackSuite) return; if (products.feedbackSuite && (!feedbackAdminEmail || (!client.config?.feedbackAdmin?.passwordConfigured && feedbackAdminPassword.length < 10))) return; if (products.whatsappCampaigns && (!client.config?.feedbackAdmin?.campaignPasswordConfigured && campaignStudioPassword.length < 10)) return; setBusy(true); await onSubmit(Number(months), Number(amount), products, { feedbackAdminEmail, feedbackAdminPassword, campaignStudioPassword }, { paidAt, paymentMethod: method, paymentNote: note }); setBusy(false); };
+  const submit = async () => {
+    // Every failed check used to just `return` with no message, so the button looked dead; fractional / huge month counts also went through.
+    const m = Number(months), amt = Number(amount);
+    if (!products.pratyeksha && !products.feedbackSuite) { setFormErr('Select at least one product.'); return; }
+    if (!Number.isInteger(m) || m < 1 || m > 120) { setFormErr('Plan duration must be a whole number of months between 1 and 120.'); return; }
+    if (String(amount).trim() === '' || !Number.isFinite(amt) || amt < 0) { setFormErr('Enter the amount received (0 or more).'); return; }
+    if (paidAt && paidAt > todayIST()) { setFormErr('Payment date cannot be in the future.'); return; }
+    if (products.feedbackSuite && !String(feedbackAdminEmail).trim()) { setFormErr('Feedback admin email is required.'); return; }
+    if (products.feedbackSuite && !client.config?.feedbackAdmin?.passwordConfigured && feedbackAdminPassword.length < 10) { setFormErr('Feedback admin password must be at least 10 characters.'); return; }
+    if (products.feedbackSuite && feedbackAdminPassword && feedbackAdminPassword.length < 10) { setFormErr('Feedback admin password must be at least 10 characters.'); return; }
+    if (products.whatsappCampaigns && !client.config?.feedbackAdmin?.campaignPasswordConfigured && campaignStudioPassword.length < 10) { setFormErr('Campaign Studio password must be at least 10 characters.'); return; }
+    setFormErr(''); setBusy(true);
+    try { await onSubmit(m, amt, products, { feedbackAdminEmail: String(feedbackAdminEmail).trim(), feedbackAdminPassword, campaignStudioPassword }, { paidAt, paymentMethod: method, paymentNote: note }); }
+    finally { setBusy(false); }
+  };
   return (
     <ModalShell title={`Renew — ${client.name}`} icon={RotateCcw} onClose={onClose} width={380}>
       <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
@@ -561,6 +580,7 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
           </LabeledInput>}
         </div>}
       </div>
+      {formErr && <div style={{ fontSize: 12, color: C.danger, marginBottom: 12 }}>{formErr}</div>}
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="button" onClick={submit} disabled={busy || !months || !amount || (!products.pratyeksha && !products.feedbackSuite)} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
@@ -632,7 +652,7 @@ const SubscriptionModal = ({ client, onClose, onChanged, onRenew, onToggle, flas
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" disabled={busy || !expiry} onClick={() => save(expiry, 'Expiry updated')} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !expiry ? 0.6 : 1 }}>Save expiry</button>
-              <button type="button" disabled={busy} onClick={() => save(todayIST(), 'Plan ended — client is now locked')} style={{ padding: '9px 14px', borderRadius: 8, border: `1px solid ${C.borderMid}`, background: 'transparent', color: C.textMid, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Expire today</button>
+              <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Expire ${client.name} at the end of today (India time)? Their apps will lock at midnight unless you renew.`)) save(todayIST(), 'Plan will expire at the end of today (India time)'); }} style={{ padding: '9px 14px', borderRadius: 8, border: `1px solid ${C.borderMid}`, background: 'transparent', color: C.textMid, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Expire today</button>
               <span style={{ fontSize: 11, color: C.textDim, alignSelf: 'center' }}>A date means the end of that day (India time).</span>
             </div>
           </div>
@@ -688,6 +708,10 @@ const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) =
         const json = JSON.parse(e.target.result);
         const arr = Array.isArray(json) ? json : Array.isArray(json[arrayKey]) ? json[arrayKey] : null;
         if (!arr) { setError(`No array found (expected either a bare [...] array, or {"${arrayKey}": [...]})`); onParsed(null); return; }
+        // Catch the two files being dropped into the wrong slots: dishes carry a price, categories never do.
+        if (arr.some(x => !x || typeof x !== 'object' || Array.isArray(x))) { setError('Every entry must be an object ({...}).'); onParsed(null); return; }
+        if (arr.length > 0 && arrayKey === 'categories' && arr.every(x => 'price' in x)) { setError('This looks like a menu items file (entries have a price). Drop it in the Menu Items box.'); onParsed(null); return; }
+        if (arr.length > 0 && arrayKey === 'menuItems' && arr.every(x => !('price' in x))) { setError('This looks like a categories file (no prices). Drop it in the Categories box.'); onParsed(null); return; }
         setCount(arr.length);
         onParsed(arr);
       } catch (err) { setError('Not valid JSON.'); onParsed(null); }
@@ -877,6 +901,37 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
 /* ════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════ */
+/* Module-level on purpose: declared inside the page component it was a new component type on every render, so the whole
+   sidebar remounted on every state change (each keystroke in any form). */
+const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
+    const isActive = active===id;
+    return (
+      <button type="button" onClick={()=>onNav(id)} className="p-nav-item" style={{
+        width:'100%', display:'flex', alignItems:'center', gap:9,
+        padding:'9px 10px', borderRadius:8, cursor:'pointer', border:'none',
+        background: isActive ? 'rgba(211,191,162,0.06)' : 'transparent',
+        color: isActive ? '#d3bfa2' : C.textDim,
+        fontSize:13, fontWeight: isActive ? 600 : 400,
+        textAlign:'left', outline:'none',
+        /* active left bar in light gold */
+        borderLeft: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
+        transition:'all 0.12s',
+      }}>
+        <Icon size={15} strokeWidth={isActive ? 2 : 1.5} style={{ flexShrink:0 }} />
+        <span style={{ flex:1 }}>{label}</span>
+        {count !== undefined && count > 0 && (
+          <span style={{
+            fontSize:11, fontWeight:700, padding:'1px 7px', borderRadius:99,
+            /* urgent badge: dark amber bg, light gold text */
+            background: urgent ? 'rgba(138,112,77,0.15)' : C.bgCard2,
+            color: urgent ? '#d3bfa2' : C.textDim,
+            border: `1px solid ${urgent ? 'rgba(211,191,162,0.22)' : C.border}`,
+          }}>{count}</span>
+        )}
+      </button>
+    );
+  };
+
 export default function PratyekshaMasterAdmin() {
   useAdminGlobalStyles();
   const [activeSection, setActiveSection] = useState('demos');
@@ -908,12 +963,17 @@ export default function PratyekshaMasterAdmin() {
   const [copied,         setCopied]         = useState('');
   const [onboardCategories, setOnboardCategories] = useState(null); // parsed array | null
   const [onboardMenuItems,  setOnboardMenuItems]  = useState(null);
+  const [onboardUploadKey, setOnboardUploadKey] = useState(0); // remounts the dropzones, which keep their own "file loaded" state
 
   const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
   const flash = useCallback((msg, tone = 'success') => {
     setToast({ msg, tone });
-    setTimeout(() => setToast(null), 3400);
+    // Each toast used to schedule its own clear, so an older timer wiped a newer message (an error could vanish instantly).
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3400);
   }, []);
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   const [confirmModal, setConfirmModal] = useState(null);
   const [renewClient,  setRenewClient]  = useState(null);
   const [planClient,   setPlanClient]   = useState(null);
@@ -949,9 +1009,9 @@ export default function PratyekshaMasterAdmin() {
       ]);
       setClients(cRes.data || []);
       setStats(sRes.data || {});
-    } catch(e){ console.error(e); }
+    } catch(e){ console.error(e); flash(e?.response?.data?.error || 'Could not load clients. Check the connection and refresh.', 'error'); }
     finally{ setLoading(false); }
-  }, []);
+  }, [flash]);
 
   const fetchDemos = useCallback(async () => {
     setDemoLoading(true);
@@ -963,6 +1023,14 @@ export default function PratyekshaMasterAdmin() {
   }, []);
 
   useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); fetchExpenses(); }, []);
+  // selectedDemo is a copy taken when the row was clicked: after a refresh the drawer kept showing the old status / details.
+  useEffect(() => {
+    setSelectedDemo(cur => {
+      if (!cur) return cur;
+      const fresh = demoRequests.find(r => r._id === cur._id);
+      return fresh && fresh !== cur ? fresh : cur;
+    });
+  }, [demoRequests]);
 
   /* ── helpers ── */
   const getClientStatus = (c) => STATE_META[subOf(c).state] || STATE_META.active;
@@ -1009,7 +1077,7 @@ export default function PratyekshaMasterAdmin() {
       await axios.patch(`${BASE_URL}/admin/master/demo-requests/${id}`);
       setDemoRequests(p => p.map(r => r._id===id ? {...r, status:'Demo Given'} : r));
       if (selectedDemo?._id===id) setSelectedDemo(p => ({...p, status:'Demo Given'}));
-    } catch(e){ console.error(e); }
+    } catch(e){ console.error(e); flash(e?.response?.data?.error || 'Could not update the request. Try again.', 'error'); }
   };
 
   const updateStatus = async (id, status) => {
@@ -1017,16 +1085,26 @@ export default function PratyekshaMasterAdmin() {
       await axios.patch(`${BASE_URL}/admin/master/demo-requests/${id}`, { status });
       setDemoRequests(p => p.map(r => r._id===id ? {...r, status} : r));
       if (selectedDemo?._id===id) setSelectedDemo(p => ({...p, status}));
-    } catch(e){ console.error(e); }
+    } catch(e){ console.error(e); flash(e?.response?.data?.error || 'Could not update the status. Try again.', 'error'); }
   };
 
   const navTo = (sec) => { setActiveSection(sec); setSidebarOpen(false); setSelectedDemo(null); };
   const refresh = () => { fetchData(); fetchDemos(); };
 
+  const copyTimerRef = useRef(null);
   const copyText = (text, key) => {
-    navigator.clipboard.writeText(text).catch(()=>{});
+    // navigator.clipboard is undefined on plain-http pages and some older browsers: the bare call threw and copied nothing.
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      } catch { flash('Copy failed — select and copy it manually', 'error'); }
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(fallback); else fallback();
     setCopied(key);
-    setTimeout(()=>setCopied(''), 2000);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(()=>setCopied(''), 2000);
   };
 
   /* ── onboard ── */
@@ -1048,6 +1126,12 @@ export default function PratyekshaMasterAdmin() {
     if (onboarding.password.length < 6) {
       setOnboardError('Password must be at least 6 characters.'); return;
     }
+    if (onboarding.products?.feedbackSuite) {
+      if (!String(onboarding.feedbackAdminEmail || '').trim()) { setOnboardError('Feedback admin email is required for the Feedback Suite.'); return; }
+      if ((onboarding.feedbackAdminPassword || '').length < 10) { setOnboardError('Feedback admin password must be at least 10 characters.'); return; }
+      if (onboarding.products?.whatsappCampaigns && (onboarding.campaignStudioPassword || '').length < 10) { setOnboardError('Campaign Studio password must be at least 10 characters.'); return; }
+    }
+    if (!onboarding.products?.pratyeksha && !onboarding.products?.feedbackSuite) { setOnboardError('Select at least one product.'); return; }
     setOnboardLoading(true); setOnboardError('');
     try {
       const res = await axios.post(`${BASE_URL}/admin/master/onboard`, {
@@ -1069,6 +1153,7 @@ export default function PratyekshaMasterAdmin() {
       });
       setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' });
       setOnboardCategories(null); setOnboardMenuItems(null);
+      setOnboardUploadKey(k => k + 1); // the dropzones kept showing the previous client's files as loaded
       fetchData();
     } catch(err) {
       setOnboardError(err.response?.data?.error || 'Onboarding failed.');
@@ -1097,7 +1182,8 @@ export default function PratyekshaMasterAdmin() {
   }, []);
 
   const sendNotification = async () => {
-    if (!notifCompose.title || !notifCompose.message) { flash('Title and message are required', 'error'); return; }
+    if (!notifCompose.title.trim() || !notifCompose.message.trim()) { flash('Title and message are required', 'error'); return; }
+    if (!Array.isArray(notifCompose.audience) || notifCompose.audience.length === 0) { flash('Choose who should receive it (owner and/or operator)', 'error'); return; }
     let tenantIds;
     if (notifCompose.target === 'all') tenantIds = 'ALL';
     else if (!notifCompose.tenantId) { flash('Pick a client to notify', 'error'); return; }
@@ -1110,12 +1196,15 @@ export default function PratyekshaMasterAdmin() {
       if (when.getTime() <= Date.now()) { flash('Scheduled time must be in the future', 'error'); return; }
     }
 
+    // One click used to broadcast to every client immediately.
+    if (notifCompose.target === 'all' && !window.confirm(notifCompose.sendMode === 'schedule' ? 'Schedule this notification for ALL clients?' : 'Send this notification to ALL clients right now?')) return;
+
     setNotifSending(true);
     try {
       const scheduledAt = notifCompose.sendMode === 'schedule' && notifCompose.scheduledAt
         ? new Date(notifCompose.scheduledAt).toISOString() : undefined;
       await axios.post(`${BASE_URL}/admin/master/notifications`, {
-        tenantIds, title: notifCompose.title, message: notifCompose.message,
+        tenantIds, title: notifCompose.title.trim(), message: notifCompose.message.trim(),
         audience: notifCompose.audience, severity: notifCompose.severity, scheduledAt
       });
       flash(scheduledAt ? 'Notification scheduled' : 'Notification sent');
@@ -1149,7 +1238,10 @@ export default function PratyekshaMasterAdmin() {
   };
 
   const submitExpense = async () => {
-    if (!expenseForm.label || !expenseForm.amount) { flash('Label and amount are required', 'error'); return; }
+    if (!String(expenseForm.label).trim() || String(expenseForm.amount).trim() === '') { flash('Label and amount are required', 'error'); return; }
+    const amt = Number(expenseForm.amount);
+    if (!Number.isFinite(amt) || amt <= 0) { flash('Amount must be a number greater than 0', 'error'); return; }
+    if (!expenseForm.date) { flash('Pick the expense date', 'error'); return; }
     setExpenseSaving(true);
     try {
       if (editingExpenseId) {
@@ -1168,18 +1260,24 @@ export default function PratyekshaMasterAdmin() {
   const editExpense = (exp) => {
     setExpenseForm({
       category: exp.category, label: exp.label, amount: String(exp.amount),
-      date: new Date(exp.date).toISOString().slice(0, 10), recurring: !!exp.recurring,
+      date: (exp.date && !Number.isNaN(new Date(exp.date).getTime()) ? new Date(exp.date).toISOString() : new Date(Date.now() + 330 * 60000).toISOString()).slice(0, 10), recurring: !!exp.recurring,
       recurringInterval: exp.recurringInterval || 'monthly', vendor: exp.vendor || '', notes: exp.notes || ''
     });
     setEditingExpenseId(exp._id);
   };
 
   const deleteExpense = async (id) => {
-    try { await axios.delete(`${BASE_URL}/admin/master/expenses/${id}`); fetchExpenses(); flash('Expense removed'); }
+    if (!window.confirm('Remove this expense? This cannot be undone.')) return;
+    try {
+      await axios.delete(`${BASE_URL}/admin/master/expenses/${id}`);
+      if (editingExpenseId === id) resetExpenseForm(); // otherwise the next Save PUT a record that no longer exists
+      fetchExpenses(); flash('Expense removed');
+    }
     catch (e) { flash('Could not remove expense', 'error'); }
   };
 
   /* ── derived ── */
+  const stateCounts = clients.reduce((m, c) => { const st = subOf(c).state; m[st] = (m[st] || 0) + 1; return m; }, {});
   const filteredClients = clients
     .filter(c => {
       const st = subOf(c).state;
@@ -1190,11 +1288,13 @@ export default function PratyekshaMasterAdmin() {
       if (clientFilter==='unset')    return st === 'unset';
       return true;
     })
-    .filter(c => !searchTerm ||
-      c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.tenantId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.address?.city?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    .filter(c => {
+      const q = searchTerm.trim().toLowerCase();
+      return !q ||
+        String(c.name ?? '').toLowerCase().includes(q) ||
+        String(c.tenantId ?? '').toLowerCase().includes(q) ||
+        String(c.address?.city ?? '').toLowerCase().includes(q);
+    });
 
   const demoCounts = {
     all:          demoRequests.length,
@@ -1208,7 +1308,7 @@ export default function PratyekshaMasterAdmin() {
     const okSearch = !demoSearch ||
       r.name?.toLowerCase().includes(demoSearch.toLowerCase()) ||
       r.restaurant?.toLowerCase().includes(demoSearch.toLowerCase()) ||
-      r.phone?.includes(demoSearch) ||
+      String(r.phone ?? '').includes(demoSearch.trim()) ||
       r.city?.toLowerCase().includes(demoSearch.toLowerCase());
     return okFilter && okSearch;
   });
@@ -1225,35 +1325,6 @@ export default function PratyekshaMasterAdmin() {
      active:  light gold text + left border + faint bg
      inactive: dim text
   */
-  const NavItem = ({ id, label, icon:Icon, count, urgent }) => {
-    const isActive = activeSection===id;
-    return (
-      <button type="button" onClick={()=>navTo(id)} className="p-nav-item" style={{
-        width:'100%', display:'flex', alignItems:'center', gap:9,
-        padding:'9px 10px', borderRadius:8, cursor:'pointer', border:'none',
-        background: isActive ? 'rgba(211,191,162,0.06)' : 'transparent',
-        color: isActive ? '#d3bfa2' : C.textDim,
-        fontSize:13, fontWeight: isActive ? 600 : 400,
-        textAlign:'left', outline:'none',
-        /* active left bar in light gold */
-        borderLeft: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
-        transition:'all 0.12s',
-      }}>
-        <Icon size={15} strokeWidth={isActive ? 2 : 1.5} style={{ flexShrink:0 }} />
-        <span style={{ flex:1 }}>{label}</span>
-        {count !== undefined && count > 0 && (
-          <span style={{
-            fontSize:11, fontWeight:700, padding:'1px 7px', borderRadius:99,
-            /* urgent badge: dark amber bg, light gold text */
-            background: urgent ? 'rgba(138,112,77,0.15)' : C.bgCard2,
-            color: urgent ? '#d3bfa2' : C.textDim,
-            border: `1px solid ${urgent ? 'rgba(211,191,162,0.22)' : C.border}`,
-          }}>{count}</span>
-        )}
-      </button>
-    );
-  };
-
   /* filter tab active style */
   const filterTab = (isActive) => ({
     padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer',
@@ -1329,15 +1400,15 @@ export default function PratyekshaMasterAdmin() {
           {/* Nav */}
           <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6, paddingLeft:10, flexShrink:0 }}>Navigation</div>
           <div className="no-sb" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, overflowY:'auto', minHeight:0, flex:'0 1 auto', maxHeight:236, paddingRight:2 }}>
-            <NavItem id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
-            <NavItem id="dashboard" label="Dashboard"       icon={BarChart3} />
-            <NavItem id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
-            <NavItem id="onboard"   label="Onboard Client"  icon={UserPlus} />
-            <NavItem id="tracking" label="Tracking" icon={Radar} />
-            <NavItem id="crm" label="Lead CRM" icon={Users} />
-            <NavItem id="notifications" label="Notifications" icon={Bell} />
-            <NavItem id="expenses" label="Operating Costs" icon={Receipt} />
-            <NavItem id="documents" label="Documents" icon={FileText} />
+            <NavItem active={activeSection} onNav={navTo} id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
+            <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard"       icon={BarChart3} />
+            <NavItem active={activeSection} onNav={navTo} id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
+            <NavItem active={activeSection} onNav={navTo} id="onboard"   label="Onboard Client"  icon={UserPlus} />
+            <NavItem active={activeSection} onNav={navTo} id="tracking" label="Tracking" icon={Radar} />
+            <NavItem active={activeSection} onNav={navTo} id="crm" label="Lead CRM" icon={Users} />
+            <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
+            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
+            <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
           </div>
 
           <Div />
@@ -1702,7 +1773,7 @@ export default function PratyekshaMasterAdmin() {
                     <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{stats.expiringSoon} subscription{stats.expiringSoon>1?'s':''} expiring within 30 days</div>
                     <div style={{ fontSize:12, color:C.textDim, marginTop:2 }}>Reach out proactively before expiry</div>
                   </div>
-                  <button type="button" onClick={()=>{ setClientFilter('active'); navTo('clients'); }} style={{
+                  <button type="button" onClick={()=>{ setClientFilter('expiring'); navTo('clients'); }} style={{
                     padding:'6px 12px', background:'rgba(138,112,77,0.08)', border:`1px solid rgba(138,112,77,0.22)`,
                     color:'#8a704d', borderRadius:7, fontSize:12, fontWeight:500, cursor:'pointer',
                   }}>View</button>
@@ -1729,7 +1800,7 @@ export default function PratyekshaMasterAdmin() {
                       <div style={{ height:3, background:C.border, borderRadius:99, overflow:'hidden' }}>
                         {/* bar fill: light gold */}
                         <div style={{ height:'100%', borderRadius:99, background:'#d3bfa2', opacity:0.5,
-                          width:`${Math.min(100,((c.totalPaidAmount||0)/Math.max(clients[0]?.totalPaidAmount||1,1))*100)}%` }} />
+                          width:`${Math.min(100,((c.totalPaidAmount||0)/Math.max(...clients.map(x => x.totalPaidAmount||0), 1))*100)}%` }} />
                       </div>
                     </div>
                   ))}
@@ -1816,11 +1887,12 @@ export default function PratyekshaMasterAdmin() {
             <div className="p-filterbar" style={{ padding:'0 32px' }}>
               {[
                 { id:'all',      label:'All',      count:clients.length },
-                { id:'active',   label:'Active',   count:stats.activeCount  ||0 },
-                { id:'expiring', label:'Expiring', count:stats.expiringSoon  ||0 },
-                { id:'expired',  label:'Expired',  count:stats.expiredCount ||0 },
-                { id:'disabled', label:'Disabled', count:stats.disabledCount||0 },
-                ...((stats.unsetCount||0) > 0 ? [{ id:'unset', label:'No expiry', count:stats.unsetCount }] : []),
+                // Counted with the same subOf() the rows are filtered by: server totals could disagree with the visible list.
+                { id:'active',   label:'Active',   count:(stateCounts.active||0) + (stateCounts.expiring||0) },
+                { id:'expiring', label:'Expiring', count:stateCounts.expiring||0 },
+                { id:'expired',  label:'Expired',  count:stateCounts.expired||0 },
+                { id:'disabled', label:'Disabled', count:stateCounts.disabled||0 },
+                ...((stateCounts.unset||0) > 0 ? [{ id:'unset', label:'No expiry', count:stateCounts.unset }] : []),
               ].map(f => (
                 <button type="button" key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(clientFilter===f.id)}>
                   {f.label}
@@ -2179,7 +2251,7 @@ export default function PratyekshaMasterAdmin() {
                   <div style={{ fontSize:11.5, color:C.textDim, marginBottom:16, lineHeight:1.6 }}>
                     Upload the client's categories and menu items as JSON instead of typing them in by hand — both are optional and independent. Skip this and the client starts with 5 default categories and no dishes.
                   </div>
-                  <DualJsonUpload onChange={({ categories, menuItems }) => { setOnboardCategories(categories); setOnboardMenuItems(menuItems); }} />
+                  <DualJsonUpload key={onboardUploadKey} onChange={({ categories, menuItems }) => { setOnboardCategories(categories); setOnboardMenuItems(menuItems); }} />
                   <a href={`${BASE_URL}/admin/master/menu-template`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:C.textDim, display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none' }}>
                     <FileDown size={12} /> View example template
                   </a>
@@ -2200,7 +2272,7 @@ export default function PratyekshaMasterAdmin() {
                       : <><UserPlus size={14}/> Onboard Client &amp; Generate Access</>
                     }
                   </button>
-                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null);}}
+                  <button type="button" onClick={()=>{setOnboarding({ name:'', businessType:'Restaurant', ownerName:'', contact:'', gstin:'', street:'', city:'', state:'', pincode:'', area:'', landmark:'', mapsUrl:'', tableCount:'12', taxPercentage:'5', username:'', password:'', confirmPassword:'', planMonths:'12', paidAmount:'', paidAt:'', paymentMethod:'UPI', googleReview:'', instaId:'', products:{ pratyeksha:true, feedbackSuite:false, whatsappCampaigns:false }, feedbackAdminEmail:'', feedbackAdminPassword:'', campaignStudioPassword:'' }); setOnboardCategories(null); setOnboardMenuItems(null); setOnboardUploadKey(k => k + 1); setOnboardError('');}}
                     style={{ flex:1, padding:'13px', background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                     Clear
                   </button>
@@ -2330,7 +2402,7 @@ export default function PratyekshaMasterAdmin() {
                         <div style={{ fontSize:10.5, color:C.textFaint, marginTop:6, display:'flex', gap:10, flexWrap:'wrap' }}>
                           <span>{client?.name || n.tenantId}</span>
                           <span>&middot;</span>
-                          <span>{n.audience.join(' + ')}</span>
+                          <span>{(Array.isArray(n.audience) ? n.audience : []).join(' + ') || '—'}</span>
                           <span>&middot;</span>
                           <span>{pending ? `Scheduled ${new Date(n.scheduledAt).toLocaleString()}` : `Delivered ${new Date(n.scheduledAt).toLocaleString()}`}</span>
                         </div>
@@ -2358,7 +2430,9 @@ export default function PratyekshaMasterAdmin() {
                   ['domain','Domain renewal'], ['email','Email / SMTP'], ['qr_stands','QR stand supply'],
                   ['hosting','Hosting / Render'], ['sms_whatsapp','SMS / WhatsApp']
                 ].map(([category,label]) => (
-                  <button type="button" key={category} onClick={()=>setExpenseForm(f=>({...f, category, label: f.label || label}))} className="p-nav-item" style={{ padding:'7px 10px', borderRadius:8, background:C.bgCard, border:`1px solid ${C.border}`, color:C.textMid, fontSize:11.5, fontWeight:600, cursor:'pointer' }}>
+                  <button type="button" key={category} onClick={()=>setExpenseForm(f=>({...f, category,
+                    // Only replace a label that came from a preset button; a label the admin typed is kept.
+                    label: (!f.label || ['Domain renewal','Email / SMTP','QR stand supply','Hosting / Render','SMS / WhatsApp'].includes(f.label)) ? label : f.label }))} className="p-nav-item" style={{ padding:'7px 10px', borderRadius:8, background:C.bgCard, border:`1px solid ${C.border}`, color:C.textMid, fontSize:11.5, fontWeight:600, cursor:'pointer' }}>
                     <Plus size={11} /> {label}
                   </button>
                 ))}
@@ -2448,12 +2522,13 @@ export default function PratyekshaMasterAdmin() {
                 <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:14 }}>By Category</div>
                 <div style={{ display:'grid', gap:10 }}>
                   {expenseSummary.categoryBreakdown.map(c => {
-                    const pct = expenseSummary.totalExpenses > 0 ? Math.round((c.amount / expenseSummary.totalExpenses) * 100) : 0;
+                    const cAmt = Number(c.amount) || 0;
+                    const pct = expenseSummary.totalExpenses > 0 ? Math.round((cAmt / expenseSummary.totalExpenses) * 100) : 0;
                     return (
                       <div key={c.category}>
                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, fontSize:12 }}>
                           <span style={{ color:C.textMid, fontWeight:600 }}>{c.label}</span>
-                          <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{c.amount.toLocaleString()} <span style={{ color:C.textDim }}>({pct}%)</span></span>
+                          <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{cAmt.toLocaleString()} <span style={{ color:C.textDim }}>({pct}%)</span></span>
                         </div>
                         <div style={{ height:6, borderRadius:100, background:C.bgDark, overflow:'hidden' }}>
                           <div style={{ width:`${pct}%`, height:'100%', background:'#d3bfa2', borderRadius:100 }} />

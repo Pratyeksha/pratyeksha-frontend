@@ -940,6 +940,7 @@ const NAV_ITEMS = [
   { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat },
   { key: 'staff', label: 'Staff & Payroll', icon: Users },
   { key: 'customers', label: 'Customers', icon: UserCircle2 },
+  { key: 'listing', label: 'Guest Discovery', icon: Eye },
   { key: 'insights', label: 'Executive Insights', icon: Gauge, badge: true },
   { key: 'alerts', label: 'Alerts', icon: Bell },
   { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck },
@@ -2952,6 +2953,119 @@ const LocationCard = ({ tenantId }) => {
   );
 };
 
+/* ════════════════════════════════════════════════════════════
+   GUEST DISCOVERY — how guests find this outlet on the Pratyeksha directory
+   ════════════════════════════════════════════════════════════ */
+const DISCOVERY_SOURCES = { list: 'Browsing the list', featured: 'Featured row', offers: 'Offers row', map: 'Map & details', recent: 'Recently viewed', saved: 'Saved places', surprise: '"Surprise me"' };
+const fmtDayShort = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+const ListingInsightsPage = () => {
+  const { tenantId } = useOwner();
+  const navigate = useNavigate();
+  const [days, setDays] = useState(30);
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/listing-insights/:tenantId', { params: { days }, refreshMs: 120000 });
+  const pctChange = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : undefined);
+  const rate = (a, b) => (b > 0 ? Math.min(100, Math.round((a / b) * 1000) / 10) : 0);
+
+  return (
+    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <PillTabs value={days} onChange={setDays} options={[{ value: 7, label: '7 days' }, { value: 30, label: '30 days' }, { value: 90, label: '90 days' }]} />
+        <GhostBtn icon={ExternalLink} onClick={() => window.open('/?notrack=1', '_blank', 'noopener')}>Preview guest directory</GhostBtn>
+      </div>
+
+      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+        {data && (() => {
+          const cur = data.current || {};
+          const prev = data.previous || {};
+          const actions = (cur.calls || 0) + (cur.directions || 0) + (cur.shares || 0) + (cur.saves || 0);
+          const prevActions = (prev.calls || 0) + (prev.directions || 0) + (prev.shares || 0) + (prev.saves || 0);
+          const sources = Object.entries(data.openSources || {}).map(([k, v]) => ({ label: DISCOVERY_SOURCES[k] || k, value: v })).filter(r => r.value > 0).sort((a, b) => b.value - a.value);
+          const score = data.listing?.score ?? 0;
+          const tone = score >= 80 ? 'gold' : score >= 50 ? 'warning' : 'danger';
+          const trend = (data.series || []).map(d => ({ date: fmtDayShort(d.day), impressions: d.impressions, opens: d.opens }));
+          return (
+            <>
+              {data.featured && <div><Badge tone="gold"><Star size={11} /> Featured placement active</Badge></div>}
+
+              {!data.hasAnyData ? (
+                <Card><EmptyState icon={Eye} title="No guest activity recorded yet" subtitle="Counting starts as guests browse the Pratyeksha directory. Share your listing link to get the first visits." /></Card>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                    <KpiCard hero icon={Eye} label="TIMES YOU WERE SEEN" value={(cur.impressions || 0).toLocaleString('en-IN')} sub="card on screen" delta={pctChange(cur.impressions || 0, prev.impressions || 0)} />
+                    <KpiCard icon={UtensilsCrossed} label="MENU OPENS" value={(cur.opens || 0).toLocaleString('en-IN')} sub="guests tapped through" delta={pctChange(cur.opens || 0, prev.opens || 0)} />
+                    <KpiCard icon={Target} label="OPEN RATE" value={`${rate(cur.opens || 0, cur.impressions || 0)}%`} sub="of views became opens" />
+                    <KpiCard icon={Zap} label="GUEST ACTIONS" value={actions.toLocaleString('en-IN')} sub="calls, directions, shares, saves" delta={pctChange(actions, prevActions)} />
+                  </div>
+
+                  <Card>
+                    <SectionHeading icon={BarChart3} title={`Last ${data.range?.days || days} days`} />
+                    <ResponsiveContainer width="100%" height={230}>
+                      <AreaChart data={trend}>
+                        <defs>
+                          <linearGradient id="discSeen" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={T.primary} stopOpacity={0.3} />
+                            <stop offset="100%" stopColor={T.primary} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                        <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} minTickGap={28} />
+                        <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
+                        <Tooltip {...chartTooltipStyle} />
+                        <Area type="monotone" name="Seen" dataKey="impressions" stroke={T.primary} strokeWidth={2} fill="url(#discSeen)" />
+                        <Area type="monotone" name="Menu opens" dataKey="opens" stroke="#e29a58" strokeWidth={2} fill="none" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    {data.peakDay && <div style={{ fontSize: 12, color: T.textMed, marginTop: 10 }}>Your busiest day for menu opens is <b style={{ color: T.textHigh }}>{data.peakDay.name}</b> ({data.peakDay.opens} opens).</div>}
+                  </Card>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                    <ChartCard icon={Search} title="Where guests found you" hint="Where menu opens came from in this period.">
+                      <HBarChart data={sources} nameWidth={128} />
+                    </ChartCard>
+                    <Card>
+                      <SectionHeading icon={Activity} title="What guests did" />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                        <StatBlock label="CALLS" value={cur.calls || 0} />
+                        <StatBlock label="DIRECTIONS" value={cur.directions || 0} />
+                        <StatBlock label="SHARES" value={cur.shares || 0} />
+                        <StatBlock label="SAVED" value={cur.saves || 0} />
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textLow, lineHeight: 1.6, marginTop: 12 }}>
+                        Anonymous counts only. Each card is counted once per guest session; no names, numbers or devices are stored.
+                      </div>
+                    </Card>
+                  </div>
+                </>
+              )}
+
+              <Card>
+                <SectionHeading icon={Gauge} title="Listing health" action={<Badge tone={tone}>{score}%</Badge>} />
+                <ProgressBar pct={score} tone={tone} />
+                <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+                  {(data.listing?.checks || []).map(c => (
+                    <div key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      {c.ok ? <CheckCircle2 size={16} color={T.primary} style={{ flexShrink: 0, marginTop: 1 }} /> : <AlertTriangle size={16} color={T.warning} style={{ flexShrink: 0, marginTop: 1 }} />}
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: c.ok ? T.textMed : T.textHigh }}>{c.label}</div>
+                        {!c.ok && <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.5, marginTop: 2 }}>{c.hint}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <GhostBtn icon={SettingsIcon} onClick={() => navigate(`/owner/${tenantId}/settings`)}>Open Settings</GhostBtn>
+                </div>
+              </Card>
+            </>
+          );
+        })()}
+      </DataBoundary>
+    </div>
+  );
+};
+
 const SettingsPage = () => {
   const { tenantId } = useOwner();
   const { data, loading, error, refetch } = useOwnerData('/api/owner/settings/:tenantId');
@@ -3043,6 +3157,29 @@ const SettingsPage = () => {
                     <input type="time" value={form.operatingHours.weekend.close} onChange={e => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, weekend: { ...f.operatingHours.weekend, close: e.target.value } } }))} style={inputStyle} />
                   </div>
                 </Field>
+              </div>
+              <Field label="WEEKLY OFF DAYS">
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => {
+                    const off = Array.isArray(form.operatingHours.closedDays) && form.operatingHours.closedDays.includes(i);
+                    return (
+                      <button type="button" key={d} aria-pressed={off} className="pown-btn" onClick={() => setForm(f => {
+                        const cur = Array.isArray(f.operatingHours.closedDays) ? f.operatingHours.closedDays : [];
+                        return { ...f, operatingHours: { ...f.operatingHours, closedDays: off ? cur.filter(x => x !== i) : [...cur, i].sort((a, b) => a - b) } };
+                      })} style={{
+                        padding: '7px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+                        background: off ? T.dangerSoft : 'transparent', color: off ? T.danger : T.textMed, border: `1px solid ${off ? T.danger : T.border}`
+                      }}>{d}</button>
+                    );
+                  })}
+                </div>
+              </Field>
+              <div style={{ display: 'grid', gap: 12, marginTop: 6 }}>
+                <AlertToggleRow label="Show Open / Closed on the guest directory" checked={form.operatingHours.showOnListing === true} onChange={() => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, showOnListing: !(f.operatingHours.showOnListing === true) } }))} />
+                <AlertToggleRow label="Temporarily closed (holiday / emergency)" checked={form.operatingHours.temporarilyClosed === true} onChange={() => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, temporarilyClosed: !(f.operatingHours.temporarilyClosed === true) } }))} />
+              </div>
+              <div style={{ fontSize: 11, color: T.textLow, lineHeight: 1.6, marginTop: 12 }}>
+                Times are in IST. A closing time earlier than the opening time means you close after midnight (for example 18:00 to 02:00). Guests see "Open now" and can filter for open places only when the first switch is on; it stays hidden until you turn it on, so default times are never shown by mistake.
               </div>
             </Card>
 
@@ -3221,6 +3358,7 @@ const OwnerAppInner = () => (
       <Route path="kitchen" element={<KitchenPage />} />
       <Route path="staff" element={<StaffPage />} />
       <Route path="customers" element={<CustomersPage />} />
+      <Route path="listing" element={<ListingInsightsPage />} />
       <Route path="insights" element={<ExecutiveInsightsPage />} />
       <Route path="alerts" element={<AlertsPage />} />
       <Route path="compliance" element={<CompliancePage />} />

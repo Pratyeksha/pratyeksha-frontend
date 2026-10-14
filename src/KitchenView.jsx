@@ -53,13 +53,20 @@ const useSwipe = (onLeft, onRight) => {
 const getOrderType = order => {
   if (order.source === 'swiggy')          return 'swiggy';
   if (order.source === 'zomato')          return 'zomato';
+  // tableNumber can arrive as a number from some clients: .toLowerCase() on it threw and blanked the whole board.
+  const tbl = String(order.tableNumber ?? '').toLowerCase();
   if (order.source === 'counter-pickup' || order.source === 'takeaway'
-    || order.tableNumber?.toLowerCase() === 'takeaway'
-    || order.tableNumber?.toLowerCase() === 'counter')  return 'parcel';
+    || tbl === 'takeaway'
+    || tbl === 'counter')  return 'parcel';
   return 'dine-in'; // waitlist, reservation, direct all → dine-in
 };
 
+// Module-level so the (module-level) order card and the board share it: keys of dish checks whose save is still in flight.
+// A refresh that lands in that window used to un-tick the dish the chef had just ticked.
+const pendingToggleKeys = new Set();
+
 const fmt = s => {
+  s = Math.max(0, Math.floor(Number(s) || 0));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   const p = n => n.toString().padStart(2,'0');
   return h > 0 ? `${h}h ${p(m)}m` : `${p(m)}:${p(sec)}`;
@@ -144,12 +151,19 @@ const KitchenView = () => {
     window.speechSynthesis.onvoiceschanged = load;
   }, []);
 
+  const speechWatchdogRef = useRef(null);
   const processSpeechQueue = () => {
+    clearTimeout(speechWatchdogRef.current);
     if (!speechQueueRef.current.length) { isSpeakingRef.current = false; return; }
     isSpeakingRef.current = true;
     const next = speechQueueRef.current.shift();
-    next.onend = next.onerror = processSpeechQueue;
-    window.speechSynthesis.speak(next);
+    let advanced = false;
+    const advance = () => { if (advanced) return; advanced = true; processSpeechQueue(); };
+    next.onend = next.onerror = advance;
+    // Some browsers (notably Chrome) sometimes never fire onend. isSpeakingRef then stayed true forever and every
+    // later ticket was queued but never announced. The watchdog moves the queue along regardless.
+    speechWatchdogRef.current = setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} advance(); }, Math.min(30000, 4000 + String(next.text || '').length * 110));
+    try { window.speechSynthesis.speak(next); } catch { advance(); }
   };
 
   const speakOrder = order => {
@@ -159,8 +173,8 @@ const KitchenView = () => {
              : otype === 'zomato' ? 'Chef, new Zomato order. '
              : otype === 'parcel' ? 'Chef, new pickup order. '
              : `Chef, new ticket for Table ${order.tableNumber}. `;
-    text += order.items.filter(i => !i.isExtraItem && i.extraItemId == null).map(i => {
-      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? `${i.portion} ` : '';
+    text += (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null).map(i => {
+      const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? `${i.portion} ` : '';
       const tag = otype === 'parcel' ? 'Parcel' : 'Dine in';
       let d = `${i.quantity} ${portion}${i.name} ${tag}`;
       if (i.suggestion?.trim()) d += `. Note: ${i.suggestion}`;
@@ -169,7 +183,7 @@ const KitchenView = () => {
     const utt = new SpeechSynthesisUtterance(text);
     const voices = synthVoicesRef.current;
     const v = voices.find(v => v.lang === 'en-IN')
-           || voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('india'))
+           || voices.find(v => String(v.lang || '').startsWith('en') && String(v.name || '').toLowerCase().includes('india'))
            || voices[0];
     if (v) utt.voice = v;
     utt.rate = 0.88; utt.pitch = 1.02;
@@ -188,9 +202,13 @@ const KitchenView = () => {
     } catch {}
   };
 
+  const fetchSeqRef = useRef(0);
   const fetchActiveOrders = async (opts) => {
     // ordersOnly: socket-triggered refreshes don't need categories/menu/tenant again (the menu is kept live by socket events).
     const ordersOnly = opts && opts.ordersOnly === true;
+    // Several refreshes can overlap (socket events, reconnect, the 86 button). A slow older response used to land last and
+    // overwrite newer data, bringing back tickets that had already been dispatched.
+    const seq = ++fetchSeqRef.current;
     try {
       const [ordersRes, catRes, menuRes, tenantRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
@@ -198,7 +216,8 @@ const KitchenView = () => {
         ordersOnly ? null : axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
         ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null })),
       ]);
-      const incoming = (ordersRes.data || []).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+      if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
+      const incoming = [...(ordersRes.data || [])].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
       setOrders(incoming);
       if (catRes)  setCategories(catRes.data  || []);
       if (menuRes) setMenuItems(menuRes.data  || []);
@@ -210,7 +229,12 @@ const KitchenView = () => {
         // Otherwise a reload/device switch makes completed dishes look unfinished.
         if (item.isCrossedLocal || item.kdsCompletedAt) hydrationMap[`${o._id}-${idx}`] = true;
       }));
-      setCheckedItemsGlobal(hydrationMap);
+      setCheckedItemsGlobal(prev => {
+        // Keep the local value of any dish whose save is still in flight; the server does not know about it yet.
+        const merged = { ...hydrationMap };
+        pendingToggleKeys.forEach(k => { if (k in prev) merged[k] = prev[k]; else delete merged[k]; });
+        return merged;
+      });
       fetchHealth();
     } catch (err) { console.error('KDS fetch:', err.message); }
   };
@@ -219,15 +243,23 @@ const KitchenView = () => {
   const voiceHandlerRef = useRef(() => {});
   const handleVoiceResult = e => {
     const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-    const isCompleteCmd = txt.includes('complete table') || txt.includes('ready table')
-      || txt.includes('टेबल तयार') || txt.includes('तयार टेबल')
-      || txt.includes('पूर्ण टेबल') || txt.includes('आर्डर तयार');
+    const hasTableWord = txt.includes('table') || txt.includes('टेबल');
+    const hasDoneWord  = /ready|complete|तयार|पूर्ण/.test(txt);
+    // "टेबल पाच तयार" (natural Marathi order) matched none of the fixed two-word phrases, so it was ignored.
+    const isCompleteCmd = (hasTableWord && hasDoneWord) || txt.includes('आर्डर तयार');
     if (isCompleteCmd) {
-      const mNums = { 'एक':1,'दोन':2,'तीन':3,'चार':4,'पाच':5,'सहा':6,'सात':7,'आठ':8,'नऊ':9,'दहा':10 };
+      // "ready table 5" / "complete table 5": the old regex took the word "table" itself as the table number, so the most
+      // natural English commands never matched an order. Strip the command words first, then read what is left.
+      const numWords = {
+        one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',ten:'10',
+        'एक':'1','दोन':'2','तीन':'3','चार':'4','पाच':'5','सहा':'6','सात':'7','आठ':'8','नऊ':'9','दहा':'10',
+        'दो':'2','पांच':'5','छह':'6','नौ':'9','दस':'10'
+      };
+      const left = txt.replace(/complete|ready|table|order|तयार|पूर्ण|आर्डर|ऑर्डर|टेबल|नंबर|number/giu, ' ');
+      const tokens = left.match(/[\p{L}\p{M}\p{N}]+/gu) || []; // \p{M}: Devanagari vowel signs, or "दहा" splits into "दह" + "ा"
       let tNum = null;
-      Object.entries(mNums).forEach(([w,n]) => { if (txt.includes(w)) tNum = n.toString(); });
-      if (!tNum) { const m = txt.match(/(?:table|ready|complete|तयार|पूर्ण)\s*(\w+)/); if (m?.[1]) tNum = m[1].toUpperCase(); }
-      if (tNum) { const o = orders.find(x => x.tableNumber?.toString().toUpperCase() === tNum.toUpperCase()); if (o) markAsReady(o._id); }
+      for (const tok of tokens) { const t = tok.toLowerCase(); if (numWords[t]) { tNum = numWords[t]; break; } if (/^[a-z]?\d+[a-z]?$/i.test(t)) { tNum = t.toUpperCase(); break; } }
+      if (tNum) { const o = orders.find(x => String(x.tableNumber ?? '').toUpperCase() === String(tNum).toUpperCase()); if (o) markAsReady(o._id); }
     }
     if (txt.includes('recall last') || txt.includes('परत आण')) handleRecall();
     if (txt.includes('show summary') || txt.includes('सारांश')) setIsAggregateView(v => !v);
@@ -250,8 +282,8 @@ const KitchenView = () => {
 
   const toggleVoice = () => {
     if (!recognitionRef.current) return alert('Speech recognition not supported.');
-    if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
-    else             { recognitionRef.current.start(); setIsListening(true); }
+    if (isListening) { try { recognitionRef.current.stop(); } catch {} setIsListening(false); }
+    else             { try { recognitionRef.current.start(); } catch { /* already running */ } setIsListening(true); }
   };
 
   /* ── main effect: socket + initial fetch ── */
@@ -310,8 +342,8 @@ const KitchenView = () => {
     socket.on('kds_item_cross_sync', data => {
       if (data.tenantId !== tenantId) return;
       setOrders(prev => prev.map(o => {
-        if (o._id !== data.orderId) return o;
-        const items = o.items.map((it,i) => i === data.idx ? { ...it, isCrossedLocal: data.newState } : it);
+        if (String(o._id) !== String(data.orderId)) return o;
+        const items = (o.items || []).map((it,i) => i === data.idx ? { ...it, isCrossedLocal: data.newState } : it);
         return { ...o, items };
       }));
     });
@@ -322,7 +354,7 @@ const KitchenView = () => {
       const itemPatch = data.item || {};
       setOrders(prev => prev.map(o => {
         if (String(o._id) !== String(data.orderId)) return o;
-        const items = o.items.map((it,i) => i === itemIndex ? { ...it, ...itemPatch } : it);
+        const items = (o.items || []).map((it,i) => i === itemIndex ? { ...it, ...itemPatch } : it);
         return { ...o, items, ...(data.orderTiming || {}) };
       }));
       const key = `${data.orderId}-${itemIndex}`;
@@ -386,7 +418,15 @@ const KitchenView = () => {
     socket.on('menu_item_restored', ({ itemId, item } = {}) => { if (itemId && item) setMenuItems(prev => prev.map(i => String(i._id) === String(itemId) ? { ...i, ...item } : i)); });
     socket.on('menu_bulk_updated', items => { if (Array.isArray(items)) setMenuItems(items); });
 
+    // A tablet that slept / lost Wi-Fi can have a socket that is dead without ever firing "disconnect", so tickets sent in
+    // the meantime never appeared. Resync when the screen wakes up, and as a slow safety net while it is visible.
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchActiveOrders({ ordersOnly: true }); };
+    document.addEventListener('visibilitychange', onVisible);
+    const safetyPoll = setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) fetchActiveOrders({ ordersOnly: true }); }, 60000);
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(safetyPoll);
       ['new_order','kds_item_cross_sync','kds_item_timing_updated','order_modification_detected','order_status_updated','order_voided','menu_updated','menu_item_deleted','menu_item_restored','menu_bulk_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
@@ -434,8 +474,11 @@ const KitchenView = () => {
       }
     } catch (err) {
       console.error(err);
-      setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
       setRecallQueue(prev => prev.filter(o => o._id !== orderId));
+      // The order no longer exists / was voided or settled elsewhere: putting the ticket back left a dead card that could
+      // never be dispatched. Anything else (network, 5xx) is restored so the chef can try again.
+      if (err?.response?.status === 404 || err?.response?.status === 410) fetchActiveOrders({ ordersOnly: true });
+      else setOrders(prev => prev.some(o => o._id === orderId) ? prev : [order, ...prev]);
     } finally {
       setProcessingOrderIds(prev => { const next = new Set(prev); next.delete(orderId); return next; });
     }
@@ -467,6 +510,7 @@ const KitchenView = () => {
     // The average is total/count, so the recalled ticket's time has to leave the total together with its count.
     const counted = Number(recalled._kdsCountedSeconds);
     if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
+    fetchHealth(); // the database-backed dispatched / average figures still counted the recalled ticket
   };
 
   const trigger86 = (categoryKey, categoryName) => {
@@ -475,8 +519,10 @@ const KitchenView = () => {
     setSelectedReason86('ran_out');
   };
 
+  const confirm86Busy = useRef(false);
   const confirm86 = async () => {
-    if (!selectedDish86) return;
+    if (!selectedDish86 || confirm86Busy.current) return; // a double-tap sent the same PATCH twice
+    confirm86Busy.current = true;
     try {
       await axios.patch(`${BASE_URL}/menu-item/${selectedDish86._id}`, {
         tenantId,
@@ -489,6 +535,7 @@ const KitchenView = () => {
       setSelectedDish86(null);
       fetchActiveOrders();
     } catch { alert('Could not update item.'); }
+    finally { confirm86Busy.current = false; }
   };
 
   const EIGHTY_SIX_REASONS = [
@@ -528,7 +575,7 @@ const KitchenView = () => {
       const otype = getOrderType(order);
       if (stationFilter === 'DINEIN'  && otype !== 'dine-in') return;
       if (stationFilter === 'PARCEL'  && otype !== 'parcel')  return;
-      order.items.forEach((item,idx) => {
+      (order.items || []).forEach((item,idx) => {
         if (item.isExtraItem || item.extraItemId != null) return;
         const fId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
         if (!fId) return;
@@ -548,7 +595,7 @@ const KitchenView = () => {
       if (stationFilter === 'DINEIN' && otype !== 'dine-in') return false;
       if (stationFilter === 'PARCEL' && otype !== 'parcel')  return false;
       if (isNonVegMode) {
-        const hasNV = order.items.some(item => {
+        const hasNV = (order.items || []).some(item => {
           const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
           return !isVeg;
         });
@@ -577,12 +624,12 @@ const KitchenView = () => {
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
-    orders.forEach(o => o.items.forEach((i,idx) => {
+    orders.forEach(o => (o.items || []).forEach((i,idx) => {
       if (i.isExtraItem || i.extraItemId != null) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const otype = getOrderType(o);
       const isP = otype === 'parcel';
-      const portion = (i.portion && i.portion.toLowerCase() !== 'single') ? ` (${i.portion})` : '';
+      const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? ` (${i.portion})` : '';
       const key = `${i.name}${portion}__${isP ? 'P' : 'D'}`;
 totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
     }));
@@ -591,7 +638,7 @@ totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
 
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
-    filteredOrders.forEach(o => o.items.forEach((i,idx) => {
+    filteredOrders.forEach(o => (o.items || []).forEach((i,idx) => {
       if (i.isExtraItem || i.extraItemId != null) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
 m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
@@ -607,7 +654,8 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       ? serverKdsToday.avgSeconds
       : (completedTicketsCount ? Math.floor(totalProcessingTime / completedTicketsCount) : 0);
     if (!avg) return '—';
-    return `${Math.floor(avg/60)}m ${avg%60}s`;
+    const a = Math.round(Number(avg));
+    return `${Math.floor(a/60)}m ${a%60}s`; // avgSeconds can be fractional: "3m 12.4285s" was shown
   }, [totalProcessingTime, completedTicketsCount, serverKdsToday]);
 
   const visibleCategories = useMemo(() => {
@@ -1030,7 +1078,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 {[
                   { label:'TICKETS DISPATCHED', value:dispatchedToday, sub:'today', big:true },
                   { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
-                  { label:'CURRENTLY PENDING',   value:filteredOrders.length, sub:'active tickets', big:true },
+                  { label:'CURRENTLY PENDING',   value:orders.filter(o => (o.items || []).some(i => !i.isExtraItem && i.extraItemId == null)).length, sub:'active tickets', big:true },
                 ].map(s => (
                   <div key={s.label} style={{ background:'#121212', border:'1px solid rgba(255,255,255,0.132)', borderTop:'2px solid rgba(255,255,255,0.171)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
                     <div style={{ fontSize:'0.5rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:10 }}>{s.label}</div>
@@ -1154,7 +1202,9 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
               {s.icon}
               <span style={{ fontSize:'0.48rem', fontWeight:900, letterSpacing:'0.3px' }}>{s.lbl}</span>
               {s.val !== 'ALL' && (() => {
-                const c = filteredOrders.filter(o => {
+                // Count from every ticket, not filteredOrders (already narrowed by the active station, so the other badge always read 0).
+                const c = orders.filter(o => {
+                  if (!(o.items || []).some(i => !i.isExtraItem && i.extraItemId == null)) return false;
                   const t = getOrderType(o);
                   return s.val==='DINEIN' ? t==='dine-in' : t==='parcel';
                 }).length;
@@ -1224,7 +1274,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                           onChange={e => {
                             const v = e.target.value;
                             setWastageForm(p => ({ ...p, itemName:v, inventoryId:null }));
-                            if (v.length >= 2) { const m = wastageInventory.filter(i => i.itemName.toLowerCase().includes(v.toLowerCase())).slice(0,5); setWastageSuggestions(m); setShowWastageSuggest(true); }
+                            if (v.length >= 2) { const m = wastageInventory.filter(i => String(i.itemName || '').toLowerCase().includes(v.toLowerCase())).slice(0,5); setWastageSuggestions(m); setShowWastageSuggest(true); }
                             else setShowWastageSuggest(false);
                           }}
                           onBlur={() => setTimeout(() => setShowWastageSuggest(false), 150)}
@@ -1350,14 +1400,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                             <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.8px', textTransform:'uppercase', marginBottom:14, paddingBottom:10, borderBottom:'1px solid rgba(255,255,255,0.083)', display:'flex', alignItems:'center', gap:6 }}>
                               <Scale size={11} color="#a6a6a6" /> BY REASON
                             </div>
-                            {Object.entries(wastageAnalytics.byReason).sort((a,b) => b[1].cost - a[1].cost).map(([reason, data]) => {
-                              const pct = wastageAnalytics.totalEntries > 0 ? Math.round((data.count/wastageAnalytics.totalEntries)*100) : 0;
+                            {Object.entries(wastageAnalytics.byReason).sort((a,b) => (Number(b[1]?.cost) || 0) - (Number(a[1]?.cost) || 0)).map(([reason, data]) => {
+                              const pct = wastageAnalytics.totalEntries > 0 ? Math.round(((Number(data.count) || 0)/wastageAnalytics.totalEntries)*100) : 0;
                               return (
                                 <div key={reason} style={{ marginBottom:10 }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
                                     <span style={{ fontSize:'0.64rem', fontWeight:800, color:'#a6a6a6' }}>{reason}</span>
                                     <span style={{ fontSize:'0.62rem', fontWeight:900, color:'#cfcac0', fontFamily:'monospace' }}>
-                                      {data.cost > 0 ? `₹${data.cost.toFixed(0)}` : `${data.count}×`}
+                                      {Number(data.cost) > 0 ? `₹${Number(data.cost).toFixed(0)}` : `${Number(data.count) || 0}×`}
                                       <span style={{ color:'#9a9a9a', fontWeight:600, marginLeft:6 }}>{pct}%</span>
                                     </span>
                                   </div>
@@ -1377,10 +1427,10 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                             </div>
                             <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:52 }}>
                               {(() => {
-                                const maxC = Math.max(...wastageAnalytics.dailyTrend.map(d => d.cost), 1);
+                                const maxC = Math.max(...wastageAnalytics.dailyTrend.map(d => Number(d.cost) || 0), 1);
                                 return wastageAnalytics.dailyTrend.map(d => (
-                                  <div key={d.date} title={`${d.date}: ₹${d.cost.toFixed(0)}`}
-                                    style={{ flex:1, minWidth:0, height:`${Math.max(8, Math.round((d.cost/maxC)*100))}%`, background: d.cost>0 ? `rgba(107,127,95,${0.25+(d.cost/maxC)*0.6})` : '#eee6d6', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }} />
+                                  <div key={d.date} title={`${d.date}: ₹${(Number(d.cost) || 0).toFixed(0)}`}
+                                    style={{ flex:1, minWidth:0, height:`${Math.max(8, Math.round(((Number(d.cost) || 0)/maxC)*100))}%`, background: Number(d.cost)>0 ? `rgba(107,127,95,${0.25+((Number(d.cost) || 0)/maxC)*0.6})` : '#eee6d6', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }} />
                                 ));
                               })()}
                             </div>
@@ -1533,7 +1583,11 @@ const KDSOrderCard = ({
   const [itemStartTimes,setItemStartTimes]= useState({});
   const [itemElapsed,   setItemElapsed]   = useState({});
   const [showNote,      setShowNote]      = useState(false);
-  const [localNote,     setLocalNote]     = useState('');
+  // The server has no field for kitchen notes, so this stays on this device. It used to vanish on every refresh / reconnect;
+  // keep it per ticket in localStorage (blocked storage just means it is not remembered).
+  const noteKey = `kds_note_${order._id}`;
+  const [localNote,     setLocalNoteState] = useState(() => { try { return localStorage.getItem(`kds_note_${order._id}`) || ''; } catch { return ''; } });
+  const setLocalNote = v => { setLocalNoteState(v); try { v ? localStorage.setItem(noteKey, v) : localStorage.removeItem(noteKey); } catch {} };
 
   /* The customer replaced the dishes: per-dish local timers are keyed by line index and would now point at different dishes */
   useEffect(() => {
@@ -1603,7 +1657,10 @@ const KDSOrderCard = ({
 
   const toggleItemCrossed = async idx => {
     const key  = `${order._id}-${idx}`;
+    // A second tap while the first save is in flight carried the same (now stale) version: guaranteed 409 and a flicker.
+    if (pendingToggleKeys.has(key)) return;
     const next = !checkedItemsGlobal[key];
+    pendingToggleKeys.add(key);
     const startMs = itemStartTimes[idx] || new Date(order.items?.[idx]?.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime();
     setItemStartTimes(prev => ({ ...prev, [idx]: startMs }));
     setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
@@ -1628,17 +1685,28 @@ const KDSOrderCard = ({
           setItemFinalTimes(prev => ({ ...prev, [key]: Number(authoritative.kdsPrepTimeSeconds) }));
         }
         setItemStartTimes(prev => ({ ...prev, [idx]: authoritative.kdsStartedAt ? new Date(authoritative.kdsStartedAt).getTime() : startMs }));
+        // Other screens were told `next` before the save; tell them what the server really holds.
+        socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
       } else {
         setCheckedItemsGlobal(prev => ({ ...prev, [key]: !next }));
+        socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState: !next });
       }
       console.error('KDS item timing save failed:', err?.message || err);
-    }
+    } finally { pendingToggleKeys.delete(key); }
   };
 
+  // Touch long-press: iOS/iPadOS never fires `contextmenu` on a long-press, so the cook timer could not be started on an iPad.
+  const lpTimerRef = useRef(null);
+  const lpFiredRef = useRef(false);
+  const lastStartRef = useRef({});
+  useEffect(() => () => clearTimeout(lpTimerRef.current), []);
   const startItemTimer = async (idx, e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     const key = `${order._id}-${idx}`;
     if (itemStartTimes[idx] || checkedItemsGlobal[key]) return;
+    // Long-press and contextmenu can both fire for one gesture on Android, and state has not updated between them.
+    if (lastStartRef.current[key] && Date.now() - lastStartRef.current[key] < 1500) return;
+    lastStartRef.current[key] = Date.now();
     // Persist the actual cook-start moment. The local clock remains immediate
     // feedback, while the server becomes the source of truth for analytics.
     const now = Date.now();
@@ -1717,7 +1785,7 @@ const KDSOrderCard = ({
               {sm.label}
             </span>
             <span style={{ fontSize:'0.48rem', color:'#6f624c', fontFamily:'monospace', fontWeight:900 }}>
-              #{order._id.slice(-4).toUpperCase()}
+              #{String(order._id).slice(-4).toUpperCase()}
             </span>
             {order.aggregatorOrderId && (
               <span style={{ fontSize:'0.48rem', color: accentColor[otype]+'99', fontFamily:'monospace' }}>
@@ -1788,7 +1856,7 @@ const KDSOrderCard = ({
 
       {/* ITEM LIST */}
       <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }} className="custom-scroll">
-        {order.items.map((item, idx) => {
+        {(order.items || []).map((item, idx) => {
           if (item.isExtraItem || item.extraItemId != null) return null;
 
           let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
@@ -1802,9 +1870,9 @@ const KDSOrderCard = ({
 
           const crossed      = !!checkedItemsGlobal[`${order._id}-${idx}`];
           const hasStarted   = !!itemStartTimes[idx] || !!item.kdsStartedAt;
-          const elapsedSecs  = item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0);
+          const elapsedSecs  = Math.max(0, Math.round(item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0)));
           const isSlow       = hasStarted && !crossed && elapsedSecs >= 300;
-          const finalSecs    = itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs;
+          const finalSecs    = Math.max(0, Math.round(Number(itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs) || 0)); // fractional server seconds rendered as "3m 12.4285s"
 
           /* Per-item source tag */
           const itemTag = isAggOrder
@@ -1816,8 +1884,12 @@ const KDSOrderCard = ({
           return (
             <div
               key={idx}
-              onClick={() => toggleItemCrossed(idx)}
+              onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } toggleItemCrossed(idx); }}
               onContextMenu={e => startItemTimer(idx, e)}
+              onTouchStart={() => { lpFiredRef.current = false; clearTimeout(lpTimerRef.current); lpTimerRef.current = setTimeout(() => { lpFiredRef.current = true; startItemTimer(idx, null); }, 550); }}
+              onTouchEnd={() => clearTimeout(lpTimerRef.current)}
+              onTouchMove={() => clearTimeout(lpTimerRef.current)}
+              onTouchCancel={() => clearTimeout(lpTimerRef.current)}
               style={{
                 display:'flex', alignItems:'flex-start', gap:10,
                 padding: isMobile?'10px 11px':'11px 12px',
@@ -1912,7 +1984,7 @@ const KDSOrderCard = ({
       {showNote && (
         <div style={{ marginTop:8, background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.165)', borderRadius:9, padding:'10px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
           <StickyNote size={12} color="#b9a27e" style={{ flexShrink:0, marginTop:2 }} />
-          <textarea value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Add a kitchen note for this ticket…"
+          <textarea value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Private note for this ticket (shown on this screen only)…"
             style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#cfcac0', fontSize:'0.72rem', resize:'none', fontFamily:"'Outfit', sans-serif", lineHeight:1.5, minHeight:52 }} rows={2} />
         </div>
       )}

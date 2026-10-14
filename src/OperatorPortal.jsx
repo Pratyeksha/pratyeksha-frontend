@@ -183,6 +183,30 @@ const AnnouncementPreviewCard = ({ data }) => {
   );
 };
 
+// GET /api/admin/analytics returns `salesData` with ONE ROW PER BILL ({_id: date, revenue, count: 1, cash, upi, card, discount, source}).
+// Several screens treated each row as a whole day: the calendar heatmap showed a single bill per date (and coloured profit/loss from
+// it), the daily-revenue chart plotted one point per bill, and the Excel "daily" / GST date-summary sheets listed bills as days with
+// per-bill rounding. This folds the rows into one entry per date (sorted); totals are unchanged.
+const rollupByDate = (rows) => {
+  const m = new Map();
+  (rows || []).forEach(r => {
+    if (!r || !r._id) return;
+    const t = m.get(r._id) || { _id: r._id, revenue: 0, count: 0, cash: 0, upi: 0, card: 0, discount: 0 };
+    t.revenue += Number(r.revenue) || 0; t.count += Number(r.count) || 0;
+    t.cash += Number(r.cash) || 0; t.upi += Number(r.upi) || 0; t.card += Number(r.card) || 0; t.discount += Number(r.discount) || 0;
+    m.set(r._id, t);
+  });
+  return [...m.values()].sort((a, b) => String(a._id).localeCompare(String(b._id)));
+};
+
+// Announcement times are entered, stored and shown as IST. The quick presets used the DEVICE clock (setHours / getFullYear /
+// toTimeString), so on a tablet or laptop not set to IST "Tonight 7PM" landed at the wrong hour once parsed as IST.
+const istShift = (d) => new Date(d.getTime() + 330 * 60000);
+const istFields = (d) => { const iso = istShift(d).toISOString(); return { date: iso.slice(0, 10), time: iso.slice(11, 16) }; };
+const istDayStr = (offsetDays = 0) => istShift(new Date(Date.now() + offsetDays * 86400000)).toISOString().slice(0, 10);
+const istAt = (dateStr, hh, mm = 0) => new Date(`${dateStr}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+05:30`);
+const istDow = () => istShift(new Date()).getUTCDay();
+
 // One source of truth for the amount payable after a discount. The same maths was copy-pasted four times (settle confirm,
 // final settle, amount-in-words, bill total) and had drifted: the two on-screen copies let a >100% discount show a NEGATIVE
 // total while the settle handlers clamped it, and none of them stopped a negative discount from INCREASING the bill.
@@ -399,7 +423,10 @@ const [monthlySalaryRecords, setMonthlySalaryRecords] = useState([]); // per-mon
 const [salaryEditModal, setSalaryEditModal] = useState(null); // { staffId, name, currentSalary }
 const [salaryEditValue, setSalaryEditValue] = useState('');
 const [salaryEditPassword, setSalaryEditPassword] = useState('');
-const tableCount = parseInt(localStorage.getItem('table_count')) || 12;
+const storedTableCount = parseInt(localStorage.getItem('table_count')) || 12; // value captured at login
+// The floor map, table pickers and staffing maths used ONLY the login-time value, so changing the number of tables (master admin /
+// onboarding) left every operator screen on the old count until they logged out and in. The live tenant config wins when loaded.
+const tableCount = Number(tenantConfig?.tableCount) >= 1 ? Math.floor(Number(tenantConfig.tableCount)) : storedTableCount;
 
 const [extraAnalytics, setExtraAnalytics] = useState(null);
 const [extraAnalyticsLoading, setExtraAnalyticsLoading] = useState(false);
@@ -417,6 +444,7 @@ const [newDish, setNewDish] = useState({
 const [pendingDeleteDish, setPendingDeleteDish] = useState(null);
 const [categories, setCategories] = useState([]);
 const [auditLogs, setAuditLogs] = useState([]);
+const [auditExpanded, setAuditExpanded] = useState({}); // category key -> show every record (only the newest 8 were reachable before)
   const occupiedTables = useMemo(() => [
     ...new Set(orders.filter(o => ['pending','ready','served'].includes(o.status)).filter(o => o.tableNumber != null).map(o => o.tableNumber.toString()))
   ], [orders]);
@@ -445,7 +473,7 @@ const fetchAuditLogs = useCallback(async () => {
 const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=200`);
 
 setAuditLogs(asArr(r.data));
-  } catch {}
+  } catch (err) { showNotif('Could not load the audit log', 'error'); }
 }, [tenantId]);
 
 
@@ -549,6 +577,7 @@ const getTimerStyle = (mins) => {
   return { color: '#a6a6a6',    fontWeight: '600' };                  // muted — fresh
 };
 
+const queueErrShown = useRef(false); // tell the operator ONCE per outage that the live queue is stale
 const fetchCounterQueue = useCallback(async () => {
   try {
     const [qRes, aRes, rRes] = await Promise.all([
@@ -571,7 +600,11 @@ const fetchCounterQueue = useCallback(async () => {
     );
     setReservationEntries(asArr(rRes.data));
     setAvgWaitData(aRes.data);
-  } catch { }
+    queueErrShown.current = false;
+  } catch {
+    // Silent failure left yesterday's waitlist / pickup queue on screen as if it were live.
+    if (!queueErrShown.current) { queueErrShown.current = true; showNotif('Could not refresh the waitlist / pickup queue — the list may be out of date', 'error'); }
+  }
 }, [tenantId, reservationViewDate]);
 
 const fetchAnnouncements = useCallback(async () => {
@@ -685,6 +718,10 @@ const results = await Promise.allSettled([
     if (aSeq !== analyticsFetchSeq.current) return; // stale response (month changed meanwhile)
     const val = (r, fallback) => (r.status === 'fulfilled' && r.value.data != null) ? r.value.data : fallback;
  
+    // A failed request silently became "no data": the screens showed Rs 0 revenue / empty charts with no hint that loading had failed.
+    const failedParts = [['sales', analyticsRes], ['hourly', hourlyRes], ['trends', trendsRes], ['profitability', profitRes]].filter(([, r]) => r.status === 'rejected').map(([n]) => n);
+    if (failedParts.length) showNotif(`Could not load ${failedParts.join(', ')} analytics — figures on screen may be incomplete`, 'error');
+
     setAnalytics(val(analyticsRes, { salesData: [] }).salesData || []);
     setTopPerformers(val(analyticsRes, { topItems: [] }).topItems || []);
     setBottomPerformers(val(analyticsRes, { bottomItems: [] }).bottomItems || []);
@@ -1207,7 +1244,11 @@ const purchaseRecommendations = useMemo(() => {
     .filter(item => item.daysRemaining !== null && item.daysRemaining <= 4)
     .map(item => {
       const targetDays = 14;
-      const recommended = Math.ceil((item.avgDailyUsage || 0) * targetDays);
+      // "Buy now" was the whole 14-day need, ignoring the stock already on the shelf (over-ordering), and 0 for an empty item with no
+      // usage history. Order the SHORTFALL up to the target; with no history fall back to twice the minimum threshold.
+      const usage = Number(item.avgDailyUsage) || 0;
+      const targetStockQty = usage > 0 ? Math.ceil(usage * targetDays) : (Number(item.minThreshold) || 0) * 2;
+      const recommended = Math.max(0, Math.ceil(targetStockQty - (Number(item.currentStock) || 0)));
       const wac = item.weightedAvgCost || item.costPrice || 0;
       return {
         ...item,
@@ -1238,8 +1279,8 @@ const purchaseRecommendations = useMemo(() => {
 const insightsRevenue = useMemo(() => {
   const rev   = currentMonthAnalytics.reduce((a, b) => a + (b.revenue || 0), 0);
   const count = currentMonthAnalytics.reduce((a, b) => a + (b.count  || 0), 0);
-  const gst   = rev > 0 ? rev / (1 + ((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) : 0;
-  const taxable = rev - gst;
+  // `gst` held the pre-tax value and `taxable` held the tax (names swapped). Unused today, but a trap for the next screen that reads them.
+  const taxable = rev > 0 ? rev / (1 + ((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) : 0;
   return {
     gross:    Math.round(rev),
     count,
@@ -1800,6 +1841,8 @@ const pendingOrders = orders.filter(o =>
     dailySettlementBreakdown, tenantId, viewDate, refreshAssistRealtimeData]);
 
 
+  const dailyRows = useMemo(() => rollupByDate(currentMonthAnalytics), [currentMonthAnalytics]);
+
   const advancedStats = useMemo(() => {
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
     currentMonthAnalytics.forEach(day => {
@@ -2103,6 +2146,10 @@ const fetchVendors = useCallback(async () => {
 
 const saveVendor = async () => {
   if (!newVendorDraft.name?.trim()) return showNotif('Vendor name is required', 'error');
+  if (newVendorDraft.phone && String(newVendorDraft.phone).replace(/\D/g, '').length < 10) return showNotif('Enter a valid phone number (at least 10 digits)', 'error');
+  if (newVendorDraft.leadTimeDays !== '' && !(Number(newVendorDraft.leadTimeDays) >= 0)) return showNotif('Lead time must be 0 days or more', 'error');
+  if (pickupFiringRef.current.has('vendor-save')) return; // double-click created the vendor twice
+  pickupFiringRef.current.add('vendor-save');
   try {
     if (editingVendorId) {
       await axios.patch(`${BASE_URL}/vendors/${tenantId}/${editingVendorId}`, newVendorDraft);
@@ -2114,7 +2161,8 @@ const saveVendor = async () => {
     setNewVendorDraft({ name: '', contactPerson: '', phone: '', email: '', paymentTerms: 'COD', leadTimeDays: 1 });
     setEditingVendorId(null);
     fetchVendors();
-  } catch { showNotif('Could not save vendor', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not save vendor', 'error'); }
+  finally { pickupFiringRef.current.delete('vendor-save'); }
 };
 
 const deleteVendor = async (id) => {
@@ -2123,7 +2171,7 @@ const deleteVendor = async (id) => {
     fetchVendors();
     fetchManagementData();
     showNotif('Vendor removed');
-  } catch { showNotif('Could not remove vendor', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not remove vendor', 'error'); }
 };
 
 const linkIngredientVendor = async (inventoryItemId, vendorId) => {
@@ -2210,30 +2258,40 @@ const generatePurchaseOrderPDF = async (vendor) => {
   container.innerHTML = poHTML;
   document.body.appendChild(container);
 
-  const html2pdf = await import('html2pdf.js');
-  const el = container.querySelector('#po-frame');
-  html2pdf.default().set({
-    margin: 0,
-    filename: `${poNumber}.pdf`,
-    image: { type: 'jpeg', quality: 1.0 },
-    html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  }).from(el).save().then(() => {
-    document.body.removeChild(container);
+  // Same pattern as the salary slip: a failed import / render left the hidden purchase-order node in <body> and told the operator nothing.
+  try {
+    const html2pdf = await import('html2pdf.js');
+    const el = container.querySelector('#po-frame');
+    await html2pdf.default().set({
+      margin: 0,
+      filename: `${poNumber}.pdf`,
+      image: { type: 'jpeg', quality: 1.0 },
+      html2canvas: { scale: 2.5, backgroundColor: '#ffffff', useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(el).save();
     showNotif(`Purchase order generated for ${vendor.name}`);
-  });
+  } catch (err) {
+    console.error('Purchase order PDF error:', err);
+    showNotif('Could not generate the purchase order PDF — please try again', 'error');
+  } finally {
+    if (container.parentNode) container.parentNode.removeChild(container);
+  }
 };
 
 const saveDiscountPresets = async (nextPresets) => {
   try {
     await axios.patch(`${BASE_URL}/tenant/profile/${tenantId}`, { 'config.discountPresets': nextPresets });
     setTenantConfig(p => ({ ...p, config: { ...p.config, discountPresets: nextPresets } }));
-  } catch { showNotif('Could not save presets', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Could not save presets', 'error'); }
 };
 
 const addDiscountPreset = () => {
   const val = parseFloat(newPresetDraft.value);
-  if (!newPresetDraft.label.trim() || isNaN(val) || val <= 0) return;
+  // Invalid input used to be ignored silently, and a 150% preset could be saved (it then made the bill total 0).
+  if (!newPresetDraft.label.trim()) { showNotif('Give the preset a name', 'error'); return; }
+  if (isNaN(val) || val <= 0) { showNotif('Enter a discount value above 0', 'error'); return; }
+  if (newPresetDraft.type === 'percent' && val > 100) { showNotif('A percentage discount cannot exceed 100%', 'error'); return; }
+  if ((tenantConfig?.config?.discountPresets || []).some(p => String(p.label).toLowerCase() === newPresetDraft.label.trim().toLowerCase())) { showNotif('A preset with this name already exists', 'error'); return; }
   const next = [...(tenantConfig?.config?.discountPresets || []), { label: newPresetDraft.label.trim(), type: newPresetDraft.type, value: val }];
   saveDiscountPresets(next);
   setNewPresetDraft({ label: '', type: 'percent', value: '' });
@@ -3061,6 +3119,8 @@ const exportToExcel = useCallback(async (type = 'daily') => {
       periodLabel = `Annual · Calendar Year ${year}`; // data is Jan–Dec; "FY 2026-27" (an Apr–Mar year) was wrong in a tax/accounting export
     }
 
+    filteredData = rollupByDate(filteredData); // per-bill rows -> one row per date (sheets below are date summaries)
+
     const totalRev       = filteredData.reduce((a,b)=>a+(b.revenue||0),0);
     const totalOrders    = filteredData.reduce((a,b)=>a+(b.count||0),0);
     const totalCash      = filteredData.reduce((a,b)=>a+(b.cash||0),0);
@@ -3068,11 +3128,14 @@ const exportToExcel = useCallback(async (type = 'daily') => {
     const totalCard      = filteredData.reduce((a,b)=>a+(b.card||0),0);
     const avgOrder       = totalOrders>0 ? Math.round(totalRev/totalOrders) : 0;
     const totalInvValue  = inventory.reduce((a,i)=>a+Math.max(0,Math.round(i.currentStock*(i.weightedAvgCost||i.costPrice||0))),0);
-    const totalGrossProfit = profitabilityData.reduce((a,b)=>a+(b.grossProfit||0),0);
-    // profitabilityData covers the whole selected month, so divide by that month's revenue. Dividing by a single day's (daily/weekly
-    // export) revenue produced margins like 900%.
-    const monthRevForMargin = analytics.filter(d=>d._id?.startsWith(exportMonthStr)).reduce((a,b)=>a+(b.revenue||0),0);
-    const overallMargin  = monthRevForMargin>0 ? Math.round((totalGrossProfit/monthRevForMargin)*100) : 0;
+    // Dishes with NO recipe have an unknown ingredient cost; the API reports them with cost 0, i.e. a fabricated 100% margin. Counting
+    // them inflated both Gross Profit and the margin. Profit and margin are therefore taken over COSTED dishes only, and the margin
+    // divides by those same dishes' revenue (profitabilityData is whole-month data, so this also keeps the base consistent for
+    // daily / weekly exports - dividing by one day's revenue gave margins like 900%).
+    const costedDishes = profitabilityData.filter(d => d.hasRecipe);
+    const totalGrossProfit = costedDishes.reduce((a,b)=>a+(b.grossProfit||0),0);
+    const costedRevenue = costedDishes.reduce((a,b)=>a+(b.totalRevenue||0),0);
+    const overallMargin  = costedRevenue>0 ? Math.round((totalGrossProfit/costedRevenue)*100) : 0;
     const totalIngredientCost = profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
 
     // ══════════════════════════════════
@@ -3151,9 +3214,14 @@ const exportToExcel = useCallback(async (type = 'daily') => {
       const ws = {};
       addTitleBlock(ws, `${tenantConfig?.name||tenantId} — DISH PROFITABILITY MATRIX`, 'Menu Engineering: Stars, Plowhorses, Puzzles & Dogs', periodLabel);
 
-      const avgSold = profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length;
-      const avgMargin = profitabilityData.reduce((a,b)=>a+(b.marginPct||0),0)/profitabilityData.length;
+      // Benchmarks over COSTED dishes only: a dish with no recipe is reported at a fabricated 100% margin, which dragged the average
+      // up and pushed genuinely good dishes into "Plowhorse"/"Dog".
+      const costedForMatrix = profitabilityData.filter(d => d.hasRecipe);
+      const benchmarkSet = costedForMatrix.length ? costedForMatrix : profitabilityData;
+      const avgSold = benchmarkSet.reduce((a,b)=>a+(b.totalQtySold||0),0)/benchmarkSet.length;
+      const avgMargin = benchmarkSet.reduce((a,b)=>a+(b.marginPct||0),0)/benchmarkSet.length;
       const classify = (d) => {
+        if (!d.hasRecipe) return {label:'— NO RECIPE', color:GOLD};
         const highSales=(d.totalQtySold||0)>=avgSold, highMargin=(d.marginPct||0)>=avgMargin;
         if (highSales&&highMargin) return {label:'⭐ STAR',color:GREEN};
         if (highSales&&!highMargin) return {label:'PLOWHORSE',color:BLUE};
@@ -4204,7 +4272,7 @@ const sgst       = taxable * _sgstPct;
         ['Extra Items Revenue (₹)',extraRev],
         ['Total Orders',totalOrders],
         ['Avg Order Value (₹)',avgOrder],
-        ['Gross Profit (₹)',totalGrossProfit+extraProfit],
+        ['Gross Profit (₹) — dishes with a recipe + extras',totalGrossProfit+extraProfit],
         ['Overall Margin',`${overallMargin}%`],
         ['Wastage Cost Lost (₹)',wastageCost],
         ['',''],
@@ -4597,13 +4665,13 @@ const netPay = salaryForSlip - deductions;
 const renderMonthHeatmap = () => {
   const year=viewDate.getFullYear(), month=viewDate.getMonth();
   const daysInMonth=new Date(year,month+1,0).getDate(), firstDay=new Date(year,month,1).getDay();
-  const maxRev=Math.max(...currentMonthAnalytics.map(a=>a.revenue||0),1);
+  const maxRev=Math.max(...dailyRows.map(a=>a.revenue||0),1);
 
   const grid=[];
   for(let x=0;x<firstDay;x++) grid.push(<div key={`p${x}`} style={styles.heatSquareEmpty}/>);
   for(let i=1;i<=daysInMonth;i++){
     const dateStr=`${year}-${(month+1).toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
-    const dayData = currentMonthAnalytics.find(d=>d._id===dateStr);
+    const dayData = dailyRows.find(d=>d._id===dateStr);
     const rev = dayData?.revenue || 0;
     // Real per-day ingredient cost from actual orders/recipes — see /api/admin/analytics/daily-cost.
     // Falls back to 0 (shown as "cost data unavailable") rather than a fake ratio guess if the
@@ -7501,12 +7569,12 @@ const renderMonthHeatmap = () => {
             {/* Quick presets */}
             <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
               {[
-                {label:'Tonight 7PM',fn:()=>{const d=new Date();d.setHours(19,0,0,0);return d;}},
-                {label:'Tomorrow 12PM',fn:()=>{const d=new Date();d.setDate(d.getDate() + 1);d.setHours(12,0,0,0);return d;}},
-                {label:'Fri 7PM',fn:()=>{const d=new Date();const df=(5-d.getDay()+7)%7||7;d.setDate(d.getDate()+df);d.setHours(19,0,0,0);return d;}},
-                {label:'Sat 12PM',fn:()=>{const d=new Date();const ds=(6-d.getDay()+7)%7||7;d.setDate(d.getDate()+ds);d.setHours(12,0,0,0);return d;}},
+                {label:'Tonight 7PM',fn:()=>istAt(istDayStr(0),19)},
+                {label:'Tomorrow 12PM',fn:()=>istAt(istDayStr(1),12)},
+                {label:'Fri 7PM',fn:()=>istAt(istDayStr((5-istDow()+7)%7||7),19)},
+                {label:'Sat 12PM',fn:()=>istAt(istDayStr((6-istDow()+7)%7||7),12)},
               ].map(p=>(
-                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,startDate:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,startTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const f=istFields(p.fn());setNewAnnouncement(prev=>({...prev,startDate:f.date,startTime:f.time}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(184,146,58,0.2)',background:'rgba(184,146,58,0.06)',color:'#b8923a',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7536,12 +7604,12 @@ const renderMonthHeatmap = () => {
             </div>
             <div style={{display:'flex',gap:'5px',flexWrap:'wrap'}}>
               {[
-                {label:'Tonight 11PM',fn:()=>{const d=new Date();d.setHours(23,59,0,0);return d;}},
+                {label:'Tonight 11PM',fn:()=>istAt(istDayStr(0),23,59)},
                 {label:'+24h',fn:()=>new Date(Date.now()+86400000)},
                 {label:'+3 days',fn:()=>new Date(Date.now()+3*86400000)},
                 {label:'+7 days',fn:()=>new Date(Date.now()+7*86400000)},
               ].map(p=>(
-                <button type="button" key={p.label} onClick={()=>{const d=p.fn();setNewAnnouncement(prev=>({...prev,expiryDate:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,expiryTime:d.toTimeString().slice(0,5)}));}}
+                <button type="button" key={p.label} onClick={()=>{const f=istFields(p.fn());setNewAnnouncement(prev=>({...prev,expiryDate:f.date,expiryTime:f.time}));}}
                   style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(211,191,162,0.16)',background:'transparent',color:'#8a704d',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
               ))}
             </div>
@@ -7806,6 +7874,13 @@ const renderMonthHeatmap = () => {
           </div>
           {newOffer.type==='happy_hour'&&(
             <div>
+              <div style={{fontSize:'0.48rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Happy Hour Discount (%)</div>
+              <input type="number" min="1" max="100" placeholder="e.g. 20" value={newOffer.value} onChange={e=>setNewOffer(p=>({...p,value:e.target.value}))}
+                style={{width:'100%',padding:'9px 12px',background:'#090909',border:'1px solid rgba(211,191,162,0.16)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box'}} />
+            </div>
+          )}
+          {newOffer.type==='happy_hour'&&(
+            <div>
               <div style={{fontSize:'0.48rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Happy Hour End</div>
               <input type="time" value={newOffer.happyEnd} onChange={e=>setNewOffer(p=>({...p,happyEnd:e.target.value}))}
                 style={{width:'100%',padding:'9px 12px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#d3bfa2',borderRadius:'8px',fontSize:'0.9rem',fontWeight:'900',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
@@ -7830,6 +7905,13 @@ const renderMonthHeatmap = () => {
             const v=Number(newOffer.value);
             if(newOffer.type==='percent_off'&&!(v>0&&v<=100)){showNotif('A % offer needs a value between 1 and 100','error');return;}
             if(newOffer.type==='fixed_off'&&!(v>0)){showNotif('A flat offer needs an amount greater than 0','error');return;}
+            // Happy-hour offers had NO discount input at all (the Value field was swapped for the start time), so they were saved as 0% off.
+            if(newOffer.type==='happy_hour'){
+              if(!newOffer.happyStart||!newOffer.happyEnd){showNotif('Set both the start and end time of the happy hour','error');return;}
+              if(newOffer.happyStart===newOffer.happyEnd){showNotif('Happy hour start and end cannot be the same','error');return;}
+              if(!(v>0&&v<=100)){showNotif('Enter a happy-hour discount between 1 and 100%','error');return;}
+            }
+            if(newOffer.type==='free_item'&&!newOffer.freeItem?.trim()){showNotif('Enter the name of the free item','error');return;}
             if(Number(newOffer.minOrder)<0){showNotif('Minimum order cannot be negative','error');return;}
           }
           try{
@@ -8019,22 +8101,30 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           </div>
         )}
  
-        <button type="button" disabled={campaignSending} onClick={async()=>{
+        <button type="button" disabled={campaignSending} onClick={()=>{
           if(!newCampaign.title?.trim()||!newCampaign.body?.trim()){showNotif('Title and message are required','error');return;}
-          setCampaignSending(true);
-          try{
-await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
-  title:        newCampaign.title.trim(),
-  body:         newCampaign.body.trim(),
-  segment:      newCampaign.segment || 'all',
-  customPhones: newCampaign.customPhones || '',
-  sendNow:      true   // ← ADD: triggers actual push delivery in server
-});
-            setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
-            showNotif('Campaign sent successfully!','success');
-            fetchCampaigns();
-          }catch(err){showNotif(err.response?.data?.error||'Failed to send','error');}
-          finally{setCampaignSending(false);}
+          const doSend=async()=>{
+            if(campaignSending||pickupFiringRef.current.has('campaign'))return; // double-click pushed the campaign twice
+            pickupFiringRef.current.add('campaign');
+            setCampaignSending(true);
+            try{
+              await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
+                title:        newCampaign.title.trim(),
+                body:         newCampaign.body.trim(),
+                segment:      newCampaign.segment || 'all',
+                customPhones: newCampaign.customPhones || '',
+                sendNow:      true   // triggers actual push delivery in server
+              });
+              setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
+              showNotif('Campaign sent successfully!','success');
+              fetchCampaigns();
+            }catch(err){showNotif(err.response?.data?.error||'Failed to send','error');}
+            finally{pickupFiringRef.current.delete('campaign');setCampaignSending(false);}
+          };
+          // A broadcast to every customer cannot be recalled; one mis-tap used to send it immediately.
+          if((newCampaign.segment||'all')==='all'){
+            setConfirmModal({show:true,title:'Send to ALL customers?',subtitle:'This push notification goes to every opted-in customer and cannot be recalled.',onConfirm:doSend});
+          } else { doSend(); }
         }} style={{
           padding:'11px 24px',
           background:campaignSending?'#101010':'linear-gradient(135deg,#d3bfa2,#bda88a)',
@@ -8608,8 +8698,10 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
         if (plowhorses.length > 0) {
           const topPlow = plowhorses.sort((a, b) => b.totalQtySold - a.totalQtySold)[0];
-          const suggestedPrice = Math.ceil((topPlow.sellingPrice * 1.08) / 10) * 10;
-          recs.push({
+          // rounding up to the next ₹10 turned a ₹5 item into ₹10 (+100%); step by ₹5 below ₹100
+          const priceStep = topPlow.sellingPrice < 100 ? 5 : 10;
+          const suggestedPrice = Math.ceil((topPlow.sellingPrice * 1.08) / priceStep) * priceStep;
+          if (topPlow.sellingPrice > 0) recs.push({
             id: 'plowhorse-price', priority: 2, category: 'PRICING',
             icon: <Repeat size={16} />, color: tone.info,
             title: `"${topPlow.name}" is underpriced for its demand`,
@@ -8696,7 +8788,12 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 5. STAFF / LABOR EFFICIENCY ──
       if (staffEfficiency.length > 0) {
-        const lowAttendance = staffEfficiency.filter(s => s.daysPresent < 15 && s.role !== 'Manager');
+        // A fixed "< 15 days present" flagged EVERY staff member during the first two weeks of any month. Compare against the days
+        // that have actually elapsed (all days when looking at a past month) and stay quiet in the first week.
+        const _istNowAtt = new Date(Date.now() + 330 * 60 * 1000);
+        const _viewingThisMonth = viewDate.getFullYear() === _istNowAtt.getUTCFullYear() && viewDate.getMonth() === _istNowAtt.getUTCMonth();
+        const _daysElapsedAtt = _viewingThisMonth ? _istNowAtt.getUTCDate() : new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+        const lowAttendance = _daysElapsedAtt < 7 ? [] : staffEfficiency.filter(s => s.daysPresent < Math.floor(_daysElapsedAtt * 0.5) && s.role !== 'Manager');
         const waiterCount = staffEfficiency.filter(s => s.role === 'Waiter').length;
         const avgRevPerWaiterHour = waiterCount > 0
           ? staffEfficiency.filter(s => s.role === 'Waiter').reduce((a, s) => a + (s.revenuePerHour || 0), 0) / waiterCount
@@ -8807,15 +8904,18 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 9. GST / COMPLIANCE URGENCY ──
       if (stats.revenue > 0) {
+        // Compared a midnight deadline against the current time of day, so on the 11th itself (the last day to file) the result was
+        // <= 0 and the reminder vanished exactly when it mattered. Compare whole days instead; 0 = due today.
         const now = new Date();
+        const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const nextGstr1 = new Date(now.getFullYear(), now.getMonth() + (now.getDate() > 11 ? 1 : 0), 11);
-        const daysToGstr1 = Math.ceil((nextGstr1 - now) / (1000 * 60 * 60 * 24));
-        if (daysToGstr1 <= 5 && daysToGstr1 > 0) {
+        const daysToGstr1 = Math.round((nextGstr1 - todayMidnight) / (1000 * 60 * 60 * 24));
+        if (daysToGstr1 <= 5 && daysToGstr1 >= 0) {
           recs.push({
             id: 'gst-deadline', priority: 1, category: 'COMPLIANCE',
             icon: <ReceiptText size={16} />, color: tone.urgent,
             title: `GSTR-1 filing due soon`,
-            stat: { value: `${daysToGstr1}d`, label: `left · est. liability ₹${Math.round(stats.revenue * (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) / (1 + (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100))).toLocaleString()}` },
+            stat: { value: daysToGstr1 === 0 ? 'TODAY' : `${daysToGstr1}d`, label: `${daysToGstr1 === 0 ? 'last day' : 'left'} · est. liability ₹${Math.round(stats.revenue * (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100) / (1 + (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100))).toLocaleString()}` },
             tag: `Export GST Invoice Register and send to your CA`,
           });
         }
@@ -9037,7 +9137,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 22. AVG ORDER VALUE OPPORTUNITY ──
       if (stats.avg > 0 && profitabilityData.length > 0) {
-        const highMarginCheap = profitabilityData.filter(d => d.marginPct >= 50 && d.sellingPrice < stats.avg * 0.4 && d.totalQtySold > 0);
+        const highMarginCheap = profitabilityData.filter(d => d.hasRecipe && d.marginPct >= 50 && d.sellingPrice < stats.avg * 0.4 && d.totalQtySold > 0);
         if (highMarginCheap.length > 0) {
           const pick = highMarginCheap.sort((a, b) => b.marginPct - a.marginPct)[0];
           recs.push({
@@ -9148,8 +9248,15 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       // ── 29. STOCK VALUE TIED UP (CAPITAL EFFICIENCY) ──
       if (inventory.length > 0 && stats.revenue > 0) {
         const totalStockValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0);
-        const stockToRevenueRatio = totalStockValue / stats.revenue;
-        if (stockToRevenueRatio > 0.4) {
+        // stats.revenue is month-to-date: on day 3 any normal stock looked like "capital tied up" (e.g. ₹40k stock / ₹15k revenue so far).
+        // Compare with the full-month run-rate instead, and stay quiet in the first 7 days of the current month.
+        const _istNowCap = new Date(Date.now() + 330 * 60 * 1000);
+        const _capIsCurrent = viewDate.getFullYear() === _istNowCap.getUTCFullYear() && viewDate.getMonth() === _istNowCap.getUTCMonth();
+        const _capDaysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+        const _capDaysElapsed = _capIsCurrent ? _istNowCap.getUTCDate() : _capDaysInMonth;
+        const monthlyRunRate = stats.revenue / Math.max(1, _capDaysElapsed) * _capDaysInMonth;
+        const stockToRevenueRatio = totalStockValue / monthlyRunRate;
+        if (_capDaysElapsed >= 7 && stockToRevenueRatio > 0.4) {
           recs.push({
             id: 'capital-tied-up', priority: 4, category: 'FINANCIAL HEALTH',
             icon: <Wallet size={16} />, color: tone.info,
@@ -9349,7 +9456,9 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
         // Heuristic: compare subtotal-implied vs actual when available via profitabilityData totals
         const totalListPrice = profitabilityData.reduce((a, d) => a + ((d.sellingPrice || 0) * (d.totalQtySold || 0)), 0);
         if (totalListPrice > 0 && totalGross > 0) {
-          const realizationPct = Math.round((totalGross / totalListPrice) * 100);
+          // `revenue` on a bill includes GST while list prices are pre-tax, which flattered the ratio by ~5%. Compare like with like.
+          const _gstFactor = 1 + (((tenantConfig?.config?.cgstPercentage ?? 2.5) + (tenantConfig?.config?.sgstPercentage ?? 2.5)) / 100);
+          const realizationPct = Math.round(((totalGross / _gstFactor) / totalListPrice) * 100);
           if (realizationPct < 85 && totalListPrice > 5000) {
             recs.push({
               id: 'price-realization-gap', priority: 3, category: 'FINANCIAL HEALTH',
@@ -9691,9 +9800,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
       // ── 60. OVERALL MARGIN HEALTH CHECK ──
       if (profitabilityData.length > 0) {
-        const totalRev = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
-        const totalProfit = profitabilityData.reduce((a, b) => a + (b.grossProfit || 0), 0);
-        const overallMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 100) : 0;
+        // Uncosted dishes (no recipe) come back with a fabricated 100% margin; judging "overall margin" with them made the card say
+        // "excellent" for a menu that was mostly un-costed. Use costed dishes only, and only when they cover most of the revenue.
+        const allRevenue = profitabilityData.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+        const costedForMargin = profitabilityData.filter(d => d.hasRecipe);
+        const totalRev = costedForMargin.reduce((a, b) => a + (b.totalRevenue || 0), 0);
+        const totalProfit = costedForMargin.reduce((a, b) => a + (b.grossProfit || 0), 0);
+        const coveredEnough = allRevenue > 0 && totalRev / allRevenue >= 0.5;
+        const overallMargin = totalRev > 0 && coveredEnough ? Math.round((totalProfit / totalRev) * 100) : 0;
         if (overallMargin >= 55 && totalRev > 10000) {
           recs.push({
             id: 'strong-overall-margin', priority: 5, category: 'FINANCIAL HEALTH',
@@ -10045,7 +10159,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       const GOLD = '#d3bfa2', BLUE = '#cdbb98', AX = 'rgba(255,255,255,0.35)', GRID = 'rgba(255,255,255,0.06)';
       const money = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${Math.round(v)}`;
       const tip = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.25)', borderRadius: 10, fontSize: 12, color: '#fff' };
-      const daily = [...currentMonthAnalytics].sort((a, b) => a._id.localeCompare(b._id)).map(d => ({ day: d._id.slice(8), revenue: d.revenue || 0, orders: d.count || 0 }));
+      const daily = dailyRows.map(d => ({ day: d._id.slice(8), revenue: d.revenue || 0, orders: d.count || 0 }));
       const hourly = (hourlyAnalytics.hourly || []).filter(h => h.orderCount > 0 || (h.hour >= 8 && h.hour <= 23)).map(h => ({ hour: `${h.hour}h`, orders: h.orderCount, revenue: h.revenue }));
       const dow = hourlyAnalytics.dayOfWeek || [];
       const hasHourly = hourly.some(h => h.orders > 0);
@@ -10564,7 +10678,14 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       if (!isCurr) return null;
       const dayOfMonth = today.getUTCDate();
       const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
-      const dailyRevenues = currentMonthAnalytics.map(d=>d.revenue||0).filter(v=>v>0);
+      // One entry per DATE. Rows can be split by order source (dine-in / online ...), so per-row values made the daily average and the
+      // "best day" too small; today's unfinished day also dragged the average down, so it is left out when earlier days exist.
+      const todayKeyFc = today.toISOString().split('T')[0];
+      const byDate = new Map();
+      currentMonthAnalytics.forEach(d => byDate.set(d._id, (byDate.get(d._id) || 0) + (Number(d.revenue) || 0)));
+      let dailyRevenues = [...byDate.entries()].filter(([, v]) => v > 0);
+      if (dailyRevenues.some(([k]) => k !== todayKeyFc)) dailyRevenues = dailyRevenues.filter(([k]) => k !== todayKeyFc);
+      dailyRevenues = dailyRevenues.map(([, v]) => v);
       if (!dailyRevenues.length) return null;
       const avgDaily = dailyRevenues.reduce((a,b)=>a+b,0)/dailyRevenues.length;
       const projected = stats.revenue + (avgDaily*(daysInMonth-dayOfMonth));
@@ -10626,9 +10747,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
     <BC style={{ marginBottom:'14px' }}>
       <BT icon={<Percent size={14} strokeWidth={1.5}/>}>DISH PROFITABILITY</BT>
       {profitabilityData.length > 0 ? (() => {
-        const totalGP  = profitabilityData.reduce((a,b)=>a+(b.grossProfit||0),0);
-        const totalRev2 = profitabilityData.reduce((a,b)=>a+(b.totalRevenue||0),0);
-        const totalCost2= profitabilityData.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
+        // costed dishes only (uncosted ones carry a fabricated 100% margin)
+        const costedP = profitabilityData.filter(d => d.hasRecipe);
+        const totalGP  = costedP.reduce((a,b)=>a+(b.grossProfit||0),0);
+        const totalRev2 = costedP.reduce((a,b)=>a+(b.totalRevenue||0),0);
+        const totalCost2= costedP.reduce((a,b)=>a+(b.totalIngredientCost||0),0);
         const ovMargin = totalRev2>0?Math.round((totalGP/totalRev2)*100):0;
         return (
           <>
@@ -10678,10 +10801,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
     {/* Menu Engineering Matrix */}
     {profitabilityData.length > 0 && (() => {
-      const avgSold = profitabilityData.reduce((a,b)=>a+(b.totalQtySold||0),0)/profitabilityData.length;
-      const avgMargin = profitabilityData.reduce((a,b)=>a+(b.marginPct||0),0)/profitabilityData.length;
+      const matrixSet = profitabilityData.filter(d => d.hasRecipe);
+      const avgSold = matrixSet.length ? matrixSet.reduce((a,b)=>a+(b.totalQtySold||0),0)/matrixSet.length : 0;
+      const avgMargin = matrixSet.length ? matrixSet.reduce((a,b)=>a+(b.marginPct||0),0)/matrixSet.length : 0;
       const quadrants = { STAR:[], PLOWHORSE:[], PUZZLE:[], DOG:[] };
-      profitabilityData.forEach(d=>{
+      matrixSet.forEach(d=>{
         const hs=(d.totalQtySold||0)>=avgSold, hm=(d.marginPct||0)>=avgMargin;
         if(hs&&hm) quadrants.STAR.push(d);
         else if(hs&&!hm) quadrants.PLOWHORSE.push(d);
@@ -11357,8 +11481,11 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
       { key: 'RECIPE_INGREDIENTS', label: 'RECIPES & INGREDIENTS', icon: <ChefHat size={14} strokeWidth={1.5} />,           accent: '#d3bfa2' },
       { key: 'SALARY_STAFF',       label: 'SALARY & STAFF',        icon: <Users size={14} strokeWidth={1.5} />,             accent: '#d3bfa2' },
       { key: 'SECURITY_SYSTEM',    label: 'SECURITY & SYSTEM',     icon: <ShieldCheck size={14} strokeWidth={1.5} />,       accent: '#d3bfa2' },
+      { key: '__other',            label: 'OTHER',                 icon: <FileText size={14} strokeWidth={1.5} />,          accent: '#d3bfa2' },
     ].map(({ key, label, icon, accent }) => {
-      const sectionLogs = auditLogs.filter(l => l.category === key);
+      // Entries whose category is missing or not one of the sections above were counted in the header total but never shown anywhere.
+      const KNOWN = ['BILLING','MENU_UPDATES','MENU_VISIBILITY','INVENTORY','RECIPE_INGREDIENTS','SALARY_STAFF','SECURITY_SYSTEM'];
+      const sectionLogs = auditLogs.filter(l => key === '__other' ? !KNOWN.includes(l.category) : l.category === key);
       if (sectionLogs.length === 0) return null;
 
       return (
@@ -11375,7 +11502,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
 
           {/* Log rows */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {sectionLogs.slice(0, 8).map((log, idx) => {
+            {(auditExpanded[key] ? sectionLogs : sectionLogs.slice(0, 8)).map((log, idx) => {
               const ts = new Date(log.createdAt);
               const timeStr = ts.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
               const beforeStr = log.before ? JSON.stringify(log.before).replace(/[{}"]/g, '').slice(0, 50) : null;
@@ -11400,7 +11527,7 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <User size={10} color="rgba(255,255,255,0.2)" strokeWidth={1.8} />
                       <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
-                        By&nbsp;<strong style={{ color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>{log.actorName}</strong>
+                        By&nbsp;<strong style={{ color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>{log.actorName || 'System'}</strong>
                       </span>
                     </div>
                     {log.entity && (
@@ -11439,9 +11566,10 @@ await axios.post(`${BASE_URL}/campaigns/${tenantId}`, {
             })}
 
             {sectionLogs.length > 8 && (
-              <div style={{ textAlign: 'center', padding: '8px', fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', fontWeight: '600' }}>
-                + {sectionLogs.length - 8} more records — export to view all
-              </div>
+              <button type="button" onClick={() => setAuditExpanded(p => ({ ...p, [key]: !p[key] }))}
+                style={{ textAlign: 'center', padding: '8px', fontSize: '0.55rem', color: 'rgba(211,191,162,0.7)', fontWeight: '700', background: 'transparent', border: 'none', cursor: 'pointer', letterSpacing: '1px' }}>
+                {auditExpanded[key] ? 'SHOW LESS' : `SHOW ALL ${sectionLogs.length} RECORDS (+${sectionLogs.length - 8} more)`}
+              </button>
             )}
           </div>
         </div>
@@ -12764,7 +12892,8 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
       {newInventoryItem.currentStock && newInventoryItem.purchasePrice && (() => {
         const addQty = Number(newInventoryItem.currentStock);
         const buyPrice = Number(newInventoryItem.purchasePrice);
-        const oldStock = selectedExistingItem.currentStock;
+        if (!(addQty > 0) || !(buyPrice >= 0)) return null; // invalid input: no preview instead of a misleading one
+        const oldStock = Math.max(0, Number(selectedExistingItem.currentStock) || 0); // negative stock has no cost basis
         const oldWAC = selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0;
         const newStock = oldStock + addQty;
         const newWAC = newStock > 0 ? ((oldStock * oldWAC) + (addQty * buyPrice)) / newStock : buyPrice;
@@ -13052,7 +13181,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                                 style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
                                 <SquarePen size={12} />
                               </button>
-                              <button type="button" onClick={() => deleteVendor(v._id)}
+                              <button type="button" onClick={() => setConfirmModal({ show: true, title: 'Remove vendor?', subtitle: `${v.name} will be unlinked from its ingredients.`, onConfirm: () => deleteVendor(v._id) })}
                                 style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
                                 <X size={12} />
                               </button>
@@ -13717,7 +13846,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               if (!inv) return sum;
               return sum + ((inv.weightedAvgCost || inv.costPrice || 0) * Number(row.quantityUsed));
             }, 0);
-            const price     = dish.price || 0;
+            const price     = dish.price || dish.priceFull || dish.priceHalf || 0; // half/full dishes have no plain price
             const profit    = price - totalCost;
             const marginPct = price > 0 ? Math.round((profit / price) * 100) : 0;
             const fcPct     = price > 0 ? Math.round((totalCost / price) * 100) : 0;
@@ -13842,7 +13971,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     <div>
                       <select
                         value={row.inventoryId}
-                        onChange={e => { const u = [...recipeIngredientRows]; u[idx].inventoryId = e.target.value; setRecipeIngredientRows(u); }}
+                        onChange={e => { const v = e.target.value; setRecipeIngredientRows(rows => rows.map((r, i) => i === idx ? { ...r, inventoryId: v } : r)); }}
                         style={{ width: '100%', padding: '9px 11px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: `1px solid ${isZero ? 'rgba(200,168,75,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#c8a84b' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
                         <option value="">— Select —</option>
                         {inventory.map(i => (
@@ -13864,7 +13993,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                       <input
                         type="number" placeholder="Qty" min="0" step="0.01"
                         value={row.quantityUsed}
-                        onChange={e => { const u = [...recipeIngredientRows]; u[idx].quantityUsed = e.target.value; setRecipeIngredientRows(u); }}
+                        onChange={e => { const v = e.target.value; setRecipeIngredientRows(rows => rows.map((r, i) => i === idx ? { ...r, quantityUsed: v } : r)); }}
                         style={{ padding: inv ? '9px 40px 9px 10px' : '9px 10px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', color: '#fff', fontSize: '0.75rem', outline: 'none', width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }} />
                       {inv && (
                         <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.6rem', fontWeight: '800', color: 'rgba(211,191,162,0.5)', pointerEvents: 'none' }}>
@@ -13901,7 +14030,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
               const inv = inventory.find(i => i._id === row.inventoryId);
               return sum + ((inv ? (inv.weightedAvgCost || inv.costPrice || 0) : 0) * (Number(row.quantityUsed) || 0));
             }, 0);
-            const price = dish?.price || 0;
+            const price = dish?.price || dish?.priceFull || dish?.priceHalf || 0;
             const margin = price > 0 ? Math.round(((price - total) / price) * 100) : null;
             return (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', padding: '11px 15px', background: 'rgba(211,191,162,0.07)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px' }}>
@@ -13999,8 +14128,9 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 }, 0)
               : null;
 
-            const margin = recipeCost !== null && dish.price > 0
-              ? Math.round(((dish.price - recipeCost) / dish.price) * 100)
+            const dishPrice = dish.price || dish.priceFull || dish.priceHalf || 0; // half/full dishes have no plain `price`
+            const margin = recipeCost !== null && dishPrice > 0
+              ? Math.round(((dishPrice - recipeCost) / dishPrice) * 100)
               : null;
 
             const marginColor = margin === null ? null : margin >= 55 ? '#d3bfa2' : margin >= 35 ? '#c8a84b' : '#e29a58';
@@ -14045,7 +14175,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                 {/* Price · cost · margin row */}
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
                   <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '5px', background: 'rgba(211,191,162,0.08)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.18)', fontFamily: 'monospace', fontWeight: '800' }}>
-                    ₹{dish.price}
+                    {dish.price ? `₹${dish.price}` : (dish.priceHalf || dish.priceFull) ? `₹${dish.priceHalf || '—'} / ₹${dish.priceFull || '—'}` : '₹0'}
                   </span>
                   {recipeCost !== null && (
                     <span style={{ fontSize: '0.58rem', padding: '3px 8px', borderRadius: '5px', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace', fontWeight: '700' }}>
@@ -15877,7 +16007,7 @@ onClick={async () => {
           </button>
           <button type="button"
             onClick={async () => {
-              const expectedPass = `${tenantId}@${tableCount}`;
+              const expectedPass = `${tenantId}@${storedTableCount}`; // unchanged behaviour: built from the login-time table count
               if (salaryEditPassword !== expectedPass) {
                 showNotif('Incorrect authorization password', 'error');
                 return;
