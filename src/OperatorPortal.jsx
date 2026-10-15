@@ -326,6 +326,10 @@ const [customerProfile, setCustomerProfile]   = useState(null); // drawer
 // ── Marketing ──
 const [offers, setOffers]                     = useState([]);
 const [campaigns, setCampaigns]               = useState([]);
+const [pushAnalytics, setPushAnalytics]         = useState(null);   // { summary, byKind, items } from /push-analytics
+const [pushKind, setPushKind]                   = useState('all');
+const [pushDays, setPushDays]                   = useState(30);
+const [pushLoading, setPushLoading]             = useState(false);
 const [marketingSubTab, setMarketingSubTab] = useState('offers');
 const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
@@ -882,6 +886,8 @@ useEffect(() => {
         setAttendanceLogs(prev => prev.filter(log => log.staffId !== data.staffId));
         showNotif("Roster sync updated.", "info");
       });
+      socket.on('push_stats_updated', () => { if (pushRefreshRef.current) pushRefreshRef.current(); });
+      socket.on('campaign_sent', () => { if (pushRefreshRef.current) pushRefreshRef.current(); });
       socket.on('inventory_updated', () => {
         refreshManagementSoon();
       });
@@ -1185,6 +1191,25 @@ const fetchCampaigns = useCallback(async () => {
   } catch { setCampaigns([]); }
 }, [tenantId]);
 
+
+const pushFetchSeq = useRef(0);
+const fetchPushAnalytics = useCallback(async () => {
+  const mySeq = ++pushFetchSeq.current;
+  setPushLoading(true);
+  try {
+    const r = await axios.get(`${BASE_URL}/push-analytics/${tenantId}`, { params: { days: pushDays, ...(pushKind !== 'all' ? { kind: pushKind } : {}) } });
+    if (mySeq === pushFetchSeq.current) setPushAnalytics(r.data);
+  } catch { if (mySeq === pushFetchSeq.current) setPushAnalytics(prev => prev || { summary: null, byKind: {}, items: [], error: true }); }
+  finally { if (mySeq === pushFetchSeq.current) setPushLoading(false); }
+}, [tenantId, pushDays, pushKind]);
+const pushRefreshRef = useRef(() => {});
+pushRefreshRef.current = fetchPushAnalytics;
+useEffect(() => {
+  if (activeTab !== 'marketing' || marketingSubTab !== 'analytics') return undefined;
+  fetchPushAnalytics();
+  const id = setInterval(fetchPushAnalytics, 30000); // clicks keep arriving after the send; also refreshed instantly by the socket event below
+  return () => clearInterval(id);
+}, [activeTab, marketingSubTab, fetchPushAnalytics]);
 
 const aggregatorDecisionBusy = useRef(false);
 const handleAggregatorAccept = async (order, prepTime = 30) => {
@@ -5043,7 +5068,7 @@ const renderMonthHeatmap = () => {
       <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}}
         style={styles.hudCountersRow} className="p-hud">
         {[
-          {label:(()=>{const istNow=new Date(new Date().getTime()+330*60*1000);const isCurrentMonth=viewDate.getFullYear()===istNow.getFullYear()&&viewDate.getMonth()===istNow.getMonth();return isCurrentMonth?"TODAY'S BILLS":"MONTH BILLS";})(),val:hudLiveCounterBreakdown.total,color:'#d3bfa2'},
+          {label:(()=>{const istNow=new Date(new Date().getTime()+330*60*1000);const isCurrentMonth=viewDate.getFullYear()===istNow.getUTCFullYear()&&viewDate.getMonth()===istNow.getUTCMonth();return isCurrentMonth?"TODAY'S BILLS":"MONTH BILLS";})(),val:hudLiveCounterBreakdown.total,color:'#d3bfa2'},
           {label:'DINE-IN',  val:hudLiveCounterBreakdown.direct},
           {label:'TAKEAWAY', val:hudLiveCounterBreakdown.takeaway},
           {label:'ONLINE',   val:hudLiveCounterBreakdown.online},
@@ -6020,7 +6045,7 @@ const renderMonthHeatmap = () => {
 
       {/* ══ DINE-IN WAITLIST ══ */}
       {queueTab === 'waitlist' && (() => {
-        const filtered = waitlistEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
+        const filtered = waitlistEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()) || String(e.customerPhone || '').includes(queueSearch.replace(/\D/g, '') || '\u0000')); // phone search too (staff are usually given a number at the counter)
         return filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '52px 20px' }}>
             <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
@@ -6121,7 +6146,7 @@ const renderMonthHeatmap = () => {
 
       {/* ══ PICKUP QUEUE ══ */}
       {queueTab === 'pickup' && (() => {
-        const filtered = pickupEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()));
+        const filtered = pickupEntries.filter(e => !queueSearch || e.customerName?.toLowerCase().includes(queueSearch.toLowerCase()) || String(e.customerPhone || '').includes(queueSearch.replace(/\D/g, '') || '\u0000'));
         return filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '52px 20px' }}>
             <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
@@ -7390,6 +7415,8 @@ const renderMonthHeatmap = () => {
         badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length },
       {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
         badge: null },
+      {id:'analytics',     label:'Analytics',     icon:<BarChart3 size={13}/>,
+        badge: null },
     ].map(st=>{
       const isActive = marketingSubTab === st.id;
       return (
@@ -8007,7 +8034,138 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
   {/* ══════════════════════════════════════════════════
       SUB-TAB: CAMPAIGNS
   ══════════════════════════════════════════════════ */}
-  {marketingSubTab === 'campaigns' && (
+  {marketingSubTab === 'analytics' && (() => {
+  const A = pushAnalytics, S = A?.summary, items = A?.items || [];
+  const fmt = (n) => Number(n || 0).toLocaleString('en-IN');
+  const kindLabel = { campaign: 'CAMPAIGN', announcement: 'MENU BANNER', offer: 'OFFER', winback: 'WIN-BACK', other: 'OTHER' };
+  const GOLD = '#d3bfa2', IVORY = '#ecdcb9', MUTED = '#969696';
+  const chip = (active) => ({
+    padding: '6px 12px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: 900, letterSpacing: '0.8px',
+    background: active ? 'rgba(211,191,162,0.14)' : 'rgba(255,255,255,0.03)',
+    border: `1px solid ${active ? 'rgba(211,191,162,0.35)' : 'rgba(255,255,255,0.07)'}`, color: active ? GOLD : MUTED
+  });
+  const stat = (label, value, sub) => (
+    <div style={{ flex: '1 1 130px', minWidth: '120px', padding: '14px 14px 12px', borderRadius: '12px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(211,191,162,0.12)' }}>
+      <div style={{ fontSize: '0.46rem', fontWeight: 900, letterSpacing: '1.2px', color: MUTED, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '1.5rem', fontWeight: 700, color: IVORY, margin: '6px 0 2px', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: '0.5rem', color: MUTED, fontWeight: 700 }}>{sub}</div>
+    </div>
+  );
+  const bar = (pct, strong) => (
+    <div style={{ height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', borderRadius: '3px', background: strong ? GOLD : 'rgba(211,191,162,0.45)', transition: 'width 0.4s' }} />
+    </div>
+  );
+  const funnel = S ? [
+    { label: 'Customers targeted', v: S.customersTargeted, hint: 'in the chosen segments' },
+    { label: 'Devices reached',    v: S.devicesReached,    hint: 'one push per phone, however many customer records it has' },
+    { label: 'Delivered',          v: S.delivered,         hint: 'notification was shown on the device' },
+    { label: 'Clicked',            v: S.clicked,           hint: 'customer tapped the notification' },
+  ] : [];
+  const fMax = Math.max(1, ...funnel.map(f => f.v));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* header: crossed spoon & fork instead of a bell */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <img src="/pratyeksha-mark.png" alt="" style={{ width: '22px', height: '25px', objectFit: 'contain' }} />
+        <div style={{ flex: 1, minWidth: '180px' }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.05rem', color: IVORY, fontWeight: 600 }}>Notification Analytics</div>
+          <div style={{ fontSize: '0.52rem', color: MUTED, fontWeight: 700, marginTop: '2px' }}>Reach, delivery and clicks for every campaign, menu banner and offer push</div>
+        </div>
+        <button type="button" onClick={fetchPushAnalytics} disabled={pushLoading}
+          style={{ ...chip(false), display: 'flex', alignItems: 'center', gap: '6px', opacity: pushLoading ? 0.6 : 1 }}>
+          <RefreshCw size={11} style={{ animation: pushLoading ? 'spin 1s linear infinite' : 'none' }} /> REFRESH
+        </button>
+      </div>
+
+      {/* filters */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['all', 'ALL'], ['campaign', 'CAMPAIGNS'], ['announcement', 'MENU BANNERS'], ['offer', 'OFFERS'], ['winback', 'WIN-BACK']].map(([id, lb]) => (
+          <button type="button" key={id} onClick={() => setPushKind(id)} style={chip(pushKind === id)}>{lb}</button>
+        ))}
+        <span style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+        {[7, 30, 90].map(d => (<button type="button" key={d} onClick={() => setPushDays(d)} style={chip(pushDays === d)}>{d} DAYS</button>))}
+      </div>
+
+      {!A && pushLoading && <div style={{ color: MUTED, fontSize: '0.7rem', padding: '30px', textAlign: 'center' }}>Loading analytics…</div>}
+      {A?.error && !S && <div style={{ color: MUTED, fontSize: '0.7rem', padding: '30px', textAlign: 'center' }}>Could not load analytics. Tap REFRESH to try again.</div>}
+
+      {S && (
+        <>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {stat('Devices reached', fmt(S.devicesReached), `${fmt(S.customersTargeted)} customers targeted`)}
+            {stat('Delivered', fmt(S.delivered), `${S.deliveredRate}% of reached`)}
+            {stat('Clicked', fmt(S.clicked), `${S.ctr}% click rate · ${fmt(S.clickTotal)} taps`)}
+            {stat('Dismissed', fmt(S.dismissed), 'swiped away')}
+            {stat('Viewed in app', fmt(S.viewedInApp), 'banner / offer seen')}
+            {stat('Broadcasts', fmt(S.broadcasts), `${fmt(S.pushes)} sends`)}
+          </div>
+
+          {/* funnel */}
+          <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(211,191,162,0.1)' }}>
+            <div style={{ fontSize: '0.5rem', fontWeight: 900, letterSpacing: '1.4px', color: GOLD, marginBottom: '12px' }}>ENGAGEMENT FUNNEL · LAST {A.days} DAYS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
+              {funnel.map((f, i) => (
+                <div key={f.label}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px' }}>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 800, color: IVORY }}>{f.label} <span style={{ color: MUTED, fontWeight: 600, fontSize: '0.5rem' }}>· {f.hint}</span></span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', fontWeight: 700, color: GOLD }}>{fmt(f.v)}</span>
+                  </div>
+                  {bar((f.v / fMax) * 100, i === funnel.length - 1)}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* per broadcast */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '0.5rem', fontWeight: 900, letterSpacing: '1.4px', color: GOLD }}>BY BROADCAST ({items.length})</div>
+            {items.length === 0 && (
+              <div style={{ padding: '36px 16px', textAlign: 'center', borderRadius: '12px', border: '1px dashed rgba(211,191,162,0.2)', color: MUTED, fontSize: '0.7rem' }}>
+                Nothing sent in this period yet. Send a campaign, publish a menu banner or activate an offer and its results will appear here.
+              </div>
+            )}
+            {items.map(it => (
+              <div key={`${it.kind}-${it.refId}`} style={{ padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(211,191,162,0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.44rem', fontWeight: 900, letterSpacing: '1px', padding: '3px 7px', borderRadius: '5px', background: 'rgba(211,191,162,0.12)', color: GOLD, border: '1px solid rgba(211,191,162,0.25)' }}>{kindLabel[it.kind] || 'OTHER'}</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: IVORY, flex: 1, minWidth: '120px' }}>{it.title || '(untitled)'}</span>
+                  <span style={{ fontSize: '0.5rem', color: MUTED, fontWeight: 700 }}>
+                    {new Date(it.lastSentAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                    {it.pushes > 1 ? ` · sent ×${it.pushes}` : ''}
+                  </span>
+                </div>
+                {it.body && <div style={{ fontSize: '0.58rem', color: MUTED, marginBottom: '10px', lineHeight: 1.5 }}>{it.body}</div>}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '10px' }}>
+                  {[
+                    ['REACHED', it.devicesReached, `of ${fmt(it.targetedCustomers)} customers`, it.targetedCustomers ? (it.devicesReached / it.targetedCustomers) * 100 : 0],
+                    ['DELIVERED', it.delivered, `${it.deliveredRate}%`, it.deliveredRate],
+                    ['CLICKED', it.clicked, `${it.ctr}% · ${fmt(it.clickTotal)} taps`, it.ctr],
+                    ['DISMISSED', it.dismissed, 'swiped away', it.devicesReached ? (it.dismissed / it.devicesReached) * 100 : 0],
+                    ['VIEWED IN APP', it.viewedInApp, `${fmt(it.viewTotal)} views`, 0],
+                  ].map(([lb, v, sub, pc]) => (
+                    <div key={lb}>
+                      <div style={{ fontSize: '0.42rem', fontWeight: 900, letterSpacing: '1px', color: MUTED }}>{lb}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '1rem', fontWeight: 700, color: IVORY, margin: '3px 0 4px' }}>{fmt(v)}</div>
+                      {lb !== 'VIEWED IN APP' && bar(pc, lb === 'CLICKED')}
+                      <div style={{ fontSize: '0.46rem', color: MUTED, marginTop: '4px', fontWeight: 700 }}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+                {it.failedDevices > 0 && <div style={{ marginTop: '9px', fontSize: '0.48rem', color: '#b8923a', fontWeight: 800 }}>{fmt(it.failedDevices)} device{it.failedDevices > 1 ? 's' : ''} could not be reached (expired or revoked notification permission)</div>}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.3)', lineHeight: 1.6 }}>
+            Delivered and clicked are reported by each customer's phone when the notification appears or is tapped, so they can lag a little behind the send and exclude people who were offline. Updates automatically.
+          </div>
+        </>
+      )}
+    </div>
+  );
+})()}
+
+{marketingSubTab === 'campaigns' && (
   <motion.div key="campaigns-tab" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
  
     {/* KPI */}
@@ -10262,10 +10420,11 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       const estimatedAnnual = monthlyRevenue * 12;
       const isCompositionEligible = estimatedAnnual < 15000000;
       const now = new Date();
+      const _todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // whole days: a midnight deadline vs the current time hid "due today"
       const nextGstr1  = new Date(now.getFullYear(), now.getMonth()+(now.getDate()>11?1:0), 11);
       const nextGstr3B = new Date(now.getFullYear(), now.getMonth()+(now.getDate()>20?1:0), 20);
-      const daysToGstr1  = Math.ceil((nextGstr1 - now)/86400000);
-      const daysToGstr3B = Math.ceil((nextGstr3B - now)/86400000);
+      const daysToGstr1  = Math.round((nextGstr1 - _todayMid)/86400000);
+      const daysToGstr3B = Math.round((nextGstr3B - _todayMid)/86400000);
 
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '24px' }}>
@@ -14319,11 +14478,11 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* Generate hour slots 11am–11pm */}
         {Array.from({length:13},(_,i)=>i+11).map(hour => {
           const slotEntries = reservationEntries.filter(r => {
-            const h = new Date(r.reservationTime).getHours();
+            const h = new Date(new Date(r.reservationTime).getTime() + 330 * 60000).getUTCHours(); // IST hour (device-local getHours() mis-bucketed slots on non-IST devices)
             return h === hour;
           });
           const fmt = h => h === 12 ? '12:00 PM' : h < 12 ? `${h}:00 AM` : `${h-12}:00 PM`;
-          const isCurrentHour = new Date().getHours() === hour;
+          const isCurrentHour = new Date(Date.now() + 330 * 60000).getUTCHours() === hour;
 
           return (
             <div key={hour} style={{

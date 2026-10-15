@@ -53,6 +53,7 @@ const L = {
     updated: 'Updated', justNow: 'just now', minAgo: 'min ago', hrAgo: 'h ago', dayAgo: 'd ago', refresh: 'Refresh', refreshing: 'Refreshing…',
     pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area',
     openNow: 'Open now', closesAt: 'closes', closingSoon: 'Closing soon', closedNow: 'Closed', opensAt: 'opens', tomorrow: 'tomorrow', tempClosed: 'Temporarily closed',
+    opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Loading restaurants…',
     open24: 'Open 24 hours', monFri: 'Mon–Fri', satSun: 'Sat–Sun', closedOn: 'Closed on', minShort: 'min', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   },
   mr: {
@@ -71,6 +72,7 @@ const L = {
     updated: 'अपडेट', justNow: 'आत्ताच', minAgo: 'मि. पूर्वी', hrAgo: 'तासांपूर्वी', dayAgo: 'दिवसांपूर्वी', refresh: 'रिफ्रेश', refreshing: 'रिफ्रेश होत आहे…',
     pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', suggestions: 'सूचना', sugArea: 'भाग',
     openNow: 'आता उघडे', closesAt: 'बंद होईल', closingSoon: 'लवकरच बंद', closedNow: 'बंद', opensAt: 'उघडेल', tomorrow: 'उद्या', tempClosed: 'तात्पुरते बंद',
+    opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'रेस्टॉरंट लोड होत आहेत…',
     open24: '२४ तास उघडे', monFri: 'सोम–शुक्र', satSun: 'शनि–रवि', closedOn: 'बंद', minShort: 'मि.', days: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'],
   },
 };
@@ -124,6 +126,44 @@ const isNew = (t) => {
 /* Optional "Own a café or restaurant?" card for owners - set to a WhatsApp / contact link (https:, mailto: or tel:). Empty = hidden. */
 const OWNER_CTA_URL = '';
 const HOW_KEY = 'px_home_how';
+
+/* ── Loading skeleton: the same geometry as the real list (stats line, count row, 2-up card grid) so nothing jumps when data lands ── */
+const SR_ONLY = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
+const Sk = ({ w, h, r = 8, d = 0, style }) => <span className="pxh-sk" style={{ display: 'block', width: w, height: h, borderRadius: r, '--d': `${d}s`, ...style }} />;
+function SkeletonCard({ i }) {
+  const d = (i % 6) * 0.12;
+  return (
+    <div className="pxh-card pxh-sk-card pxh-sk-in" style={{ animationDelay: `${Math.min(i, 8) * 0.05}s` }} aria-hidden="true">
+      <div style={{ padding: '14px 14px 13px' }}>
+        <Sk w={52} h={52} r={16} d={d} />
+        <Sk w={`${58 + ((i * 13) % 26)}%`} h={14} r={7} d={d} style={{ marginTop: 12, marginBottom: 3 }} />
+        <div style={{ marginTop: 4, height: 14, display: 'flex', alignItems: 'center' }}><Sk w={`${34 + ((i * 11) % 22)}%`} h={10} r={5} d={d} /></div>
+        <Sk w={78} h={19} r={10} d={d} style={{ marginTop: 8 }} />
+        <div style={{ marginTop: 11, minHeight: 24, display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Sk w={13} h={13} r={7} d={d} /><Sk w={13} h={13} r={7} d={d} /><Sk w={13} h={13} r={7} d={d} />
+        </div>
+      </div>
+      <span className="pxh-sk" style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: '50%', '--d': `${d}s` }} />
+    </div>
+  );
+}
+function ListSkeleton({ label }) {
+  return (
+    <div role="status" aria-busy="true" aria-live="polite">
+      <span style={SR_ONLY}>{label}</span>
+      <div aria-hidden="true">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '0 0 12px', minHeight: 40 }}>
+          <Sk w={112} h={12} r={6} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Sk w={104} h={34} r={13} d={0.1} />
+            <Sk w={122} h={40} r={13} d={0.2} />
+          </div>
+        </div>
+        <div className="pxh-grid">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} i={i} />)}</div>
+      </div>
+    </div>
+  );
+}
 
 /* Dialog accessibility: move focus into the dialog, keep Tab inside it, and give focus back to the opener on close. */
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -210,7 +250,7 @@ const openStatus = (hours, nowMs = Date.now()) => {
     if (o > c && m >= o) return { state: 'open', closesAt: c, minsLeft: 1440 - m + c }; // overnight window that started today
   }
   if (yday && yday.o > yday.c && m < yday.c) return { state: 'open', closesAt: yday.c, minsLeft: yday.c - m }; // yesterday's overnight window still running
-  if (today && m < today.o) return { state: 'closed', opensAt: today.o, dayOffset: 0, opensDay: day };
+  if (today && m < today.o) return { state: 'closed', opensAt: today.o, dayOffset: 0, opensDay: day, minsToOpen: today.o - m };
   for (let d = 1; d <= 7; d++) {
     const w = week[(day + d) % 7];
     if (w) return { state: 'closed', opensAt: w.o, dayOffset: d, opensDay: (day + d) % 7 };
@@ -231,6 +271,7 @@ const statusLabel = (st, tr) => {
   }
   if (st.temp) return { tone: 'closed', text: tr.tempClosed };
   if (st.opensAt == null) return { tone: 'closed', text: tr.closedNow };
+  if (st.dayOffset === 0 && st.minsToOpen > 0 && st.minsToOpen <= 60) return { tone: 'soon', text: tr.opensSoon.replace('{n}', st.minsToOpen) };
   const when = st.dayOffset === 0 ? '' : st.dayOffset === 1 ? `${tr.tomorrow} ` : `${tr.days[st.opensDay]} `;
   return { tone: 'closed', text: `${tr.closedNow} · ${tr.opensAt} ${when}${fmtClock(st.opensAt)}` };
 };
@@ -268,7 +309,8 @@ function track(tenantId, type, src) {
     window.addEventListener('pagehide', flushTrack);
     document.addEventListener('visibilitychange', () => { if (document.hidden) flushTrack(); });
   }
-  if (trackQueue.length >= 20) flushTrack();
+  // an "open" is followed by navigation to the menu, so send it straight away instead of waiting for the timer
+  if (type === 'open' || trackQueue.length >= 20) flushTrack();
   else if (!trackTimer) trackTimer = setTimeout(flushTrack, 4000);
 }
 /* An outlet counts as "seen" once per browser session, when at least half its card has been on screen. */
@@ -395,8 +437,13 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-refresh{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:rgba(255,255,255,.45);font-size:11px;font-family:inherit;cursor:pointer;padding:0}
 .pxh-refresh:hover:not(:disabled){color:#d3bfa2}
 @keyframes pxhShimmer{0%{background-position:-300px 0}100%{background-position:300px 0}}
-.pxh-skel{border-radius:20px;height:132px;border:1px solid rgba(211,191,162,.08);background:linear-gradient(90deg,#141414 0%,#1c1c1c 50%,#141414 100%);background-size:600px 100%;animation:pxhShimmer 1.3s linear infinite}
-@media(prefers-reduced-motion:reduce){.pxh-spin{animation:none}.pxh-skel{animation:none}.pxh-card{transition:none}}
+.pxh-sk{position:relative;overflow:hidden;background:rgba(255,255,255,.05);flex:0 0 auto}
+.pxh-sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(100deg,transparent 0%,rgba(211,191,162,.13) 50%,transparent 100%);animation:pxhSweep 1.6s cubic-bezier(.4,0,.2,1) infinite;animation-delay:var(--d,0s)}
+@keyframes pxhSweep{to{transform:translateX(100%)}}
+.pxh-card.pxh-sk-card,.pxh-card.pxh-sk-card:hover{transform:none;box-shadow:none;border-color:rgba(211,191,162,.13);pointer-events:none}
+.pxh-sk-in{animation:pxhSkIn .35s ease both}
+@keyframes pxhSkIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pxh-spin{animation:none}.pxh-sk::after{animation:none;display:none}.pxh-sk-in{animation:none}.pxh-card{transition:none}}
 `;
 
 const Avatar = ({ t, size = 50, radius = 15 }) => {
@@ -509,6 +556,7 @@ export default function CustomerHome() {
   const [loading, setLoading] = useState(() => normalizeTenants(readJson(CACHE_KEY, null)?.list).length === 0);
   const [loadError, setLoadError] = useState('');
   const [fromCache, setFromCache] = useState(false);
+  const [fresh, setFresh] = useState(false); // true once the list has come from the network in this visit
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lang, setLang] = useState(() => { try { return localStorage.getItem(LANG_KEY) === 'mr' ? 'mr' : 'en'; } catch { return 'en'; } });
   const tr = L[lang];
@@ -598,6 +646,7 @@ export default function CustomerHome() {
         const list = normalizeTenants(res.data);
         setTenants(list);
         setFromCache(false);
+        setFresh(true);
         setLoadError('');
         const now = Date.now();
         writeJson(CACHE_KEY, { t: now, list });
@@ -860,15 +909,18 @@ export default function CustomerHome() {
     pickup: tenants.filter((t) => t.config?.customerFeatures?.pickup !== false).length,
     reserve: tenants.filter((t) => t.config?.customerFeatures?.reservation !== false).length,
   }), [tenants]);
-  const anyVeg = useMemo(() => tenants.some((t) => t.config?.onlyVeg === true), [tenants]);
+  // Hidden when every outlet is flagged pure-veg (the schema default is true, so the flag may simply never have been set) - a filter that keeps everything is noise and could mislabel non-veg places.
+  const anyVeg = useMemo(() => tenants.some((t) => t.config?.onlyVeg === true) && tenants.some((t) => t.config?.onlyVeg !== true), [tenants]);
   const anyHours = useMemo(() => tenants.some((t) => openStatus(t.hours, minuteKey * 60000)), [tenants, minuteKey]);
+  const openCount = useMemo(() => tenants.filter((t) => openStatus(t.hours, minuteKey * 60000)?.state === 'open').length, [tenants, minuteKey]);
   // A saved Offers / Pure-veg filter that no longer matches anything would show an empty list with no visible chip to turn off.
   useEffect(() => {
-    if (loading || !tenants.length) return;
+    // Only judge a saved filter against live data: an older cached list (no hours / offers yet) must not wipe the guest's choice.
+    if (loading || !fresh || !tenants.length) return;
     if (offersOnly && totalOffers === 0) setOffersOnly(false);
     if (vegOnly && !anyVeg) setVegOnly(false);
     if (openOnly && !anyHours) setOpenOnly(false);
-  }, [loading, tenants.length, offersOnly, vegOnly, openOnly, totalOffers, anyVeg, anyHours]);
+  }, [loading, fresh, tenants.length, offersOnly, vegOnly, openOnly, totalOffers, anyVeg, anyHours]);
 
   const surprise = () => {
     if (!filtered.length) return;
@@ -996,9 +1048,15 @@ export default function CustomerHome() {
           <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
             {greetingLine}<span style={{ color: GOLD }}>.</span>
           </h1>
+          {loading && (
+            <div className="pxh-stats" aria-hidden="true" style={{ alignItems: 'center', height: 15 }}>
+              <Sk w={64} h={11} r={6} /><Sk w={84} h={11} r={6} d={0.1} /><Sk w={96} h={11} r={6} d={0.2} />
+            </div>
+          )}
           {!loading && tenants.length > 0 && (
             <div className="pxh-stats" aria-label="Summary">
               <span><b>{tenants.length}</b> {tenants.length === 1 ? tr.place : tr.places}</span>
+              {openCount > 0 && <span><b>{openCount}</b> {tr.statOpen}</span>}
               {totalOffers > 0 && <span><b>{totalOffers}</b> {tr.statOffers}</span>}
               {stats.pickup > 0 && <span><b>{stats.pickup}</b> {tr.statPickup}</span>}
               {stats.reserve > 0 && <span><b>{stats.reserve}</b> {tr.statReserve}</span>}
@@ -1191,7 +1249,7 @@ export default function CustomerHome() {
             </div>
           )}
           {loading ? (
-            <div className="pxh-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="pxh-skel" />)}</div>
+            <ListSkeleton label={tr.loadingList} />
           ) : loadError ? (
             <div style={{ border: '1px solid rgba(211,191,162,.12)', borderRadius: 20, padding: '38px 20px', textAlign: 'center', background: 'rgba(255,255,255,.02)' }}>
               <Wifi size={22} color={GOLD} />

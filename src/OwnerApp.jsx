@@ -26,7 +26,7 @@ import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
   Users, UserCircle2, Bell, ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
   ChevronDown, ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownRight, LayoutGrid, Wallet,
-  Target, AlertTriangle, CheckCircle2, Clock, Flame, Sparkles, Download, Send, Phone, Store,
+  Target, AlertTriangle, CheckCircle2, Clock, Flame, Sparkles, Download, Send, Phone, Store, Copy,
   Menu as MenuIcon, X, RefreshCcw, Eye, EyeOff, IndianRupee, Percent, TrendingDown, Boxes,
   Timer, Megaphone, MapPin, Star, Gauge, CalendarClock, FileSpreadsheet, FileText, Mail,
   Search, Filter, MoreVertical, Plus, Minus, Check, ShoppingBag, Truck, CreditCard, Banknote,
@@ -107,6 +107,7 @@ const GlobalStyles = () => (
     @keyframes pownPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
     @keyframes pownSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .pown-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.04) 63%); background-size: 400% 100%; animation: pownShimmer 1.6s ease infinite; border-radius: 10px; }
+    @media (prefers-reduced-motion: reduce) { .pown-skel { animation: none; } }
     @keyframes pownShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
     .pown-btn { cursor: pointer; border: none; font-family: inherit; transition: transform .15s ${T.ease}, opacity .15s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease; }
     .pown-btn:active { transform: scale(0.96); }
@@ -2959,11 +2960,108 @@ const LocationCard = ({ tenantId }) => {
 const DISCOVERY_SOURCES = { list: 'Browsing the list', featured: 'Featured row', offers: 'Offers row', map: 'Map & details', recent: 'Recently viewed', saved: 'Saved places', surprise: '"Surprise me"' };
 const fmtDayShort = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
+/* Same layout as the loaded page: 4 KPI cards, trend chart, two side cards, health checklist. */
+const DiscoverySkeleton = () => {
+  const bar = (w, h = 10, extra) => <Skeleton h={h} style={{ width: w, borderRadius: Math.min(8, h / 2 + 2), ...extra }} />;
+  const heading = (w = 130) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>{bar(18, 18, { borderRadius: 6 })}{bar(w, 13)}</div>
+  );
+  const heights = [34, 46, 40, 58, 52, 70, 62, 78, 66, 84, 72, 60, 74, 88, 80, 68, 76, 92, 84, 70, 62, 78, 66, 56, 72, 64, 52, 60, 48, 56];
+  return (
+    <div role="status" aria-busy="true" aria-live="polite" style={{ display: 'grid', gap: 16 }}>
+      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>Loading guest discovery…</span>
+      <div aria-hidden="true" style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          {[0, 1, 2, 3].map(i => (
+            <Card key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: i === 0 ? 132 : 118, borderColor: i === 0 ? T.borderStrong : T.border }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                {bar(i === 0 ? 112 : 84, 10)}
+                {bar(30, 30, { borderRadius: 9 })}
+              </div>
+              {bar(i === 0 ? '58%' : '46%', i === 0 ? 32 : 25, { borderRadius: 8 })}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{bar(46, 16, { borderRadius: 100 })}{bar(78, 10)}</div>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          {heading(150)}
+          <div style={{ height: 230, display: 'flex', alignItems: 'flex-end', gap: 4, padding: '0 4px' }}>
+            {heights.map((h, i) => <Skeleton key={i} h={`${h}%`} style={{ flex: 1, borderRadius: '4px 4px 0 0', animationDelay: `${(i % 10) * 0.08}s` }} />)}
+          </div>
+          <div style={{ marginTop: 14 }}>{bar('62%', 11)}</div>
+        </Card>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+          <Card>
+            {heading(168)}
+            <div style={{ display: 'grid', gap: 14 }}>
+              {[88, 64, 46, 30, 18].map((w, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {bar(104, 10)}
+                  <div style={{ flex: 1 }}>{bar(`${w}%`, 12, { borderRadius: 6 })}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            {heading(124)}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>
+                  {bar(58, 9)}{bar(44, 22, { borderRadius: 7 })}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 14 }}>{bar('88%', 10)}</div>
+          </Card>
+        </div>
+
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{bar(18, 18, { borderRadius: 6 })}{bar(116, 13)}</div>
+            {bar(52, 22, { borderRadius: 100 })}
+          </div>
+          {bar('100%', 8, { borderRadius: 100 })}
+          <div style={{ display: 'grid', gap: 14, marginTop: 20 }}>
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                {bar(16, 16, { borderRadius: '50%', marginTop: 1 })}
+                <div style={{ flex: 1, display: 'grid', gap: 7 }}>{bar(`${30 + (i * 9) % 22}%`, 11)}{i % 2 === 0 && bar(`${56 + (i * 7) % 24}%`, 9)}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
 const ListingInsightsPage = () => {
   const { tenantId } = useOwner();
   const navigate = useNavigate();
   const [days, setDays] = useState(30);
+  const [toast, setToast] = useState(null);
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
   const { data, loading, error, refetch } = useOwnerData('/api/owner/listing-insights/:tenantId', { params: { days }, refreshMs: 120000 });
+  // Link that opens the guest directory already searching for this outlet - for Instagram bio, WhatsApp status, printed QR.
+  const copyListingLink = async () => {
+    const link = `${window.location.origin}/?q=${encodeURIComponent(data?.tenantName || tenantId)}`;
+    try { await navigator.clipboard.writeText(link); flash('Listing link copied'); } catch { flash(link); }
+  };
+  const downloadCsv = () => {
+    if (!data?.series?.length) return;
+    const rows = [['Date', 'Seen', 'Menu opens', 'Guest actions'], ...data.series.map(d => [d.day, d.impressions, d.opens, d.actions])];
+    const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guest-discovery-${tenantId}-${data.range.from}_${data.range.to}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
   const pctChange = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : undefined);
   const rate = (a, b) => (b > 0 ? Math.min(100, Math.round((a / b) * 1000) / 10) : 0);
 
@@ -2971,10 +3069,15 @@ const ListingInsightsPage = () => {
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <PillTabs value={days} onChange={setDays} options={[{ value: 7, label: '7 days' }, { value: 30, label: '30 days' }, { value: 90, label: '90 days' }]} />
-        <GhostBtn icon={ExternalLink} onClick={() => window.open('/?notrack=1', '_blank', 'noopener')}>Preview guest directory</GhostBtn>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <GhostBtn icon={Copy} onClick={copyListingLink}>Copy listing link</GhostBtn>
+          <GhostBtn icon={Download} onClick={downloadCsv} disabled={!data?.hasAnyData}>Download CSV</GhostBtn>
+          <GhostBtn icon={ExternalLink} onClick={() => window.open('/?notrack=1', '_blank', 'noopener')}>Preview guest directory</GhostBtn>
+        </div>
       </div>
+      {toast && <Toast message={toast} />}
 
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary loading={loading} error={error} onRetry={refetch} skeleton={<DiscoverySkeleton />}>
         {data && (() => {
           const cur = data.current || {};
           const prev = data.previous || {};
@@ -2983,6 +3086,14 @@ const ListingInsightsPage = () => {
           const sources = Object.entries(data.openSources || {}).map(([k, v]) => ({ label: DISCOVERY_SOURCES[k] || k, value: v })).filter(r => r.value > 0).sort((a, b) => b.value - a.value);
           const score = data.listing?.score ?? 0;
           const tone = score >= 80 ? 'gold' : score >= 50 ? 'warning' : 'danger';
+          const missing = (k) => (data.listing?.checks || []).some(c => c.key === k && !c.ok);
+          const openRateNow = rate(cur.opens || 0, cur.impressions || 0);
+          const tips = [];
+          if ((cur.impressions || 0) >= 50 && openRateNow < 15) tips.push('Many guests see your card but few open it. A live offer and a complete listing (logo, area, hours) make the card more tempting.');
+          if (missing('hours')) tips.push('Turn on "Show on guest directory" in Settings to display Open now. Guests can filter for places that are open.');
+          if (missing('phone') && (cur.opens || 0) >= 20) tips.push('Add a phone number so guests who open your page can call you straight away.');
+          if (missing('offers') && (cur.impressions || 0) >= 20) tips.push('Run a live offer: it adds a headline to your card and puts you in the Offers row.');
+          if ((cur.directions || 0) > 0 && missing('pin')) tips.push('Guests are asking for directions but your map pin is missing. Add your coordinates under Settings > Location & Map.');
           const trend = (data.series || []).map(d => ({ date: fmtDayShort(d.day), impressions: d.impressions, opens: d.opens }));
           return (
             <>
@@ -2995,9 +3106,18 @@ const ListingInsightsPage = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                     <KpiCard hero icon={Eye} label="TIMES YOU WERE SEEN" value={(cur.impressions || 0).toLocaleString('en-IN')} sub="card on screen" delta={pctChange(cur.impressions || 0, prev.impressions || 0)} />
                     <KpiCard icon={UtensilsCrossed} label="MENU OPENS" value={(cur.opens || 0).toLocaleString('en-IN')} sub="guests tapped through" delta={pctChange(cur.opens || 0, prev.opens || 0)} />
-                    <KpiCard icon={Target} label="OPEN RATE" value={`${rate(cur.opens || 0, cur.impressions || 0)}%`} sub="of views became opens" />
+                    <KpiCard icon={Target} label="OPEN RATE" value={`${rate(cur.opens || 0, cur.impressions || 0)}%`} sub={(prev.impressions || 0) > 0 ? `was ${rate(prev.opens || 0, prev.impressions || 0)}% before` : 'of views became opens'} />
                     <KpiCard icon={Zap} label="GUEST ACTIONS" value={actions.toLocaleString('en-IN')} sub="calls, directions, shares, saves" delta={pctChange(actions, prevActions)} />
                   </div>
+
+                  {tips.length > 0 && (
+                    <Card>
+                      <SectionHeading icon={Sparkles} title="Suggestions" />
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {tips.map(t => <div key={t} style={{ fontSize: 12.5, color: T.textMed, lineHeight: 1.6 }}>• {t}</div>)}
+                      </div>
+                    </Card>
+                  )}
 
                   <Card>
                     <SectionHeading icon={BarChart3} title={`Last ${data.range?.days || days} days`} />
@@ -3174,6 +3294,10 @@ const SettingsPage = () => {
                   })}
                 </div>
               </Field>
+              {[['Mon–Fri', form.operatingHours.weekday], ['Sat–Sun', form.operatingHours.weekend]].map(([lbl, b]) => {
+                const note = !b?.open || !b?.close ? '' : b.close === b.open ? 'open 24 hours' : b.close < b.open ? `closes at ${b.close} the next day` : '';
+                return note ? <div key={lbl} style={{ fontSize: 11.5, color: T.primary, marginBottom: 6 }}>{lbl}: {note}</div> : null;
+              })}
               <div style={{ display: 'grid', gap: 12, marginTop: 6 }}>
                 <AlertToggleRow label="Show Open / Closed on the guest directory" checked={form.operatingHours.showOnListing === true} onChange={() => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, showOnListing: !(f.operatingHours.showOnListing === true) } }))} />
                 <AlertToggleRow label="Temporarily closed (holiday / emergency)" checked={form.operatingHours.temporarilyClosed === true} onChange={() => setForm(f => ({ ...f, operatingHours: { ...f.operatingHours, temporarilyClosed: !(f.operatingHours.temporarilyClosed === true) } }))} />

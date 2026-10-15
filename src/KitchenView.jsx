@@ -13,16 +13,7 @@ import { useParams } from 'react-router-dom';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ChefHat, Timer, Hourglass, BellRing, StickyNote,
-  X, Zap, History, LayoutGrid, BarChart3,
-  Package, UtensilsCrossed, Clock, CheckSquare,
-  Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff,
-  AlignJustify, Trash2, AlertTriangle, RotateCcw,
-  TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight,
-  CheckCircle2, ArrowRight, Scale, FileText, Droplets, FlameKindling,
-  PackageX, ShieldAlert, Wrench
-} from 'lucide-react';
+import { ChefHat, Timer, BellRing, StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Clock, CheckSquare, Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
 
@@ -64,6 +55,15 @@ const getOrderType = order => {
 // Module-level so the (module-level) order card and the board share it: keys of dish checks whose save is still in flight.
 // A refresh that lands in that window used to un-tick the dish the chef had just ticked.
 const pendingToggleKeys = new Set();
+
+// Same rule the order card uses to show/hide a dish (category tab + veg/non-veg mode), so totals built elsewhere match the cards.
+const isDishVisible = (item, { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode }) => {
+  if (!item || item.isExtraItem || item.extraItemId != null) return false;
+  const catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap?.[item.name?.toLowerCase().trim()] || null;
+  if (selectedCategory !== 'ALL' && catId !== String(selectedCategory).toLowerCase().trim()) return false;
+  const isVeg = item.isVeg !== undefined ? item.isVeg !== false : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
+  return tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
+};
 
 const fmt = s => {
   s = Math.max(0, Math.floor(Number(s) || 0));
@@ -107,6 +107,8 @@ const KitchenView = () => {
   const [checkedItemsGlobal,   setCheckedItemsGlobal]   = useState({});
   const [isListening,          setIsListening]          = useState(false);
   const [interceptedAlerts,    setInterceptedAlerts]    = useState([]);
+  // 'loading' until the first ticket fetch answers; 'error' if it failed. Before this the board showed "KITCHEN CLEAR" while loading.
+  const [boardState, setBoardState] = useState('loading');
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
   const [eightySixModal, setEightySixModal] = useState(null); // { categoryKey, categoryName }
   const [selectedDish86, setSelectedDish86] = useState(null);
@@ -137,6 +139,16 @@ const KitchenView = () => {
   /* ── refs ── */
   const audioPlayer    = useRef(null);
   const alertPlayer    = useRef(null);
+  // Browsers refuse all audio and speech until the page has had a user gesture. On a kiosk/tablet that reloads without a tap,
+  // every alert was silently swallowed by `play().catch(() => {})` and the kitchen never knew. Show a prompt until the first tap.
+  const [audioUnlocked, setAudioUnlocked] = useState(() => { try { return navigator.userActivation ? !!navigator.userActivation.hasBeenActive : false; } catch { return false; } });
+  useEffect(() => {
+    if (audioUnlocked) return undefined;
+    const unlock = () => setAudioUnlocked(true);
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+  }, [audioUnlocked]);
   const recognitionRef = useRef(null);
   const socketRef      = useRef(null);
   const speechQueueRef = useRef([]);
@@ -218,6 +230,7 @@ const KitchenView = () => {
       ]);
       if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
       const incoming = [...(ordersRes.data || [])].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setBoardState('ready');
       setOrders(incoming);
       if (catRes)  setCategories(catRes.data  || []);
       if (menuRes) setMenuItems(menuRes.data  || []);
@@ -236,11 +249,14 @@ const KitchenView = () => {
         return merged;
       });
       fetchHealth();
-    } catch (err) { console.error('KDS fetch:', err.message); }
+    } catch (err) { console.error('KDS fetch:', err.message); setBoardState(prev => prev === 'ready' ? prev : 'error'); }
   };
+
+  const retryBoardLoad = () => { setBoardState('loading'); fetchActiveOrders(); };
 
   /* ── voice recognition ── */
   const voiceHandlerRef = useRef(() => {});
+  const wantListeningRef = useRef(false);
   const handleVoiceResult = e => {
     const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
     const hasTableWord = txt.includes('table') || txt.includes('टेबल');
@@ -275,20 +291,26 @@ const KitchenView = () => {
     const rec = new SR();
     rec.continuous = true; rec.interimResults = false; rec.lang = 'hi-IN';
     rec.onresult = e => voiceHandlerRef.current(e);
-    rec.onerror = rec.onend = () => setIsListening(false);
+    // The browser ends continuous recognition after a stretch of silence. The mic indicator then flipped to "off" on its own
+    // (or stayed "on" while nothing listened). Restart while the chef still wants it; stop for good if the mic is blocked.
+    rec.onerror = (e) => { if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) { wantListeningRef.current = false; setIsListening(false); } };
+    rec.onend = () => {
+      if (wantListeningRef.current) setTimeout(() => { if (wantListeningRef.current) { try { rec.start(); } catch { /* already running */ } } }, 300);
+      else setIsListening(false);
+    };
     recognitionRef.current = rec;
-    return () => { try { rec.abort(); } catch {} recognitionRef.current = null; }; // leaving the KDS left the mic recognizer running
+    return () => { wantListeningRef.current = false; try { rec.abort(); } catch {} recognitionRef.current = null; }; // leaving the KDS left the mic recognizer running
   }, []);
 
   const toggleVoice = () => {
     if (!recognitionRef.current) return alert('Speech recognition not supported.');
-    if (isListening) { try { recognitionRef.current.stop(); } catch {} setIsListening(false); }
-    else             { try { recognitionRef.current.start(); } catch { /* already running */ } setIsListening(true); }
+    if (isListening) { wantListeningRef.current = false; try { recognitionRef.current.stop(); } catch {} setIsListening(false); }
+    else             { wantListeningRef.current = true; try { recognitionRef.current.start(); } catch { /* already running */ } setIsListening(true); }
   };
 
   /* ── main effect: socket + initial fetch ── */
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId) { setBoardState('error'); return undefined; }
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     // Blocked/throwing storage used to abort this whole effect, so the socket never connected and the KDS stayed empty.
     try {
@@ -383,7 +405,8 @@ const KitchenView = () => {
           setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
         }
       }
-      setInterceptedAlerts(prev => [{ id: Date.now(), ...data, modificationNote: note }, ...prev]);
+      // Date.now() alone collided for two alerts in the same millisecond (duplicate React keys), and the list grew without bound.
+      setInterceptedAlerts(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...data, modificationNote: note }, ...prev].slice(0, 25));
       fetchActiveOrders({ ordersOnly: true });
     });
 
@@ -624,8 +647,11 @@ const KitchenView = () => {
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
-    orders.forEach(o => (o.items || []).forEach((i,idx) => {
-      if (i.isExtraItem || i.extraItemId != null) return;
+    // Built from filteredOrders + the card's own visibility rule: it used every order and every dish, so the totals disagreed
+    // with the "N tickets" label beside them and with the dishes actually shown on the cards.
+    const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
+    filteredOrders.forEach(o => (o.items || []).forEach((i,idx) => {
+      if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const otype = getOrderType(o);
       const isP = otype === 'parcel';
@@ -634,17 +660,18 @@ const KitchenView = () => {
 totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
     }));
     return totals;
-  }, [orders, checkedItemsGlobal]);
+  }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
 
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
+    const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
     filteredOrders.forEach(o => (o.items || []).forEach((i,idx) => {
-      if (i.isExtraItem || i.extraItemId != null) return;
+      if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
 m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
     }));
     return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,7);
-  }, [filteredOrders, checkedItemsGlobal]);
+  }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
 
   // Prefer the database figures (same on every KDS device and in the Owner app); the localStorage counters stay
   // only as an offline fallback before the first server response.
@@ -676,7 +703,10 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
   }, [tenantId]);
   const fetchWastageLog = useCallback(async () => {
     setWastageLoading(true);
-    try { const r = await axios.get(`${BASE_URL}/wastage/${tenantId}`); setWastageLog(r.data||[]); } catch { setWastageLog([]); } finally { setWastageLoading(false); }
+    // A failed load used to become an empty list, so the panel claimed "No wastage entries today" and invited duplicate entries.
+    try { const r = await axios.get(`${BASE_URL}/wastage/${tenantId}`); setWastageLog(Array.isArray(r.data) ? r.data : []); setWastageError(e => e === 'Could not load today\'s entries. Close and reopen this panel to retry.' ? '' : e); }
+    catch { setWastageError('Could not load today\'s entries. Close and reopen this panel to retry.'); }
+    finally { setWastageLoading(false); }
   }, [tenantId]);
   const fetchWastageAnalytics = useCallback(async () => {
     try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
@@ -702,7 +732,9 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
   };
 
   const deleteWastageEntry = async id => {
-    try { await axios.delete(`${BASE_URL}/wastage/${tenantId}/${id}`); setWastageLog(prev => prev.filter(e => e._id !== id)); } catch {}
+    if (!window.confirm('Remove this wastage entry?')) return;
+    try { await axios.delete(`${BASE_URL}/wastage/${tenantId}/${id}`); setWastageLog(prev => prev.filter(e => e._id !== id)); setWastageError(''); }
+    catch (err) { setWastageError(err?.response?.data?.error || 'Could not remove the entry. Try again.'); }
   };
 
   /* ── breakpoint helpers ── */
@@ -750,6 +782,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       )}
 
       {/* section list */}
+      {boardState === 'loading' ? <KdsSidebarSkeleton /> : (
       <div style={{ display:'flex', flexDirection:'column', gap:4, overflowY:'auto', flex:1 }} className="no-scrollbar">
         {/* ALL */}
         {(() => {
@@ -808,6 +841,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           </button>
         </div>
       </div>
+      )}
       <div style={{ paddingTop:10, marginTop:10, borderTop:'1px solid rgba(255,255,255,0.099)', flexShrink:0 }}>
         <SupportContact style={{ marginBottom: 8 }} />
         <PwaInstallButton kind="kitchen" compact light />
@@ -820,8 +854,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
   ═══════════════════════════════════════════════════════════ */
   return (
     <div style={rs.root}>
+      {boardState === 'loading' && <KdsSkeletonCss />}
       <audio ref={audioPlayer} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
       <audio ref={alertPlayer} src="https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3"  preload="auto" />
+      {!audioUnlocked && (
+        <div style={{ position:'fixed', left:'50%', bottom:16, transform:'translateX(-50%)', zIndex:4000, padding:'9px 16px', borderRadius:99, background:'#17120c', color:'#f1e3c4', border:'1px solid rgba(233,220,195,0.5)', fontSize:'0.66rem', fontWeight:900, letterSpacing:'0.6px', boxShadow:'0 8px 28px rgba(0,0,0,0.55)', pointerEvents:'none' }}>
+          🔇 TAP ANYWHERE TO ENABLE ORDER SOUNDS &amp; VOICE
+        </div>
+      )}
 
       {/* ── DRAWER OVERLAY ── */}
       <AnimatePresence>
@@ -996,7 +1036,8 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
       {/* ── MODIFICATION ALERTS ── */}
       <AnimatePresence>
-        {interceptedAlerts.map(alert => (
+        {/* Only the latest few: an unbounded stack pushed the actual tickets off the screen during a rush. */}
+        {interceptedAlerts.slice(0, 3).map(alert => (
           <motion.div key={alert.id} initial={{ scale:0.95, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ opacity:0 }}
             style={{ background:'#2b2219', border:'1px solid rgba(226,154,88,0.3)', padding: isMobile ? '12px 14px' : '13px 20px', borderRadius:13, display:'flex', alignItems:'center', justifyContent:'space-between', flexDirection: isMobile ? 'column' : 'row', gap:12, flexShrink:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -1014,6 +1055,13 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             </button>
           </motion.div>
         ))}
+        {interceptedAlerts.length > 3 && (
+          <motion.div key="alerts-more" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'8px 14px', borderRadius:10, background:'#2b2219', border:'1px solid rgba(226,154,88,0.3)', color:'#d08a4a', fontSize:'0.64rem', fontWeight:900 }}>
+            <span>+{interceptedAlerts.length - 3} MORE ORDER CHANGES</span>
+            <button type="button" onClick={() => setInterceptedAlerts([])} style={{ background:'transparent', border:'1px solid rgba(226,154,88,0.4)', color:'#e29a58', padding:'5px 12px', borderRadius:7, fontSize:'0.6rem', fontWeight:900, cursor:'pointer' }}>ACKNOWLEDGE ALL</button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ══════════════ BODY ══════════════ */}
@@ -1132,7 +1180,20 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
           {/* MOBILE SWIPE CARDS */}
           {!showMetricsDashboard && !isAggregateView && useCardView && (
-            filteredOrders.length === 0 ? (
+            boardState === 'loading' ? (
+              <div aria-hidden="true" style={{ flex:1, display:'flex', flexDirection:'column', gap:10, overflow:'hidden' }}>
+                <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:5, flexShrink:0, padding:'0 20px' }}>
+                  <Sk w={20} h={6} r={3} style={{ background:'rgba(211,191,162,0.25)' }} />
+                  {[0,1,2,3].map(i => <Sk key={i} w={6} h={6} r={3} />)}
+                </div>
+                <div style={{ flex:1, overflow:'hidden' }}><KdsCardSkeleton isMobile /></div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+                  <Sk w={84} h={36} r={10} /><Sk w={40} h={10} r={4} /><Sk w={84} h={36} r={10} />
+                </div>
+              </div>
+            ) : boardState === 'error' && orders.length === 0 ? (
+              <KdsLoadError onRetry={retryBoardLoad} />
+            ) : filteredOrders.length === 0 ? (
               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
                 <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
                 <div style={{ textAlign:'center' }}>
@@ -1171,12 +1232,14 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           {/* TABLET/DESKTOP GRID */}
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
             <div style={{ flex:1, overflowY:'auto', display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isSmallTablet?'240px':'300px'},1fr))`, gap: isTablet ? 12 : 16, alignContent:'flex-start' }} className="no-scrollbar">
+              {boardState === 'loading' && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} isTablet={isTablet} />)}
+              {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn:'1/-1', display:'flex' }}><KdsLoadError onRetry={retryBoardLoad} /></div>}
               <AnimatePresence mode="popLayout">
                 {filteredOrders.map((order,i) => (
                   <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
                 ))}
               </AnimatePresence>
-              {filteredOrders.length === 0 && (
+              {boardState === 'ready' && filteredOrders.length === 0 && (
                 <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
                   <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
                   <div style={{ textAlign:'center' }}>
@@ -1597,7 +1660,7 @@ const KDSOrderCard = ({
 
   /* live second counter */
   useEffect(() => {
-    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - new Date(order.createdAt)) / 1000)));
+    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - new Date(order.createdAt)) / 1000) || 0)); // NaN when createdAt is missing/invalid
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
@@ -2124,6 +2187,125 @@ const wFormLabel = {
   fontWeight:900, letterSpacing:'1.2px', marginBottom:6,
   textTransform:'uppercase',
 };
+
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING SKELETONS — mirror the real KDS geometry (ticket card, sidebar list) so nothing shifts when data arrives.
+   One calm sweep, staggered across the cards; motion is switched off for prefers-reduced-motion.
+═══════════════════════════════════════════════════════════ */
+const KDS_SKELETON_CSS = `
+.kdsk{position:relative;overflow:hidden;background:rgba(255,255,255,0.055);border-radius:6px;flex-shrink:0}
+.kdsk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(100deg,transparent 15%,rgba(233,220,195,0.11) 50%,transparent 85%);
+  animation:kdsk-sweep 1.7s cubic-bezier(.45,0,.25,1) infinite;animation-delay:var(--kdsk-d,0s)}
+.kdsk-ink{background:rgba(23,18,12,0.12)}
+.kdsk-ink::after{background:linear-gradient(100deg,transparent 15%,rgba(255,255,255,0.42) 50%,transparent 85%)}
+@keyframes kdsk-sweep{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.kdsk::after{animation:none;opacity:0}}
+`;
+
+const KdsSkeletonCss = () => (
+  <>
+    <style>{KDS_SKELETON_CSS}</style>
+    <span role="status" style={{ position:'absolute', width:1, height:1, overflow:'hidden', clip:'rect(0 0 0 0)', whiteSpace:'nowrap' }}>Loading kitchen tickets…</span>
+  </>
+);
+
+const Sk = ({ w, h, r = 6, ink = false, style }) => (
+  <div className={`kdsk${ink ? ' kdsk-ink' : ''}`} style={{ width:w, height:h, borderRadius:r, ...style }} />
+);
+
+/* One ticket: same shell, cream header band, progress row, dish rows and dispatch button as KDSOrderCard. */
+const KdsCardSkeleton = ({ index = 0, isMobile = false, isTablet = false }) => {
+  const pad = (isMobile || isTablet) ? 14 : 16;
+  const rows = isMobile ? 5 : isTablet ? 3 : 4;
+  return (
+    <div aria-hidden="true" style={{
+      '--kdsk-d': `${index * 0.14}s`,
+      borderRadius:16, padding:pad, display:'flex', flexDirection:'column', boxSizing:'border-box',
+      height: isMobile ? '100%' : isTablet ? 390 : 420,
+      border:'1px solid rgba(233,220,195,0.2)', position:'relative', overflow:'hidden',
+      background:'linear-gradient(160deg, rgba(233,220,195,0.06), rgba(233,220,195,0.015)), #0c0a08',
+    }}>
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:'rgba(233,220,195,0.22)' }} />
+
+      {/* header band */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8,
+        margin:`-${pad}px -${pad}px 12px`, padding: pad === 14 ? '17px 14px 12px' : '19px 16px 13px',
+        background:'linear-gradient(135deg, #f1e8d4 0%, #e6d9bd 55%, #dccdad 100%)', borderBottom:'1px solid rgba(23,18,12,0.12)' }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <Sk ink w={isMobile ? 64 : 78} h={isMobile ? 27 : 30} r={7} style={{ marginBottom:5 }} />
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+            <Sk ink w={46} h={15} r={4} />
+            <Sk ink w={34} h={11} r={4} />
+          </div>
+        </div>
+        <Sk ink w={80} h={31} r={9} />
+      </div>
+
+      {/* prep progress */}
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <Sk w={70} h={8} r={3} />
+          <Sk w={24} h={8} r={3} />
+        </div>
+        <Sk w="100%" h={3} r={2} />
+      </div>
+
+      {/* dish rows */}
+      <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', gap:4 }}>
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} style={{
+            display:'flex', alignItems:'flex-start', gap:10, padding: isMobile ? '10px 11px' : '11px 12px',
+            borderRadius:10, background:'#0d0d0d', border:'1px solid rgba(247,243,235,0.07)', borderLeft:'3px solid rgba(247,243,235,0.12)',
+          }}>
+            <Sk w={28} h={28} r={7} />
+            <div style={{ flex:1, minWidth:0, paddingTop:2 }}>
+              <Sk w={`${58 + ((i * 17 + index * 9) % 30)}%`} h={13} r={4} style={{ marginBottom:7 }} />
+              <Sk w={`${26 + ((i * 11 + index * 7) % 20)}%`} h={8} r={3} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* bottom actions */}
+      <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
+        <div style={{ display:'flex', justifyContent:'flex-end' }}><Sk w={70} h={22} r={7} /></div>
+        <Sk w="100%" h={isMobile ? 50 : 44} r={12} style={{ background:'rgba(233,220,195,0.09)', border:'1px solid rgba(233,220,195,0.16)' }} />
+      </div>
+    </div>
+  );
+};
+
+/* Sidebar station list: ALL + category rows, same 40px buttons as rs.sidebarBtn. */
+const KdsSidebarSkeleton = () => (
+  <div aria-hidden="true" style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflow:'hidden' }}>
+    {[78, 62, 84, 56, 70, 66].map((w, i) => (
+      <div key={i} style={{ '--kdsk-d': `${i * 0.1}s`, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 10px', minHeight:40,
+        borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', background:'rgba(255,255,255,0.033)', boxSizing:'border-box' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <Sk w={12} h={12} r={4} />
+          <Sk w={Math.round(w * 0.9)} h={9} r={3} />
+        </div>
+        <Sk w={24} h={16} r={6} />
+      </div>
+    ))}
+  </div>
+);
+
+/* First load failed: say so and offer a retry instead of an endless skeleton or a false "KITCHEN CLEAR". */
+const KdsLoadError = ({ onRetry }) => (
+  <div role="alert" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
+    <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(226,154,88,0.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <WifiOff size={28} color="#e29a58" />
+    </div>
+    <div style={{ textAlign:'center' }}>
+      <p style={{ fontWeight:900, color:'#cfcac0', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>COULDN'T LOAD TICKETS</p>
+      <p style={{ fontSize:'0.62rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Check the connection. This screen keeps retrying every minute.</p>
+    </div>
+    <button type="button" onClick={onRetry} style={{ padding:'10px 22px', borderRadius:10, border:'1px solid rgba(233,220,195,0.55)', background:'linear-gradient(135deg, #f1e8d4, #e3d5b8 55%, #d6c5a0)', color:'#17120c', fontWeight:900, fontSize:'0.7rem', letterSpacing:'0.8px', cursor:'pointer' }}>TRY AGAIN</button>
+  </div>
+);
 
 // One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
 const __sfxCache = {};

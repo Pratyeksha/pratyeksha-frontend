@@ -5,17 +5,7 @@ import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Building2, RefreshCcw, Search, TrendingUp, Users, Trophy,
-  ShieldCheck, Zap, AlertCircle, Utensils, Coffee,
-  CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2,
-  Clock, Layers, X, Menu, Plus, Power, RotateCcw, UserPlus,
-  IndianRupee, AlertTriangle, Calendar, Store, ChefHat,
-  BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone,
-  Upload, FileJson, Loader2, FileDown, Trash2, ChevronDown, Info, Bell, Send, Receipt,
-  Globe, Server, MessageSquare, QrCode, CreditCard, Wrench, Megaphone as MegaphoneIcon,
-  TrendingDown, PlusCircle, Edit3, FileText, Radar
-} from 'lucide-react';
+import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2, Bell, Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar } from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
 const BRAND_LOGO = '/pratyeksha-logo.png';
@@ -326,22 +316,25 @@ function usePwaInstall() {
   const [isIos, setIsIos] = useState(false);
 
   useEffect(() => {
+    // Remember what we inject and remove it on unmount: it used to stay in <head> after leaving this page, so the admin
+    // manifest / icon stayed attached to every other screen of the SPA.
+    const injected = [];
     if (!document.querySelector('link[rel="manifest"]')) {
       const link = document.createElement('link');
       link.rel = 'manifest';
       link.href = '/admin-manifest.webmanifest';
-      document.head.appendChild(link);
+      document.head.appendChild(link); injected.push(link);
     }
     if (!document.querySelector('meta[name="theme-color"]')) {
       const meta = document.createElement('meta');
       meta.name = 'theme-color'; meta.content = '#1a1a1d';
-      document.head.appendChild(meta);
+      document.head.appendChild(meta); injected.push(meta);
     }
     if (!document.querySelector('link[rel="apple-touch-icon"]')) {
       const link = document.createElement('link');
       link.rel = 'apple-touch-icon';
       link.href = '/admin-pwa/apple-touch-icon.png';
-      document.head.appendChild(link);
+      document.head.appendChild(link); injected.push(link);
     }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/admin-sw.js', { scope: '/master-admin' }).catch(() => {});
@@ -356,16 +349,23 @@ function usePwaInstall() {
     return () => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstall);
       window.removeEventListener('appinstalled', onInstalled);
+      injected.forEach(el => { try { el.remove(); } catch { /* already gone */ } });
     };
   }, []);
 
   const promptInstall = async () => {
     if (!installEvent) return 'unavailable';
-    installEvent.prompt();
-    const { outcome } = await installEvent.userChoice;
-    if (outcome === 'accepted') setInstalled(true);
-    setInstallEvent(null);
-    return outcome;
+    try {
+      installEvent.prompt();
+      const { outcome } = await installEvent.userChoice;
+      if (outcome === 'accepted') setInstalled(true);
+      setInstallEvent(null);
+      return outcome;
+    } catch {
+      // The event can only be used once; a second tap threw and left the button stuck.
+      setInstallEvent(null);
+      return 'unavailable';
+    }
   };
 
   return { canInstall: !!installEvent, installed, isIos, promptInstall };
@@ -447,8 +447,19 @@ const InstallButton = ({ compact }) => {
 /* ─────────────────────────────────────────
    SHARED: modal shell, toast, confirm/renew/import dialogs
 ───────────────────────────────────────── */
-const ModalShell = ({ title, icon: Icon, onClose, children, width }) => (
-  <motion.div className="p-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+const ModalShell = ({ title, icon: Icon, onClose, children, width }) => {
+  // Close on a click that both started and ended on the backdrop: selecting text in an input and releasing the mouse outside
+  // the dialog used to close it and throw away a half-filled form. Escape closes too.
+  const downOnBackdrop = useRef(false);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+  <motion.div className="p-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget; }}
+    onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose?.(); downOnBackdrop.current = false; }}>
     <motion.div className="p-modal" style={width ? { width } : undefined}
       initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }}
       transition={{ duration: 0.2 }} onClick={e => e.stopPropagation()}>
@@ -462,7 +473,8 @@ const ModalShell = ({ title, icon: Icon, onClose, children, width }) => (
       {children}
     </motion.div>
   </motion.div>
-);
+  );
+};
 
 const Toast = ({ toast }) => (
   <AnimatePresence>
@@ -901,6 +913,161 @@ const DeleteTenantModal = ({ client, onClose, onConfirm }) => {
 /* ════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════ */
+/* ─────────────────────────────────────────
+   LOADING SKELETON — mirrors the real shell (floating sidebar, revenue card, nav, client list) and the Demo Requests
+   screen it opens on, so nothing jumps when data arrives. Self-contained CSS: the global admin stylesheet is only
+   injected after first paint. One gold-tinted sweep, staggered; disabled for prefers-reduced-motion.
+───────────────────────────────────────── */
+const PKS_CSS = `
+.pks{position:relative;overflow:hidden;background:rgba(255,255,255,0.055);border-radius:6px;flex-shrink:0}
+.pks::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(100deg,transparent 15%,rgba(211,191,162,0.10) 50%,transparent 85%);
+  animation:pks-sweep 1.8s cubic-bezier(.45,0,.25,1) infinite;animation-delay:var(--pks-d,0s)}
+@keyframes pks-sweep{to{transform:translateX(100%)}}
+.pks-root{position:fixed;top:0;left:0;width:100vw;height:100vh;display:flex;overflow:hidden;box-sizing:border-box;
+  background:radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.09), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(211,191,162,0.05), transparent 60%), #141416}
+.pks-root *,.pks-root *::before,.pks-root *::after{box-sizing:border-box}
+.pks-side{width:256px;min-width:256px;height:calc(100vh - 24px);margin:12px 0 12px 12px;padding:22px 14px;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;
+  background:linear-gradient(180deg, rgba(34,34,38,0.92), rgba(22,22,25,0.96));border:1px solid rgba(211,191,162,0.16);border-radius:24px;
+  box-shadow:0 24px 60px -24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)}
+.pks-top{display:none;position:fixed;top:0;left:0;right:0;height:50px;background:#101012;border-bottom:1px solid #313137;align-items:center;justify-content:space-between;padding:0 14px;z-index:5}
+.pks-main{flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.pks-hdr{padding:20px 32px 14px;background:#101012;border-bottom:1px solid #2e2e34;flex-shrink:0}
+.pks-tabs{display:flex;padding:0 32px;border-bottom:1px solid #313137;background:#101012;flex-shrink:0;overflow:hidden}
+.pks-list{padding:14px 32px 40px;flex:1;min-height:0;overflow:hidden}
+@media (max-width:1100px){.pks-side{width:220px;min-width:220px}.pks-hdr,.pks-tabs,.pks-list{padding-left:20px;padding-right:20px}}
+@media (max-width:768px){
+  .pks-side{display:none}.pks-top{display:flex}.pks-main{padding-top:50px}
+  .pks-hdr{padding:14px 14px 12px}.pks-tabs{padding:0 14px}.pks-list{padding:14px 14px 40px}
+  .pks-hide-mob{display:none!important}.pks-search{display:none!important}
+}
+@media (prefers-reduced-motion:reduce){.pks::after{animation:none;opacity:0}}
+`;
+
+const Pk = ({ w, h, r = 6, style, className = '' }) => (
+  <div className={`pks ${className}`.trim()} style={{ width: w, height: h, borderRadius: r, ...style }} />
+);
+
+/* One Demo Requests row: same padding / radius / rows as the real card. */
+const DemoCardSkeleton = ({ index = 0 }) => (
+  <div aria-hidden="true" style={{ '--pks-d': `${index * 0.1}s`, padding:'14px 16px', borderRadius:10, marginBottom:6, background:C.bgCard, border:`1px solid ${C.border}`, borderLeft:'2px solid transparent' }}>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+      <div style={{ flex:1, minWidth:0, marginRight:12 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
+          <Pk w={104 + ((index * 23) % 64)} h={14} r={4} />
+          <Pk w={58} h={19} r={6} />
+        </div>
+        <Pk w={`${34 + ((index * 13) % 26)}%`} h={12} r={4} />
+      </div>
+      <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+        <Pk w={64} h={26} r={7} />
+        <Pk w={14} h={14} r={4} />
+      </div>
+    </div>
+    <div style={{ display:'flex', gap:14, alignItems:'center' }}>
+      <Pk w={96} h={12} r={4} />
+      <Pk className="pks-hide-mob" w={70} h={12} r={4} />
+      <Pk className="pks-hide-mob" w={62} h={12} r={4} />
+      <Pk w={42} h={11} r={4} style={{ marginLeft:'auto' }} />
+    </div>
+  </div>
+);
+
+const DemoListSkeleton = ({ count = 6 }) => (
+  <div role="status" aria-label="Loading requests">
+    {Array.from({ length: count }, (_, i) => <DemoCardSkeleton key={i} index={i} />)}
+  </div>
+);
+
+const AdminSkeleton = () => (
+  <div className="pks-root" role="status" aria-busy="true" aria-label="Loading Pratyeksha control centre">
+    <style>{PKS_CSS}</style>
+    <span style={{ position:'absolute', width:1, height:1, overflow:'hidden', clip:'rect(0 0 0 0)', whiteSpace:'nowrap' }}>Loading control centre…</span>
+
+    {/* mobile top bar */}
+    <div className="pks-top" aria-hidden="true">
+      <Pk w={30} h={30} r={8} />
+      <Pk w={72} h={28} r={8} />
+      <Pk w={30} h={30} r={8} />
+    </div>
+
+    {/* sidebar */}
+    <aside className="pks-side" aria-hidden="true">
+      {/* brand */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:28, paddingBottom:18, borderBottom:`1px solid ${C.border}` }}>
+        <Pk w={58} h={34} r={9} />
+        <div>
+          <Pk w={86} h={13} r={4} style={{ marginBottom:6 }} />
+          <Pk w={64} h={10} r={4} />
+        </div>
+      </div>
+      {/* revenue card */}
+      <div style={{ marginBottom:20, padding:14, background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10 }}>
+        <Pk w={112} h={10} r={4} style={{ marginBottom:8 }} />
+        <Pk w={146} h={22} r={5} style={{ marginBottom:8 }} />
+        <Pk w={160} h={10} r={4} style={{ marginBottom:12 }} />
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} style={{ background:C.bgDark, padding:'7px 8px', borderRadius:7, border:`1px solid ${C.border}` }}>
+              <Pk w={26} h={16} r={4} style={{ marginBottom:5 }} />
+              <Pk w={42} h={10} r={4} />
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* navigation */}
+      <Pk w={64} h={10} r={4} style={{ marginBottom:10, marginLeft:10 }} />
+      <div style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, maxHeight:236, overflow:'hidden', flexShrink:0 }}>
+        {[88, 72, 96, 84, 56, 62, 82, 90, 70].map((w, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderLeft:'2px solid transparent', borderRadius:8, background: i === 0 ? 'rgba(211,191,162,0.06)' : 'transparent' }}>
+            <Pk w={15} h={15} r={4} />
+            <Pk w={w} h={11} r={4} style={{ '--pks-d': `${i * 0.08}s` }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ height:1, background:C.border, margin:'4px 0 14px' }} />
+      {/* clients */}
+      <Pk w={48} h={10} r={4} style={{ marginBottom:10, marginLeft:4 }} />
+      <div style={{ overflow:'hidden', minHeight:70, maxHeight:150 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard, border:`1px solid ${C.border}` }}>
+            <Pk w={7} h={7} r={99} />
+            <div style={{ flex:1 }}>
+              <Pk w={`${54 + i * 12}%`} h={11} r={4} style={{ marginBottom:5 }} />
+              <Pk w={`${36 + i * 8}%`} h={9} r={3} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+
+    {/* main: Demo Requests (the screen the console opens on) */}
+    <main className="pks-main" aria-hidden="true">
+      <div className="pks-hdr">
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', flexWrap:'wrap', gap:12 }}>
+          <div>
+            <Pk w={92} h={10} r={4} style={{ marginBottom:8 }} />
+            <Pk w={176} h={22} r={5} style={{ marginBottom:9 }} />
+            <Pk w={236} h={12} r={4} />
+          </div>
+          <Pk className="pks-search" w={200} h={38} r={8} style={{ border:`1px solid ${C.borderMid}`, background:C.bgInput }} />
+        </div>
+      </div>
+      <div className="pks-tabs">
+        {[46, 70, 84, 54].map((w, i) => (
+          <div key={i} style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:7, borderBottom:`2px solid ${i === 0 ? 'rgba(211,191,162,0.5)' : 'transparent'}` }}>
+            <Pk w={w - 20} h={12} r={4} />
+            <Pk w={22} h={17} r={99} />
+          </div>
+        ))}
+      </div>
+      <div className="pks-list">
+        {Array.from({ length: 7 }, (_, i) => <DemoCardSkeleton key={i} index={i} />)}
+      </div>
+    </main>
+  </div>
+);
+
 /* Module-level on purpose: declared inside the page component it was a new component type on every render, so the whole
    sidebar remounted on every state change (each keystroke in any form). */
 const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
@@ -1109,6 +1276,7 @@ export default function PratyekshaMasterAdmin() {
 
   /* ── onboard ── */
   const handleOnboard = async () => {
+    if (onboardLoading) return; // a double-click could submit twice
     if (!String(onboarding.name || '').trim() || !String(onboarding.username || '').trim() || !onboarding.password) {
       setOnboardError('Restaurant name, username and password are required.'); return;
     }
@@ -1120,6 +1288,13 @@ export default function PratyekshaMasterAdmin() {
     if (String(onboarding.tableCount).trim() === '' || !Number.isInteger(tablesNum) || tablesNum < 1) {
       setOnboardError('Number of tables must be a whole number of at least 1.'); return;
     }
+    if (String(onboarding.username).trim().length < 3) { setOnboardError('Username must be at least 3 characters.'); return; }
+    if (String(onboarding.pincode || '').trim() && !/^\d{6}$/.test(String(onboarding.pincode).trim())) { setOnboardError('Pincode must be 6 digits.'); return; }
+    if (String(onboarding.contact || '').trim() && String(onboarding.contact).replace(/\D/g, '').length < 10) { setOnboardError('Contact number must have at least 10 digits.'); return; }
+    if (String(onboarding.mapsUrl || '').trim() && !/^https?:\/\//i.test(String(onboarding.mapsUrl).trim())) { setOnboardError('Google Maps link must start with http:// or https://'); return; }
+    const paidNum = Number(onboarding.paidAmount);
+    if (String(onboarding.paidAmount).trim() !== '' && (!Number.isFinite(paidNum) || paidNum < 0)) { setOnboardError('Amount received must be 0 or more.'); return; }
+    if (onboarding.paidAt && onboarding.paidAt > todayIST()) { setOnboardError('Payment date cannot be in the future.'); return; }
     if (onboarding.password !== onboarding.confirmPassword) {
       setOnboardError('Passwords do not match.'); return;
     }
@@ -1134,8 +1309,11 @@ export default function PratyekshaMasterAdmin() {
     if (!onboarding.products?.pratyeksha && !onboarding.products?.feedbackSuite) { setOnboardError('Select at least one product.'); return; }
     setOnboardLoading(true); setOnboardError('');
     try {
+      // Trim the text fields (a trailing space in the name/username/city was stored as typed) and don't send confirmPassword.
+      const { confirmPassword: _omit, ...rest } = onboarding;
+      const trimmed = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, (typeof v === 'string' && !/password/i.test(k)) ? v.trim() : v]));
       const res = await axios.post(`${BASE_URL}/admin/master/onboard`, {
-        ...onboarding,
+        ...trimmed,
         tableCount:Number(onboarding.tableCount),
         taxPercentage:Number(onboarding.taxPercentage),
         planMonths:Number(onboarding.planMonths),
@@ -1166,7 +1344,10 @@ export default function PratyekshaMasterAdmin() {
       const res = await axios.delete(`${BASE_URL}/admin/master/tenant/${client.tenantId}`, { data: { confirm: confirmText } });
       await fetchData();
       setDeleteTarget(null);
-      flash(`${client.name} deleted — ${res.data.totalDocumentsDeleted} records removed across ${Object.keys(res.data.collections).length} collections`);
+      // Built after the delete succeeded: a missing field here threw into the catch and reported "Could not delete" for a client that was gone.
+      const removed = Number(res?.data?.totalDocumentsDeleted) || 0;
+      const colls = Object.keys(res?.data?.collections || {}).length;
+      flash(`${client.name} deleted${removed ? ` — ${removed} records removed${colls ? ` across ${colls} collections` : ''}` : ''}`);
     } catch (e) {
       flash(e?.response?.data?.error || 'Could not delete client', 'error');
     }
@@ -1314,12 +1495,7 @@ export default function PratyekshaMasterAdmin() {
   });
 
   /* ── loader ── */
-  if (loading) return (
-    <div style={{ height:'100vh', background:C.bgDark, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
-      <div style={{ width:36, height:36, borderRadius:'50%', border:`1.5px solid ${C.border}`, borderTopColor:'#d3bfa2', animation:'spin 0.9s linear infinite' }} />
-      <div style={{ fontSize:11, fontWeight:500, letterSpacing:'2px', color:C.textDim }}>PRATYEKSHA</div>
-    </div>
-  );
+  if (loading) return <AdminSkeleton />;
 
   /* ── nav item ──
      active:  light gold text + left border + faint bg
@@ -1499,10 +1675,10 @@ export default function PratyekshaMasterAdmin() {
               {/* List */}
               <div className="p-scroll no-sb" style={{ padding:'14px 32px 40px' }}>
                 {demoLoading ? (
-                  <div style={{ textAlign:'center', padding:'60px 0', color:C.textDim }}>
-                    <div style={{ width:28, height:28, borderRadius:'50%', border:`1.5px solid ${C.border}`, borderTopColor:'#d3bfa2', animation:'spin 0.9s linear infinite', margin:'0 auto 10px' }} />
-                    <div style={{ fontSize:12 }}>Loading…</div>
-                  </div>
+                  <>
+                    <style>{PKS_CSS}</style>
+                    <DemoListSkeleton count={6} />
+                  </>
                 ) : filteredDemos.length===0 ? (
                   <div style={{ textAlign:'center', padding:'80px 0', color:C.textDim }}>
                     <CalendarClock size={28} color={C.border} style={{ marginBottom:10 }} />
@@ -1669,7 +1845,12 @@ export default function PratyekshaMasterAdmin() {
                       }}>
                         <Phone size={13} /> Call Now
                       </a>
-                      <button type="button" onClick={()=>{ setOnboarding(p=>({...p, name:selectedDemo.restaurant||'', contact:selectedDemo.phone||'', tableCount:selectedDemo.tables||'12'})); navTo('onboard'); }} style={{
+                      <button type="button" onClick={()=>{ setOnboarding(p=>({...p,
+                          name:selectedDemo.restaurant||'', contact:selectedDemo.phone||'',
+                          ownerName: p.ownerName || selectedDemo.name || '', city: p.city || selectedDemo.city || '',
+                          // "10-20" / "about 12" went straight into a numeric field: take the first whole number.
+                          tableCount: String(parseInt(String(selectedDemo.tables ?? '').match(/\d+/)?.[0], 10) || 12)
+                        })); navTo('onboard'); }} style={{
                         padding:'11px', background:'rgba(138,112,77,0.07)',
                         border:`1px solid rgba(138,112,77,0.25)`, color:'#8a704d',
                         borderRadius:9, fontSize:13, fontWeight:500, cursor:'pointer',
