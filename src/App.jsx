@@ -18,6 +18,7 @@ import {
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 
+import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
@@ -578,7 +579,7 @@ waitlistSocket.on('operator_notify', (data) => {
       safeNotify(title, {
         body,
         icon: '/pratyeksha-logo.png',
-        badge: '/pratyeksha-logo.png',
+        badge: '/notification-badge.png',
         tag: tag || 'operator-notify',
         renotify: true,
         vibrate: [200, 100, 200]
@@ -590,7 +591,7 @@ waitlistSocket.on('operator_notify', (data) => {
           safeNotify(title, {
             body,
             icon: '/pratyeksha-logo.png',
-            badge: '/pratyeksha-logo.png',
+            badge: '/notification-badge.png',
             tag: tag || 'operator-notify',
             renotify: true,
           });
@@ -859,7 +860,7 @@ useEffect(() => {
             : isTableBanner
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/pratyeksha-logo.png', badge: '/pratyeksha-logo.png',
+          icon: '/pratyeksha-logo.png', badge: '/notification-badge.png',
           vibrate: [300, 100, 300], tag: 'pratyeksha-ready', renotify: true
         }
       );
@@ -2951,7 +2952,7 @@ const askNotificationPermission = async () => {
             ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
             : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
           icon: '/pratyeksha-logo.png',
-          badge: '/pratyeksha-logo.png',
+          badge: '/notification-badge.png',
         }
       );
     }
@@ -3957,7 +3958,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
           {/* ── NOTIFICATION PILL ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 15px', marginBottom: '20px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '16px' }}>
             <div style={{ width: '30px', height: '30px', borderRadius: '9px', flexShrink: 0, background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BellRing size={13} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
+              <SpoonForkIcon size={13} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
             </div>
             <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.65, fontWeight: '500' }}>
               {language === 'mr' ? 'बुकिंग कन्फर्म झाल्यावर सूचना मिळेल.' : "You'll be notified when the restaurant confirms your booking."}
@@ -4161,7 +4162,7 @@ if (registrationStep === 'confirm' && waitlistEntry) {
         {/* NOTIFICATION PILL */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', marginBottom: '16px', background: 'rgba(211,191,162,0.03)', border: '1px solid rgba(211,191,162,0.07)', borderRadius: '18px' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '9px', flexShrink: 0, background: 'rgba(211,191,162,0.06)', border: '1px solid rgba(211,191,162,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BellRing size={14} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
+            <SpoonForkIcon size={14} color="rgba(211,191,162,0.45)" strokeWidth={1.5} />
           </div>
           <p style={{ margin: 0, fontSize: '0.71rem', color: 'rgba(255,255,255,0.52)', lineHeight: 1.65, fontWeight: '500' }}>
             {language === 'mr' ? 'टेबल / ऑर्डर तयार झाल्यावर सूचना मिळेल — पेज बंद केले तरीही.' : "You'll be notified when ready — even if you close this page."}
@@ -6529,7 +6530,7 @@ if (sessionBlocked) {
 {/* FABs RIGHT SIDE */}
 <div style={styles.rightFabContainer}>
   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}} onClick={() => setIsWaiterModalOpen(true)}>
-    <BellRing size={24} color="#d3bfa2" strokeWidth={1.8} />
+    <SpoonForkIcon size={24} color="#d3bfa2" strokeWidth={1.8} />
   </motion.div>
 
   {/* EXTRA ITEMS FAB */}
@@ -6560,7 +6561,7 @@ if (sessionBlocked) {
             <div style={{ ...styles.modalHeader, alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left' }}>
                 <div style={{ width: 48, height: 48, borderRadius: 16, background: PX.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 28px rgba(211,191,162,0.25)' }}>
-                  <BellRing size={22} color="#14110c" strokeWidth={2} />
+                  <SpoonForkIcon size={22} color="#14110c" strokeWidth={2} />
                 </div>
                 <div>
                   <h2 style={{ margin: 0, fontFamily: PX.serif, fontSize: '1.4rem', fontWeight: 700, color: '#f7f3eb', textAlign: 'left', lineHeight: 1.1 }}>{t[language].callWaiter}</h2>
@@ -6610,7 +6611,7 @@ if (sessionBlocked) {
                   <ChevronRight size={16} color="rgba(211,191,162,0.5)" />
                 </button>
                 <button type="button" className="px-gold" style={{ ...styles.kitchenBtn, marginTop: 14, borderRadius: 20, fontSize: '0.86rem', letterSpacing: '0.6px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'Poppins, sans-serif' }} onClick={() => notifyWaiter("Custom")}>
-                  <BellRing size={16} strokeWidth={2.2} /> {t[language].sendRequest}
+                  <SpoonForkIcon size={16} strokeWidth={2.2} /> {t[language].sendRequest}
                 </button>
               </div>
             </div>
@@ -7340,7 +7341,7 @@ if (sessionBlocked) {
                   pointerEvents: 'none'
                 }}
               />
-              <BellRing size={17} color="#0c0c0c" strokeWidth={2.2}/>
+              <SpoonForkIcon size={17} color="#0c0c0c" strokeWidth={2.2}/>
               {language === 'mr' ? 'वेटरला विनंती पाठवा' : 'REQUEST TO WAITER'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0c0c0c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
@@ -9491,4 +9492,4 @@ arCustomBtn: {
   suggestionInput: { background: 'none', border: 'none', color: '#fff', fontSize: '0.75rem', width: '100%', outline: 'none' }
 };
 
-export default PratyekshaPremiumMenu;
+export default PratyekshaPremiumMenu;

@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
+import SpoonForkIcon from './SpoonForkIcon.jsx';
 
 import API_BASE_URL from './apiBase.js';
 
@@ -754,11 +755,25 @@ export default function CustomerHome() {
   // A dismissed banner used to come straight back whenever the restaurant list reloaded (Retry, refresh). Remember the dismissal
   // for the current link; a new notification link shows again.
   const dismissedNote = useRef('');
+  const viewedPx = useRef('');
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tenantId = params.get('tenantId');
     if (params.get('notification') === '1' && tenantId) {
       if (dismissedNote.current === location.search) return;
+      // Report "viewed" once per opened notification link (analytics: reach -> delivered -> clicked -> viewed).
+      const px = params.get('px');
+      if (px && px.includes(':') && viewedPx.current !== px) {
+        viewedPx.current = px;
+        const [kind, ...rest] = px.split(':');
+        const visitor = (() => { try { let v = localStorage.getItem('px_visitor'); if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('px_visitor', v); } return v; } catch { return ''; } })();
+        const send = (endpoint) => axios.post(`${API_BASE_URL}/push-track`, { tenantId, kind, refId: rest.join(':'), event: 'viewed', endpoint, visitor }).catch(() => {});
+        (async () => {
+          let endpoint = '';
+          try { const reg = await navigator.serviceWorker?.getRegistration?.(); endpoint = (await reg?.pushManager?.getSubscription?.())?.endpoint || ''; } catch { /* anonymous visitor id is used instead */ }
+          send(endpoint);
+        })();
+      }
       const tenant = tenants.find((t) => t.tenantId === tenantId);
       setNotification(tenant ? `Update from ${tenant.name}` : 'You have a restaurant update');
     }
@@ -1037,7 +1052,7 @@ export default function CustomerHome() {
 
         {notification && (
           <div style={{ marginTop: 14, padding: '11px 14px', border: '1px solid rgba(211,191,162,.18)', background: 'rgba(211,191,162,.06)', borderRadius: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <Bell size={15} color={GOLD} />
+            <SpoonForkIcon size={16} color={GOLD} />
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,.78)', flex: 1 }}>{notification}</div>
             <button type="button" onClick={() => { dismissedNote.current = location.search; setNotification(null); }} aria-label="Dismiss" style={{ border: 0, background: 'transparent', color: GOLD, cursor: 'pointer', display: 'flex' }}><X size={15} /></button>
           </div>

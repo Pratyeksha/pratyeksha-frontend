@@ -7,6 +7,8 @@ import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cart
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
+import SpoonForkIcon from './SpoonForkIcon.jsx';
+import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
  
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -330,6 +332,7 @@ const [pushAnalytics, setPushAnalytics]         = useState(null);   // { summary
 const [pushKind, setPushKind]                   = useState('all');
 const [pushDays, setPushDays]                   = useState(30);
 const [pushLoading, setPushLoading]             = useState(false);
+const [mktReady, setMktReady]                   = useState({ announcements:false, offers:false, campaigns:false }); // false until the first fetch settles -> skeleton
 const [marketingSubTab, setMarketingSubTab] = useState('offers');
 const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
@@ -616,6 +619,7 @@ const fetchAnnouncements = useCallback(async () => {
     const res = await axios.get(`${BASE_URL}/announcements/${tenantId}`);
     setAnnouncements(asArr(res.data));
   } catch { setAnnouncements([]); }
+  finally { setMktReady(p => p.announcements ? p : { ...p, announcements: true }); }
 }, [tenantId]);
 
 
@@ -1182,6 +1186,7 @@ const fetchOffers = useCallback(async () => {
     const res = await axios.get(`${BASE_URL}/offers/${tenantId}`);
     setOffers(asArr(res.data));
   } catch { setOffers([]); }
+  finally { setMktReady(p => p.offers ? p : { ...p, offers: true }); }
 }, [tenantId]);
  
 const fetchCampaigns = useCallback(async () => {
@@ -1189,6 +1194,7 @@ const fetchCampaigns = useCallback(async () => {
     const res = await axios.get(`${BASE_URL}/campaigns/${tenantId}`);
     setCampaigns(asArr(res.data));
   } catch { setCampaigns([]); }
+  finally { setMktReady(p => p.campaigns ? p : { ...p, campaigns: true }); }
 }, [tenantId]);
 
 
@@ -5210,7 +5216,7 @@ const renderMonthHeatmap = () => {
         </div>
       )}
       {/* Sub-tab pills */}
-      {['announcements','offers','campaigns'].map(st=>(
+      {['announcements','offers','campaigns','analytics'].map(st=>(
         <button type="button" key={st} onClick={()=>setMarketingSubTab(st)}
           style={{
             padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
@@ -5220,7 +5226,7 @@ const renderMonthHeatmap = () => {
             color:marketingSubTab===st?'#0c0c0c':'#969696',
             transition:'all 0.15s',textTransform:'uppercase'
           }}>
-          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':''}
+          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':'Analytics'}
         </button>
       ))}
     </div>
@@ -7186,7 +7192,7 @@ const renderMonthHeatmap = () => {
 
     {/* ── CUSTOMER TABLE ── */}
     {customerLoading ? (
-      <div style={{textAlign:'center',padding:'48px',color:'#969696',fontSize:'0.78rem'}}>Loading customers...</div>
+      <SkelTable rows={8} cols={5} label="Loading customers" />
     ) : (
       <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',borderRadius:'14px',overflow:'hidden'}}>
         {/* Header */}
@@ -7725,7 +7731,9 @@ const renderMonthHeatmap = () => {
  
       {/* ── ANNOUNCEMENTS LIST ── */}
       <div style={{display:'flex',flexDirection:'column',gap:'9px'}}>
-        {announcements.length===0 ? (
+        {!mktReady.announcements ? (
+          <SkelRows count={3} label="Loading banners" />
+        ) : announcements.length===0 ? (
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'14px',padding:'70px 20px',border:'1px dashed rgba(211,191,162,0.12)',borderRadius:'14px',color:'#8a8a8a'}}>
             <Megaphone size={30} color="#8a8a8a"/>
             <div>
@@ -7966,7 +7974,9 @@ const renderMonthHeatmap = () => {
     </div>
  
     {/* Offers grid */}
-    {(Array.isArray(offers)?offers:[]).length===0?(
+    {!mktReady.offers?(
+      <SkelRows count={3} label="Loading offers" />
+    ):(Array.isArray(offers)?offers:[]).length===0?(
       <div style={{textAlign:'center',padding:'50px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',borderRadius:'13px',border:'1px dashed rgba(211,191,162,0.12)'}}>
         <Tag size={26} color="#8a8a8a" style={{marginBottom:'12px'}}/>
         <div style={{color:'#8a8a8a',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
@@ -8087,7 +8097,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         {[7, 30, 90].map(d => (<button type="button" key={d} onClick={() => setPushDays(d)} style={chip(pushDays === d)}>{d} DAYS</button>))}
       </div>
 
-      {!A && pushLoading && <div style={{ color: MUTED, fontSize: '0.7rem', padding: '30px', textAlign: 'center' }}>Loading analytics…</div>}
+      {!A && pushLoading && <SkelAnalytics />}
       {A?.error && !S && <div style={{ color: MUTED, fontSize: '0.7rem', padding: '30px', textAlign: 'center' }}>Could not load analytics. Tap REFRESH to try again.</div>}
 
       {S && (
@@ -8248,7 +8258,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
             <div style={{fontSize:'0.46rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
             <div style={{background:'#171717',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
-              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}><Bell size={14} color="#d3bfa2" /></div>
+              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}><SpoonForkIcon size={15} color="#d3bfa2" /></div>
               <div>
                 <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
                 <div style={{fontSize:'0.62rem',color:'#888',lineHeight:1.4}}>{newCampaign.body||'Your message here'}</div>
@@ -8304,7 +8314,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         <div style={{fontSize:'0.56rem',color:'#8a704d',fontWeight:'900',letterSpacing:'1.5px'}}>SEND HISTORY</div>
         <span style={{marginLeft:'auto',fontSize:'0.52rem',color:'#969696'}}>{(Array.isArray(campaigns)?campaigns:[]).length} campaigns</span>
       </div>
-      {(Array.isArray(campaigns)?campaigns:[]).length===0?(
+      {!mktReady.campaigns?(
+        <div style={{padding:'12px'}}><SkelRows count={3} label="Loading campaigns" /></div>
+      ):(Array.isArray(campaigns)?campaigns:[]).length===0?(
         <div style={{textAlign:'center',padding:'40px',color:'#0c0c0c',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
       ):(
         <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -13688,7 +13700,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         {/* HISTORY LIST */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 40px' }} className="custom-scroll">
           {purchaseHistoryLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#969696', fontSize: '0.8rem' }}>LOADING...</div>
+            <SkelRows count={5} label="Loading purchase history" />
           ) : !purchaseHistoryData?.purchaseHistory?.length ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#8a8a8a', fontSize: '0.8rem', fontWeight: '700' }}>
               NO PURCHASE HISTORY YET<br/>
@@ -14917,7 +14929,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
  
   {/* ── ITEMS GRID ── */}
   {extraItemsLoading?(
-    <div style={{textAlign:'center',padding:'60px',color:'#8a8a8a',fontSize:'0.78rem',fontWeight:'700'}}>LOADING CATALOG...</div>
+    <SkelCards count={8} label="Loading catalog" />
   ):(()=>{
     const filtered=extraItems.filter(i=>{
       if(activeExtraCategory==='__lowstock__') return i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0;

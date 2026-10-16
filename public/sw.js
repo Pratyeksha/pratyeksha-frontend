@@ -4,7 +4,7 @@
 // (Vite: /public/sw.js → deploys to https://yourapp.com/sw.js)
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'pratyeksha-menu-v4';
+const CACHE_NAME = 'pratyeksha-menu-v5';
 const API_HOST = 'pratyeksha-backend.onrender.com';
 
 // Only these read-only, "browse the menu" endpoints are cached.
@@ -68,20 +68,48 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// ── Push analytics: tell the backend what happened to a broadcast (delivered / clicked / dismissed) ──
+function reportPushEvent(track, event) {
+  if (!track || !track.tenantId || !track.kind || !track.refId) return Promise.resolve();
+  const api = (track.api || ('https://' + API_HOST)).replace(/\/$/, '').replace(/\/api$/, '');
+  return self.registration.pushManager.getSubscription()
+    .catch(() => null)
+    .then((sub) => fetch(api + '/api/push-track', {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId: track.tenantId, kind: track.kind, refId: track.refId, event, endpoint: sub ? sub.endpoint : '' })
+    }))
+    .catch(() => {});
+}
+
 self.addEventListener('push', function(event) {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; } // a plain-text push used to throw and show nothing
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'Pratyeksha', {
-      body: data.body || '',
-      icon: data.icon || '/pratyeksha-logo.png',
-      vibrate: data.vibrate || [200, 100, 200],
-      data: data.data || {}
-    })
-  );
+  const track = data.data && data.data.track ? data.data.track : null;
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/pratyeksha-logo.png',
+    // Small status-bar mark: crossed spoon & fork (browsers otherwise fall back to a generic bell).
+    badge: data.badge || '/notification-badge.png',
+    vibrate: data.vibrate || [200, 100, 200],
+    data: data.data || {}
+  };
+  // Same tag = the OS replaces a repeat of the same broadcast instead of stacking a second copy.
+  if (data.tag) { options.tag = data.tag; options.renotify = false; }
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(data.title || 'Pratyeksha', options),
+    reportPushEvent(track, 'delivered')
+  ]));
+});
+
+self.addEventListener('notificationclose', function(event) {
+  const track = event.notification.data && event.notification.data.track;
+  if (track) event.waitUntil(reportPushEvent(track, 'dismissed'));
 });
 
 self.addEventListener('notificationclick', function(event) {
+  const clickTrack = event.notification.data && event.notification.data.track;
   event.notification.close();
   // Push notifications may wake a completely closed PWA, but they must never
   // turn into an implicit table-ordering session. The backend supplies a safe
@@ -92,6 +120,7 @@ self.addEventListener('notificationclick', function(event) {
     const parsed = new URL(rawUrl, self.location.origin);
     url = parsed.origin === self.location.origin ? `${parsed.pathname}${parsed.search}` : '/';
   } catch {}
+  if (clickTrack) event.waitUntil(reportPushEvent(clickTrack, 'clicked'));
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
