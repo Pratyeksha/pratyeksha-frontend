@@ -9,6 +9,7 @@ import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGa
 import { ForgotLink } from './ForgotPassword.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
+import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
  
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -363,6 +364,8 @@ useEffect(() => {
 }, []);
 
   const tenantId = localStorage.getItem('active_tenant') || 'jay_ambe_fusion';
+  // Marketing > Directory Insights: guest-directory activity (views, searches, offer taps, timing) + marketing performance.
+  const loadDiscovery = useCallback((days) => axios.get(`${BASE_URL}/operator/discovery/${tenantId}`, { params: { days } }).then(r => r.data), [tenantId]);
   const logoPath = '/pratyeksha-logo.png';
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -5216,7 +5219,7 @@ const renderMonthHeatmap = () => {
         </div>
       )}
       {/* Sub-tab pills */}
-      {['announcements','offers','campaigns','analytics'].map(st=>(
+      {['announcements','offers','campaigns','analytics','discovery'].map(st=>(
         <button type="button" key={st} onClick={()=>setMarketingSubTab(st)}
           style={{
             padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
@@ -5226,7 +5229,7 @@ const renderMonthHeatmap = () => {
             color:marketingSubTab===st?'#0c0c0c':'#969696',
             transition:'all 0.15s',textTransform:'uppercase'
           }}>
-          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':'Analytics'}
+          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':st==='discovery'?'Directory Insights':'Analytics'}
         </button>
       ))}
     </div>
@@ -7421,7 +7424,9 @@ const renderMonthHeatmap = () => {
         badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length },
       {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
         badge: null },
-      {id:'analytics',     label:'Analytics',     icon:<BarChart3 size={13}/>,
+      {id:'analytics',     label:'Push Analytics', icon:<BarChart3 size={13}/>,
+        badge: null },
+      {id:'discovery',     label:'Directory Insights', icon:<Search size={13}/>,
         badge: null },
     ].map(st=>{
       const isActive = marketingSubTab === st.id;
@@ -8174,6 +8179,12 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     </div>
   );
 })()}
+
+{marketingSubTab === 'discovery' && (
+  <div key="discovery-tab" style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+    <DiscoveryAnalytics load={loadDiscovery} previewUrl={`/?notrack=1`} />
+  </div>
+)}
 
 {marketingSubTab === 'campaigns' && (
   <motion.div key="campaigns-tab" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>

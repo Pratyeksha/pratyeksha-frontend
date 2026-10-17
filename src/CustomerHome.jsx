@@ -55,6 +55,7 @@ const L = {
     pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area',
     openNow: 'Open now', closesAt: 'closes', closingSoon: 'Closing soon', closedNow: 'Closed', opensAt: 'opens', tomorrow: 'tomorrow', tempClosed: 'Temporarily closed',
     opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Loading restaurants…',
+    searchPh: 'Search places, areas, dishes…', browseMenu: 'Browse by menu', serves: 'Serves', menuCategory: 'Category', tryMenu: 'Try a menu category', sugCategory: 'Category', sugDish: 'Dish',
     open24: 'Open 24 hours', monFri: 'Mon–Fri', satSun: 'Sat–Sun', closedOn: 'Closed on', minShort: 'min', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   },
   mr: {
@@ -74,6 +75,7 @@ const L = {
     pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', suggestions: 'सूचना', sugArea: 'भाग',
     openNow: 'आता उघडे', closesAt: 'बंद होईल', closingSoon: 'लवकरच बंद', closedNow: 'बंद', opensAt: 'उघडेल', tomorrow: 'उद्या', tempClosed: 'तात्पुरते बंद',
     opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'रेस्टॉरंट लोड होत आहेत…',
+    searchPh: 'ठिकाण, भाग, पदार्थ शोधा…', browseMenu: 'मेनूनुसार शोधा', serves: 'उपलब्ध', menuCategory: 'श्रेणी', tryMenu: 'मेनू श्रेणी वापरून पहा', sugCategory: 'श्रेणी', sugDish: 'पदार्थ',
     open24: '२४ तास उघडे', monFri: 'सोम–शुक्र', satSun: 'शनि–रवि', closedOn: 'बंद', minShort: 'मि.', days: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'],
   },
 };
@@ -127,6 +129,58 @@ const isNew = (t) => {
 /* Optional "Own a café or restaurant?" card for owners - set to a WhatsApp / contact link (https:, mailto: or tel:). Empty = hidden. */
 const OWNER_CTA_URL = '';
 const HOW_KEY = 'px_home_how';
+const MENU_CACHE_KEY = 'px_home_menu_v1';
+
+/* ── Menu search: the server publishes each outlet's categories and top dishes (GET /tenants/menu-index) so the search bar can answer
+   "biryani", "cold coffee" or a Marathi dish name with the outlets that serve it. ── */
+const normQ = (v) => String(v || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+function buildMenuLookup(raw) {
+  const map = new Map();
+  const cats = new Map();
+  for (const [id, e] of Object.entries(raw?.tenants || {})) {
+    if (!e || typeof e !== 'object') continue;
+    const c = [...(Array.isArray(e.c) ? e.c : []), ...(Array.isArray(e.cm) ? e.cm : [])].filter(Boolean);
+    const d = [...(Array.isArray(e.d) ? e.d : []), ...(Array.isArray(e.dm) ? e.dm : [])].filter(Boolean);
+    map.set(id, { cats: c.map((x) => ({ raw: x, lc: normQ(x) })), dishes: d.map((x) => ({ raw: x, lc: normQ(x) })) });
+    const seen = new Set();
+    for (const x of Array.isArray(e.c) ? e.c : []) {
+      const k = normQ(x);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      const cur = cats.get(k) || { label: x, n: 0 };
+      cur.n += 1;
+      cats.set(k, cur);
+    }
+  }
+  const top = [...cats.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label)).slice(0, 10);
+  return { map, top };
+}
+const uniqList = (arr) => [...new Set(arr)];
+/* Why does this outlet match the typed text? Priority: name > menu category > dish > area. A multi-word search
+   ("veg biryani rajarampuri") matches when every word hits something; the whole phrase is tried first ("cold coffee"). */
+function matchWhy(t, q, menu) {
+  if (!q) return null;
+  const name = normQ(t.name);
+  const addr = normQ(`${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`);
+  const m = menu?.map.get(t.tenantId);
+  const hitsFor = (needle) => ({
+    name: name.includes(needle),
+    area: addr.includes(needle),
+    category: m ? m.cats.filter((c) => c.lc.includes(needle)).map((c) => c.raw) : [],
+    dish: m ? m.dishes.filter((d) => d.lc.includes(needle)).map((d) => d.raw) : [],
+  });
+  const any = (h) => h.name || h.area || h.category.length > 0 || h.dish.length > 0;
+  let h = hitsFor(q);
+  if (!any(h)) {
+    const words = q.split(' ').filter(Boolean);
+    if (words.length < 2) return null;
+    const parts = words.map(hitsFor);
+    if (!parts.every(any)) return null;
+    h = { name: parts.some((p) => p.name), area: parts.some((p) => p.area), category: uniqList(parts.flatMap((p) => p.category)), dish: uniqList(parts.flatMap((p) => p.dish)) };
+  }
+  const w = h.name ? 'name' : h.category.length ? 'category' : h.dish.length ? 'dish' : 'area';
+  return { w, name: h.name, area: h.area, category: uniqList(h.category).slice(0, 2), dish: uniqList(h.dish).slice(0, 3) };
+}
 
 /* ── Loading skeleton: the same geometry as the real list (stats line, count row, 2-up card grid) so nothing jumps when data lands ── */
 const SR_ONLY = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
@@ -298,21 +352,37 @@ function flushTrack() {
     try { fetch(TRACK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events }), keepalive: true }).catch(() => {}); } catch { /* ignore */ }
   }
 }
-function track(tenantId, type, src) {
-  if (!tenantId || trackingOff || typeof window === 'undefined' || typeof fetch === 'undefined' || navigator.webdriver) return;
-  const key = `${tenantId}|${type}`;
-  const now = Date.now();
-  if (type !== 'impression' && now - (trackLast.get(key) || 0) < 1500) return; // double-tap guard
-  trackLast.set(key, now);
-  trackQueue.push(src ? { tenantId, type, src } : { tenantId, type });
+function enqueueTrack(ev, immediate) {
+  trackQueue.push(ev);
   if (!trackListening) {
     trackListening = true;
     window.addEventListener('pagehide', flushTrack);
     document.addEventListener('visibilitychange', () => { if (document.hidden) flushTrack(); });
   }
   // an "open" is followed by navigation to the menu, so send it straight away instead of waiting for the timer
-  if (type === 'open' || trackQueue.length >= 20) flushTrack();
+  if (immediate || trackQueue.length >= 20) flushTrack();
   else if (!trackTimer) trackTimer = setTimeout(flushTrack, 4000);
+}
+const trackBlocked = () => trackingOff || typeof window === 'undefined' || typeof fetch === 'undefined' || navigator.webdriver;
+function track(tenantId, type, src, extra) {
+  if (!tenantId || trackBlocked()) return;
+  const key = `${tenantId}|${type}|${extra?.offerId || ''}`;
+  const now = Date.now();
+  if (type !== 'impression' && now - (trackLast.get(key) || 0) < 1500) return; // double-tap guard
+  trackLast.set(key, now);
+  enqueueTrack({ tenantId, type, ...(src ? { src } : {}), ...(extra || {}) }, type === 'open');
+}
+/* A directory search: which outlets the top results showed and why (name / area / category / dish). The server aggregates the phrase per
+   outlet per day (no visitor id); phrases that look like phone numbers or e-mail addresses are never sent. */
+const searchSent = new Map();
+function trackSearch(term, hits, total) {
+  if (trackBlocked()) return;
+  const q = normQ(term);
+  if (q.length < 2 || q.length > 40 || q.includes('@') || /\d{5,}/.test(q.replace(/\s/g, ''))) return;
+  const now = Date.now();
+  if (now - (searchSent.get(q) || 0) < 20000) return; // same phrase again within 20 s is not a new search
+  searchSent.set(q, now);
+  enqueueTrack({ type: 'search', q, hits: hits.slice(0, 12), total }, false);
 }
 /* An outlet counts as "seen" once per browser session, when at least half its card has been on screen. */
 const SEEN_KEY = 'px_home_seen';
@@ -414,7 +484,7 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-btn.pri{background:linear-gradient(135deg,#e2d3ba,#d3bfa2 55%,#bda88a);color:#101010;border-color:transparent;box-shadow:0 8px 20px -8px rgba(211,191,162,.55)}
 .pxh-ribbon{position:absolute;top:0;left:0;z-index:2;pointer-events:none;display:inline-flex;align-items:center;gap:4px;padding:4px 11px 4px 9px;border-radius:0 0 12px 0;font-size:9px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase}
 .pxh-ribbon.feat{background:linear-gradient(135deg,#e2d3ba,#bda88a);color:#101010}
-.pxh-ribbon.new{background:rgba(122,201,152,.16);color:#8fd6a8;border:1px solid rgba(122,201,152,.28);border-left:0;border-top:0}
+.pxh-ribbon.new{background:rgba(247,243,235,.08);color:#f7f3eb;border:1px solid rgba(247,243,235,.26);border-left:0;border-top:0}
 .pxh-card.featured{border-color:rgba(211,191,162,.42);box-shadow:0 10px 30px -14px rgba(211,191,162,.35)}
 .pxh-offerpill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;background:rgba(211,191,162,.12);border:1px solid rgba(211,191,162,.22);color:#d3bfa2;font-size:9.5px;font-weight:900;max-width:100%;overflow:hidden;white-space:nowrap}
 .pxh-sec{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:900;letter-spacing:1.6px;text-transform:uppercase;color:rgba(211,191,162,.75);margin:0 0 8px}
@@ -432,7 +502,11 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-status{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10px;font-weight:800;overflow:hidden;white-space:nowrap}
 .pxh-status i{width:6px;height:6px;border-radius:50%;flex:0 0 auto;background:currentColor}
 .pxh-status span{overflow:hidden;text-overflow:ellipsis}
-.pxh-status.open{color:#8fd6a8}.pxh-status.soon{color:#f0b450}.pxh-status.closed{color:#e08a8a}
+.pxh-status i{box-sizing:border-box}
+.pxh-status.open{color:#ece0c8}.pxh-status.soon{color:#d3bfa2}.pxh-status.closed{color:rgba(247,243,235,.46)}
+.pxh-status.soon i{box-shadow:0 0 0 3px rgba(211,191,162,.24)}.pxh-status.closed i{background:transparent;border:1.5px solid currentColor}
+.pxh-why{display:flex;align-items:center;gap:5px;margin-top:6px;font-size:10px;color:rgba(247,243,235,.62);overflow:hidden;white-space:nowrap}
+.pxh-why span{overflow:hidden;text-overflow:ellipsis}.pxh-why svg{flex:0 0 auto;color:#d3bfa2}
 @keyframes pxhSpin{to{transform:rotate(360deg)}}
 .pxh-spin{animation:pxhSpin .9s linear infinite}
 .pxh-refresh{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:rgba(255,255,255,.45);font-size:11px;font-family:inherit;cursor:pointer;padding:0}
@@ -526,7 +600,7 @@ function PlaceDetail({ t, pos, onOrder, tr }) {
               <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 11.5, color: 'rgba(255,255,255,.6)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>{tr.monFri}</span><span>{hoursRange(t.hours.weekday)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>{tr.satSun}</span><span>{hoursRange(t.hours.weekend)}</span></div>
-                {off.length > 0 && <div style={{ color: '#e08a8a' }}>{tr.closedOn}: {off.map((d) => tr.days[d]).join(', ')}</div>}
+                {off.length > 0 && <div style={{ color: 'rgba(247,243,235,.5)' }}>{tr.closedOn}: {off.map((d) => tr.days[d]).join(', ')}</div>}
               </div>
             </div>
           );
@@ -558,6 +632,8 @@ export default function CustomerHome() {
   const [loadError, setLoadError] = useState('');
   const [fromCache, setFromCache] = useState(false);
   const [fresh, setFresh] = useState(false); // true once the list has come from the network in this visit
+  const [menuLookup, setMenuLookup] = useState(() => { try { const c = JSON.parse(sessionStorage.getItem(MENU_CACHE_KEY) || 'null'); return c?.data ? buildMenuLookup(c.data) : null; } catch { return null; } });
+  const menuReq = useRef(false);
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lang, setLang] = useState(() => { try { return localStorage.getItem(LANG_KEY) === 'mr' ? 'mr' : 'en'; } catch { return 'en'; } });
   const tr = L[lang];
@@ -593,6 +669,7 @@ export default function CustomerHome() {
   const [vegOnly, setVegOnly] = useState(init.vegOnly);
   const [openOnly, setOpenOnly] = useState(init.openOnly);
   const [query, setQuery] = useState(init.query);
+  const qNorm = normQ(query);
   const [limit, setLimit] = useState(PAGE);
   const [notification, setNotification] = useState(null);
   const [favs, setFavs] = useState(() => readList(FAV_KEY));
@@ -668,6 +745,24 @@ export default function CustomerHome() {
     load(ctrl.signal, hadCache.current);
     return () => ctrl.abort();
   }, [load]);
+
+  // Menu index for category / dish search. Loaded once per visit: shortly after the list, or at once when the guest focuses the search box.
+  const ensureMenu = useCallback(() => {
+    if (menuReq.current) return;
+    menuReq.current = true;
+    axios.get(`${BASE_URL}/tenants/menu-index`, { timeout: 12000 })
+      .then((res) => {
+        if (!alive.current || !res.data || typeof res.data !== 'object') return;
+        setMenuLookup(buildMenuLookup(res.data));
+        try { sessionStorage.setItem(MENU_CACHE_KEY, JSON.stringify({ t: Date.now(), data: res.data })); } catch { /* ignore */ }
+      })
+      .catch(() => { menuReq.current = false; }); // search keeps working on names / areas; try again on the next focus
+  }, []);
+  useEffect(() => {
+    if (loading || !tenants.length) return undefined;
+    const id = setTimeout(ensureMenu, 2500);
+    return () => clearTimeout(id);
+  }, [loading, tenants.length, ensureMenu]);
 
   // Refresh when the guest comes back to the tab or the connection returns (at most once a minute), and track online state.
   useEffect(() => {
@@ -782,7 +877,10 @@ export default function CustomerHome() {
   const openTenant = (tenant, src = 'list') => {
     // Directory selection is not a QR/table scan, so no table number is attached.
     if (!tenant?.tenantId) return;
-    track(tenant.tenantId, 'open', src);
+    // An open from the result list while a search is active is credited to the search (with the phrase), and the search itself is sent first.
+    const fromSearch = src === 'list' && qNorm.length >= 2;
+    if (fromSearch) sendSearchNow();
+    track(tenant.tenantId, 'open', fromSearch ? 'search' : src, fromSearch ? { q: qNorm } : undefined);
     setRecent((prev) => {
       const next = [tenant.tenantId, ...prev.filter((id) => id !== tenant.tenantId)].slice(0, 8);
       writeList(RECENT_KEY, next);
@@ -802,7 +900,7 @@ export default function CustomerHome() {
 
   const minuteKey = Math.floor(Date.now() / 60000); // re-evaluates "Open now" every minute (the page re-renders every 30 s)
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normQ(query);
     const list = tenants.filter((t) => {
       const cafe = isCafe(t);
       if (filter === 'cafe' && !cafe) return false;
@@ -814,7 +912,7 @@ export default function CustomerHome() {
       if (init.audit && incompleteOnly && !listingGaps(t).length) return false;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') return false;
       if (area !== 'all' && areaOf(t).toLowerCase() !== area) return false;
-      return !q || `${t.name} ${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`.toLowerCase().includes(q);
+      return !q || !!matchWhy(t, q, menuLookup);
     });
     if (nearMe && pos) list.sort((a, b) => (distanceKm(pos, a) ?? 1e9) - (distanceKm(pos, b) ?? 1e9));
     else if (sort === 'az') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
@@ -826,7 +924,7 @@ export default function CustomerHome() {
       list.sort((a, b) => Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
     }
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, area, nearMe, pos, sort]);
+  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 520);
@@ -842,29 +940,61 @@ export default function CustomerHome() {
     setSearches(next); writeList(SEARCHES_KEY, next);
   };
 
-  // Autocomplete: places whose name matches, then areas (names that start with the text come first).
+  // Autocomplete: places, menu categories and dishes (with how many places serve them), then areas. Prefix matches rank first.
   const suggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = qNorm;
     if (!q) return [];
     const places = [];
     const areas = new Map();
+    const cats = new Map();
+    const dishes = new Map();
+    const bump = (map, lc, raw, seen) => {
+      if (seen.has(lc)) return;
+      seen.add(lc);
+      const cur = map.get(lc) || { kind: '', text: raw, n: 0, rank: lc.startsWith(q) ? 0 : 1 };
+      cur.n += 1;
+      map.set(lc, cur);
+    };
     for (const t of tenants) {
       const name = String(t.name || '').trim();
-      const ln = name.toLowerCase();
+      const ln = normQ(name);
       if (name && ln.includes(q) && ln !== q) places.push({ kind: 'place', text: name, sub: areaOf(t), cafe: isCafe(t), rank: ln.startsWith(q) ? 0 : 1 });
       const a = areaOf(t);
-      const la = a.toLowerCase();
+      const la = normQ(a);
       if (a && la.includes(q) && la !== q && !areas.has(la)) areas.set(la, { kind: 'area', text: a, rank: la.startsWith(q) ? 0 : 1 });
+      const m = menuLookup?.map.get(t.tenantId);
+      if (m) {
+        const seenC = new Set();
+        const seenD = new Set();
+        for (const c of m.cats) if (c.lc.includes(q)) bump(cats, c.lc, c.raw, seenC);
+        for (const d of m.dishes) if (d.lc.includes(q)) bump(dishes, d.lc, d.raw, seenD);
+      }
     }
-    const byRank = (x, y) => x.rank - y.rank || x.text.localeCompare(y.text);
-    return [...places.sort(byRank).slice(0, 5), ...[...areas.values()].sort(byRank).slice(0, 3)];
-  }, [tenants, query]);
+    const byRank = (x, y) => x.rank - y.rank || (y.n || 0) - (x.n || 0) || x.text.localeCompare(y.text);
+    const count = (n) => `${n} ${n === 1 ? tr.place : tr.places}`;
+    return [
+      ...places.sort(byRank).slice(0, 4),
+      ...[...cats.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'category', sub: `${tr.sugCategory} · ${count(c.n)}` })),
+      ...[...dishes.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'dish', sub: `${tr.sugDish} · ${count(c.n)}` })),
+      ...[...areas.values()].sort(byRank).slice(0, 2),
+    ];
+  }, [tenants, qNorm, menuLookup, tr]);
   const showSug = searchOpen && query.trim().length > 0 && suggestions.length > 0;
+  // The search that the current results answer: sent once the guest stops typing (and straight away when they open a result).
+  const sendSearchNow = () => {
+    if (qNorm.length < 2) return;
+    trackSearch(qNorm, filtered.slice(0, 12).map((t) => ({ id: t.tenantId, w: matchWhy(t, qNorm, menuLookup)?.w || 'name' })), filtered.length);
+  };
+  useEffect(() => {
+    if (qNorm.length < 2 || loading || !tenants.length) return undefined;
+    const id = setTimeout(sendSearchNow, 1300);
+    return () => clearTimeout(id);
+  }, [qNorm, filtered, loading, tenants.length, menuLookup]); // eslint-disable-line react-hooks/exhaustive-deps
   const pickSuggestion = (text) => { setQuery(text); rememberSearch(text); setSearchOpen(false); setSugIdx(-1); };
 
   // Area chips are built from the real outlets (counts respect the other filters, not the area itself).
   const areaChips = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normQ(query);
     const counts = new Map();
     for (const t of tenants) {
       const a = areaOf(t); if (!a) continue;
@@ -877,14 +1007,14 @@ export default function CustomerHome() {
       if (vegOnly && t.config?.onlyVeg !== true) continue;
       if (init.audit && incompleteOnly && !listingGaps(t).length) continue;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') continue;
-      if (q && !`${t.name} ${t.address?.area || ''} ${t.address?.city || ''} ${t.address?.landmark || ''} ${t.address?.street || ''}`.toLowerCase().includes(q)) continue;
+      if (q && !matchWhy(t, q, menuLookup)) continue;
       const k = a.toLowerCase(); const cur = counts.get(k) || { key: k, label: a, n: 0 };
       cur.n += 1; counts.set(k, cur);
     }
     const list = [...counts.values()].sort((x, y) => y.n - x.n || x.label.localeCompare(y.label));
     if (area !== 'all' && !counts.has(area)) list.unshift({ key: area, label: area.replace(/\b\w/g, (c) => c.toUpperCase()), n: 0 });
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, area]);
+  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area]);
 
   const chooseArea = (key) => { setArea(key); try { localStorage.setItem(AREA_KEY, key); } catch { /* ignore */ } };
 
@@ -1081,19 +1211,19 @@ export default function CustomerHome() {
             </div>
           )}
           {init.audit && !loading && tenants.length > 0 && (
-            <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(240,180,80,.4)', background: 'rgba(240,180,80,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
-              <b style={{ color: '#f0b450' }}>Audit mode</b>
+            <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
+              <b style={{ color: '#d3bfa2' }}>Audit mode</b>
               <span>{auditRows.length} of {tenants.length} listings incomplete</span>
               <span style={{ flex: 1 }} />
               <button type="button" className={`pxh-area${incompleteOnly ? ' on' : ''}`} aria-pressed={incompleteOnly} onClick={() => setIncompleteOnly(!incompleteOnly)}>{incompleteOnly ? 'Show all' : 'Only incomplete'}</button>
               <button type="button" className="pxh-area" onClick={copyAudit}>Copy report</button>
-              {auditMsg && <span role="status" style={{ color: '#f0b450' }}>{auditMsg}</span>}
+              {auditMsg && <span role="status" style={{ color: '#d3bfa2' }}>{auditMsg}</span>}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <Search size={16} color="rgba(211,191,162,.55)" style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)' }} />
-              <input value={query} onFocus={() => setSearchOpen(true)} onBlur={() => { rememberSearch(query); setTimeout(() => setSearchOpen(false), 150); }} onKeyDown={(e) => {
+              <input value={query} onFocus={() => { setSearchOpen(true); ensureMenu(); }} onBlur={() => { rememberSearch(query); setTimeout(() => setSearchOpen(false), 150); }} onKeyDown={(e) => {
                 if (e.key === 'ArrowDown' && showSug) { e.preventDefault(); setSugIdx((i) => (i + 1) % suggestions.length); }
                 else if (e.key === 'ArrowUp' && showSug) { e.preventDefault(); setSugIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1)); }
                 else if (e.key === 'Escape' && showSug) { e.preventDefault(); setSearchOpen(false); setSugIdx(-1); }
@@ -1101,14 +1231,14 @@ export default function CustomerHome() {
                   if (showSug && sugIdx >= 0 && suggestions[sugIdx]) { e.preventDefault(); pickSuggestion(suggestions[sugIdx].text); } else rememberSearch(query);
                   e.currentTarget.blur();
                 }
-              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={tr.search} aria-label={tr.search}
+              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={tr.searchPh} aria-label={tr.search}
                 role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} style={{ width: '100%', boxSizing: 'border-box', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
               {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex', padding: 4 }}><X size={15} /></button>}
               {showSug && (
                 <div id="pxh-sug" role="listbox" aria-label={tr.suggestions} style={{ position: 'absolute', left: 0, right: 0, top: 'calc(100% + 6px)', zIndex: 30, borderRadius: 16, border: '1px solid rgba(211,191,162,.22)', background: '#141414', boxShadow: '0 18px 40px rgba(0,0,0,.55)', overflow: 'hidden' }}>
                   {suggestions.map((sg, i) => (
                     <button type="button" role="option" id={`pxh-sug-${i}`} key={`${sg.kind}-${sg.text}`} aria-selected={i === sugIdx} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setSugIdx(i)} onClick={() => pickSuggestion(sg.text)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px', border: 0, background: i === sugIdx ? 'rgba(211,191,162,.12)' : 'transparent', color: '#f7f3eb', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {sg.kind === 'area' ? <MapPin size={14} color={GOLD} /> : sg.cafe ? <Coffee size={14} color={GOLD} /> : <UtensilsCrossed size={14} color={GOLD} />}
+                      {sg.kind === 'area' ? <MapPin size={14} color={GOLD} /> : sg.kind === 'category' ? <LayoutGrid size={14} color={GOLD} /> : sg.kind === 'dish' ? <Sparkles size={14} color={GOLD} /> : sg.cafe ? <Coffee size={14} color={GOLD} /> : <UtensilsCrossed size={14} color={GOLD} />}
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sg.text}</span>
                       <span style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', flex: '0 0 auto' }}>{sg.kind === 'area' ? tr.sugArea : sg.sub}</span>
                     </button>
@@ -1127,6 +1257,15 @@ export default function CustomerHome() {
               <button type="button" key={t} role="listitem" className="pxh-area" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(t); setSearchOpen(false); }}>{t}</button>
             ))}
             <button type="button" className="pxh-area" onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearches([]); writeList(SEARCHES_KEY, []); }} aria-label={tr.clearRecent}><X size={11} /> {tr.clearRecent}</button>
+          </div>
+        )}
+
+        {searchOpen && !query && menuLookup?.top.length > 0 && (
+          <div className="pxh-areas" role="list" aria-label={tr.browseMenu} style={{ marginTop: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 800, letterSpacing: 1.4, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', flex: '0 0 auto' }}><LayoutGrid size={12} /> {tr.browseMenu}</span>
+            {menuLookup.top.map((c) => (
+              <button type="button" key={c.label} role="listitem" className="pxh-area" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(c.label); setSearchOpen(false); }}>{c.label} <span style={{ opacity: .55 }}>{c.n}</span></button>
+            ))}
           </div>
         )}
 
@@ -1212,7 +1351,7 @@ export default function CustomerHome() {
           <section style={{ marginTop: 16 }}>
             <div className="pxh-rail">
               {offerCards.map((offer) => (
-                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => openTenant(offer._tenant, 'offers')} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
+                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(offer._tenant, 'offers'); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
                   <Avatar t={offer._tenant} size={38} radius={11} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: GOLD, letterSpacing: .3 }}>{offerValue(offer)}</div>
@@ -1275,6 +1414,14 @@ export default function CustomerHome() {
             <div style={{ border: '1px solid rgba(211,191,162,.1)', borderRadius: 20, padding: '38px 20px', textAlign: 'center', background: 'rgba(255,255,255,.02)' }}>
               <Sparkles size={22} color={GOLD} />
               <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(255,255,255,.55)' }}>{favOnly && !favs.length ? tr.saveHint : tr.nothing}</div>
+              {qNorm && menuLookup?.top.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.4, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', marginBottom: 8 }}>{tr.tryMenu}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'center' }}>
+                    {menuLookup.top.slice(0, 6).map((c) => <button type="button" key={c.label} className="pxh-area" onClick={() => setQuery(c.label)}>{c.label}</button>)}
+                  </div>
+                </div>
+              )}
               {hasFilters && <button type="button" onClick={resetFilters} style={{ marginTop: 14, border: '1px solid rgba(211,191,162,.28)', background: 'rgba(211,191,162,.08)', color: GOLD, borderRadius: 12, padding: '9px 16px', fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit' }}>{tr.clear}</button>}
             </div>
           ) : (
@@ -1309,6 +1456,7 @@ export default function CustomerHome() {
                   const badge = featured ? 'feat' : isNew(tenant) ? 'new' : '';
                   const gaps = init.audit ? listingGaps(tenant) : [];
                   const st = statusLabel(openStatus(tenant.hours), tr);
+                  const why = qNorm.length >= 2 ? matchWhy(tenant, qNorm, menuLookup) : null;
                   return (
                     <motion.div key={tenant.tenantId} className={`pxh-card${featured ? ' featured' : ''}`} ref={imprRef} data-tid={tenant.tenantId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.03, duration: 0.25 }} whileTap={{ scale: 0.985 }}>
                       {badge && <span className={`pxh-ribbon ${badge}`}>{badge === 'feat' ? <><Star size={9} fill="currentColor" /> {tr.featured}</> : tr.isNew}</span>}
@@ -1318,6 +1466,9 @@ export default function CustomerHome() {
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'rgba(255,255,255,.38)', minHeight: 14 }}>
                           {areaOf(tenant) && <><MapPin size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(tenant)}{distanceKm(pos, tenant) != null ? ` · ${fmtKm(distanceKm(pos, tenant))}` : ''}</span></>}
                         </div>
+                        {why && !why.name && (why.dish.length > 0 || why.category.length > 0) && (
+                          <div className="pxh-why"><Search size={10} /><span>{why.dish.length ? `${tr.serves}: ${why.dish.slice(0, 2).join(', ')}` : `${tr.menuCategory}: ${why.category.join(', ')}`}</span></div>
+                        )}
                         {st && <div className={`pxh-status ${st.tone}`}><i /><span>{st.text}</span></div>}
                         {best && <div style={{ marginTop: 8 }}><span className="pxh-offerpill"><Tag size={10} /> {offerValue(best)}{offers > 1 ? ` +${offers - 1}` : ''}</span></div>}
                         <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 9, minHeight: 24, paddingRight: hasPlace(tenant) ? 36 : 0 }}>
@@ -1327,8 +1478,8 @@ export default function CustomerHome() {
                         {init.audit && (
                           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                             {gaps.length === 0
-                              ? <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 8, background: 'rgba(122,201,152,.14)', color: '#8fd6a8' }}>✓ Complete</span>
-                              : gaps.map((g) => <span key={g} style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 8, background: 'rgba(240,180,80,.14)', color: '#f0b450' }}>{g}</span>)}
+                              ? <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 8, background: 'rgba(211,191,162,.14)', color: '#ece0c8' }}>✓ Complete</span>
+                              : gaps.map((g) => <span key={g} style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 8, background: 'rgba(211,191,162,.14)', color: '#d3bfa2' }}>{g}</span>)}
                           </div>
                         )}
                       </button>
@@ -1403,7 +1554,7 @@ export default function CustomerHome() {
                       const tenant = offer.tenant || {};
                       const value = offer.type === 'happy_hour' ? `${offer.happyStart || '?'}–${offer.happyEnd || '?'}` : offerValue(offer);
                       return (
-                        <button type="button" key={`${tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${i}`} onClick={() => { setShowAllOffers(false); openTenant(tenant, 'offers'); }} style={{ textAlign: 'left', border: '1px solid rgba(211,191,162,.14)', borderRadius: 16, background: 'linear-gradient(145deg,#191919,#101010)', color: '#fff', padding: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, fontFamily: 'inherit' }}>
+                        <button type="button" key={`${tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${i}`} onClick={() => { setShowAllOffers(false); if (offer._id) track(tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(tenant, 'offers'); }} style={{ textAlign: 'left', border: '1px solid rgba(211,191,162,.14)', borderRadius: 16, background: 'linear-gradient(145deg,#191919,#101010)', color: '#fff', padding: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, fontFamily: 'inherit' }}>
                           <Avatar t={tenant} size={40} radius={12} />
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 900, color: GOLD }}>{value}</div>

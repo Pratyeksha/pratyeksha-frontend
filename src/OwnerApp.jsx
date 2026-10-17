@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { RenewalReminder } from './SubscriptionGate.jsx';
+import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
 import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
@@ -683,6 +684,152 @@ const DataBoundary = ({ loading, error, empty, emptyProps, onRetry, skeleton, ch
   if (empty) return <EmptyState {...emptyProps} />;
   return children;
 };
+
+/* ════════════════════════════════════════════════════════════
+   PAGE SKELETONS — one composition per tab, built from the same geometry as the loaded layout
+   (KPI cards 118/132 px, 230 px trend charts, donut cards, tables with their real column counts) so nothing jumps when data lands.
+   ════════════════════════════════════════════════════════════ */
+const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' };
+const skb = (w, h = 10, style) => <Skeleton h={h} style={{ width: w, borderRadius: Math.min(8, h / 2 + 2), flex: '0 0 auto', ...style }} />;
+const SkPage = ({ label, children }) => (
+  <div role="status" aria-busy="true" aria-live="polite" style={{ display: 'grid', gap: 16 }}>
+    <span style={SR_ONLY}>{label}</span>
+    <div aria-hidden="true" style={{ display: 'grid', gap: 16 }}>{children}</div>
+  </div>
+);
+const SkHead = ({ w = 130, pill }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{skb(18, 18, { borderRadius: 6 })}{skb(w, 13)}</div>
+    {pill && skb(pill, 22, { borderRadius: 100 })}
+  </div>
+);
+const SkKpis = ({ n = 4, min = 180, hero = false }) => (
+  <div data-sk="kpis" style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12 }}>
+    {Array.from({ length: n }).map((_, i) => (
+      <Card key={i} data-sk="kpi" style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: hero && i === 0 ? 132 : 118, borderColor: hero && i === 0 ? T.borderStrong : T.border }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>{skb(hero && i === 0 ? 112 : 84, 10)}{skb(30, 30, { borderRadius: 9 })}</div>
+        {skb(hero && i === 0 ? '58%' : '46%', hero && i === 0 ? 32 : 25, { borderRadius: 8 })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{skb(46, 16, { borderRadius: 100 })}{skb(78, 10)}</div>
+      </Card>
+    ))}
+  </div>
+);
+const SK_BARS = [34, 46, 40, 58, 52, 70, 62, 78, 66, 84, 72, 60, 74, 88, 80, 68, 76, 92, 84, 70, 62, 78, 66, 56, 72, 64, 52, 60, 48, 56];
+const SkChart = ({ title = 140, h = 230, action }) => (
+  <Card data-sk="chart">
+    <SkHead w={title} pill={action} />
+    <div style={{ height: h, display: 'flex', alignItems: 'flex-end', gap: 4, padding: '0 4px' }}>
+      {SK_BARS.map((b, i) => <Skeleton key={i} h={`${b}%`} style={{ flex: 1, borderRadius: '4px 4px 0 0', animationDelay: `${(i % 10) * 0.08}s` }} />)}
+    </div>
+  </Card>
+);
+const SkBarsCard = ({ title = 150, rows = 5 }) => (
+  <Card data-sk="bars">
+    <SkHead w={title} />
+    <div style={{ display: 'grid', gap: 14 }}>
+      {[88, 70, 58, 40, 28, 20, 14].slice(0, rows).map((w, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>{skb(96, 10)}<div style={{ flex: 1 }}>{skb(`${w}%`, 12, { borderRadius: 6 })}</div></div>
+      ))}
+    </div>
+  </Card>
+);
+const SkDonuts = ({ n = 3, min = 260 }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 14 }}>
+    {Array.from({ length: n }).map((_, i) => (
+      <Card key={i} data-sk="donut">
+        <SkHead w={130} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+          <Skeleton h={118} style={{ width: 118, borderRadius: '50%', flex: '0 0 auto', animationDelay: `${i * 0.1}s` }} />
+          <div style={{ flex: 1, minWidth: 110, display: 'grid', gap: 11 }}>{[0, 1, 2, 3].map(k => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{skb(10, 10, { borderRadius: 3 })}{skb(`${64 - k * 9}%`, 10)}</div>)}</div>
+        </div>
+      </Card>
+    ))}
+  </div>
+);
+const SkStats = ({ n = 4, min = 130 }) => (
+  <div data-sk="stats" style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 10 }}>
+    {Array.from({ length: n }).map((_, i) => (
+      <div key={i} style={{ border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>{skb(58, 9)}{skb(44, 22, { borderRadius: 7 })}</div>
+    ))}
+  </div>
+);
+const SkHealth = ({ title = 150, stats = 4 }) => (
+  <Card data-sk="health">
+    <SkHead w={title} pill={90} />
+    {skb('100%', 9, { borderRadius: 100 })}
+    <div style={{ marginTop: 16 }}><SkStats n={stats} min={120} /></div>
+  </Card>
+);
+const SkTable = ({ cols = 5, rows = 6, min = 560, title = 140 }) => (
+  <Card padded={false} data-sk="table">
+    <div style={{ padding: '18px 20px 14px' }}><SkHead w={title} /></div>
+    <div className="pown-scroll" style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: min, padding: '0 20px 14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `2fr repeat(${cols - 1}, 1fr)`, gap: 14, padding: '0 0 12px', borderBottom: `1px solid ${T.border}` }}>{Array.from({ length: cols }).map((_, c) => <span key={c}>{skb(c === 0 ? 70 : 52, 9)}</span>)}</div>
+        {Array.from({ length: rows }).map((_, r) => (
+          <div key={r} data-sk="row" style={{ display: 'grid', gridTemplateColumns: `2fr repeat(${cols - 1}, 1fr)`, gap: 14, alignItems: 'center', padding: '13px 0', borderBottom: r < rows - 1 ? `1px solid ${T.border}` : 'none' }}>
+            {Array.from({ length: cols }).map((_, c) => <span key={c}>{skb(c === 0 ? `${52 + ((r * 13) % 30)}%` : `${44 + ((r + c) * 11) % 36}%`, 11)}</span>)}
+          </div>
+        ))}
+      </div>
+    </div>
+  </Card>
+);
+const SkList = ({ rows = 6, title, padded = true }) => (
+  <Card data-sk="list" padded={padded}>
+    {title && <SkHead w={title} />}
+    <div style={{ display: 'grid' }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} data-sk="row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: padded ? '12px 0' : '14px 20px', borderBottom: i < rows - 1 ? `1px solid ${T.border}` : 'none' }}>
+          {skb(34, 34, { borderRadius: 10 })}
+          <div style={{ flex: 1, display: 'grid', gap: 8 }}>{skb(`${48 + ((i * 17) % 34)}%`, 11)}{skb(`${30 + ((i * 11) % 30)}%`, 9)}</div>
+          {skb(56, 20, { borderRadius: 100 })}
+        </div>
+      ))}
+    </div>
+  </Card>
+);
+const SkFields = ({ title = 130, rows = 2, toggles = 0 }) => (
+  <Card data-sk="form">
+    <SkHead w={title} />
+    <div style={{ display: 'grid', gap: 16 }}>
+      {Array.from({ length: rows }).map((_, i) => <div key={i} style={{ display: 'grid', gap: 8 }}>{skb(86, 9)}{skb('100%', 40, { borderRadius: 11 })}</div>)}
+      {Array.from({ length: toggles }).map((_, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>{skb(`${40 + ((i * 13) % 30)}%`, 11)}{skb(40, 22, { borderRadius: 100 })}</div>)}
+    </div>
+  </Card>
+);
+const SkGrid = ({ min = 300, children }) => <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 14 }}>{children}</div>;
+
+const SkDashboard = () => (
+  <SkPage label="Loading dashboard…">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>{skb(160, 14)}{skb(90, 14)}</div>
+    <SkKpis n={4} min={190} hero />
+    <Card data-sk="goal" style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
+      {skb(54, 54, { borderRadius: '50%' })}
+      <div style={{ flex: 1, minWidth: 180, display: 'grid', gap: 10 }}>{skb('46%', 12)}{skb('100%', 8, { borderRadius: 100 })}</div>
+      {skb(96, 34, { borderRadius: 11 })}
+    </Card>
+    <SkChart title={170} h={200} />
+    <SkGrid min={300}><SkList rows={4} title={130} /><SkBarsCard title={120} rows={4} /></SkGrid>
+  </SkPage>
+);
+const SkRevenue = () => (<SkPage label="Loading revenue…"><SkKpis n={4} min={180} /><SkChart title={120} h={230} /><SkDonuts n={3} min={260} /><SkChart title={140} h={150} /></SkPage>);
+const SkPnl = () => (<SkPage label="Loading profit and loss…"><SkChart title={110} h={200} action={150} /><SkKpis n={3} min={190} /><SkChart title={150} h={200} /><SkBarsCard title={120} rows={6} /></SkPage>);
+const SkMenu = () => (<SkPage label="Loading menu analytics…"><SkKpis n={4} min={220} /><SkGrid min={300}><SkBarsCard title={150} rows={7} /><SkDonuts n={1} min={300} /><SkBarsCard title={110} rows={4} /></SkGrid><SkTable cols={6} rows={8} min={640} title={130} /></SkPage>);
+const SkInventory = () => (<SkPage label="Loading inventory…"><SkHealth title={120} stats={4} /><SkGrid min={300}><SkDonuts n={1} min={300} /><SkBarsCard title={110} rows={6} /></SkGrid><SkList rows={5} title={110} /><SkList rows={3} title={80} /></SkPage>);
+const SkKitchen = () => (<SkPage label="Loading kitchen…"><SkHealth title={150} stats={4} /><SkKpis n={4} min={200} /><SkGrid min={300}><SkChart title={110} h={170} /><SkBarsCard title={130} rows={7} /></SkGrid><SkList rows={5} title={140} /></SkPage>);
+const SkStaff = () => (<SkPage label="Loading staff…"><SkKpis n={4} min={150} /><SkTable cols={5} rows={6} min={540} title={130} /><Card data-sk="payroll"><SkHead w={170} /><SkStats n={3} min={140} /><div style={{ marginTop: 16 }}>{skb('100%', 8, { borderRadius: 100 })}</div></Card><SkDonuts n={2} min={300} /></SkPage>);
+const SkCustomers = () => (<SkPage label="Loading customers…"><SkKpis n={4} min={150} /><SkStats n={4} /><SkDonuts n={1} min={300} /><Card data-sk="winback"><SkHead w={150} /><div style={{ display: 'grid', gap: 10 }}>{skb('70%', 11)}{skb('46%', 10)}</div><div style={{ marginTop: 16 }}>{skb(140, 38, { borderRadius: 11 })}</div></Card><SkTable cols={5} rows={6} min={600} title={120} /></SkPage>);
+const SkAlerts = () => (<SkPage label="Loading alerts…"><SkStats n={3} min={150} /><SkList rows={7} padded={false} /></SkPage>);
+const SkCompliance = () => (<SkPage label="Loading compliance…"><Card data-sk="gst"><SkHead w={190} /><SkStats n={5} min={140} /></Card><Card data-sk="turnover"><SkHead w={160} /><SkStats n={3} min={160} /><div style={{ marginTop: 14 }}>{skb('100%', 8, { borderRadius: 100 })}</div></Card><Card data-sk="downloads"><SkHead w={110} /><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{[0, 1, 2].map(i => <span key={i}>{skb(150, 40, { borderRadius: 11 })}</span>)}</div></Card><SkTable cols={6} rows={7} min={620} title={130} /></SkPage>);
+const SkInsights = () => (
+  <SkPage label="Loading executive insights…">
+    <SkKpis n={4} min={165} hero />
+    <SkGrid min={240}>{[0, 1, 2].map(i => <Card key={i} data-sk="pulse"><SkHead w={110} /><div style={{ display: 'grid', gap: 14 }}>{[0, 1, 2, 3].map(k => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>{skb(`${40 + k * 7}%`, 10)}{skb(54, 10)}</div>)}</div></Card>)}</SkGrid>
+    <Card data-sk="actions"><SkHead w={140} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, display: 'grid', gap: 9 }}>{skb('60%', 12)}{skb('90%', 9)}{skb('70%', 9)}</div>)}</div></Card>
+  </SkPage>
+);
+const SkSettings = () => (<SkPage label="Loading settings…"><SkFields title={140} toggles={2} /><SkFields title={90} rows={2} /><SkFields title={130} rows={2} /><SkFields title={140} rows={1} toggles={2} /><SkFields title={150} toggles={6} rows={0} /><SkFields title={130} rows={1} /></SkPage>);
 
 const IconBtn = ({ icon: Icon, onClick, active, title }) => (
   <button type="button" onClick={onClick} title={title} className="pown-btn" style={{
@@ -1488,13 +1635,7 @@ const DashboardPage = () => {
   useEffect(() => { if (liveOrderEvent) refetch(); }, [liveOrderEvent]); // eslint-disable-line
   useEffect(() => { if (liveStaffEvent) refetch(); }, [liveStaffEvent]); // eslint-disable-line
 
-  if (loading) return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <SkeletonGrid count={4} h={112} />
-      <Skeleton h={54} />
-      <Skeleton h={220} />
-    </div>
-  );
+  if (loading) return <SkDashboard />;
   if (error) return <ErrorState message={error} onRetry={refetch} />;
   if (!data) return null;
 
@@ -1625,7 +1766,7 @@ const RevenuePage = () => {
         { value: 'lastMonth', label: 'Last Month' }
       ]} />
 
-      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.orderCount === 0}
+      <DataBoundary skeleton={<SkRevenue />} loading={loading} error={error} onRetry={refetch} empty={data && data.orderCount === 0}
         emptyProps={{ icon: TrendingUp, title: 'No settled orders in this range' }}>
         {data && (
           <>
@@ -1732,7 +1873,7 @@ const PnlPage = () => {
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
       </div>
 
-      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.revenue === 0}
+      <DataBoundary skeleton={<SkPnl />} loading={loading} error={error} onRetry={refetch} empty={data && data.revenue === 0}
         emptyProps={{ icon: PieIcon, title: 'No settled revenue this month yet' }}>
         {data && (() => {
           const fc = foodCostTone(data.foodCostPct);
@@ -1827,7 +1968,7 @@ const MenuPage = () => {
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.dishTable.length === 0}
+      <DataBoundary skeleton={<SkMenu />} loading={loading} error={error} onRetry={refetch} empty={data && data.dishTable.length === 0}
         emptyProps={{ icon: UtensilsCrossed, title: 'No menu items with sales data' }}>
         {data && (
           <>
@@ -1942,7 +2083,7 @@ const InventoryPage = () => {
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkInventory />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
             <Card>
@@ -2040,7 +2181,7 @@ const KitchenPage = () => {
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkKitchen />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
             <Card>
@@ -2163,7 +2304,7 @@ const StaffPage = () => {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
       </div>
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkStaff />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
@@ -2314,7 +2455,7 @@ const CustomersPage = () => {
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <PrivacyRequestsCard tenantId={tenantId} />
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkCustomers />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
@@ -2434,7 +2575,7 @@ const AlertsPage = () => {
         </Card>
       )}
 
-      <DataBoundary loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0 && (!notifData || notifData.length === 0)}
+      <DataBoundary skeleton={<SkAlerts />} loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0 && (!notifData || notifData.length === 0)}
         emptyProps={{ icon: Bell, title: 'No alerts yet', subtitle: 'You\u2019ll see stock, revenue and kitchen alerts here in real time' }}>
         {data && (
           <>
@@ -2529,7 +2670,7 @@ const CompliancePage = () => {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
       </div>
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkCompliance />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
             <Card>
@@ -2737,7 +2878,7 @@ const ExecutiveInsightsPage = () => {
         <div style={{ fontSize:21, fontWeight:800, marginTop:10, letterSpacing:-0.4 }}>Know what needs attention now.</div>
         <div style={{ fontSize:12, color:T.textMed, marginTop:5, lineHeight:1.6, maxWidth:620 }}>A compact snapshot built from settled revenue anchors, live stock and stored customer totals.</div>
       </Card>
-      <DataBoundary loading={loading} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkInsights />} loading={loading} error={error} onRetry={refetch}>
         {data && <>
           <div className="pown-stagger" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(165px,1fr))', gap:12 }}>
             <KpiCard hero icon={IndianRupee} label="TODAY" value={`₹${Number(data.today.revenue||0).toLocaleString('en-IN')}`} sub={`${data.today.orders} settled bills`} />
@@ -2955,233 +3096,18 @@ const LocationCard = ({ tenantId }) => {
 };
 
 /* ════════════════════════════════════════════════════════════
-   GUEST DISCOVERY — how guests find this outlet on the Pratyeksha directory
+   GUEST DISCOVERY — customer-home activity + marketing performance for this outlet.
+   The screen itself is shared with the Operator portal (DiscoveryAnalytics.jsx).
    ════════════════════════════════════════════════════════════ */
-const DISCOVERY_SOURCES = { list: 'Browsing the list', featured: 'Featured row', offers: 'Offers row', map: 'Map & details', recent: 'Recently viewed', saved: 'Saved places', surprise: '"Surprise me"' };
-const fmtDayShort = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-/* Same layout as the loaded page: 4 KPI cards, trend chart, two side cards, health checklist. */
-const DiscoverySkeleton = () => {
-  const bar = (w, h = 10, extra) => <Skeleton h={h} style={{ width: w, borderRadius: Math.min(8, h / 2 + 2), ...extra }} />;
-  const heading = (w = 130) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>{bar(18, 18, { borderRadius: 6 })}{bar(w, 13)}</div>
-  );
-  const heights = [34, 46, 40, 58, 52, 70, 62, 78, 66, 84, 72, 60, 74, 88, 80, 68, 76, 92, 84, 70, 62, 78, 66, 56, 72, 64, 52, 60, 48, 56];
-  return (
-    <div role="status" aria-busy="true" aria-live="polite" style={{ display: 'grid', gap: 16 }}>
-      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>Loading guest discovery…</span>
-      <div aria-hidden="true" style={{ display: 'grid', gap: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          {[0, 1, 2, 3].map(i => (
-            <Card key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: i === 0 ? 132 : 118, borderColor: i === 0 ? T.borderStrong : T.border }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                {bar(i === 0 ? 112 : 84, 10)}
-                {bar(30, 30, { borderRadius: 9 })}
-              </div>
-              {bar(i === 0 ? '58%' : '46%', i === 0 ? 32 : 25, { borderRadius: 8 })}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{bar(46, 16, { borderRadius: 100 })}{bar(78, 10)}</div>
-            </Card>
-          ))}
-        </div>
-
-        <Card>
-          {heading(150)}
-          <div style={{ height: 230, display: 'flex', alignItems: 'flex-end', gap: 4, padding: '0 4px' }}>
-            {heights.map((h, i) => <Skeleton key={i} h={`${h}%`} style={{ flex: 1, borderRadius: '4px 4px 0 0', animationDelay: `${(i % 10) * 0.08}s` }} />)}
-          </div>
-          <div style={{ marginTop: 14 }}>{bar('62%', 11)}</div>
-        </Card>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-          <Card>
-            {heading(168)}
-            <div style={{ display: 'grid', gap: 14 }}>
-              {[88, 64, 46, 30, 18].map((w, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {bar(104, 10)}
-                  <div style={{ flex: 1 }}>{bar(`${w}%`, 12, { borderRadius: 6 })}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card>
-            {heading(124)}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} style={{ border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>
-                  {bar(58, 9)}{bar(44, 22, { borderRadius: 7 })}
-                </div>
-              ))}
-            </div>
-            <div style={{ marginTop: 14 }}>{bar('88%', 10)}</div>
-          </Card>
-        </div>
-
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{bar(18, 18, { borderRadius: 6 })}{bar(116, 13)}</div>
-            {bar(52, 22, { borderRadius: 100 })}
-          </div>
-          {bar('100%', 8, { borderRadius: 100 })}
-          <div style={{ display: 'grid', gap: 14, marginTop: 20 }}>
-            {[0, 1, 2, 3, 4].map(i => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                {bar(16, 16, { borderRadius: '50%', marginTop: 1 })}
-                <div style={{ flex: 1, display: 'grid', gap: 7 }}>{bar(`${30 + (i * 9) % 22}%`, 11)}{i % 2 === 0 && bar(`${56 + (i * 7) % 24}%`, 9)}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-};
-
 const ListingInsightsPage = () => {
   const { tenantId } = useOwner();
   const navigate = useNavigate();
-  const [days, setDays] = useState(30);
-  const [toast, setToast] = useState(null);
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
-  const { data, loading, error, refetch } = useOwnerData('/api/owner/listing-insights/:tenantId', { params: { days }, refreshMs: 120000 });
-  // Link that opens the guest directory already searching for this outlet - for Instagram bio, WhatsApp status, printed QR.
-  const copyListingLink = async () => {
-    const link = `${window.location.origin}/?q=${encodeURIComponent(data?.tenantName || tenantId)}`;
-    try { await navigator.clipboard.writeText(link); flash('Listing link copied'); } catch { flash(link); }
-  };
-  const downloadCsv = () => {
-    if (!data?.series?.length) return;
-    const rows = [['Date', 'Seen', 'Menu opens', 'Guest actions'], ...data.series.map(d => [d.day, d.impressions, d.opens, d.actions])];
-    const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `guest-discovery-${tenantId}-${data.range.from}_${data.range.to}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-  const pctChange = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : cur > 0 ? 100 : undefined);
-  const rate = (a, b) => (b > 0 ? Math.min(100, Math.round((a / b) * 1000) / 10) : 0);
-
+  const load = useCallback((days) => api.get(`/api/owner/discovery/${tenantId}`, { params: { days } }).then(r => r.data), [tenantId]);
+  // Only items the owner can change in this app get a "Fix" button.
+  const fixable = ['area', 'pin', 'hours', 'phone'];
   return (
-    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <PillTabs value={days} onChange={setDays} options={[{ value: 7, label: '7 days' }, { value: 30, label: '30 days' }, { value: 90, label: '90 days' }]} />
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <GhostBtn icon={Copy} onClick={copyListingLink}>Copy listing link</GhostBtn>
-          <GhostBtn icon={Download} onClick={downloadCsv} disabled={!data?.hasAnyData}>Download CSV</GhostBtn>
-          <GhostBtn icon={ExternalLink} onClick={() => window.open('/?notrack=1', '_blank', 'noopener')}>Preview guest directory</GhostBtn>
-        </div>
-      </div>
-      {toast && <Toast message={toast} />}
-
-      <DataBoundary loading={loading} error={error} onRetry={refetch} skeleton={<DiscoverySkeleton />}>
-        {data && (() => {
-          const cur = data.current || {};
-          const prev = data.previous || {};
-          const actions = (cur.calls || 0) + (cur.directions || 0) + (cur.shares || 0) + (cur.saves || 0);
-          const prevActions = (prev.calls || 0) + (prev.directions || 0) + (prev.shares || 0) + (prev.saves || 0);
-          const sources = Object.entries(data.openSources || {}).map(([k, v]) => ({ label: DISCOVERY_SOURCES[k] || k, value: v })).filter(r => r.value > 0).sort((a, b) => b.value - a.value);
-          const score = data.listing?.score ?? 0;
-          const tone = score >= 80 ? 'gold' : score >= 50 ? 'warning' : 'danger';
-          const missing = (k) => (data.listing?.checks || []).some(c => c.key === k && !c.ok);
-          const openRateNow = rate(cur.opens || 0, cur.impressions || 0);
-          const tips = [];
-          if ((cur.impressions || 0) >= 50 && openRateNow < 15) tips.push('Many guests see your card but few open it. A live offer and a complete listing (logo, area, hours) make the card more tempting.');
-          if (missing('hours')) tips.push('Turn on "Show on guest directory" in Settings to display Open now. Guests can filter for places that are open.');
-          if (missing('phone') && (cur.opens || 0) >= 20) tips.push('Add a phone number so guests who open your page can call you straight away.');
-          if (missing('offers') && (cur.impressions || 0) >= 20) tips.push('Run a live offer: it adds a headline to your card and puts you in the Offers row.');
-          if ((cur.directions || 0) > 0 && missing('pin')) tips.push('Guests are asking for directions but your map pin is missing. Add your coordinates under Settings > Location & Map.');
-          const trend = (data.series || []).map(d => ({ date: fmtDayShort(d.day), impressions: d.impressions, opens: d.opens }));
-          return (
-            <>
-              {data.featured && <div><Badge tone="gold"><Star size={11} /> Featured placement active</Badge></div>}
-
-              {!data.hasAnyData ? (
-                <Card><EmptyState icon={Eye} title="No guest activity recorded yet" subtitle="Counting starts as guests browse the Pratyeksha directory. Share your listing link to get the first visits." /></Card>
-              ) : (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                    <KpiCard hero icon={Eye} label="TIMES YOU WERE SEEN" value={(cur.impressions || 0).toLocaleString('en-IN')} sub="card on screen" delta={pctChange(cur.impressions || 0, prev.impressions || 0)} />
-                    <KpiCard icon={UtensilsCrossed} label="MENU OPENS" value={(cur.opens || 0).toLocaleString('en-IN')} sub="guests tapped through" delta={pctChange(cur.opens || 0, prev.opens || 0)} />
-                    <KpiCard icon={Target} label="OPEN RATE" value={`${rate(cur.opens || 0, cur.impressions || 0)}%`} sub={(prev.impressions || 0) > 0 ? `was ${rate(prev.opens || 0, prev.impressions || 0)}% before` : 'of views became opens'} />
-                    <KpiCard icon={Zap} label="GUEST ACTIONS" value={actions.toLocaleString('en-IN')} sub="calls, directions, shares, saves" delta={pctChange(actions, prevActions)} />
-                  </div>
-
-                  {tips.length > 0 && (
-                    <Card>
-                      <SectionHeading icon={Sparkles} title="Suggestions" />
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {tips.map(t => <div key={t} style={{ fontSize: 12.5, color: T.textMed, lineHeight: 1.6 }}>• {t}</div>)}
-                      </div>
-                    </Card>
-                  )}
-
-                  <Card>
-                    <SectionHeading icon={BarChart3} title={`Last ${data.range?.days || days} days`} />
-                    <ResponsiveContainer width="100%" height={230}>
-                      <AreaChart data={trend}>
-                        <defs>
-                          <linearGradient id="discSeen" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={T.primary} stopOpacity={0.3} />
-                            <stop offset="100%" stopColor={T.primary} stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                        <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} minTickGap={28} />
-                        <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
-                        <Tooltip {...chartTooltipStyle} />
-                        <Area type="monotone" name="Seen" dataKey="impressions" stroke={T.primary} strokeWidth={2} fill="url(#discSeen)" />
-                        <Area type="monotone" name="Menu opens" dataKey="opens" stroke="#e29a58" strokeWidth={2} fill="none" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                    {data.peakDay && <div style={{ fontSize: 12, color: T.textMed, marginTop: 10 }}>Your busiest day for menu opens is <b style={{ color: T.textHigh }}>{data.peakDay.name}</b> ({data.peakDay.opens} opens).</div>}
-                  </Card>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-                    <ChartCard icon={Search} title="Where guests found you" hint="Where menu opens came from in this period.">
-                      <HBarChart data={sources} nameWidth={128} />
-                    </ChartCard>
-                    <Card>
-                      <SectionHeading icon={Activity} title="What guests did" />
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-                        <StatBlock label="CALLS" value={cur.calls || 0} />
-                        <StatBlock label="DIRECTIONS" value={cur.directions || 0} />
-                        <StatBlock label="SHARES" value={cur.shares || 0} />
-                        <StatBlock label="SAVED" value={cur.saves || 0} />
-                      </div>
-                      <div style={{ fontSize: 11, color: T.textLow, lineHeight: 1.6, marginTop: 12 }}>
-                        Anonymous counts only. Each card is counted once per guest session; no names, numbers or devices are stored.
-                      </div>
-                    </Card>
-                  </div>
-                </>
-              )}
-
-              <Card>
-                <SectionHeading icon={Gauge} title="Listing health" action={<Badge tone={tone}>{score}%</Badge>} />
-                <ProgressBar pct={score} tone={tone} />
-                <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-                  {(data.listing?.checks || []).map(c => (
-                    <div key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                      {c.ok ? <CheckCircle2 size={16} color={T.primary} style={{ flexShrink: 0, marginTop: 1 }} /> : <AlertTriangle size={16} color={T.warning} style={{ flexShrink: 0, marginTop: 1 }} />}
-                      <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: c.ok ? T.textMed : T.textHigh }}>{c.label}</div>
-                        {!c.ok && <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.5, marginTop: 2 }}>{c.hint}</div>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 16 }}>
-                  <GhostBtn icon={SettingsIcon} onClick={() => navigate(`/owner/${tenantId}/settings`)}>Open Settings</GhostBtn>
-                </div>
-              </Card>
-            </>
-          );
-        })()}
-      </DataBoundary>
+    <div className="pown-fade-in">
+      <DiscoveryAnalytics load={load} canFix={(k) => fixable.includes(k)} onFixListing={() => navigate(`/owner/${tenantId}/settings`)} />
     </div>
   );
 };
@@ -3226,7 +3152,7 @@ const SettingsPage = () => {
 
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
-      <DataBoundary loading={loading || !form} error={error} onRetry={refetch}>
+      <DataBoundary skeleton={<SkSettings />} loading={loading || !form} error={error} onRetry={refetch}>
         {form && (
           <>
             <Card>
@@ -3417,7 +3343,7 @@ const EightySixForm = ({ tenantId, onDone }) => {
       </Field>
       {hideError && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 10 }}>{hideError}</div>}
       <div className="pown-scroll" style={{ maxHeight: 280, overflowY: 'auto', display: 'grid', gap: 6 }}>
-        {loading ? <Skeleton h={40} /> : dishes.length === 0 ? (
+        {loading ? <div role="status" aria-busy="true" style={{ display: 'grid', gap: 6 }}>{[0, 1, 2, 3, 4].map(i => <Skeleton key={i} h={40} style={{ borderRadius: 10 }} />)}</div> : dishes.length === 0 ? (
           <div style={{ fontSize: 12, color: T.textLow, padding: '10px 0' }}>No matching dishes</div>
         ) : dishes.slice(0, 30).map(d => (
           <div key={d._id} style={{
