@@ -736,7 +736,7 @@ const CHATBOT_VERIFIED_INTENTS = CHATBOT_INTENTS.map(({ id, title, terms, answer
 const CHAT_TOPIC_SETS = {
   Discover: [
     ["What is Pratyeksha?", "spark"],
-    ["Who is PRATYEKSHa for?", "users"],
+    ["Who is Pratyeksha for?", "users"],
     ["What are the main benefits?", "spark"],
     ["What features are included?", "layers"],
     ["How is it different from a normal restaurant app?", "spark"],
@@ -827,13 +827,47 @@ const INSTAGRAM_HIGHLIGHTS = [
   { title: "Book Demo", icon: "arrowUpRight", tone: "sage", url: INSTAGRAM_PROFILE_URL, note: "Take the next step" },
 ];
 
+const HERO_ROTATING_WORDS = ["in sync.", "more smoothly.", "with clarity.", "beautifully."];
+
+function TypewriterWords({ words = HERO_ROTATING_WORDS, typeSpeed = 76, deleteSpeed = 42, pause = 1450 }) {
+  const [wordIndex, setWordIndex] = useState(0);
+  const [displayed, setDisplayed] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayed(words[0] || "in sync.");
+      return undefined;
+    }
+    const word = words[wordIndex % words.length] || "in sync.";
+    const complete = !deleting && displayed === word;
+    const delay = complete ? pause : deleting ? deleteSpeed : typeSpeed;
+    const timer = window.setTimeout(() => {
+      if (complete) {
+        setDeleting(true);
+      } else if (deleting) {
+        if (displayed.length > 0) setDisplayed(displayed.slice(0, -1));
+        else {
+          setDeleting(false);
+          setWordIndex((index) => (index + 1) % words.length);
+        }
+      } else {
+        setDisplayed(word.slice(0, displayed.length + 1));
+      }
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [displayed, deleting, wordIndex, words, typeSpeed, deleteSpeed, pause]);
+
+  return <span className="typewriter-word" aria-label={words[wordIndex % words.length]}><span aria-hidden="true">{displayed}</span><i className="typewriter-caret" aria-hidden="true" /></span>;
+}
+
 function InstagramProfileSection() {
   return (
     <section className="ig-showcase-section" id="instagram" aria-labelledby="ig-showcase-title">
       <div className="ig-showcase-inner">
         <div className="ig-showcase-heading">
           <span className="eyebrow">CONNECT WITH Pratyeksha</span>
-          <p className="ig-overline">OUR WORLD, BEHIND THE EXPERIENCE <span> / </span> @PRATYEKSHA.IO</p>
+          <p className="ig-overline">OUR WORLD, BEHIND THE EXPERIENCE <span> / </span> @pratyeksha.io</p>
           <h2 id="ig-showcase-title">Get to know <em>Pratyeksha.</em></h2>
           <p className="ig-heading-copy">Product updates, practical ideas and a closer look at how Pratyeksha helps cafés and restaurants deliver better experiences.</p>
         </div>
@@ -880,8 +914,8 @@ function PratyekshaChatbot() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "Welcome to PRATYEKSHa. I can help you explore the system — from QR ordering and customer experience to kitchen, billing, inventory, intelligence and marketing.",
-      meta: "PRATYEKSHa knowledge assistant"
+      text: "Hello, welcome to Pratyeksha.\n\nI’m here to help you find the right place to start — from a more engaging guest experience to smoother kitchen and business operations. What would you like to explore?",
+      meta: "Your Pratyeksha guide"
     }
   ]);
   const endRef = useRef(null);
@@ -913,7 +947,7 @@ function PratyekshaChatbot() {
     setSending(true);
     const local = fallbackAnswer(question);
     if (local.intent !== "unknown") {
-      setMessages((prev) => [...prev, { role: "assistant", text: local.text, intent: local.intent, icon: local.icon, title: local.title, meta: "Verified PRATYEKSHa information" }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: local.text, intent: local.intent, icon: local.icon, title: local.title, meta: "Verified Pratyeksha information" }]);
       setSending(false);
       return;
     }
@@ -936,7 +970,7 @@ function PratyekshaChatbot() {
           knowledge: CHATBOT_KNOWLEDGE,
           verifiedIntents: CHATBOT_VERIFIED_INTENTS,
           answerPolicy: {
-            coverage: `Use verified PRATYEKSHa information. The local intent matrix represents ${CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ practical question variations.`,
+            coverage: `Use verified Pratyeksha information. The local intent matrix represents ${CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ practical question variations.`,
             neverInvent: ["pricing", "features not listed", "integrations", "availability", "contracts", "performance guarantees", "security certifications"],
             unknownAction: `If the answer is not supported, clearly say so, provide ${CHATBOT_KNOWLEDGE.contact.email}, ${CHATBOT_KNOWLEDGE.contact.phone} and ${CHATBOT_KNOWLEDGE.contact.alternatePhone}, and encourage a private demo.`,
             style: "Premium, warm, concise, left-aligned, factual and helpful. Use short paragraphs or bullets when useful. Never pretend certainty when information is insufficient."
@@ -948,9 +982,9 @@ function PratyekshaChatbot() {
       setMessages((prev) => [...prev, {
         role: "assistant",
         text: data.answer.trim().slice(0, 5000),
-        title: "PRATYEKSHa assistant",
+        title: "Pratyeksha assistant",
         icon: "spark",
-        meta: data?.source === "knowledge" ? "Verified PRATYEKSHa information" : "PRATYEKSHa assistant",
+        meta: data?.source === "knowledge" ? "Verified Pratyeksha information" : "Pratyeksha assistant",
         needsContact: Boolean(data?.needsContact)
       }]);
     } catch {
@@ -961,7 +995,7 @@ function PratyekshaChatbot() {
         icon: local.icon,
         fallback: true,
         intent: local.intent,
-        meta: local.intent === "unknown" ? "A team member can confirm this" : "Verified PRATYEKSHa information"
+        meta: local.intent === "unknown" ? "A team member can confirm this" : "Verified Pratyeksha information"
       }]);
     } finally {
       window.clearTimeout(timeout);
@@ -973,23 +1007,23 @@ function PratyekshaChatbot() {
   return (
     <>
       {open && <div className="chat-backdrop is-open" onClick={() => setOpen(false)} aria-hidden="true" />}
-      <button type="button" className={`chat-launcher ${open ? "is-open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label={open ? "Close PRATYEKSHa assistant" : "Open PRATYEKSHa assistant"}>
+      <button type="button" className={`chat-launcher ${open ? "is-open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label={open ? "Close Pratyeksha assistant" : "Open Pratyeksha assistant"}>
         <span className="chat-launcher-glow" />
         <span className="chat-launcher-icon"><I name={open ? "close" : "spark"} size={21} /></span>
-        {!open && <span className="chat-launcher-copy"><small>PRATYEKSHa</small><strong>Ask the system</strong></span>}
+        {!open && <span className="chat-launcher-copy"><small>Pratyeksha</small><strong>Ask Pratyeksha</strong></span>}
       </button>
-      <aside className={`chat-panel ${open ? "is-open" : ""}`} aria-hidden={!open} aria-label="PRATYEKSHa AI assistant">
+      <aside className={`chat-panel ${open ? "is-open" : ""}`} aria-hidden={!open} aria-label="Pratyeksha AI assistant">
         <div className="chat-header">
           <div className="chat-agent-mark"><I name="spark" size={18} /></div>
           <div className="chat-agent-title">
-            <span>PRATYEKSHa / AI ASSISTANT</span>
-            <strong>Ask. Explore. Understand.</strong>
-            <small><span className="chat-status-dot" /> {CHATBOT_COVERAGE_ESTIMATE.toLocaleString()}+ question variations covered</small>
+            <span>Pratyeksha / AI ASSISTANT</span>
+            <strong>A little clarity for your next step.</strong>
+            <small><span className="chat-status-dot" /> Explore the platform, one question at a time</small>
           </div>
           <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Close assistant"><I name="close" size={17} /></button>
         </div>
         <div className="chat-trust">
-          <span className="chat-live-dot" /> Grounded in PRATYEKSHa information <span>•</span> No invented pricing
+          <span className="chat-live-dot" /> Answers grounded in Pratyeksha information <span>•</span> Pricing confirmed by our team
         </div>
         <div className="chat-topic-bar" aria-label="Question categories">
           {Object.keys(CHAT_TOPIC_SETS).map((topic) => {
@@ -1006,7 +1040,7 @@ function PratyekshaChatbot() {
             <div className={`chat-message-row ${message.role}`} key={`${message.role}-${index}`}>
               {message.role === "assistant" && <span className="chat-mini-mark"><I name="spark" size={11} /></span>}
               <div className="chat-message-stack">
-                {message.role === "assistant" && <div className="chat-answer-heading"><span><I name={message.icon || "spark"} size={13} /></span><strong>{message.title || "PRATYEKSHa assistant"}</strong></div>}
+                {message.role === "assistant" && <div className="chat-answer-heading"><span><I name={message.icon || "spark"} size={13} /></span><strong>{message.title || "Pratyeksha assistant"}</strong></div>}
                 <div className="chat-bubble">{message.text}</div>
                 {message.role === "assistant" && message.meta && <span className="chat-meta">{message.meta}</span>}
                 {message.role === "assistant" && (message.needsContact || (message.fallback && message.intent === "unknown")) && (
@@ -1015,7 +1049,7 @@ function PratyekshaChatbot() {
                       <span><I name="phone" size={13} /></span>
                       <div>
                         <strong>Need a precise answer?</strong>
-                        <small>Talk directly with the PRATYEKSHa team</small>
+                        <small>Talk directly with the Pratyeksha team</small>
                       </div>
                     </div>
                     <div className="chat-contact-links">
@@ -1032,7 +1066,7 @@ function PratyekshaChatbot() {
             <div className="chat-message-row assistant">
               <span className="chat-mini-mark"><I name="spark" size={11} /></span>
               <div className="chat-message-stack">
-                <div className="chat-bubble chat-typing"><i /><i /><i /><span>Thinking from PRATYEKSHa knowledge</span></div>
+                <div className="chat-bubble chat-typing"><i /><i /><i /><span>Thinking from Pratyeksha knowledge</span></div>
               </div>
             </div>
           )}
@@ -1055,7 +1089,7 @@ function PratyekshaChatbot() {
         </div>
         <form className="chat-input-wrap" onSubmit={(e) => { e.preventDefault(); send(); }}>
           <span className="chat-input-icon"><I name="search" size={15} /></span>
-          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value.slice(0, 1200))} placeholder="Ask your own question…" aria-label="Ask PRATYEKSHa assistant" maxLength={1200} />
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value.slice(0, 1200))} placeholder="Ask about your restaurant…" aria-label="Ask Pratyeksha assistant" maxLength={1200} />
           <span className="chat-counter">{input.length > 900 ? `${input.length}/1200` : ""}</span>
           <button type="submit" disabled={!input.trim() || sending} aria-label="Send question"><I name="arrow" size={17} /></button>
         </form>
@@ -2308,39 +2342,33 @@ function App() {
           <div className="hero-left">
             <div className="hero-eyebrow reveal">
               <span />
-              BUILT FOR CAFÉS + RESTAURANTS
+              FOR THE PEOPLE WHO RUN THE ROOM
             </div>
-            <h1 className="hero-title reveal delay-1">
-              The digital layer
+            <h1 className="hero-title reveal delay-1 hero-title-premium">
+              Your restaurant.
               <br />
-              behind a{" "}
-              <em>
-                better
-                <br />
-                food experience.
-              </em>
+              More in <em><TypewriterWords words={["harmony.", "your control.", "clear focus.", "good flow."]} /></em>
             </h1>
             <p className="hero-description reveal delay-2">
-              Pratyeksha connects your customer menu, kitchen,
-              billing, inventory, analytics and marketing into one
-              intelligent restaurant experience system.
+              Orders, kitchen flow, stock and guest relationships should work together—not compete for your attention. Pratyeksha brings the moving parts into one connected view, helping you spend less time chasing updates and more time shaping the business you want to build.
             </p>
             <div className="hero-actions reveal delay-3">
               <button type="button"
                 className="button primary"
                 onClick={() => scrollTo("demo")}
               >
-                Book a Private Demo
+                Explore Pratyeksha
                 <I name="arrow" size={16} />
               </button>
               <button type="button"
                 className="button secondary"
                 onClick={() => scrollTo("system")}
               >
-                Explore the System
+                Explore the Difference
               </button>
             </div>
-            <div className="hero-cta-note"><I name="shield" size={13} /> Private walkthrough · no pressure · built around your workflow</div>
+            <div className="hero-cta-note"><I name="sparkles" size={13} /> Built around the pressure of a real service, not a software checklist</div>
+            <div className="hero-proofline reveal delay-4"><span className="hero-proof-dot" /><span>One connected view</span><i /> <span>Fewer blind spots</span><i /> <span>Better-informed decisions</span></div>
             <div className="hero-meta reveal delay-4">
               <div>
                 <strong>01</strong>
@@ -2363,7 +2391,7 @@ function App() {
             <div className="restaurant-card">
               <div className="restaurant-top">
                 <div>
-                  <small>LIVE RESTAURANT</small>
+                  <small>YOUR BUSINESS, AT A GLANCE</small>
                   <BrandLogo className="restaurant-brand-image" alt="Pratyeksha logo" />
                 </div>
                 <span className="live">
@@ -2385,16 +2413,16 @@ function App() {
               </div>
               <div className="restaurant-stats">
                 <div>
-                  <small>ORDERS</small>
-                  <strong>24</strong>
+                  <small>ORDER FLOW</small>
+                  <strong><I name="check-circle" size={15} /> Connected</strong>
                 </div>
                 <div>
                   <small>KITCHEN</small>
-                  <strong>08</strong>
+                  <strong><I name="timer" size={15} /> In view</strong>
                 </div>
                 <div>
-                  <small>TABLES</small>
-                  <strong>17</strong>
+                  <small>DECISIONS</small>
+                  <strong><I name="chart-no-axes-combined" size={15} /> Informed</strong>
                 </div>
               </div>
               <div className="mini-order">
@@ -2421,7 +2449,7 @@ function App() {
               <I name="chart" size={15} />
               <div>
                 <small>INTELLIGENCE</small>
-                <strong>+24.8% insight</strong>
+                <strong>Clearer decisions</strong>
               </div>
             </div>
           </div>
@@ -2436,9 +2464,14 @@ function App() {
             <div className="section-head">
               <div>
                 <span className="eyebrow">The Pratyeksha system</span>
-                <h2>Five layers. One restaurant experience.</h2>
+                <h2>Stop running your restaurant in pieces.</h2>
               </div>
-              <p>Instead of forcing every part of the restaurant into one dashboard, each layer gets an interface designed around the job it needs to perform.</p>
+              <p>Missed orders. Stock surprises. Unclear margins. Customers who never return. One disconnected workflow can create five more problems. Pratyeksha connects the everyday work so you can see what is happening and act with more clarity.</p>
+            </div>
+            <div className="owner-pressure-line reveal" aria-label="Common restaurant operating challenges">
+              <span><i /> Orders scattered across tools</span>
+              <span><i /> Stock surprises during service</span>
+              <span><i /> Repeat visits left to chance</span>
             </div>
             <div className="product-tabs">
               {Object.entries(PRODUCTS).map(([key, item]) => (
@@ -2484,14 +2517,12 @@ function App() {
           <div className="section-heading reveal">
             <div className="eyebrow">ONE PLATFORM / MANY FORMATS</div>
             <h2>
-              Designed for the way
+              Built around the pressure
               <br />
-              <em>you actually operate.</em>
+              <em>you deal with every day.</em>
             </h2>
             <p>
-              Whether you run a compact café, a busy restaurant,
-              a QSR or multiple outlets, the same connected
-              foundation adapts around your operation.
+              From the first customer scan to the final bill, your team needs fewer hand-offs and clearer information. Pratyeksha is designed for cafés, restaurants and growing multi-outlet businesses.
             </p>
           </div>
           <div className="use-grid">
@@ -2773,18 +2804,20 @@ function App() {
               <div className="eyebrow reveal">
                 PRIVATE DEMONSTRATION
               </div>
+              <div className="demo-overline reveal delay-1">A PRIVATE, OWNER-FOCUSED WALKTHROUGH</div>
               <h2 className="reveal delay-1">
-                See what
+                Make room for
                 <br />
-                <em>Pratyeksha</em>
-                <br />
-                can do for you.
+                <em>better service.</em>
               </h2>
               <p className="reveal delay-2">
-                Tell us about your café or restaurant. We will
-                walk you through the parts of the platform that
-                matter to your operation.
+                Tell us what slows your team down—from order handoffs and stock visibility to billing or bringing guests back. We’ll focus the walkthrough on your priorities, then help you understand the right setup and subscription fit for your business.
               </p>
+              <div className="demo-benefit-list reveal delay-3">
+                <div><span>01</span><p><strong>Map your current workflow</strong><small>See where orders, stock, billing and customer follow-ups meet.</small></p></div>
+                <div><span>02</span><p><strong>Focus on what matters to you</strong><small>No generic feature tour. A conversation around your priorities.</small></p></div>
+                <div><span>03</span><p><strong>Understand the next step</strong><small>Explore fit, setup and applicable subscription options with the team.</small></p></div>
+              </div>
               <div className="contact-details reveal delay-3">
                 <a href="tel:+918767622654">
                   <span>
@@ -2828,8 +2861,9 @@ function App() {
               ) : (
                 <form onSubmit={submitDemo} aria-busy={sending}>
                   <div className="form-top">
-                    <small>BOOK A DEMO</small>
-                    <span>01 / 01</span>
+                    <div className="form-heading-mark"><I name="sparkles" size={17} /></div>
+                    <div className="form-heading-copy"><small>YOUR PRIVATE WALKTHROUGH</small><strong>Let’s make it relevant.</strong><span>About a minute to get started</span></div>
+                    <span className="form-step">01 <i /> 01</span>
                   </div>
                   <div className="hp-field" aria-hidden="true">
                     <label htmlFor="website">Website</label>
@@ -2855,7 +2889,7 @@ function App() {
                         maxLength={80}
                         value={form.name}
                         onChange={updateForm}
-                        placeholder="Enter your name"
+                        placeholder="The person behind the business"
                       />
                       {fieldErrors.name && <span id="name-error" className="field-error">{fieldErrors.name}</span>}
                     </label>
@@ -2870,7 +2904,7 @@ function App() {
                         maxLength={120}
                         value={form.business}
                         onChange={updateForm}
-                        placeholder="Business name"
+                        placeholder="Your café or restaurant name"
                       />
                       {fieldErrors.business && <span id="business-error" className="field-error">{fieldErrors.business}</span>}
                     </label>
@@ -2934,7 +2968,7 @@ function App() {
                         maxLength={1000}
                         value={form.message}
                         onChange={updateForm}
-                        placeholder="Tell us briefly about your current setup..."
+                        placeholder="What takes too much time? Where do things get missed? What would you like to improve?"
                         rows={4}
                       />
                     </label>
@@ -2962,12 +2996,11 @@ function App() {
                     type="submit"
                     disabled={sending}
                   >
-                    {sending ? "Sending securely…" : "Book a Private Demo"}
+                    {sending ? "Sending securely…" : "See Your Restaurant, Connected"}
                     <I name="arrow" size={17} />
                   </button>
                   <p className="form-note">
-                    No spam. No pressure. Just a walkthrough of
-                    the platform.
+                    <I name="lock-keyhole" size={13} /> Your details are used to respond to this request. No pressure—just a focused conversation about your operation.
                   </p>
                 </form>
               )}
@@ -3186,7 +3219,7 @@ function App() {
       </footer>
       <PratyekshaChatbot />
       <div className="mobile-sticky-cta" aria-label="Book a private demo">
-        <button type="button" onClick={() => scrollTo("demo")}><span>Book a Private Demo</span><I name="arrow" size={15} /></button>
+        <button type="button" onClick={() => scrollTo("demo")}><span>See Your Restaurant, Connected</span><I name="arrow" size={15} /></button>
       </div>
       <CookieBanner
         consent={cookieConsent}
@@ -8265,6 +8298,413 @@ input, select, textarea, button{
 @media(max-width:760px){.ig-showcase-section{padding:64px 5vw}.ig-showcase-heading{margin-bottom:30px}.ig-profile-topline{padding:0 16px;font-size:8px;letter-spacing:.8px}.ig-profile-main{grid-template-columns:1fr;gap:23px;padding:28px 22px 30px;text-align:center}.ig-avatar-ring{width:126px;height:126px}.ig-profile-info{text-align:center}.ig-username-row{justify-content:center}.ig-value-line{justify-content:center;gap:8px;margin:15px 0;padding-bottom:14px}.ig-bio-block{margin:0 auto}.ig-bio{font-size:12px}.ig-bio-link{justify-content:center}.ig-profile-cta{margin:17px auto 0}.ig-divider{margin:0 20px;font-size:8px;letter-spacing:.8px}.ig-highlights-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 8px;padding:20px 16px 27px}.ig-highlight-orbit{width:clamp(62px,16vw,80px)}.ig-highlight strong{font-size:11px}.ig-highlight small{display:none}.ig-card-bottom{padding:17px 20px;font-size:8px;letter-spacing:.8px}}
 @media(max-width:440px){.ig-highlights-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 8px}.ig-profile-topline{gap:8px}.ig-profile-topline>a{font-size:0}.ig-profile-topline>a svg{width:16px;height:16px}.ig-value-line{font-size:10px;gap:7px}.ig-card-bottom{align-items:flex-start;flex-direction:column}.ig-divider span:last-child{max-width:45%;text-align:right;line-height:1.5}}
 @media(prefers-reduced-motion:reduce){.ig-highlight,.ig-profile-cta,.ig-highlight-orbit{transition:none}}
+
+
+/* Premium editorial motion layer — calm, purposeful and accessible */
+.hero{isolation:isolate}
+.hero:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 74% 40%,rgba(184,151,94,.11),transparent 34%),linear-gradient(110deg,rgba(255,255,255,.32),transparent 62%)}
+.hero-title-premium{max-width:760px;letter-spacing:-.055em;line-height:1.035}
+.hero-title-premium em{display:inline-flex;align-items:baseline;white-space:normal;color:#777d59;font-style:normal;font-weight:400}
+.typewriter-word{position:relative;display:inline-block;min-width:5.5ch;color:#737b55}
+.typewriter-caret{display:inline-block;width:2px;height:.78em;margin-left:3px;vertical-align:-.02em;background:#b38a4a;animation:typeCaret 850ms steps(2,end) infinite}
+@keyframes typeCaret{0%,45%{opacity:1}46%,100%{opacity:0}}
+.hero-title-premium em{transition:color .35s ease}
+.hero-right{perspective:1200px}
+.restaurant-card{transform:translateZ(0);transition:transform .65s cubic-bezier(.2,.7,.2,1),box-shadow .65s ease;box-shadow:0 28px 85px rgba(33,29,20,.12)}
+.hero-right:hover .restaurant-card{transform:translateY(-5px) rotateX(1deg);box-shadow:0 38px 100px rgba(33,29,20,.16)}
+.floating-note{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 16px 42px rgba(35,30,20,.1)}
+.hero-scroll i{animation:scrollNudge 1.8s ease-in-out infinite}
+@keyframes scrollNudge{0%,100%{transform:translateY(0);opacity:.5}55%{transform:translateY(7px);opacity:1}}
+.reveal{transform:translate3d(0,22px,0);transition:opacity .8s cubic-bezier(.2,.65,.2,1),transform .8s cubic-bezier(.2,.65,.2,1)}
+.reveal.visible{transform:translate3d(0,0,0)}
+.product-tab,.feature-card,.usecase-card,.faq-item,.ig-profile-card{transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s ease,border-color .35s ease}
+.product-tab:hover,.feature-card:hover,.usecase-card:hover{transform:translateY(-3px)}
+/* Ask Pratyeksha: compact, calm, editorial assistant with a clear conversational hierarchy */
+.chat-launcher{right:24px;bottom:24px;padding:7px 17px 7px 7px;border:1px solid rgba(179,138,74,.35);background:rgba(30,33,26,.96);box-shadow:0 14px 44px rgba(25,25,18,.22);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}
+.chat-launcher:hover{transform:translateY(-3px) scale(1.015);box-shadow:0 22px 56px rgba(25,25,18,.28);border-color:rgba(179,138,74,.7)}
+.chat-launcher-icon{width:43px;height:43px;background:#e5d5b5;color:#292a21;box-shadow:none;transition:transform .35s ease,background .35s ease}
+.chat-launcher:hover .chat-launcher-icon{transform:rotate(-7deg);background:#f0e5ce}
+.chat-launcher-copy small{font-family:'DM Sans',sans-serif;letter-spacing:.16em;color:#d6c49f}
+.chat-launcher-copy strong{font-size:12px;letter-spacing:-.01em}
+.chat-panel{right:24px;bottom:86px;width:min(430px,calc(100vw - 32px));height:min(720px,calc(100dvh - 112px));border:1px solid rgba(179,138,74,.24);border-radius:24px;background:#fbf8f1;box-shadow:0 34px 100px rgba(22,22,16,.26);overflow:hidden;transform:translateY(16px) scale(.985);transform-origin:bottom right;transition:opacity .28s ease,transform .35s cubic-bezier(.2,.8,.2,1),visibility .28s ease}
+.chat-header{padding:20px 19px 17px;background:#22241c;gap:13px}
+.chat-agent-mark{width:45px;height:45px;border-radius:15px;background:#e6d7b7;color:#343528;box-shadow:none}
+.chat-agent-title span{font-family:'DM Sans',sans-serif;font-size:8px;letter-spacing:.17em;color:#c4b28d}
+.chat-agent-title strong{font-size:16px;letter-spacing:-.025em;font-weight:550}
+.chat-agent-title small{margin-top:5px;color:rgba(248,243,232,.64);font-family:'DM Sans',sans-serif;font-size:10px;letter-spacing:0;line-height:1.4}
+.chat-close{border-radius:12px;width:36px;height:36px;background:rgba(255,255,255,.045)}
+.chat-trust{padding:10px 18px;background:#f1ecdf;color:#716b58;font-family:'DM Sans',sans-serif;font-size:10px;line-height:1.45;letter-spacing:0}
+.chat-topic-bar{padding:11px 15px;background:#fbf8f1;gap:7px}
+.chat-topic-bar button{border-radius:999px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:10px;letter-spacing:0;transition:background .2s ease,border-color .2s ease,color .2s ease}
+.chat-topic-bar button.active{background:#303326;color:#f7f2e8;border-color:#303326;box-shadow:none}
+.chat-messages{padding:20px 17px 12px;background:radial-gradient(circle at 100% 0,rgba(219,205,174,.2),transparent 33%),#fbf8f1}
+.chat-message-row{gap:9px;margin-bottom:16px;animation:chatMessageIn .28s ease both}
+@keyframes chatMessageIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.chat-mini-mark{width:25px;height:25px;flex-basis:25px;border-radius:9px;background:#e6d8b9;color:#3c3d2e}
+.chat-message-stack{max-width:88%}
+.chat-answer-heading{gap:8px;margin:0 2px 7px}
+.chat-answer-heading span{width:26px;height:26px;border-radius:9px;background:#e6d8b9;color:#343528;box-shadow:none}
+.chat-answer-heading strong{font-size:11px;font-weight:650;color:#414235;letter-spacing:-.01em}
+.chat-bubble{padding:13px 15px;border:1px solid #eae3d5;border-radius:17px 17px 17px 5px;background:#fffefa;color:#37372e;font:400 12.5px/1.72 'DM Sans',sans-serif;box-shadow:0 5px 16px rgba(43,39,28,.025);white-space:pre-line}
+.chat-message-row.user .chat-bubble{border:1px solid #34372a;background:#34372a;color:#faf6ec;border-radius:17px 17px 5px 17px;box-shadow:none}
+.chat-meta{margin:6px 4px 0;color:#99917f;font:400 9px/1.4 'DM Sans',sans-serif;letter-spacing:.01em}
+.chat-escalation{border-color:#e4d7bd;background:#f5efe2;border-radius:16px;padding:13px}
+.chat-suggestions-wrap{padding:12px 15px 13px;background:#f7f2e8;border-top:1px solid #ece4d5;max-height:180px}
+.chat-suggestion-label{margin-bottom:9px}
+.chat-suggestion-label span{font-family:'DM Sans',sans-serif;font-size:9px;letter-spacing:.11em;color:#737857}
+.chat-suggestion-label small{font-size:9px;color:#9a927f}
+.chat-suggestions{gap:7px}
+.chat-suggestions button{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #e8dfce;border-radius:12px;background:#fffdf8;color:#4a493d;font:500 10px/1.35 'DM Sans',sans-serif;box-shadow:0 2px 5px rgba(50,43,29,.02);transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.chat-suggestions button:hover{transform:translateY(-1px);border-color:#c8b58b;background:#fff}
+.chat-suggestions button span{width:25px;height:25px;flex:0 0 25px;border-radius:8px;background:#f0eadb;color:#747b58}
+.chat-suggestions button b{font-weight:550;flex:1}
+.chat-input-wrap{margin:0 14px 9px;padding:7px 8px 7px 12px;border:1px solid #e4dac7;border-radius:15px;background:#fffefa;box-shadow:0 5px 18px rgba(44,35,23,.035)}
+.chat-input-wrap:focus-within{border-color:#a99b72;box-shadow:0 0 0 3px rgba(169,155,114,.12)}
+.chat-input-wrap input{font:400 12px/1.4 'DM Sans',sans-serif;color:#323329}
+.chat-input-wrap input::placeholder{color:#a19a89}
+.chat-input-wrap button{width:36px;height:36px;border-radius:11px;background:#303326;color:#f7f2e8;transition:transform .2s ease,background .2s ease}
+.chat-input-wrap button:not(:disabled):hover{transform:translateX(2px);background:#626a48}
+.chat-footer-row{padding:0 17px 13px;background:#fbf8f1;color:#928a79;font:400 8px/1.5 'DM Sans',sans-serif;letter-spacing:0}
+.chat-footer-row button{color:#666f4b;font:600 9px/1.4 'DM Sans',sans-serif}
+@media(max-width:640px){
+ .hero-title-premium{font-size:clamp(2.7rem,12vw,4.1rem);letter-spacing:-.06em}
+ .hero-title-premium em{display:inline}
+ .typewriter-word{min-width:0}
+ .chat-launcher{right:14px;bottom:calc(84px + env(safe-area-inset-bottom));padding:6px;border-radius:50%}
+ .chat-launcher-copy{display:none}
+ .chat-launcher-icon{width:47px;height:47px}
+ .chat-panel{right:8px;bottom:calc(142px + env(safe-area-inset-bottom));width:calc(100vw - 16px);height:min(680px,calc(100dvh - 160px - env(safe-area-inset-bottom)));border-radius:22px}
+ .chat-header{padding:15px 15px 14px}
+ .chat-suggestions-wrap{max-height:150px}
+ .chat-suggestions{grid-template-columns:1fr 1fr}
+ .chat-bubble{font-size:12px;line-height:1.65}
+}
+@media(prefers-reduced-motion:reduce){
+ .typewriter-caret{animation:none;opacity:1}
+ .hero-scroll i{animation:none}
+ .restaurant-card,.product-tab,.feature-card,.usecase-card,.chat-message-row{transition:none;animation:none}
+ .hero-right:hover .restaurant-card{transform:none}
+}
+
+
+/* V2 art direction: tactile editorial, kinetic type, clear contrast and owner-first storytelling */
+:root{--px-ink:#202219;--px-ivory:#faf7ef;--px-paper:#f1eadb;--px-olive:#66704a;--px-gold:#b38a4a;--px-muted:#a9a28f}
+html{scroll-behavior:smooth;scroll-padding-top:86px}
+::selection{background:#d7c49b;color:#202219}
+.hero{min-height:min(900px,100svh);background:radial-gradient(ellipse at 78% 36%,rgba(179,138,74,.13),transparent 30%),linear-gradient(135deg,#faf7ef 0%,#f7f1e4 58%,#eee5d2 100%)}
+.hero-title-premium{font-size:clamp(3.65rem,7.4vw,7.2rem);max-width:850px;line-height:.98;letter-spacing:-.075em;font-weight:500}
+.hero-title-premium em{color:#66704a;background:linear-gradient(100deg,#596341,#8c8d65,#596341);background-size:180% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:oliveShimmer 7s ease-in-out infinite}
+@keyframes oliveShimmer{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero-description{max-width:600px;font-size:clamp(15px,1.3vw,18px);line-height:1.85;letter-spacing:-.015em}
+.hero-eyebrow,.eyebrow{font-size:10px;letter-spacing:.2em;font-weight:650}
+.button{border-radius:999px!important;min-height:52px;padding-inline:24px!important;transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s ease,background .3s ease!important}
+.button.primary{box-shadow:0 9px 24px rgba(38,39,28,.13)}
+.button.primary:hover{transform:translateY(-3px);box-shadow:0 17px 34px rgba(38,39,28,.19)}
+.button.secondary:hover{transform:translateY(-3px)}
+.restaurant-card{border:1px solid rgba(179,138,74,.22);border-radius:28px;overflow:hidden;animation:cardArrive 1.1s cubic-bezier(.2,.75,.2,1) both;box-shadow:0 34px 100px rgba(45,39,24,.14)}
+@keyframes cardArrive{from{opacity:0;transform:translateY(24px) rotateY(-5deg) scale(.97)}to{opacity:1;transform:translateY(0) rotateY(0) scale(1)}}
+.hero-orbit{animation:orbitDrift 12s ease-in-out infinite alternate}
+.orbit-b{animation-delay:-5s;animation-duration:16s}
+@keyframes orbitDrift{from{transform:translate3d(-7px,5px,0) rotate(-3deg)}to{transform:translate3d(10px,-10px,0) rotate(4deg)}}
+.hero-meta>div{transition:transform .3s ease,color .3s ease}.hero-meta>div:hover{transform:translateY(-4px)}
+/* Section two: enforce readable white-on-charcoal contrast on every content surface */
+.product-section{position:relative;isolation:isolate;background:#202219!important;color:#faf7ef!important;padding-block:clamp(84px,10vw,150px)!important}
+.product-section:before{content:"";position:absolute;z-index:-1;inset:0;pointer-events:none;background:radial-gradient(ellipse at 83% 13%,rgba(179,138,74,.13),transparent 31%),linear-gradient(120deg,rgba(255,255,255,.025),transparent 50%)}
+.product-section:after{content:"P";position:absolute;right:-.04em;top:-.22em;z-index:-1;font:italic 500 clamp(22rem,49vw,58rem)/1 Georgia,serif;color:rgba(250,247,239,.025);pointer-events:none}
+.product-section,.product-section *{box-sizing:border-box}
+.product-section .section-head h2,.product-section .section-head h2 *,.product-section h1,.product-section h2,.product-section h3,.product-section h4,.product-section .product-tab strong,.product-section .product-copy-top h3{color:#faf7ef!important}
+.product-section p,.product-section .section-head p,.product-section .product-copy-top p,.product-section .feature-list,.product-section .feature-list>div{color:rgba(250,247,239,.74)!important}
+.product-section .eyebrow{color:#c9ad76!important}
+.product-section .section-head{align-items:end;gap:42px;margin-bottom:28px}
+.product-section .section-head h2{max-width:800px;font:500 clamp(2.7rem,5.8vw,5.6rem)/.98 Georgia,'Times New Roman',serif;letter-spacing:-.06em;text-wrap:balance}
+.product-section .section-head h2 em{font-weight:400;color:#d6c49e!important}
+.product-section .section-head p{max-width:410px;font-size:14px;line-height:1.9}
+.owner-pressure-line{display:flex;flex-wrap:wrap;gap:9px;margin:28px 0 26px}
+.owner-pressure-line span{display:inline-flex;align-items:center;gap:9px;padding:10px 13px;border:1px solid rgba(250,247,239,.13);border-radius:999px;color:rgba(250,247,239,.7);font:500 10px/1.3 'DM Sans',sans-serif;letter-spacing:.015em;background:rgba(255,255,255,.025)}
+.owner-pressure-line i{width:5px;height:5px;flex:0 0 5px;border-radius:50%;background:#c6a96e;box-shadow:0 0 0 4px rgba(198,169,110,.1)}
+.product-tabs{gap:10px!important;margin-bottom:24px!important}
+.product-tab{position:relative;overflow:hidden;min-height:116px!important;padding:18px!important;border:1px solid rgba(250,247,239,.12)!important;border-radius:17px!important;background:rgba(255,255,255,.035)!important;color:#faf7ef!important;backdrop-filter:blur(12px);transition:transform .4s cubic-bezier(.2,.8,.2,1),background .35s ease,border-color .35s ease,box-shadow .35s ease!important}
+.product-tab:before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,#b38a4a,#e3d2ac);transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+.product-tab:hover{transform:translateY(-5px)!important;border-color:rgba(211,190,143,.45)!important;background:rgba(255,255,255,.065)!important}
+.product-tab.active{background:linear-gradient(145deg,rgba(179,138,74,.18),rgba(255,255,255,.055))!important;border-color:rgba(211,190,143,.55)!important;box-shadow:0 15px 40px rgba(0,0,0,.13)!important}
+.product-tab.active:before{transform:scaleX(1)}
+.product-tab-number{color:#d4bd8b!important;font-size:10px!important;letter-spacing:.13em}
+.product-tab-icon{color:#d4bd8b!important}
+.product-detail{gap:clamp(30px,6vw,90px)!important;align-items:center}
+.product-copy-top h3{font:500 clamp(2.5rem,4.5vw,4.7rem)/1 Georgia,'Times New Roman',serif!important;letter-spacing:-.055em!important;text-wrap:balance}
+.product-copy-top p{font-size:15px!important;line-height:1.9!important;max-width:540px}
+.feature-list>div{border-bottom:1px solid rgba(250,247,239,.1);padding:12px 0!important;transition:padding-left .25s ease,color .25s ease}
+.feature-list>div:hover{padding-left:6px!important;color:#fff!important}
+.feature-list>div svg{color:#cbb27d!important}
+.product-nav button{width:43px!important;height:43px!important;border:1px solid rgba(250,247,239,.22)!important;background:rgba(255,255,255,.04)!important;color:#faf7ef!important;transition:background .25s ease,transform .25s ease,border-color .25s ease!important}
+.product-nav button:hover{transform:translateY(-2px);background:#c5a66b!important;color:#202219!important;border-color:#c5a66b!important}
+.product-counter{color:rgba(250,247,239,.6)!important;letter-spacing:.15em}
+.product-visual-wrap{filter:drop-shadow(0 24px 55px rgba(0,0,0,.19));animation:visualFloat 7s ease-in-out infinite}
+@keyframes visualFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+/* Editorial hierarchy and tactile interaction throughout */
+section:not(.hero):not(.product-section){scroll-margin-top:80px}
+.section-heading h2,.module-copy h2,.signature-heading h2,.command-heading h2,.demo-copy h2{font-family:Georgia,'Times New Roman',serif!important;font-weight:500!important;letter-spacing:-.055em!important;line-height:1.03!important;text-wrap:balance}
+.section-heading h2 em,.module-copy h2 em{font-weight:400!important}
+.use-card,.module-card,.feature-card,.faq-item,.ig-profile-card{transform:translateZ(0);transition:transform .4s cubic-bezier(.2,.8,.2,1),box-shadow .4s ease,border-color .4s ease!important}
+.use-card:hover,.module-card:hover,.feature-card:hover,.ig-profile-card:hover{transform:translateY(-6px)!important;box-shadow:0 20px 50px rgba(25,25,18,.12)!important}
+.module-section .module-copy h2{font-size:clamp(2.8rem,5.3vw,5.2rem)!important}
+.module-section .module-eyebrow,.section-number{letter-spacing:.17em}
+.reveal{transition:opacity .85s cubic-bezier(.2,.7,.2,1),transform .85s cubic-bezier(.2,.7,.2,1),filter .85s ease!important;filter:blur(0)}
+.reveal:not(.visible){filter:blur(2px)}
+.delay-1{transition-delay:.08s!important}.delay-2{transition-delay:.16s!important}.delay-3{transition-delay:.24s!important}.delay-4{transition-delay:.32s!important}
+.site a:focus-visible,.site button:focus-visible,.site input:focus-visible,.site textarea:focus-visible{outline:2px solid #b38a4a!important;outline-offset:4px!important}
+@media(max-width:760px){.hero{min-height:auto;padding-bottom:88px}.hero-title-premium{font-size:clamp(3.2rem,12.5vw,5.4rem)}.product-section{padding-block:76px!important}.product-section .section-head{display:block}.product-section .section-head h2{font-size:clamp(2.8rem,11vw,4.3rem)}.product-section .section-head p{margin-top:20px}.owner-pressure-line{gap:7px;margin:23px 0}.owner-pressure-line span{font-size:9px;padding:9px 11px}.product-tab{min-height:92px!important;padding:13px!important}.product-tab strong{font-size:10px!important}.product-detail{gap:28px!important}.product-copy-top h3{font-size:clamp(2.7rem,10vw,4rem)!important}.product-visual-wrap{animation:none}}
+@media(max-width:430px){.owner-pressure-line span{width:100%;border-radius:11px}.product-tabs{grid-template-columns:repeat(2,minmax(0,1fr))!important}.product-tab:last-child{grid-column:1/-1}.product-tab{min-height:82px!important}.hero-title-premium{letter-spacing:-.07em}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero-title-premium em,.restaurant-card,.hero-orbit,.product-visual-wrap{animation:none!important}.reveal{filter:none!important;transition:none!important}.product-tab,.button,.use-card,.module-card{transition:none!important}}
+
+
+/* V3 — signature hero, owner-first conversion, crisp contrast, no blurred content */
+.hero{
+  position:relative;isolation:isolate;overflow:hidden;min-height:min(960px,calc(100svh - 60px));
+  background:#f8f4ea!important;
+  background-image:radial-gradient(ellipse at 76% 30%,rgba(194,166,112,.2),transparent 31%),radial-gradient(ellipse at 12% 94%,rgba(108,119,79,.10),transparent 30%),linear-gradient(125deg,#fbf8f1 0%,#f5efdf 55%,#e9dfca 100%)!important;
+}
+.hero:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.24;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E");mix-blend-mode:multiply}
+.hero:after{content:"HOSPITALITY, IN HARMONY";position:absolute;right:clamp(20px,4vw,64px);top:50%;writing-mode:vertical-rl;transform:translateY(-50%);font:500 9px/1 'DM Sans',sans-serif;letter-spacing:.28em;color:rgba(53,54,40,.45);pointer-events:none}
+.hero-left{position:relative;z-index:2;padding-top:clamp(68px,8.8vw,128px);padding-bottom:clamp(78px,9vw,128px);max-width:920px}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:11px;padding:10px 14px;border:1px solid rgba(56,57,43,.13);border-radius:999px;background:rgba(255,255,255,.43);backdrop-filter:blur(12px);font-size:9px!important;letter-spacing:.19em!important;color:#5b5b49!important}
+.hero-eyebrow>span{width:7px;height:7px;border-radius:50%;background:#8a9168;box-shadow:0 0 0 4px rgba(138,145,104,.15);animation:heroPulse 2.6s ease-in-out infinite}
+@keyframes heroPulse{0%,100%{box-shadow:0 0 0 3px rgba(138,145,104,.12)}50%{box-shadow:0 0 0 7px rgba(138,145,104,.02)}}
+.hero-title-premium{max-width:940px!important;margin:27px 0 25px!important;font-family:'DM Serif Display',Georgia,serif!important;font-size:clamp(3.8rem,7.4vw,7.6rem)!important;font-weight:400!important;line-height:.91!important;letter-spacing:-.065em!important;text-wrap:balance;position:relative}
+.hero-title-premium em{display:inline-block;min-height:1.04em;padding-right:.07em;font-family:'DM Serif Display',Georgia,serif!important;font-weight:400!important;font-style:italic;background:linear-gradient(105deg,#626d48 2%,#9b8b5d 48%,#596441 88%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:oliveShimmer 8s ease-in-out infinite}
+.hero-description{max-width:610px!important;font-size:clamp(15px,1.22vw,17px)!important;line-height:1.85!important;color:#625d50!important}
+.hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:30px}
+.hero-actions .button.primary{background:#292c21!important;color:#faf6ec!important;border:1px solid #292c21!important;box-shadow:0 12px 28px rgba(35,37,27,.16)!important}
+.hero-actions .button.primary:hover{background:#424733!important;box-shadow:0 20px 44px rgba(35,37,27,.2)!important}
+.hero-actions .button.secondary{border:1px solid rgba(45,46,34,.2)!important;background:rgba(255,255,255,.38)!important;color:#303126!important}
+.hero-cta-note{margin-top:17px;color:#797260!important;font-size:11px!important;letter-spacing:.01em;display:flex;align-items:center;gap:7px}
+.hero-cta-note svg{color:#8b754a}
+.hero-proofline{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:35px;color:#66614f;font:500 10px/1.4 'DM Sans',sans-serif;letter-spacing:.025em}
+.hero-proofline i{width:3px;height:3px;border-radius:50%;background:#b39a66}
+.hero-proof-dot{width:6px;height:6px;border-radius:50%;background:#87906a;box-shadow:0 0 0 4px rgba(135,144,106,.12)}
+.hero-meta{border-top:1px solid rgba(44,44,32,.13);max-width:580px;margin-top:34px;padding-top:19px;gap:clamp(22px,4vw,55px)!important}
+.hero-meta>div strong{font-family:'DM Serif Display',Georgia,serif!important;font-size:26px!important;font-weight:400!important;color:#6a704e!important}
+.hero-meta>div span{font-size:9px!important;letter-spacing:.13em!important;text-transform:uppercase;color:#77705f!important}
+.hero-right{position:relative;z-index:1;perspective:1400px;isolation:isolate}
+.hero-glow{background:radial-gradient(ellipse,rgba(185,157,100,.25),rgba(185,157,100,0) 68%)!important;filter:blur(8px)}
+.restaurant-card{border:1px solid rgba(255,255,255,.56)!important;border-radius:26px!important;background:linear-gradient(145deg,rgba(255,254,248,.92),rgba(242,235,219,.88))!important;box-shadow:0 38px 100px rgba(48,43,29,.15),inset 0 1px 0 rgba(255,255,255,.9)!important;backdrop-filter:blur(22px);transform-style:preserve-3d;transition:transform .65s cubic-bezier(.2,.8,.2,1),box-shadow .65s ease!important}
+.restaurant-top{border-bottom:1px solid rgba(45,45,33,.1)!important;padding:23px 24px 18px!important}
+.restaurant-top small{font:500 8px/1.4 'DM Sans',sans-serif!important;letter-spacing:.18em!important;color:#8b8068!important}
+.restaurant-top .live{background:rgba(111,125,82,.1)!important;color:#5e6845!important;border:1px solid rgba(111,125,82,.2);border-radius:999px;padding:7px 10px;font-size:8px;letter-spacing:.12em}
+.table-scene{background:radial-gradient(ellipse at 50% 45%,rgba(199,162,105,.18),transparent 48%),linear-gradient(145deg,#eee4cf,#f8f4e9)!important;min-height:250px!important}
+.table-circle{box-shadow:0 22px 55px rgba(55,45,28,.16)!important;border:1px solid rgba(255,255,255,.7)!important}
+.scene-label{background:rgba(255,253,247,.82)!important;border:1px solid rgba(255,255,255,.7);border-radius:12px;padding:10px 13px!important;box-shadow:0 10px 30px rgba(50,43,30,.08);backdrop-filter:blur(12px)}
+.scene-label span{color:#8a7b5d!important;letter-spacing:.17em!important}
+.scene-label strong{color:#333327!important}
+.restaurant-stats{gap:8px!important;padding:15px 19px!important}
+.restaurant-stats>div{background:rgba(255,255,255,.48);border:1px solid rgba(48,48,35,.07);border-radius:12px;padding:11px 9px!important;min-width:0}
+.restaurant-stats small{color:#8a806b!important;font-size:8px!important;letter-spacing:.12em!important}
+.restaurant-stats strong{display:flex;align-items:center;gap:5px;color:#53583d!important;font-size:11px!important;font-weight:600!important;white-space:nowrap}
+.restaurant-stats strong svg{color:#9d8754}
+.mini-order{margin:0 18px 18px!important;border:1px solid rgba(65,67,48,.1)!important;border-radius:14px!important;background:rgba(255,255,255,.54)!important;box-shadow:none!important;padding:13px!important}
+.mini-order strong{color:#343529!important;font-size:11px!important}.mini-order span{color:#7a725f!important;font-size:10px!important}
+.floating-note{border:1px solid rgba(255,255,255,.76)!important;background:rgba(255,253,247,.78)!important;backdrop-filter:blur(22px)!important;border-radius:17px!important;box-shadow:0 20px 48px rgba(43,39,26,.13)!important;animation:floatNote 6.5s ease-in-out infinite}
+.note-two{animation-delay:-3.2s}
+@keyframes floatNote{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(.6deg)}}
+.hero-scroll{color:#756d5b!important;letter-spacing:.2em!important}
+.hero-scroll i{background:#8b805f!important}
+/* Remove the blur state that made section two appear out of focus during reveal */
+.reveal,.reveal:not(.visible),.product-section .reveal,.product-section .reveal:not(.visible){filter:none!important;-webkit-filter:none!important;backdrop-filter:none!important}
+.reveal:not(.visible){opacity:.98!important}
+.reveal.visible{opacity:1!important;filter:none!important;-webkit-filter:none!important}
+.product-section{filter:none!important;-webkit-filter:none!important;backdrop-filter:none!important;transform:none!important}
+.product-section *{text-shadow:none}
+.product-section .product-visual-wrap{filter:drop-shadow(0 24px 55px rgba(0,0,0,.19))!important;-webkit-filter:drop-shadow(0 24px 55px rgba(0,0,0,.19))!important}
+/* A considered conversion section: ink backdrop, ivory form, no generic white SaaS card */
+.demo-section{position:relative;isolation:isolate;overflow:hidden;background:#24271e!important;color:#f8f3e8!important;padding-block:clamp(90px,10vw,150px)!important}
+.demo-section:before{content:"";position:absolute;z-index:-1;inset:0;pointer-events:none;background:radial-gradient(ellipse at 8% 22%,rgba(179,138,74,.16),transparent 33%),radial-gradient(ellipse at 90% 95%,rgba(130,143,98,.13),transparent 35%),linear-gradient(120deg,rgba(255,255,255,.018),transparent 50%)}
+.demo-section:after{content:"THE NEXT SERVICE, BETTER CONNECTED";position:absolute;top:42px;right:clamp(22px,6vw,96px);font:500 8px/1 'DM Sans',sans-serif;letter-spacing:.24em;color:rgba(246,239,222,.27);pointer-events:none}
+.demo-grid{align-items:start!important;gap:clamp(36px,7vw,110px)!important;position:relative;z-index:1}
+.demo-copy{position:sticky;top:120px;padding-top:12px}
+.demo-copy .eyebrow{color:#c6ad79!important;letter-spacing:.22em!important}
+.demo-overline{margin:20px 0 12px;color:#c6ad79;font:500 9px/1.5 'DM Sans',sans-serif;letter-spacing:.18em}
+.demo-copy h2{font-family:'DM Serif Display',Georgia,serif!important;font-size:clamp(3.4rem,6.3vw,6.4rem)!important;line-height:.94!important;letter-spacing:-.065em!important;font-weight:400!important;color:#faf6eb!important}
+.demo-copy h2 em{color:#d7c49b!important;font-weight:400!important}
+.demo-copy>p{max-width:480px!important;color:rgba(248,243,232,.68)!important;font-size:14px!important;line-height:1.9!important}
+.demo-benefit-list{margin-top:35px;max-width:510px;border-top:1px solid rgba(248,243,232,.13)}
+.demo-benefit-list>div{display:flex;align-items:flex-start;gap:15px;padding:16px 0;border-bottom:1px solid rgba(248,243,232,.1)}
+.demo-benefit-list>div>span{padding-top:2px;color:#c6ad79;font:400 12px/1 'DM Mono',monospace}
+.demo-benefit-list p{margin:0;display:grid;gap:5px}
+.demo-benefit-list strong{color:#f7f1e4;font:500 12px/1.4 'DM Sans',sans-serif}
+.demo-benefit-list small{color:rgba(248,243,232,.57);font:400 11px/1.65 'DM Sans',sans-serif}
+.demo-section .contact-details{margin-top:28px;gap:11px}
+.demo-section .contact-details a{color:rgba(248,243,232,.77)!important}
+.demo-section .contact-details a>span{border-color:rgba(248,243,232,.16)!important;background:rgba(255,255,255,.035)!important;color:#d5c08e!important}
+.demo-form-wrap{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.72)!important;border-radius:28px!important;padding:clamp(22px,3.3vw,43px)!important;background:linear-gradient(145deg,#fffdf7 0%,#f4eddd 100%)!important;color:#292a21!important;box-shadow:0 35px 95px rgba(0,0,0,.23),inset 0 1px 0 #fff!important}
+.demo-form-wrap:before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#596341,#b38a4a,#d8c69d,#596341);background-size:220% 100%;animation:formAccentFlow 9s linear infinite}
+@keyframes formAccentFlow{to{background-position:220% 0}}
+.demo-form-wrap form{position:relative;z-index:1}
+.form-top{display:flex!important;align-items:center!important;gap:13px!important;margin-bottom:27px!important;padding-bottom:22px!important;border-bottom:1px solid rgba(44,43,32,.12)!important}
+.form-heading-mark{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border-radius:15px;background:#e8dfca;color:#686f4c;border:1px solid rgba(104,111,76,.12)}
+.form-heading-copy{display:grid;gap:4px;min-width:0;flex:1}
+.form-heading-copy small{color:#8b7c5d!important;font:600 8px/1.3 'DM Sans',sans-serif!important;letter-spacing:.17em!important}
+.form-heading-copy strong{color:#292a21;font:400 23px/1.15 'DM Serif Display',Georgia,serif;letter-spacing:-.035em}
+.form-heading-copy>span{color:#89816f;font:400 10px/1.4 'DM Sans',sans-serif}
+.form-step{display:flex;align-items:center;gap:7px;color:#8d826a;font:500 9px/1 'DM Mono',monospace;letter-spacing:.08em;white-space:nowrap}
+.form-step i{width:20px;height:1px;background:#c7a269;display:block}
+.form-grid{gap:18px!important}
+.form-grid label>span:first-child{display:block;margin-bottom:8px!important;color:#5b594a!important;font:600 9px/1.4 'DM Sans',sans-serif!important;letter-spacing:.08em!important;text-transform:uppercase}
+.form-grid input,.form-grid select,.form-grid textarea{width:100%;min-height:49px;border:1px solid rgba(55,54,40,.13)!important;border-radius:12px!important;background:rgba(255,255,255,.66)!important;color:#292a21!important;padding:13px 14px!important;font:400 12px/1.5 'DM Sans',sans-serif!important;box-shadow:inset 0 1px 2px rgba(42,39,29,.025)!important;transition:border-color .25s ease,box-shadow .25s ease,background .25s ease,transform .25s ease!important}
+.form-grid input::placeholder,.form-grid textarea::placeholder{color:#a29a87!important;opacity:1}
+.form-grid input:focus,.form-grid select:focus,.form-grid textarea:focus{outline:none!important;border-color:#8b916b!important;background:#fffdf8!important;box-shadow:0 0 0 4px rgba(126,137,91,.13)!important;transform:translateY(-1px)}
+.form-grid textarea{min-height:112px;resize:vertical}
+.form-grid select{appearance:auto;cursor:pointer}
+.form-privacy-notice{padding:12px 14px!important;margin:20px 0 14px!important;border-left:2px solid #b59a64!important;background:rgba(225,215,193,.28)!important;color:#77705f!important;font:400 10px/1.7 'DM Sans',sans-serif!important}
+.form-privacy-notice strong{color:#555443!important;font-weight:600}
+.form-consent{align-items:flex-start!important;gap:10px!important;color:#77705f!important;font:400 10px/1.7 'DM Sans',sans-serif!important}
+.form-consent input{margin-top:3px;accent-color:#626c47;flex:0 0 auto}
+.form-consent button{color:#5f6944!important;text-decoration:underline;text-underline-offset:3px}
+.submit-button{width:100%!important;min-height:56px!important;margin-top:19px!important;padding:15px 19px!important;border:1px solid #2c3023!important;border-radius:14px!important;background:#2c3023!important;color:#faf6ec!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:15px!important;font:500 12px/1.3 'DM Sans',sans-serif!important;letter-spacing:.01em!important;box-shadow:0 10px 22px rgba(37,40,29,.13)!important;transition:transform .25s ease,box-shadow .25s ease,background .25s ease!important}
+.submit-button:hover{transform:translateY(-2px)!important;background:#454a34!important;box-shadow:0 16px 30px rgba(37,40,29,.2)!important}
+.submit-button svg{transition:transform .25s ease}.submit-button:hover svg{transform:translateX(4px)}
+.form-note{display:flex!important;align-items:flex-start;gap:7px;justify-content:center;margin:13px 0 0!important;color:#89816f!important;font:400 10px/1.65 'DM Sans',sans-serif!important;text-align:center}
+.form-note svg{flex:0 0 auto;margin-top:1px;color:#8a9168}
+.demo-form-wrap .success-state{padding:36px 8px;text-align:center;color:#292a21}
+.demo-form-wrap .success-state h3{font:400 clamp(2rem,4vw,3rem)/1.05 'DM Serif Display',Georgia,serif;color:#292a21}
+.demo-form-wrap .success-state p{color:#77705f;line-height:1.8}
+@media(min-width:1000px){.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(400px,.9fr);align-items:center}.hero-left{padding-right:0}.hero-right{width:100%;max-width:660px;justify-self:end;padding:50px clamp(28px,5vw,80px) 50px 25px}.restaurant-card{max-width:530px;margin-inline:auto}.floating-note.note-one{left:-2%;top:22%}.floating-note.note-two{right:1%;bottom:15%}}
+@media(max-width:999px){.hero{display:flex;flex-direction:column;align-items:stretch}.hero-left{padding:70px clamp(22px,6vw,58px) 26px}.hero-right{width:min(100%,680px);margin:0 auto;padding:18px 30px 80px}.hero-title-premium{font-size:clamp(3.8rem,10vw,6.5rem)!important}.demo-copy{position:relative;top:auto}.demo-grid{grid-template-columns:1fr!important}.demo-copy{max-width:760px}.demo-benefit-list{max-width:700px}.demo-form-wrap{max-width:780px;width:100%;margin-inline:auto}}
+@media(max-width:620px){.hero:after{display:none}.hero-left{padding-top:55px}.hero-title-premium{font-size:clamp(3.25rem,13.5vw,5rem)!important;line-height:.94!important;letter-spacing:-.07em!important}.hero-description{font-size:14px!important;line-height:1.8!important}.hero-actions{align-items:stretch;flex-direction:column}.hero-actions .button{width:100%;justify-content:center}.hero-proofline{gap:8px;margin-top:25px;font-size:9px}.hero-meta{margin-top:25px;gap:18px!important}.hero-meta>div strong{font-size:22px!important}.hero-meta>div span{font-size:8px!important}.hero-right{padding-inline:18px;padding-bottom:72px}.restaurant-top{padding:17px!important}.table-scene{min-height:205px!important}.restaurant-stats{padding:10px!important;gap:5px!important}.restaurant-stats>div{padding:9px 6px!important}.restaurant-stats small{font-size:7px!important}.restaurant-stats strong{font-size:9px!important;gap:3px}.restaurant-stats strong svg{width:12px;height:12px}.floating-note{transform:scale(.86)}.demo-section{padding-block:72px!important}.demo-section:after{display:none}.demo-copy h2{font-size:clamp(3.2rem,13vw,4.6rem)!important}.demo-benefit-list{margin-top:25px}.demo-form-wrap{padding:22px 17px!important;border-radius:22px!important}.form-top{gap:10px!important}.form-heading-mark{width:39px;height:39px;flex-basis:39px;border-radius:13px}.form-heading-copy strong{font-size:20px}.form-heading-copy small{font-size:7px!important}.form-step{font-size:8px}.form-grid{grid-template-columns:1fr!important;gap:15px!important}.form-grid label.full{grid-column:auto!important}.form-grid input,.form-grid select,.form-grid textarea{min-height:48px}.form-privacy-notice{font-size:9px!important}.form-consent{font-size:9px!important}}
+@media(prefers-reduced-motion:reduce){.hero-eyebrow>span,.floating-note,.demo-form-wrap:before{animation:none!important}.hero-title-premium em{animation:none!important}.submit-button,.form-grid input,.form-grid select,.form-grid textarea{transition:none!important}}
+
+/* Signature refinement: measured type, warm beige accents, and a more considered demo experience. */
+.hero-left{max-width:790px!important;padding-right:clamp(28px,4.2vw,68px)!important}
+.hero-title-premium{font-size:clamp(2.85rem,5.15vw,5.15rem)!important;line-height:1.015!important;letter-spacing:-.052em!important;max-width:660px!important;margin:24px 0 20px!important;color:#2d2d25!important}
+.hero-title-premium em{color:#b8a27b!important;background:linear-gradient(105deg,#9f8960 0%,#c6b18a 48%,#a58e64 100%)!important;background-size:160% 100%!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;font-style:italic!important;animation:beigeGlimmer 9s ease-in-out infinite!important}
+@keyframes beigeGlimmer{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero-description{max-width:540px!important;font-size:clamp(13px,1.05vw,15px)!important;line-height:1.82!important;color:#696253!important}
+.hero-cta-note{font-size:10px!important;color:#81745c!important}
+.hero-proofline{margin-top:27px!important;font-size:9px!important;color:#77705f!important;gap:9px!important}
+.hero-meta{margin-top:27px!important;padding-top:15px!important;max-width:520px!important}
+.hero-meta>div strong{font-size:22px!important;color:#ad9871!important}
+.hero-meta>div span{font-size:8px!important;color:#817967!important}
+.hero-actions{margin-top:25px!important;gap:10px!important}
+.hero-actions .button{min-height:44px!important;padding-inline:18px!important;font-size:11px!important;letter-spacing:.015em!important;border-radius:999px!important}
+.hero-eyebrow{font-size:8px!important;letter-spacing:.16em!important;color:#75684f!important}
+/* Preserve the original right-side restaurant visual and its layout. */
+.hero-right .restaurant-card,.hero-right .floating-note,.hero-right .hero-orbit{will-change:transform}
+.demo-section{padding-block:clamp(76px,8.4vw,118px)!important}
+.demo-grid{grid-template-columns:minmax(0,.88fr) minmax(440px,1.12fr)!important;gap:clamp(34px,6vw,88px)!important;max-width:1320px!important;margin-inline:auto!important;padding-inline:clamp(22px,5vw,76px)!important}
+.demo-copy{max-width:465px!important}
+.demo-overline{font-size:8px!important;letter-spacing:.16em!important;margin:16px 0 12px!important;color:#c9b58a!important}
+.demo-copy h2{font-size:clamp(2.75rem,4.5vw,4.5rem)!important;line-height:1.015!important;letter-spacing:-.045em!important;margin:16px 0 20px!important;max-width:470px!important}
+.demo-copy h2 em{color:#c8b38a!important}
+.demo-copy>p{font-size:13px!important;line-height:1.85!important;max-width:430px!important;color:rgba(248,243,232,.72)!important}
+.demo-benefit-list{margin-top:27px!important}
+.demo-benefit-list>div{padding:13px 0!important;gap:13px!important;transition:padding-left .25s ease,border-color .25s ease}
+.demo-benefit-list>div:hover{padding-left:5px!important;border-bottom-color:rgba(198,173,121,.35)!important}
+.demo-benefit-list>div>span{font-size:10px!important;color:#cbb78b!important}
+.demo-benefit-list strong{font-size:11px!important}
+.demo-benefit-list small{font-size:10px!important;line-height:1.6!important}
+.demo-form-wrap{max-width:690px!important;border-radius:23px!important;padding:clamp(23px,3vw,36px)!important;background:linear-gradient(145deg,#fbf8ef 0%,#f0e7d4 100%)!important;border:1px solid rgba(255,255,255,.76)!important;box-shadow:0 28px 75px rgba(0,0,0,.22),0 1px 0 rgba(255,255,255,.8) inset!important;transform:translateZ(0);transition:transform .4s ease,box-shadow .4s ease!important}
+.demo-form-wrap:hover{box-shadow:0 34px 86px rgba(0,0,0,.25),0 1px 0 rgba(255,255,255,.9) inset!important}
+.demo-form-wrap:after{content:"Pratyeksha  /  PRIVATE DEMO";position:absolute;right:24px;bottom:13px;color:rgba(94,88,70,.33);font:500 7px/1 'DM Sans',sans-serif;letter-spacing:.16em;pointer-events:none}
+.form-top{margin-bottom:22px!important;padding-bottom:18px!important;gap:12px!important}
+.form-heading-mark{width:40px!important;height:40px!important;flex-basis:40px!important;border-radius:13px!important;background:linear-gradient(145deg,#eee4cd,#e2d5b8)!important;color:#8b754d!important}
+.form-heading-copy small{font-size:7px!important;letter-spacing:.19em!important;color:#8e7a57!important}
+.form-heading-copy strong{font-size:21px!important;letter-spacing:-.025em!important;color:#302f26!important}
+.form-heading-copy>span{font-size:9px!important;color:#817966!important}
+.form-step{font-size:8px!important;color:#98896c!important}
+.form-grid{column-gap:13px!important;row-gap:15px!important}
+.form-grid label>span:first-child{font-size:8px!important;letter-spacing:.12em!important;color:#68614f!important;margin-bottom:7px!important}
+.form-grid input,.form-grid select,.form-grid textarea{min-height:45px!important;border-radius:10px!important;padding:11px 13px!important;background:rgba(255,255,255,.62)!important;border-color:rgba(63,58,43,.15)!important;font-size:11px!important;color:#302f26!important}
+.form-grid textarea{min-height:94px!important}
+.form-grid input:hover,.form-grid select:hover,.form-grid textarea:hover{border-color:rgba(154,130,84,.52)!important;background:rgba(255,255,255,.82)!important}
+.form-grid input:focus,.form-grid select:focus,.form-grid textarea:focus{border-color:#b49b6d!important;box-shadow:0 0 0 3px rgba(180,155,109,.15)!important}
+.form-privacy-notice{font-size:9px!important;line-height:1.65!important;margin:16px 0 12px!important;padding:11px 13px!important;border-radius:0 9px 9px 0!important;background:rgba(222,211,188,.25)!important}
+.form-consent{font-size:9px!important;line-height:1.65!important}
+.submit-button{min-height:51px!important;border-radius:11px!important;margin-top:15px!important;padding-inline:16px!important;font-size:11px!important;letter-spacing:.025em!important;background:#292c22!important}
+.form-note{font-size:9px!important;margin-top:10px!important}
+.demo-section .contact-details{gap:9px!important;margin-top:24px!important}
+.demo-section .contact-details a{font-size:10px!important;gap:9px!important}
+.demo-section .contact-details a>span{width:31px!important;height:31px!important;border-radius:10px!important}
+@media(max-width:999px){.hero-title-premium{font-size:clamp(3rem,7.3vw,5rem)!important}.demo-grid{grid-template-columns:1fr!important;max-width:820px!important}.demo-copy{max-width:700px!important}.demo-copy h2{font-size:clamp(2.9rem,7vw,4.2rem)!important}.demo-form-wrap{max-width:780px!important}}
+@media(max-width:620px){.hero-left{padding:56px 22px 22px!important}.hero-title-premium{font-size:clamp(2.65rem,10.6vw,3.7rem)!important;line-height:1.02!important;letter-spacing:-.052em!important;margin:21px 0 17px!important}.hero-description{font-size:13px!important;line-height:1.78!important}.hero-actions .button{font-size:10px!important}.hero-proofline{font-size:8px!important}.demo-grid{padding-inline:0!important;gap:28px!important}.demo-copy h2{font-size:clamp(2.65rem,10vw,3.7rem)!important}.demo-copy>p{font-size:12px!important}.demo-form-wrap{padding:21px 16px 27px!important;border-radius:19px!important}.form-heading-copy strong{font-size:19px!important}.form-step{gap:4px!important}.form-step i{width:12px!important}.form-grid{grid-template-columns:1fr!important}.form-grid label.full{grid-column:auto!important}.demo-form-wrap:after{right:16px;font-size:6px}}
+@media(prefers-reduced-motion:reduce){.hero-title-premium em{animation:none!important}.demo-form-wrap,.demo-benefit-list>div{transition:none!important}}
+
+/* Warm-ink signature surfaces: bring the hero product preview and demo form back to Pratyeksha's olive/charcoal identity. */
+.hero-right .restaurant-card{
+  background:linear-gradient(145deg,#292d23 0%,#20231c 58%,#303124 100%)!important;
+  border:1px solid rgba(205,180,124,.34)!important;
+  box-shadow:0 38px 100px rgba(28,29,21,.25),inset 0 1px 0 rgba(255,246,220,.08)!important;
+  color:#f6efdf!important;
+}
+.hero-right .restaurant-top{border-bottom-color:rgba(236,223,193,.13)!important}
+.hero-right .restaurant-top small{color:#c9b78e!important}
+.hero-right .restaurant-top .live{background:rgba(150,163,111,.12)!important;color:#d7dcb7!important;border-color:rgba(174,187,133,.3)!important}
+.hero-right .restaurant-top .restaurant-brand-image{filter:none!important;opacity:1!important;background:#f4ecdc!important;border:1px solid rgba(205,180,124,.28)!important;border-radius:7px!important;padding:4px 7px!important;object-fit:contain!important;box-shadow:0 5px 18px rgba(0,0,0,.16)!important}
+.hero-right .table-scene{
+  background:radial-gradient(ellipse at 50% 42%,rgba(181,145,81,.24),transparent 42%),linear-gradient(145deg,#414632 0%,#2b3024 58%,#34382a 100%)!important;
+  border-top:1px solid rgba(224,201,153,.08)!important;border-bottom:1px solid rgba(224,201,153,.12)!important;
+}
+.hero-right .table-circle{background:radial-gradient(circle at 35% 25%,#62684c,#333827 72%)!important;border:1px solid rgba(210,185,125,.38)!important;box-shadow:0 24px 60px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,246,220,.12)!important}
+.hero-right .dish{background:radial-gradient(circle at 35% 30%,#f1e6cd,#c6b58f 62%,#8d7955 100%)!important;border-color:rgba(255,246,221,.48)!important;box-shadow:0 8px 18px rgba(0,0,0,.25)!important}
+.hero-right .glass{border-color:rgba(233,218,180,.55)!important;background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(202,178,125,.06))!important}
+.hero-right .scene-label{background:rgba(31,34,26,.88)!important;border-color:rgba(212,188,133,.28)!important;box-shadow:0 12px 32px rgba(0,0,0,.22)!important}
+.hero-right .scene-label span{color:#d0b77f!important}
+.hero-right .scene-label strong{color:#f6efdf!important}
+.hero-right .restaurant-stats>div{background:rgba(255,255,255,.035)!important;border-color:rgba(235,220,185,.11)!important}
+.hero-right .restaurant-stats small{color:#bcb39b!important}
+.hero-right .restaurant-stats strong{color:#eee5d0!important}
+.hero-right .restaurant-stats strong svg{color:#c8ab70!important}
+.hero-right .mini-order{background:rgba(255,255,255,.045)!important;border-color:rgba(235,220,185,.12)!important}
+.hero-right .mini-order strong{color:#f4eddf!important}
+.hero-right .mini-order span{color:#c5bca6!important}
+.hero-right .mini-icon{background:rgba(185,154,96,.15)!important;color:#d4b778!important;border-color:rgba(198,169,112,.22)!important}
+.hero-right .mini-arrow{color:#d4b778!important}
+.hero-right .floating-note{background:linear-gradient(145deg,rgba(47,51,39,.97),rgba(33,36,28,.97))!important;border-color:rgba(205,180,124,.32)!important;box-shadow:0 20px 48px rgba(0,0,0,.28)!important;color:#f3ead5!important}
+.hero-right .floating-note small{color:#c9b27b!important}
+.hero-right .floating-note strong,.hero-right .floating-note span{color:#f3ead5!important}
+.hero-right .floating-note>svg{color:#d1b477!important}
+.hero-right .hero-orbit{border-color:rgba(181,145,81,.24)!important}
+.hero-right .hero-glow{background:radial-gradient(ellipse,rgba(166,139,82,.2),rgba(166,139,82,0) 70%)!important}
+
+/* Demo form: an editorial dark-olive booking panel, not a plain white card. */
+.demo-form-wrap{
+  position:relative!important;isolation:isolate!important;overflow:hidden!important;
+  background:radial-gradient(ellipse at 100% 0%,rgba(181,145,81,.16),transparent 35%),linear-gradient(145deg,#303429 0%,#25291f 52%,#20231c 100%)!important;
+  color:#f6efdf!important;border:1px solid rgba(203,177,119,.32)!important;
+  border-radius:25px!important;box-shadow:0 32px 90px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,246,220,.07)!important;
+  padding:clamp(24px,3.2vw,40px)!important;transition:transform .4s ease,box-shadow .4s ease,border-color .4s ease!important;
+}
+.demo-form-wrap:before{height:2px!important;background:linear-gradient(90deg,transparent,#a78b54 20%,#e0cc9e 50%,#a78b54 80%,transparent)!important;background-size:180% 100%!important}
+.demo-form-wrap:after{color:rgba(230,214,176,.35)!important;bottom:15px!important;right:25px!important}
+.demo-form-wrap:hover{transform:translateY(-3px)!important;border-color:rgba(213,187,128,.5)!important;box-shadow:0 40px 100px rgba(0,0,0,.36),inset 0 1px 0 rgba(255,246,220,.08)!important}
+.demo-form-wrap .form-top{border-bottom-color:rgba(239,226,194,.15)!important}
+.demo-form-wrap .form-heading-mark{background:linear-gradient(145deg,#4b503b,#383d2d)!important;border-color:rgba(210,184,125,.24)!important;color:#d6bc80!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)!important}
+.demo-form-wrap .form-heading-copy small{color:#c9b27b!important}
+.demo-form-wrap .form-heading-copy strong{color:#f7f0e1!important}
+.demo-form-wrap .form-heading-copy>span{color:#bdb49f!important}
+.demo-form-wrap .form-step{color:#c7b78f!important}
+.demo-form-wrap .form-step i{background:#b89a5f!important}
+.demo-form-wrap .form-grid label>span:first-child{color:#d9cfb7!important}
+.demo-form-wrap .form-grid input,.demo-form-wrap .form-grid select,.demo-form-wrap .form-grid textarea{
+  color:#f6efdf!important;background:rgba(14,17,13,.28)!important;border:1px solid rgba(225,209,169,.19)!important;
+  border-radius:11px!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.12)!important;
+}
+.demo-form-wrap .form-grid input::placeholder,.demo-form-wrap .form-grid textarea::placeholder{color:#a9a28e!important;opacity:1!important}
+.demo-form-wrap .form-grid input:hover,.demo-form-wrap .form-grid select:hover,.demo-form-wrap .form-grid textarea:hover{background:rgba(14,17,13,.42)!important;border-color:rgba(207,178,117,.45)!important}
+.demo-form-wrap .form-grid input:focus,.demo-form-wrap .form-grid select:focus,.demo-form-wrap .form-grid textarea:focus{background:rgba(14,17,13,.5)!important;border-color:#c7aa6d!important;box-shadow:0 0 0 3px rgba(199,170,109,.16)!important}
+.demo-form-wrap .form-grid select option{background:#292d23!important;color:#f6efdf!important}
+.demo-form-wrap .form-privacy-notice{color:#cfc5ac!important;background:rgba(190,161,103,.09)!important;border-left-color:#b89a5f!important}
+.demo-form-wrap .form-consent,.demo-form-wrap .form-consent label,.demo-form-wrap .form-note{color:#bdb49f!important}
+.demo-form-wrap .form-consent a,.demo-form-wrap .form-note a{color:#dfc58a!important;text-decoration-color:rgba(223,197,138,.4)!important}
+.demo-form-wrap .form-consent input[type="checkbox"]{accent-color:#c5a66a!important}
+.demo-form-wrap .field-error{color:#e8a99a!important}
+.demo-form-wrap .submit-button{background:linear-gradient(105deg,#c6ad78,#e0cc9c)!important;color:#25271f!important;border:1px solid rgba(255,239,199,.38)!important;box-shadow:0 10px 24px rgba(0,0,0,.18)!important;font-weight:600!important;transition:transform .25s ease,filter .25s ease,box-shadow .25s ease!important}
+.demo-form-wrap .submit-button:hover{filter:brightness(1.06)!important;transform:translateY(-2px)!important;box-shadow:0 14px 28px rgba(0,0,0,.24)!important}
+.demo-form-wrap .success-state{color:#f6efdf!important}
+.demo-form-wrap .success-state h3{color:#f6efdf!important}
+.demo-form-wrap .success-state p{color:#c8c0ad!important}
+.demo-form-wrap .success-icon{background:rgba(197,166,106,.14)!important;color:#dec58b!important;border:1px solid rgba(197,166,106,.28)!important}
+@media(max-width:620px){.demo-form-wrap{padding:23px 17px 30px!important}.demo-form-wrap:after{right:16px!important;font-size:6px!important}.hero-right .restaurant-card{border-radius:21px!important}}
+@media(prefers-reduced-motion:reduce){.hero-right .floating-note,.demo-form-wrap:before{animation:none!important}.demo-form-wrap,.demo-form-wrap .submit-button{transition:none!important}}
+
 
 `;
 export default function Pratyeksha() {
