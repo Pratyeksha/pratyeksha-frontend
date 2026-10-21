@@ -169,23 +169,6 @@ const SuccessHero = ({ icon: Icon = CheckCircle2, title, subtitle }) => (
   </div>
 );
 
-// ── Table ownership helpers (the server enforces the rules; these keep the phone in step with it) ──
-const tableTokenKey = (tenantId, table) => `pratyeksha_table_token_${tenantId}_${table}`;
-const readTableToken = (tenantId, table) => { try { return localStorage.getItem(tableTokenKey(tenantId, table)) || ''; } catch { return ''; } };
-const writeTableToken = (tenantId, table, token) => {
-  try {
-    if (token) localStorage.setItem(tableTokenKey(tenantId, table), token);
-    else localStorage.removeItem(tableTokenKey(tenantId, table));
-  } catch { /* private mode: the server still enforces ownership */ }
-};
-const tableAuthHeaders = (tenantId, table) => {
-  const token = readTableToken(tenantId, table);
-  return token ? { 'x-table-token': token } : {};
-};
-const tableViewOnlyMsg = (lang) => lang === 'mr'
-  ? 'या टेबलवर दुसरे पाहुणे ऑर्डर देत आहेत. तुम्ही मेनू पाहू शकता; ऑर्डर फक्त ज्या पाहुण्याने ऑर्डर सुरू केली तेच देऊ शकतात.'
-  : 'Another guest is ordering at this table. You can browse the menu; only the guest who started the order can place orders.';
-
 const PratyekshaPremiumMenu = () => {
   const { tenantId: urlTenantId } = useParams();
   const [restaurantData, setRestaurantData] = useState(null);
@@ -595,8 +578,8 @@ waitlistSocket.on('operator_notify', (data) => {
     if (Notification.permission === 'granted') {
       safeNotify(title, {
         body,
-        icon: '/notify/icon-512.png',
-        badge: '/notify/badge-96.png',
+        icon: '/pratyeksha-logo.png',
+        badge: '/notification-badge.png',
         tag: tag || 'operator-notify',
         renotify: true,
         vibrate: [200, 100, 200]
@@ -607,8 +590,8 @@ waitlistSocket.on('operator_notify', (data) => {
         if (perm === 'granted') {
           safeNotify(title, {
             body,
-            icon: '/notify/icon-512.png',
-            badge: '/notify/badge-96.png',
+            icon: '/pratyeksha-logo.png',
+            badge: '/notification-badge.png',
             tag: tag || 'operator-notify',
             renotify: true,
           });
@@ -877,7 +860,7 @@ useEffect(() => {
             : isTableBanner
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/notify/icon-512.png', badge: '/notify/badge-96.png',
+          icon: '/pratyeksha-logo.png', badge: '/notification-badge.png',
           vibrate: [300, 100, 300], tag: 'pratyeksha-ready', renotify: true
         }
       );
@@ -1831,7 +1814,6 @@ useEffect(() => {
   };
 
 const sendExtraItemsRequest = async () => {
-  if (tableViewOnly) { triggerAlert(tableViewOnlyMsg(language), 'error'); return; }
   const activeItems = Object.entries(extraItemCart).filter(([id, qty]) => qty > 0 && extraItems.some(i => i._id === id));
   if (activeItems.length === 0) return;
   if (extraSendingRef.current) return;
@@ -1864,7 +1846,7 @@ try {
     tenantId,
     tableNumber,
     serviceRequest: `EXTRA ITEMS: ${requestText}`
-  }, { headers: tableAuthHeaders(tenantId, tableNumber) });
+  });
 
   if (res.data?.extraItemsWarning) {
     // Extra items couldn't actually be fulfilled (e.g. ran out of stock) — don't
@@ -1877,10 +1859,8 @@ try {
   }
   setExtraItemCart({});
   setIsExtraItemsOpen(false);
-} catch (exErr) {
-  const exRefused = exErr?.response?.data?.code === 'TABLE_LOCKED';
-  if (exRefused) setTableAccess({ checked: true, canOrder: false, hasSession: true });
-  triggerAlert(exRefused ? exErr.response.data.error : 'orderError', 'error');
+} catch {
+  triggerAlert('orderError', 'error');
 } finally {
   extraSendingRef.current = false;
 }
@@ -2629,7 +2609,6 @@ const notifyWaiter = async (serviceType = "Custom") => {
   const borderColor = 'rgba(211, 191, 162, 0.2)';
 
   const addToCart = (item, portion) => {
-    if (tableViewOnly) { triggerAlert(tableViewOnlyMsg(language), 'error'); return; }
     const cartKey = portion === 'Single' ? item._id : `${item._id}-${portion}`;
     setCart(prev => ({ ...prev, [cartKey]: (prev[cartKey] || 0) + 1 }));
   };
@@ -2736,7 +2715,6 @@ if (r.data?.lastOrderItems?.length > 0) {
 
 
 const sendBatchToKitchen = async () => {
-  if (tableViewOnly) { triggerAlert(tableViewOnlyMsg(language), 'error'); return; }
   // Direct dine-in ordering remains tied to a QR/table session. Directory,
   // notification and install routes never flip this flag on their own.
   if (!isCounterScan && !hasQrSession) {
@@ -2796,7 +2774,7 @@ if (unavailableItems.length > 0) {
     // ── Editing a just-placed order: replace its dishes instead of creating a second order ──
     if (modifyingOrderId) {
       try {
-        const mres = await axios.patch(`${BASE_URL}/orders/${modifyingOrderId}/customer-modify`, { tenantId, items: orderItems }, { headers: tableAuthHeaders(tenantId, tableNumber) });
+        const mres = await axios.patch(`${BASE_URL}/orders/${modifyingOrderId}/customer-modify`, { tenantId, items: orderItems });
         const upd = mres.data?.order;
         if (!mres.data?.unchanged && upd) {
           const fresh = (upd.items || []).filter(i => !i.isExtraItem).map(i => ({ ...i, menuItemId: i.menuItemId ? String(i.menuItemId) : null }));
@@ -2816,7 +2794,7 @@ if (unavailableItems.length > 0) {
       } catch (merr) {
         const code = merr?.response?.data?.code;
         triggerAlert(merr?.response?.data?.error || 'Could not update the order. Please try again.', 'error');
-        if (code === 'MODIFY_LOCKED' || code === 'MODIFY_WINDOW_CLOSED' || code === 'TABLE_LOCKED') {
+        if (code === 'MODIFY_LOCKED' || code === 'MODIFY_WINDOW_CLOSED') {
           setModifyingOrderId(null); setModifiable(null); setCart({}); setSuggestions({});
         }
       }
@@ -2839,11 +2817,7 @@ if (unavailableItems.length > 0) {
     paymentStatus: "unpaid"
   };
  
-    const orderRes = await axios.post(`${BASE_URL}/orders`, payload, { headers: tableAuthHeaders(tenantId, tableNumber) });
-    if (!isCounterScan) {
-      if (orderRes.data?.tableToken) writeTableToken(tenantId, tableNumber, orderRes.data.tableToken);
-      setTableAccess({ checked: true, canOrder: true, hasSession: true });
-    }
+    const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
     const placedOrderId = orderRes.data?.order?._id || orderRes.data?._id;
     if (placedOrderId) {
       setLiveOrderStatuses(prev => ({ ...prev, [placedOrderId]: 'pending' }));
@@ -2890,8 +2864,7 @@ setPrepPct(0);
     // The server explains refusals ("<dish> is currently unavailable", "Insufficient stock for …", "Duplicate order detected").
     // Showing only a generic failure made guests retry blindly (and a retry of a duplicate is blocked again).
     const st = error?.response?.status;
-    if (error?.response?.data?.code === 'TABLE_LOCKED') setTableAccess({ checked: true, canOrder: false, hasSession: true });
-    triggerAlert(((st === 400 || st === 409 || st === 403) && error.response?.data?.error) ? error.response.data.error : "orderError", "error");
+    triggerAlert((st === 400 || st === 409) && error.response.data?.error ? error.response.data.error : "orderError", "error");
   }
   finally{
      setIsPlacingOrder(false);    
@@ -2978,8 +2951,8 @@ const askNotificationPermission = async () => {
           body: counterMode === 'dine-in'
             ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
             : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
-          icon: '/notify/icon-512.png',
-          badge: '/notify/badge-96.png',
+          icon: '/pratyeksha-logo.png',
+          badge: '/notification-badge.png',
         }
       );
     }
@@ -2992,7 +2965,7 @@ const askNotificationPermission = async () => {
           : (scheduledPickupTime && !isNaN(new Date(scheduledPickupTime))
               ? `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`
               : 'Your pickup order has been placed.'),
-        icon: '/notify/icon-512.png',
+        icon: '/pratyeksha-logo.png',
       }
     );
   }
@@ -3112,7 +3085,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
       if (perm === 'granted') {
         safeNotify('Reservation Requested!', {
           body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
-          icon: '/notify/icon-512.png',
+          icon: '/pratyeksha-logo.png',
         });
       }
     } catch { /* notifications unavailable */ }
@@ -3447,11 +3420,10 @@ useEffect(() => {
   }
 }, [isCounterScan]);
 const requestFinalBill = async () => {
-  if (tableViewOnly) { triggerAlert(tableViewOnlyMsg(language), 'error'); return; }
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
   try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify({ name: customerInfo.name.trim(), phone: customerInfo.phone.replace(/\D/g,'') })); } catch {}
   try {
-    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name, tableToken: readTableToken(tenantId, tableNumber) });
+    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
 
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
@@ -3694,31 +3666,11 @@ useEffect(() => {
   return () => clearInterval(interval);
 }, [orderPlacedAt, orderEta]);
 
-// ── TABLE ACCESS: is this phone the guest allowed to order here? Polled so the UI follows a host change or settlement ──
-const [tableAccess, setTableAccess] = useState({ checked: false, canOrder: true, hasSession: false });
-const tableViewOnly = !isCounterScan && hasQrSession && tableAccess.checked && tableAccess.hasSession && !tableAccess.canOrder;
-
-useEffect(() => {
-  if (isCounterScan || !hasQrSession || !tenantId || !tableNumber) {
-    setTableAccess({ checked: false, canOrder: true, hasSession: false });
-    return;
-  }
-  let cancelled = false;
-  const probe = () => {
-    axios.get(`${BASE_URL}/orders/table-access/${encodeURIComponent(tenantId)}/${encodeURIComponent(tableNumber)}`, { headers: tableAuthHeaders(tenantId, tableNumber) })
-      .then(r => { if (!cancelled) setTableAccess({ checked: true, canOrder: !!r.data?.canOrder, hasSession: !!r.data?.hasSession }); })
-      .catch(() => { /* fail open in the UI only: the server still refuses */ });
-  };
-  probe();
-  const id = setInterval(probe, 15000);
-  return () => { cancelled = true; clearInterval(id); };
-}, [tenantId, tableNumber, isCounterScan, hasQrSession]);
-
 // ── RESTORE placedOrders FROM SERVER on mount (multi-device safe) ──
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === '' || tableNumber === 'Counter' || isCounterScan) return;
   
-  axios.get(`${BASE_URL}/orders/table/${tenantId}/${tableNumber}`, { headers: tableAuthHeaders(tenantId, tableNumber) })
+  axios.get(`${BASE_URL}/orders/table/${tenantId}/${tableNumber}`)
     .then(r => {
       if (r.data?.allItems?.length > 0) {
         // Map server items to our placedOrders format
@@ -4981,7 +4933,7 @@ if (phone.length === 10) {
                         if ('Notification' in window && Notification.permission === 'granted') {
                           safeNotify('Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
-                            icon: '/notify/icon-512.png'
+                            icon: '/pratyeksha-logo.png'
                           });
                         }
                       } catch(err) {
@@ -6273,11 +6225,6 @@ if (sessionBlocked) {
   return (
     <>
       {modifyOrderStrip}
-      {tableViewOnly && (
-        <div role="status" style={{ margin: '12px 16px 0', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(211,191,162,0.3)', background: 'rgba(211,191,162,0.08)', color: '#e9dcc4', fontSize: 13, lineHeight: 1.45 }}>
-          {tableViewOnlyMsg(language)}
-        </div>
-      )}
       {/* STICKY BANNER */}
       <motion.div
         onClick={() => setOrderTrackingPanelOpen(true)}
@@ -6591,7 +6538,7 @@ if (sessionBlocked) {
     <motion.div
       initial={{ scale: 0 }} animate={{ scale: 1 }}
       whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}}
-      onClick={() => { if (tableViewOnly) { triggerAlert(tableViewOnlyMsg(language), 'error'); return; } setIsExtraItemsOpen(true); setExtraItemCart({}); setActiveExtraCategory('All'); setExtraItemSearchQuery(''); }}
+      onClick={() => { setIsExtraItemsOpen(true); setExtraItemCart({}); setActiveExtraCategory('All'); setExtraItemSearchQuery(''); }}
     >
       <ShoppingBag size={22} color="#d3bfa2" strokeWidth={1.8} />
     </motion.div>
@@ -9372,8 +9319,6 @@ if (sessionBlocked) {
 
 <style>{`
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  html,body,html *,body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
-  html::-webkit-scrollbar,body::-webkit-scrollbar,html *::-webkit-scrollbar,body *::-webkit-scrollbar,*::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent!important}
   * { -webkit-tap-highlight-color: transparent; }
   html, body, #root { 
     height: 100%; 

@@ -444,8 +444,6 @@ const fmtKm = (km) => {
 
 const css = `
 html,body{scrollbar-width:none;-ms-overflow-style:none}
-html,body,html *,body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
-html::-webkit-scrollbar,body::-webkit-scrollbar,html *::-webkit-scrollbar,body *::-webkit-scrollbar,*::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent!important}
 html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;height:0;display:none}
 .pxh-sort{display:inline-flex;align-items:center;gap:6px;margin-left:auto;margin-right:8px;border:1px solid rgba(211,191,162,.18);border-radius:13px;padding:0 4px 0 10px;background:rgba(255,255,255,.03);color:rgba(211,191,162,.8)}
 .pxh-sort select{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:11px;font-weight:800;padding:9px 18px 9px 2px;font-family:inherit;cursor:pointer;outline:none}
@@ -1195,9 +1193,23 @@ export default function CustomerHome() {
           <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
             {greetingLine}<span style={{ color: GOLD }}>.</span>
           </h1>
-          <button type="button" className="pxh-refresh" onClick={refresh} disabled={refreshing} aria-label={tr.refresh} title={tr.refresh} style={{ marginTop: 10 }}>
-            <RotateCcw size={14} className={refreshing ? 'pxh-spin' : undefined} />
-          </button>
+          {loading && (
+            <div className="pxh-stats" aria-hidden="true" style={{ alignItems: 'center', height: 15 }}>
+              <Sk w={64} h={11} r={6} /><Sk w={84} h={11} r={6} d={0.1} /><Sk w={96} h={11} r={6} d={0.2} />
+            </div>
+          )}
+          {!loading && tenants.length > 0 && (
+            <div className="pxh-stats" aria-label="Summary">
+              <span><b>{tenants.length}</b> {tenants.length === 1 ? tr.place : tr.places}</span>
+              {openCount > 0 && <span><b>{openCount}</b> {tr.statOpen}</span>}
+              {totalOffers > 0 && <span><b>{totalOffers}</b> {tr.statOffers}</span>}
+              {stats.pickup > 0 && <span><b>{stats.pickup}</b> {tr.statPickup}</span>}
+              {stats.reserve > 0 && <span><b>{stats.reserve}</b> {tr.statReserve}</span>}
+              <button type="button" className="pxh-refresh" onClick={refresh} disabled={refreshing} aria-label={tr.refresh} title={tr.refresh}>
+                <RotateCcw size={11} className={refreshing ? 'pxh-spin' : undefined} /> {refreshing ? tr.refreshing : updatedAt ? `${tr.updated} ${fmtAgo(updatedAt, tr)}` : tr.refresh}
+              </button>
+            </div>
+          )}
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>
@@ -1262,6 +1274,9 @@ export default function CustomerHome() {
           <button type="button" className={`pxh-chip${filter === 'all' && !service && !favOnly && !offersOnly && !vegOnly && !openOnly ? ' on' : ''}`} onClick={resetFilters}><LayoutGrid size={13} /> {tr.all}</button>
           <button type="button" className={`pxh-chip${filter === 'cafe' ? ' on' : ''}`} onClick={() => setFilter(filter === 'cafe' ? 'all' : 'cafe')}><Coffee size={13} /> {tr.cafe}</button>
           <button type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</button>
+          {SERVICES.map(({ id, label, icon: Icon }) => (
+            <button type="button" key={id} className={`pxh-chip${service === id ? ' on' : ''}`} onClick={() => setService(service === id ? null : id)}><Icon size={13} /> {tr[id] || label}</button>
+          ))}
           <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</button>
           {anyHours && <button type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</button>}
           {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</button>}

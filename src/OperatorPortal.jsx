@@ -100,13 +100,15 @@ const playCachedSound = (url) => {
     const p = a.play(); if (p && p.catch) p.catch(() => {});
   } catch { /* autoplay blocked / unsupported */ }
 };
-// Every operator alert has its own bell (bundled in /public/sounds, no third-party links).
-const SFX = {
-  order: '/sounds/order.wav', table: '/sounds/table.wav', waiter: '/sounds/waiter.wav',
-  waitlist: '/sounds/waitlist.wav', reservation: '/sounds/reservation.wav', pickup: '/sounds/pickup.wav',
-  bill: '/sounds/bill.wav', aggregator: '/sounds/aggregator.wav', alert: '/sounds/alert.wav', default: '/sounds/default.wav',
+const playSFX = (type = 'default') => {
+  const sounds = {
+    waitlist:    'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',  // chime
+    pickup:      'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3',  // bell
+    reservation: 'https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3',  // soft ping
+    default:     'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+  };
+  playCachedSound(sounds[type] || sounds.default);
 };
-const playSFX = (type = 'default') => playCachedSound(SFX[type] || SFX.default);
 
 const calculateTenure = (joiningDateString) => {
     if (!joiningDateString) return 'N/A';
@@ -335,7 +337,7 @@ const [mktReady, setMktReady]                   = useState({ announcements:false
 const [marketingSubTab, setMarketingSubTab] = useState('offers');
 const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
-  title: '', message: '', type: 'offer', accentColor: 'gold', icon: 'tag', imageUrl: '',
+  title: '', message: '', type: 'offer', accentColor: 'gold', icon: 'tag',
   discountValue: '', discountType: 'percent',
   startDate: '', startTime: '',       // ← NEW: scheduled start
   expiryDate: '', expiryTime: ''
@@ -345,47 +347,9 @@ const [newOffer, setNewOffer]                 = useState({
   minOrder: '', categoryId: '', happyStart: '', happyEnd: '', expiresAt: ''
 });
 const [newCampaign, setNewCampaign]           = useState({
-  title: '', body: '', segment: 'all', customPhones: '', imageUrl: ''
+  title: '', body: '', segment: 'all', customPhones: ''
 });
 const [campaignSending, setCampaignSending]   = useState(false);
-
-// ── Call-out cards: reservation and pickup requests are announced aloud and stay until the operator closes them ──
-const [callOuts, setCallOuts] = useState([]);
-const speakCallOut = (text) => {
-  try {
-    if (!('speechSynthesis' in window)) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-IN'; u.rate = 0.95;
-    setTimeout(() => { window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }, 1000); // let the bell finish first
-  } catch { /* speech not available on this browser */ }
-};
-const pushCallOut = (kind, text) => {
-  const id = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  setCallOuts(prev => [{ id, kind, text }, ...prev].slice(0, 6));
-  speakCallOut(text);
-};
-const dismissCallOut = (id) => setCallOuts(prev => prev.filter(c => c.id !== id));
-const callOutTime = (iso) => {
-  const d = iso ? new Date(iso) : new Date();
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true });
-};
-
-// ── Campaign / offer images: uploaded once, then sent with the push notification ──
-const uploadPromoImage = (file, onDone) => {
-  if (!file) return;
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { showNotif('Use a PNG, JPG or WEBP image', 'error'); return; }
-  if (file.size > 1024 * 1024) { showNotif('Image must be under 1 MB', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const r = await axios.post(`${BASE_URL}/media/${tenantId}`, { dataUrl: reader.result });
-      onDone(r.data.url);
-      showNotif('Image attached', 'success');
-    } catch (err) { showNotif(err.response?.data?.error || 'Image upload failed', 'error'); }
-  };
-  reader.readAsDataURL(file);
-};
-const promoImageSrc = (url) => (url ? `${BASE_URL.replace(/\/api\/?$/, '')}${url}` : '');
  
   // ── IST today string — used for billing HUD and daily breakdowns
 const [istTodayStr, setIstTodayStr] = useState(() => new Date(Date.now() + 330*60*1000).toISOString().split('T')[0]);
@@ -920,7 +884,7 @@ useEffect(() => {
       fetchReservationNoShowDataRef.current();
 
       socket.on("new_order", (order) => { 
-        playCachedSound(SFX.order); 
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
         showNotif(`Order Update: Table ${order?.tableNumber ?? ''}`); 
         fetchInitialData({ skipMenu: true }); 
       });
@@ -936,7 +900,6 @@ useEffect(() => {
       });
 
       socket.on("low_stock_alert", (data) => {
-  playSFX('alert');
         showNotif(`LOW STOCK: ${data.itemName} — only ${data.currentStock}${data.unit} left`, "error");
         setLowStockAlerts(prev => {
           const exists = prev.find(a => a.itemName === data.itemName);
@@ -945,14 +908,12 @@ useEffect(() => {
         refreshManagementSoon(); // refresh inventory numbers
       });
       socket.on('inventory_expiry_alert', (data) => {
-  playSFX('alert');
   showNotif(`${data.itemName} expires in ${data.daysLeft} day${data.daysLeft>1?'s':''} — use first (FEFO)`, 'error');
   setInventory(prev => prev.map(i =>
     i._id === data.itemId ? { ...i, batchExpiry: data.batchExpiry, _expiryAlert: true } : i
   ));
 });
       socket.on('ingredient_out_of_stock', (data) => {
-  playSFX('alert');
     setIngredientAlerts(prev => {
         // Deduplicate: if same ingredient already has an active alert, replace it
         const filtered = prev.filter(a => a.ingredientName !== data.ingredientName);
@@ -983,7 +944,7 @@ useEffect(() => {
     ingredientAlertByName.set(data.ingredientName, alertTimer);
 });
       socket.on("new_waiter_request", (request) => {
-        playCachedSound(SFX.waiter);
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
         setWaiterRequests(prev => [request, ...prev]);
       });
@@ -1023,7 +984,7 @@ socket.on("table_occupied_live", (data) => {
         }
         return prevOrders;
     });
-    playCachedSound(SFX.table);
+    playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 });
 
       socket.on("menu_item_deleted", ({ itemId }) => {
@@ -1034,8 +995,6 @@ socket.on("table_occupied_live", (data) => {
 socket.on('new_waitlist_entry', (data) => {
   fetchCounterQueue();
   playSFX('waitlist');
-  const wEntry = data?.entry || data || {};
-  if (wEntry.mode === 'pickup') pushCallOut('pickup', `Pickup requested by ${wEntry.customerName || 'a guest'}, for ${callOutTime(wEntry.scheduledPickupTime) || 'the requested time'}.`);
   showNotif(
     `New walk-in — ${data?.customerName || 'Guest'} · Party of ${data?.partySize || '?'}`,
     'info', 'waitlist'
@@ -1045,8 +1004,6 @@ socket.on('new_waitlist_entry', (data) => {
 socket.on('new_reservation', (data) => {
   fetchCounterQueue();
   playSFX('reservation');
-  const rsv = data || {};
-  pushCallOut('reservation', `Reservation for ${rsv.customerName || 'a guest'}, ${rsv.partySize || '?'} guests, booked for ${callOutTime(rsv.reservationTime) || 'the requested time'}.`);
   showNotif(
     `Reservation — ${data?.customerName || 'Guest'} · ${data?.partySize || '?'} pax · ${
       data?.reservationTime
@@ -1060,7 +1017,6 @@ socket.on('new_reservation', (data) => {
 socket.on('reservation_updated', () => fetchCounterQueue());
 
 socket.on('waitlist_cancelled', (data) => {
-  playSFX('alert');
   fetchCounterQueue();
   showNotif(
     `Waitlist cancelled — ${data?.customerName || 'Guest'}`,
@@ -1091,7 +1047,7 @@ socket.on('pickup_ready', (data) => {
       socket.on("bill_requested", (data) => {
         if (data?.tableNumber == null) return;
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
-        playCachedSound(SFX.bill);
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 socket.on('order_voided', () => {
@@ -1113,7 +1069,7 @@ socket.on('order_modification_detected', (data) => {
 });
 // ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
       socket.on('aggregator_order_incoming', (data) => {
-        playCachedSound(SFX.aggregator);
+        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
         setIncomingAggregatorOrders(prev => {
           const exists = prev.find(o => o._id === data._id);
           return exists ? prev : [...prev, data];
@@ -1132,7 +1088,7 @@ socket.on('aggregator_session_expired', (data) => {
     if (prev.find(a => a.platform === data.platform)) return prev;
     return [...prev, data];
   });
-  playCachedSound(SFX.alert);
+  playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
   showNotif(data.message, 'error');
 });
 
@@ -7697,17 +7653,6 @@ const renderMonthHeatmap = () => {
             </div>
           </div>
  
-        <div style={{marginTop:'10px'}}>
-          <span style={{fontSize:'0.72rem',fontWeight:'700',color:'#d3bfa2'}}>Image (optional)</span>
-          {newAnnouncement.imageUrl ? (
-            <div style={{display:'flex',alignItems:'center',gap:'10px',marginTop:'6px'}}>
-              <img src={promoImageSrc(newAnnouncement.imageUrl)} alt="" style={{width:'96px',height:'48px',objectFit:'cover',borderRadius:'8px'}}/>
-              <button type="button" onClick={()=>setNewAnnouncement(p=>({...p,imageUrl:''}))} style={{background:'transparent',border:'1px solid #3a3a3a',color:'#d3bfa2',borderRadius:'8px',padding:'4px 10px',cursor:'pointer',fontSize:'0.7rem'}}>Remove</button>
-            </div>
-          ) : (
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const f=e.target.files?.[0]; e.target.value=''; uploadPromoImage(f, url=>setNewAnnouncement(p=>({...p,imageUrl:url})));}} style={{display:'block',marginTop:'6px',color:'#969696',fontSize:'0.72rem'}}/>
-          )}
-        </div>
           {/* Live preview */}
           {(newAnnouncement.title||newAnnouncement.message) && (
             <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
@@ -7762,12 +7707,11 @@ const renderMonthHeatmap = () => {
                   expiresAt:expiresAt.toISOString(),
                   startsAt:startsAt?startsAt.toISOString():new Date().toISOString(),
                   isActive:!isScheduled,
-                  imageUrl:newAnnouncement.imageUrl||'',
                 });
                 showNotif(isScheduled
                   ?`Scheduled for ${startsAt.toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})} ✓`
                   :'Live on customer menu now ✓');
-                setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',imageUrl:'',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
+                setNewAnnouncement({title:'',message:'',type:'offer',accentColor:'gold',icon:'tag',discountValue:'',discountType:'percent',startDate:'',startTime:'',expiryDate:'',expiryTime:''});
                 fetchAnnouncements();
               }catch(err){showNotif(err.response?.data?.error||'Failed to publish','error');}
               finally{pickupFiringRef.current.delete('announce');}
@@ -8321,17 +8265,6 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         </div>
  
         {/* Preview */}
-        <div style={{marginTop:'10px'}}>
-          <span style={{fontSize:'0.72rem',fontWeight:'700',color:'#d3bfa2'}}>Image (optional)</span>
-          {newCampaign.imageUrl ? (
-            <div style={{display:'flex',alignItems:'center',gap:'10px',marginTop:'6px'}}>
-              <img src={promoImageSrc(newCampaign.imageUrl)} alt="" style={{width:'96px',height:'48px',objectFit:'cover',borderRadius:'8px'}}/>
-              <button type="button" onClick={()=>setNewCampaign(p=>({...p,imageUrl:''}))} style={{background:'transparent',border:'1px solid #3a3a3a',color:'#d3bfa2',borderRadius:'8px',padding:'4px 10px',cursor:'pointer',fontSize:'0.7rem'}}>Remove</button>
-            </div>
-          ) : (
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const f=e.target.files?.[0]; e.target.value=''; uploadPromoImage(f, url=>setNewCampaign(p=>({...p,imageUrl:url})));}} style={{display:'block',marginTop:'6px',color:'#969696',fontSize:'0.72rem'}}/>
-          )}
-        </div>
         {(newCampaign.title||newCampaign.body)&&(
           <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
             <div style={{fontSize:'0.46rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
@@ -8359,10 +8292,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                 body:         newCampaign.body.trim(),
                 segment:      newCampaign.segment || 'all',
                 customPhones: newCampaign.customPhones || '',
-                imageUrl:     newCampaign.imageUrl || '',
                 sendNow:      true   // triggers actual push delivery in server
               });
-              setNewCampaign({title:'',body:'',segment:'all',customPhones:'',imageUrl:''});
+              setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
               showNotif('Campaign sent successfully!','success');
               fetchCampaigns();
             }catch(err){showNotif(err.response?.data?.error||'Failed to send','error');}
@@ -16091,17 +16023,6 @@ onClick={async () => {
 </AnimatePresence>
 
 <AnimatePresence>
-  {callOuts.length > 0 && (
-    <div role="alert" aria-live="assertive" style={{position:'fixed',top:'18px',left:'50%',transform:'translateX(-50%)',zIndex:10000,display:'flex',flexDirection:'column',gap:'10px',width:'min(440px,calc(100vw - 24px))'}}>
-      {callOuts.map(co => (
-        <div key={co.id} style={{background:'linear-gradient(135deg,#1a1812,#0d0c09)',border:'1px solid rgba(211,191,162,0.45)',borderRadius:'16px',padding:'14px 44px 14px 16px',boxShadow:'0 18px 50px rgba(0,0,0,0.6)',color:'#f7f3eb',position:'relative'}}>
-          <div style={{fontSize:'10px',letterSpacing:'0.14em',color:'#c8a96e',fontWeight:800,marginBottom:'4px'}}>{co.kind === 'reservation' ? 'RESERVATION' : 'PICKUP REQUEST'}</div>
-          <div style={{fontSize:'15px',fontWeight:700,lineHeight:1.35}}>{co.text}</div>
-          <button type="button" aria-label="Close alert" onClick={() => dismissCallOut(co.id)} style={{position:'absolute',top:'8px',right:'10px',background:'transparent',border:'none',color:'#c8a96e',cursor:'pointer',fontSize:'22px',lineHeight:1,padding:'4px'}}>×</button>
-        </div>
-      ))}
-    </div>
-  )}
   {activeAggregatorPopup && (
     <motion.div
       initial={false} animate={{ opacity: 1 }}
