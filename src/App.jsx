@@ -175,6 +175,8 @@ const PratyekshaPremiumMenu = () => {
   // Set when the server says this table link / session is invalid (or the outlet is gone). Kept separate from restaurantData:
   // the menu fetch re-sets restaurantData and used to silently undo the block, and a null restaurantData only rendered an empty menu.
   const [sessionBlocked, setSessionBlocked] = useState(false);
+  const [qrSignature, setQrSignature] = useState('');
+  const [tableSessionRole, setTableSessionRole] = useState('viewer');
   const [categoryList, setCategoryList] = useState([]);
   const [allMenuItems, setAllMenuItems] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
@@ -214,7 +216,7 @@ const generateToken = useCallback(() => {
 }, []);
 
 // Store token per session so it doesn't regenerate on re-render
-const [sessionToken] = useState(() => {
+const [sessionToken, setSessionToken] = useState(() => {
   let stored = null;
   try { stored = sessionStorage.getItem('pratyeksha_token'); } catch {}
   if (stored) return stored;
@@ -261,6 +263,10 @@ const [orderEta, setOrderEta] = useState(null);
 const etaRefreshRef = useRef(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
+  const [upiPayments, setUpiPayments] = useState([]);
+  const [upiBusy, setUpiBusy] = useState(false);
+  const [upiError, setUpiError] = useState('');
+  const [utrInputs, setUtrInputs] = useState({});
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
@@ -639,6 +645,7 @@ useEffect(() => {
 
   if (tableParam) {
     setTableNumber(tableParam);
+    setQrSignature(qrParam);
     setIsCounterScan(false);
     setHasQrSession(true);
     try {
@@ -646,6 +653,8 @@ useEffect(() => {
     } catch {}
   } else {
     setTableNumber('Counter');
+    setQrSignature('');
+    setTableSessionRole('viewer');
     setIsCounterScan(true);
     setHasQrSession(false);
     try { sessionStorage.removeItem('pratyeksha_qr_session'); } catch {}
@@ -1789,22 +1798,29 @@ useEffect(() => {
 }, [hasPlacedInitialOrder, tenantId, tableNumber, isCounterScan]);
 
 
-  // ── QR Session Validation — prevents URL injection ──
+  // Server validates the signed QR and issues a high-entropy owner token. A second browser
+  // scanning the same table receives viewer access and cannot submit orders.
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   setSessionBlocked(false);
-  let stale = false; // a slow answer for the previous table/outlet must not blank the page the guest has since moved to
-  axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken })
+  let stale = false;
+  if (!qrSignature) { setSessionBlocked(true); setTableSessionRole('viewer'); return; }
+  axios.post(`${BASE_URL}/session/start`, { tenantId, tableNumber, qrSignature, sessionToken })
     .then(r => {
-      if (!stale && r.data && r.data.valid === false) setSessionBlocked(true);
+      if (stale) return;
+      if (!r.data?.valid) { setSessionBlocked(true); return; }
+      setTableSessionRole(r.data.role || 'viewer');
+      if (r.data.role === 'owner' && r.data.sessionToken) {
+        setSessionToken(r.data.sessionToken);
+        try { sessionStorage.setItem('pratyeksha_token', r.data.sessionToken); } catch {}
+      }
     })
-    .catch((err) => {
-      // The server answers an invalid table/token with HTTP 403 { valid:false }. axios REJECTS on 403, so the .then() above
-      // never saw it and a forged / expired QR link was never blocked. Network errors and 5xx stay non-fatal.
-      if (!stale && err?.response?.status === 403 && err.response.data?.valid === false) setSessionBlocked(true);
+    .catch(err => {
+      if (!stale && (err?.response?.status === 403 || err?.response?.status === 400)) setSessionBlocked(true);
+      else if (!stale) setSessionBlocked(true); // fail closed: no ordering during network/server failure
     });
   return () => { stale = true; };
-}, [tenantId, tableNumber, isCounterScan, sessionToken]);
+}, [tenantId, tableNumber, isCounterScan, qrSignature]);
 
   const handleSwipe = (direction) => {
     const categories = ['all', ...categoryList.map(c => c.categoryId)];
@@ -2721,6 +2737,10 @@ const sendBatchToKitchen = async () => {
     triggerAlert('Please scan the restaurant QR code to start table ordering.', 'error');
     return;
   }
+  if (!isCounterScan && !['owner', 'eligible'].includes(tableSessionRole)) {
+    triggerAlert('This device has menu-only access. The guest who started this table session can place the order.', 'error');
+    return;
+  }
   if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);      
   try {
@@ -2806,6 +2826,8 @@ if (unavailableItems.length > 0) {
   const payload = {
     tenantId,
     tableNumber,
+    qrSignature: isCounterScan ? undefined : qrSignature,
+    sessionToken: isCounterScan ? undefined : sessionToken,
     source: isCounterScan ? 'counter-pickup' : 'direct',
     items: orderItems,
     billDetails: {
@@ -2818,6 +2840,7 @@ if (unavailableItems.length > 0) {
   };
  
     const orderRes = await axios.post(`${BASE_URL}/orders`, payload);
+    setTableSessionRole('owner');
     const placedOrderId = orderRes.data?.order?._id || orderRes.data?._id;
     if (placedOrderId) {
       setLiveOrderStatuses(prev => ({ ...prev, [placedOrderId]: 'pending' }));
@@ -3490,6 +3513,7 @@ const requestFinalBill = async () => {
       localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     } catch { /* storage unavailable */ }
     setBillRequested(true);
+    try { sessionStorage.setItem(`pratyeksha_bill_locked_${tenantId}_${tableNumber}`, '1'); } catch {}
     // placedOrders intentionally NOT cleared here — still needed for the bill summary display
     // They clear when modal closes (see isBillOpen X handler below)
 
@@ -3501,6 +3525,40 @@ const requestFinalBill = async () => {
     setBillRequested(true);
   }
 };
+
+  const createCustomerUpiPayments = async () => {
+    if (upiBusy) return;
+    const ids = [...new Set(placedOrders.map(i => String(i.orderId || '')).filter(id => /^[a-f0-9]{24}$/i.test(id)))];
+    if (!ids.length) { setUpiError('Online payment is unavailable because this bill does not contain a server-issued order reference. Please ask the restaurant operator for assistance.'); return; }
+    setUpiBusy(true); setUpiError('');
+    try {
+      const results = await Promise.all(ids.map(async orderId => {
+        const existing = upiPayments.find(p => p.orderId === orderId);
+        if (existing) return existing;
+        const r = await axios.post(`${BASE_URL}/payments/customer-order/${orderId}/intent`, { tenantId, tableNumber, qrSignature, sessionToken });
+        return { ...r.data, orderId };
+      }));
+      setUpiPayments(prev => [...prev.filter(p => !results.some(r => r.orderId === p.orderId)), ...results]);
+    } catch (e) { setUpiError(e?.response?.data?.error || 'Could not prepare UPI payment. Please retry or ask the restaurant operator.'); }
+    finally { setUpiBusy(false); }
+  };
+  const submitCustomerUtr = async (payment) => {
+    const utr = String(utrInputs[payment.reference] || '').trim();
+    if (!/^[A-Za-z0-9]{8,35}$/.test(utr)) { setUpiError('Enter the UTR/reference shown by your UPI app (8–35 letters or digits).'); return; }
+    setUpiBusy(true); setUpiError('');
+    try {
+      await axios.post(`${BASE_URL}/payments/${encodeURIComponent(payment.reference)}/submit-utr`, { utr, tenantId, tableNumber, qrSignature, sessionToken, orderId: payment.orderId });
+      setUpiPayments(prev => prev.map(p => p.reference === payment.reference ? {...p,status:'pending'} : p));
+    } catch(e) { setUpiError(e?.response?.data?.error || 'Could not submit UTR.'); }
+    finally { setUpiBusy(false); }
+  };
+  const launchUpiApp = (payment, appName) => {
+    // UPI URI carries a server-calculated amount/reference; launching an app is never treated as proof of payment.
+    const uri = new URL(payment.upiUri);
+    const params = uri.searchParams;
+    const target = appName === 'googlepay' ? `gpay://upi/pay?${params.toString()}` : `phonepe://pay?${params.toString()}`;
+    window.location.href = target;
+  };
 
   const hasNonVegInView = useMemo(() => {
     if (isOnlyVegTenant) return false;
@@ -7618,6 +7676,14 @@ if (sessionBlocked) {
                        <ReceiptText size={18} color="#0c0c0c" strokeWidth={2.5} />
                        DOWNLOAD TAX INVOICE
                      </button>
+
+                     <div style={{border:'1px solid rgba(211,191,162,0.28)',borderRadius:16,padding:16,background:'rgba(211,191,162,0.06)',color:'#f7f3eb'}}>
+                       <div style={{fontWeight:900,fontSize:'0.9rem',marginBottom:6}}>Pay by UPI</div>
+                       <p style={{fontSize:'0.72rem',lineHeight:1.6,color:'rgba(247,243,235,0.68)',margin:'0 0 12px'}}>Payment is routed to this restaurant’s configured UPI account. Open Google Pay or PhonePe, complete the payment, then enter the UTR below. The restaurant must verify it; opening an app or uploading a screenshot does not mark the bill paid.</p>
+                       <button type="button" disabled={upiBusy} onClick={createCustomerUpiPayments} style={{width:'100%',padding:12,borderRadius:10,border:0,background:'#d3bfa2',color:'#17130e',fontWeight:900,cursor:upiBusy?'wait':'pointer'}}>{upiBusy?'Preparing…':'Prepare secure amount & UPI reference'}</button>
+                       {upiPayments.map(p=><div key={p.reference} style={{marginTop:12,padding:12,borderRadius:10,border:'1px solid rgba(211,191,162,0.18)',background:'rgba(0,0,0,0.18)'}}><div style={{fontSize:'.72rem',opacity:.75}}>Order {p.orderId}</div><div style={{fontWeight:900,margin:'4px 0'}}>₹{Number(p.amount).toFixed(2)}</div><div style={{fontSize:'.72rem',wordBreak:'break-word'}}>Payee: {p.payeeName} · UPI ID: {p.upiId}</div><div style={{fontSize:'.7rem',marginTop:5}}>Reference: <b>{p.reference}</b> · Status: <b>{p.status}</b></div>{p.status==='unpaid'||p.status==='rejected'?<><div style={{display:'flex',gap:8,marginTop:10}}><button type="button" onClick={()=>launchUpiApp(p,'googlepay')} style={{flex:1,padding:10,borderRadius:8,border:'1px solid rgba(211,191,162,.4)',background:'transparent',color:'#f7f3eb',fontWeight:800}}>Google Pay</button><button type="button" onClick={()=>launchUpiApp(p,'phonepe')} style={{flex:1,padding:10,borderRadius:8,border:'1px solid rgba(211,191,162,.4)',background:'transparent',color:'#f7f3eb',fontWeight:800}}>PhonePe</button></div><label style={{display:'block',fontSize:'.7rem',marginTop:10}}>UTR / transaction reference<input value={utrInputs[p.reference]||''} onChange={e=>setUtrInputs(v=>({...v,[p.reference]:e.target.value}))} maxLength={35} inputMode="text" autoComplete="off" placeholder="Enter UTR after successful payment" style={{display:'block',width:'100%',marginTop:5,padding:10,borderRadius:8,border:'1px solid rgba(211,191,162,.28)',background:'#151515',color:'#fff'}} /></label><button type="button" disabled={upiBusy} onClick={()=>submitCustomerUtr(p)} style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:0,background:'#d3bfa2',color:'#17130e',fontWeight:900}}>Submit UTR for verification</button></>:<div style={{fontSize:'.72rem',marginTop:8,color:'#d3bfa2'}}>Do not pay again while this reference is pending. Ask the restaurant to confirm status.</div>}</div>)}
+                       {upiError&&<div role="alert" style={{fontSize:'.72rem',color:'#ffb4a2',marginTop:10}}>{upiError}</div>}
+                     </div>
 
                      {/* GOLD — Continue to Feedback */}
                      <button type="button"
