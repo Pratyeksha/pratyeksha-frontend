@@ -595,8 +595,8 @@ waitlistSocket.on('operator_notify', (data) => {
     if (Notification.permission === 'granted') {
       safeNotify(title, {
         body,
-        icon: '/pratyeksha-logo.png',
-        badge: '/notification-badge.png',
+        icon: '/notify/icon-512.png',
+        badge: '/notify/badge-96.png',
         tag: tag || 'operator-notify',
         renotify: true,
         vibrate: [200, 100, 200]
@@ -607,8 +607,8 @@ waitlistSocket.on('operator_notify', (data) => {
         if (perm === 'granted') {
           safeNotify(title, {
             body,
-            icon: '/pratyeksha-logo.png',
-            badge: '/notification-badge.png',
+            icon: '/notify/icon-512.png',
+            badge: '/notify/badge-96.png',
             tag: tag || 'operator-notify',
             renotify: true,
           });
@@ -877,7 +877,7 @@ useEffect(() => {
             : isTableBanner
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/pratyeksha-logo.png', badge: '/notification-badge.png',
+          icon: '/notify/icon-512.png', badge: '/notify/badge-96.png',
           vibrate: [300, 100, 300], tag: 'pratyeksha-ready', renotify: true
         }
       );
@@ -2978,8 +2978,8 @@ const askNotificationPermission = async () => {
           body: counterMode === 'dine-in'
             ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
             : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
-          icon: '/pratyeksha-logo.png',
-          badge: '/notification-badge.png',
+          icon: '/notify/icon-512.png',
+          badge: '/notify/badge-96.png',
         }
       );
     }
@@ -2992,7 +2992,7 @@ const askNotificationPermission = async () => {
           : (scheduledPickupTime && !isNaN(new Date(scheduledPickupTime))
               ? `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`
               : 'Your pickup order has been placed.'),
-        icon: '/pratyeksha-logo.png',
+        icon: '/notify/icon-512.png',
       }
     );
   }
@@ -3112,7 +3112,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
       if (perm === 'granted') {
         safeNotify('Reservation Requested!', {
           body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
-          icon: '/pratyeksha-logo.png',
+          icon: '/notify/icon-512.png',
         });
       }
     } catch { /* notifications unavailable */ }
@@ -4981,7 +4981,7 @@ if (phone.length === 10) {
                         if ('Notification' in window && Notification.permission === 'granted') {
                           safeNotify('Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
-                            icon: '/pratyeksha-logo.png'
+                            icon: '/notify/icon-512.png'
                           });
                         }
                       } catch(err) {
@@ -9372,6 +9372,8 @@ if (sessionBlocked) {
 
 <style>{`
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  html body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
+  html body *::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
   * { -webkit-tap-highlight-color: transparent; }
   html, body, #root { 
     height: 100%; 

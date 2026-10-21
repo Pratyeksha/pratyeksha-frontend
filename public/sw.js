@@ -89,9 +89,10 @@ self.addEventListener('push', function(event) {
   const track = data.data && data.data.track ? data.data.track : null;
   const options = {
     body: data.body || '',
-    icon: data.icon || '/pratyeksha-logo.png',
+    icon: data.icon || '/notify/icon-512.png',
     // Small status-bar mark: crossed spoon & fork (browsers otherwise fall back to a generic bell).
-    badge: data.badge || '/notification-badge.png',
+    badge: data.badge || '/notify/badge-96.png',
+    image: data.image || undefined,
     vibrate: data.vibrate || [200, 100, 200],
     data: data.data || {}
   };
