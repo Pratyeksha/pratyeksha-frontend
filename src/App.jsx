@@ -9372,8 +9372,8 @@ if (sessionBlocked) {
 
 <style>{`
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  html body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
-  html body *::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
+  html,body,html *,body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
+  html::-webkit-scrollbar,body::-webkit-scrollbar,html *::-webkit-scrollbar,body *::-webkit-scrollbar,*::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent!important}
   * { -webkit-tap-highlight-color: transparent; }
   html, body, #root { 
     height: 100%; 

@@ -444,8 +444,8 @@ const fmtKm = (km) => {
 
 const css = `
 html,body{scrollbar-width:none;-ms-overflow-style:none}
-html body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
-html body *::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
+html,body,html *,body *{scrollbar-width:none!important;-ms-overflow-style:none!important}
+html::-webkit-scrollbar,body::-webkit-scrollbar,html *::-webkit-scrollbar,body *::-webkit-scrollbar,*::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent!important}
 html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;height:0;display:none}
 .pxh-sort{display:inline-flex;align-items:center;gap:6px;margin-left:auto;margin-right:8px;border:1px solid rgba(211,191,162,.18);border-radius:13px;padding:0 4px 0 10px;background:rgba(255,255,255,.03);color:rgba(211,191,162,.8)}
 .pxh-sort select{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:11px;font-weight:800;padding:9px 18px 9px 2px;font-family:inherit;cursor:pointer;outline:none}
