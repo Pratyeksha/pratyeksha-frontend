@@ -1879,6 +1879,21 @@ useEffect(() => {
     return () => window.removeEventListener('pratyeksha:table-locked', onLocked);
   });
 
+// Deep link from the discovery page: ?service=pickup | reservation | waitlist starts that flow (only for a fresh visit).
+useEffect(() => {
+  if (!isCounterScan) return;
+  let svc = '';
+  try { svc = new URLSearchParams(window.location.search).get('service') || ''; } catch { svc = ''; }
+  const mode = { pickup: 'pickup', reservation: 'reservation', waitlist: 'dine-in' }[svc];
+  if (!mode) return;
+  // Wait a moment so an existing waitlist / pickup entry for this phone can be restored first; only then apply the shortcut.
+  const timer = setTimeout(() => {
+    if (registrationStep === 'mode' && counterMode === null) { setCounterMode(mode); setRegistrationStep('register'); }
+  }, 900);
+  return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isCounterScan, tenantId]);
+
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   setSessionBlocked(false);

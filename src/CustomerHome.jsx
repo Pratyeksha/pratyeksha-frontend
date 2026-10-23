@@ -4,7 +4,7 @@ import {
   Coffee, UtensilsCrossed, Search,  ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
   Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check, ArrowUp, ArrowUpDown, History, Phone, WifiOff, Leaf, Star,
-} from 'lucide-react';
+  CalendarClock, Armchair }  from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
@@ -46,7 +46,10 @@ const L = {
     offlineCached: "Couldn't refresh — showing your last saved list", offline: "You're offline", directions: 'Directions', openMenu: 'Open menu', call: 'Call',
     loadFail: 'Unable to load restaurants.', locDenied: 'Allow location access to sort by distance', locTimeout: 'Could not get your location in time — try again',
     locNA: 'Location is not available on this device', locBusy: 'Location unavailable right now', finding: 'Finding you…', inArea: 'in',
-    featured: 'Featured', isNew: 'New', featuredRail: 'Featured places', statOffers: 'live offers', statPickup: 'offer pickup', statReserve: 'take reservations',
+    featured: 'Featured', isNew: 'New',
+    reserveNow: 'Reserve a table', joinWaitlist: 'Join waitlist', orderPickup: 'Order pickup', share: 'Share', copy: 'Copy', googleMaps: 'Google Maps',
+    loadingMap: 'Loading map', noLocation: 'Location not added yet', surprise: 'Surprise me', backToTop: 'Back to top', addrCopied: 'Address copied', copyNA: 'Copy not available',
+    nearLandmark: 'Near', validTill: 'Valid till', minBill: 'Min bill', useCode: 'Code', straightLine: 'in a straight line', away: 'away', featuredRail: 'Featured places', statOffers: 'live offers', statPickup: 'offer pickup', statReserve: 'take reservations',
     howTitle: 'How it works', how1t: 'Find', how1: 'Browse cafés & restaurants near you', how2t: 'Order', how2: 'Scan the table QR to order or reserve — no app to install',
     how3t: 'Enjoy', how3: 'Track your order and ask for the bill from your phone', hide: 'Hide', shareView: 'Share this list', linkCopied: 'Link copied',
     ownerTitle: 'Own a café or restaurant?', ownerBody: 'Get your own QR menu, table ordering, reservations and live offers — listed here for every guest.', ownerBtn: 'Get listed',
@@ -66,7 +69,10 @@ const L = {
     offlineCached: 'रिफ्रेश झाले नाही — शेवटची जतन केलेली यादी दाखवत आहे', offline: 'तुम्ही ऑफलाइन आहात', directions: 'दिशा', openMenu: 'मेनू उघडा', call: 'कॉल',
     loadFail: 'रेस्टॉरंट लोड करता आले नाहीत.', locDenied: 'अंतरानुसार क्रमवारीसाठी लोकेशनची परवानगी द्या', locTimeout: 'लोकेशन वेळेत मिळाले नाही — पुन्हा प्रयत्न करा',
     locNA: 'या डिव्हाइसवर लोकेशन उपलब्ध नाही', locBusy: 'लोकेशन सध्या उपलब्ध नाही', finding: 'तुमचे लोकेशन शोधत आहे…', inArea: 'येथे',
-    featured: 'विशेष', isNew: 'नवीन', featuredRail: 'विशेष ठिकाणे', statOffers: 'चालू ऑफर्स', statPickup: 'पिकअप देतात', statReserve: 'आरक्षण घेतात',
+    featured: 'विशेष', isNew: 'नवीन',
+    reserveNow: 'टेबल आरक्षित करा', joinWaitlist: 'प्रतीक्षा यादीत सामील व्हा', orderPickup: 'पिकअप ऑर्डर करा', share: 'शेअर करा', copy: 'कॉपी', googleMaps: 'गुगल मॅप्स',
+    loadingMap: 'नकाशा लोड होत आहे', noLocation: 'स्थान अजून जोडलेले नाही', surprise: 'काहीतरी नवीन सुचवा', backToTop: 'वर जा', addrCopied: 'पत्ता कॉपी केला', copyNA: 'कॉपी उपलब्ध नाही',
+    nearLandmark: 'जवळ', validTill: 'वैध', minBill: 'किमान बिल', useCode: 'कोड', straightLine: 'सरळ रेषेत', away: 'दूर', featuredRail: 'विशेष ठिकाणे', statOffers: 'चालू ऑफर्स', statPickup: 'पिकअप देतात', statReserve: 'आरक्षण घेतात',
     howTitle: 'हे कसे चालते', how1t: 'शोधा', how1: 'तुमच्या जवळची कॅफे आणि रेस्टॉरंट्स पाहा', how2t: 'ऑर्डर करा', how2: 'टेबलचा QR स्कॅन करून ऑर्डर किंवा आरक्षण करा — अ‍ॅप नको',
     how3t: 'आनंद घ्या', how3: 'ऑर्डर ट्रॅक करा आणि फोनवरूनच बिल मागवा', hide: 'लपवा', shareView: 'ही यादी शेअर करा', linkCopied: 'लिंक कॉपी झाली',
     ownerTitle: 'तुमचे कॅफे किंवा रेस्टॉरंट आहे का?', ownerBody: 'स्वतःचा QR मेनू, टेबल ऑर्डरिंग, आरक्षण आणि लाइव्ह ऑफर्स मिळवा — प्रत्येक पाहुण्यासाठी येथे सूचीबद्ध.', ownerBtn: 'सूचीत या',
@@ -113,6 +119,16 @@ const offerValue = (o) => {
   if (o?.type === 'fixed_off') return Number.isFinite(v) ? `₹${v} OFF` : 'OFFER';
   if (o?.type === 'free_item') return `FREE ${o.freeItem || 'ITEM'}`;
   return 'HAPPY HOUR';
+};
+/* "Valid till 30 Oct - Min bill 500 - Code SAVE10": what a diner needs to know before walking in. */
+const offerTerms = (o, tr) => {
+  const bits = [];
+  const d = o?.expiresAt ? new Date(o.expiresAt) : null;
+  if (d && !Number.isNaN(d.getTime())) bits.push(`${tr.validTill} ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}`);
+  const mb = Number(o?.minOrder);
+  if (Number.isFinite(mb) && mb > 0) bits.push(`${tr.minBill} ${mb}`);
+  if (o?.code) bits.push(`${tr.useCode} ${String(o.code).toUpperCase()}`);
+  return bits.join(' \u00b7 ');
 };
 /* The most attractive live offer of an outlet (largest % off first) - shown as the card headline. */
 const offerRank = (o) => (o?.type === 'percent_off' ? Number(o.value) || 0 : o?.type === 'fixed_off' ? 1 : 0.5);
@@ -260,6 +276,8 @@ const fmtAgo = (ts, tr) => {
   return `${Math.round(h / 24)} ${tr.dayAgo}`;
 };
 
+/* The audit tool is internal: it only works in dev builds or when the site is built with VITE_ENABLE_LISTING_AUDIT=true. */
+const AUDIT_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_LISTING_AUDIT === 'true';
 /* Listing audit (open the page with ?audit=1): what is still missing on an outlet's public listing. Internal tool, English only. */
 const listingGaps = (t) => {
   const g = [];
@@ -541,7 +559,7 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
 };
 
 /* Map + navigate card for one outlet (used in the Map view and in the quick sheet). */
-function PlaceDetail({ t, pos, onOrder, tr }) {
+function PlaceDetail({ t, pos, onOrder, onService, tr }) {
   const [note, setNote] = useState('');
   const km = distanceKm(pos, t);
   const flashTimer = useRef(null);
@@ -552,14 +570,17 @@ function PlaceDetail({ t, pos, onOrder, tr }) {
     flashTimer.current = window.setTimeout(() => setNote(''), 2200);
   };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(`${t.name}${addressLine(t) ? ', ' + addressLine(t) : ''}`); flash('Address copied'); }
-    catch { flash('Copy not available'); }
+    try { await navigator.clipboard.writeText(`${t.name}${addressLine(t) ? ', ' + addressLine(t) : ''}`); flash(tr.addrCopied); }
+    catch { flash(tr.copyNA); }
   };
   const share = async () => {
-    const data = { title: t.name, text: `${t.name}${addressLine(t) ? ' — ' + addressLine(t) : ''}`, url: openMapUrl(t) };
+    // Share the restaurant's page on this platform (so a listing spreads through the app), with the map link in the text.
+    const pageUrl = `${window.location.origin}/${encodeURIComponent(t.tenantId)}?entry=home`;
+    const mapLine = hasPlace(t) ? `\n${openMapUrl(t)}` : '';
+    const data = { title: t.name, text: `${t.name}${addressLine(t) ? ' - ' + addressLine(t) : ''}${mapLine}`, url: pageUrl };
     try {
       if (navigator.share) { await navigator.share(data); track(t.tenantId, 'share'); }
-      else { await navigator.clipboard.writeText(`${data.text}\n${data.url}`); flash('Link copied'); track(t.tenantId, 'share'); }
+      else { await navigator.clipboard.writeText(`${data.text}\n${data.url}`); flash(tr.linkCopied); track(t.tenantId, 'share'); }
     } catch { /* cancelled */ }
   };
   const placeable = hasPlace(t);
@@ -569,12 +590,12 @@ function PlaceDetail({ t, pos, onOrder, tr }) {
     <div className="pxh-detail" style={{ border: '1px solid rgba(211,191,162,.18)', borderRadius: 22, overflow: 'hidden', background: 'linear-gradient(160deg,#181818,#0f0f0f)' }}>
       <div style={{ position: 'relative', height: 'clamp(210px,38vw,300px)', background: 'linear-gradient(145deg,#1b1b1b,#121212)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'rgba(211,191,162,.45)', fontSize: 11 }}>
-          <MapPin size={26} />{placeable ? 'Loading map…' : 'Location not added yet'}
+          <MapPin size={26} />{placeable ? tr.loadingMap : tr.noLocation}
         </div>
         {placeable && (
           <iframe key={t.tenantId} title={`Map of ${t.name}`} src={embedUrl(t)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, filter: 'saturate(.85) contrast(1.02)' }} />
         )}
-        {km != null && <span style={{ position: 'absolute', left: 12, top: 12, padding: '5px 10px', borderRadius: 10, background: 'rgba(12,12,12,.82)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 900, backdropFilter: 'blur(6px)' }}>{fmtKm(km)} away</span>}
+        {km != null && <span style={{ position: 'absolute', left: 12, top: 12, padding: '5px 10px', borderRadius: 10, background: 'rgba(12,12,12,.82)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 900, backdropFilter: 'blur(6px)' }}>{fmtKm(km)} {tr.away}</span>}
       </div>
       <div style={{ padding: '16px 16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -587,7 +608,7 @@ function PlaceDetail({ t, pos, onOrder, tr }) {
         {(addressLine(t) || t.address?.landmark) && (
           <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55, color: 'rgba(255,255,255,.62)' }}>
             {addressLine(t)}
-            {t.address?.landmark && <div style={{ marginTop: 3, color: 'rgba(211,191,162,.7)' }}>Near {t.address.landmark}</div>}
+            {t.address?.landmark && <div style={{ marginTop: 3, color: 'rgba(211,191,162,.7)' }}>{tr.nearLandmark} {t.address.landmark}</div>}
           </div>
         )}
         {t.hours && (() => {
@@ -610,11 +631,20 @@ function PlaceDetail({ t, pos, onOrder, tr }) {
           {onOrder && <button type="button" className="pxh-btn" onClick={() => onOrder(t)} style={{ flex: '1 1 110px' }}>{tr.openMenu} <ChevronRight size={14} /></button>}
           {callHref && <a className="pxh-btn" href={callHref} onClick={() => track(t.tenantId, 'call')} style={{ flex: '1 1 90px' }}><Phone size={14} /> {tr.call}</a>}
         </div>
+        {onService && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 9 }}>
+            {[['reservation', CalendarClock, tr.reserveNow], ['waitlist', Armchair, tr.joinWaitlist], ['pickup', ShoppingBag, tr.orderPickup]]
+              .filter(([id]) => (t.config?.customerFeatures || {})[id] !== false)
+              .map(([id, Icon, label]) => (
+                <button key={id} type="button" className="pxh-btn" onClick={() => onService(t, id)} style={{ flex: '1 1 130px' }}><Icon size={14} /> {label}</button>
+              ))}
+          </div>
+        )}
         {placeable && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 9 }}>
-            <a className="pxh-btn" href={openMapUrl(t)} target="_blank" rel="noopener noreferrer" onClick={() => track(t.tenantId, 'directions')} style={{ padding: '8px 12px', fontSize: 11 }}><ExternalLink size={12} /> Google Maps</a>
-            <button type="button" className="pxh-btn" onClick={copy} style={{ padding: '8px 12px', fontSize: 11 }}><Copy size={12} /> Copy</button>
-            <button type="button" className="pxh-btn" onClick={share} style={{ padding: '8px 12px', fontSize: 11 }}><Share2 size={12} /> Share</button>
+            <a className="pxh-btn" href={openMapUrl(t)} target="_blank" rel="noopener noreferrer" onClick={() => track(t.tenantId, 'directions')} style={{ padding: '8px 12px', fontSize: 11 }}><ExternalLink size={12} /> {tr.googleMaps}</a>
+            <button type="button" className="pxh-btn" onClick={copy} style={{ padding: '8px 12px', fontSize: 11 }}><Copy size={12} /> {tr.copy}</button>
+            <button type="button" className="pxh-btn" onClick={share} style={{ padding: '8px 12px', fontSize: 11 }}><Share2 size={12} /> {tr.share}</button>
             {note && <span role="status" style={{ alignSelf: 'center', fontSize: 11, color: GOLD, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={12} />{note}</span>}
           </div>
         )}
@@ -644,7 +674,7 @@ export default function CustomerHome() {
     // ?notrack=1 (staff / owners checking their own listing) stops this browser from counting; ?notrack=0 turns counting back on. Audit mode never counts.
     try { if (qp.get('notrack') === '1') localStorage.setItem('px_notrack', '1'); else if (qp.get('notrack') === '0') localStorage.removeItem('px_notrack'); } catch { /* ignore */ }
     let muted = false; try { muted = localStorage.getItem('px_notrack') === '1'; } catch { /* ignore */ }
-    setTrackingOff(muted || qp.get('audit') === '1');
+    setTrackingOff(muted || (AUDIT_ENABLED && qp.get('audit') === '1'));
     const sf = urlView ? {} : readJson(FILTERS_KEY, {});
     const type = urlView ? qp.get('type') : sf?.filter;
     const svc = urlView ? qp.get('service') : sf?.service;
@@ -658,7 +688,7 @@ export default function CustomerHome() {
       vegOnly: urlView ? qp.get('veg') === '1' : sf?.vegOnly === true,
       openOnly: urlView ? qp.get('open') === '1' : sf?.openOnly === true,
       query: urlView ? String(qp.get('q') || '').slice(0, 60) : '',
-      audit: qp.get('audit') === '1',
+      audit: AUDIT_ENABLED && qp.get('audit') === '1',
       area: urlView ? String(qp.get('area') || 'all').trim().toLowerCase().slice(0, 60) || 'all' : storedArea,
     };
   });
@@ -874,7 +904,7 @@ export default function CustomerHome() {
     }
   }, [location.search, tenants]);
 
-  const openTenant = (tenant, src = 'list') => {
+  const openTenant = (tenant, src = 'list', service = null) => {
     // Directory selection is not a QR/table scan, so no table number is attached.
     if (!tenant?.tenantId) return;
     // An open from the result list while a search is active is credited to the search (with the phrase), and the search itself is sent first.
@@ -886,7 +916,8 @@ export default function CustomerHome() {
       writeList(RECENT_KEY, next);
       return next;
     });
-    navigate(`/${encodeURIComponent(tenant.tenantId)}?entry=home`);
+    const svc = ['reservation', 'waitlist', 'pickup'].includes(service) ? `&service=${service}` : '';
+    navigate(`/${encodeURIComponent(tenant.tenantId)}?entry=home${svc}`);
   };
 
   const toggleFav = (id) => {
@@ -914,10 +945,12 @@ export default function CustomerHome() {
       if (area !== 'all' && areaOf(t).toLowerCase() !== area) return false;
       return !q || !!matchWhy(t, q, menuLookup);
     });
-    if (nearMe && pos) list.sort((a, b) => (distanceKm(pos, a) ?? 1e9) - (distanceKm(pos, b) ?? 1e9));
-    else if (sort === 'az') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-    else if (sort === 'offers') list.sort((a, b) => (b.activeOffers?.length || 0) - (a.activeOffers?.length || 0));
-    else if (sort === 'saved') list.sort((a, b) => Number(favs.includes(b.tenantId)) - Number(favs.includes(a.tenantId)));
+    // With Near me on, distance is the tie-breaker for every sort, and the sole order for "Recommended".
+    const dist = (t) => (nearMe && pos ? (distanceKm(pos, t) ?? 1e9) : 0);
+    if (sort === 'az') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    else if (sort === 'offers') list.sort((a, b) => ((b.activeOffers?.length || 0) - (a.activeOffers?.length || 0)) || (dist(a) - dist(b)));
+    else if (sort === 'saved') list.sort((a, b) => (Number(favs.includes(b.tenantId)) - Number(favs.includes(a.tenantId))) || (dist(a) - dist(b)));
+    else if (nearMe && pos) list.sort((a, b) => dist(a) - dist(b));
     else {
       // recommended: featured placements first, then outlets that are open (or have no hours on file) before ones known to be closed
       const closedRank = (t) => (openStatus(t.hours, minuteKey * 60000)?.state === 'closed' ? 1 : 0);
@@ -1229,7 +1262,7 @@ export default function CustomerHome() {
                 </div>
               )}
             </div>
-            <button type="button" onClick={surprise} disabled={!filtered.length} aria-label="Surprise me" title="Surprise me" style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, opacity: filtered.length ? 1 : .4 }}><Shuffle size={18} color={GOLD} /></button>
+            <button type="button" onClick={surprise} disabled={!filtered.length} aria-label={tr.surprise} title={tr.surprise} style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, opacity: filtered.length ? 1 : .4 }}><Shuffle size={18} color={GOLD} /></button>
           </div>
         </section>
 
@@ -1337,6 +1370,7 @@ export default function CustomerHome() {
                     : <Avatar t={offer._tenant} size={38} radius={11} />}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: GOLD, letterSpacing: .3 }}>{offerValue(offer)}</div>
+                    {offerTerms(offer, tr) && <div style={{ marginTop: 2, fontSize: 9.5, color: 'rgba(255,255,255,.5)', lineHeight: 1.35 }}>{offerTerms(offer, tr)}</div>}
                     <div style={{ marginTop: 2, fontSize: 11, color: 'rgba(255,255,255,.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer._tenant.name}</div>
                   </div>
                   <ChevronRight size={14} color={GOLD} />
@@ -1371,7 +1405,7 @@ export default function CustomerHome() {
               </div>
               <label className="pxh-sort" title={tr.sort}>
                 <ArrowUpDown size={12} />
-                <select aria-label={tr.sort} value={nearMe ? 'recommended' : sort} disabled={nearMe} onChange={(e) => chooseSort(e.target.value)}>
+                <select aria-label={tr.sort} value={sort} onChange={(e) => chooseSort(e.target.value)}>
                   <option value="recommended">{tr.sortRec}</option>
                   <option value="az">{tr.sortAz}</option>
                   <option value="offers">{tr.sortOffers}</option>
@@ -1424,7 +1458,7 @@ export default function CustomerHome() {
                     );
                   })}
                 </div>
-                <div style={{ order: 1 }}><PlaceDetail key={mapTenant.tenantId} t={mapTenant} pos={pos} onOrder={(x) => openTenant(x, 'map')} tr={tr} /></div>
+                <div style={{ order: 1 }}><PlaceDetail key={mapTenant.tenantId} t={mapTenant} pos={pos} onOrder={(x) => openTenant(x, 'map')} onService={(x, id) => openTenant(x, 'map', id)} tr={tr} /></div>
               </div>
             ) : (
             <>
@@ -1454,7 +1488,12 @@ export default function CustomerHome() {
                         {st && <div className={`pxh-status ${st.tone}`}><i /><span>{st.text}</span></div>}
                         {best && <div style={{ marginTop: 8 }}><span className="pxh-offerpill"><Tag size={10} /> {offerValue(best)}{offers > 1 ? ` +${offers - 1}` : ''}</span></div>}
                         <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 9, minHeight: 24, paddingRight: hasPlace(tenant) ? 36 : 0 }}>
-                          {SERVICES.map(({ id, label, icon: Icon }) => features[id] !== false && <span key={id} title={label} style={{ display: 'flex', color: 'rgba(211,191,162,.65)' }}><Icon size={13} /></span>)}
+                          {SERVICES.map(({ id, label, icon: Icon }) => features[id] !== false && (
+                            <span key={id} role="button" tabIndex={0} title={tr[id] || label} aria-label={`${tr[id] || label} - ${tenant.name}`}
+                              onClick={(e) => { e.stopPropagation(); openTenant(tenant, 'list', id); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTenant(tenant, 'list', id); } }}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(211,191,162,.85)', padding: 6, margin: -6, borderRadius: 8, cursor: 'pointer' }}><Icon size={14} /></span>
+                          ))}
                           <span style={{ flex: 1 }} />
                         </div>
                         {init.audit && (
@@ -1508,7 +1547,7 @@ export default function CustomerHome() {
           <motion.div role="dialog" aria-modal="true" aria-label={`Map of ${sheetTenant.name}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSheetTenant(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(5,5,5,.82)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
             <motion.div initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} ref={sheetRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} style={{ outline: 'none', width: 'min(560px,100%)', maxHeight: '92dvh', overflowY: 'auto', borderRadius: '24px 24px 0 0', position: 'relative' }}>
               <button type="button" onClick={() => setSheetTenant(null)} aria-label="Close" style={{ ...iconBtn, position: 'absolute', top: 12, right: 12, zIndex: 3, width: 34, height: 34, background: 'rgba(12,12,12,.8)' }}><X size={16} color={GOLD} /></button>
-              <PlaceDetail t={sheetTenant} pos={pos} tr={tr} onOrder={(t) => { setSheetTenant(null); openTenant(t, 'map'); }} />
+              <PlaceDetail t={sheetTenant} pos={pos} tr={tr} onOrder={(t) => { setSheetTenant(null); openTenant(t, 'map'); }} onService={(t, id) => { setSheetTenant(null); openTenant(t, 'map', id); }} />
             </motion.div>
           </motion.div>
         )}
@@ -1541,6 +1580,7 @@ export default function CustomerHome() {
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 900, color: GOLD }}>{value}</div>
                             <div style={{ fontSize: 11, marginTop: 3, color: 'rgba(255,255,255,.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[offer.title, tenant.name || 'Restaurant'].filter(Boolean).join(' · ')}</div>
+                            {offerTerms(offer, tr) && <div style={{ fontSize: 10, marginTop: 3, color: 'rgba(255,255,255,.45)', lineHeight: 1.35 }}>{offerTerms(offer, tr)}</div>}
                           </div>
                           <ChevronRight size={15} color={GOLD} />
                         </button>
@@ -1556,7 +1596,7 @@ export default function CustomerHome() {
 
       {scanning && <QrScanner onClose={() => setScanning(false)} onPath={(path) => { setScanning(false); navigate(path); }} />}
       {showTop && (
-        <button type="button" className="pxh-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top"><ArrowUp size={18} /></button>
+        <button type="button" className="pxh-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label={tr.backToTop}><ArrowUp size={18} /></button>
       )}
     </main>
   );
