@@ -1594,7 +1594,7 @@ export default function CustomerHome() {
         )}
       </AnimatePresence>
 
-      {scanning && <QrScanner onClose={() => setScanning(false)} onPath={(path) => { setScanning(false); navigate(path); }} />}
+      {scanning && <QrScanner onClose={() => setScanning(false)} onPath={(path) => { setScanning(false); try { if (/[?&]table=/.test(path)) sessionStorage.setItem('pratyeksha_fresh_scan', '1'); } catch { /* ignore */ } navigate(path); }} />}
       {showTop && (
         <button type="button" className="pxh-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label={tr.backToTop}><ArrowUp size={18} /></button>
       )}

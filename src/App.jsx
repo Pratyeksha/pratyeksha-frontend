@@ -19,6 +19,9 @@ import {
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
+import UpiPay from './UpiPay.jsx';
+import { decideEntry } from './sessionPolicy.js';
+import SessionEndedScreen from './SessionEnded.jsx';
 const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
@@ -52,7 +55,21 @@ const getTableSig = () => {
     return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').sig || '';
   } catch { return ''; }
 };
-const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate)(\/|$|\?)/;
+// ── TABLE SESSION (client half) ──────────────────────────────────────────────
+// A QR scan (a fresh page load) starts a server session. Generating the bill ends it. Refresh / back / forward after that
+// can never reopen the menu: only scanning the QR again starts a new session.
+const TSESSION_KEY = 'pratyeksha_tsession';
+let __memTSession = null;
+const readTSession = () => {
+  try { const v = JSON.parse(sessionStorage.getItem(TSESSION_KEY) || 'null'); if (v) return v; } catch { /* storage blocked */ }
+  return __memTSession;
+};
+const writeTSession = (o) => { __memTSession = o; try { if (o) sessionStorage.setItem(TSESSION_KEY, JSON.stringify(o)); else sessionStorage.removeItem(TSESSION_KEY); } catch { /* memory only */ } };
+const BILL_KEY = (t, n) => `pratyeksha_last_bill_${t}_${n}`;
+const readLastBill = (t, n) => { try { return JSON.parse(localStorage.getItem(BILL_KEY(t, n)) || 'null'); } catch { return null; } };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const __sessionBooted = new Set(); // one bootstrap per tenant+table per page load (a re-render must never start a second session)
+const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate|table-session|payments)(\/|$|\?)/;
 if (typeof window !== 'undefined' && !window.__pxTableGuard) {
   window.__pxTableGuard = true;
   axios.interceptors.request.use((config) => {
@@ -63,16 +80,20 @@ if (typeof window !== 'undefined' && !window.__pxTableGuard) {
         config.headers['x-device-key'] = getDeviceKey();
         const sig = getTableSig();
         if (sig) config.headers['x-table-sig'] = sig;
+        if (!config.px_noSession) { const ts = readTSession(); if (ts && ts.token) config.headers['x-session-token'] = ts.token; }
       }
     } catch { /* never block a request because of this */ }
     return config;
   });
   axios.interceptors.response.use((r) => r, (err) => {
-    // Another guest owns this table → tell the app so it switches to view-only (works for every table endpoint).
     try {
       const d = err?.response?.data;
-      if (err?.response?.status === 403 && d && String(err?.config?.method || '').toLowerCase() !== 'get' && (d.code === 'TABLE_LOCKED' || d.code === 'TABLE_QR_INVALID')) {
-        window.dispatchEvent(new CustomEvent('pratyeksha:table-locked', { detail: { code: d.code, message: d.error } }));
+      const cfg = err?.config || {};
+      const isRead = String(cfg.method || '').toLowerCase() === 'get';
+      if (err?.response?.status === 403 && d && !isRead && !cfg.px_silent) {
+        // Another guest owns this table → view-only. Session over → the menu closes. Edited QR → blocked.
+        if (d.code === 'TABLE_LOCKED' || d.code === 'TABLE_QR_INVALID') window.dispatchEvent(new CustomEvent('pratyeksha:table-locked', { detail: { code: d.code, message: d.error } }));
+        if (d.code === 'SESSION_ENDED' || d.code === 'SESSION_REQUIRED') window.dispatchEvent(new CustomEvent('pratyeksha:session-ended', { detail: { code: d.code } }));
       }
     } catch { /* ignore */ }
     return Promise.reject(err);
@@ -1894,11 +1915,99 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [isCounterScan, tenantId]);
 
+// ── Session lifecycle: start on a fresh scan, close at billing, never reopen on refresh / back / forward ──
+  const [sessionEnded, setSessionEnded] = useState(null);       // null | 'bill' | 'expired'
+  const [sessionClosedLocal, setSessionClosedLocal] = useState(false);
+  const [lastBill, setLastBill] = useState(null);
+  const [payInfo, setPayInfo] = useState(null);
+  useEffect(() => {
+    if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
+    const key = `${tenantId}|${tableNumber}`;
+    if (__sessionBooted.has(key)) return;
+    __sessionBooted.add(key);
+    (async () => {
+      let nav = 'navigate';
+      try { nav = performance.getEntriesByType('navigation')[0]?.type || 'navigate'; } catch { /* old browser */ }
+      let freshFlag = false;
+      try { if (sessionStorage.getItem('pratyeksha_fresh_scan') === '1') { freshFlag = true; sessionStorage.removeItem('pratyeksha_fresh_scan'); } } catch { /* ignore */ }
+      const stored = readTSession();
+      const decision = decideEntry({ navType: nav, freshFlag, stored, tenantId, tableNumber });
+      if (decision !== 'start') {
+        // refresh / back / forward: continue the existing session or stay closed. Never start a new one here.
+        setLastBill(readLastBill(tenantId, tableNumber));
+        if (decision === 'ended-bill') { setSessionEnded('bill'); return; }
+        if (decision === 'ended-expired') { setSessionEnded('expired'); return; }
+        try { await axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken }, { px_silent: true }); }
+        catch (e) { if (e?.response?.status === 403 && e.response.data?.code === 'SESSION_ENDED') setSessionEnded('bill'); }
+        return;
+      }
+      // A fresh scan = a new visit.
+      try { localStorage.removeItem(BILL_KEY(tenantId, tableNumber)); } catch { /* ignore */ }
+      setLastBill(null); setSessionClosedLocal(false); setSessionEnded(null);
+      writeTSession(null);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const r = await axios.post(`${BASE_URL}/table-session/start`, { tenantId, tableNumber }, { px_silent: true, px_noSession: true });
+          if (r.data?.token) { writeTSession({ tenantId, tableNumber, token: r.data.token }); window.__pxStartFailed = false; return; }
+        } catch (e) {
+          if (e?.response?.status === 403 && e.response.data?.code === 'TABLE_QR_INVALID') { setSessionBlocked(true); return; }
+          if (e?.response?.status && e.response.status < 500) break;       // a definite refusal: do not hammer
+        }
+        await sleep(1200 * (attempt + 1));
+      }
+      window.__pxStartFailed = true; // offline at scan time: ordering retries the start once (see the session-ended listener)
+    })();
+  }, [tenantId, tableNumber, isCounterScan, sessionToken]);
+
+  // Coming back to the page (bfcache restore, switching back from a UPI app): make sure the session is still alive.
+  useEffect(() => {
+    if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
+    const recheck = () => {
+      const ts = readTSession();
+      if (!ts || !ts.token || ts.tenantId !== tenantId) return;
+      if (ts.closed) { setSessionClosedLocal(true); return; }
+      axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken }, { px_silent: true })
+        .catch((e) => { if (e?.response?.status === 403 && e.response.data?.code === 'SESSION_ENDED') { writeTSession({ ...ts, closed: true }); setSessionClosedLocal(true); } });
+    };
+    const onShow = (e) => { if (e.persisted) recheck(); };
+    const onVis = () => { if (!document.hidden) recheck(); };
+    window.addEventListener('pageshow', onShow);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('pageshow', onShow); document.removeEventListener('visibilitychange', onVis); };
+  }, [tenantId, tableNumber, isCounterScan, sessionToken]);
+
+  // Once the bill has been generated, the moment the bill screen is closed the menu is gone (no way back to it).
+  useEffect(() => { if (sessionClosedLocal && !isBillOpen) setSessionEnded('bill'); }, [sessionClosedLocal, isBillOpen]);
+
+  // The server refused an order because the session is over (or never started).
+  useEffect(() => {
+    const onEnded = async (e) => {
+      if (window.__pxStartFailed && e?.detail?.code === 'SESSION_REQUIRED' && tenantId && tableNumber) {
+        window.__pxStartFailed = false;
+        try {
+          const r = await axios.post(`${BASE_URL}/table-session/start`, { tenantId, tableNumber }, { px_silent: true, px_noSession: true });
+          if (r.data?.token) { writeTSession({ tenantId, tableNumber, token: r.data.token }); triggerAlert(language === 'mr' ? 'कृपया पुन्हा प्रयत्न करा.' : 'Connection restored — please place your order again.', 'error'); return; }
+        } catch { /* fall through */ }
+      }
+      setSessionEnded((prev) => prev || (e?.detail?.code === 'SESSION_ENDED' ? 'bill' : 'expired'));
+    };
+    window.addEventListener('pratyeksha:session-ended', onEnded);
+    return () => window.removeEventListener('pratyeksha:session-ended', onEnded);
+  });
+
+  // The restaurant's UPI ID / payee name (public; bank details never leave the server).
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    axios.get(`${BASE_URL}/payment-info/${encodeURIComponent(tenantId)}`).then((r) => { if (alive) setPayInfo(r.data || null); }).catch(() => { if (alive) setPayInfo(null); });
+    return () => { alive = false; };
+  }, [tenantId]);
+
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   setSessionBlocked(false);
   let stale = false; // a slow answer for the previous table/outlet must not blank the page the guest has since moved to
-  axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken })
+  axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken }, { px_noSession: true, px_silent: true })
     .then(r => {
       if (!stale && r.data && r.data.valid === false) setSessionBlocked(true);
     })
@@ -3253,6 +3362,46 @@ const finalBillItems = useMemo(() => {
   }, [placedOrders]);
 
 
+// The amount a guest pays: the SAME formula as the invoice PDF and the server (items ex-tax, CGST + SGST added, 2-decimal rounding).
+const payableAmount = useMemo(() => {
+  const cgstPct = restaurantData?.config?.cgstPercentage ?? 2.5;
+  const sgstPct = restaurantData?.config?.sgstPercentage ?? 2.5;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const subtotal = finalBillItems.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+  const cgst = r2(r2(subtotal) * (cgstPct / 100));
+  const sgst = r2(r2(subtotal) * (sgstPct / 100));
+  return r2(r2(subtotal) + cgst + sgst);
+}, [finalBillItems, restaurantData]);
+
+// Bill generated ⇒ the table session ends (server + this browser). Keeps a small snapshot so an unpaid bill can still be paid
+// after a reload, without ever reopening the menu.
+const markBillGenerated = () => {
+  if (isCounterScan || !tableNumber || tableNumber === 'Counter') return;
+  const snap = {
+    total: payableAmount, items: finalBillItems.length, name: customerInfo.name, createdAt: Date.now(), claimed: false,
+    upi: payInfo && payInfo.enabled ? { upiId: payInfo.upiId, payeeName: payInfo.payeeName } : null,
+    restaurant: restaurantData?.name || '',
+  };
+  try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(snap)); } catch { /* storage blocked */ }
+  setLastBill(snap);
+  const ts = readTSession();
+  writeTSession({ ...(ts || { tenantId, tableNumber }), closed: true });   // closed in this browser even if the network call below fails
+  setSessionClosedLocal(true);
+  (async () => {
+    for (let i = 0; i < 3; i++) {
+      try { await axios.post(`${BASE_URL}/table-session/close`, { tenantId, tableNumber }, { px_silent: true }); return; }
+      catch (e) { const st = e?.response?.status; if (st && st < 500) return; await sleep(1500 * (i + 1)); }
+    }
+  })();
+};
+const onUpiClaimed = () => {
+  setLastBill((prev) => {
+    const n = { ...(prev || {}), claimed: true };
+    try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(n)); } catch { /* ignore */ }
+    return n;
+  });
+};
+
 const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
   const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
@@ -3592,6 +3741,7 @@ const requestFinalBill = async () => {
       localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
       localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     } catch { /* storage unavailable */ }
+    markBillGenerated();
     setBillRequested(true);
     // placedOrders intentionally NOT cleared here — still needed for the bill summary display
     // They clear when modal closes (see isBillOpen X handler below)
@@ -3601,6 +3751,7 @@ const requestFinalBill = async () => {
       localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
       localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     } catch { /* storage unavailable */ }
+    markBillGenerated();
     setBillRequested(true);
   }
 };
@@ -5209,6 +5360,13 @@ if (phone.length === 10) {
 
 // ── LOADER ──
 if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू लोड होत आहे' : 'Preparing your menu'} />;
+
+if (sessionEnded && !isCounterScan) {
+  return (
+    <SessionEndedScreen language={language} reason={sessionEnded} restaurantName={restaurantData?.name || ''} lastBill={lastBill}
+      tenantId={tenantId} tableNumber={tableNumber} onClaimed={onUpiClaimed} />
+  );
+}
 
 if (sessionBlocked) {
   return (
@@ -7712,6 +7870,13 @@ if (sessionBlocked) {
     )}
   </div>
 </div>
+
+                   {/* PAY WITH UPI — opens the guest's UPI app with the exact bill amount */}
+                   <div style={{ width: '100%', padding: '0 10px', margin: '0 0 16px', boxSizing: 'border-box' }}>
+                     <UpiPay amount={payableAmount} payInfo={payInfo} note={`Bill T${tableNumber}`} language={language}
+                       tenantId={tenantId} tableNumber={tableNumber} guestName={customerInfo.name}
+                       claimed={!!lastBill?.claimed} onClaimed={onUpiClaimed} />
+                   </div>
 
                    {/* INTERACTIVE CONTROLS CONTAINER ROW */}
                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px' }}>

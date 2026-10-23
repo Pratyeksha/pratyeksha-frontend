@@ -3044,6 +3044,84 @@ const GrowthPage = () => {
    MODULE 12 — SETTINGS & REMOTE CONTROLS
    ════════════════════════════════════════════════════════════ */
 /* Where guests find this outlet on the home screen: area filter + Google Maps + directions. */
+const PaymentCard = ({ tenantId }) => {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ text: '', ok: true });
+  const [clearAcc, setClearAcc] = useState(false);
+  const UPI_RE = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/;
+  useEffect(() => {
+    let alive = true;
+    api.get(`/api/owner/payment/${tenantId}`)
+      .then(r => { if (alive) setForm({ ...r.data, accountNumber: '' }); })
+      .catch(() => { if (alive) setForm({ upiId: '', payeeName: '', bankName: '', accountHolder: '', accountNumberMasked: '', hasAccountNumber: false, ifsc: '', accountNumber: '' }); });
+    return () => { alive = false; };
+  }, [tenantId]);
+  if (!form) return null;
+  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setMsg({ text: '', ok: true }); };
+  const upi = String(form.upiId || '').trim();
+  const upiBad = upi && !UPI_RE.test(upi);
+  const save = async () => {
+    // same rules as the server, so mistakes are caught before they cost a customer a failed payment
+    if (upiBad) { setMsg({ text: 'UPI ID looks wrong. It should look like name@bank (for example shop@okhdfcbank).', ok: false }); return; }
+    if (upi && !String(form.payeeName || '').trim()) { setMsg({ text: 'Enter the name customers will see when they pay (your restaurant name).', ok: false }); return; }
+    const ifsc = String(form.ifsc || '').trim().toUpperCase();
+    if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) { setMsg({ text: 'IFSC code looks wrong. It is 11 characters, like HDFC0001234.', ok: false }); return; }
+    const acc = String(form.accountNumber || '').replace(/\s+/g, '');
+    if (acc && !/^\d{9,18}$/.test(acc)) { setMsg({ text: 'Account number must be 9 to 18 digits.', ok: false }); return; }
+    setSaving(true); setMsg({ text: '', ok: true });
+    try {
+      const r = await api.put(`/api/owner/payment/${tenantId}`, {
+        upiId: upi, payeeName: form.payeeName, bankName: form.bankName, accountHolder: form.accountHolder, ifsc, accountNumber: acc, clearAccountNumber: clearAcc,
+      });
+      setForm({ ...r.data, accountNumber: '' }); setClearAcc(false);
+      setMsg({ text: r.data.upiId ? 'Saved. Guests can now pay their bill through Google Pay, PhonePe, Paytm and other UPI apps.' : 'Saved. Add a UPI ID to let guests pay online.', ok: true });
+    } catch (e) { setMsg({ text: e?.response?.data?.error || 'Could not save payment details', ok: false }); }
+    finally { setSaving(false); }
+  };
+  return (
+    <Card>
+      <SectionHeading icon={Wallet} title="Online Payments (UPI) & Bank Details" />
+      <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.6, marginBottom: 14 }}>
+        With a UPI ID saved, the guest's bill shows Google Pay, PhonePe and Paytm buttons. Tapping one opens that app with your restaurant name and the exact bill amount filled in; the guest only enters their PIN.
+        Use your <b style={{ color: T.textMed }}>business / merchant UPI ID</b> (from your bank or payment app) — apps are more likely to decline payments to personal IDs for business amounts.
+        Staff are alerted when a guest taps “I've paid”, and still confirm the payment before settling the table.
+      </div>
+      <div className="pown-grid-2">
+        <Field label="UPI ID (VPA)">
+          <input value={form.upiId || ''} onChange={e => set('upiId', e.target.value.replace(/\s/g, ''))} placeholder="restaurant@okhdfcbank" autoCapitalize="none" autoCorrect="off" spellCheck={false} style={{ ...inputStyle, borderColor: upiBad ? '#c9806a' : inputStyle.border }} />
+          {upiBad && <div style={{ fontSize: 10.5, color: '#c9806a', marginTop: 4 }}>Format: name@bank</div>}
+        </Field>
+        <Field label="NAME SHOWN TO CUSTOMERS">
+          <input value={form.payeeName || ''} onChange={e => set('payeeName', e.target.value)} maxLength={60} placeholder="Your restaurant name" style={inputStyle} />
+        </Field>
+      </div>
+      <div style={{ height: 1, background: T.border, margin: '4px 0 14px' }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: T.textMed, letterSpacing: 0.4, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Lock size={12} /> BANK DETAILS (for your records — never shown to guests)</div>
+      <div className="pown-grid-2">
+        <Field label="ACCOUNT HOLDER NAME"><input value={form.accountHolder || ''} onChange={e => set('accountHolder', e.target.value)} maxLength={80} style={inputStyle} /></Field>
+        <Field label="BANK NAME"><input value={form.bankName || ''} onChange={e => set('bankName', e.target.value)} maxLength={80} style={inputStyle} /></Field>
+      </div>
+      <div className="pown-grid-2">
+        <Field label={form.hasAccountNumber ? `ACCOUNT NUMBER (saved: ${form.accountNumberMasked})` : 'ACCOUNT NUMBER'}>
+          <input value={form.accountNumber || ''} onChange={e => set('accountNumber', e.target.value.replace(/[^\d\s]/g, ''))} inputMode="numeric" autoComplete="off" maxLength={24}
+            placeholder={form.hasAccountNumber ? 'Leave empty to keep the saved number' : '9 to 18 digits'} style={inputStyle} />
+        </Field>
+        <Field label="IFSC CODE"><input value={form.ifsc || ''} onChange={e => set('ifsc', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={11} placeholder="HDFC0001234" autoCapitalize="characters" style={inputStyle} /></Field>
+      </div>
+      {form.hasAccountNumber && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: T.textLow, marginBottom: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={clearAcc} onChange={e => setClearAcc(e.target.checked)} /> Remove the saved account number
+        </label>
+      )}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving' : 'Save payment details'}</PrimaryBtn>
+        {msg.text && <span style={{ fontSize: 11.5, color: msg.ok ? T.textMed : '#c9806a', lineHeight: 1.5 }}>{msg.text}</span>}
+      </div>
+    </Card>
+  );
+};
+
 const LocationCard = ({ tenantId }) => {
   const [addr, setAddr] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -3177,6 +3255,8 @@ const SettingsPage = () => {
             </Card>
 
             <LocationCard tenantId={tenantId} />
+
+            <PaymentCard tenantId={tenantId} />
 
             <Card>
               <SectionHeading icon={Target} title="Revenue Targets" />

@@ -69,6 +69,7 @@ export const ALERT_TUNES = {
   expiry:        [[N.C5, 0, 0.6], [N.C5, 0.3, 0.6], [N.G5, 0.9, 1.2]],                        // expiring stock: tick-tick … tock
   aggregator:    [[N.E6, 0, 0.35], [N.C6, 0.2, 0.35], [N.E6, 0.4, 0.35], [N.C6, 0.6, 0.35], [N.E6, 0.8, 0.35], [N.C6, 1.0, 0.9]], // Swiggy/Zomato: urgent ring
   sessionExpired:[[N.A5, 0, 0.8], [N.F4, 0.45, 0.8], [N.A5, 0.9, 0.8], [N.F4, 1.35, 1.4]],   // aggregator session lost
+  payment:       [[N.E6, 0, 0.5], [N.G6, 0.15, 0.5], [N.C6, 0.3, 0.5], [N.E6, 0.45, 1.3]],                // guest says UPI paid: coin-like rising chime
   generic:       [[N.C6, 0, 1.0]],
 };
 

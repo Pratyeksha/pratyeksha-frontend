@@ -31,7 +31,7 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 , Eye,
   ShoppingCart, Copy,Flame ,
   PackageX, ShieldAlert, Wrench
-, ScanLine} from 'lucide-react';
+, ScanLine, IndianRupee} from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
 const asArr = (v) => (Array.isArray(v) ? v : []);
@@ -1021,6 +1021,18 @@ socket.on('new_waitlist_entry', (data) => {
   }
 });
 
+socket.on('upi_payment_claimed', (data) => {
+  // A guest tapped "I've paid" after paying through a UPI app. Staff must verify it in their UPI / bank app, then settle the table.
+  const amt = Number(data?.amount);
+  const amtText = Number.isFinite(amt) ? amt.toFixed(2).replace(/\.00$/, '') : '';
+  const tableText = String(data?.tableNumber || '').trim();
+  const who = String(data?.name || '').trim();
+  const sentence = `Table ${tableText} says a UPI payment of ${amtText} rupees is done. Please verify and settle.`;
+  callOut('payment', sentence, { repeat: 1 });
+  setCallAlerts(prev => [{ id: `up-${tableText}-${Date.now()}`, kind: 'payment', name: who || `Table ${tableText}`, table: tableText, amount: amtText, requestedAt: formatAlertTime(new Date()), sentence }, ...prev].slice(0, 8));
+  showNotif(`UPI payment claimed  Table ${tableText}  ${amtText}`, 'info');
+});
+
 socket.on('new_reservation', (data) => {
   fetchCounterQueue();
   const r = data?.reservation || data || {};
@@ -1127,7 +1139,7 @@ socket.on('aggregator_session_restored', (data) => {
         'new_order', 'staff_wiped_live', 'inventory_updated', 'low_stock_alert',
         'inventory_expiry_alert', 'ingredient_out_of_stock', 'new_waiter_request',
         'menu_updated', 'menu_bulk_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
-        'new_waitlist_entry', 'new_reservation', 'reservation_updated', 'waitlist_cancelled',
+        'new_waitlist_entry', 'new_reservation', 'upi_payment_claimed', 'reservation_updated', 'waitlist_cancelled',
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
         'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
         'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored'
@@ -4808,15 +4820,17 @@ const renderMonthHeatmap = () => {
               </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(211,191,162,0.12)', border: '1px solid rgba(211,191,162,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {a.kind === 'pickup' ? <ShoppingBag size={19} color="#d3bfa2" /> : <CalendarClock size={19} color="#d3bfa2" />}
+                  {a.kind === 'pickup' ? <ShoppingBag size={19} color="#d3bfa2" /> : a.kind === 'payment' ? <IndianRupee size={19} color="#d3bfa2" /> : <CalendarClock size={19} color="#d3bfa2" />}
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: 2, color: 'rgba(211,191,162,0.75)' }}>{a.kind === 'pickup' ? 'NEW PICKUP REQUEST' : 'NEW RESERVATION'}</div>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: 2, color: 'rgba(211,191,162,0.75)' }}>{a.kind === 'pickup' ? 'NEW PICKUP REQUEST' : a.kind === 'payment' ? 'UPI PAYMENT CLAIMED' : 'NEW RESERVATION'}</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f7f3eb', lineHeight: 1.2 }}>{a.name}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.78)' }}>
-                <span><b style={{ color: '#d3bfa2' }}>{a.kind === 'pickup' ? 'Pickup at' : 'Reserved for'}</b> {a.time}</span>
+                {a.kind === 'payment'
+                  ? <span><b style={{ color: '#d3bfa2' }}>Table {a.table}</b> · ₹{a.amount} · verify in your UPI app, then settle</span>
+                  : <span><b style={{ color: '#d3bfa2' }}>{a.kind === 'pickup' ? 'Pickup at' : 'Reserved for'}</b> {a.time}</span>}
                 {a.kind === 'reservation' && a.partySize ? <span><b style={{ color: '#d3bfa2' }}>Party</b> {a.partySize}</span> : null}
                 {a.phone ? <span><b style={{ color: '#d3bfa2' }}>Phone</b> {a.phone}</span> : null}
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>Received {a.requestedAt}</span>
