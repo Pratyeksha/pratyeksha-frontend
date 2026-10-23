@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import {
-  Coffee, UtensilsCrossed, Search, Bell, ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
+  Coffee, UtensilsCrossed, Search,  ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
   Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check, ArrowUp, ArrowUpDown, History, Phone, WifiOff, Leaf, Star,
 } from 'lucide-react';
@@ -652,7 +652,7 @@ export default function CustomerHome() {
     return {
       urlView,
       filter: ['all', 'cafe', 'restaurant'].includes(type) ? type : 'all',
-      service: ['pickup', 'reservation', 'waitlist'].includes(svc) ? svc : null,
+      service: null, // pickup / reserve / waitlist are common to every outlet, so there is no service filter any more
       favOnly: !urlView && sf?.favOnly === true,
       offersOnly: urlView ? qp.get('offers') === '1' : sf?.offersOnly === true,
       vegOnly: urlView ? qp.get('veg') === '1' : sf?.vegOnly === true,
@@ -1182,7 +1182,7 @@ export default function CustomerHome() {
 
         {notification && (
           <div style={{ marginTop: 14, padding: '11px 14px', border: '1px solid rgba(211,191,162,.18)', background: 'rgba(211,191,162,.06)', borderRadius: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <SpoonForkIcon size={16} color={GOLD} />
+            <img src="/notification-icon.png" alt="Pratyeksha" width={34} height={34} style={{ borderRadius: 10, flexShrink: 0, display: 'block' }} />
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,.78)', flex: 1 }}>{notification}</div>
             <button type="button" onClick={() => { dismissedNote.current = location.search; setNotification(null); }} aria-label="Dismiss" style={{ border: 0, background: 'transparent', color: GOLD, cursor: 'pointer', display: 'flex' }}><X size={15} /></button>
           </div>
@@ -1193,23 +1193,6 @@ export default function CustomerHome() {
           <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
             {greetingLine}<span style={{ color: GOLD }}>.</span>
           </h1>
-          {loading && (
-            <div className="pxh-stats" aria-hidden="true" style={{ alignItems: 'center', height: 15 }}>
-              <Sk w={64} h={11} r={6} /><Sk w={84} h={11} r={6} d={0.1} /><Sk w={96} h={11} r={6} d={0.2} />
-            </div>
-          )}
-          {!loading && tenants.length > 0 && (
-            <div className="pxh-stats" aria-label="Summary">
-              <span><b>{tenants.length}</b> {tenants.length === 1 ? tr.place : tr.places}</span>
-              {openCount > 0 && <span><b>{openCount}</b> {tr.statOpen}</span>}
-              {totalOffers > 0 && <span><b>{totalOffers}</b> {tr.statOffers}</span>}
-              {stats.pickup > 0 && <span><b>{stats.pickup}</b> {tr.statPickup}</span>}
-              {stats.reserve > 0 && <span><b>{stats.reserve}</b> {tr.statReserve}</span>}
-              <button type="button" className="pxh-refresh" onClick={refresh} disabled={refreshing} aria-label={tr.refresh} title={tr.refresh}>
-                <RotateCcw size={11} className={refreshing ? 'pxh-spin' : undefined} /> {refreshing ? tr.refreshing : updatedAt ? `${tr.updated} ${fmtAgo(updatedAt, tr)}` : tr.refresh}
-              </button>
-            </div>
-          )}
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>
@@ -1274,9 +1257,6 @@ export default function CustomerHome() {
           <button type="button" className={`pxh-chip${filter === 'all' && !service && !favOnly && !offersOnly && !vegOnly && !openOnly ? ' on' : ''}`} onClick={resetFilters}><LayoutGrid size={13} /> {tr.all}</button>
           <button type="button" className={`pxh-chip${filter === 'cafe' ? ' on' : ''}`} onClick={() => setFilter(filter === 'cafe' ? 'all' : 'cafe')}><Coffee size={13} /> {tr.cafe}</button>
           <button type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</button>
-          {SERVICES.map(({ id, label, icon: Icon }) => (
-            <button type="button" key={id} className={`pxh-chip${service === id ? ' on' : ''}`} onClick={() => setService(service === id ? null : id)}><Icon size={13} /> {tr[id] || label}</button>
-          ))}
           <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</button>
           {anyHours && <button type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</button>}
           {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</button>}
@@ -1352,7 +1332,9 @@ export default function CustomerHome() {
             <div className="pxh-rail">
               {offerCards.map((offer) => (
                 <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(offer._tenant, 'offers'); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
-                  <Avatar t={offer._tenant} size={38} radius={11} />
+                  {offer.imageUrl && /^https:\/\//i.test(offer.imageUrl)
+                    ? <img src={offer.imageUrl} alt="" loading="lazy" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, objectFit: 'cover', flexShrink: 0, display: 'block' }} />
+                    : <Avatar t={offer._tenant} size={38} radius={11} />}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: GOLD, letterSpacing: .3 }}>{offerValue(offer)}</div>
                     <div style={{ marginTop: 2, fontSize: 11, color: 'rgba(255,255,255,.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer._tenant.name}</div>

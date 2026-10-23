@@ -26,10 +26,68 @@ const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 // `new Notification()` throws "Illegal constructor" on Android Chrome (it only allows ServiceWorkerRegistration.showNotification).
 // Raw calls sat inside the same try as the API request, so a reservation that WAS saved still showed an error, and the
 // "table almost ready" socket handler threw before it could show its in-app alert. Never throws.
-const safeNotify = (title, options) => {
-  try { new Notification(title, options); return true; } catch { /* fall through to the service worker */ }
+// Every notification (push, in-app, local) uses the Pratyeksha logo on its brand background as the icon, the crossed
+// spoon & fork as the small badge (never the browser's bell) and a creative picture for that kind of event.
+// ── TABLE SECURITY (client half) ─────────────────────────────────────────────
+// Each phone has a random private key. The first phone that orders on a table "owns" it on the server; every other phone
+// that opens the same table can only browse the menu. The key is never shown or put in a URL.
+const DEVICE_KEY_NAME = 'pratyeksha_device_key';
+let __memDeviceKey = '';
+const getDeviceKey = () => {
+  const valid = (k) => typeof k === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(k);
+  try { const k = localStorage.getItem(DEVICE_KEY_NAME); if (valid(k)) return k; } catch { /* storage blocked */ }
+  try { const k = sessionStorage.getItem(DEVICE_KEY_NAME); if (valid(k)) return k; } catch { /* storage blocked */ }
+  if (valid(__memDeviceKey)) return __memDeviceKey;
+  const bytes = new Uint8Array(16);
+  try { crypto.getRandomValues(bytes); } catch { for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256); }
+  const k = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  __memDeviceKey = k;
+  try { localStorage.setItem(DEVICE_KEY_NAME, k); } catch { try { sessionStorage.setItem(DEVICE_KEY_NAME, k); } catch { /* memory only */ } }
+  return k;
+};
+const getTableSig = () => {
   try {
-    if (navigator.serviceWorker?.getRegistration) navigator.serviceWorker.getRegistration().then((r) => r && r.showNotification(title, options)).catch(() => {});
+    const fromUrl = new URLSearchParams(window.location.search).get('sig');
+    if (fromUrl) return fromUrl;
+    return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').sig || '';
+  } catch { return ''; }
+};
+const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate)(\/|$|\?)/;
+if (typeof window !== 'undefined' && !window.__pxTableGuard) {
+  window.__pxTableGuard = true;
+  axios.interceptors.request.use((config) => {
+    try {
+      const url = String(config.url || '');
+      if (url.startsWith(BASE_URL) && TABLE_SCOPED_PATH.test(url.slice(BASE_URL.length))) {
+        config.headers = config.headers || {};
+        config.headers['x-device-key'] = getDeviceKey();
+        const sig = getTableSig();
+        if (sig) config.headers['x-table-sig'] = sig;
+      }
+    } catch { /* never block a request because of this */ }
+    return config;
+  });
+  axios.interceptors.response.use((r) => r, (err) => {
+    // Another guest owns this table → tell the app so it switches to view-only (works for every table endpoint).
+    try {
+      const d = err?.response?.data;
+      if (err?.response?.status === 403 && d && String(err?.config?.method || '').toLowerCase() !== 'get' && (d.code === 'TABLE_LOCKED' || d.code === 'TABLE_QR_INVALID')) {
+        window.dispatchEvent(new CustomEvent('pratyeksha:table-locked', { detail: { code: d.code, message: d.error } }));
+      }
+    } catch { /* ignore */ }
+    return Promise.reject(err);
+  });
+}
+
+const NOTIF_ICON = '/notification-icon.png';
+const NOTIF_BADGE = '/notification-badge.png';
+const notifImage = (event, custom) => custom || `/notif/${event || 'default'}.jpg`;
+const safeNotify = (title, options = {}) => {
+  const { event, ...rest } = options || {};
+  const opts = { ...rest, icon: NOTIF_ICON, badge: NOTIF_BADGE, image: rest.image || notifImage(event) };
+  try { new Notification(title, opts); return true; } catch { /* fall through to the service worker */ }
+  try {
+    if (navigator.serviceWorker?.getRegistration) navigator.serviceWorker.getRegistration().then((r) => r && r.showNotification(title, opts)).catch(() => {});
   } catch { /* notifications unavailable */ }
   return false;
 };
@@ -247,7 +305,17 @@ useEffect(() => {
 }, []);
 
   const [activeModel, setActiveModel] = useState(null);
-const [cart, setCart] = useState({});
+const viewOnlyRef = useRef(false);
+const [tableRole, setTableRole] = useState(null); // 'free' | 'owner' | 'viewer' | 'invalid' | null (not checked yet)
+const [cart, setCartRaw] = useState({});
+// Single choke-point for every add-to-cart: a view-only guest cannot put anything in the cart (clearing it is allowed).
+const setCart = (v) => {
+  if (viewOnlyRef.current && !(v && typeof v === 'object' && Object.keys(v).length === 0)) {
+    window.dispatchEvent(new CustomEvent('pratyeksha:table-locked', { detail: { code: 'TABLE_LOCKED', soft: true } }));
+    return;
+  }
+  setCartRaw(v);
+};
 const [cartStockWarning, setCartStockWarning] = useState(null); // { itemId, itemName }
 const cartRef = useRef({});
 const extraSendingRef = useRef(false);
@@ -573,13 +641,12 @@ waitlistSocket.on('announcement_ended', () => {
 // ── Operator manual push → browser notification on customer device ──
 waitlistSocket.on('operator_notify', (data) => {
   // Show browser / push notification
-  const fireNotification = (title, body, tag) => {
+  const fireNotification = (title, body, tag, event) => {
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') {
       safeNotify(title, {
         body,
-        icon: '/pratyeksha-logo.png',
-        badge: '/notification-badge.png',
+        event,
         tag: tag || 'operator-notify',
         renotify: true,
         vibrate: [200, 100, 200]
@@ -590,8 +657,7 @@ waitlistSocket.on('operator_notify', (data) => {
         if (perm === 'granted') {
           safeNotify(title, {
             body,
-            icon: '/pratyeksha-logo.png',
-            badge: '/notification-badge.png',
+            event,
             tag: tag || 'operator-notify',
             renotify: true,
           });
@@ -601,12 +667,14 @@ waitlistSocket.on('operator_notify', (data) => {
   };
 
   const { title, body, tag, type } = data;
+  const notifEvent = data.event || (type === 'waitlist' ? 'waitlist-update' : type === 'pickup' ? 'pickup-ready' : 'reservation-update');
 
   // Fire the notification
   fireNotification(
     title || (type === 'waitlist' ? 'Table Almost Ready!' : type === 'pickup' ? 'Pickup Ready!' : 'Reservation Update'),
     body || 'Please check with the staff.',
-    tag
+    tag,
+    notifEvent
   );
 
   // Also show in-app alert for waitlist type
@@ -642,7 +710,7 @@ useEffect(() => {
     setIsCounterScan(false);
     setHasQrSession(true);
     try {
-      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, startedAt: Date.now() }));
+      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, sig: params.get('sig') || '', startedAt: Date.now() }));
     } catch {}
   } else {
     setTableNumber('Counter');
@@ -860,7 +928,7 @@ useEffect(() => {
             : isTableBanner
             ? `Table ${notificationBanner.tableNumber} at ${notificationBanner.restaurantName} is ready for you.`
             : `Please collect your order at ${notificationBanner.restaurantName}.`,
-          icon: '/pratyeksha-logo.png', badge: '/notification-badge.png',
+          event: isResBanner ? 'reservation-confirmed' : isTableBanner ? 'table-ready' : 'pickup-ready',
           vibrate: [300, 100, 300], tag: 'pratyeksha-ready', renotify: true
         }
       );
@@ -904,28 +972,18 @@ const isReservation = notificationBanner.type === 'reservation_confirmed';
         pointerEvents: 'none'
       }} />
 
-      {/* Outer ring */}
-      <div style={{
-        width: '120px', height: '120px', borderRadius: '50%',
-        border: '1px solid rgba(211,191,162,0.12)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        marginBottom: '36px', position: 'relative'
-      }}>
-        {/* Inner ring */}
-        <div style={{
-          width: '90px', height: '90px', borderRadius: '50%',
-          border: '1px solid rgba(211,191,162,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(211,191,162,0.05)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isReservation
-              ? <CalendarClock size={36} color="#d3bfa2" strokeWidth={1.5} />
-              : isTable
-              ? <Armchair size={36} color="#d3bfa2" strokeWidth={1.5} />
-              : <ShoppingBag size={36} color="#d3bfa2" strokeWidth={1.5} />}
-          </div>
-        </div>
+      {/* Creative picture for this notification + brand icon (logo on its background) */}
+      <div style={{ position: 'relative', width: '100%', maxWidth: '340px', marginBottom: '44px' }}>
+        <img
+          src={notifImage(isReservation ? 'reservation-confirmed' : isTable ? 'table-ready' : 'pickup-ready')}
+          alt=""
+          style={{ width: '100%', aspectRatio: '2 / 1', objectFit: 'cover', borderRadius: '20px', border: '1px solid rgba(211,191,162,0.22)', display: 'block' }}
+        />
+        <img
+          src={NOTIF_ICON}
+          alt="Pratyeksha"
+          style={{ position: 'absolute', left: '50%', bottom: '-24px', transform: 'translateX(-50%)', width: '52px', height: '52px', borderRadius: '50%', border: '2px solid #0c0c0c', boxShadow: '0 4px 18px rgba(0,0,0,0.5)' }}
+        />
       </div>
 
       {/* Marathi headline */}
@@ -1790,6 +1848,37 @@ useEffect(() => {
 
 
   // ── QR Session Validation — prevents URL injection ──
+  // ── Who may order on this table? (this phone = owner / viewer / nobody has ordered yet) ──
+  const viewOnly = !isCounterScan && !!tableNumber && tableNumber !== 'Counter' && (tableRole === 'viewer' || tableRole === 'invalid');
+  useEffect(() => { viewOnlyRef.current = viewOnly; }, [viewOnly]);
+  useEffect(() => {
+    if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) { setTableRole(null); return; }
+    let stop = false;
+    const check = () => {
+      if (document.hidden) return;
+      axios.get(`${BASE_URL}/table-access/${encodeURIComponent(tenantId)}/${encodeURIComponent(tableNumber)}`)
+        .then(r => { if (!stop && r.data?.role) setTableRole(r.data.role); })
+        .catch(() => {}); // network trouble: keep the last known role
+    };
+    check();
+    const iv = setInterval(check, 12000);
+    const onVis = () => { if (!document.hidden) check(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stop = true; clearInterval(iv); document.removeEventListener('visibilitychange', onVis); };
+  }, [tenantId, tableNumber, isCounterScan, hasPlacedInitialOrder]);
+  useEffect(() => {
+    const onLocked = (e) => {
+      const d = e.detail || {};
+      if (d.code === 'TABLE_QR_INVALID') { setSessionBlocked(true); return; }
+      if (!d.soft) { setTableRole('viewer'); setCartRaw({}); }
+      triggerAlert(language === 'mr'
+        ? 'या टेबलवर दुसऱ्या पाहुण्याने आधीच ऑर्डर दिली आहे. तुम्ही फक्त मेनू पाहू शकता.'
+        : 'Another guest at this table has already ordered. You can browse the menu, but only that guest can order.', 'error');
+    };
+    window.addEventListener('pratyeksha:table-locked', onLocked);
+    return () => window.removeEventListener('pratyeksha:table-locked', onLocked);
+  });
+
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   setSessionBlocked(false);
@@ -2951,8 +3040,7 @@ const askNotificationPermission = async () => {
           body: counterMode === 'dine-in'
             ? `Hi ${customerInfo.name}! We'll notify you when your table is ready.`
             : `Hi ${customerInfo.name}! We'll notify you when your order is ready for pickup.`,
-          icon: '/pratyeksha-logo.png',
-          badge: '/notification-badge.png',
+          event: counterMode === 'dine-in' ? 'waitlist-joined' : 'pickup-confirmed',
         }
       );
     }
@@ -2965,7 +3053,7 @@ const askNotificationPermission = async () => {
           : (scheduledPickupTime && !isNaN(new Date(scheduledPickupTime))
               ? `Order placed for pickup at ${new Date(scheduledPickupTime).toLocaleTimeString([],{ timeZone: 'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}.`
               : 'Your pickup order has been placed.'),
-        icon: '/pratyeksha-logo.png',
+        event: counterMode === 'dine-in' ? 'waitlist-joined' : 'pickup-confirmed',
       }
     );
   }
@@ -3085,7 +3173,7 @@ setWaitlistEntry({ ...res.data.reservation, mode: 'reservation' });
       if (perm === 'granted') {
         safeNotify('Reservation Requested!', {
           body: `Hi ${customerInfo.name}! Your table for ${partySize} on ${resDateTime.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' })} at ${resDateTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} is pending confirmation.`,
-          icon: '/pratyeksha-logo.png',
+          event: 'reservation-update',
         });
       }
     } catch { /* notifications unavailable */ }
@@ -4933,7 +5021,7 @@ if (phone.length === 10) {
                         if ('Notification' in window && Notification.permission === 'granted') {
                           safeNotify('Reservation Requested!', {
                             body: `Hi ${customerInfo.name}! Pending confirmation.`,
-                            icon: '/pratyeksha-logo.png'
+                            event: 'reservation-update'
                           });
                         }
                       } catch(err) {
@@ -5127,6 +5215,13 @@ if (sessionBlocked) {
     <div style={{...styles.body, backgroundColor: '#0b0b0c', position: 'relative', isolation: 'isolate'}}>
       <div className="px-ambient" style={{ zIndex: -1 }} aria-hidden="true"><div className="px-grain" /></div>
       {legalSheetEl}
+      {viewOnly && (
+        <div role="status" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9000, padding: 'calc(9px + env(safe-area-inset-top, 0px)) 14px 9px', background: 'rgba(20,17,12,0.96)', borderBottom: '1px solid rgba(211,191,162,0.35)', color: '#d3bfa2', fontSize: '0.72rem', fontWeight: 700, textAlign: 'center', lineHeight: 1.4, backdropFilter: 'blur(8px)' }}>
+          {language === 'mr'
+            ? 'फक्त पाहण्यासाठी — या टेबलवर दुसऱ्या पाहुण्याने ऑर्डर दिली आहे. फक्त तेच ऑर्डर करू शकतात.'
+            : 'View only — another guest at this table has ordered. Only that guest can order and be billed.'}
+        </div>
+      )}
 
       {/* OFFLINE / SAVED-MENU NOTICE — persistent, not a timed toast */}
       <AnimatePresence>
@@ -5560,6 +5655,10 @@ if (sessionBlocked) {
                 </button>
               </div>
 
+              {activeAnnouncement.imageUrl && (
+                <img src={activeAnnouncement.imageUrl} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  style={{ width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '12px', marginBottom: '10px', display: 'block' }} />
+              )}
               {/* Title */}
               <div style={{
                 fontSize: '0.92rem', fontWeight: '900', color: '#fff',
@@ -9319,6 +9418,9 @@ if (sessionBlocked) {
 
 <style>{`
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  /* No visible scrollbars anywhere in the customer app (scrolling still works) */
+  html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { width: 0; height: 0; display: none; }
   * { -webkit-tap-highlight-color: transparent; }
   html, body, #root { 
     height: 100%; 

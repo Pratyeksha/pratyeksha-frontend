@@ -5,7 +5,9 @@ import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2, Bell, Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar } from 'lucide-react';
+import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar } from 'lucide-react';
+import SpoonForkIcon from './SpoonForkIcon.jsx';
+const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
 const BASE_URL = API_BASE_URL;
 const BRAND_LOGO = '/pratyeksha-logo.png';

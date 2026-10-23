@@ -25,7 +25,7 @@ import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
 import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
-  Users, UserCircle2, Bell, ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
+  Users, UserCircle2,  ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
   ChevronDown, ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownRight, LayoutGrid, Wallet,
   Target, AlertTriangle, CheckCircle2, Clock, Flame, Sparkles, Download, Send, Phone, Store, Copy,
   Menu as MenuIcon, X, RefreshCcw, Eye, EyeOff, IndianRupee, Percent, TrendingDown, Boxes,
@@ -36,6 +36,8 @@ import {
   Lock, ArrowLeftRight
   , Crosshair
 } from 'lucide-react';
+import SpoonForkIcon from './SpoonForkIcon.jsx';
+const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell

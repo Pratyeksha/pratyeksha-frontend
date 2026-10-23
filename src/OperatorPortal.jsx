@@ -8,6 +8,11 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
+const BellRing = SpoonForkIcon; // the crossed spoon & fork replaces the bell everywhere
+const Bell = SpoonForkIcon;
+import NotifImagePicker from './NotifImagePicker.jsx';
+import TableQrModal from './TableQrModal.jsx';
+import { playAlertSound, callOut, speak, formatAlertTime } from './alertSounds.js';
 import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
  
@@ -15,7 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UtensilsCrossed, ReceiptIndianRupee, BarChart3,ClipboardList, FileClock, SquarePen, Boxes, ClipboardPenLine,
 FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus, ArrowUpRight, ArrowDownRight,UserRound ,EyeOff ,
-  Search, CheckCircle2, BellRing, MessageSquare, Sparkles, AlertTriangle, 
+  Search, CheckCircle2,  MessageSquare, Sparkles, AlertTriangle, 
   SendHorizontal, CookingPot, Percent, Smartphone, QrCode,
   Timer, Clock, Layers, TrendingUp, Globe, Calendar, ChevronLeft, ChevronRight,
   User, ShieldCheck, Zap, MousePointer2, ShoppingBag, Truck, X, CreditCard, Banknote, ChevronUp, ChevronDown, LayoutGrid, Link2,
@@ -23,10 +28,10 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   Store, RefreshCw, Hash, TableProperties, ArrowRightCircle, CircleDot,  Droplets, IceCream, Package2, Citrus, 
   Droplet, Wind, Milk, Candy, Box,CalendarClock ,StickyNote, Star, Repeat, Puzzle, XCircle, Award,
   ArrowUp, ArrowDown, Lightbulb, Activity, ClipboardCheck,Wallet ,FileText,Trash2 ,TrendingDown,ReceiptText,AlignJustify,Package,
-  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 ,Bell , Eye,
+  MessageCircle, ThumbsUp, ThumbsDown, Send, Tag, Gift, Megaphone,BadgeCheck, Crown, UserX, UserPlus, PhoneCall,AlertCircle,BarChart2 , Eye,
   ShoppingCart, Copy,Flame ,
   PackageX, ShieldAlert, Wrench
-} from 'lucide-react';
+, ScanLine} from 'lucide-react';
 
 const BASE_URL = API_BASE_URL;
 const asArr = (v) => (Array.isArray(v) ? v : []);
@@ -259,6 +264,9 @@ const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subt
   const [wipingStaffId, setWipingStaffId] = useState(null); 
 
 const [ingredientAlerts, setIngredientAlerts] = useState([]);
+// Big on-screen alerts for new reservations / pickup requests. They stay until the operator clicks the cross.
+const [callAlerts, setCallAlerts] = useState([]);
+const [showTableQr, setShowTableQr] = useState(false);
   const [isDownloadingAllBills, setIsDownloadingAllBills] = useState(false);
 
   // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
@@ -884,7 +892,7 @@ useEffect(() => {
       fetchReservationNoShowDataRef.current();
 
       socket.on("new_order", (order) => { 
-        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
+        playAlertSound('order'); 
         showNotif(`Order Update: Table ${order?.tableNumber ?? ''}`); 
         fetchInitialData({ skipMenu: true }); 
       });
@@ -900,6 +908,7 @@ useEffect(() => {
       });
 
       socket.on("low_stock_alert", (data) => {
+        playAlertSound('lowStock');
         showNotif(`LOW STOCK: ${data.itemName} — only ${data.currentStock}${data.unit} left`, "error");
         setLowStockAlerts(prev => {
           const exists = prev.find(a => a.itemName === data.itemName);
@@ -908,12 +917,14 @@ useEffect(() => {
         refreshManagementSoon(); // refresh inventory numbers
       });
       socket.on('inventory_expiry_alert', (data) => {
+  playAlertSound('expiry');
   showNotif(`${data.itemName} expires in ${data.daysLeft} day${data.daysLeft>1?'s':''} — use first (FEFO)`, 'error');
   setInventory(prev => prev.map(i =>
     i._id === data.itemId ? { ...i, batchExpiry: data.batchExpiry, _expiryAlert: true } : i
   ));
 });
       socket.on('ingredient_out_of_stock', (data) => {
+    playAlertSound('ingredientOut');
     setIngredientAlerts(prev => {
         // Deduplicate: if same ingredient already has an active alert, replace it
         const filtered = prev.filter(a => a.ingredientName !== data.ingredientName);
@@ -944,7 +955,7 @@ useEffect(() => {
     ingredientAlertByName.set(data.ingredientName, alertTimer);
 });
       socket.on("new_waiter_request", (request) => {
-        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        playAlertSound('waiter');
         showNotif(`Service Request: Table ${request.tableNumber}`, "info");
         setWaiterRequests(prev => [request, ...prev]);
       });
@@ -984,7 +995,7 @@ socket.on("table_occupied_live", (data) => {
         }
         return prevOrders;
     });
-    playCachedSound('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    playAlertSound('table');
 });
 
       socket.on("menu_item_deleted", ({ itemId }) => {
@@ -994,30 +1005,39 @@ socket.on("table_occupied_live", (data) => {
 
 socket.on('new_waitlist_entry', (data) => {
   fetchCounterQueue();
-  playSFX('waitlist');
-  showNotif(
-    `New walk-in — ${data?.customerName || 'Guest'} · Party of ${data?.partySize || '?'}`,
-    'info', 'waitlist'
-  );
+  // The server sends { entry }; reading data.customerName directly always showed "Guest".
+  const e = data?.entry || data || {};
+  const who = String(e.customerName || 'Guest').trim() || 'Guest';
+  if (e.mode === 'pickup') {
+    // PICKUP requested → own bell + the system calls it out + a closable alert on screen
+    const when = e.scheduledPickupTime ? formatAlertTime(e.scheduledPickupTime) : '';
+    const sentence = `New pickup order. ${who} has requested a pickup${when ? ` at ${when}` : ' as soon as possible'}.`;
+    callOut('pickup', sentence, { repeat: 2 });
+    setCallAlerts(prev => [{ id: `pk-${e._id || Date.now()}-${Date.now()}`, kind: 'pickup', name: who, phone: e.customerPhone || '', time: when || 'ASAP', requestedAt: formatAlertTime(new Date()), sentence, amount: e.totalAmount }, ...prev].slice(0, 8));
+    showNotif(`Pickup request  ${who}${when ? `  ${when}` : ''}`, 'info', 'pickup');
+  } else {
+    playAlertSound('waitlist');
+    showNotif(`New walk-in  ${who}  Party of ${e.partySize || '?'}`, 'info', 'waitlist');
+  }
 });
 
 socket.on('new_reservation', (data) => {
   fetchCounterQueue();
-  playSFX('reservation');
-  showNotif(
-    `Reservation — ${data?.customerName || 'Guest'} · ${data?.partySize || '?'} pax · ${
-      data?.reservationTime
-        ? new Date(data.reservationTime).toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
-        : ''
-    }`,
-    'info', 'reservation'
-  );
+  const r = data?.reservation || data || {};
+  const who = String(r.customerName || 'Guest').trim() || 'Guest';
+  const when = r.reservationTime ? formatAlertTime(r.reservationTime) : '';
+  const sentence = `New reservation. ${who} has booked a table for ${r.partySize || 'some'} ${Number(r.partySize) === 1 ? 'person' : 'people'}${when ? ` at ${when}` : ''}.`;
+  // RESERVATION → own bell + the system calls out name and time + a closable alert on screen
+  callOut('reservation', sentence, { repeat: 2 });
+  setCallAlerts(prev => [{ id: `rs-${r._id || Date.now()}-${Date.now()}`, kind: 'reservation', name: who, phone: r.customerPhone || '', time: when || '—', partySize: r.partySize, requestedAt: formatAlertTime(new Date()), sentence }, ...prev].slice(0, 8));
+  showNotif(`Reservation  ${who}  ${r.partySize || '?'} pax  ${when}`, 'info', 'reservation');
 });
 
 socket.on('reservation_updated', () => fetchCounterQueue());
 
 socket.on('waitlist_cancelled', (data) => {
   fetchCounterQueue();
+  playAlertSound('cancelled');
   showNotif(
     `Waitlist cancelled — ${data?.customerName || 'Guest'}`,
     'error', 'waitlist'
@@ -1026,6 +1046,7 @@ socket.on('waitlist_cancelled', (data) => {
 
 socket.on('waitlist_assigned', (data) => {
   fetchCounterQueue();
+  playAlertSound('assigned');
   fetchInitialData();
   showNotif(
     `Table assigned — ${data?.customerName || 'Guest'} → T${data?.tableNumber || '?'}`,
@@ -1037,7 +1058,7 @@ socket.on('waitlist_updated', () => fetchCounterQueue());
 
 socket.on('pickup_ready', (data) => {
   fetchCounterQueue();
-  playSFX('pickup');
+  playAlertSound('pickupReady');
   showNotif(
     `Pickup ready — ${data?.customerName || 'Customer'} · ₹${data?.totalAmount?.toLocaleString() || '?'}`,
     'success', 'pickup'
@@ -1047,7 +1068,7 @@ socket.on('pickup_ready', (data) => {
       socket.on("bill_requested", (data) => {
         if (data?.tableNumber == null) return;
         setCheckoutRequests(prev => [...new Set([...prev, data.tableNumber.toString()])]);
-        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+        playAlertSound('bill');
         showNotif(`Settlement Request: Table ${data.tableNumber}`);
       });
 socket.on('order_voided', () => {
@@ -1069,7 +1090,7 @@ socket.on('order_modification_detected', (data) => {
 });
 // ── New aggregator order arrives — fires the center-screen popup, NOT the pending list ──
       socket.on('aggregator_order_incoming', (data) => {
-        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+        playAlertSound('aggregator');
         setIncomingAggregatorOrders(prev => {
           const exists = prev.find(o => o._id === data._id);
           return exists ? prev : [...prev, data];
@@ -1088,7 +1109,7 @@ socket.on('aggregator_session_expired', (data) => {
     if (prev.find(a => a.platform === data.platform)) return prev;
     return [...prev, data];
   });
-  playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+  playAlertSound('sessionExpired');
   showNotif(data.message, 'error');
 });
 
@@ -2595,8 +2616,8 @@ useEffect(() => {
 useEffect(() => {
   if (!socket) return;
 
-  const lowStockAudio = { play: () => { playCachedSound('/sounds/low-stock-alert.mp3'); return Promise.resolve(); } }; // cached: no new Audio per effect run
-  const outOfStockAudio = { play: () => { playCachedSound('/sounds/out-of-stock-alert.mp3'); return Promise.resolve(); } };
+  const lowStockAudio = { play: () => { playAlertSound('lowStock'); return Promise.resolve(); } };
+  const outOfStockAudio = { play: () => { playAlertSound('outOfStock'); return Promise.resolve(); } };
 
   const handleItemUpdated = (updatedItem) => {
     setExtraItems(prev =>
@@ -4775,6 +4796,37 @@ const renderMonthHeatmap = () => {
   // ─────────────────────────────────────────────────────
   return (
     <div style={styles.dashboard} className="p-dash">
+      {showTableQr && <TableQrModal tenantId={tenantId} onClose={() => setShowTableQr(false)} notify={showNotif} />}
+      {/* RESERVATION / PICKUP CALL-OUT ALERTS — stay on screen until the operator clicks the cross */}
+      {callAlerts.length > 0 && (
+        <div role="alert" aria-live="assertive" style={{ position: 'fixed', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, zIndex: 100000, display: 'flex', flexDirection: 'column', gap: 10, width: 'min(380px, calc(100vw - 28px))', maxHeight: 'calc(100vh - 28px)', overflowY: 'auto' }}>
+          {callAlerts.map(a => (
+            <div key={a.id} style={{ position: 'relative', background: 'linear-gradient(160deg,#1c1812,#100e0a)', border: '1px solid rgba(211,191,162,0.45)', borderRadius: 18, padding: '16px 44px 16px 16px', boxShadow: '0 18px 50px rgba(0,0,0,0.65)', color: '#fff' }}>
+              <button type="button" onClick={() => setCallAlerts(prev => prev.filter(x => x.id !== a.id))} aria-label="Close alert" title="Close"
+                style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: '50%', border: '1px solid rgba(211,191,162,0.35)', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                <X size={16} />
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(211,191,162,0.12)', border: '1px solid rgba(211,191,162,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {a.kind === 'pickup' ? <ShoppingBag size={19} color="#d3bfa2" /> : <CalendarClock size={19} color="#d3bfa2" />}
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: 2, color: 'rgba(211,191,162,0.75)' }}>{a.kind === 'pickup' ? 'NEW PICKUP REQUEST' : 'NEW RESERVATION'}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f7f3eb', lineHeight: 1.2 }}>{a.name}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.78)' }}>
+                <span><b style={{ color: '#d3bfa2' }}>{a.kind === 'pickup' ? 'Pickup at' : 'Reserved for'}</b> {a.time}</span>
+                {a.kind === 'reservation' && a.partySize ? <span><b style={{ color: '#d3bfa2' }}>Party</b> {a.partySize}</span> : null}
+                {a.phone ? <span><b style={{ color: '#d3bfa2' }}>Phone</b> {a.phone}</span> : null}
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Received {a.requestedAt}</span>
+              </div>
+              <button type="button" onClick={() => speak(a.sentence)} style={{ marginTop: 10, background: 'transparent', border: '1px solid rgba(211,191,162,0.3)', color: '#d3bfa2', borderRadius: 10, fontSize: '0.62rem', fontWeight: 800, letterSpacing: 1, padding: '6px 10px', cursor: 'pointer' }}>REPEAT ANNOUNCEMENT</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* TOAST */}
 {/* TOAST */}
 <AnimatePresence>
@@ -5513,6 +5565,10 @@ const renderMonthHeatmap = () => {
       <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#c2c2c2', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
     <div style={{ display:'flex', gap:'8px' }}>
+      <button type="button" onClick={() => setShowTableQr(true)} title="Signed QR codes for every table + release a table lock"
+        style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(211,191,162,0.2)', background:'transparent', color:'#d3bfa2', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer', letterSpacing:'0.5px' }}>
+        <ScanLine size={11}/> SECURE QR
+      </button>
       {joinMode && (
         <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(236,220,185,0.35)', background:'rgba(236,220,185,0.1)', color:'#ecdcb9', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
@@ -7653,6 +7709,8 @@ const renderMonthHeatmap = () => {
             </div>
           </div>
  
+          <NotifImagePicker tenantId={tenantId} value={newAnnouncement.imageUrl||''} onChange={(u)=>setNewAnnouncement(p=>({...p,imageUrl:u}))} onError={(m)=>showNotif(m,'error')} hint="Shown on the customer menu banner and in the push notification" />
+
           {/* Live preview */}
           {(newAnnouncement.title||newAnnouncement.message) && (
             <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
@@ -7662,6 +7720,7 @@ const renderMonthHeatmap = () => {
                   {newAnnouncement.type==='offer'?<Tag size={14} color="#C9A84C"/>:newAnnouncement.type==='discount'?<Percent size={14} color="#C9A84C"/>:newAnnouncement.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
+                  {newAnnouncement.imageUrl && <img src={newAnnouncement.imageUrl} alt="" style={{width:'100%',maxHeight:120,objectFit:'cover',borderRadius:7,marginBottom:8,display:'block'}} />}
                   <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff',marginBottom:'3px'}}>{newAnnouncement.title||'Your headline'}</div>
                   <div style={{fontSize:'0.68rem',color:'#888',lineHeight:1.5}}>{newAnnouncement.message||'Your message'}</div>
                   {newAnnouncement.discountValue && newAnnouncement.type!=='wish' && (
@@ -7704,6 +7763,7 @@ const renderMonthHeatmap = () => {
                   icon:newAnnouncement.icon||'tag',
                   discountValue:newAnnouncement.discountValue||null,
                   discountType:newAnnouncement.discountType||null,
+                  imageUrl:newAnnouncement.imageUrl||'',
                   expiresAt:expiresAt.toISOString(),
                   startsAt:startsAt?startsAt.toISOString():new Date().toISOString(),
                   isActive:!isScheduled,
@@ -7939,6 +7999,9 @@ const renderMonthHeatmap = () => {
               style={{width:'100%',padding:'9px 12px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#fff',borderRadius:'8px',fontSize:'0.8rem',outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
           </div>
         </div>
+        <div style={{marginBottom:12}}>
+          <NotifImagePicker tenantId={tenantId} value={newOffer.imageUrl||''} onChange={(u)=>setNewOffer(p=>({...p,imageUrl:u}))} onError={(m)=>showNotif(m,'error')} hint="Shown with this offer in the push notification and on the customer menu" />
+        </div>
         <button type="button" onClick={async()=>{
           if(!newOffer.title?.trim()){showNotif('Offer title is required','error');return;}
           {
@@ -7965,6 +8028,7 @@ const renderMonthHeatmap = () => {
               happyStart:newOffer.happyStart||undefined,
               happyEnd:newOffer.happyEnd||undefined,
               expiresAt:newOffer.expiresAt?new Date(`${newOffer.expiresAt}T23:59:59+05:30`).toISOString():undefined, // end of that day in IST (was UTC midnight = 05:30 AM IST)
+              imageUrl:newOffer.imageUrl||'',
               isActive:true
             };
             await axios.post(`${BASE_URL}/offers/${tenantId}`,payload);
@@ -8264,17 +8328,19 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
             style={{width:'100%',padding:'9px 12px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#fff',borderRadius:'8px',fontSize:'0.78rem',outline:'none',resize:'vertical',fontFamily:'inherit',lineHeight:1.5,boxSizing:'border-box'}}/>
         </div>
  
+        <NotifImagePicker tenantId={tenantId} value={newCampaign.imageUrl||''} onChange={(u)=>setNewCampaign(p=>({...p,imageUrl:u}))} onError={(m)=>showNotif(m,'error')} hint="Appears as the large picture inside the push notification" />
+
         {/* Preview */}
         {(newCampaign.title||newCampaign.body)&&(
           <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
             <div style={{fontSize:'0.46rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginBottom:'9px',textTransform:'uppercase'}}>Push Preview</div>
             <div style={{background:'#171717',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
-              <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:'rgba(211,191,162,0.1)',border:'1px solid rgba(211,191,162,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.6rem'}}><SpoonForkIcon size={15} color="#d3bfa2" /></div>
+              <img src="/notification-icon.png" alt="Pratyeksha" width={28} height={28} style={{borderRadius:'7px',flexShrink:0,display:'block'}} />
               <div>
                 <div style={{fontSize:'0.72rem',fontWeight:'800',color:'#fff',marginBottom:'2px'}}>{newCampaign.title||'Notification title'}</div>
                 <div style={{fontSize:'0.62rem',color:'#888',lineHeight:1.4}}>{newCampaign.body||'Your message here'}</div>
                 <div style={{fontSize:'0.48rem',color:'#8a704d',fontWeight:'800',marginTop:'6px'}}>FROM: {tenantConfig?.name || tenantId}</div>
-                <div style={{marginTop:'5px'}}><img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:72,height:'auto',background:'#f7f3eb',borderRadius:3,padding:'2px 4px'}} /></div>
+                <img src={newCampaign.imageUrl||'/notif/campaign.jpg'} alt="" style={{width:'100%',maxWidth:260,aspectRatio:'2 / 1',objectFit:'cover',borderRadius:8,marginTop:8,display:'block'}} />
               </div>
             </div>
           </div>
@@ -8292,6 +8358,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                 body:         newCampaign.body.trim(),
                 segment:      newCampaign.segment || 'all',
                 customPhones: newCampaign.customPhones || '',
+                imageUrl:     newCampaign.imageUrl || '',
                 sendNow:      true   // triggers actual push delivery in server
               });
               setNewCampaign({title:'',body:'',segment:'all',customPhones:''});
@@ -8443,7 +8510,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ repeat: Infinity, duration: 2 }}
             >
-              <BellRing size={14} style={{ color: '#d3bfa2' }} />
+              <BellRing size={14} color="#d3bfa2" />
             </motion.div>
           )}
 

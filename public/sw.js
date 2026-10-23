@@ -4,7 +4,7 @@
 // (Vite: /public/sw.js → deploys to https://yourapp.com/sw.js)
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'pratyeksha-menu-v5';
+const CACHE_NAME = 'pratyeksha-menu-v6';
 const API_HOST = 'pratyeksha-backend.onrender.com';
 
 // Only these read-only, "browse the menu" endpoints are cached.
@@ -89,9 +89,12 @@ self.addEventListener('push', function(event) {
   const track = data.data && data.data.track ? data.data.track : null;
   const options = {
     body: data.body || '',
-    icon: data.icon || '/pratyeksha-logo.png',
+    // Large icon: Pratyeksha logo (crossed spoon & fork) on the brand background. Always ours, never the wide wordmark.
+    icon: '/notification-icon.png',
     // Small status-bar mark: crossed spoon & fork (browsers otherwise fall back to a generic bell).
-    badge: data.badge || '/notification-badge.png',
+    badge: '/notification-badge.png',
+    // Creative picture for this kind of notification (or the operator-uploaded campaign / offer image).
+    image: data.image || '/notif/default.jpg',
     vibrate: data.vibrate || [200, 100, 200],
     data: data.data || {}
   };
