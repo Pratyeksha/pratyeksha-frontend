@@ -11,7 +11,6 @@ import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // the crossed spoon & fork replaces the bell everywhere
 const Bell = SpoonForkIcon;
 import NotifImagePicker from './NotifImagePicker.jsx';
-import TableQrModal from './TableQrModal.jsx';
 import { playAlertSound, callOut, speak, formatAlertTime } from './alertSounds.js';
 import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
@@ -266,7 +265,6 @@ const [notif, setNotif] = useState({ show: false, msg: '', type: 'success', subt
 const [ingredientAlerts, setIngredientAlerts] = useState([]);
 // Big on-screen alerts for new reservations / pickup requests. They stay until the operator clicks the cross.
 const [callAlerts, setCallAlerts] = useState([]);
-const [showTableQr, setShowTableQr] = useState(false);
   const [isDownloadingAllBills, setIsDownloadingAllBills] = useState(false);
 
   // ── EXTRA ITEMS (Cold drinks, Ice creams, etc.)
@@ -4808,7 +4806,6 @@ const renderMonthHeatmap = () => {
   // ─────────────────────────────────────────────────────
   return (
     <div style={styles.dashboard} className="p-dash">
-      {showTableQr && <TableQrModal tenantId={tenantId} onClose={() => setShowTableQr(false)} notify={showNotif} />}
       {/* RESERVATION / PICKUP CALL-OUT ALERTS — stay on screen until the operator clicks the cross */}
       {callAlerts.length > 0 && (
         <div role="alert" aria-live="assertive" style={{ position: 'fixed', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, zIndex: 100000, display: 'flex', flexDirection: 'column', gap: 10, width: 'min(380px, calc(100vw - 28px))', maxHeight: 'calc(100vh - 28px)', overflowY: 'auto' }}>
@@ -5579,10 +5576,7 @@ const renderMonthHeatmap = () => {
       <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#c2c2c2', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
     <div style={{ display:'flex', gap:'8px' }}>
-      <button type="button" onClick={() => setShowTableQr(true)} title="Signed QR codes for every table + release a table lock"
-        style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(211,191,162,0.2)', background:'transparent', color:'#d3bfa2', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer', letterSpacing:'0.5px' }}>
-        <ScanLine size={11}/> SECURE QR
-      </button>
+
       {joinMode && (
         <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(236,220,185,0.35)', background:'rgba(236,220,185,0.1)', color:'#ecdcb9', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
@@ -8900,6 +8894,22 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         MODE: {activePaymentType === 'split' ? 'SPLIT PAYMENT' : selectedSingleMode.toUpperCase()}
       </div>
     </div>
+
+    {/* Send the operator-approved bill to the matching customer table before settlement. */}
+    <button type="button" onClick={() => {
+      if (!tableBill || !selectedTable || selectedTable === 'Online') { showNotif('Select a dine-in table before sending a customer bill.', 'error'); return; }
+      const subtotal = Number(tableBill.subtotal || 0);
+      const cgstPct = Number(tableBill.cgstPct || 0) / 100;
+      const sgstPct = Number(tableBill.sgstPct || 0) / 100;
+      const total = Math.round(billFinalAmount(tableBill, discountType, discount) * 100) / 100;
+      const cgst = Number(tableBill.cgst || 0);
+      const sgst = Number(tableBill.sgst || 0);
+      const discountAmount = Math.max(0, Math.round((subtotal + cgst + sgst - total) * 100) / 100);
+      socket.emit('send_customer_bill', { tenantId, tableNumber: String(selectedTable), items: tableBill.items || [], subtotal: Math.round(subtotal * 100) / 100, cgst, sgst, total, discountAmount, discountReason: discountReason || '', discountType, discountValue: Number(discount) || 0, sentAt: new Date().toISOString() });
+      showNotif(`Approved bill sent to Table ${selectedTable}.`, 'success');
+    }} style={{ ...styles.settleBtn, marginTop:'12px', background:'#d3bfa2', color:'#17120d' }}>
+      SEND APPROVED BILL TO CUSTOMER
+    </button>
 
     {/* ── SETTLE BUTTON ── */}
     <button type="button" onClick={settleBill}

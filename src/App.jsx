@@ -350,6 +350,7 @@ const [orderEta, setOrderEta] = useState(null);
 const etaRefreshRef = useRef(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
+  const [approvedCustomerBill, setApprovedCustomerBill] = useState(null);
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
@@ -620,6 +621,25 @@ const globalSearchResults = useMemo(() => {
       (i.name?.toLowerCase().includes(q) || (i.name_mr || '').includes(sq));
   }).slice(0, 8);
 }, [allMenuItems, searchQuery, filterVegOnly]);
+
+  // Join this tenant's live room so the operator can send the approved bill back to this table.
+  // Incoming bills are filtered by tenant and table before they are displayed.
+  useEffect(() => {
+    if (!tenantId) return;
+    const joinTenant = () => waitlistSocket.emit('join_restaurant', tenantId);
+    const onApprovedBill = (bill) => {
+      if (!bill || String(bill.tenantId) !== String(tenantId) || String(bill.tableNumber) !== String(tableNumber)) return;
+      setApprovedCustomerBill(bill);
+      triggerAlert('Your final bill is ready. Please review the approved total.', 'success');
+    };
+    waitlistSocket.on('connect', joinTenant);
+    if (waitlistSocket.connected) joinTenant();
+    waitlistSocket.on('customer_bill_approved', onApprovedBill);
+    return () => {
+      waitlistSocket.off('connect', joinTenant);
+      waitlistSocket.off('customer_bill_approved', onApprovedBill);
+    };
+  }, [tenantId, tableNumber, waitlistSocket]);
 
   useEffect(() => {
     if (!isCounterScan || !sessionId) return;
@@ -3675,7 +3695,8 @@ const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
   try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify({ name: customerInfo.name.trim(), phone: customerInfo.phone.replace(/\D/g,'') })); } catch {}
   try {
-    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name });
+    setApprovedCustomerBill(null);
+    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name, phone: customerInfo.phone.replace(/\D/g, '') });
 
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
@@ -7636,6 +7657,7 @@ if (sessionBlocked) {
 <X size={30} color={primaryColor} onClick={() => { 
   setIsBillOpen(false); 
   setBillRequested(false); 
+  setApprovedCustomerBill(null);
   setShowReviewPage(false);
   // ── Reset everything for next customer ──
   setPlacedOrders([]);
@@ -7694,6 +7716,13 @@ if (sessionBlocked) {
     <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 18 }} />
   </div>
 
+              ) : !approvedCustomerBill ? (
+                <div style={{ minHeight:'55vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', padding:'32px 24px', color:'#f7f3eb' }}>
+                  <div style={{ width:76, height:76, borderRadius:26, display:'grid', placeItems:'center', background:'rgba(211,191,162,.12)', border:'1px solid rgba(211,191,162,.35)', marginBottom:22 }}><ReceiptText size={34} color={PX.gold}/></div>
+                  <h2 style={{ fontFamily:PX.serif, fontSize:'1.7rem', margin:'0 0 10px' }}>Your bill is being prepared</h2>
+                  <p style={{ maxWidth:320, color:'#c9bba9', lineHeight:1.7, margin:0 }}>The team is reviewing your order and applying any eligible offers. Your final bill will appear here once the operator sends it.</p>
+                  <div style={{ marginTop:22, fontSize:'.7rem', letterSpacing:2, color:PX.gold, textTransform:'uppercase' }}>Table {tableNumber} · Awaiting approval</div>
+                </div>
               ) : !showReviewPage ? (
                 <div style={styles.thankYouWrapperProfessional}>
                    <div style={styles.statusIconWrapper}><CheckCircle2 size={50} color={primaryColor} /></div>
@@ -7712,7 +7741,7 @@ if (sessionBlocked) {
                       
                       {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
 <div style={styles.billTableBody}>
-  {finalBillItems.map((order, idx) => (
+  {(approvedCustomerBill.items || finalBillItems).map((order, idx) => (
     <div key={idx} style={{ ...styles.billTableRow, flexDirection: 'column', alignItems: 'flex-start', gap: '3px', paddingBottom: '10px', borderBottom: '1px solid rgba(211,191,162,0.07)', marginBottom: '4px' }}>
       {/* Row 1: Dish name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
@@ -7746,10 +7775,11 @@ if (sessionBlocked) {
     const rd = restaurantData;
     const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
     const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-    const subtotal = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-    const cgstAmt = subtotal * (cgstPct / 100);
-    const sgstAmt = subtotal * (sgstPct / 100);
-    const grandTotal = subtotal + cgstAmt + sgstAmt;
+    const subtotal = Number(approvedCustomerBill.subtotal ?? finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0));
+    const cgstAmt = Number(approvedCustomerBill.cgst ?? subtotal * (cgstPct / 100));
+    const sgstAmt = Number(approvedCustomerBill.sgst ?? subtotal * (sgstPct / 100));
+    const grandTotal = Number(approvedCustomerBill.total ?? (subtotal + cgstAmt + sgstAmt));
+    const approvedDiscount = Number(approvedCustomerBill.discountAmount || 0);
     return (
       <>
 <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
@@ -7764,6 +7794,7 @@ if (sessionBlocked) {
           <span>SGST @ {sgstPct}%</span>
           <span>₹{sgstAmt.toFixed(2)}</span>
         </div>
+        {approvedDiscount > 0 && <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#b9d2a0', marginBottom: '12px' }}><span>Approved discount{approvedCustomerBill.discountReason ? ` · ${approvedCustomerBill.discountReason}` : ''}</span><span>−₹{approvedDiscount.toFixed(2)}</span></div>}
 <div style={styles.billLineTotal}>
           <span>{t[language].grandTotal}</span>
           <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
