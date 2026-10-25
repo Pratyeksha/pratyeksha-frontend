@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import OfferSheet from './OfferSheet.jsx';
 import axios from 'axios';
 import {
   Coffee, UtensilsCrossed, Search,  ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
@@ -131,6 +132,13 @@ const offerTerms = (o, tr) => {
   return bits.join(' \u00b7 ');
 };
 /* The most attractive live offer of an outlet (largest % off first) - shown as the card headline. */
+/* Offer-type filter: percent / flat / free item / happy hour / ending within 48 h. */
+const offerMatchesKind = (o, kind) => {
+  if (!kind) return true;
+  if (kind === 'ending') { const d = o?.expiresAt ? new Date(o.expiresAt).getTime() : NaN; return Number.isFinite(d) && d > Date.now() && d - Date.now() <= 48 * 36e5; }
+  return o?.type === kind;
+};
+const OFFER_KINDS = [['percent_off', { en: '% off', mr: '% सूट' }], ['fixed_off', { en: '₹ off', mr: '₹ सूट' }], ['free_item', { en: 'Free item', mr: 'मोफत पदार्थ' }], ['happy_hour', { en: 'Happy hour', mr: 'हॅपी अवर' }], ['ending', { en: 'Ending soon', mr: 'लवकरच संपते' }]];
 const offerRank = (o) => (o?.type === 'percent_off' ? Number(o.value) || 0 : o?.type === 'fixed_off' ? 1 : 0.5);
 const bestOffer = (t) => {
   const list = Array.isArray(t?.activeOffers) ? t.activeOffers : [];
@@ -696,6 +704,8 @@ export default function CustomerHome() {
   const [service, setService] = useState(init.service);
   const [favOnly, setFavOnly] = useState(init.favOnly);
   const [offersOnly, setOffersOnly] = useState(init.offersOnly);
+  const [offerKind, setOfferKind] = useState(null);       // null = any offer
+  const [offerSheet, setOfferSheet] = useState(null);
   const [vegOnly, setVegOnly] = useState(init.vegOnly);
   const [openOnly, setOpenOnly] = useState(init.openOnly);
   const [query, setQuery] = useState(init.query);
@@ -938,7 +948,7 @@ export default function CustomerHome() {
       if (filter === 'restaurant' && cafe) return false;
       if (service && (t.config?.customerFeatures || {})[service] === false) return false;
       if (favOnly && !favs.includes(t.tenantId)) return false;
-      if (offersOnly && !(t.activeOffers || []).length) return false;
+      if ((offersOnly || offerKind) && !(t.activeOffers || []).some((o) => offerMatchesKind(o, offerKind))) return false;
       if (vegOnly && t.config?.onlyVeg !== true) return false;
       if (init.audit && incompleteOnly && !listingGaps(t).length) return false;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') return false;
@@ -954,10 +964,20 @@ export default function CustomerHome() {
     else {
       // recommended: featured placements first, then outlets that are open (or have no hours on file) before ones known to be closed
       const closedRank = (t) => (openStatus(t.hours, minuteKey * 60000)?.state === 'closed' ? 1 : 0);
-      list.sort((a, b) => Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
+      // While searching, the best MATCH comes first (restaurant name, then dish category, then dish, then area); featured / open is the tie-breaker.
+      const rel = (t) => {
+        if (!q) return 0;
+        const n = normQ(t.name); if (n === q) return 100; if (n.startsWith(q)) return 85;
+        const w = matchWhy(t, q, menuLookup); if (!w) return 0;
+        if (w.name) return 70;
+        if (w.category.length) return 50 + (w.category.some((c) => normQ(c).startsWith(q)) ? 5 : 0);
+        if (w.dish.length) return 40 + (w.dish.some((d) => normQ(d).startsWith(q)) ? 5 : 0);
+        return 25;
+      };
+      list.sort((a, b) => rel(b) - rel(a) || Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
     }
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
+  }, [tenants, filter, service, favOnly, offersOnly, offerKind, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 520);
@@ -1036,7 +1056,7 @@ export default function CustomerHome() {
       if (filter === 'restaurant' && cafe) continue;
       if (service && (t.config?.customerFeatures || {})[service] === false) continue;
       if (favOnly && !favs.includes(t.tenantId)) continue;
-      if (offersOnly && !(t.activeOffers || []).length) continue;
+      if ((offersOnly || offerKind) && !(t.activeOffers || []).some((o) => offerMatchesKind(o, offerKind))) continue;
       if (vegOnly && t.config?.onlyVeg !== true) continue;
       if (init.audit && incompleteOnly && !listingGaps(t).length) continue;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') continue;
@@ -1047,7 +1067,7 @@ export default function CustomerHome() {
     const list = [...counts.values()].sort((x, y) => y.n - x.n || x.label.localeCompare(y.label));
     if (area !== 'all' && !counts.has(area)) list.unshift({ key: area, label: area.replace(/\b\w/g, (c) => c.toUpperCase()), n: 0 });
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area]);
+  }, [tenants, filter, service, favOnly, offersOnly, offerKind, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area]);
 
   const chooseArea = (key) => { setArea(key); try { localStorage.setItem(AREA_KEY, key); } catch { /* ignore */ } };
 
@@ -1077,9 +1097,10 @@ export default function CustomerHome() {
   }, [recent, favs, byId]);
 
   const offerCards = useMemo(
-    () => filtered.flatMap((t) => (t.activeOffers || []).map((o) => ({ ...o, _tenant: t }))).slice(0, 12),
-    [filtered]
+    () => filtered.flatMap((t) => (t.activeOffers || []).filter((o) => offerMatchesKind(o, offerKind)).map((o) => ({ ...o, _tenant: t }))).slice(0, 12),
+    [filtered, offerKind]
   );
+  const offerKindCounts = useMemo(() => Object.fromEntries(OFFER_KINDS.map(([k]) => [k, tenants.filter((t) => (t.activeOffers || []).some((o) => offerMatchesKind(o, k))).length])), [tenants]);
   const totalOffers = useMemo(() => tenants.reduce((n, t) => n + (Array.isArray(t.activeOffers) ? t.activeOffers.length : 0), 0), [tenants]);
 
   const featuredList = useMemo(() => tenants.filter(isFeatured), [tenants]);
@@ -1109,8 +1130,8 @@ export default function CustomerHome() {
   const greeting = hour < 12 ? tr.morning : hour < 17 ? tr.afternoon : tr.evening;
   const greetingLine = guestName ? `${greeting}, ${guestName}` : greeting;
   const visible = filtered.slice(0, limit);
-  const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setOffersOnly(false); setVegOnly(false); setOpenOnly(false); setIncompleteOnly(false); setQuery(''); chooseArea('all'); };
-  const hasFilters = filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
+  const resetFilters = () => { setOfferKind(null); setFilter('all'); setService(null); setFavOnly(false); setOffersOnly(false); setVegOnly(false); setOpenOnly(false); setIncompleteOnly(false); setQuery(''); chooseArea('all'); };
+  const hasFilters = offerKind || filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
   const hasMore = filtered.length > limit;
   const showFeatured = !loading && !hasFilters && view === 'list' && featuredList.length > 0;
   const showHow = !howHidden && !loading && tenants.length > 0 && !hasFilters && !recent.length && !favs.length;
@@ -1181,6 +1202,7 @@ export default function CustomerHome() {
 
   return (
     <main style={{ minHeight: '100dvh', background: 'radial-gradient(900px 420px at 50% -10%, rgba(211,191,162,.10), transparent 60%), #0e0e0e', color: '#fff', fontFamily: 'Poppins, sans-serif', textAlign: 'left', boxShadow: '0 0 0 100vmax #0e0e0e', clipPath: 'inset(0 -100vmax)' }}>
+      {offerSheet && <OfferSheet offer={offerSheet} lang={lang} onClose={() => setOfferSheet(null)} onView={(o) => { const t = o._tenant; setOfferSheet(null); openTenant(t, 'offers'); }} />}
       <style>{css}</style>
       {(pull > 0 || refreshing) && (
         <div aria-hidden="true" style={{ position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 10px)', left: '50%', zIndex: 1200, pointerEvents: 'none', transform: `translate(-50%, ${refreshing ? 0 : Math.round(pull * 22) - 22}px)`, opacity: refreshing ? 1 : pull, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 20, background: 'rgba(20,20,20,.94)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 800 }}>
@@ -1292,7 +1314,7 @@ export default function CustomerHome() {
           <button type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</button>
           <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</button>
           {anyHours && <button type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</button>}
-          {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</button>}
+          {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => { setOffersOnly(!offersOnly); if (offersOnly) setOfferKind(null); }}><Tag size={13} /> {tr.offers}</button>}
           {anyVeg && <button type="button" className={`pxh-chip${vegOnly ? ' on' : ''}`} aria-pressed={vegOnly} onClick={() => setVegOnly(!vegOnly)}><Leaf size={13} /> {tr.veg}</button>}
         </div>
 
@@ -1360,11 +1382,16 @@ export default function CustomerHome() {
         )}
 
         {/* ── Offers rail ── */}
+        {(offersOnly || offerKind) && totalOffers > 0 && (
+          <div role="group" aria-label={lang === 'mr' ? 'ऑफरचा प्रकार' : 'Offer type'} style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {OFFER_KINDS.filter(([k]) => offerKindCounts[k] > 0 || offerKind === k).map(([k, lbl]) => (
+              <button type="button" key={k} className={`pxh-chip${offerKind === k ? ' on' : ''}`} aria-pressed={offerKind === k} onClick={() => { setOfferKind(offerKind === k ? null : k); setOffersOnly(true); }}>{lbl[lang]} <span style={{ opacity: .6 }}>· {offerKindCounts[k]}</span></button>))}
+          </div>)}
         {offerCards.length > 0 && (
           <section style={{ marginTop: 16 }}>
             <div className="pxh-rail">
               {offerCards.map((offer) => (
-                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(offer._tenant, 'offers'); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
+                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); setOfferSheet(offer); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
                   {offer.imageUrl && /^https:\/\//i.test(offer.imageUrl)
                     ? <img src={offer.imageUrl} alt="" loading="lazy" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, objectFit: 'cover', flexShrink: 0, display: 'block' }} />
                     : <Avatar t={offer._tenant} size={38} radius={11} />}

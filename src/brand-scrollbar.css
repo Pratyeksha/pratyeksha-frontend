@@ -1,0 +1,16 @@
+/* Pratyeksha branded scrollbars — charcoal track, antique-gold thumb. Loaded LAST so it wins over the older muted rules.
+   Surfaces that intentionally hide their scrollbar (.no-scrollbar / .no-sb / .chat-suggestions) keep doing so. */
+:root { --px-sb-track: #151517; --px-sb-thumb: #8a704d; --px-sb-thumb-hi: #d3bfa2; }
+html, body, * { scrollbar-width: thin; scrollbar-color: var(--px-sb-thumb) var(--px-sb-track); }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--px-sb-track); border-radius: 999px; }
+*::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #b99f78, #8a704d); border-radius: 999px; border: 2px solid var(--px-sb-track); min-height: 36px; min-width: 36px; }
+*::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #e6d6b8, #d3bfa2); }
+*::-webkit-scrollbar-thumb:active { background: var(--px-sb-thumb-hi); }
+*::-webkit-scrollbar-corner { background: var(--px-sb-track); }
+/* intentionally hidden scrollers */
+.no-scrollbar, .no-sb, .chat-suggestions, .p-master-shell .p-filterbar, .p-kitchen-shell .no-scrollbar { scrollbar-width: none !important; }
+.no-scrollbar::-webkit-scrollbar, .no-sb::-webkit-scrollbar, .chat-suggestions::-webkit-scrollbar, .p-master-shell .p-filterbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+/* ivory surfaces (feedback / light cards) get a softer track so the gold thumb stays legible */
+.px-light, .px-light * { --px-sb-track: #ece6da; }
+@media (max-width: 640px) { *::-webkit-scrollbar { width: 6px; height: 6px; } }

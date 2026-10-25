@@ -19,12 +19,16 @@ const T = {
 };
 
 /** Shown instead of the menu once the bill is generated (and after refresh / back / forward). The menu is NOT reachable from here. */
-export default function SessionEndedScreen({ language = 'en', reason = 'bill', restaurantName = '', lastBill, tenantId, tableNumber, onClaimed }) {
+export default function SessionEndedScreen({ language = 'en', reason = 'bill', restaurantName = '', lastBill, billStatus, tenantId, tableNumber, onClaimed }) {
   const tr = T[language] || T.en;
   const copy = reason === 'bill' ? tr.bill : tr.expired;
   const [claimed, setClaimed] = useState(!!lastBill?.claimed);
   // An unpaid bill stays payable here for 6 hours (e.g. the tab was reloaded while the guest was in the UPI app).
-  const payable = lastBill && lastBill.total > 0 && lastBill.upi && !claimed && (Date.now() - (lastBill.createdAt || 0) < 6 * 3600 * 1000);
+  // Only the restaurant-APPROVED amount is ever payable (the pre-approval snapshot total is not).
+  const st = billStatus?.status;
+  const approved = st === 'sent' && billStatus?.bill && !billStatus.paid;
+  const amount = approved ? billStatus.bill.grandTotal : 0;
+  const payable = !!(approved && amount > 0 && lastBill?.upi && !claimed && !billStatus.claimed && (Date.now() - (lastBill.createdAt || 0) < 6 * 3600 * 1000));
   return (
     <div style={{ minHeight: '100vh', background: '#0b0b0c', color: '#f7f3eb', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 'calc(40px + env(safe-area-inset-top, 0px)) 22px 40px', boxSizing: 'border-box' }}>
       <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
@@ -35,13 +39,16 @@ export default function SessionEndedScreen({ language = 'en', reason = 'bill', r
 
         {payable && (
           <div style={{ marginBottom: 22 }}>
-            <UpiPay amount={lastBill.total} payInfo={{ enabled: true, ...lastBill.upi }} note={`Bill T${tableNumber}`} language={language}
+            <UpiPay amount={amount} payInfo={{ enabled: true, ...lastBill.upi }} note={`Bill T${tableNumber}`} language={language}
               tenantId={tenantId} tableNumber={tableNumber} guestName={lastBill.name} claimed={claimed}
               onClaimed={() => { setClaimed(true); onClaimed && onClaimed(); }} />
           </div>
         )}
-        {claimed && lastBill && (
-          <div style={{ marginBottom: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: GOLD, fontSize: '0.8rem', fontWeight: 800 }}><CheckCircle2 size={16} /> ₹{Number(lastBill.total).toFixed(2)}</div>
+        {st === 'requested' && <div role="status" style={{ marginBottom: 22, color: GOLD, fontSize: '0.82rem', fontWeight: 700, lineHeight: 1.5 }}>{language === 'mr' ? 'तुमचे बिल तयार होत आहे… हे पान आपोआप अपडेट होईल.' : 'Your bill is being prepared… this page updates by itself.'}</div>}
+        {approved && !payable && !claimed && !billStatus.claimed && <div style={{ marginBottom: 22, color: '#f7f3eb', fontSize: '0.9rem' }}>{language === 'mr' ? 'तुमचे बिल' : 'Your bill'}: <b style={{ color: GOLD }}>₹{Number(amount).toFixed(2)}</b><div style={{ color: 'rgba(255,255,255,.55)', fontSize: '0.75rem', marginTop: 4 }}>{language === 'mr' ? 'कृपया काउंटरवर पेमेंट करा.' : 'Please pay at the counter.'}</div></div>}
+        {st === 'settled' && <div style={{ marginBottom: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: GOLD, fontSize: '0.85rem', fontWeight: 800 }}><CheckCircle2 size={18} /> {language === 'mr' ? 'पेमेंट मिळाले — धन्यवाद!' : 'Payment received — thank you!'}{billStatus.paidAmount != null ? ` ₹${Number(billStatus.paidAmount).toFixed(2)}` : ''}</div>}
+        {(claimed || billStatus?.claimed) && st === 'sent' && lastBill && (
+          <div style={{ marginBottom: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: GOLD, fontSize: '0.8rem', fontWeight: 800 }}><CheckCircle2 size={16} /> ₹{Number(amount || lastBill.total).toFixed(2)} · {language === 'mr' ? 'रेस्टॉरंट पेमेंटची पुष्टी करेल' : 'the restaurant will confirm your payment'}</div>
         )}
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 16, border: '1px solid rgba(211,191,162,0.3)', background: 'rgba(211,191,162,0.06)', textAlign: 'left' }}>

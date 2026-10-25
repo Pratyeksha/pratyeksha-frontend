@@ -14,8 +14,12 @@ import { configurePwa } from './pwa.js'
 import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
 import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
+import { installOperatorAuth } from './operatorAuth.js'
+import QrGate from './QrGate.jsx'
+import './brand-scrollbar.css'   // keep LAST so the branded scrollbars override the older rules
 
 installSubscriptionInterceptor();
+installOperatorAuth();
 
 /* Expired subscriptions lock the customer app, KDS and Owner app behind a renewal page. */
 function Gated({ children }) {
@@ -96,7 +100,7 @@ createRoot(document.getElementById('root')).render(
 
         {/* 7. Customer Menu Route (Dynamic) */}
         {/* Must stay near the bottom — catches /:tenantId */}
-        <Route path="/:tenantId" element={<Gated><App /></Gated>} />
+        <Route path="/:tenantId" element={<Gated><QrGate><App /></QrGate></Gated>} />
 
         {/* 8. Customer PWA Home — installed app opens here unless a restaurant QR route is active */}
         <Route path="/" element={<CustomerHome />} />

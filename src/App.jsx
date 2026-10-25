@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { AmbientBackdrop, BrandLoader } from './PremiumUI.jsx';
+import { recommendForCart } from './recommend.js';
 import { GuestLegalSheet, ConsentCheck, getGuestConsent, setGuestConsent, setGuestToken, clearGuestLocalData, GUEST_CONSENT_VERSION } from './GuestLegal.jsx';
 import { io } from "socket.io-client";
 import { 
@@ -20,6 +21,7 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import UpiPay from './UpiPay.jsx';
+import GuestBillTotals from './GuestBill.jsx';
 import { decideEntry } from './sessionPolicy.js';
 import SessionEndedScreen from './SessionEnded.jsx';
 const BASE_URL = API_BASE_URL;
@@ -48,6 +50,21 @@ const getDeviceKey = () => {
   try { localStorage.setItem(DEVICE_KEY_NAME, k); } catch { try { sessionStorage.setItem(DEVICE_KEY_NAME, k); } catch { /* memory only */ } }
   return k;
 };
+// ── Combos: shown as an ordinary category of dishes; sent to the server as combo lines (server prices them) ──
+const COMBO_CATEGORY_ID = '__combos__';
+const COMBO_CATEGORY = { _id: COMBO_CATEGORY_ID, categoryId: COMBO_CATEGORY_ID, name: 'Combos', name_mr: 'कॉम्बो', displayOrder: -1, isCombo: true };
+const comboToMenuItem = (c) => ({
+  _id: `combo_${c._id}`, comboId: String(c._id), isCombo: true, categoryId: COMBO_CATEGORY_ID, name: c.name, name_mr: c.name_mr || '',
+  description: `${(c.items || []).map(i => `${i.quantity}× ${i.name}`).join(' + ')}${c.description ? ' — ' + c.description : ''}`,
+  price: c.price, priceFull: c.price, isVeg: c.isVeg !== false, isAvailable: true, imageUrl: c.imageUrl || '', tags: ['Combo'], comboSavings: c.savings || 0,
+});
+// ETA helpers — the server sends an ABSOLUTE ready-by time; the phone only counts down from it (skew-free: uses the server's own clock reading).
+const etaRemainingMs = (e) => (e?.etaAtMs && e?.serverNowMs) ? Math.max(0, (e.etaAtMs - e.serverNowMs) - (Date.now() - (e._rx || Date.now()))) : Math.max(0, (e?.etaMinutes || 0) * 60000);
+const etaLeftMin = (e) => Math.ceil(etaRemainingMs(e) / 60000);
+const etaClock = (e) => (e?.etaAtMs && e?.serverNowMs) ? new Date(e._rx + etaRemainingMs(e)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : (e?.etaTime || '');
+const getTableQr = () => {   // legacy `qr` credential printed by the old tools script (verified server-side, never newly issued)
+  try { const fromUrl = new URLSearchParams(window.location.search).get('qr'); if (fromUrl) return fromUrl; return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').qr || ''; } catch { return ''; }
+};
 const getTableSig = () => {
   try {
     const fromUrl = new URLSearchParams(window.location.search).get('sig');
@@ -69,7 +86,7 @@ const BILL_KEY = (t, n) => `pratyeksha_last_bill_${t}_${n}`;
 const readLastBill = (t, n) => { try { return JSON.parse(localStorage.getItem(BILL_KEY(t, n)) || 'null'); } catch { return null; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const __sessionBooted = new Set(); // one bootstrap per tenant+table per page load (a re-render must never start a second session)
-const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate|table-session|payments)(\/|$|\?)/;
+const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate|table-session|payments|bill-requests)(\/|$|\?)/;
 if (typeof window !== 'undefined' && !window.__pxTableGuard) {
   window.__pxTableGuard = true;
   axios.interceptors.request.use((config) => {
@@ -80,6 +97,7 @@ if (typeof window !== 'undefined' && !window.__pxTableGuard) {
         config.headers['x-device-key'] = getDeviceKey();
         const sig = getTableSig();
         if (sig) config.headers['x-table-sig'] = sig;
+        const legacyQr = getTableQr(); if (legacyQr) config.headers['x-table-qr'] = legacyQr;
         if (!config.px_noSession) { const ts = readTSession(); if (ts && ts.token) config.headers['x-session-token'] = ts.token; }
       }
     } catch { /* never block a request because of this */ }
@@ -350,7 +368,6 @@ const [orderEta, setOrderEta] = useState(null);
 const etaRefreshRef = useRef(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
-  const [approvedCustomerBill, setApprovedCustomerBill] = useState(null);
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [placedOrders, setPlacedOrders] = useState([]); // To store actual items for bill calculation
   const [liveOrderStatuses, setLiveOrderStatuses] = useState({}); 
@@ -622,25 +639,6 @@ const globalSearchResults = useMemo(() => {
   }).slice(0, 8);
 }, [allMenuItems, searchQuery, filterVegOnly]);
 
-  // Join this tenant's live room so the operator can send the approved bill back to this table.
-  // Incoming bills are filtered by tenant and table before they are displayed.
-  useEffect(() => {
-    if (!tenantId) return;
-    const joinTenant = () => waitlistSocket.emit('join_restaurant', tenantId);
-    const onApprovedBill = (bill) => {
-      if (!bill || String(bill.tenantId) !== String(tenantId) || String(bill.tableNumber) !== String(tableNumber)) return;
-      setApprovedCustomerBill(bill);
-      triggerAlert('Your final bill is ready. Please review the approved total.', 'success');
-    };
-    waitlistSocket.on('connect', joinTenant);
-    if (waitlistSocket.connected) joinTenant();
-    waitlistSocket.on('customer_bill_approved', onApprovedBill);
-    return () => {
-      waitlistSocket.off('connect', joinTenant);
-      waitlistSocket.off('customer_bill_approved', onApprovedBill);
-    };
-  }, [tenantId, tableNumber, waitlistSocket]);
-
   useEffect(() => {
     if (!isCounterScan || !sessionId) return;
     const joinSession = () => waitlistSocket.emit('join_session', sessionId);
@@ -744,14 +742,15 @@ useEffect(() => {
   const activeTenant = urlTenantId || 'jay_ambe_fusion';
   setTenantId(activeTenant);
   const params = new URLSearchParams(window.location.search);
-  const tableParam = params.get('table');
+  const rawTableParam = params.get('table');
+  const tableParam = /^(ct|counter)$/i.test(String(rawTableParam || '').trim()) ? '' : rawTableParam;   // the signed counter QR (table=CT) is a counter scan, not a table
 
   if (tableParam) {
     setTableNumber(tableParam);
     setIsCounterScan(false);
     setHasQrSession(true);
     try {
-      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, sig: params.get('sig') || '', startedAt: Date.now() }));
+      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, sig: params.get('sig') || '', qr: params.get('qr') || '', startedAt: Date.now() }));
     } catch {}
   } else {
     setTableNumber('Counter');
@@ -1693,10 +1692,11 @@ let _menuReqSeq = 0;
 const fetchMenuContent = async () => {
   const mySeq = ++_menuReqSeq;
   try {
-    const [res, cat, extras] = await Promise.all([
+    const [res, cat, extras, comboRes] = await Promise.all([
       axios.get(`${BASE_URL}/tenant/${tenantId}`),
       axios.get(`${BASE_URL}/categories/${tenantId}`),
-      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] }))
+      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] })),
+      axios.get(`${BASE_URL}/combos/${tenantId}`).catch(() => ({ data: [] }))      // published, fully orderable combos of THIS tenant only
     ]);
 
     // Try engineered order, fall back to plain menu
@@ -1705,8 +1705,9 @@ const fetchMenuContent = async () => {
 
     if (_disposedMenu || mySeq !== _menuReqSeq) return;
     setRestaurantData(res.data);
-    setCategoryList(Array.isArray(cat.data) ? cat.data : []);
-    setAllMenuItems(Array.isArray(menuRes.data) ? menuRes.data : []);
+    const combos = (Array.isArray(comboRes.data) ? comboRes.data : []).map(comboToMenuItem);
+    setCategoryList([...(combos.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])]);
+    setAllMenuItems([...(Array.isArray(menuRes.data) ? menuRes.data : []), ...combos]);
     setExtraItems(Array.isArray(extras.data) ? extras.data : []);
     // If the browser reports offline but we still got real data back, it came
     // from the service worker's menu cache, not a live network round-trip.
@@ -1768,6 +1769,20 @@ socket.on('menu_bulk_updated', (updatedItems) => {
   });
 });
 
+// Combos are priced/published by staff and hide themselves when a component dish runs out — keep this phone in step.
+let _comboT = null;
+const refreshCombos = () => {
+  clearTimeout(_comboT);
+  _comboT = setTimeout(() => {
+    axios.get(`${BASE_URL}/combos/${tenantId}`).then((r) => {
+      const combos = (Array.isArray(r.data) ? r.data : []).map(comboToMenuItem);
+      setAllMenuItems(prev => [...prev.filter(i => !i.isCombo), ...combos]);
+      setCategoryList(prev => { const rest = prev.filter(c => c._id !== COMBO_CATEGORY_ID); return combos.length ? [COMBO_CATEGORY, ...rest] : rest; });
+    }).catch(() => {});
+  }, 1200);
+};
+socket.on('combos_updated', refreshCombos);
+socket.on('menu_updated', refreshCombos);
 socket.on('menu_item_deleted', ({ itemId }) => {
   if (!itemId) return;
   setAllMenuItems(prev => prev.filter(i => i._id !== itemId && i._id?.toString() !== itemId.toString()));
@@ -1845,6 +1860,8 @@ socket.on('kds_item_timing_updated', (data) => {
 return () => {
   _disposedMenu = true;
   socket.off("menu_updated");
+  socket.off('combos_updated');
+  clearTimeout(_comboT);
   socket.off('menu_bulk_updated');
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
@@ -1872,7 +1889,7 @@ useEffect(() => {
   const load = async () => {
     try {
       const r = await axios.get(`${BASE_URL}/orders/eta/${encodeURIComponent(tenantId)}/${encodeURIComponent(tableNumber)}`);
-      if (!disposed && r.data) setOrderEta(r.data);
+      if (!disposed && r.data) setOrderEta({ ...r.data, _rx: Date.now() });
     } catch {
       // Keep the last known ETA visible during transient failures.
     }
@@ -2968,7 +2985,10 @@ const sendBatchToKitchen = async () => {
       const summaryKey = `${id}-${portion}`;
       if (!summary[summaryKey]) {
         const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
-summary[summaryKey] = {
+summary[summaryKey] = item.isCombo ? {
+  isCombo: true, comboId: item.comboId, name: item.name, name_mr: item.name_mr, quantity: 0, portion: 'Combo',
+  pricePerUnit: unitPrice, subtotal: 0, suggestion: suggestions[key] || "", isVeg: item.isVeg !== false
+} : {
   menuItemId:   item._id,
   name:         item.name,
   name_mr:      item.name_mr,
@@ -2988,7 +3008,7 @@ summary[summaryKey] = {
     // ── Validate items are still available before sending ──
 const unavailableItems = Object.entries(summary)
   .filter(([, item]) => {
-    const menuItem = allMenuItems.find(m => m._id === item.menuItemId);
+    const menuItem = allMenuItems.find(m => item.isCombo ? m.comboId === item.comboId : m._id === item.menuItemId);
     return menuItem && menuItem.isAvailable === false;
   })
   .map(([, item]) => item.name);
@@ -3414,7 +3434,40 @@ const markBillGenerated = () => {
     }
   })();
 };
+// ── Authoritative bill status (requested → sent → settled). Pushed by socket, with polling + focus refetch as the safety net. ──
+const [billStatus, setBillStatus] = useState(null);
+useEffect(() => {
+  if ((!billRequested && !lastBill) || isCounterScan || !tenantId || !tableNumber || tableNumber === 'Counter') return undefined;
+  let stop = false, iv = null;
+  const pull = async () => {
+    try {
+      const r = await axios.get(`${BASE_URL}/bill-requests/${tenantId}/${encodeURIComponent(tableNumber)}/status`, { px_silent: true, px_noSession: true, timeout: 12000 });
+      if (stop) return;
+      setBillStatus(r.data);
+      if (r.data?.status === 'settled' && iv) { clearInterval(iv); iv = null; }
+    } catch { /* transient — next tick retries */ }
+  };
+  pull(); iv = setInterval(pull, 4000);
+  const onVis = () => { if (!document.hidden) pull(); };
+  const onSock = (m) => { if (m && String(m.tableNumber) === String(tableNumber)) pull(); };
+  document.addEventListener('visibilitychange', onVis); window.addEventListener('online', pull);
+  try { waitlistSocket?.on?.('bill_updated', onSock); waitlistSocket?.on?.('connect', pull); } catch { /* socket optional */ }
+  return () => { stop = true; if (iv) clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('online', pull); try { waitlistSocket?.off?.('bill_updated', onSock); waitlistSocket?.off?.('connect', pull); } catch { /* ignore */ } };
+}, [billRequested, !!lastBill, tenantId, tableNumber, isCounterScan]); // eslint-disable-line react-hooks/exhaustive-deps
+// The amount a guest pays is the approved one — keep the saved snapshot (used after a reload) in step with it.
+useEffect(() => {
+  const b = billStatus?.bill;
+  if (!b || billStatus.status === 'requested') return;
+  setLastBill((prev) => {
+    if (!prev || (Number(prev.total) === Number(b.grandTotal) && prev.version === b.version)) return prev;
+    const n = { ...prev, total: b.grandTotal, version: b.version, approved: true };
+    try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(n)); } catch { /* ignore */ }
+    return n;
+  });
+}, [billStatus, tenantId, tableNumber]);
+
 const onUpiClaimed = () => {
+  axios.post(`${BASE_URL}/bill-requests/${tenantId}/${encodeURIComponent(tableNumber)}/claim`, {}, { px_silent: true, px_noSession: true }).catch(() => {});
   setLastBill((prev) => {
     const n = { ...(prev || {}), claimed: true };
     try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(n)); } catch { /* ignore */ }
@@ -3426,14 +3479,15 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
   const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
   const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-  const subtotal   = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const ab = billStatus?.bill && billStatus.status !== 'requested' ? billStatus.bill : null;   // the approved bill, when there is one
+  const subtotal   = ab ? ab.subtotal : finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
   // Same 2-decimal rounding the server uses at settlement (it never rounds the grand total to a whole rupee), so the
   // customer's invoice matches the operator's bill to the paisa.
   const r2 = (n) => Math.round(n * 100) / 100;
   const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const cgstAmt    = r2(r2(subtotal) * (cgstPct / 100));
-  const sgstAmt    = r2(r2(subtotal) * (sgstPct / 100));
-  const grandTotal = r2(r2(subtotal) + cgstAmt + sgstAmt);
+  const cgstAmt    = ab ? ab.cgst : r2(r2(subtotal) * (cgstPct / 100));
+  const sgstAmt    = ab ? ab.sgst : r2(r2(subtotal) * (sgstPct / 100));
+  const grandTotal = ab ? ab.grandTotal : r2(r2(subtotal) + cgstAmt + sgstAmt);
   const taxableAmt = subtotal; // items are priced ex-tax; tax is added on top
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
@@ -3625,6 +3679,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
 
   <!-- TAX BREAKDOWN -->
   <div class="tax-block">
+    ${ab && ab.discount ? `<div class="tax-row"><span>Items total</span><span>₹${Number(ab.baseSubtotal).toFixed(2)}</span></div><div class="tax-row"><span>Discount (${escHtml(ab.discount.title || ab.discount.reason)})</span><span>- ₹${Number(ab.discount.amountExTax).toFixed(2)}</span></div>` : ''}
     <div class="tax-row subtotal-row">
       <span>Subtotal</span>
       <span>₹${taxableAmt.toFixed(2)}</span>
@@ -3677,7 +3732,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const win  = window.open(url, '_blank');
   if (!win) triggerAlert('Please allow pop-ups to download your invoice.', 'error'); // a blocked pop-up used to fail silently
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-}, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient]);
+}, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient, billStatus]);
 
   // Add this useEffect to ask notification permission early, before order is placed
 useEffect(() => {
@@ -3694,10 +3749,18 @@ useEffect(() => {
 const requestFinalBill = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
   try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify({ name: customerInfo.name.trim(), phone: customerInfo.phone.replace(/\D/g,'') })); } catch {}
+  // The request is stored on the server FIRST (so staff can never miss it, even if this phone goes offline right after).
+  // Only when that succeeds do we end the table session and show "bill requested".
+  if (!isCounterScan && tableNumber && tableNumber !== 'Counter') {
+    try { await axios.post(`${BASE_URL}/bill-requests`, { tenantId, tableNumber, name: customerInfo.name.trim() }, { px_silent: true, timeout: 20000 }); }
+    catch (e) {
+      const d = e?.response?.data;
+      if (d?.code === 'TABLE_QR_INVALID') { setSessionBlocked(true); return; }
+      triggerAlert(d?.error || (language === 'mr' ? 'रेस्टॉरंटशी संपर्क होऊ शकला नाही. कृपया पुन्हा प्रयत्न करा.' : "We couldn't reach the restaurant to request your bill. Please try again."), 'error');
+      return;
+    }
+  } else { try { waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name }); } catch { /* counter flow */ } }
   try {
-    setApprovedCustomerBill(null);
-    waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name, phone: customerInfo.phone.replace(/\D/g, '') });
-
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
       .map(i => ({
@@ -3929,11 +3992,12 @@ const modifyOrderStrip = canModifyOrder && !modifyingOrderId ? (
 ) : null;
 
 useEffect(() => {
-  if (!orderPlacedAt || !orderEta?.etaMinutes) return;
-  const etaMs = orderEta.etaMinutes * 60 * 1000;
+  if (!orderEta?.etaMinutes) return;
   const tick = () => {
-    const elapsed = Date.now() - orderPlacedAt;
-    const pct = Math.min(95, Math.round((elapsed / etaMs) * 100)); // cap at 95% — hits 100 only when ready
+    // progress = time already waited / (time already waited + time still to go); both anchored to the server's own clock reading
+    const waited = (orderEta.placedAtMs && orderEta.serverNowMs ? Math.max(0, orderEta.serverNowMs - orderEta.placedAtMs) : (orderPlacedAt ? Math.max(0, (orderEta._rx || Date.now()) - orderPlacedAt) : 0)) + (Date.now() - (orderEta._rx || Date.now()));
+    const left = etaRemainingMs(orderEta);
+    const pct = Math.min(95, Math.max(0, Math.round((waited / Math.max(1, waited + left)) * 100))); // capped at 95% - reaches 100 only when ready
     setPrepPct(pct);
   };
   tick();
@@ -4001,34 +4065,28 @@ useEffect(() => {
     });
 }, [tenantId, tableNumber, isCounterScan]);
 
-// "Goes well with your order" — the same smart pairing strip for QR table ordering, waitlist, pickup and reservations.
+// "Goes well with your order" — recommendations that depend on what is IN THE CART and on THIS restaurant's own categories,
+// boosted by what its guests really order together (server-side, from its own settled orders). See recommend.js.
+const [pairings, setPairings] = useState([]);
+const pairKeyRef = useRef('');
+useEffect(() => {
+  if (!tenantId || !allMenuItems.length) return undefined;
+  const ids = Object.keys(cart).map(k => k.split('-')[0]).filter(id => /^[a-f0-9]{24}$/i.test(id));
+  const key = [...new Set(ids)].sort().join(',');
+  if (!key) { pairKeyRef.current = ''; setPairings([]); return undefined; }
+  if (key === pairKeyRef.current) return undefined;
+  const t = setTimeout(() => {
+    pairKeyRef.current = key;
+    axios.get(`${BASE_URL}/menu/pairings/${tenantId}`, { params: { items: key } }).then(r => setPairings(Array.isArray(r.data?.pairings) ? r.data.pairings : [])).catch(() => setPairings([]));
+  }, 400);
+  return () => clearTimeout(t);
+}, [cart, tenantId, allMenuItems.length]);
 useEffect(() => {
   if (!allMenuItems.length) return;
-  const cartIds = Object.keys(cart).map(k => k.split('-')[0]);
-  if (cartIds.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
-
-  const kindOf = (m) => {
-    const c = `${m.categoryId || ''} ${m.category || ''} ${m.name || ''}`.toLowerCase();
-    if (/drink|juice|beverage|coffee|tea|shake|lassi|soda|cola|mojito|water|latte|cappuccino|chai/.test(c)) return 'drink';
-    if (/dessert|sweet|ice|cake|brownie|pastry|gulab|kulfi|cookie|waffle/.test(c)) return 'dessert';
-    if (/snack|starter|fries|sandwich|burger|pizza|roll|momo|pakora|bites|wrap/.test(c)) return 'snack';
-    return 'main';
-  };
-  const inCartSet = new Set(cartIds.map(String));
-  const cartItems = cartIds.map(id => allMenuItems.find(m => String(m._id) === String(id))).filter(Boolean);
-  if (cartItems.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
-  const have = new Set(cartItems.map(kindOf));
-  const wantedOrder = ['drink', 'dessert', 'snack'].filter(k => !have.has(k));
-  const rank = (m) => {
-    const w = wantedOrder.indexOf(kindOf(m));
-    return (w === -1 ? 10 : w) - (m.isBestSeller ? 1.5 : 0) - (m.isChefSpecial ? 1 : 0);
-  };
-  const pool = allMenuItems.filter(m => m.isAvailable !== false && !inCartSet.has(String(m._id)) && Number(m.price || m.priceHalf || m.priceFull) > 0);
-  let picks = pool.filter(m => kindOf(m) !== 'main').sort((x, y) => rank(x) - rank(y)).slice(0, 6);
-  if (picks.length === 0) picks = pool.filter(m => m.isBestSeller || m.isChefSpecial).slice(0, 6);
-  setComboSuggestions(picks);
-  setShowComboStrip(picks.length > 0);
-}, [cart, allMenuItems]);
+  const recs = recommendForCart({ cart, allMenuItems, categories: categoryList, pairings, vegOnly: filterVegOnly || isOnlyVegTenant, limit: 6 });
+  const picks = recs.map(r => ({ ...r.item, _reason: r.reason }));
+  setComboSuggestions(picks); setShowComboStrip(picks.length > 0);
+}, [cart, allMenuItems, categoryList, pairings, filterVegOnly, isOnlyVegTenant]);
 
 // ── Tenant-specific guest services. Defaults stay enabled to preserve every
 // existing restaurant workflow unless the tenant explicitly disables a service.
@@ -5384,7 +5442,7 @@ if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू �
 
 if (sessionEnded && !isCounterScan) {
   return (
-    <SessionEndedScreen language={language} reason={sessionEnded} restaurantName={restaurantData?.name || ''} lastBill={lastBill}
+    <SessionEndedScreen language={language} reason={sessionEnded} restaurantName={restaurantData?.name || ''} lastBill={lastBill} billStatus={billStatus}
       tenantId={tenantId} tableNumber={tableNumber} onClaimed={onUpiClaimed} />
   );
 }
@@ -6586,7 +6644,7 @@ if (sessionBlocked) {
         />
       </div>
       <div style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.35)', fontWeight:'700', fontFamily:'monospace' }}>
-        {prepPct}% · ~{Math.max(0, orderEta.etaMinutes - (orderPlacedAt ? Math.round((Date.now()-orderPlacedAt)/60000) : 0))}m left
+        {prepPct}% · ~{etaLeftMin(orderEta)}m left
       </div>
     </>
   ) : (
@@ -6783,10 +6841,10 @@ if (sessionBlocked) {
     <div style={{ color:'rgba(211,191,162,0.35)', fontSize:'0.5rem',
       letterSpacing:'2px', fontWeight:'900', marginBottom:'5px' }}>ESTIMATED ARRIVAL</div>
     <div style={{ color:'#d3bfa2', fontSize:'1.5rem', fontWeight:'900', letterSpacing:'-0.5px' }}>
-      {orderEta.etaTime}
+      {etaClock(orderEta)}
     </div>
     <div style={{ color:'rgba(255,255,255,0.2)', fontSize:'0.62rem', marginTop:'3px' }}>
-      ~{orderEta.etaMinutes} min · {orderEta.queueLength} order{orderEta.queueLength!==1?'s':''} in kitchen
+      ~{etaLeftMin(orderEta)} min · {orderEta.queueLength} order{orderEta.queueLength!==1?'s':''} in kitchen
     </div>
     {orderEta.currentItems?.length > 0 && (
       <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'0.6rem', marginTop:'7px' }}>
@@ -7657,7 +7715,6 @@ if (sessionBlocked) {
 <X size={30} color={primaryColor} onClick={() => { 
   setIsBillOpen(false); 
   setBillRequested(false); 
-  setApprovedCustomerBill(null);
   setShowReviewPage(false);
   // ── Reset everything for next customer ──
   setPlacedOrders([]);
@@ -7716,13 +7773,6 @@ if (sessionBlocked) {
     <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 18 }} />
   </div>
 
-              ) : !approvedCustomerBill ? (
-                <div style={{ minHeight:'55vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', padding:'32px 24px', color:'#f7f3eb' }}>
-                  <div style={{ width:76, height:76, borderRadius:26, display:'grid', placeItems:'center', background:'rgba(211,191,162,.12)', border:'1px solid rgba(211,191,162,.35)', marginBottom:22 }}><ReceiptText size={34} color={PX.gold}/></div>
-                  <h2 style={{ fontFamily:PX.serif, fontSize:'1.7rem', margin:'0 0 10px' }}>Your bill is being prepared</h2>
-                  <p style={{ maxWidth:320, color:'#c9bba9', lineHeight:1.7, margin:0 }}>The team is reviewing your order and applying any eligible offers. Your final bill will appear here once the operator sends it.</p>
-                  <div style={{ marginTop:22, fontSize:'.7rem', letterSpacing:2, color:PX.gold, textTransform:'uppercase' }}>Table {tableNumber} · Awaiting approval</div>
-                </div>
               ) : !showReviewPage ? (
                 <div style={styles.thankYouWrapperProfessional}>
                    <div style={styles.statusIconWrapper}><CheckCircle2 size={50} color={primaryColor} /></div>
@@ -7741,7 +7791,7 @@ if (sessionBlocked) {
                       
                       {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
 <div style={styles.billTableBody}>
-  {(approvedCustomerBill.items || finalBillItems).map((order, idx) => (
+  {finalBillItems.map((order, idx) => (
     <div key={idx} style={{ ...styles.billTableRow, flexDirection: 'column', alignItems: 'flex-start', gap: '3px', paddingBottom: '10px', borderBottom: '1px solid rgba(211,191,162,0.07)', marginBottom: '4px' }}>
       {/* Row 1: Dish name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
@@ -7775,11 +7825,10 @@ if (sessionBlocked) {
     const rd = restaurantData;
     const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
     const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-    const subtotal = Number(approvedCustomerBill.subtotal ?? finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0));
-    const cgstAmt = Number(approvedCustomerBill.cgst ?? subtotal * (cgstPct / 100));
-    const sgstAmt = Number(approvedCustomerBill.sgst ?? subtotal * (sgstPct / 100));
-    const grandTotal = Number(approvedCustomerBill.total ?? (subtotal + cgstAmt + sgstAmt));
-    const approvedDiscount = Number(approvedCustomerBill.discountAmount || 0);
+    const subtotal = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+    const cgstAmt = subtotal * (cgstPct / 100);
+    const sgstAmt = subtotal * (sgstPct / 100);
+    const grandTotal = subtotal + cgstAmt + sgstAmt;
     return (
       <>
 <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
@@ -7794,7 +7843,6 @@ if (sessionBlocked) {
           <span>SGST @ {sgstPct}%</span>
           <span>₹{sgstAmt.toFixed(2)}</span>
         </div>
-        {approvedDiscount > 0 && <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#b9d2a0', marginBottom: '12px' }}><span>Approved discount{approvedCustomerBill.discountReason ? ` · ${approvedCustomerBill.discountReason}` : ''}</span><span>−₹{approvedDiscount.toFixed(2)}</span></div>}
 <div style={styles.billLineTotal}>
           <span>{t[language].grandTotal}</span>
           <span style={{ color: primaryColor, fontSize: '1.2rem' }}>
@@ -7866,32 +7914,8 @@ if (sessionBlocked) {
 )}
 </div>
 
-{/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
-{/* Items are priced ex-tax and GST is added on top (same as the bill table, the invoice PDF and the server). This block
-    used to treat the item sum as tax-INCLUSIVE, so it showed a smaller subtotal and a grand total with no tax at all. */}
-{(() => {
-  const cgstPct = restaurantData?.config?.cgstPercentage ?? 2.5;
-  const sgstPct = restaurantData?.config?.sgstPercentage ?? 2.5;
-  const r2 = (n) => Math.round(n * 100) / 100;
-  const sub = r2(calculateGrandTotal());
-  const cgstAmt = r2(sub * (cgstPct / 100));
-  const sgstAmt = r2(sub * (sgstPct / 100));
-  const grand = r2(sub + cgstAmt + sgstAmt);
-  return (
-    <>
-      <div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Subtotal</span><span>₹{sub.toFixed(2)}</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST ({cgstPct}%)</span><span>₹{cgstAmt.toFixed(2)}</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST ({sgstPct}%)</span><span>₹{sgstAmt.toFixed(2)}</span></div>
-      </div>
-
-      <div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
-        <span>GRAND TOTAL</span>
-        <span>₹{convertToMrNumber(Number.isInteger(grand) ? grand : grand.toFixed(2))}</span>
-      </div>
-    </>
-  );
-})()}
+{/* 4. Tax & Grand Total — the restaurant's APPROVED bill (offers/discount/taxes applied by staff). Never computed on the phone. */}
+<GuestBillTotals status={billStatus} language={language} />
 {/* 6. Branding Footer */}
         <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '0.6rem', fontWeight: '900', color: '#888', borderTop: '1px dashed #ccc', paddingTop: '15px' }}>
           <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
@@ -7904,9 +7928,11 @@ if (sessionBlocked) {
 
                    {/* PAY WITH UPI — opens the guest's UPI app with the exact bill amount */}
                    <div style={{ width: '100%', padding: '0 10px', margin: '0 0 16px', boxSizing: 'border-box' }}>
-                     <UpiPay amount={payableAmount} payInfo={payInfo} note={`Bill T${tableNumber}`} language={language}
-                       tenantId={tenantId} tableNumber={tableNumber} guestName={customerInfo.name}
-                       claimed={!!lastBill?.claimed} onClaimed={onUpiClaimed} />
+                     {billStatus?.status === 'sent' && billStatus.bill && !billStatus.paid ? (
+                       <UpiPay amount={billStatus.bill.grandTotal} payInfo={payInfo} note={`Bill T${tableNumber}`} language={language}
+                         tenantId={tenantId} tableNumber={tableNumber} guestName={customerInfo.name}
+                         claimed={!!(lastBill?.claimed || billStatus.claimed)} onClaimed={onUpiClaimed} />
+                     ) : null}
                    </div>
 
                    {/* INTERACTIVE CONTROLS CONTAINER ROW */}
@@ -7915,7 +7941,9 @@ if (sessionBlocked) {
                      {/* WHITE — Download Invoice */}
                      <button type="button"
                        onClick={() => autoDownloadInvoicePDF()}
-                       style={{
+                       disabled={!(billStatus?.bill && billStatus.status !== 'requested')}
+                       title={billStatus?.bill ? '' : 'Available once the restaurant sends your bill'}
+                       style={{ opacity: billStatus?.bill && billStatus.status !== 'requested' ? 1 : 0.45,
                          width: '100%', padding: '18px', borderRadius: '15px',
                          background: '#ffffff',
                          color: '#0c0c0c', fontWeight: '900', border: '1px solid #e0e0e0',
@@ -8291,6 +8319,7 @@ if (sessionBlocked) {
           >
             <div style={{ minWidth:0, flex:1 }}>
               <div style={{ fontSize:'0.72rem', fontWeight:700, color: inCart ? '#d3bfa2' : '#f7f3eb', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nm}</div>
+              {item._reason && <div style={{ fontSize:'0.56rem', color:'rgba(247,243,235,0.5)', marginTop:'2px', letterSpacing:'.3px' }}>{item._reason}</div>}
               <div style={{ fontSize:'0.66rem', fontWeight:800, color:'rgba(211,191,162,0.8)', marginTop:'3px' }}>₹{convertToMrNumber(price)}</div>
             </div>
             <span style={{ width:'28px', height:'28px', borderRadius:'10px', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', background: inCart ? 'transparent' : PX.gold, color:'#14110c' }}>

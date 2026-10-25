@@ -3,16 +3,19 @@ import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
 import { Smartphone, Copy, Check, CheckCircle2, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from './apiBase.js';
-import { buildUpiLink, appsFor, detectPlatform, formatUpiAmount, roundMoney, UPI_ID_RE } from './upi.js';
+import { buildUpiLink, appsFor, detectPlatform, formatUpiAmount, roundMoney, makeTxnRef, UPI_ID_RE } from './upi.js';
+import UpiLogo from './UpiLogos.jsx';
 
 const GOLD = '#d3bfa2';
 const T = {
   en: { title: 'Pay with UPI', sub: 'Tap your app — the amount opens ready for your PIN.', other: 'Other UPI app', paid: "I've paid", sent: 'Staff have been told — they will confirm your payment.',
         copy: 'Copy UPI ID', copied: 'Copied', noOpen: "Didn't open? Choose “Other UPI app”, or pay this UPI ID manually.", scan: 'Scan with any UPI app on your phone',
-        amount: 'Amount to pay', checking: 'Sending…', fail: 'Could not notify staff. Please tell them at the counter.', note: 'Show the payment success screen to staff if asked. A discount applied by staff will be adjusted at the counter.' },
+        amount: 'Amount to pay', checking: 'Sending…', fail: 'Could not notify staff. Please tell them at the counter.', note: 'This is the exact amount on your bill. Show the payment success screen to staff if asked.',
+        help: 'Payment failed?', helpTitle: 'Declined, or “limit exceeded”?', helpBody: 'That message comes from your UPI app or bank — not from this restaurant. It is usually a daily or per-payment limit, a limit for a new payee, or a restriction on paying individual UPI IDs. Try another UPI app above, or open your UPI app, choose “Pay to UPI ID” and enter the ID and exact amount below, or pay at the counter by cash or card.', copyAmt: 'Copy amount' },
   mr: { title: 'UPI ने पैसे द्या', sub: 'तुमचे अ‍ॅप निवडा — रक्कम PIN साठी तयार उघडेल.', other: 'इतर UPI अ‍ॅप', paid: 'मी पैसे दिले', sent: 'स्टाफला कळवले आहे — ते तुमचे पेमेंट तपासतील.',
         copy: 'UPI आयडी कॉपी करा', copied: 'कॉपी झाले', noOpen: 'उघडले नाही? “इतर UPI अ‍ॅप” निवडा किंवा हा UPI आयडी वापरून पैसे द्या.', scan: 'तुमच्या फोनवरील कोणत्याही UPI अ‍ॅपने स्कॅन करा',
-        amount: 'भरायची रक्कम', checking: 'पाठवत आहे…', fail: 'स्टाफला कळवता आले नाही. कृपया काउंटरवर सांगा.', note: 'स्टाफने विचारल्यास पेमेंट यशस्वी स्क्रीन दाखवा. स्टाफने सवलत दिल्यास ती काउंटरवर समायोजित केली जाईल.' },
+        amount: 'भरायची रक्कम', checking: 'पाठवत आहे…', fail: 'स्टाफला कळवता आले नाही. कृपया काउंटरवर सांगा.', note: 'हीच तुमच्या बिलावरील अचूक रक्कम आहे. विचारल्यास पेमेंट यशस्वी झाल्याचा स्क्रीन कर्मचाऱ्यांना दाखवा.',
+        help: 'पेमेंट अयशस्वी?', helpTitle: 'नाकारले गेले किंवा “limit exceeded”?', helpBody: 'हा संदेश तुमच्या UPI अॅप किंवा बँकेकडून येतो, रेस्टॉरंटकडून नाही — सहसा दैनिक किंवा प्रति-व्यवहार मर्यादा, नवीन पेयीसाठी मर्यादा किंवा वैयक्तिक UPI ID वरील निर्बंधामुळे. वरील दुसरे UPI अॅप वापरून पहा, किंवा अॅपमध्ये “UPI ID वर पेमेंट” निवडून खालील ID आणि अचूक रक्कम टाका, किंवा काउंटरवर रोख/कार्डने भरा.', copyAmt: 'रक्कम कॉपी करा' },
 };
 
 /**
@@ -28,13 +31,16 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const hintTimer = useRef(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [copiedAmt, setCopiedAmt] = useState(false);
+  const txnRef = useMemo(() => makeTxnRef(tenantId, tableNumber), [tenantId, tableNumber]);   // one reference per bill, stable across taps
   useEffect(() => () => clearTimeout(hintTimer.current), []);
 
   const amt = roundMoney(amount);
   const ready = !!(payInfo && payInfo.enabled && UPI_ID_RE.test(payInfo.upiId || '') && payInfo.payeeName && Number.isFinite(amt) && amt > 0);
   if (!ready) return null;
 
-  const params = { upiId: payInfo.upiId, payeeName: payInfo.payeeName, amount: amt, note };
+  const params = { upiId: payInfo.upiId, payeeName: payInfo.payeeName, amount: amt, note, ref: txnRef, merchantCode: payInfo.merchantCode };
   let genericLink = '';
   try { genericLink = buildUpiLink('any', params, platform); } catch { return null; }
 
@@ -78,9 +84,9 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {appsFor(platform).map((a) => (
-            <button key={a.id} type="button" onClick={() => open(a.id)} style={btn}>{a.label}</button>
+            <button key={a.id} type="button" onClick={() => open(a.id)} style={btn} aria-label={`${tr.title}: ${a.label}`}><UpiLogo id={a.id} size={26} /> {a.label}</button>
           ))}
-          <button type="button" onClick={() => open('any')} style={{ ...btn, gridColumn: '1 / -1', background: 'transparent' }}>{tr.other}</button>
+          <button type="button" onClick={() => open('any')} style={{ ...btn, gridColumn: '1 / -1', background: 'transparent' }}><UpiLogo id="any" size={26} /> {tr.other}</button>
         </div>
       )}
 
@@ -102,6 +108,15 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
           </button>
         )
       )}
+      <div style={{ marginTop: 12 }}>
+        <button type="button" onClick={() => setShowHelp(v => !v)} aria-expanded={showHelp} style={{ background: 'none', border: 'none', padding: 0, color: '#e0c48f', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>{tr.help}</button>
+        {showHelp && (
+          <div role="note" style={{ marginTop: 8, padding: 12, borderRadius: 12, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(211,191,162,0.2)' }}>
+            <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#f7f3eb', marginBottom: 6 }}>{tr.helpTitle}</div>
+            <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>{tr.helpBody}</div>
+            <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(formatUpiAmount(amt)); setCopiedAmt(true); setTimeout(() => setCopiedAmt(false), 1800); } catch { /* clipboard blocked */ } }} style={{ ...btn, padding: '8px 12px', fontSize: '0.68rem', background: 'transparent', marginTop: 10 }}>{copiedAmt ? <Check size={13} /> : <Copy size={13} />} {copiedAmt ? tr.copied : `${tr.copyAmt} · ${formatUpiAmount(amt)}`}</button>
+          </div>)}
+      </div>
       {err && <div role="alert" style={{ marginTop: 8, fontSize: '0.7rem', color: '#d9907a' }}>{err}</div>}
       <div style={{ marginTop: 10, fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>{tr.note}</div>
     </div>

@@ -4,9 +4,10 @@ import API_BASE_URL from './apiBase.js';
 import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
-import TemplateQRGenerator from './TemplateQRGenerator.jsx';
+import QrStudio from './QrStudio.jsx';
+import { QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2, Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar, QrCode } from 'lucide-react';
+import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar } from 'lucide-react';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
@@ -1149,7 +1150,6 @@ export default function PratyekshaMasterAdmin() {
   const [planClient,   setPlanClient]   = useState(null);
   const [importTarget, setImportTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [qrTarget, setQrTarget] = useState(null);
 
   const [notifications,     setNotifications]     = useState([]);
   const [notifLoading,      setNotifLoading]       = useState(false);
@@ -1589,6 +1589,7 @@ export default function PratyekshaMasterAdmin() {
             <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
             <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
             <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
+            <NavItem active={activeSection} onNav={navTo} id="qrstudio" label="QR Studio" icon={QrCode} />
           </div>
 
           <Div />
@@ -2155,11 +2156,6 @@ export default function PratyekshaMasterAdmin() {
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
-                            <button type="button" onClick={()=>setQrTarget(client)} title="Generate print-ready table and counter QR images" style={{
-                              padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500, cursor:'pointer',
-                              background:'rgba(211,191,162,0.08)', border:`1px solid rgba(211,191,162,0.28)`, color:'#d3bfa2',
-                              display:'flex', alignItems:'center', gap:4,
-                            }}><QrCode size={12} /></button>
                             <button type="button" onClick={()=>{ setDocsClientId(String(client._id || client.tenantId)); navTo('documents'); }} title="Prepare welcome / invoice / agreement" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',
@@ -2476,6 +2472,12 @@ export default function PratyekshaMasterAdmin() {
 
         {activeSection==='crm' && <LeadCRM />}
 
+        {activeSection==='qrstudio' && (
+          <div className="no-sb p-fade-in" style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', width:'100%', WebkitOverflowScrolling:'touch' }}>
+            <QrStudio />
+          </div>
+        )}
+
         {activeSection==='documents' && (
           <div className="no-sb p-fade-in" style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', width:'100%', WebkitOverflowScrolling:'touch' }}>
             <MasterDocuments clients={clients} focusClientId={docsClientId} onFocusHandled={()=>setDocsClientId(null)} />
@@ -2791,7 +2793,6 @@ export default function PratyekshaMasterAdmin() {
         {deleteTarget && (
           <DeleteTenantModal client={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={(text) => runDeleteTenant(deleteTarget, text)} />
         )}
-        {qrTarget && <TemplateQRGenerator client={qrTarget} onClose={() => setQrTarget(null)} flash={flash} />}
       </AnimatePresence>
       <Toast toast={toast} />
     </div>

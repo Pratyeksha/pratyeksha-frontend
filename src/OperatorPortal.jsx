@@ -11,6 +11,7 @@ import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // the crossed spoon & fork replaces the bell everywhere
 const Bell = SpoonForkIcon;
 import NotifImagePicker from './NotifImagePicker.jsx';
+import { OperatorTables, OperatorCombos, OperatorBillRequests } from './OperatorCommerce.jsx';
 import { playAlertSound, callOut, speak, formatAlertTime } from './alertSounds.js';
 import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
@@ -4944,6 +4945,7 @@ const renderMonthHeatmap = () => {
         section: 'OPERATIONS',
         items: [
           {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
+          {id:'bill_requests', label:'Bill Requests',  icon:<ReceiptText size={16}/>,  badge: checkoutRequests.length || null},
           {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
           {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
         ]
@@ -4962,6 +4964,8 @@ const renderMonthHeatmap = () => {
         items: [
           {id:'inventory',    label:'Inventory',       icon:<Layers size={16}/>,       badge: (procurementData||[]).filter(p=>p.daysRemaining!==null&&p.daysRemaining<=2).length || null},
           {id:'extras',       label:'Extra Items',     icon:<ShoppingBag size={16}/>,  badge: null},
+          {id:'combos',       label:'Combos',          icon:<Boxes size={16}/>,        badge: null},
+          {id:'tables',       label:'Tables',          icon:<LayoutGrid size={16}/>,   badge: null},
           {id:'recipes',      label:'Recipes',         icon:<ChefHat size={16}/>,      badge: null},
         ]
       },
@@ -5576,7 +5580,6 @@ const renderMonthHeatmap = () => {
       <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#c2c2c2', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
     <div style={{ display:'flex', gap:'8px' }}>
-
       {joinMode && (
         <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(236,220,185,0.35)', background:'rgba(236,220,185,0.1)', color:'#ecdcb9', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
@@ -8895,22 +8898,6 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       </div>
     </div>
 
-    {/* Send the operator-approved bill to the matching customer table before settlement. */}
-    <button type="button" onClick={() => {
-      if (!tableBill || !selectedTable || selectedTable === 'Online') { showNotif('Select a dine-in table before sending a customer bill.', 'error'); return; }
-      const subtotal = Number(tableBill.subtotal || 0);
-      const cgstPct = Number(tableBill.cgstPct || 0) / 100;
-      const sgstPct = Number(tableBill.sgstPct || 0) / 100;
-      const total = Math.round(billFinalAmount(tableBill, discountType, discount) * 100) / 100;
-      const cgst = Number(tableBill.cgst || 0);
-      const sgst = Number(tableBill.sgst || 0);
-      const discountAmount = Math.max(0, Math.round((subtotal + cgst + sgst - total) * 100) / 100);
-      socket.emit('send_customer_bill', { tenantId, tableNumber: String(selectedTable), items: tableBill.items || [], subtotal: Math.round(subtotal * 100) / 100, cgst, sgst, total, discountAmount, discountReason: discountReason || '', discountType, discountValue: Number(discount) || 0, sentAt: new Date().toISOString() });
-      showNotif(`Approved bill sent to Table ${selectedTable}.`, 'success');
-    }} style={{ ...styles.settleBtn, marginTop:'12px', background:'#d3bfa2', color:'#17120d' }}>
-      SEND APPROVED BILL TO CUSTOMER
-    </button>
-
     {/* ── SETTLE BUTTON ── */}
     <button type="button" onClick={settleBill}
       style={{...styles.settleBtn, marginTop:'18px', opacity: isSettling ? 0.5 : 1, cursor: isSettling ? 'not-allowed' : 'pointer'}}
@@ -11720,6 +11707,10 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 
 {/* ── PREMIUM AUDIT TRAIL TAB ── */}
 {/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
+{activeTab === 'bill_requests' && <OperatorBillRequests tenantId={tenantId} notify={showNotif} onGoBilling={() => setActiveTab('billing')} />}
+{activeTab === 'tables' && <OperatorTables tenantId={tenantId} notify={showNotif} />}
+{activeTab === 'combos' && <OperatorCombos tenantId={tenantId} menuItems={menuItems} notify={showNotif} />}
+
 {activeTab === 'audit' && (
   <motion.div key="audit" initial={false} animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
