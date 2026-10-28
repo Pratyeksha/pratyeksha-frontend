@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import OfferSheet from './OfferSheet.jsx';
 import axios from 'axios';
 import {
   Coffee, UtensilsCrossed, Search,  ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
   Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check, ArrowUp, ArrowUpDown, History, Phone, WifiOff, Leaf, Star,
-  CalendarClock, Armchair }  from 'lucide-react';
+  CalendarClock, Armchair , Mic}  from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
+import OffersExplorer from './OffersExplorer.jsx';
 
 import API_BASE_URL from './apiBase.js';
 
@@ -48,6 +48,7 @@ const L = {
     loadFail: 'Unable to load restaurants.', locDenied: 'Allow location access to sort by distance', locTimeout: 'Could not get your location in time — try again',
     locNA: 'Location is not available on this device', locBusy: 'Location unavailable right now', finding: 'Finding you…', inArea: 'in',
     featured: 'Featured', isNew: 'New',
+    didYouMean: 'Did you mean', voice: 'Voice search', listening: 'Listening…', servedAt: 'at',
     reserveNow: 'Reserve a table', joinWaitlist: 'Join waitlist', orderPickup: 'Order pickup', share: 'Share', copy: 'Copy', googleMaps: 'Google Maps',
     loadingMap: 'Loading map', noLocation: 'Location not added yet', surprise: 'Surprise me', backToTop: 'Back to top', addrCopied: 'Address copied', copyNA: 'Copy not available',
     nearLandmark: 'Near', validTill: 'Valid till', minBill: 'Min bill', useCode: 'Code', straightLine: 'in a straight line', away: 'away', featuredRail: 'Featured places', statOffers: 'live offers', statPickup: 'offer pickup', statReserve: 'take reservations',
@@ -71,6 +72,7 @@ const L = {
     loadFail: 'रेस्टॉरंट लोड करता आले नाहीत.', locDenied: 'अंतरानुसार क्रमवारीसाठी लोकेशनची परवानगी द्या', locTimeout: 'लोकेशन वेळेत मिळाले नाही — पुन्हा प्रयत्न करा',
     locNA: 'या डिव्हाइसवर लोकेशन उपलब्ध नाही', locBusy: 'लोकेशन सध्या उपलब्ध नाही', finding: 'तुमचे लोकेशन शोधत आहे…', inArea: 'येथे',
     featured: 'विशेष', isNew: 'नवीन',
+    didYouMean: 'तुम्हाला हे म्हणायचे आहे का', voice: 'आवाजाने शोधा', listening: 'ऐकत आहे…', servedAt: 'येथे',
     reserveNow: 'टेबल आरक्षित करा', joinWaitlist: 'प्रतीक्षा यादीत सामील व्हा', orderPickup: 'पिकअप ऑर्डर करा', share: 'शेअर करा', copy: 'कॉपी', googleMaps: 'गुगल मॅप्स',
     loadingMap: 'नकाशा लोड होत आहे', noLocation: 'स्थान अजून जोडलेले नाही', surprise: 'काहीतरी नवीन सुचवा', backToTop: 'वर जा', addrCopied: 'पत्ता कॉपी केला', copyNA: 'कॉपी उपलब्ध नाही',
     nearLandmark: 'जवळ', validTill: 'वैध', minBill: 'किमान बिल', useCode: 'कोड', straightLine: 'सरळ रेषेत', away: 'दूर', featuredRail: 'विशेष ठिकाणे', statOffers: 'चालू ऑफर्स', statPickup: 'पिकअप देतात', statReserve: 'आरक्षण घेतात',
@@ -132,13 +134,6 @@ const offerTerms = (o, tr) => {
   return bits.join(' \u00b7 ');
 };
 /* The most attractive live offer of an outlet (largest % off first) - shown as the card headline. */
-/* Offer-type filter: percent / flat / free item / happy hour / ending within 48 h. */
-const offerMatchesKind = (o, kind) => {
-  if (!kind) return true;
-  if (kind === 'ending') { const d = o?.expiresAt ? new Date(o.expiresAt).getTime() : NaN; return Number.isFinite(d) && d > Date.now() && d - Date.now() <= 48 * 36e5; }
-  return o?.type === kind;
-};
-const OFFER_KINDS = [['percent_off', { en: '% off', mr: '% सूट' }], ['fixed_off', { en: '₹ off', mr: '₹ सूट' }], ['free_item', { en: 'Free item', mr: 'मोफत पदार्थ' }], ['happy_hour', { en: 'Happy hour', mr: 'हॅपी अवर' }], ['ending', { en: 'Ending soon', mr: 'लवकरच संपते' }]];
 const offerRank = (o) => (o?.type === 'percent_off' ? Number(o.value) || 0 : o?.type === 'fixed_off' ? 1 : 0.5);
 const bestOffer = (t) => {
   const list = Array.isArray(t?.activeOffers) ? t.activeOffers : [];
@@ -704,8 +699,6 @@ export default function CustomerHome() {
   const [service, setService] = useState(init.service);
   const [favOnly, setFavOnly] = useState(init.favOnly);
   const [offersOnly, setOffersOnly] = useState(init.offersOnly);
-  const [offerKind, setOfferKind] = useState(null);       // null = any offer
-  const [offerSheet, setOfferSheet] = useState(null);
   const [vegOnly, setVegOnly] = useState(init.vegOnly);
   const [openOnly, setOpenOnly] = useState(init.openOnly);
   const [query, setQuery] = useState(init.query);
@@ -948,7 +941,7 @@ export default function CustomerHome() {
       if (filter === 'restaurant' && cafe) return false;
       if (service && (t.config?.customerFeatures || {})[service] === false) return false;
       if (favOnly && !favs.includes(t.tenantId)) return false;
-      if ((offersOnly || offerKind) && !(t.activeOffers || []).some((o) => offerMatchesKind(o, offerKind))) return false;
+      if (offersOnly && !(t.activeOffers || []).length) return false;
       if (vegOnly && t.config?.onlyVeg !== true) return false;
       if (init.audit && incompleteOnly && !listingGaps(t).length) return false;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') return false;
@@ -964,20 +957,10 @@ export default function CustomerHome() {
     else {
       // recommended: featured placements first, then outlets that are open (or have no hours on file) before ones known to be closed
       const closedRank = (t) => (openStatus(t.hours, minuteKey * 60000)?.state === 'closed' ? 1 : 0);
-      // While searching, the best MATCH comes first (restaurant name, then dish category, then dish, then area); featured / open is the tie-breaker.
-      const rel = (t) => {
-        if (!q) return 0;
-        const n = normQ(t.name); if (n === q) return 100; if (n.startsWith(q)) return 85;
-        const w = matchWhy(t, q, menuLookup); if (!w) return 0;
-        if (w.name) return 70;
-        if (w.category.length) return 50 + (w.category.some((c) => normQ(c).startsWith(q)) ? 5 : 0);
-        if (w.dish.length) return 40 + (w.dish.some((d) => normQ(d).startsWith(q)) ? 5 : 0);
-        return 25;
-      };
-      list.sort((a, b) => rel(b) - rel(a) || Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
+      list.sort((a, b) => Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
     }
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, offerKind, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
+  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 520);
@@ -1001,11 +984,12 @@ export default function CustomerHome() {
     const areas = new Map();
     const cats = new Map();
     const dishes = new Map();
-    const bump = (map, lc, raw, seen) => {
+    const bump = (map, lc, raw, seen, tname) => {
       if (seen.has(lc)) return;
       seen.add(lc);
-      const cur = map.get(lc) || { kind: '', text: raw, n: 0, rank: lc.startsWith(q) ? 0 : 1 };
+      const cur = map.get(lc) || { kind: '', text: raw, n: 0, names: [], rank: lc.startsWith(q) ? 0 : 1 };
       cur.n += 1;
+      if (tname && cur.names.length < 3) cur.names.push(tname);
       map.set(lc, cur);
     };
     for (const t of tenants) {
@@ -1019,20 +1003,59 @@ export default function CustomerHome() {
       if (m) {
         const seenC = new Set();
         const seenD = new Set();
-        for (const c of m.cats) if (c.lc.includes(q)) bump(cats, c.lc, c.raw, seenC);
-        for (const d of m.dishes) if (d.lc.includes(q)) bump(dishes, d.lc, d.raw, seenD);
+        for (const c of m.cats) if (c.lc.includes(q)) bump(cats, c.lc, c.raw, seenC, t.name);
+        for (const d of m.dishes) if (d.lc.includes(q)) bump(dishes, d.lc, d.raw, seenD, t.name);
       }
     }
     const byRank = (x, y) => x.rank - y.rank || (y.n || 0) - (x.n || 0) || x.text.localeCompare(y.text);
     const count = (n) => `${n} ${n === 1 ? tr.place : tr.places}`;
     return [
       ...places.sort(byRank).slice(0, 4),
-      ...[...cats.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'category', sub: `${tr.sugCategory} · ${count(c.n)}` })),
-      ...[...dishes.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'dish', sub: `${tr.sugDish} · ${count(c.n)}` })),
+      ...[...cats.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'category', sub: `${tr.sugCategory} · ${c.n === 1 ? c.names[0] : `${count(c.n)}: ${c.names.slice(0, 2).join(', ')}${c.n > 2 ? ` +${c.n - 2}` : ''}`}` })),
+      ...[...dishes.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'dish', sub: `${tr.sugDish} · ${c.n === 1 ? `${tr.servedAt} ${c.names[0]}` : `${count(c.n)}: ${c.names.slice(0, 2).join(', ')}${c.n > 2 ? ` +${c.n - 2}` : ''}`}` })),
       ...[...areas.values()].sort(byRank).slice(0, 2),
     ];
   }, [tenants, qNorm, menuLookup, tr]);
   const showSug = searchOpen && query.trim().length > 0 && suggestions.length > 0;
+
+  // Typos / near misses: when nothing matches, offer the closest place, area, category or dish (edit distance, not a guess).
+  const didYouMean = useMemo(() => {
+    const q = qNorm;
+    if (q.length < 3 || filtered.length > 0) return '';
+    const lev = (a, b) => {
+      if (Math.abs(a.length - b.length) > 3) return 9;
+      let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+      for (let i = 1; i <= a.length; i++) { const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+      return prev[b.length];
+    };
+    const max = q.length <= 5 ? 1 : 2;
+    let best = null;
+    const consider = (raw) => {
+      const text = String(raw || '').trim(); if (!text) return;
+      const lc = normQ(text);
+      const parts = [lc, ...lc.split(' ').filter((w) => w.length >= 3)];      // the whole phrase or any single word of it
+      for (const p of parts) { const d = lev(q, p); if (d <= max && (!best || d < best.d)) best = { d, text }; }
+    };
+    for (const t of tenants) {
+      consider(t.name); consider(areaOf(t));
+      const m = menuLookup?.map.get(t.tenantId);
+      if (m) { for (const c of m.cats) consider(c.raw); for (const d of m.dishes) consider(d.raw); }
+    }
+    return best && normQ(best.text) !== q ? best.text : '';
+  }, [tenants, qNorm, menuLookup, filtered.length]);
+
+  const [listening, setListening] = useState(false);
+  const speechCtor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const startVoice = () => {
+    if (!speechCtor || listening) return;
+    try {
+      const rec = new speechCtor();
+      rec.lang = lang === 'mr' ? 'mr-IN' : 'en-IN'; rec.interimResults = false; rec.maxAlternatives = 1;
+      rec.onresult = (e) => { const text = e.results?.[0]?.[0]?.transcript; if (text) { setQuery(text.replace(/[.!?]+$/, '')); setSearchOpen(true); } };
+      rec.onend = () => setListening(false); rec.onerror = () => setListening(false);
+      setListening(true); rec.start();
+    } catch { setListening(false); }
+  };
   // The search that the current results answer: sent once the guest stops typing (and straight away when they open a result).
   const sendSearchNow = () => {
     if (qNorm.length < 2) return;
@@ -1056,7 +1079,7 @@ export default function CustomerHome() {
       if (filter === 'restaurant' && cafe) continue;
       if (service && (t.config?.customerFeatures || {})[service] === false) continue;
       if (favOnly && !favs.includes(t.tenantId)) continue;
-      if ((offersOnly || offerKind) && !(t.activeOffers || []).some((o) => offerMatchesKind(o, offerKind))) continue;
+      if (offersOnly && !(t.activeOffers || []).length) continue;
       if (vegOnly && t.config?.onlyVeg !== true) continue;
       if (init.audit && incompleteOnly && !listingGaps(t).length) continue;
       if (openOnly && openStatus(t.hours, minuteKey * 60000)?.state !== 'open') continue;
@@ -1067,7 +1090,7 @@ export default function CustomerHome() {
     const list = [...counts.values()].sort((x, y) => y.n - x.n || x.label.localeCompare(y.label));
     if (area !== 'all' && !counts.has(area)) list.unshift({ key: area, label: area.replace(/\b\w/g, (c) => c.toUpperCase()), n: 0 });
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, offerKind, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area]);
+  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area]);
 
   const chooseArea = (key) => { setArea(key); try { localStorage.setItem(AREA_KEY, key); } catch { /* ignore */ } };
 
@@ -1097,10 +1120,9 @@ export default function CustomerHome() {
   }, [recent, favs, byId]);
 
   const offerCards = useMemo(
-    () => filtered.flatMap((t) => (t.activeOffers || []).filter((o) => offerMatchesKind(o, offerKind)).map((o) => ({ ...o, _tenant: t }))).slice(0, 12),
-    [filtered, offerKind]
+    () => filtered.flatMap((t) => (t.activeOffers || []).map((o) => ({ ...o, _tenant: t }))).slice(0, 12),
+    [filtered]
   );
-  const offerKindCounts = useMemo(() => Object.fromEntries(OFFER_KINDS.map(([k]) => [k, tenants.filter((t) => (t.activeOffers || []).some((o) => offerMatchesKind(o, k))).length])), [tenants]);
   const totalOffers = useMemo(() => tenants.reduce((n, t) => n + (Array.isArray(t.activeOffers) ? t.activeOffers.length : 0), 0), [tenants]);
 
   const featuredList = useMemo(() => tenants.filter(isFeatured), [tenants]);
@@ -1130,8 +1152,8 @@ export default function CustomerHome() {
   const greeting = hour < 12 ? tr.morning : hour < 17 ? tr.afternoon : tr.evening;
   const greetingLine = guestName ? `${greeting}, ${guestName}` : greeting;
   const visible = filtered.slice(0, limit);
-  const resetFilters = () => { setOfferKind(null); setFilter('all'); setService(null); setFavOnly(false); setOffersOnly(false); setVegOnly(false); setOpenOnly(false); setIncompleteOnly(false); setQuery(''); chooseArea('all'); };
-  const hasFilters = offerKind || filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
+  const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setOffersOnly(false); setVegOnly(false); setOpenOnly(false); setIncompleteOnly(false); setQuery(''); chooseArea('all'); };
+  const hasFilters = filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
   const hasMore = filtered.length > limit;
   const showFeatured = !loading && !hasFilters && view === 'list' && featuredList.length > 0;
   const showHow = !howHidden && !loading && tenants.length > 0 && !hasFilters && !recent.length && !favs.length;
@@ -1202,7 +1224,6 @@ export default function CustomerHome() {
 
   return (
     <main style={{ minHeight: '100dvh', background: 'radial-gradient(900px 420px at 50% -10%, rgba(211,191,162,.10), transparent 60%), #0e0e0e', color: '#fff', fontFamily: 'Poppins, sans-serif', textAlign: 'left', boxShadow: '0 0 0 100vmax #0e0e0e', clipPath: 'inset(0 -100vmax)' }}>
-      {offerSheet && <OfferSheet offer={offerSheet} lang={lang} onClose={() => setOfferSheet(null)} onView={(o) => { const t = o._tenant; setOfferSheet(null); openTenant(t, 'offers'); }} />}
       <style>{css}</style>
       {(pull > 0 || refreshing) && (
         <div aria-hidden="true" style={{ position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 10px)', left: '50%', zIndex: 1200, pointerEvents: 'none', transform: `translate(-50%, ${refreshing ? 0 : Math.round(pull * 22) - 22}px)`, opacity: refreshing ? 1 : pull, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 20, background: 'rgba(20,20,20,.94)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 800 }}>
@@ -1284,9 +1305,16 @@ export default function CustomerHome() {
                 </div>
               )}
             </div>
+            {speechCtor && <button type="button" onClick={startVoice} aria-label={listening ? tr.listening : tr.voice} title={listening ? tr.listening : tr.voice} style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, background: listening ? 'rgba(211,191,162,.25)' : undefined }}><Mic size={18} color={GOLD} /></button>}
             <button type="button" onClick={surprise} disabled={!filtered.length} aria-label={tr.surprise} title={tr.surprise} style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, opacity: filtered.length ? 1 : .4 }}><Shuffle size={18} color={GOLD} /></button>
           </div>
         </section>
+
+        {query.trim() && didYouMean && (
+          <div role="status" style={{ marginTop: 10, fontSize: 12.5, color: 'rgba(255,255,255,.6)' }}>
+            {tr.didYouMean} <button type="button" onClick={() => { setQuery(didYouMean); setSearchOpen(false); }} style={{ background: 'transparent', border: 0, color: GOLD, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>{didYouMean}</button>?
+          </div>
+        )}
 
         {searchOpen && !query && searches.length > 0 && (
           <div className="pxh-areas" role="list" aria-label="Recent searches" style={{ marginTop: 10 }}>
@@ -1314,7 +1342,7 @@ export default function CustomerHome() {
           <button type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</button>
           <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</button>
           {anyHours && <button type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</button>}
-          {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => { setOffersOnly(!offersOnly); if (offersOnly) setOfferKind(null); }}><Tag size={13} /> {tr.offers}</button>}
+          {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</button>}
           {anyVeg && <button type="button" className={`pxh-chip${vegOnly ? ' on' : ''}`} aria-pressed={vegOnly} onClick={() => setVegOnly(!vegOnly)}><Leaf size={13} /> {tr.veg}</button>}
         </div>
 
@@ -1382,16 +1410,11 @@ export default function CustomerHome() {
         )}
 
         {/* ── Offers rail ── */}
-        {(offersOnly || offerKind) && totalOffers > 0 && (
-          <div role="group" aria-label={lang === 'mr' ? 'ऑफरचा प्रकार' : 'Offer type'} style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {OFFER_KINDS.filter(([k]) => offerKindCounts[k] > 0 || offerKind === k).map(([k, lbl]) => (
-              <button type="button" key={k} className={`pxh-chip${offerKind === k ? ' on' : ''}`} aria-pressed={offerKind === k} onClick={() => { setOfferKind(offerKind === k ? null : k); setOffersOnly(true); }}>{lbl[lang]} <span style={{ opacity: .6 }}>· {offerKindCounts[k]}</span></button>))}
-          </div>)}
         {offerCards.length > 0 && (
           <section style={{ marginTop: 16 }}>
             <div className="pxh-rail">
               {offerCards.map((offer) => (
-                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); setOfferSheet(offer); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
+                <button type="button" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(offer._tenant, 'offers'); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
                   {offer.imageUrl && /^https:\/\//i.test(offer.imageUrl)
                     ? <img src={offer.imageUrl} alt="" loading="lazy" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, objectFit: 'cover', flexShrink: 0, display: 'block' }} />
                     : <Avatar t={offer._tenant} size={38} radius={11} />}
@@ -1597,23 +1620,7 @@ export default function CustomerHome() {
                 ) : allOffers.length === 0 ? (
                   <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.38)', fontSize: 12 }}>No offers right now</div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
-                    {allOffers.map((offer, i) => {
-                      const tenant = offer.tenant || {};
-                      const value = offer.type === 'happy_hour' ? `${offer.happyStart || '?'}–${offer.happyEnd || '?'}` : offerValue(offer);
-                      return (
-                        <button type="button" key={`${tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${i}`} onClick={() => { setShowAllOffers(false); if (offer._id) track(tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(tenant, 'offers'); }} style={{ textAlign: 'left', border: '1px solid rgba(211,191,162,.14)', borderRadius: 16, background: 'linear-gradient(145deg,#191919,#101010)', color: '#fff', padding: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, fontFamily: 'inherit' }}>
-                          <Avatar t={tenant} size={40} radius={12} />
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 900, color: GOLD }}>{value}</div>
-                            <div style={{ fontSize: 11, marginTop: 3, color: 'rgba(255,255,255,.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[offer.title, tenant.name || 'Restaurant'].filter(Boolean).join(' · ')}</div>
-                            {offerTerms(offer, tr) && <div style={{ fontSize: 10, marginTop: 3, color: 'rgba(255,255,255,.45)', lineHeight: 1.35 }}>{offerTerms(offer, tr)}</div>}
-                          </div>
-                          <ChevronRight size={15} color={GOLD} />
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <OffersExplorer offers={allOffers} lang={lang} Avatar={Avatar} onOpen={(offer) => { const tenant = offer.tenant || {}; setShowAllOffers(false); if (offer._id) track(tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(tenant, 'offers'); }} />
                 )}
               </div>
             </motion.div>

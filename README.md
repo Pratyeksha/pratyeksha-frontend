@@ -28,3 +28,14 @@ If you are developing a production application, we recommend using TypeScript wi
 - Owner app ▸ Settings ▸ **Online Payments (UPI) & Bank Details**: UPI ID, name shown to customers, optional bank details.
 - After "Generate bill" the receipt page shows Google Pay / PhonePe / Paytm / BHIM / Other UPI buttons. Android uses `intent://pay?...;package=<app>` links, iOS uses `gpay://`, `phonepe://`, `paytmmp://`; desktop shows a QR code. The amount is the bill's grand total (same formula as the invoice PDF).
 - Once the bill is generated the menu is closed: closing the receipt, refresh, back and forward all show the "session ended" screen. An unpaid bill can still be paid from that screen for 6 hours. Only scanning the table QR again starts a new session.
+
+
+## Updates in this version
+- **Master Admin > QR Studio**: signed, print-ready QR cards per table + counter (`CT`) on your template. The template is auto-detected, so replacing `public/qr-template.png` (or uploading another in the studio) needs no code change.
+- **Invalid QR screen**: any edited or unsigned table link shows a premium "can't be verified" screen; the menu loads only after the backend verifies the scan.
+- **Billing**: Generate bill creates a persistent request; the guest sees a waiting screen until the operator approves, then the exact approved bill (offers, discount, GST) with UPI payment and a PDF. Operator: floating "Bills" panel > Review & send.
+- **Combos**: Operator > Marketing > Combos; shown to guests as a "Combos" menu category.
+- **Tables**: operator floor map has +/- to add or remove tables (live on every device).
+- **Customer Home**: search shows restaurants serving a dish/category, "Did you mean", voice search; offers have filters and a detail view.
+- **UPI**: Google Pay / PhonePe / Paytm buttons with their marks; guests report a failed payment and the real reason reaches the operator.
+- Gold scrollbar theme on all staff screens (customer screens keep hidden scrollbars).

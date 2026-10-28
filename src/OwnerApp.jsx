@@ -3072,7 +3072,7 @@ const PaymentCard = ({ tenantId }) => {
     setSaving(true); setMsg({ text: '', ok: true });
     try {
       const r = await api.put(`/api/owner/payment/${tenantId}`, {
-        upiId: upi, payeeName: form.payeeName, bankName: form.bankName, accountHolder: form.accountHolder, ifsc, accountNumber: acc, clearAccountNumber: clearAcc,
+        upiId: upi, payeeName: form.payeeName, bankName: form.bankName, accountHolder: form.accountHolder, ifsc, accountNumber: acc, clearAccountNumber: clearAcc, merchant: !!form.merchant, mcc: form.mcc || '5812',
       });
       setForm({ ...r.data, accountNumber: '' }); setClearAcc(false);
       setMsg({ text: r.data.upiId ? 'Saved. Guests can now pay their bill through Google Pay, PhonePe, Paytm and other UPI apps.' : 'Saved. Add a UPI ID to let guests pay online.', ok: true });
@@ -3096,6 +3096,10 @@ const PaymentCard = ({ tenantId }) => {
           <input value={form.payeeName || ''} onChange={e => set('payeeName', e.target.value)} maxLength={60} placeholder="Your restaurant name" style={inputStyle} />
         </Field>
       </div>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: T.textMed, margin: '2px 0 12px', cursor: 'pointer', lineHeight: 1.5 }}>
+        <input type="checkbox" checked={!!form.merchant} onChange={e => set('merchant', e.target.checked)} style={{ marginTop: 3 }} />
+        <span>This is a registered <b>business / merchant</b> UPI ID (from your bank or payment app). Payment links then carry the merchant category code{form.merchant ? <> <input value={form.mcc || '5812'} onChange={e => set('mcc', e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ ...inputStyle, width: 70, display: 'inline-block', padding: '3px 6px', margin: '0 4px' }} aria-label="Merchant category code" /> (5812 = restaurants)</> : ''} and a transaction reference, which UPI apps expect for business accounts. Leave it off for a personal UPI ID.</span>
+      </label>
       <div style={{ height: 1, background: T.border, margin: '4px 0 14px' }} />
       <div style={{ fontSize: 11, fontWeight: 700, color: T.textMed, letterSpacing: 0.4, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Lock size={12} /> BANK DETAILS (for your records — never shown to guests)</div>
       <div className="pown-grid-2">

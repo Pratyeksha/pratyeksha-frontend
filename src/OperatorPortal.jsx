@@ -11,7 +11,8 @@ import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // the crossed spoon & fork replaces the bell everywhere
 const Bell = SpoonForkIcon;
 import NotifImagePicker from './NotifImagePicker.jsx';
-import { OperatorTables, OperatorCombos, OperatorBillRequests } from './OperatorCommerce.jsx';
+import BillRequestsPanel from './BillRequestsPanel.jsx';
+import ComboBuilder from './ComboBuilder.jsx';
 import { playAlertSound, callOut, speak, formatAlertTime } from './alertSounds.js';
 import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
@@ -1020,6 +1021,17 @@ socket.on('new_waitlist_entry', (data) => {
   }
 });
 
+socket.on('upi_payment_failed', (data) => {
+  // The guest says the UPI payment failed. Staff see the real reason and can take payment at the counter.
+  const amt = Number(data?.amount); const amtText = Number.isFinite(amt) ? amt.toFixed(2).replace(/\.00$/, '') : '';
+  const tableText = String(data?.tableNumber || '').trim();
+  const why = { limit: 'a limit exceeded message', declined: 'the payment being declined', noopen: 'the UPI app not opening', other: 'a problem' }[data?.reason] || 'a problem';
+  const sentence = `Table ${tableText} reports a UPI payment of ${amtText} rupees failed with ${why}. Please help the guest.`;
+  callOut('cancelled', sentence, { repeat: 1 });
+  setCallAlerts(prev => [{ id: `uf-${tableText}-${Date.now()}`, kind: 'payment', failed: true, reason: data?.reason, name: String(data?.name || '').trim() || `Table ${tableText}`, table: tableText, amount: amtText, requestedAt: formatAlertTime(new Date()), sentence }, ...prev].slice(0, 8));
+  showNotif(`UPI payment problem  Table ${tableText}  ${amtText}`, 'error');
+});
+
 socket.on('upi_payment_claimed', (data) => {
   // A guest tapped "I've paid" after paying through a UPI app. Staff must verify it in their UPI / bank app, then settle the table.
   const amt = Number(data?.amount);
@@ -1030,6 +1042,12 @@ socket.on('upi_payment_claimed', (data) => {
   callOut('payment', sentence, { repeat: 1 });
   setCallAlerts(prev => [{ id: `up-${tableText}-${Date.now()}`, kind: 'payment', name: who || `Table ${tableText}`, table: tableText, amount: amtText, requestedAt: formatAlertTime(new Date()), sentence }, ...prev].slice(0, 8));
   showNotif(`UPI payment claimed  Table ${tableText}  ${amtText}`, 'info');
+});
+
+socket.on('tables_updated', (d) => {
+  if (!d || !Number.isFinite(Number(d.tableCount))) return;
+  setTenantConfig(p => ({ ...p, tableCount: d.tableCount, ...(Array.isArray(d.floorLayout) ? { floorLayout: d.floorLayout } : {}) }));
+  setLocalFloorLayout(null);
 });
 
 socket.on('new_reservation', (data) => {
@@ -1138,7 +1156,7 @@ socket.on('aggregator_session_restored', (data) => {
         'new_order', 'staff_wiped_live', 'inventory_updated', 'low_stock_alert',
         'inventory_expiry_alert', 'ingredient_out_of_stock', 'new_waiter_request',
         'menu_updated', 'menu_bulk_updated', 'menu_item_restored', 'table_occupied_live', 'menu_item_deleted',
-        'new_waitlist_entry', 'new_reservation', 'upi_payment_claimed', 'reservation_updated', 'waitlist_cancelled',
+        'new_waitlist_entry', 'new_reservation', 'tables_updated', 'upi_payment_claimed', 'upi_payment_failed', 'reservation_updated', 'waitlist_cancelled',
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
         'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
         'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored'
@@ -2082,6 +2100,30 @@ const fetchDailyCostData = useCallback(async () => {
 
 // ── Build the working floor layout: saved layout if it exists, else an auto-arranged
 // grid from tableCount so the heatmap is usable on day one with zero setup ──
+// ── Add / remove tables (saved on the server; every screen and every device follows tenantConfig.tableCount) ──
+const [tablesBusy, setTablesBusy] = useState(false);
+const changeTables = async (op) => {
+  if (tablesBusy) return;
+  const n = Number(tenantConfig?.tableCount) || 0;
+  if (op === 'remove' && !window.confirm(`Remove Table ${n}? Tables are numbered 1 to ${n}, so the highest-numbered table is the one removed. It must have no open order, bill or reservation.`)) return;
+  setTablesBusy(true);
+  try {
+    const r = await axios.post(`${BASE_URL}/admin/tables/${encodeURIComponent(tenantId)}/${op}`);
+    setTenantConfig(p => ({ ...p, tableCount: r.data.tableCount, ...(r.data.floorLayout ? { floorLayout: r.data.floorLayout } : {}) }));
+    setLocalFloorLayout(null);                       // drop any unsaved local arrangement so the map matches the saved tables
+    showNotif(op === 'add' ? `Table ${r.data.added} added` : `Table ${r.data.removed} removed`, 'success');
+  } catch (e) { showNotif(e?.response?.data?.error || 'Could not change tables', 'error'); }
+  finally { setTablesBusy(false); }
+};
+const releaseTableLock = async () => {
+  const t = window.prompt('Release the ordering lock for which table number?\n(Use only if the guest who ordered lost their phone or cleared their browser while still seated.)');
+  if (!t || !t.trim()) return;
+  try {
+    const r = await axios.post(`${BASE_URL}/admin/table-lock/release`, { tenantId, tableNumber: t.trim() });
+    showNotif(r.data?.released ? `Table ${t.trim()} unlocked. The next guest to order becomes its ordering guest.` : `Table ${t.trim()} was not locked.`, r.data?.released ? 'success' : 'info');
+  } catch (e) { showNotif(e?.response?.data?.error || 'Could not release the table', 'error'); }
+};
+
 const floorLayout = useMemo(() => {
   if (localFloorLayout) return localFloorLayout;
   const saved = tenantConfig?.floorLayout;
@@ -2764,6 +2806,20 @@ useEffect(() => {
     fetchRecipes();
   }
 }, [activeTab, fetchRecipes]);
+
+// If the guest was shown an approved bill for this table, pre-fill the settlement with exactly that discount.
+useEffect(() => {
+  if (!selectedTable || selectedTable === 'Online' || selectedTable === 'Counter') return undefined;
+  let alive = true;
+  axios.get(`${BASE_URL}/admin/bill-requests/${encodeURIComponent(tenantId)}`).then((r) => {
+    const b = (Array.isArray(r.data) ? r.data : []).find((x) => x.status === 'sent' && x.bill && (String(x.tableNumber) === String(selectedTable) || (x.joinedTables || []).map(String).includes(String(selectedTable))));
+    if (!alive || !b) return;
+    setDiscountType('flat'); setDiscount(b.bill.settleDiscount.discount); setDiscountReason('Approved bill');
+    showNotif(`Approved bill applied: the guest was shown ₹${Number(b.bill.total).toFixed(2)}`, 'info');
+  }).catch(() => {});
+  return () => { alive = false; };
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedTable, tenantId]);
 
 const handleFinalSettle = async () => {
     // 🔒 PREVENT DOUBLE-FIRE: Guard against multiple clicks
@@ -4807,6 +4863,7 @@ const renderMonthHeatmap = () => {
   // ─────────────────────────────────────────────────────
   return (
     <div style={styles.dashboard} className="p-dash">
+      <BillRequestsPanel tenantId={tenantId} socket={socket} notify={showNotif} />
       {/* RESERVATION / PICKUP CALL-OUT ALERTS — stay on screen until the operator clicks the cross */}
       {callAlerts.length > 0 && (
         <div role="alert" aria-live="assertive" style={{ position: 'fixed', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, zIndex: 100000, display: 'flex', flexDirection: 'column', gap: 10, width: 'min(380px, calc(100vw - 28px))', maxHeight: 'calc(100vh - 28px)', overflowY: 'auto' }}>
@@ -4821,13 +4878,13 @@ const renderMonthHeatmap = () => {
                   {a.kind === 'pickup' ? <ShoppingBag size={19} color="#d3bfa2" /> : a.kind === 'payment' ? <IndianRupee size={19} color="#d3bfa2" /> : <CalendarClock size={19} color="#d3bfa2" />}
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: 2, color: 'rgba(211,191,162,0.75)' }}>{a.kind === 'pickup' ? 'NEW PICKUP REQUEST' : a.kind === 'payment' ? 'UPI PAYMENT CLAIMED' : 'NEW RESERVATION'}</div>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: 2, color: 'rgba(211,191,162,0.75)' }}>{a.kind === 'pickup' ? 'NEW PICKUP REQUEST' : a.kind === 'payment' ? (a.failed ? 'UPI PAYMENT PROBLEM' : 'UPI PAYMENT CLAIMED') : 'NEW RESERVATION'}</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f7f3eb', lineHeight: 1.2 }}>{a.name}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.78)' }}>
                 {a.kind === 'payment'
-                  ? <span><b style={{ color: '#d3bfa2' }}>Table {a.table}</b> · ₹{a.amount} · verify in your UPI app, then settle</span>
+                  ? <span><b style={{ color: '#d3bfa2' }}>Table {a.table}</b> · ₹{a.amount} · {a.failed ? `guest reports: ${({ limit: 'limit exceeded', declined: 'declined', noopen: 'app did not open', other: 'other problem' })[a.reason] || 'problem'}. Offer another way or take payment at the counter` : 'verify in your UPI app, then settle'}</span>
                   : <span><b style={{ color: '#d3bfa2' }}>{a.kind === 'pickup' ? 'Pickup at' : 'Reserved for'}</b> {a.time}</span>}
                 {a.kind === 'reservation' && a.partySize ? <span><b style={{ color: '#d3bfa2' }}>Party</b> {a.partySize}</span> : null}
                 {a.phone ? <span><b style={{ color: '#d3bfa2' }}>Phone</b> {a.phone}</span> : null}
@@ -4945,7 +5002,6 @@ const renderMonthHeatmap = () => {
         section: 'OPERATIONS',
         items: [
           {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
-          {id:'bill_requests', label:'Bill Requests',  icon:<ReceiptText size={16}/>,  badge: checkoutRequests.length || null},
           {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
           {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
         ]
@@ -4964,8 +5020,6 @@ const renderMonthHeatmap = () => {
         items: [
           {id:'inventory',    label:'Inventory',       icon:<Layers size={16}/>,       badge: (procurementData||[]).filter(p=>p.daysRemaining!==null&&p.daysRemaining<=2).length || null},
           {id:'extras',       label:'Extra Items',     icon:<ShoppingBag size={16}/>,  badge: null},
-          {id:'combos',       label:'Combos',          icon:<Boxes size={16}/>,        badge: null},
-          {id:'tables',       label:'Tables',          icon:<LayoutGrid size={16}/>,   badge: null},
           {id:'recipes',      label:'Recipes',         icon:<ChefHat size={16}/>,      badge: null},
         ]
       },
@@ -5579,7 +5633,16 @@ const renderMonthHeatmap = () => {
       </div>
       <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#c2c2c2', letterSpacing:'2.5px', textTransform:'uppercase' }}>Floor Map · Live</span>
     </div>
-    <div style={{ display:'flex', gap:'8px' }}>
+    <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'4px', border:'1px solid rgba(211,191,162,0.2)', borderRadius:'7px', padding:'2px' }}>
+        <button type="button" disabled={tablesBusy || (tenantConfig?.tableCount || 0) <= 1} onClick={() => changeTables('remove')} title="Remove the last table" aria-label="Remove a table"
+          style={{ width:'26px', height:'26px', borderRadius:'5px', border:'none', background:'transparent', color:'#d3bfa2', fontSize:'1rem', fontWeight:'900', cursor:'pointer', opacity:(tablesBusy || (tenantConfig?.tableCount || 0) <= 1) ? 0.4 : 1 }}>&minus;</button>
+        <span style={{ fontSize:'0.58rem', fontWeight:'900', color:'#d3bfa2', letterSpacing:'1px', minWidth:'58px', textAlign:'center' }}>{tenantConfig?.tableCount || 0} TABLES</span>
+        <button type="button" disabled={tablesBusy} onClick={() => changeTables('add')} title="Add a table" aria-label="Add a table"
+          style={{ width:'26px', height:'26px', borderRadius:'5px', border:'none', background:'transparent', color:'#d3bfa2', fontSize:'1rem', fontWeight:'900', cursor:'pointer', opacity:tablesBusy ? 0.4 : 1 }}>+</button>
+      </div>
+      <button type="button" onClick={releaseTableLock} title="Free a table whose ordering guest can no longer order"
+        style={{ padding:'7px 10px', borderRadius:'7px', border:'1px solid rgba(211,191,162,0.2)', background:'transparent', color:'#d3bfa2', fontSize:'0.52rem', fontWeight:'900', cursor:'pointer', letterSpacing:'0.5px' }}>UNLOCK TABLE</button>
       {joinMode && (
         <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(236,220,185,0.35)', background:'rgba(236,220,185,0.1)', color:'#ecdcb9', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
@@ -7489,6 +7552,8 @@ const renderMonthHeatmap = () => {
         badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length },
       {id:'offers',        label:'Offers',        icon:<Tag size={13}/>,
         badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length },
+      {id:'combos',        label:'Combos',        icon:<Layers size={13}/>,
+        badge: null },
       {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
         badge: null },
       {id:'analytics',     label:'Push Analytics', icon:<BarChart3 size={13}/>,
@@ -8254,6 +8319,12 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     </div>
   );
 })()}
+
+{marketingSubTab === 'combos' && (
+  <div key="combos-tab">
+    <ComboBuilder tenantId={tenantId} menuItems={menuItems} notify={showNotif} />
+  </div>
+)}
 
 {marketingSubTab === 'discovery' && (
   <div key="discovery-tab" style={{display:'flex',flexDirection:'column',gap:'20px'}}>
@@ -11707,10 +11778,6 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 
 {/* ── PREMIUM AUDIT TRAIL TAB ── */}
 {/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
-{activeTab === 'bill_requests' && <OperatorBillRequests tenantId={tenantId} notify={showNotif} onGoBilling={() => setActiveTab('billing')} />}
-{activeTab === 'tables' && <OperatorTables tenantId={tenantId} notify={showNotif} />}
-{activeTab === 'combos' && <OperatorCombos tenantId={tenantId} menuItems={menuItems} notify={showNotif} />}
-
 {activeTab === 'audit' && (
   <motion.div key="audit" initial={false} animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}

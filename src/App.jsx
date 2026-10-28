@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { AmbientBackdrop, BrandLoader } from './PremiumUI.jsx';
-import { recommendForCart } from './recommend.js';
 import { GuestLegalSheet, ConsentCheck, getGuestConsent, setGuestConsent, setGuestToken, clearGuestLocalData, GUEST_CONSENT_VERSION } from './GuestLegal.jsx';
 import { io } from "socket.io-client";
 import { 
@@ -21,9 +20,11 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import UpiPay from './UpiPay.jsx';
-import GuestBillTotals from './GuestBill.jsx';
 import { decideEntry } from './sessionPolicy.js';
+import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
+import InvalidQrScreen from './InvalidQrScreen.jsx';
+import { useBillStatus, BillWaitingScreen, ApprovedBillCard } from './billFlow.jsx';
 const BASE_URL = API_BASE_URL;
 const PRATYEKSHAA_LOGO = '/pratyeksha-logo.png';
 
@@ -50,24 +51,9 @@ const getDeviceKey = () => {
   try { localStorage.setItem(DEVICE_KEY_NAME, k); } catch { try { sessionStorage.setItem(DEVICE_KEY_NAME, k); } catch { /* memory only */ } }
   return k;
 };
-// ── Combos: shown as an ordinary category of dishes; sent to the server as combo lines (server prices them) ──
-const COMBO_CATEGORY_ID = '__combos__';
-const COMBO_CATEGORY = { _id: COMBO_CATEGORY_ID, categoryId: COMBO_CATEGORY_ID, name: 'Combos', name_mr: 'कॉम्बो', displayOrder: -1, isCombo: true };
-const comboToMenuItem = (c) => ({
-  _id: `combo_${c._id}`, comboId: String(c._id), isCombo: true, categoryId: COMBO_CATEGORY_ID, name: c.name, name_mr: c.name_mr || '',
-  description: `${(c.items || []).map(i => `${i.quantity}× ${i.name}`).join(' + ')}${c.description ? ' — ' + c.description : ''}`,
-  price: c.price, priceFull: c.price, isVeg: c.isVeg !== false, isAvailable: true, imageUrl: c.imageUrl || '', tags: ['Combo'], comboSavings: c.savings || 0,
-});
-// ETA helpers — the server sends an ABSOLUTE ready-by time; the phone only counts down from it (skew-free: uses the server's own clock reading).
-const etaRemainingMs = (e) => (e?.etaAtMs && e?.serverNowMs) ? Math.max(0, (e.etaAtMs - e.serverNowMs) - (Date.now() - (e._rx || Date.now()))) : Math.max(0, (e?.etaMinutes || 0) * 60000);
-const etaLeftMin = (e) => Math.ceil(etaRemainingMs(e) / 60000);
-const etaClock = (e) => (e?.etaAtMs && e?.serverNowMs) ? new Date(e._rx + etaRemainingMs(e)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : (e?.etaTime || '');
-const getTableQr = () => {   // legacy `qr` credential printed by the old tools script (verified server-side, never newly issued)
-  try { const fromUrl = new URLSearchParams(window.location.search).get('qr'); if (fromUrl) return fromUrl; return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').qr || ''; } catch { return ''; }
-};
 const getTableSig = () => {
   try {
-    const fromUrl = new URLSearchParams(window.location.search).get('sig');
+    const fromUrl = new URLSearchParams(window.location.search).get('qr');
     if (fromUrl) return fromUrl;
     return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').sig || '';
   } catch { return ''; }
@@ -86,6 +72,13 @@ const BILL_KEY = (t, n) => `pratyeksha_last_bill_${t}_${n}`;
 const readLastBill = (t, n) => { try { return JSON.parse(localStorage.getItem(BILL_KEY(t, n)) || 'null'); } catch { return null; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const __sessionBooted = new Set(); // one bootstrap per tenant+table per page load (a re-render must never start a second session)
+const getQrTenant = () => {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('tenantId');
+    if (fromUrl) return fromUrl;
+    return JSON.parse(sessionStorage.getItem('pratyeksha_qr_session') || '{}').qrTenant || '';
+  } catch { return ''; }
+};
 const TABLE_SCOPED_PATH = /\/(orders|waiter-requests|table-access|session\/validate|table-session|payments|bill-requests)(\/|$|\?)/;
 if (typeof window !== 'undefined' && !window.__pxTableGuard) {
   window.__pxTableGuard = true;
@@ -97,7 +90,8 @@ if (typeof window !== 'undefined' && !window.__pxTableGuard) {
         config.headers['x-device-key'] = getDeviceKey();
         const sig = getTableSig();
         if (sig) config.headers['x-table-sig'] = sig;
-        const legacyQr = getTableQr(); if (legacyQr) config.headers['x-table-qr'] = legacyQr;
+        const qrT = getQrTenant();
+        if (qrT) config.headers['x-qr-tenant'] = qrT;
         if (!config.px_noSession) { const ts = readTSession(); if (ts && ts.token) config.headers['x-session-token'] = ts.token; }
       }
     } catch { /* never block a request because of this */ }
@@ -118,6 +112,29 @@ if (typeof window !== 'undefined' && !window.__pxTableGuard) {
   });
 }
 
+// Combos (built by the operator from real dishes) are shown as virtual menu items in a "Combos" category, so the cart, totals and
+// display work unchanged. They are turned back into combo lines when the order is sent; the SERVER prices them.
+// Remaining time for the guest's order, counted down from the moment the SERVER computed it (never from when the order was placed:
+// the server value is already "time left from now", so subtracting the age of the order again made the countdown run too short).
+const etaLeftSeconds = (eta, nowMs = Date.now()) => (eta && eta.etaSeconds != null && eta._at ? Math.max(0, eta.etaSeconds - Math.floor((nowMs - eta._at) / 1000)) : null);
+const etaProgressPct = (eta, nowMs = Date.now()) => {
+  const left = etaLeftSeconds(eta, nowMs);
+  if (left === null) return 0;
+  const elapsed = (eta.elapsedSeconds || 0) + Math.floor((nowMs - eta._at) / 1000);
+  return Math.min(95, Math.max(2, Math.round((elapsed / Math.max(1, elapsed + left)) * 100)));
+};
+const etaLabel = (eta, nowMs, lang) => {
+  const left = etaLeftSeconds(eta, nowMs);
+  if (left === null) return lang === 'mr' ? 'स्वयंपाकघर तयारी करत आहे' : 'Kitchen is preparing';
+  if (eta.delayed || left <= 45) return lang === 'mr' ? 'लवकरच तयार' : 'Any moment now';
+  return lang === 'mr' ? `सुमारे ${Math.ceil(left / 60)} मि.` : `About ${Math.ceil(left / 60)} min`;
+};
+const COMBO_CATEGORY = { categoryId: 'combos', name: 'Combos', name_mr: 'कॉम्बो', displayOrder: -1, isCombos: true };
+const comboToMenuItem = (c) => ({
+  _id: `combo_${c._id}`, isCombo: true, name: c.name, name_mr: c.name, categoryId: 'combos', isAvailable: true, isVeg: c.isVeg !== false,
+  price: c.price, priceFull: c.price, priceHalf: null, originalPrice: c.originalPrice, savings: c.savings, comboItems: c.items,
+  description: `${(c.items || []).map((i) => `${i.quantity}× ${i.name}${i.portion && i.portion !== 'Single' ? ` (${i.portion})` : ''}`).join(' + ')}${c.description ? ` · ${c.description}` : ''}`,
+});
 const NOTIF_ICON = '/notification-icon.png';
 const NOTIF_BADGE = '/notification-badge.png';
 const notifImage = (event, custom) => custom || `/notif/${event || 'default'}.jpg`;
@@ -272,6 +289,8 @@ const PratyekshaPremiumMenu = () => {
   // Set when the server says this table link / session is invalid (or the outlet is gone). Kept separate from restaurantData:
   // the menu fetch re-sets restaurantData and used to silently undo the block, and a null restaurantData only rendered an empty menu.
   const [sessionBlocked, setSessionBlocked] = useState(false);
+  // A table link must be verified by the backend BEFORE any menu is shown (checking -> ok | invalid | unverified).
+  const [qrCheck, setQrCheck] = useState(() => { try { return new URLSearchParams(window.location.search).get('table') ? 'checking' : 'ok'; } catch { return 'ok'; } });
   const [categoryList, setCategoryList] = useState([]);
   const [allMenuItems, setAllMenuItems] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
@@ -365,6 +384,7 @@ useEffect(() => { cartRef.current = cart; }, [cart]);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [waiterCounts, setWaiterCounts] = useState({ spoon: 0, fork: 0, plates: 0, tissue: 0 });
 const [orderEta, setOrderEta] = useState(null);
+const [etaNow, setEtaNow] = useState(() => Date.now());   // re-renders the countdown every few seconds
 const etaRefreshRef = useRef(null);
   const [hasPlacedInitialOrder, setHasPlacedInitialOrder] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
@@ -742,15 +762,14 @@ useEffect(() => {
   const activeTenant = urlTenantId || 'jay_ambe_fusion';
   setTenantId(activeTenant);
   const params = new URLSearchParams(window.location.search);
-  const rawTableParam = params.get('table');
-  const tableParam = /^(ct|counter)$/i.test(String(rawTableParam || '').trim()) ? '' : rawTableParam;   // the signed counter QR (table=CT) is a counter scan, not a table
+  const tableParam = params.get('table');
 
   if (tableParam) {
     setTableNumber(tableParam);
     setIsCounterScan(false);
     setHasQrSession(true);
     try {
-      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, sig: params.get('sig') || '', qr: params.get('qr') || '', startedAt: Date.now() }));
+      sessionStorage.setItem('pratyeksha_qr_session', JSON.stringify({ tenantId: activeTenant, tableNumber: tableParam, sig: params.get('qr') || '', qrTenant: params.get('tenantId') || '', startedAt: Date.now() }));
     } catch {}
   } else {
     setTableNumber('Counter');
@@ -1692,12 +1711,13 @@ let _menuReqSeq = 0;
 const fetchMenuContent = async () => {
   const mySeq = ++_menuReqSeq;
   try {
-    const [res, cat, extras, comboRes] = await Promise.all([
+    const [res, cat, extras, combosRes] = await Promise.all([
       axios.get(`${BASE_URL}/tenant/${tenantId}`),
       axios.get(`${BASE_URL}/categories/${tenantId}`),
       axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/combos/${tenantId}`).catch(() => ({ data: [] }))      // published, fully orderable combos of THIS tenant only
+      axios.get(`${BASE_URL}/combos/${tenantId}`).catch(() => ({ data: [] })),
     ]);
+    const comboList = Array.isArray(combosRes.data) ? combosRes.data : [];
 
     // Try engineered order, fall back to plain menu
     const menuRes = await axios.get(`${BASE_URL}/menu/engineered/${tenantId}`)
@@ -1705,9 +1725,8 @@ const fetchMenuContent = async () => {
 
     if (_disposedMenu || mySeq !== _menuReqSeq) return;
     setRestaurantData(res.data);
-    const combos = (Array.isArray(comboRes.data) ? comboRes.data : []).map(comboToMenuItem);
-    setCategoryList([...(combos.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])]);
-    setAllMenuItems([...(Array.isArray(menuRes.data) ? menuRes.data : []), ...combos]);
+    setCategoryList([...(comboList.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])]);
+    setAllMenuItems([...(Array.isArray(menuRes.data) ? menuRes.data : []), ...comboList.map(comboToMenuItem)]);
     setExtraItems(Array.isArray(extras.data) ? extras.data : []);
     // If the browser reports offline but we still got real data back, it came
     // from the service worker's menu cache, not a live network round-trip.
@@ -1735,6 +1754,8 @@ const fetchMenuContent = async () => {
     // Menu/availability changes missed while offline are never replayed: refetch on RE-connect.
     let _seenConnect = socket.connected;
     socket.on('connect', () => { if (_seenConnect) fetchMenuContent(); _seenConnect = true; });
+
+socket.on("combos_updated", () => { fetchMenuContent(); });
 
 socket.on("menu_updated", (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -1769,20 +1790,6 @@ socket.on('menu_bulk_updated', (updatedItems) => {
   });
 });
 
-// Combos are priced/published by staff and hide themselves when a component dish runs out — keep this phone in step.
-let _comboT = null;
-const refreshCombos = () => {
-  clearTimeout(_comboT);
-  _comboT = setTimeout(() => {
-    axios.get(`${BASE_URL}/combos/${tenantId}`).then((r) => {
-      const combos = (Array.isArray(r.data) ? r.data : []).map(comboToMenuItem);
-      setAllMenuItems(prev => [...prev.filter(i => !i.isCombo), ...combos]);
-      setCategoryList(prev => { const rest = prev.filter(c => c._id !== COMBO_CATEGORY_ID); return combos.length ? [COMBO_CATEGORY, ...rest] : rest; });
-    }).catch(() => {});
-  }, 1200);
-};
-socket.on('combos_updated', refreshCombos);
-socket.on('menu_updated', refreshCombos);
 socket.on('menu_item_deleted', ({ itemId }) => {
   if (!itemId) return;
   setAllMenuItems(prev => prev.filter(i => i._id !== itemId && i._id?.toString() !== itemId.toString()));
@@ -1860,8 +1867,7 @@ socket.on('kds_item_timing_updated', (data) => {
 return () => {
   _disposedMenu = true;
   socket.off("menu_updated");
-  socket.off('combos_updated');
-  clearTimeout(_comboT);
+  socket.off("combos_updated");
   socket.off('menu_bulk_updated');
   socket.off("extra_item_updated");
   socket.off("extra_item_out_of_stock");
@@ -1889,14 +1895,14 @@ useEffect(() => {
   const load = async () => {
     try {
       const r = await axios.get(`${BASE_URL}/orders/eta/${encodeURIComponent(tenantId)}/${encodeURIComponent(tableNumber)}`);
-      if (!disposed && r.data) setOrderEta({ ...r.data, _rx: Date.now() });
+      if (!disposed && r.data) setOrderEta({ ...r.data, _at: Date.now() });
     } catch {
       // Keep the last known ETA visible during transient failures.
     }
   };
   etaRefreshRef.current = load;
   load();
-  const iv = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) load(); }, 30000);
+  const iv = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) load(); }, 20000);
   return () => {
     disposed = true;
     if (etaRefreshRef.current === load) etaRefreshRef.current = null;
@@ -1957,6 +1963,9 @@ useEffect(() => {
   const [sessionClosedLocal, setSessionClosedLocal] = useState(false);
   const [lastBill, setLastBill] = useState(null);
   const [payInfo, setPayInfo] = useState(null);
+  const [billSeed, setBillSeed] = useState(null);                                   // set when the guest taps Generate bill
+  const { request: liveBill } = useBillStatus({ tenantId, tableNumber, enabled: !!billSeed, seed: billSeed });
+  const billFlow = liveBill || billSeed;                                            // { id, status: requested | sent | settled | cancelled, bill }
   useEffect(() => {
     if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
     const key = `${tenantId}|${tableNumber}`;
@@ -2044,15 +2053,25 @@ useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === 'Counter' || isCounterScan) return;
   setSessionBlocked(false);
   let stale = false; // a slow answer for the previous table/outlet must not blank the page the guest has since moved to
-  axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken }, { px_noSession: true, px_silent: true })
-    .then(r => {
-      if (!stale && r.data && r.data.valid === false) setSessionBlocked(true);
-    })
-    .catch((err) => {
-      // The server answers an invalid table/token with HTTP 403 { valid:false }. axios REJECTS on 403, so the .then() above
-      // never saw it and a forged / expired QR link was never blocked. Network errors and 5xx stay non-fatal.
-      if (!stale && err?.response?.status === 403 && err.response.data?.valid === false) setSessionBlocked(true);
-    });
+  // 1) Shape check (no network): the scan must carry a signature and the tenantId printed in the QR must match the address.
+  let p; try { p = new URLSearchParams(window.location.search); } catch { p = new URLSearchParams(); }
+  const qr = (p.get('qr') || '').toLowerCase(); const qrT = p.get('tenantId') || '';
+  if (!/^[a-f0-9]{64}$/.test(qr) || qrT !== tenantId) { setSessionBlocked(true); setQrCheck('invalid'); return; }
+  // 2) The backend verifies the signature for exactly this (tenant, table). Network trouble is retried, never waved through.
+  (async () => {
+    for (let attempt = 0; attempt < 3 && !stale; attempt++) {
+      try {
+        await axios.post(`${BASE_URL}/session/validate`, { tenantId, tableNumber, sessionToken }, { px_noSession: true, px_silent: true });
+        if (!stale) { setSessionBlocked(false); setQrCheck('ok'); }
+        return;
+      } catch (err) {
+        const st = err?.response?.status;
+        if (st === 403 || st === 404 || st === 400) { if (!stale) { setSessionBlocked(true); setQrCheck('invalid'); } return; }
+        await sleep(900 * (attempt + 1));
+      }
+    }
+    if (!stale) setQrCheck('unverified');
+  })();
   return () => { stale = true; };
 }, [tenantId, tableNumber, isCounterScan, sessionToken]);
 
@@ -2981,14 +3000,17 @@ const sendBatchToKitchen = async () => {
       const portion = isMulti ? key.split('-')[1] : 'Single';
       const item = allMenuItems.find(i => i._id === id);
       if (!item) return;
+      if (item.isCombo) {
+        const ck = `combo:${id}`;
+        if (!summary[ck]) summary[ck] = { comboId: String(id).replace(/^combo_/, ''), name: item.name, name_mr: item.name, quantity: 0, portion: 'Single', pricePerUnit: Number(item.price) || 0, subtotal: 0, suggestion: suggestions[key] || '', isVeg: item.isVeg !== false, isCombo: true };
+        summary[ck].quantity += qty; summary[ck].subtotal = summary[ck].quantity * summary[ck].pricePerUnit;
+        return;
+      }
  
       const summaryKey = `${id}-${portion}`;
       if (!summary[summaryKey]) {
         const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
-summary[summaryKey] = item.isCombo ? {
-  isCombo: true, comboId: item.comboId, name: item.name, name_mr: item.name_mr, quantity: 0, portion: 'Combo',
-  pricePerUnit: unitPrice, subtotal: 0, suggestion: suggestions[key] || "", isVeg: item.isVeg !== false
-} : {
+summary[summaryKey] = {
   menuItemId:   item._id,
   name:         item.name,
   name_mr:      item.name_mr,
@@ -3008,7 +3030,7 @@ summary[summaryKey] = item.isCombo ? {
     // ── Validate items are still available before sending ──
 const unavailableItems = Object.entries(summary)
   .filter(([, item]) => {
-    const menuItem = allMenuItems.find(m => item.isCombo ? m.comboId === item.comboId : m._id === item.menuItemId);
+    const menuItem = allMenuItems.find(m => m._id === item.menuItemId);
     return menuItem && menuItem.isAvailable === false;
   })
   .map(([, item]) => item.name);
@@ -3093,15 +3115,14 @@ setPrepPct(0);
         quantity:   i.quantity,
         subtotal:   i.subtotal,
       }));
-      const credit = getCredit();
+      // A visit is NOT counted here: it is counted only when the guest requests the bill (requestFinalBill below).
       upsertGuest({
         tenantId,
         name:           customerInfo.name?.trim() || welcomeCard?.name || savedCustomer?.name || '',
         phone:          knownPhone,
         lastOrderItems: visitItems,
         visitAmount:    total,
-        incrementVisit: !credit.visit,
-      }).then(r => { if (r) addCredit({ visit: true, spend: total, dishes: true }); }).catch(() => {});
+      }).then(r => { if (r) addCredit({ spend: total, dishes: true }); }).catch(() => {});
     }
  
     triggerAlert("orderSuccess");
@@ -3136,6 +3157,12 @@ const placeWaitlistOrder = async () => {
     const portion = isMulti ? key.split('-')[1] : 'Single';
     const item = allMenuItems.find(i => i._id === id);
     if (!item) return;
+    if (item.isCombo) {
+      const ck = `combo:${id}`;
+      if (!summary[ck]) summary[ck] = { comboId: String(id).replace(/^combo_/, ''), name: item.name, name_mr: item.name, quantity: 0, portion: 'Single', pricePerUnit: Number(item.price) || 0, subtotal: 0, isVeg: item.isVeg !== false, isCombo: true };
+      summary[ck].quantity += qty; summary[ck].subtotal = summary[ck].quantity * summary[ck].pricePerUnit;
+      return;
+    }
     const summaryKey = `${id}-${portion}`;
     if (!summary[summaryKey]) {
       const unitPrice = Number(portion === 'Half' ? (item.priceHalf || item.price) : (item.priceFull || item.price)) || 0;
@@ -3177,8 +3204,7 @@ const res = await axios.post(`${BASE_URL}/waitlist/${tenantId}`, {
         tenantId,
         name: customerInfo.name.trim(),
         phone,
-        lastVisit: new Date().toISOString(),
-        incrementVisit: counterMode === 'pickup',
+        // No visit is counted for counter / pickup orders: visits count only when a bill is requested through requestFinalBill.
         lastOrderItems: orderItems.map(i => ({
           menuItemId: i.menuItemId,
           name: i.name,
@@ -3403,7 +3429,10 @@ const finalBillItems = useMemo(() => {
 
 
 // The amount a guest pays: the SAME formula as the invoice PDF and the server (items ex-tax, CGST + SGST added, 2-decimal rounding).
+const approvedBill = billFlow && (billFlow.status === 'sent' || billFlow.status === 'settled') && billFlow.bill ? billFlow.bill : null;
+const billLines = approvedBill ? approvedBill.lines : finalBillItems;
 const payableAmount = useMemo(() => {
+  if (approvedBill) return billFlow.status === 'settled' ? 0 : approvedBill.total;   // exact approved total; 0 once the table is settled
   const cgstPct = restaurantData?.config?.cgstPercentage ?? 2.5;
   const sgstPct = restaurantData?.config?.sgstPercentage ?? 2.5;
   const r2 = (n) => Math.round(n * 100) / 100;
@@ -3411,7 +3440,7 @@ const payableAmount = useMemo(() => {
   const cgst = r2(r2(subtotal) * (cgstPct / 100));
   const sgst = r2(r2(subtotal) * (sgstPct / 100));
   return r2(r2(subtotal) + cgst + sgst);
-}, [finalBillItems, restaurantData]);
+}, [finalBillItems, restaurantData, approvedBill, billFlow]);
 
 // Bill generated ⇒ the table session ends (server + this browser). Keeps a small snapshot so an unpaid bill can still be paid
 // after a reload, without ever reopening the menu.
@@ -3434,40 +3463,7 @@ const markBillGenerated = () => {
     }
   })();
 };
-// ── Authoritative bill status (requested → sent → settled). Pushed by socket, with polling + focus refetch as the safety net. ──
-const [billStatus, setBillStatus] = useState(null);
-useEffect(() => {
-  if ((!billRequested && !lastBill) || isCounterScan || !tenantId || !tableNumber || tableNumber === 'Counter') return undefined;
-  let stop = false, iv = null;
-  const pull = async () => {
-    try {
-      const r = await axios.get(`${BASE_URL}/bill-requests/${tenantId}/${encodeURIComponent(tableNumber)}/status`, { px_silent: true, px_noSession: true, timeout: 12000 });
-      if (stop) return;
-      setBillStatus(r.data);
-      if (r.data?.status === 'settled' && iv) { clearInterval(iv); iv = null; }
-    } catch { /* transient — next tick retries */ }
-  };
-  pull(); iv = setInterval(pull, 4000);
-  const onVis = () => { if (!document.hidden) pull(); };
-  const onSock = (m) => { if (m && String(m.tableNumber) === String(tableNumber)) pull(); };
-  document.addEventListener('visibilitychange', onVis); window.addEventListener('online', pull);
-  try { waitlistSocket?.on?.('bill_updated', onSock); waitlistSocket?.on?.('connect', pull); } catch { /* socket optional */ }
-  return () => { stop = true; if (iv) clearInterval(iv); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('online', pull); try { waitlistSocket?.off?.('bill_updated', onSock); waitlistSocket?.off?.('connect', pull); } catch { /* ignore */ } };
-}, [billRequested, !!lastBill, tenantId, tableNumber, isCounterScan]); // eslint-disable-line react-hooks/exhaustive-deps
-// The amount a guest pays is the approved one — keep the saved snapshot (used after a reload) in step with it.
-useEffect(() => {
-  const b = billStatus?.bill;
-  if (!b || billStatus.status === 'requested') return;
-  setLastBill((prev) => {
-    if (!prev || (Number(prev.total) === Number(b.grandTotal) && prev.version === b.version)) return prev;
-    const n = { ...prev, total: b.grandTotal, version: b.version, approved: true };
-    try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(n)); } catch { /* ignore */ }
-    return n;
-  });
-}, [billStatus, tenantId, tableNumber]);
-
 const onUpiClaimed = () => {
-  axios.post(`${BASE_URL}/bill-requests/${tenantId}/${encodeURIComponent(tableNumber)}/claim`, {}, { px_silent: true, px_noSession: true }).catch(() => {});
   setLastBill((prev) => {
     const n = { ...(prev || {}), claimed: true };
     try { localStorage.setItem(BILL_KEY(tenantId, tableNumber), JSON.stringify(n)); } catch { /* ignore */ }
@@ -3477,18 +3473,24 @@ const onUpiClaimed = () => {
 
 const autoDownloadInvoicePDF = useCallback(() => {
   const rd = restaurantData;
-  const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
-  const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-  const ab = billStatus?.bill && billStatus.status !== 'requested' ? billStatus.bill : null;   // the approved bill, when there is one
-  const subtotal   = ab ? ab.subtotal : finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const ap = approvedBill;                       // the operator-approved bill (offers, discount, taxes) when available
+  const invoiceItems = billLines;
+  const cgstPct = ap ? ap.cgstPct : (rd?.config?.cgstPercentage ?? 2.5);
+  const sgstPct = ap ? ap.sgstPct : (rd?.config?.sgstPercentage ?? 2.5);
+  const subtotal   = ap ? ap.base : finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
   // Same 2-decimal rounding the server uses at settlement (it never rounds the grand total to a whole rupee), so the
   // customer's invoice matches the operator's bill to the paisa.
   const r2 = (n) => Math.round(n * 100) / 100;
   const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const cgstAmt    = ab ? ab.cgst : r2(r2(subtotal) * (cgstPct / 100));
-  const sgstAmt    = ab ? ab.sgst : r2(r2(subtotal) * (sgstPct / 100));
-  const grandTotal = ab ? ab.grandTotal : r2(r2(subtotal) + cgstAmt + sgstAmt);
-  const taxableAmt = subtotal; // items are priced ex-tax; tax is added on top
+  const cgstAmt    = ap ? ap.cgst : r2(r2(subtotal) * (cgstPct / 100));
+  const sgstAmt    = ap ? ap.sgst : r2(r2(subtotal) * (sgstPct / 100));
+  const grandTotal = ap ? ap.total : r2(r2(subtotal) + cgstAmt + sgstAmt);
+  const taxableAmt = ap ? ap.subtotal : subtotal; // items are priced ex-tax; tax is added on top
+  const discountRowsHtml = ap && ap.discountTotal > 0
+    ? `<div class="tax-row"><span>Items total</span><span>₹${ap.base.toFixed(2)}</span></div>`
+      + (ap.offers || []).map((o) => `<div class="tax-row"><span>Offer: ${escHtml(o.title)}</span><span>-₹${o.amount.toFixed(2)}</span></div>`).join('')
+      + (ap.manual && ap.manual.amount > 0 ? `<div class="tax-row"><span>Discount${ap.manual.type === 'percent' ? ` (${ap.manual.value}%)` : ''}</span><span>-₹${ap.manual.amount.toFixed(2)}</span></div>` : '')
+    : '';
 
   const addr = [rd?.address?.street, rd?.address?.city, rd?.address?.state, rd?.address?.pincode]
     .filter(Boolean).join(', ');
@@ -3503,7 +3505,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   }).toUpperCase();
   const timeStr    = new Date().toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const itemRows = finalBillItems.map((item, idx) => `
+  const itemRows = invoiceItems.map((item, idx) => `
     <tr>
       <td class="desc">
         <span class="item-name">${item.quantity}x ${escHtml(item.name)}${item.portion && item.portion !== 'Single' ? ` (${escHtml(item.portion)})` : ''}${item.isExtraItem ? ' *' : ''}</span>
@@ -3679,9 +3681,9 @@ const autoDownloadInvoicePDF = useCallback(() => {
 
   <!-- TAX BREAKDOWN -->
   <div class="tax-block">
-    ${ab && ab.discount ? `<div class="tax-row"><span>Items total</span><span>₹${Number(ab.baseSubtotal).toFixed(2)}</span></div><div class="tax-row"><span>Discount (${escHtml(ab.discount.title || ab.discount.reason)})</span><span>- ₹${Number(ab.discount.amountExTax).toFixed(2)}</span></div>` : ''}
+    ${discountRowsHtml}
     <div class="tax-row subtotal-row">
-      <span>Subtotal</span>
+      <span>${ap && ap.discountTotal > 0 ? 'Taxable amount' : 'Subtotal'}</span>
       <span>₹${taxableAmt.toFixed(2)}</span>
     </div>
     <div class="tax-row">
@@ -3732,7 +3734,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const win  = window.open(url, '_blank');
   if (!win) triggerAlert('Please allow pop-ups to download your invoice.', 'error'); // a blocked pop-up used to fail silently
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-}, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient, billStatus]);
+}, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient, approvedBill, billLines]);
 
   // Add this useEffect to ask notification permission early, before order is placed
 useEffect(() => {
@@ -3746,21 +3748,26 @@ useEffect(() => {
     return () => clearTimeout(t);
   }
 }, [isCounterScan]);
+// A double-tap sent two bill requests at once (two operator alerts, and the visit counted twice). One request at a time.
+const billRequestLockRef = useRef(false);
 const requestFinalBill = async () => {
+  if (billRequestLockRef.current) return;
+  billRequestLockRef.current = true;
+  try { await requestFinalBillOnce(); } finally { billRequestLockRef.current = false; }
+};
+const requestFinalBillOnce = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
   try { localStorage.setItem(`pratyeksha_customer_history_${tenantId}`, JSON.stringify({ name: customerInfo.name.trim(), phone: customerInfo.phone.replace(/\D/g,'') })); } catch {}
-  // The request is stored on the server FIRST (so staff can never miss it, even if this phone goes offline right after).
-  // Only when that succeeds do we end the table session and show "bill requested".
-  if (!isCounterScan && tableNumber && tableNumber !== 'Counter') {
-    try { await axios.post(`${BASE_URL}/bill-requests`, { tenantId, tableNumber, name: customerInfo.name.trim() }, { px_silent: true, timeout: 20000 }); }
-    catch (e) {
-      const d = e?.response?.data;
-      if (d?.code === 'TABLE_QR_INVALID') { setSessionBlocked(true); return; }
-      triggerAlert(d?.error || (language === 'mr' ? 'रेस्टॉरंटशी संपर्क होऊ शकला नाही. कृपया पुन्हा प्रयत्न करा.' : "We couldn't reach the restaurant to request your bill. Please try again."), 'error');
-      return;
-    }
-  } else { try { waitlistSocket.emit("request_bill", { tenantId, tableNumber, name: customerInfo.name }); } catch { /* counter flow */ } }
+  let billCreated = false;
   try {
+    // Persistent bill request (database + real-time alert to the operator). The operator reviews, applies offers / discounts and
+    // sends the final bill; until then the guest sees a waiting screen and NO amount.
+    const br = await axios.post(`${BASE_URL}/bill-requests`, { tenantId, tableNumber, guestName: customerInfo.name.trim(), guestPhone: customerInfo.phone.replace(/\D/g, '') })
+      .then((r) => r.data).catch((e) => ({ error: e?.response?.data?.error || (language === 'mr' ? 'बिल विनंती पाठवता आली नाही. कृपया पुन्हा प्रयत्न करा.' : 'Could not send your bill request. Please check your connection and try again.') }));
+    if (br.error) { triggerAlert(br.error, 'error'); return; }
+    billCreated = true;
+    setBillSeed({ id: br.request.id, status: br.request.status, sentAt: br.request.sentAt, requestedAt: br.request.requestedAt, bill: br.request.bill || null });
+
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
       .map(i => ({
@@ -3772,9 +3779,11 @@ const requestFinalBill = async () => {
 
     const visitTotal = finalBillItems.reduce((sum, i) => sum + (i.subtotal || 0), 0);
 
-    // Orders already credited this table's visit, spend and dishes when they were placed — only add what is missing.
+    // THE place a visit is counted: once per bill request. Orders already credited this table's spend and dishes when they were
+    // placed, so only what is missing is added. When the server says an open request for this table already existed (a second tap,
+    // a refresh, another tab), that request was counted when it was created, so nothing is counted again.
     const credit = getCredit();
-    const billUpsert = await upsertGuest({
+    const billUpsert = br.existing ? null : await upsertGuest({
       tenantId,
       name: customerInfo.name.trim(),
       phone: customerInfo.phone.replace(/\D/g, ''),
@@ -3782,7 +3791,7 @@ const requestFinalBill = async () => {
       ...(credit.dishes ? {} : { lastOrderItems: visitItems }),
       visitAmount: Math.max(0, Math.round((visitTotal - credit.spend) * 100) / 100),
       incrementVisit: !credit.visit,
-    });
+    }).catch(() => null); // a failed customer save must not skip the push registration / cleanup below
     if (billUpsert) addCredit({ visit: true, spend: Math.max(0, visitTotal - credit.spend), dishes: true });
 
     const phoneDigits = customerInfo.phone.replace(/\D/g, '');
@@ -3835,6 +3844,7 @@ const requestFinalBill = async () => {
       localStorage.removeItem(`pratyeksha_placed_${tenantId}_${tableNumber}`);
       localStorage.removeItem(`pratyeksha_cart_${tenantId}_${tableNumber}`);
     } catch { /* storage unavailable */ }
+    if (!billCreated) { triggerAlert(language === 'mr' ? 'काहीतरी चुकले. कृपया पुन्हा प्रयत्न करा.' : 'Something went wrong. Please try again.', 'error'); return; }
     markBillGenerated();
     setBillRequested(true);
   }
@@ -3992,18 +4002,12 @@ const modifyOrderStrip = canModifyOrder && !modifyingOrderId ? (
 ) : null;
 
 useEffect(() => {
-  if (!orderEta?.etaMinutes) return;
-  const tick = () => {
-    // progress = time already waited / (time already waited + time still to go); both anchored to the server's own clock reading
-    const waited = (orderEta.placedAtMs && orderEta.serverNowMs ? Math.max(0, orderEta.serverNowMs - orderEta.placedAtMs) : (orderPlacedAt ? Math.max(0, (orderEta._rx || Date.now()) - orderPlacedAt) : 0)) + (Date.now() - (orderEta._rx || Date.now()));
-    const left = etaRemainingMs(orderEta);
-    const pct = Math.min(95, Math.max(0, Math.round((waited / Math.max(1, waited + left)) * 100))); // capped at 95% - reaches 100 only when ready
-    setPrepPct(pct);
-  };
+  if (!orderEta || orderEta.etaSeconds == null) return;
+  const tick = () => { setPrepPct(etaProgressPct(orderEta)); setEtaNow(Date.now()); };
   tick();
-  const interval = setInterval(tick, 10000); // update every 10s
+  const interval = setInterval(tick, 10000);
   return () => clearInterval(interval);
-}, [orderPlacedAt, orderEta]);
+}, [orderEta]);
 
 // ── RESTORE placedOrders FROM SERVER on mount (multi-device safe) ──
 useEffect(() => {
@@ -4065,28 +4069,20 @@ useEffect(() => {
     });
 }, [tenantId, tableNumber, isCounterScan]);
 
-// "Goes well with your order" — recommendations that depend on what is IN THE CART and on THIS restaurant's own categories,
-// boosted by what its guests really order together (server-side, from its own settled orders). See recommend.js.
-const [pairings, setPairings] = useState([]);
-const pairKeyRef = useRef('');
-useEffect(() => {
-  if (!tenantId || !allMenuItems.length) return undefined;
-  const ids = Object.keys(cart).map(k => k.split('-')[0]).filter(id => /^[a-f0-9]{24}$/i.test(id));
-  const key = [...new Set(ids)].sort().join(',');
-  if (!key) { pairKeyRef.current = ''; setPairings([]); return undefined; }
-  if (key === pairKeyRef.current) return undefined;
-  const t = setTimeout(() => {
-    pairKeyRef.current = key;
-    axios.get(`${BASE_URL}/menu/pairings/${tenantId}`, { params: { items: key } }).then(r => setPairings(Array.isArray(r.data?.pairings) ? r.data.pairings : [])).catch(() => setPairings([]));
-  }, 400);
-  return () => clearTimeout(t);
-}, [cart, tenantId, allMenuItems.length]);
+// "Goes well with your order" — the same smart pairing strip for QR table ordering, waitlist, pickup and reservations.
 useEffect(() => {
   if (!allMenuItems.length) return;
-  const recs = recommendForCart({ cart, allMenuItems, categories: categoryList, pairings, vegOnly: filterVegOnly || isOnlyVegTenant, limit: 6 });
-  const picks = recs.map(r => ({ ...r.item, _reason: r.reason }));
-  setComboSuggestions(picks); setShowComboStrip(picks.length > 0);
-}, [cart, allMenuItems, categoryList, pairings, filterVegOnly, isOnlyVegTenant]);
+  const cartIds = Object.keys(cart).map(k => k.split('-')[0]);
+  if (cartIds.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
+
+  // Suggestions are driven by WHAT is in the cart (owner-curated pairings, classic food pairings, the missing course) and the
+  // guest's diet; see pairing.js. With no relevant match the strip stays hidden instead of showing unrelated dishes.
+  const cartItems = cartIds.map(id => allMenuItems.find(m => String(m._id) === String(id))).filter(Boolean);
+  if (cartItems.length === 0) { setComboSuggestions([]); setShowComboStrip(false); return; }
+  const picks = recommendPairings({ cartItems, menu: allMenuItems, categoryList, vegOnly: !!isOnlyVegTenant, max: 6 });
+  setComboSuggestions(picks);
+  setShowComboStrip(picks.length > 0);
+}, [cart, allMenuItems, categoryList, isOnlyVegTenant]);
 
 // ── Tenant-specific guest services. Defaults stay enabled to preserve every
 // existing restaurant workflow unless the tenant explicitly disables a service.
@@ -5438,29 +5434,24 @@ if (phone.length === 10) {
 
 
 // ── LOADER ──
+if (billRequested && billFlow && !approvedBill && !isCounterScan) {
+  return <BillWaitingScreen language={language} restaurantName={restaurantData?.name || ''} requestedAt={billFlow.requestedAt} cancelled={billFlow.status === 'cancelled'} />;
+}
+if (qrCheck === 'checking') return <BrandLoader message={language === 'mr' ? 'तुमचे टेबल पडताळत आहे' : 'Verifying your table'} />;
 if (isLoading) return <BrandLoader message={language === 'mr' ? 'मेनू लोड होत आहे' : 'Preparing your menu'} />;
 
 if (sessionEnded && !isCounterScan) {
   return (
-    <SessionEndedScreen language={language} reason={sessionEnded} restaurantName={restaurantData?.name || ''} lastBill={lastBill} billStatus={billStatus}
+    <SessionEndedScreen language={language} reason={sessionEnded} restaurantName={restaurantData?.name || ''} lastBill={lastBill}
       tenantId={tenantId} tableNumber={tableNumber} onClaimed={onUpiClaimed} />
   );
 }
 
-if (sessionBlocked) {
-  return (
-    <CustomerShell>
-      <div style={{ marginTop: '18vh', maxWidth: '340px' }}>
-        <AlertCircle size={34} color="#d3bfa2" />
-        <h2 style={{ margin: '16px 0 8px', fontFamily: 'Georgia, serif', fontWeight: 500, color: '#f7f3eb', fontSize: '1.35rem' }}>
-          {language === 'mr' ? 'हा टेबल लिंक वैध नाही' : "This table link isn't valid"}
-        </h2>
-        <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: 1.6 }}>
-          {language === 'mr' ? 'कृपया तुमच्या टेबलवरील QR कोड पुन्हा स्कॅन करा किंवा स्टाफला विचारा.' : 'Please scan the QR code on your table again, or ask a member of staff for help.'}
-        </p>
-      </div>
-    </CustomerShell>
-  );
+if (sessionBlocked || qrCheck === 'invalid') {
+  return <InvalidQrScreen language={language} restaurantName={restaurantData?.name || ''} />;
+}
+if (qrCheck === 'unverified') {
+  return <InvalidQrScreen language={language} variant="offline" restaurantName={restaurantData?.name || ''} onRetry={() => window.location.reload()} />;
 }
 
   return (
@@ -6631,7 +6622,7 @@ if (sessionBlocked) {
 
           {/* Progress mini bar */}
 <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px', flexShrink:0, minWidth:'70px' }}>
-  {hasPending && orderEta?.etaMinutes ? (
+  {hasPending && orderEta && orderEta.etaSeconds != null ? (
     <>
       <div style={{ width:'100%', height:'4px', background:'rgba(255,255,255,0.07)', borderRadius:'2px', overflow:'hidden' }}>
         <motion.div
@@ -6644,7 +6635,7 @@ if (sessionBlocked) {
         />
       </div>
       <div style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.35)', fontWeight:'700', fontFamily:'monospace' }}>
-        {prepPct}% · ~{etaLeftMin(orderEta)}m left
+        {prepPct}%  ·  {etaLabel(orderEta, etaNow, language)}
       </div>
     </>
   ) : (
@@ -6831,26 +6822,37 @@ if (sessionBlocked) {
                 </div>
 
                 {/* EST TIME note */}
-{/* DYNAMIC ETA */}
+{/* DYNAMIC ETA: real kitchen data (per-dish history, dishes already cooking, queue ahead). With no history it shows the live status instead of a made-up time. */}
 {orderEta && Object.values(liveOrderStatuses).some(s => s === 'pending') ? (
-  <div style={{
-    padding:'12px 14px',
-    background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)',
-    borderRadius:'11px', textAlign:'center'
-  }}>
-    <div style={{ color:'rgba(211,191,162,0.35)', fontSize:'0.5rem',
-      letterSpacing:'2px', fontWeight:'900', marginBottom:'5px' }}>ESTIMATED ARRIVAL</div>
-    <div style={{ color:'#d3bfa2', fontSize:'1.5rem', fontWeight:'900', letterSpacing:'-0.5px' }}>
-      {etaClock(orderEta)}
+  <div style={{ padding:'12px 14px', background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.1)', borderRadius:'11px', textAlign:'center' }}>
+    <div style={{ color:'rgba(211,191,162,0.5)', fontSize:'0.5rem', letterSpacing:'2px', fontWeight:'900', marginBottom:'5px' }}>
+      {orderEta.stage === 'preparing' ? (language === 'mr' ? 'तयार होत आहे' : 'BEING PREPARED') : (language === 'mr' ? 'ऑर्डर मिळाली' : 'ORDER RECEIVED')}
     </div>
-    <div style={{ color:'rgba(255,255,255,0.2)', fontSize:'0.62rem', marginTop:'3px' }}>
-      ~{etaLeftMin(orderEta)} min · {orderEta.queueLength} order{orderEta.queueLength!==1?'s':''} in kitchen
-    </div>
-    {orderEta.currentItems?.length > 0 && (
-      <div style={{ color:'rgba(255,255,255,0.15)', fontSize:'0.6rem', marginTop:'7px' }}>
-        Chef is preparing: {orderEta.currentItems.join(', ')}
-      </div>
+    {orderEta.etaSeconds != null ? (
+      <>
+        <div style={{ color:'#d3bfa2', fontSize:'1.5rem', fontWeight:'900', letterSpacing:'-0.5px' }}>{orderEta.delayed || etaLeftSeconds(orderEta, etaNow) <= 45 ? etaLabel(orderEta, etaNow, language) : orderEta.etaTime}</div>
+        <div style={{ color:'rgba(255,255,255,0.45)', fontSize:'0.66rem', marginTop:'3px' }}>
+          {etaLabel(orderEta, etaNow, language)}{orderEta.aheadCount > 0 ? ` · ${orderEta.aheadCount} ${language === 'mr' ? 'ऑर्डर पुढे' : (orderEta.aheadCount === 1 ? 'order ahead' : 'orders ahead')}` : ''}
+        </div>
+      </>
+    ) : (
+      <div style={{ color:'#d3bfa2', fontSize:'0.95rem', fontWeight:'800' }}>{etaLabel(orderEta, etaNow, language)}</div>
     )}
+    {(() => {
+      const mine = (orderEta.orders || []).filter(o => o.stage === 'received' || o.stage === 'preparing').flatMap(o => o.items);
+      if (!mine.length) return null;
+      const label = { waiting: language === 'mr' ? 'प्रतीक्षा' : 'Waiting', cooking: language === 'mr' ? 'शिजत आहे' : 'Cooking', done: language === 'mr' ? 'तयार' : 'Done' };
+      const color = { waiting: 'rgba(255,255,255,0.35)', cooking: '#d3bfa2', done: '#7fc79a' };
+      return (
+        <div style={{ marginTop:'10px', textAlign:'left', borderTop:'1px solid rgba(211,191,162,0.12)', paddingTop:'8px' }}>
+          {mine.slice(0, 12).map((it, k) => (
+            <div key={k} style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'0.66rem', padding:'2px 0', color:'rgba(255,255,255,0.7)' }}>
+              <span>{it.quantity}× {it.name}</span><span style={{ color: color[it.state], fontWeight:'800' }}>{label[it.state]}</span>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
   </div>
 ) : (
   <div style={{
@@ -7791,7 +7793,7 @@ if (sessionBlocked) {
                       
                       {/* 🚀 FIXED: Maps over the aggregated finalBillItems instead of the raw placedOrders */}
 <div style={styles.billTableBody}>
-  {finalBillItems.map((order, idx) => (
+  {billLines.map((order, idx) => (
     <div key={idx} style={{ ...styles.billTableRow, flexDirection: 'column', alignItems: 'flex-start', gap: '3px', paddingBottom: '10px', borderBottom: '1px solid rgba(211,191,162,0.07)', marginBottom: '4px' }}>
       {/* Row 1: Dish name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', justifyContent: 'space-between' }}>
@@ -7825,14 +7827,22 @@ if (sessionBlocked) {
     const rd = restaurantData;
     const cgstPct = rd?.config?.cgstPercentage ?? 2.5;
     const sgstPct = rd?.config?.sgstPercentage ?? 2.5;
-    const subtotal = finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
-    const cgstAmt = subtotal * (cgstPct / 100);
-    const sgstAmt = subtotal * (sgstPct / 100);
-    const grandTotal = subtotal + cgstAmt + sgstAmt;
+    const ap = approvedBill;
+    const subtotal = ap ? ap.subtotal : finalBillItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+    const cgstAmt = ap ? ap.cgst : subtotal * (cgstPct / 100);
+    const sgstAmt = ap ? ap.sgst : subtotal * (sgstPct / 100);
+    const grandTotal = ap ? ap.total : subtotal + cgstAmt + sgstAmt;
     return (
       <>
-<div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
-          <span>Subtotal</span>
+{ap && ap.discountTotal > 0 && (
+          <>
+            <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}><span>Items total</span><span>₹{ap.base.toFixed(2)}</span></div>
+            {(ap.offers || []).map((o, i) => <div key={i} style={{ ...styles.billLine, fontSize: '0.78rem', color: '#7fc79a' }}><span>Offer: {o.title}</span><span>-₹{o.amount.toFixed(2)}</span></div>)}
+            {ap.manual && ap.manual.amount > 0 && <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#7fc79a' }}><span>Discount{ap.manual.type === 'percent' ? ` (${ap.manual.value}%)` : ''}</span><span>-₹{ap.manual.amount.toFixed(2)}</span></div>}
+          </>
+        )}
+        <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}>
+          <span>{ap && ap.discountTotal > 0 ? 'Taxable amount' : 'Subtotal'}</span>
           <span>₹{subtotal.toFixed(2)}</span>
         </div>
         <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#888' }}>
@@ -7891,7 +7901,7 @@ if (sessionBlocked) {
      <span>ITEM DESCRIPTION</span>
      <span>TOTAL</span>
   </div>
-{finalBillItems.map((order, idx) => (
+{billLines.map((order, idx) => (
   <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
@@ -7914,8 +7924,40 @@ if (sessionBlocked) {
 )}
 </div>
 
-{/* 4. Tax & Grand Total — the restaurant's APPROVED bill (offers/discount/taxes applied by staff). Never computed on the phone. */}
-<GuestBillTotals status={billStatus} language={language} />
+{/* 4. Tax & Grand Total Block (To match your uploaded invoice style) */}
+{/* Items are priced ex-tax and GST is added on top (same as the bill table, the invoice PDF and the server). This block
+    used to treat the item sum as tax-INCLUSIVE, so it showed a smaller subtotal and a grand total with no tax at all. */}
+{(() => {
+  const cgstPct = restaurantData?.config?.cgstPercentage ?? 2.5;
+  const sgstPct = restaurantData?.config?.sgstPercentage ?? 2.5;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const ap = approvedBill;
+  const sub = ap ? ap.subtotal : r2(calculateGrandTotal());
+  const cgstAmt = ap ? ap.cgst : r2(sub * (cgstPct / 100));
+  const sgstAmt = ap ? ap.sgst : r2(sub * (sgstPct / 100));
+  const grand = ap ? ap.total : r2(sub + cgstAmt + sgstAmt);
+  return (
+    <>
+      <div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
+        {ap && ap.discountTotal > 0 && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Items total</span><span>₹{ap.base.toFixed(2)}</span></div>
+            {(ap.offers || []).map((o, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Offer: {o.title}</span><span>-₹{o.amount.toFixed(2)}</span></div>)}
+            {ap.manual && ap.manual.amount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Discount{ap.manual.type === 'percent' ? ` (${ap.manual.value}%)` : ''}</span><span>-₹{ap.manual.amount.toFixed(2)}</span></div>}
+          </>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>{ap && ap.discountTotal > 0 ? 'Taxable amount' : 'Subtotal'}</span><span>₹{sub.toFixed(2)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>CGST ({cgstPct}%)</span><span>₹{cgstAmt.toFixed(2)}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SGST ({sgstPct}%)</span><span>₹{sgstAmt.toFixed(2)}</span></div>
+      </div>
+
+      <div style={{ marginTop: '15px', fontWeight: '900', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
+        <span>GRAND TOTAL</span>
+        <span>₹{convertToMrNumber(Number.isInteger(grand) ? grand : grand.toFixed(2))}</span>
+      </div>
+    </>
+  );
+})()}
 {/* 6. Branding Footer */}
         <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '0.6rem', fontWeight: '900', color: '#888', borderTop: '1px dashed #ccc', paddingTop: '15px' }}>
           <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:130, height:'auto', background:'#f7f3eb', borderRadius:6, padding:'3px 6px' }} />
@@ -7928,11 +7970,9 @@ if (sessionBlocked) {
 
                    {/* PAY WITH UPI — opens the guest's UPI app with the exact bill amount */}
                    <div style={{ width: '100%', padding: '0 10px', margin: '0 0 16px', boxSizing: 'border-box' }}>
-                     {billStatus?.status === 'sent' && billStatus.bill && !billStatus.paid ? (
-                       <UpiPay amount={billStatus.bill.grandTotal} payInfo={payInfo} note={`Bill T${tableNumber}`} language={language}
-                         tenantId={tenantId} tableNumber={tableNumber} guestName={customerInfo.name}
-                         claimed={!!(lastBill?.claimed || billStatus.claimed)} onClaimed={onUpiClaimed} />
-                     ) : null}
+                     <UpiPay amount={payableAmount} payInfo={payInfo} note={`Bill T${tableNumber}`} language={language}
+                       tenantId={tenantId} tableNumber={tableNumber} guestName={customerInfo.name} txnSeed={billFlow?.id}
+                       claimed={!!lastBill?.claimed} onClaimed={onUpiClaimed} />
                    </div>
 
                    {/* INTERACTIVE CONTROLS CONTAINER ROW */}
@@ -7941,9 +7981,7 @@ if (sessionBlocked) {
                      {/* WHITE — Download Invoice */}
                      <button type="button"
                        onClick={() => autoDownloadInvoicePDF()}
-                       disabled={!(billStatus?.bill && billStatus.status !== 'requested')}
-                       title={billStatus?.bill ? '' : 'Available once the restaurant sends your bill'}
-                       style={{ opacity: billStatus?.bill && billStatus.status !== 'requested' ? 1 : 0.45,
+                       style={{
                          width: '100%', padding: '18px', borderRadius: '15px',
                          background: '#ffffff',
                          color: '#0c0c0c', fontWeight: '900', border: '1px solid #e0e0e0',
@@ -8319,7 +8357,6 @@ if (sessionBlocked) {
           >
             <div style={{ minWidth:0, flex:1 }}>
               <div style={{ fontSize:'0.72rem', fontWeight:700, color: inCart ? '#d3bfa2' : '#f7f3eb', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nm}</div>
-              {item._reason && <div style={{ fontSize:'0.56rem', color:'rgba(247,243,235,0.5)', marginTop:'2px', letterSpacing:'.3px' }}>{item._reason}</div>}
               <div style={{ fontSize:'0.66rem', fontWeight:800, color:'rgba(211,191,162,0.8)', marginTop:'3px' }}>₹{convertToMrNumber(price)}</div>
             </div>
             <span style={{ width:'28px', height:'28px', borderRadius:'10px', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', background: inCart ? 'transparent' : PX.gold, color:'#14110c' }}>

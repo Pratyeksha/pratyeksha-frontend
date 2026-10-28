@@ -1,0 +1,18 @@
+/* One scrollbar for every PRATYEKSHA screen that scrolls (owner, operator, kitchen, master admin, landing, feedback):
+   antique-gold thumb on a charcoal track. Customer screens (home + menu) keep their scrollbars hidden by design,
+   so they are excluded via the data-customer flag that main.jsx sets from the current route. */
+:root:not([data-customer]) * { scrollbar-width: thin !important; scrollbar-color: #8a704d rgba(20, 17, 12, 0.55) !important; }
+:root:not([data-customer]) *::-webkit-scrollbar { width: 10px !important; height: 10px !important; background: transparent !important; }
+:root:not([data-customer]) *::-webkit-scrollbar-track { background: rgba(20, 17, 12, 0.55) !important; border-radius: 999px !important; }
+:root:not([data-customer]) *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #b08c58, #8a704d) !important;
+  border-radius: 999px !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+  min-height: 36px;
+}
+:root:not([data-customer]) *::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #d3bfa2, #b08c58) !important; background-clip: padding-box !important; }
+:root:not([data-customer]) *::-webkit-scrollbar-corner { background: transparent !important; }
+/* Components that deliberately hide their scrollbar (horizontal chip rows, carousels) keep doing so. */
+:root:not([data-customer]) .no-scrollbar, :root:not([data-customer]) .no-scrollbar::-webkit-scrollbar, :root:not([data-customer]) .hide-scrollbar::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+:root:not([data-customer]) .no-scrollbar, :root:not([data-customer]) .hide-scrollbar { scrollbar-width: none !important; }

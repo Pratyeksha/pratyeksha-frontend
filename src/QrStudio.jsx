@@ -1,191 +1,224 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { zipSync, strToU8 } from 'fflate';
+import JSZip from 'jszip';
+import '@fontsource/roboto-condensed/700.css';
+import { QrCode, Download, Printer, Upload, RefreshCcw, CheckCircle2, AlertTriangle, Loader2, SlidersHorizontal, FileArchive } from 'lucide-react';
 import API_BASE_URL from './apiBase.js';
-import { renderPoster, withDpi, posterFileName, POSTER } from './qrPoster.js';
-import fontUrl from '@fontsource/roboto-condensed/files/roboto-condensed-latin-700-normal.woff2?url';
+import { detectTemplate, renderCard, decodeCard, cardFileName } from './qrCompose.js';
 
-/* Master Admin → QR Studio
-   Generates the signed, tenant-specific table QR posters (+ one counter "CT" poster) on the Pratyeksha template, entirely in
-   the browser. The signatures come from the backend (HMAC with the server secret) — this screen never sees the secret.
-   Access: the platform master key (MASTER_ADMIN_KEY on the server), kept only in sessionStorage for this tab. */
+// Master Admin ▸ QR Studio: one click makes a print-ready, signed QR card for every table of a restaurant (1..tableCount) plus a counter card ("CT").
+// The template is auto-detected (QR placeholder + table-number box), so replacing the template image needs no code change.
+const GOLD = '#d3bfa2', GOLD2 = '#8a704d', BG = '#1b1b1e', BG2 = '#232327', BORDER = '#2e2e34', INPUT = '#17171a';
+const DEFAULT_TEMPLATE = '/qr-template.png';
+const FONT = '"Roboto Condensed", "Arial Narrow", sans-serif';
 
-const BASE_URL = API_BASE_URL;
-const KEY_NAME = 'px_master_key';
-const P = { bg: '#141416', card: '#1b1b1e', card2: '#232327', line: 'rgba(211,191,162,.16)', gold: '#d3bfa2', goldDim: '#8a704d', text: '#ece6da', muted: '#9a9486', sage: '#93ab8d', danger: '#d0806f' };
-const card = { background: P.card, border: `1px solid ${P.line}`, borderRadius: 14, padding: 18 };
-const btn = (primary, disabled) => ({ padding: '10px 16px', borderRadius: 10, border: primary ? 'none' : `1px solid ${P.line}`, background: primary ? 'linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78)' : 'transparent', color: primary ? '#1a1612' : P.gold, fontWeight: 700, fontSize: 13, letterSpacing: .3, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .5 : 1 });
+const loadImage = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('The template image could not be loaded')); img.src = src; });
+const makeCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const toBlob = (canvas) => new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Could not create the image'))), 'image/png'));
+const yieldUi = () => new Promise((r) => setTimeout(r, 0));
 
-let assetsPromise = null;
-function loadAssets() {
-  if (!assetsPromise) {
-    assetsPromise = (async () => {
-      const face = new FontFace(POSTER.fontFamily, `url(${fontUrl})`, { weight: '700' });
-      await face.load(); document.fonts.add(face);
-      const img = new Image(); img.src = '/qr-studio/template.png';
-      await img.decode();
-      return img;
-    })().catch((e) => { assetsPromise = null; throw e; });
-  }
-  return assetsPromise;
-}
-const mkCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
-const canvasPng = (c) => new Promise((res, rej) => c.toBlob(async (b) => { try { res(withDpi(new Uint8Array(await b.arrayBuffer()), 300)); } catch (e) { rej(e); } }, 'image/png'));
-const save = (bytes, name, type) => { const url = URL.createObjectURL(new Blob([bytes], { type })); const a = Object.assign(document.createElement('a'), { href: url, download: name }); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
+const card = { background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 18 };
+const label = { fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: GOLD2, textTransform: 'uppercase', marginBottom: 6, display: 'block' };
+const input = { width: '100%', boxSizing: 'border-box', background: INPUT, color: '#f1ece2', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 10px', fontSize: 13, outline: 'none' };
+const btn = (primary, disabled) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: primary ? 'none' : `1px solid ${BORDER}`, background: primary ? GOLD : BG2, color: primary ? '#14110c' : GOLD, fontWeight: 800, fontSize: 12.5, letterSpacing: 0.4, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1 });
 
-export default function QrStudio() {
-  const [key, setKey] = useState(() => { try { return sessionStorage.getItem(KEY_NAME) || ''; } catch { return ''; } });
-  const [keyInput, setKeyInput] = useState('');
-  const [authErr, setAuthErr] = useState('');
-  const [tenants, setTenants] = useState(null);
-  const [query, setQuery] = useState('');
+export default function QrStudio({ clients = [] }) {
   const [tenantId, setTenantId] = useState('');
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState('');
-  const [thumbs, setThumbs] = useState({});
-  const [verified, setVerified] = useState({});
-  const [busy, setBusy] = useState('');
-  const [progress, setProgress] = useState(0);
-  const gen = useRef(0);
+  const [scale, setScale] = useState(2);
+  const [withCounter, setWithCounter] = useState(true);
+  const [template, setTemplate] = useState(null);          // { img, name }
+  const [layout, setLayout] = useState(null);
+  const [detectErr, setDetectErr] = useState('');
+  const [showAdv, setShowAdv] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [results, setResults] = useState([]);              // [{ label, thumb, blob, url, verified }]
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const urlsRef = useRef([]);
+  const previewRef = useRef(null);
+  const fileRef = useRef(null);
 
-  const headers = useMemo(() => ({ 'x-master-key': key }), [key]);
-  const signOut = () => { try { sessionStorage.removeItem(KEY_NAME); } catch { /* ignore */ } setKey(''); setTenants(null); setData(null); setTenantId(''); };
+  const tenants = useMemo(() => [...clients].filter((c) => c && c.tenantId).sort((a, b) => String(a.name).localeCompare(String(b.name))), [clients]);
+  const selected = tenants.find((t) => t.tenantId === tenantId) || null;
 
-  const loadTenants = useCallback(async () => {
+  const analyse = useCallback(async (src, name) => {
+    setDetectErr(''); setLayout(null);
     try {
-      const r = await axios.get(`${BASE_URL}/master/qr-studio/tenants`, { headers });
-      setTenants(r.data.tenants || []); setAuthErr('');
-    } catch (e) {
-      const d = e?.response?.data;
-      if (e?.response?.status === 401 || e?.response?.status === 503) { setAuthErr(d?.error || 'Master key rejected.'); signOut(); }
-      else setErr(d?.error || 'Could not load restaurants.');
-    }
-  }, [headers]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (key) loadTenants(); }, [key, loadTenants]);
+      const img = await loadImage(src);
+      const c = makeCanvas(img.naturalWidth, img.naturalHeight); const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0);
+      const found = detectTemplate(cx.getImageData(0, 0, c.width, c.height));
+      if (found.error) { setDetectErr(found.error); setTemplate({ img, name }); return; }
+      setTemplate({ img: Object.assign(img, { width: img.naturalWidth, height: img.naturalHeight }), name }); setLayout(found);
+      if (found.warning) setDetectErr(found.warning);
+    } catch (e) { setDetectErr(e.message); }
+  }, []);
+  useEffect(() => { analyse(DEFAULT_TEMPLATE, 'Built-in template'); }, [analyse]);
+  useEffect(() => () => urlsRef.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  const unlock = (e) => { e.preventDefault(); const k = keyInput.trim(); if (!k) return; try { sessionStorage.setItem(KEY_NAME, k); } catch { /* memory only */ } setKey(k); setKeyInput(''); };
+  const onUpload = (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { setDetectErr('Please choose a PNG, JPG or WebP template.'); return; }
+    const u = URL.createObjectURL(f); urlsRef.current.push(u); setResults([]); analyse(u, f.name);
+  };
 
-  // Load a tenant's signed links and render low-res previews + a server-side verification for every one.
+  // live preview of the (possibly hand-adjusted) detection boxes on the template
   useEffect(() => {
-    if (!tenantId || !key) return;
-    const run = ++gen.current; setData(null); setThumbs({}); setVerified({}); setErr('');
-    (async () => {
-      try {
-        const [r, tpl] = await Promise.all([axios.get(`${BASE_URL}/master/qr-studio/${encodeURIComponent(tenantId)}`, { headers }), loadAssets()]);
-        if (run !== gen.current) return;
-        setData(r.data);
-        const items = [...r.data.tables.map(t => ({ label: t.label, url: t.url })), { label: 'CT', url: r.data.counter.url }];
-        for (const it of items) {
-          if (run !== gen.current) return;
-          const c = renderPoster({ url: it.url, label: it.label, template: tpl, createCanvas: mkCanvas, scale: 0.5 });
-          setThumbs(p => ({ ...p, [it.label]: c.toDataURL('image/jpeg', 0.82) }));
-          const u = new URL(it.url);
-          axios.get(`${BASE_URL}/qr/verify`, { params: { tenantId: u.pathname.slice(1), table: u.searchParams.get('table'), sig: u.searchParams.get('sig') } })
-            .then(v => run === gen.current && setVerified(p => ({ ...p, [it.label]: !!v.data?.valid }))).catch(() => run === gen.current && setVerified(p => ({ ...p, [it.label]: false })));
-          await new Promise(r2 => setTimeout(r2, 0));
-        }
-      } catch (e) { if (run === gen.current) setErr(e?.response?.data?.error || e?.message || 'Could not generate QR codes.'); }
-    })();
-  }, [tenantId, key, headers]);
+    const cv = previewRef.current; if (!cv || !template || !layout) return;
+    const w = 300, h = Math.round(300 * layout.height / layout.width); cv.width = w; cv.height = h;
+    const x = cv.getContext('2d'); x.drawImage(template.img, 0, 0, w, h); const k = w / layout.width;
+    x.lineWidth = 2; x.strokeStyle = '#4ad37a'; x.strokeRect(layout.qr.x * k, layout.qr.y * k, layout.qr.size * k, layout.qr.size * k);
+    if (layout.label) { x.strokeStyle = '#e2b34a'; const g = layout.label.glyph; x.strokeRect(g.x * k, g.y * k, g.w * k, g.h * k); }
+  }, [template, layout]);
 
-  const items = useMemo(() => data ? [...data.tables.map(t => ({ label: t.label, url: t.url })), { label: 'CT', url: data.counter.url }] : [], [data]);
+  const setNum = (path, v) => setLayout((L) => {
+    const n = Math.max(0, Math.round(Number(v) || 0)); const next = JSON.parse(JSON.stringify(L));
+    if (path[0] === 'qr') next.qr[path[1]] = n; else next.label.glyph[path[1]] = n;
+    return next;
+  });
 
-  const downloadOne = async (it) => {
-    setBusy(it.label);
-    try { const tpl = await loadAssets(); const c = renderPoster({ url: it.url, label: it.label, template: tpl, createCanvas: mkCanvas, scale: 2 }); save(await canvasPng(c), posterFileName(it.label), 'image/png'); }
-    catch (e) { setErr(e?.message || 'Could not create the image.'); } finally { setBusy(''); }
-  };
-  const downloadAll = async () => {
-    if (!data) return; setBusy('ALL'); setProgress(0); setErr('');
+  const generate = async () => {
+    setError(''); setInfo(''); setResults([]);
+    if (!selected) { setError('Choose a restaurant first.'); return; }
+    if (!template || !layout) { setError('The template could not be analysed. Upload a template that has a white QR placeholder.'); return; }
+    setBusy(true);
     try {
-      const tpl = await loadAssets(); const files = {};
+      const { data } = await axios.get(`${API_BASE_URL}/admin/master/qr-studio/${encodeURIComponent(selected.tenantId)}`);
+      const items = data.tables.map((t) => ({ label: t.label, url: t.url }));
+      if (withCounter) items.push({ label: data.counter.label, url: data.counter.url });
+      if (!items.length) { setError('This restaurant has no tables configured yet.'); setBusy(false); return; }
+      if (document.fonts && document.fonts.load) { try { await document.fonts.load(`700 100px ${FONT}`); } catch { /* falls back to Arial Narrow */ } }
+      setProgress({ done: 0, total: items.length });
+      const out = []; let failed = 0;
       for (let i = 0; i < items.length; i++) {
-        const c = renderPoster({ url: items[i].url, label: items[i].label, template: tpl, createCanvas: mkCanvas, scale: 2 });
-        files[posterFileName(items[i].label)] = [await canvasPng(c), { level: 0 }];     // PNG is already compressed
-        setProgress(Math.round(((i + 1) / items.length) * 100));
-        await new Promise(r => setTimeout(r, 0));
+        const it = items[i];
+        const canvas = await renderCard({ createCanvas: makeCanvas, template: template.img, layout, scanUrl: it.url, label: it.label, scale, fontFamily: FONT });
+        const verified = decodeCard(canvas, layout, scale) === it.url;          // the printed QR is decoded again and must equal the link
+        if (!verified) failed++;
+        const blob = await toBlob(canvas);
+        const th = makeCanvas(240, Math.round(240 * canvas.height / canvas.width)); th.getContext('2d').drawImage(canvas, 0, 0, th.width, th.height);
+        const url = URL.createObjectURL(blob); urlsRef.current.push(url);
+        out.push({ label: it.label, thumb: th.toDataURL('image/jpeg', 0.8), blob, url, verified, scanUrl: it.url });
+        setProgress({ done: i + 1, total: items.length });
+        if (i % 2 === 1) await yieldUi();
       }
-      const csv = ['label,file,url', ...items.map(it => `${it.label},${posterFileName(it.label)},${it.url}`)].join('\n');
-      files['manifest.csv'] = [strToU8(csv), { level: 6 }];
-      save(zipSync(files), `${data.tenantId}_qr-posters.zip`, 'application/zip');
-    } catch (e) { setErr(e?.message || 'Could not build the ZIP.'); } finally { setBusy(''); setProgress(0); }
+      setResults(out);
+      setInfo(failed ? '' : `All ${out.length} codes were decoded again after printing onto the template and match their links.`);
+      if (failed) setError(`${failed} card(s) did not read back correctly. Increase the output size or check the QR box in "Template regions".`);
+    } catch (e) { setError(e?.response?.data?.error || e.message || 'Could not generate the QR codes'); }
+    finally { setBusy(false); }
   };
 
-  const filtered = (tenants || []).filter(t => `${t.name} ${t.tenantId}`.toLowerCase().includes(query.trim().toLowerCase()));
-  const allVerified = items.length > 0 && items.every(i => verified[i.label] === true);
-  const anyBad = items.some(i => verified[i.label] === false);
-
-  if (!key) return (
-    <div style={{ padding: 28, maxWidth: 520, margin: '0 auto' }}>
-      <form onSubmit={unlock} style={{ ...card, display: 'grid', gap: 14 }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: P.gold }}>QR Studio</div>
-        <div style={{ color: P.muted, fontSize: 13, lineHeight: 1.6 }}>Signed QR credentials can be minted for any restaurant, so this tool is protected by the platform master key (<code>MASTER_ADMIN_KEY</code> on the server). It is kept only for this browser tab.</div>
-        <input type="password" autoComplete="off" value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="Master key" aria-label="Master key"
-          style={{ background: '#17171a', border: `1px solid ${P.line}`, borderRadius: 10, padding: '12px 14px', color: P.text, fontSize: 14, outline: 'none' }} />
-        {authErr && <div role="alert" style={{ color: P.danger, fontSize: 13 }}>{authErr}</div>}
-        <button type="submit" style={btn(true, !keyInput.trim())} disabled={!keyInput.trim()}>Unlock QR Studio</button>
-      </form>
-    </div>
-  );
+  const save = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+  const downloadZip = async () => {
+    setBusy(true); setError('');
+    try {
+      const zip = new JSZip(); const folder = zip.folder(selected.tenantId);
+      const rows = ['label,file,scan_url'];
+      for (const r of results) { const fn = cardFileName(r.label); folder.file(fn, r.blob); rows.push(`${r.label},${fn},"${r.scanUrl}"`); }
+      folder.file('links.csv', rows.join('\n'));
+      save(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), `${selected.tenantId}_QR_cards.zip`);
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  const printAll = () => {
+    const w = window.open('', '_blank'); if (!w) { setError('Allow pop-ups to print.'); return; }
+    w.document.write(`<!doctype html><title>${selected.name} QR cards</title><style>@page{margin:0}body{margin:0}img{display:block;width:100%;height:auto;page-break-after:always;break-after:page}</style>${results.map((r) => `<img src="${r.url}">`).join('')}`);
+    w.document.close(); setTimeout(() => w.print(), 600);
+  };
 
   return (
-    <div style={{ padding: '22px clamp(14px,3vw,32px) 60px', display: 'grid', gap: 18, maxWidth: 1240, margin: '0 auto', width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: P.gold }}>QR Studio</div>
-          <div style={{ color: P.muted, fontSize: 13, marginTop: 4 }}>Unique, signed table posters for each restaurant — plus one counter poster (CT). Print-ready PNG, 300 dpi.</div>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', width: '100%', padding: '24px 20px 40px', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+          <QrCode size={22} color={GOLD} /><h2 style={{ margin: 0, fontFamily: 'Georgia, serif', fontWeight: 500, color: '#f7f3eb', fontSize: '1.5rem' }}>QR Studio</h2>
         </div>
-        <button type="button" onClick={signOut} style={btn(false)}>Lock</button>
-      </div>
+        <p style={{ margin: '0 0 18px', color: 'rgba(255,255,255,0.55)', fontSize: 13, lineHeight: 1.6 }}>
+          Pick a restaurant and press <b style={{ color: GOLD }}>Generate QR</b>. You get a signed, print-ready card for every table (from the restaurant’s real table count) and one counter card labelled <b style={{ color: GOLD }}>CT</b>. Each code is decoded again after it is placed on the template, so a card that would not scan is flagged.
+        </p>
 
-      <div style={{ ...card, display: 'grid', gap: 12 }}>
-        <label style={{ color: P.muted, fontSize: 12, letterSpacing: 1.2, textTransform: 'uppercase' }} htmlFor="qs-search">Restaurant</label>
-        <input id="qs-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by name or ID…" style={{ background: '#17171a', border: `1px solid ${P.line}`, borderRadius: 10, padding: '11px 14px', color: P.text, fontSize: 14, outline: 'none' }} />
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 150, overflowY: 'auto' }}>
-          {tenants === null ? <span style={{ color: P.muted, fontSize: 13 }}>Loading restaurants…</span> : filtered.length === 0 ? <span style={{ color: P.muted, fontSize: 13 }}>No restaurants match.</span> : filtered.map(t => (
-            <button key={t.tenantId} type="button" onClick={() => setTenantId(t.tenantId)} aria-pressed={tenantId === t.tenantId}
-              style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${tenantId === t.tenantId ? P.gold : P.line}`, background: tenantId === t.tenantId ? 'rgba(211,191,162,.14)' : 'transparent', color: tenantId === t.tenantId ? P.gold : P.text, fontSize: 13, cursor: 'pointer', opacity: t.isActive ? 1 : .55 }}>
-              {t.name} <span style={{ color: P.muted }}>· {t.tableCount} tables{t.isActive ? '' : ' · inactive'}</span>
-            </button>))}
-        </div>
-      </div>
-
-      {err && <div role="alert" style={{ ...card, borderColor: 'rgba(208,128,111,.5)', color: P.danger, fontSize: 13 }}>{err}</div>}
-
-      {tenantId && !data && !err && <div style={{ ...card, color: P.muted, fontSize: 13 }}>Preparing signed QR codes…</div>}
-
-      {data && (
-        <>
-          <div style={{ ...card, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ color: P.text, fontWeight: 700, fontSize: 16 }}>{data.name}</div>
-              <div style={{ color: P.muted, fontSize: 12.5, marginTop: 4 }}>{data.tables.length} table QR{data.tables.length === 1 ? '' : 's'} + 1 counter QR · points to <span style={{ color: P.gold }}>{data.origin.replace(/^https?:\/\//, '')}</span></div>
-              <div style={{ fontSize: 12.5, marginTop: 6, color: anyBad ? P.danger : allVerified ? P.sage : P.muted }} role="status">
-                {anyBad ? 'Some codes failed server verification — do not print.' : allVerified ? `✓ All ${items.length} codes verified by the server` : `Verifying with the server… ${Object.keys(verified).length}/${items.length}`}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
+          <div style={card}>
+            <label style={label}>Restaurant</label>
+            <select value={tenantId} onChange={(e) => { setTenantId(e.target.value); setResults([]); setInfo(''); setError(''); }} style={input}>
+              <option value="">Select a restaurant…</option>
+              {tenants.map((t) => <option key={t.tenantId} value={t.tenantId}>{t.name} — {t.tableCount ?? '?'} tables</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ minWidth: 150 }}>
+                <label style={label}>Output size</label>
+                <select value={scale} onChange={(e) => setScale(Number(e.target.value))} style={input}>
+                  <option value={1}>Standard (1024 × 1535)</option>
+                  <option value={2}>Print (2048 × 3070)</option>
+                  <option value={3}>Large print (3072 × 4605)</option>
+                </select>
               </div>
-              {!data.enforced && <div style={{ color: P.danger, fontSize: 12.5, marginTop: 6 }}>Server is running with unsigned QR codes allowed (ALLOW_UNSIGNED_TABLE_QR). Tampered links will NOT be rejected until that is turned off.</div>}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f1ece2', fontSize: 13, paddingBottom: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={withCounter} onChange={(e) => setWithCounter(e.target.checked)} /> Include counter card (CT)
+              </label>
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {busy === 'ALL' && <span style={{ color: P.muted, fontSize: 12.5 }}>{progress}%</span>}
-              <button type="button" onClick={downloadAll} disabled={!!busy || anyBad || Object.keys(thumbs).length < items.length} style={btn(true, !!busy || anyBad || Object.keys(thumbs).length < items.length)}>{busy === 'ALL' ? 'Building ZIP…' : 'Download all (ZIP)'}</button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+              <button type="button" style={btn(true, busy || !selected || !layout)} disabled={busy || !selected || !layout} onClick={generate}>
+                {busy ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <QrCode size={15} />} {busy ? `Generating ${progress.done}/${progress.total}…` : 'Generate QR'}
+              </button>
+              {results.length > 0 && <>
+                <button type="button" style={btn(false, busy)} disabled={busy} onClick={downloadZip}><FileArchive size={15} /> Download all (ZIP)</button>
+                <button type="button" style={btn(false, busy)} disabled={busy} onClick={printAll}><Printer size={15} /> Print all</button>
+              </>}
             </div>
+            {busy && progress.total > 0 && <div style={{ height: 4, background: BORDER, borderRadius: 4, marginTop: 14, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(progress.done / progress.total) * 100}%`, background: GOLD, transition: 'width .2s' }} /></div>}
+            {error && <div role="alert" style={{ marginTop: 12, color: '#e0907a', fontSize: 12.5, lineHeight: 1.5, display: 'flex', gap: 8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {error}</div>}
+            {info && <div style={{ marginTop: 12, color: GOLD, fontSize: 12.5, lineHeight: 1.5, display: 'flex', gap: 8 }}><CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {info}</div>}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 14 }}>
-            {[...items].sort((a, b) => (a.label === 'CT') - (b.label === 'CT') ? (a.label === 'CT' ? -1 : 1) : String(a.label).localeCompare(String(b.label), undefined, { numeric: true })).map(it => (
-              <div key={it.label} style={{ ...card, padding: 10, display: 'grid', gap: 8 }}>
-                <div style={{ aspectRatio: '1024/1535', background: '#0f0f11', borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {thumbs[it.label] ? <img src={thumbs[it.label]} alt={`${it.label === 'CT' ? 'Counter' : 'Table ' + it.label} QR poster`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: P.muted, fontSize: 12 }}>Rendering…</span>}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div style={{ color: P.text, fontSize: 13, fontWeight: 700 }}>{it.label === 'CT' ? 'Counter (CT)' : `Table ${it.label}`}</div>
-                  <span title={verified[it.label] === undefined ? 'Verifying' : verified[it.label] ? 'Verified by server' : 'Failed verification'} style={{ fontSize: 12, color: verified[it.label] === false ? P.danger : verified[it.label] ? P.sage : P.muted }}>{verified[it.label] === undefined ? '…' : verified[it.label] ? '✓' : '✕'}</span>
-                </div>
-                <button type="button" onClick={() => downloadOne(it)} disabled={!!busy || !thumbs[it.label]} style={{ ...btn(false, !!busy || !thumbs[it.label]), padding: '8px 10px', fontSize: 12 }}>{busy === it.label ? 'Preparing…' : 'Download PNG'}</button>
-              </div>))}
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <label style={{ ...label, marginBottom: 0 }}>Template</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onUpload} style={{ display: 'none' }} />
+                <button type="button" style={{ ...btn(false), padding: '6px 10px', fontSize: 11 }} onClick={() => fileRef.current && fileRef.current.click()}><Upload size={13} /> Replace</button>
+                <button type="button" style={{ ...btn(false), padding: '6px 10px', fontSize: 11 }} onClick={() => { setResults([]); analyse(DEFAULT_TEMPLATE, 'Built-in template'); }}><RefreshCcw size={13} /> Reset</button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+              <canvas ref={previewRef} style={{ width: 120, borderRadius: 8, border: `1px solid ${BORDER}`, background: '#000', flexShrink: 0 }} />
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+                <div style={{ color: '#f1ece2' }}>{template ? template.name : 'Loading…'}</div>
+                {layout && <div>{layout.width} × {layout.height}px</div>}
+                <div><span style={{ color: '#4ad37a' }}>■</span> QR placeholder {layout ? `${layout.qr.size}px` : '—'}</div>
+                <div><span style={{ color: '#e2b34a' }}>■</span> Table number {layout?.label ? 'found' : 'not found'}</div>
+                {detectErr && <div style={{ color: '#e0907a', marginTop: 4 }}>{detectErr}</div>}
+              </div>
+            </div>
+            <button type="button" onClick={() => setShowAdv((v) => !v)} style={{ ...btn(false), marginTop: 14, padding: '7px 10px', fontSize: 11 }}><SlidersHorizontal size={13} /> Template regions</button>
+            {showAdv && layout && (
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {[['QR x', ['qr', 'x']], ['QR y', ['qr', 'y']], ['QR size', ['qr', 'size']], ['Corner', ['qr', 'radius']]].map(([t, p]) => (
+                  <div key={t}><label style={label}>{t}</label><input type="number" style={input} value={layout.qr[p[1]]} onChange={(e) => setNum(p, e.target.value)} /></div>
+                ))}
+                {layout.label && [['No. x', ['label', 'x']], ['No. y', ['label', 'y']], ['No. width', ['label', 'w']], ['No. height', ['label', 'h']]].map(([t, p]) => (
+                  <div key={t}><label style={label}>{t}</label><input type="number" style={input} value={layout.label.glyph[p[1]]} onChange={(e) => setNum(p, e.target.value)} /></div>
+                ))}
+              </div>
+            )}
           </div>
-        </>
-      )}
+        </div>
+
+        {results.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
+            {results.map((r) => (
+              <div key={r.label} style={{ ...card, padding: 10 }}>
+                <img src={r.thumb} alt={`QR card ${r.label}`} style={{ width: '100%', borderRadius: 6, display: 'block' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: GOLD }}>{/^\d+$/.test(r.label) ? `Table ${r.label}` : 'Counter (CT)'}</span>
+                  {r.verified ? <CheckCircle2 size={14} color="#4ad37a" title="Scan verified" /> : <AlertTriangle size={14} color="#e0907a" title="Did not read back" />}
+                </div>
+                <button type="button" onClick={() => save(r.blob, cardFileName(r.label))} style={{ ...btn(false), width: '100%', marginTop: 8, padding: '6px 8px', fontSize: 11 }}><Download size={12} /> PNG</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

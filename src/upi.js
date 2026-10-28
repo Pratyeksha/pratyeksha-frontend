@@ -8,17 +8,11 @@ export const roundMoney = (n) => Math.round((Number(n) + Number.EPSILON) * 100) 
 // UPI wants a plain decimal with at most 2 places, no thousands separators, no currency symbol.
 export const formatUpiAmount = (n) => roundMoney(n).toFixed(2);
 
-// '#' is NOT allowed: inside an Android `intent://…#Intent;…` link it would cut the link short and the app would open without the amount.
-const cleanNote = (v) => String(v ?? '').replace(/[^A-Za-z0-9 .\-_/]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+const cleanNote = (v) => String(v ?? '').replace(/[^A-Za-z0-9 .\-_/#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
 const cleanName = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
 /** Query string for the payment. Throws on anything that would make a UPI app reject or mis-show the payment. */
-const cleanRef = (v) => String(v ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 35);
-/** A unique transaction reference. UPI apps use `tr` to treat the payment as a merchant (P2M) payment rather than a plain
- *  person-to-person transfer, which has tighter per-transaction limits at some banks/apps. */
-export const makeTxnRef = (tenantId = '', tableNumber = '') => cleanRef(`PRX${String(tenantId).slice(0, 6)}${String(tableNumber).slice(0, 4)}${Date.now().toString(36)}`);
-
-export function upiQuery({ upiId, payeeName, amount, note, ref, merchantCode }) {
+export function upiQuery({ upiId, payeeName, amount, note, merchantCode = '', txnRef = '' }) {
   const vpa = String(upiId || '').trim();
   if (!UPI_ID_RE.test(vpa)) throw new Error('Invalid UPI ID');
   const amt = roundMoney(amount);
@@ -29,13 +23,14 @@ export function upiQuery({ upiId, payeeName, amount, note, ref, merchantCode }) 
   const pairs = [
     ['pa', encodeURIComponent(vpa).replace(/%40/g, '@')],
     ['pn', encodeURIComponent(pn)],
-    ['am', formatUpiAmount(amt)],
-    ['cu', 'INR'],
   ];
-  const tr = cleanRef(ref);
-  if (tr) pairs.push(['tr', tr]);
-  const mc = String(merchantCode ?? '').trim();              // only when the restaurant's VPA is a registered merchant account (4-digit MCC)
-  if (/^\d{4}$/.test(mc)) pairs.push(['mc', mc]);
+  // Business (merchant) UPI IDs are expected to carry a merchant category code and a transaction reference. Personal IDs must NOT:
+  // adding them to a personal VPA makes some apps refuse the payment.
+  const mc = String(merchantCode || '').trim();
+  if (mc) { if (!/^\d{4}$/.test(mc)) throw new Error('Invalid merchant code'); pairs.push(['mc', mc]); }
+  const tr = String(txnRef || '').trim();
+  if (tr) { if (!/^[A-Za-z0-9]{1,35}$/.test(tr)) throw new Error('Invalid transaction reference'); pairs.push(['tr', tr]); }
+  pairs.push(['am', formatUpiAmount(amt)], ['cu', 'INR']);
   const tn = cleanNote(note);
   if (tn) pairs.push(['tn', encodeURIComponent(tn)]);
   return pairs.map(([k, v]) => `${k}=${v}`).join('&');
@@ -45,7 +40,6 @@ export const UPI_APPS = [
   { id: 'gpay',    label: 'Google Pay', android: 'com.google.android.apps.nbu.paisa.user', ios: 'gpay://upi/pay' },
   { id: 'phonepe', label: 'PhonePe',    android: 'com.phonepe.app',                        ios: 'phonepe://pay' },
   { id: 'paytm',   label: 'Paytm',      android: 'net.one97.paytm',                        ios: 'paytmmp://pay' },
-  { id: 'bhim',    label: 'BHIM',       android: 'in.org.npci.upiapp',                     ios: null },
 ];
 
 export const detectPlatform = (ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '')) => {

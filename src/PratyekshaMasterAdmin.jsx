@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import API_BASE_URL from './apiBase.js';
+import { hasValidMasterToken, masterLogin, MASTER_EXPIRED_EVENT } from './masterAuth.js';
 import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
-import MasterDocuments from './MasterDocuments.jsx';
 import QrStudio from './QrStudio.jsx';
-import { QrCode } from 'lucide-react';
+import MasterDocuments from './MasterDocuments.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar } from 'lucide-react';
+import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar, QrCode } from 'lucide-react';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
@@ -1103,7 +1103,7 @@ const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
     );
   };
 
-export default function PratyekshaMasterAdmin() {
+function PratyekshaMasterAdminInner() {
   useAdminGlobalStyles();
   const [activeSection, setActiveSection] = useState('demos');
   const [docsClientId, setDocsClientId] = useState(null);
@@ -2472,11 +2472,7 @@ export default function PratyekshaMasterAdmin() {
 
         {activeSection==='crm' && <LeadCRM />}
 
-        {activeSection==='qrstudio' && (
-          <div className="no-sb p-fade-in" style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', width:'100%', WebkitOverflowScrolling:'touch' }}>
-            <QrStudio />
-          </div>
-        )}
+        {activeSection==='qrstudio' && <QrStudio clients={clients} />}
 
         {activeSection==='documents' && (
           <div className="no-sb p-fade-in" style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', width:'100%', WebkitOverflowScrolling:'touch' }}>
@@ -2797,4 +2793,49 @@ export default function PratyekshaMasterAdmin() {
       <Toast toast={toast} />
     </div>
   );
+}
+
+/* The platform admin used to open with no login and its API had no authentication. The page now sits behind a password
+   (MASTER_ADMIN_PASSWORD on the server); the signed token lasts 12 hours. Nothing inside loads until login succeeds. */
+function MasterLoginGate({ children }) {
+  const [authed, setAuthed] = useState(() => hasValidMasterToken());
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onExpired = () => { setAuthed(false); setPw(''); setErr('Your session expired. Please sign in again.'); };
+    window.addEventListener(MASTER_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(MASTER_EXPIRED_EVENT, onExpired);
+  }, []);
+  if (authed) return children;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy || !pw) return;
+    setBusy(true); setErr('');
+    try { await masterLogin(pw); setPw(''); setAuthed(true); }
+    catch (ex) {
+      const st = ex?.response?.status;
+      setErr(ex?.response?.data?.error || (st ? 'Sign-in failed. Please try again.' : 'Cannot reach the server. Check your connection.'));
+    } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'grid', placeItems: 'center', padding: 24 }}>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <img src={BRAND_LOGO} alt="" style={{ height: 36, alignSelf: 'flex-start', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        <div style={{ fontSize: 20, fontWeight: 600, color: C.goldPrimary }}>Platform admin</div>
+        <div style={{ fontSize: 13, color: C.textMid }}>Enter the platform admin password to continue.</div>
+        <input type="password" autoFocus autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password"
+          style={{ background: C.bgInput, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px', color: C.text, fontSize: 15, outline: 'none' }} />
+        {err && <div role="alert" style={{ fontSize: 13, color: '#e5736b' }}>{err}</div>}
+        <button type="submit" disabled={busy || !pw}
+          style={{ background: C.goldPrimary, color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontWeight: 600, cursor: busy || !pw ? 'not-allowed' : 'pointer', opacity: busy || !pw ? 0.6 : 1 }}>
+          {busy ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function PratyekshaMasterAdmin() {
+  return <MasterLoginGate><PratyekshaMasterAdminInner /></MasterLoginGate>;
 }

@@ -1,7 +1,8 @@
 import React, { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import './index.css'
+import './themeScroll.css'
 import App from './App.jsx'
 import OperatorPortal from './OperatorPortal.jsx'
 import KitchenView from './KitchenView.jsx'
@@ -14,12 +15,8 @@ import { configurePwa } from './pwa.js'
 import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
 import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
-import { installOperatorAuth } from './operatorAuth.js'
-import QrGate from './QrGate.jsx'
-import './brand-scrollbar.css'   // keep LAST so the branded scrollbars override the older rules
 
 installSubscriptionInterceptor();
-installOperatorAuth();
 
 /* Expired subscriptions lock the customer app, KDS and Owner app behind a renewal page. */
 function Gated({ children }) {
@@ -45,6 +42,19 @@ function SplashGate({ children }) {
       )}
     </>
   );
+}
+
+/* Marks customer surfaces (guest home + restaurant menu) so the gold scrollbar theme leaves their hidden scrollbars alone. */
+const STAFF_PREFIXES = ['landing', 'master-admin', 'kitchen', 'operator', 'owner', 'feedback-suite'];
+function SurfaceFlag() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const first = pathname.split('/').filter(Boolean)[0] || '';
+    const customer = first === '' || !STAFF_PREFIXES.includes(first);
+    if (customer) document.documentElement.setAttribute('data-customer', '1');
+    else document.documentElement.removeAttribute('data-customer');
+  }, [pathname]);
+  return null;
 }
 
 class AppErrorBoundary extends React.Component {
@@ -74,6 +84,7 @@ createRoot(document.getElementById('root')).render(
     <AppErrorBoundary>
       <SplashGate>
       <BrowserRouter>
+      <SurfaceFlag />
       <Routes>
         {/* 1. 🌐 Pratyeksha Landing Page */}
         <Route path="/landing" element={<Pratyeksha />} />
@@ -100,7 +111,7 @@ createRoot(document.getElementById('root')).render(
 
         {/* 7. Customer Menu Route (Dynamic) */}
         {/* Must stay near the bottom — catches /:tenantId */}
-        <Route path="/:tenantId" element={<Gated><QrGate><App /></QrGate></Gated>} />
+        <Route path="/:tenantId" element={<Gated><App /></Gated>} />
 
         {/* 8. Customer PWA Home — installed app opens here unless a restaurant QR route is active */}
         <Route path="/" element={<CustomerHome />} />
