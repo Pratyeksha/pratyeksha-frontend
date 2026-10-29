@@ -1038,17 +1038,18 @@ const SetupScreen = () => {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [operatorPassword, setOperatorPassword] = useState(''); // proof that this person is allowed to create the owner login
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const canSubmit = username.trim() && password.length >= 6 && password === confirm;
+  const canSubmit = operatorPassword && username.trim() && password.length >= 6 && password === confirm;
 
   const submit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true); setError(null);
     try {
-      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName, email: recoveryEmail.trim() || undefined });
+      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName, operatorPassword, email: recoveryEmail.trim() || undefined });
       completeAuth(res.data.token, res.data.ownerName);
     } catch (err) {
       setError(err?.response?.data?.error || 'Could not complete setup');
@@ -1061,7 +1062,8 @@ const SetupScreen = () => {
         <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 3 }}>Set up your owner login</div>
         <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>First time here for <b style={{ color: T.primary }}>{tenantId}</b> — create your credentials. You'll only do this once.</div>
         <form onSubmit={submit}>
-          <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" autoFocus /></Field>
+          <Field label="RESTAURANT OPERATOR PASSWORD (ASK YOUR MANAGER)"><input type="password" value={operatorPassword} onChange={e => setOperatorPassword(e.target.value)} style={inputStyle} autoComplete="off" autoFocus /></Field>
+          <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" /></Field>
           <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" /></Field>
           <Field label="RECOVERY EMAIL (FOR FORGOT PASSWORD)"><input type="email" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" autoComplete="email" autoCapitalize="none" /></Field>
           <Field label="CHOOSE A PASSWORD"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>

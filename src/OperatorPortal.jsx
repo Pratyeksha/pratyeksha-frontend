@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+import { OPERATOR_AUTH_EVENT } from './operatorAuth.js';
 import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
@@ -241,6 +242,12 @@ const OperatorPortalInner = () => {
   }), []);
 
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
+  // The server answered 401 OPERATOR_AUTH_REQUIRED (old / expired session): back to the login form instead of a dashboard of errors.
+  useEffect(() => {
+    const onAuthRequired = () => setIsAuthenticated(false);
+    window.addEventListener(OPERATOR_AUTH_EVENT, onAuthRequired);
+    return () => window.removeEventListener(OPERATOR_AUTH_EVENT, onAuthRequired);
+  }, []);
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [expiredInfo, setExpiredInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('pending'); 

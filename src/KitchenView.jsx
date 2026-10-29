@@ -11,6 +11,7 @@ import { io } from "socket.io-client";
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+import { OPERATOR_AUTH_EVENT, setKitchenToken } from './operatorAuth.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, Timer,  StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Clock, CheckSquare, Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench } from 'lucide-react';
@@ -80,7 +81,7 @@ const UNIT_OPTIONS   = ['kg','g','litre','ml','pcs','plate','portion'];
 /* ═══════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════ */
-const KitchenView = () => {
+const KitchenViewInner = () => {
   const { tenantId } = useParams();
 
   useEffect(() => {
@@ -2318,4 +2319,55 @@ const playCachedSound = (url) => {
     const p = a.play(); if (p && p.catch) p.catch(() => {});
   } catch { /* autoplay blocked / unsupported */ }
 };
+/* The kitchen screen opens straight from its link, exactly as before. Only if the server answers "sign-in required"
+   (REQUIRE_OPERATOR_AUTH is on and this tablet has no valid session) does it show a sign-in form, using the restaurant's
+   operator account. The session is stored under its own key and lasts 30 days. */
+const KitchenView = () => {
+  const { tenantId } = useParams();
+  const [needLogin, setNeedLogin] = useState(false);
+  const [form, setForm] = useState({ username: '', password: '' });
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onAuth = () => { setNeedLogin(true); setErr(''); };
+    window.addEventListener(OPERATOR_AUTH_EVENT, onAuth);
+    return () => window.removeEventListener(OPERATOR_AUTH_EVENT, onAuth);
+  }, []);
+  if (!needLogin) return <KitchenViewInner />;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy || !form.username || !form.password) return;
+    setBusy(true); setErr('');
+    try {
+      const { data } = await axios.post(`${BASE_URL}/admin/login`, { username: form.username.trim(), password: form.password });
+      if (tenantId && data.tenantId !== tenantId) { setErr('These credentials belong to a different restaurant.'); return; }
+      setKitchenToken(data.token);
+      setForm({ username: '', password: '' });
+      setNeedLogin(false); // remounts the kitchen screen, which now sends the new session
+    } catch (ex) {
+      const st = ex?.response?.status, d = ex?.response?.data;
+      setErr(!st ? 'Cannot reach the server. Check the internet connection.'
+        : st === 402 ? (d?.error || 'This subscription has expired.')
+        : st === 429 ? (d?.error || 'Too many attempts. Try again in a few minutes.')
+        : st === 401 ? 'Incorrect username or password.' : (d?.error || 'Sign-in failed. Please try again.'));
+    } finally { setBusy(false); }
+  };
+  const field = { background: '#1a1a1a', border: '1px solid #3a3a3a', borderRadius: 10, padding: '14px 16px', color: '#f2f2f2', fontSize: 17, outline: 'none' };
+  return (
+    <div style={{ minHeight: '100vh', background: '#0d0d0d', color: '#f2f2f2', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14, background: '#151515', border: '1px solid #2a2a2a', borderRadius: 16, padding: 28 }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>Kitchen sign-in</div>
+        <div style={{ fontSize: 14, color: '#a0a0a0' }}>Sign in with the restaurant account to open the kitchen screen on this device.</div>
+        <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Username" autoCapitalize="none" autoCorrect="off" autoComplete="username" style={field} />
+        <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" autoComplete="current-password" style={field} />
+        {err && <div role="alert" style={{ fontSize: 14, color: '#ff7a70' }}>{err}</div>}
+        <button type="submit" disabled={busy || !form.username || !form.password}
+          style={{ background: '#f5b82e', color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '14px 16px', fontSize: 17, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy || !form.username || !form.password ? 0.6 : 1 }}>
+          {busy ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
 export default KitchenView;
