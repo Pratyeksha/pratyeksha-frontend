@@ -18,3 +18,25 @@ build/
 
 # OS metadata
 .DS_Store
+
+# More environment files (keep the example)
+.env.*
+!.env.example
+feedback-suite-app/.env
+feedback-suite-app/.env.*
+!feedback-suite-app/.env.example
+
+# Keys, logs, local backups and archives
+*.pem
+*.key
+*.log
+*.bak
+*.zip
+*.tgz
+
+# Build output of the feedback app and coverage
+feedback-suite-app/dist/
+coverage/
+
+# Stray files that have ended up in this repository before
+/git

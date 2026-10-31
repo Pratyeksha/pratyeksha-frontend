@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+import { startInvoicePdf } from './invoicePdf.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import UpiPay from './UpiPay.jsx';
@@ -3710,21 +3711,6 @@ const autoDownloadInvoicePDF = useCallback(() => {
 
 </div>
 
-<script>
-  window.onload = function() {
-    var element = document.getElementById('invoice-root');
-    var opt = {
-      margin:      [8, 8, 8, 8],
-      filename:    'TaxInvoice_Table${String(tableNumber).replace(/[^A-Za-z0-9_-]/g, '')}_${invoiceNo}.pdf',
-      image:       { type: 'jpeg', quality: 1.0 },
-      html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false },
-      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save().then(function() {
-      setTimeout(function() { window.close(); }, 90000);
-    });
-  };
-</script>
 </body>
 </html>`;
 
@@ -3733,6 +3719,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const url  = URL.createObjectURL(blob);
   const win  = window.open(url, '_blank');
   if (!win) triggerAlert('Please allow pop-ups to download your invoice.', 'error'); // a blocked pop-up used to fail silently
+  else startInvoicePdf(win, `TaxInvoice_Table${String(tableNumber).replace(/[^A-Za-z0-9_-]/g, '')}_${invoiceNo}.pdf`);
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient, approvedBill, billLines]);
 

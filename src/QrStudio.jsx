@@ -123,7 +123,9 @@ export default function QrStudio({ clients = [] }) {
   };
   const printAll = () => {
     const w = window.open('', '_blank'); if (!w) { setError('Allow pop-ups to print.'); return; }
-    w.document.write(`<!doctype html><title>${selected.name} QR cards</title><style>@page{margin:0}body{margin:0}img{display:block;width:100%;height:auto;page-break-after:always;break-after:page}</style>${results.map((r) => `<img src="${r.url}">`).join('')}`);
+    // The window is opened from the platform-admin app (same origin), so nothing typed by a person may be written into it unescaped.
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    w.document.write(`<!doctype html><title>${esc(selected.name)} QR cards</title><style>@page{margin:0}body{margin:0}img{display:block;width:100%;height:auto;page-break-after:always;break-after:page}</style>${results.map((r) => `<img src="${esc(r.url)}">`).join('')}`);
     w.document.close(); setTimeout(() => w.print(), 600);
   };
 

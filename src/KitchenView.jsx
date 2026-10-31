@@ -11,7 +11,7 @@ import { io } from "socket.io-client";
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
-import { OPERATOR_AUTH_EVENT, setKitchenToken } from './operatorAuth.js';
+import { OPERATOR_AUTH_EVENT, setKitchenToken, getOperatorToken } from './operatorAuth.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChefHat, Timer,  StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Clock, CheckSquare, Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench } from 'lucide-react';
@@ -112,6 +112,7 @@ const KitchenViewInner = () => {
   const [interceptedAlerts,    setInterceptedAlerts]    = useState([]);
   // 'loading' until the first ticket fetch answers; 'error' if it failed. Before this the board showed "KITCHEN CLEAR" while loading.
   const [boardState, setBoardState] = useState('loading');
+  const [boardError, setBoardError] = useState(''); // what the server actually answered when the board could not load
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
   const [eightySixModal, setEightySixModal] = useState(null); // { categoryKey, categoryName }
   const [selectedDish86, setSelectedDish86] = useState(null);
@@ -233,7 +234,7 @@ const KitchenViewInner = () => {
       ]);
       if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
       const incoming = [...(ordersRes.data || [])].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setBoardState('ready');
+      setBoardState('ready'); setBoardError('');
       setOrders(incoming);
       if (catRes)  setCategories(catRes.data  || []);
       if (menuRes) setMenuItems(menuRes.data  || []);
@@ -252,7 +253,12 @@ const KitchenViewInner = () => {
         return merged;
       });
       fetchHealth();
-    } catch (err) { console.error('KDS fetch:', err.message); setBoardState(prev => prev === 'ready' ? prev : 'error'); }
+    } catch (err) {
+      console.error('KDS fetch:', err.message);
+      const r = err && err.response;
+      setBoardError(r ? `Server answered ${r.status}${r.data && r.data.code ? ` (${r.data.code})` : ''}${r.data && r.data.error ? `: ${String(r.data.error).slice(0, 140)}` : ''}` : (err && err.message) || 'No response from the server');
+      setBoardState(prev => prev === 'ready' ? prev : 'error');
+    }
   };
 
   const retryBoardLoad = () => { setBoardState('loading'); fetchActiveOrders(); };
@@ -337,7 +343,7 @@ const KitchenViewInner = () => {
 
     const socket = io(SOCKET_BASE_URL, { transports: ['polling','websocket'], reconnection: true });
     socketRef.current = socket;
-    const joinRestaurant = () => socket.emit('join_restaurant', tenantId);
+    const joinRestaurant = () => socket.emit('join_restaurant', tenantId, getOperatorToken()); // staff room needs the token
     socket.on('connect', joinRestaurant);
     // Tickets/timings that changed while the socket was down are never replayed: resync on reconnect.
     let hasConnectedOnce = false;
@@ -1195,7 +1201,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 </div>
               </div>
             ) : boardState === 'error' && orders.length === 0 ? (
-              <KdsLoadError onRetry={retryBoardLoad} />
+              <KdsLoadError onRetry={retryBoardLoad} detail={boardError} />
             ) : filteredOrders.length === 0 ? (
               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
                 <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
@@ -1236,7 +1242,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
             <div style={{ flex:1, overflowY:'auto', display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isSmallTablet?'240px':'300px'},1fr))`, gap: isTablet ? 12 : 16, alignContent:'flex-start' }} className="no-scrollbar">
               {boardState === 'loading' && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} isTablet={isTablet} />)}
-              {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn:'1/-1', display:'flex' }}><KdsLoadError onRetry={retryBoardLoad} /></div>}
+              {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn:'1/-1', display:'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
                 {filteredOrders.map((order,i) => (
                   <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
@@ -1631,14 +1637,16 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 /* ═══════════════════════════════════════════════════════════════════
    KDS ORDER CARD COMPONENT
 ═══════════════════════════════════════════════════════════════════ */
-const KDSOrderCard = ({
+// forwardRef: <AnimatePresence mode="popLayout"> hands every child a ref to measure it. A plain function component cannot take one
+// ("Function components cannot be given refs"), so an exiting ticket could not be measured and the grid jumped when a ticket was dispatched.
+const KDSOrderCard = React.forwardRef(({
   order, onReady, isNewest,
   dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
   socketInstance, isNonVegMode, tenantOnlyVeg,
   isMobile, isTablet,
   itemFinalTimes, setItemFinalTimes, onItemSynced
-}) => {
+}, ref) => {
   // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
   const tenantId     = order.tenantId;
   const otype        = getOrderType(order);
@@ -1810,6 +1818,7 @@ const KDSOrderCard = ({
 
   return (
     <motion.div
+      ref={ref}
       layout
       initial={{ opacity:0, y:16, scale:0.98 }}
       animate={{ opacity:1, y:0,  scale:1 }}
@@ -2097,7 +2106,8 @@ const KDSOrderCard = ({
       </div>
     </motion.div>
   );
-};
+});
+KDSOrderCard.displayName = 'KDSOrderCard';
 
 /* ─────────────────────────────────────────────────────────────
    STYLE TOKENS
@@ -2297,7 +2307,7 @@ const KdsSidebarSkeleton = () => (
 );
 
 /* First load failed: say so and offer a retry instead of an endless skeleton or a false "KITCHEN CLEAR". */
-const KdsLoadError = ({ onRetry }) => (
+const KdsLoadError = ({ onRetry, detail }) => (
   <div role="alert" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
     <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(226,154,88,0.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
       <WifiOff size={28} color="#e29a58" />
@@ -2305,6 +2315,7 @@ const KdsLoadError = ({ onRetry }) => (
     <div style={{ textAlign:'center' }}>
       <p style={{ fontWeight:900, color:'#cfcac0', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>COULDN'T LOAD TICKETS</p>
       <p style={{ fontSize:'0.62rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Check the connection. This screen keeps retrying every minute.</p>
+      {detail && <p data-testid="kds-error-detail" style={{ fontSize:'0.62rem', color:'#e29a58', margin:'8px 0 0', fontWeight:700, wordBreak:'break-word' }}>{detail}</p>}
     </div>
     <button type="button" onClick={onRetry} style={{ padding:'10px 22px', borderRadius:10, border:'1px solid rgba(233,220,195,0.55)', background:'linear-gradient(135deg, #f1e8d4, #e3d5b8 55%, #d6c5a0)', color:'#17120c', fontWeight:900, fontSize:'0.7rem', letterSpacing:'0.8px', cursor:'pointer' }}>TRY AGAIN</button>
   </div>

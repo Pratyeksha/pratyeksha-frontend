@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
-import { OPERATOR_AUTH_EVENT } from './operatorAuth.js';
+import { OPERATOR_AUTH_EVENT, getOperatorToken } from './operatorAuth.js';
 import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
@@ -19,6 +19,11 @@ import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './Opera
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
  
 import { motion, AnimatePresence } from 'framer-motion';
+
+// HTML-escape for the document builders below (purchase order, salary slip, invoice). Anything typed by a person must go through this
+// before it is placed in a string that is later assigned to innerHTML, or `<img onerror=...>` in a vendor / staff / address field would run.
+const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 import { 
   UtensilsCrossed, ReceiptIndianRupee, BarChart3,ClipboardList, FileClock, SquarePen, Boxes, ClipboardPenLine,
 FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus, ArrowUpRight, ArrowDownRight,UserRound ,EyeOff ,
@@ -870,7 +875,8 @@ useEffect(() => {
 }, [isAuthenticated, viewDate, fetchAnalytics, fetchMonthlySalary, fetchExtraAnalytics]);
 
   useEffect(() => {
-    const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
+    // The staff room (new orders, waiter calls, bills...) needs this restaurant's token; the token is read at emit time because this socket is created before login.
+    const joinRestaurant = () => socket.emit("join_restaurant", tenantId, getOperatorToken());
     const ingredientAlertTimers = new Set();
     const ingredientAlertByName = new Map(); // ingredientName -> its auto-dismiss timer
     // inventory_updated / low_stock_alert fire once per ingredient touched by an order; each one re-downloaded inventory, staff,
@@ -2311,9 +2317,9 @@ const generatePurchaseOrderPDF = async (vendor) => {
   const rows = itemsForVendor.map((it, i) => `
     <tr>
       <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;">${i+1}</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;font-weight:700;">${it.itemName}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;font-weight:700;">${escHtml(it.itemName)}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;">${it.suggestedReorderQty}</td>
-      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;">${it.unit}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;">${escHtml(it.unit)}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;">${it.currentStock}</td>
     </tr>
   `).join('');
@@ -2322,9 +2328,9 @@ const generatePurchaseOrderPDF = async (vendor) => {
     <div id="po-frame" style="width:794px;padding:48px;background:#fff;font-family:Arial,sans-serif;color:#111;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:16px;margin-bottom:24px;">
         <div>
-          <div style="font-size:22px;font-weight:900;letter-spacing:1px;">${tenantConfig?.name || 'PURCHASE ORDER'}</div>
-          <div style="font-size:11px;color:#666;margin-top:4px;">${tenantConfig?.address || ''}</div>
-          ${tenantConfig?.gstin ? `<div style="font-size:11px;color:#666;">GSTIN: ${tenantConfig.gstin}</div>` : ''}
+          <div style="font-size:22px;font-weight:900;letter-spacing:1px;">${escHtml(tenantConfig?.name || 'PURCHASE ORDER')}</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;">${escHtml(tenantConfig?.address || '')}</div>
+          ${tenantConfig?.gstin ? `<div style="font-size:11px;color:#666;">GSTIN: ${escHtml(tenantConfig.gstin)}</div>` : ''}
         </div>
         <div style="text-align:right;">
           <div style="font-size:16px;font-weight:900;color:#BA7517;">PURCHASE ORDER</div>
@@ -2336,15 +2342,15 @@ const generatePurchaseOrderPDF = async (vendor) => {
       <div style="display:flex;justify-content:space-between;margin-bottom:24px;">
         <div style="flex:1;">
           <div style="font-size:10px;color:#999;font-weight:800;letter-spacing:0.5px;margin-bottom:6px;">VENDOR</div>
-          <div style="font-size:14px;font-weight:900;">${vendor.name}</div>
-          ${vendor.contactPerson ? `<div style="font-size:12px;color:#444;margin-top:2px;">Attn: ${vendor.contactPerson}</div>` : ''}
-          ${vendor.phone ? `<div style="font-size:12px;color:#444;">${vendor.phone}</div>` : ''}
-          ${vendor.email ? `<div style="font-size:12px;color:#444;">${vendor.email}</div>` : ''}
-          ${vendor.address ? `<div style="font-size:12px;color:#444;margin-top:2px;">${vendor.address}</div>` : ''}
+          <div style="font-size:14px;font-weight:900;">${escHtml(vendor.name)}</div>
+          ${vendor.contactPerson ? `<div style="font-size:12px;color:#444;margin-top:2px;">Attn: ${escHtml(vendor.contactPerson)}</div>` : ''}
+          ${vendor.phone ? `<div style="font-size:12px;color:#444;">${escHtml(vendor.phone)}</div>` : ''}
+          ${vendor.email ? `<div style="font-size:12px;color:#444;">${escHtml(vendor.email)}</div>` : ''}
+          ${vendor.address ? `<div style="font-size:12px;color:#444;margin-top:2px;">${escHtml(vendor.address)}</div>` : ''}
         </div>
         <div style="flex:1;text-align:right;">
           <div style="font-size:10px;color:#999;font-weight:800;letter-spacing:0.5px;margin-bottom:6px;">TERMS</div>
-          <div style="font-size:12px;color:#444;">Payment: ${vendor.paymentTerms || 'COD'}</div>
+          <div style="font-size:12px;color:#444;">Payment: ${escHtml(vendor.paymentTerms || 'COD')}</div>
           <div style="font-size:12px;color:#444;">Expected lead time: ${vendor.leadTimeDays || 1} day${(vendor.leadTimeDays||1)>1?'s':''}</div>
         </div>
       </div>
@@ -4522,14 +4528,14 @@ const downloadAllTodaysInvoices = useCallback(async () => {
             <h4 style="margin:0;font-size:10px;letter-spacing:2px;font-weight:800;color:#888;">TAX INVOICE${sourceTag}</h4>
             <h1 style="margin:5px 0;color:#555;font-size:26px;font-weight:900;text-transform:uppercase;">${escInv(bill.businessName || '')}</h1>
             <p style="font-size:10px;color:#555;margin:0 0 3px;font-weight:600;">${escInv(bill.address || 'Address not configured')}</p>
-            <p style="font-size:11px;font-weight:800;margin:2px 0;">GSTIN: ${bill.gstin || '—'}</p>
-            ${bill.fssaiNumber ? `<p style="font-size:10px;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${bill.fssaiNumber}</p>` : ''}
+            <p style="font-size:11px;font-weight:800;margin:2px 0;">GSTIN: ${escInv(bill.gstin || '—')}</p>
+            ${bill.fssaiNumber ? `<p style="font-size:10px;font-weight:700;margin:2px 0;color:#666;">FSSAI: ${escInv(bill.fssaiNumber)}</p>` : ''}
           </div>
 
           <div style="border-top:2px solid #000;border-bottom:2px solid #000;padding:8px 0;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
             <div>
               <div style="font-size:9px;font-weight:900;color:#888;letter-spacing:1px;">BILL NO. (TODAY)</div>
-              <div style="font-size:18px;font-weight:900;">#${bill.billNo ?? '—'}</div>
+              <div style="font-size:18px;font-weight:900;">#${escInv(bill.billNo ?? '—')}</div>
               <div style="font-size:9px;color:#aaa;margin-top:2px;">Total #${bill.totalBillCount ?? '—'}</div>
             </div>
             <div>
@@ -4565,7 +4571,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
               <span>- ${bill.discountType === 'percent' ? `${bill.discountValue}%` : `₹${Number(bill.discountValue).toFixed(2)}`}</span>
             </div>` : ''}
             ${roundOff !== 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;color:#888;"><span>Round off</span><span>${roundOff > 0 ? '+' : '-'}₹${Math.abs(roundOff).toFixed(2)}</span></div>` : ''}
-            <p style="font-size:9px;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${bill.totalInWords || ''}</p>
+            <p style="font-size:9px;font-style:italic;margin-top:8px;font-weight:700;color:#888;">${escInv(bill.totalInWords || '')}</p>
           </div>
 
           <div style="border-top:2px solid #000;padding-top:14px;margin-top:14px;">
@@ -4574,7 +4580,7 @@ const downloadAllTodaysInvoices = useCallback(async () => {
               <span>₹${grandTotal}</span>
             </div>
             <div style="font-size:9px;font-weight:800;color:#888;text-align:right;margin-top:4px;">
-              MODE: ${paymentMode}
+              MODE: ${escInv(paymentMode)}
             </div>
           </div>
 
@@ -4685,8 +4691,8 @@ const netPay = salaryForSlip - deductions;
     <div id="salary-slip-frame" style="width:210mm;min-height:148mm;background:#fff;padding:20mm;font-family:Arial,sans-serif;color:#000;box-sizing:border-box;">
       <div style="border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
-          <div style="font-size:1.2rem;font-weight:900;text-transform:uppercase;">${tenantConfig?.name || tenantId}</div>
-          <div style="font-size:0.7rem;color:#555;margin-top:4px;">${tenantConfig?.address?.street||''}, ${tenantConfig?.address?.city||''}</div>
+          <div style="font-size:1.2rem;font-weight:900;text-transform:uppercase;">${escHtml(tenantConfig?.name || tenantId)}</div>
+          <div style="font-size:0.7rem;color:#555;margin-top:4px;">${escHtml(tenantConfig?.address?.street||'')}, ${escHtml(tenantConfig?.address?.city||'')}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:0.65rem;font-weight:800;color:#555;letter-spacing:1px;">SALARY SLIP</div>
@@ -4704,8 +4710,8 @@ const netPay = salaryForSlip - deductions;
           ['Employee ID', member._id.toString().slice(-6).toUpperCase()]
         ].map(([k,v]) => `
           <div>
-            <div style="font-size:0.58rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${k}</div>
-            <div style="font-size:0.82rem;font-weight:800;margin-top:2px;">${v}</div>
+            <div style="font-size:0.58rem;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${escHtml(k)}</div>
+            <div style="font-size:0.82rem;font-weight:800;margin-top:2px;">${escHtml(v)}</div>
           </div>
         `).join('')}
       </div>
@@ -4751,11 +4757,11 @@ const netPay = salaryForSlip - deductions;
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;padding-top:16px;border-top:1px dashed #ccc;">
         <div>
           <div style="font-size:0.6rem;color:#888;margin-bottom:24px;">Employee Signature</div>
-          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${pureName}</div>
+          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${escHtml(pureName)}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:0.6rem;color:#888;margin-bottom:24px;">Authorized Signatory</div>
-          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${tenantConfig?.name || ''}</div>
+          <div style="border-top:1px solid #000;padding-top:4px;font-size:0.6rem;color:#888;">${escHtml(tenantConfig?.name || '')}</div>
         </div>
       </div>
 
