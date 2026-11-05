@@ -113,6 +113,7 @@ const KitchenViewInner = () => {
   // 'loading' until the first ticket fetch answers; 'error' if it failed. Before this the board showed "KITCHEN CLEAR" while loading.
   const [boardState, setBoardState] = useState('loading');
   const [boardError, setBoardError] = useState(''); // what the server actually answered when the board could not load
+  const [lastLoadedAt, setLastLoadedAt] = useState(null);
   const [showMetricsDashboard, setShowMetricsDashboard] = useState(false);
   const [eightySixModal, setEightySixModal] = useState(null); // { categoryKey, categoryName }
   const [selectedDish86, setSelectedDish86] = useState(null);
@@ -209,11 +210,11 @@ const KitchenViewInner = () => {
 
   const fetchHealth = async () => {
     try {
-      const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`);
+      const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`, { timeout: 12000 });
       setKitchenHealth(r.data);
     } catch {}
     try {
-      const s = await axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`);
+      const s = await axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`, { timeout: 12000 });
       if (s.data && Number.isFinite(Number(s.data.count))) setServerKdsToday(s.data);
     } catch {}
   };
@@ -227,14 +228,14 @@ const KitchenViewInner = () => {
     const seq = ++fetchSeqRef.current;
     try {
       const [ordersRes, catRes, menuRes, tenantRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`),
-        ordersOnly ? null : axios.get(`${BASE_URL}/categories/${tenantId}`).catch(() => ({ data: [] })),
-        ordersOnly ? null : axios.get(`${BASE_URL}/menu/${tenantId}`).catch(() => ({ data: [] })),
-        ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`).catch(() => ({ data: null })),
+        axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`, { timeout: 15000 }), // a request that never answers used to freeze the whole board on its skeleton forever
+        ordersOnly ? null : axios.get(`${BASE_URL}/categories/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: [] })),
+        ordersOnly ? null : axios.get(`${BASE_URL}/menu/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: [] })),
+        ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: null })),
       ]);
       if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
       const incoming = [...(ordersRes.data || [])].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setBoardState('ready'); setBoardError('');
+      setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
       setOrders(incoming);
       if (catRes)  setCategories(catRes.data  || []);
       if (menuRes) setMenuItems(menuRes.data  || []);
@@ -708,17 +709,17 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
   /* ── wastage ── */
   const fetchWastageInventory = useCallback(async () => {
-    try { const r = await axios.get(`${BASE_URL}/inventory/${tenantId}`); setWastageInventory(r.data||[]); } catch { setWastageInventory([]); }
+    try { const r = await axios.get(`${BASE_URL}/inventory/${tenantId}`, { timeout: 12000 }); setWastageInventory(r.data||[]); } catch { setWastageInventory([]); }
   }, [tenantId]);
   const fetchWastageLog = useCallback(async () => {
     setWastageLoading(true);
     // A failed load used to become an empty list, so the panel claimed "No wastage entries today" and invited duplicate entries.
-    try { const r = await axios.get(`${BASE_URL}/wastage/${tenantId}`); setWastageLog(Array.isArray(r.data) ? r.data : []); setWastageError(e => e === 'Could not load today\'s entries. Close and reopen this panel to retry.' ? '' : e); }
+    try { const r = await axios.get(`${BASE_URL}/wastage/${tenantId}`, { timeout: 12000 }); setWastageLog(Array.isArray(r.data) ? r.data : []); setWastageError(e => e === 'Could not load today\'s entries. Close and reopen this panel to retry.' ? '' : e); }
     catch { setWastageError('Could not load today\'s entries. Close and reopen this panel to retry.'); }
     finally { setWastageLoading(false); }
   }, [tenantId]);
   const fetchWastageAnalytics = useCallback(async () => {
-    try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
+    try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`, { timeout: 12000 }); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
   }, [tenantId]);
   useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); } }, [showWastagePanel]);
   useEffect(() => { if (showWastagePanel && wastageTab==='report') fetchWastageAnalytics(); }, [wastageTab, showWastagePanel]);
@@ -791,7 +792,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       )}
 
       {/* section list */}
-      {boardState === 'loading' ? <KdsSidebarSkeleton /> : (
+      {boardState === 'loading' && orders.length === 0 ? <KdsSidebarSkeleton /> : (
       <div style={{ display:'flex', flexDirection:'column', gap:4, overflowY:'auto', flex:1 }} className="no-scrollbar">
         {/* ALL */}
         {(() => {
@@ -1189,7 +1190,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
           {/* MOBILE SWIPE CARDS */}
           {!showMetricsDashboard && !isAggregateView && useCardView && (
-            boardState === 'loading' ? (
+            boardState === 'loading' && orders.length === 0 ? (
               <div aria-hidden="true" style={{ flex:1, display:'flex', flexDirection:'column', gap:10, overflow:'hidden' }}>
                 <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:5, flexShrink:0, padding:'0 20px' }}>
                   <Sk w={20} h={6} r={3} style={{ background:'rgba(211,191,162,0.25)' }} />
@@ -1208,6 +1209,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                 <div style={{ textAlign:'center' }}>
                   <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
                   <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Waiting for next order…</p>
+                  <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
                 </div>
               </div>
             ) : (
@@ -1254,6 +1256,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
                   <div style={{ textAlign:'center' }}>
                     <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
                     <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>All tickets dispatched</p>
+                    <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
                   </div>
                 </div>
               )}
@@ -2307,6 +2310,20 @@ const KdsSidebarSkeleton = () => (
 );
 
 /* First load failed: say so and offer a retry instead of an endless skeleton or a false "KITCHEN CLEAR". */
+/* Shown under "KITCHEN CLEAR": says whether nothing arrived, or orders arrived and were hidden (station / veg / category / search filters,
+   or tickets that contain only extra items, which never go to the kitchen). Without it both cases look identical. */
+const KdsEmptyDetail = ({ loaded, shown, tenantId, at }) => {
+  let host = '';
+  try { host = new URL(BASE_URL, window.location.origin).host; } catch { host = String(BASE_URL || ''); }
+  const hidden = Math.max(0, loaded - shown);
+  return (
+    <p data-testid="kds-empty-detail" style={{ fontSize:'0.58rem', color:'#6f6f6f', margin:'10px 0 0', fontWeight:700, maxWidth:420, lineHeight:1.5, wordBreak:'break-word' }}>
+      {`Loaded ${loaded} pending order${loaded === 1 ? '' : 's'} for "${tenantId || '?'}" from ${host}${at ? ` at ${new Date(at).toLocaleTimeString()}` : ''}.`}
+      {hidden > 0 ? ` ${hidden} hidden by the station / veg / category / search filter or because ${hidden === 1 ? 'it has' : 'they have'} only extra items.` : (loaded === 0 ? ' Nothing is waiting in the kitchen.' : '')}
+    </p>
+  );
+};
+
 const KdsLoadError = ({ onRetry, detail }) => (
   <div role="alert" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
     <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(226,154,88,0.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>

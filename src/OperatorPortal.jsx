@@ -94,13 +94,14 @@ const numberToWords = (num) => {
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
     const n = ('000000000' + Math.round(num)).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
+    if (Math.round(num) === 0) return 'Zero Only';
     let str = '';
     str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + ' Crore ' : '';
     str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + ' Lakh ' : '';
     str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + ' Thousand ' : '';
     str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + ' Hundred ' : '';
     str += (n[5] != 0) ? (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + ' ' : '';
-    return str.trim() + " Only";
+    return str.replace(/\s+/g, ' ').trim() + " Only";
 };
 
 // One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
@@ -1172,7 +1173,8 @@ socket.on('aggregator_session_restored', (data) => {
         'new_waitlist_entry', 'new_reservation', 'tables_updated', 'upi_payment_claimed', 'upi_payment_failed', 'reservation_updated', 'waitlist_cancelled',
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
         'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
-        'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored'
+        'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored',
+        'push_stats_updated', 'campaign_sent'
       ].forEach(event => socket.off(event));
       ingredientAlertTimers.forEach(clearTimeout);
       ingredientAlertTimers.clear();

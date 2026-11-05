@@ -39,3 +39,17 @@ If you are developing a production application, we recommend using TypeScript wi
 - **Customer Home**: search shows restaurants serving a dish/category, "Did you mean", voice search; offers have filters and a detail view.
 - **UPI**: Google Pay / PhonePe / Paytm buttons with their marks; guests report a failed payment and the real reason reaches the operator.
 - Gold scrollbar theme on all staff screens (customer screens keep hidden scrollbars).
+
+## Kitchen screen (`/kitchen/<tenantId>`): what each message means
+
+| You see | It means | What to do |
+|---|---|---|
+| Tickets | Working. | |
+| **"Kitchen sign-in"** form | The server requires a login (`REQUIRE_OPERATOR_AUTH=true`) and this device has none for this restaurant. | Sign in once with the restaurant's operator username and password. |
+| Red panel with a line like **"Server answered 500 ..."** | The orders request failed; the line is the server's answer. 401/403: wrong or missing login. 500: server or database error (look in the server log for the `ref=` shown). | Press Retry; send the line if it persists. |
+| **"KITCHEN CLEAR"** and a line **"Loaded 0 pending orders for ... from <host>"** | The kitchen asked the server and nothing is waiting. Check that `<host>` is your backend and `<tenantId>` is the restaurant the guests ordered from. | If the host or restaurant is wrong, fix `VITE_API_URL` / the URL. |
+| **"KITCHEN CLEAR"** and **"Loaded N pending orders ... N hidden by the station / veg / category / search filter or because they have only extra items"** | Orders arrived but the screen hides them: a filter is on, or every item on the ticket is an "extra item" (packaged goods that do not go to the kitchen). | Clear the filters (station tabs, veg toggle, category, search). |
+
+**If the board shows grey placeholder boxes and the sidebar has only "STATIONS" and "Contact"**, the first load is still waiting for the
+server (live tickets that arrive over the socket are still shown, and the header count keeps working). Every load request now times out
+(orders after 15 s, menu / categories / restaurant after 8 s), so the board completes or shows the red error panel; it can no longer wait forever.

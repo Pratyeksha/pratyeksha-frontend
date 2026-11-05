@@ -14,5 +14,7 @@
 :root:not([data-customer]) *::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #d3bfa2, #b08c58) !important; background-clip: padding-box !important; }
 :root:not([data-customer]) *::-webkit-scrollbar-corner { background: transparent !important; }
 /* Components that deliberately hide their scrollbar (horizontal chip rows, carousels) keep doing so. */
-:root:not([data-customer]) .no-scrollbar, :root:not([data-customer]) .no-scrollbar::-webkit-scrollbar, :root:not([data-customer]) .hide-scrollbar::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+/* Only the scrollbar PSEUDO-elements are hidden. The bare `.no-scrollbar` element used to be in this selector list too, so every
+   .no-scrollbar container (the kitchen board, operator panels...) got width:0; height:0; display:none and vanished. */
+:root:not([data-customer]) .no-scrollbar::-webkit-scrollbar, :root:not([data-customer]) .hide-scrollbar::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
 :root:not([data-customer]) .no-scrollbar, :root:not([data-customer]) .hide-scrollbar { scrollbar-width: none !important; }
