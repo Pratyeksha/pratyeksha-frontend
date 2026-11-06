@@ -203,6 +203,8 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err?.response?.status === 401) window.dispatchEvent(new Event('owner-auth-expired'));
+    // A subscription that expires or is paused mid-session answers 402 on every call; only 401 was handled, so each page just showed a generic load error.
+    else if (err?.response?.status === 402) window.dispatchEvent(new CustomEvent('owner-subscription-blocked', { detail: err.response.data?.error || '' }));
     return Promise.reject(err);
   }
 );
@@ -243,6 +245,8 @@ function OwnerProvider({ tenantId, children }) {
   const [authToken, setAuthToken] = useState(null);
   const [ownerName, setOwnerName] = useState('');
   const [authErrorDetail, setAuthErrorDetail] = useState(null);
+  const [authBlocked, setAuthBlocked] = useState(false); // true when the server refused because the subscription expired / the account is paused
+  const authSeq = useRef(0);
 
   /**
    * Sets (or clears) the axios default header immediately, as a plain object
@@ -260,22 +264,35 @@ function OwnerProvider({ tenantId, children }) {
   };
 
   const resolveAuth = useCallback(async () => {
-    let cancelled = false;
+    // `cancelled` used to be a local that nothing ever set, so a slow check for the previous outlet could finish after the outlet changed
+    // and overwrite the token / status of the new one. Only the latest call may apply its result.
+    const mySeq = ++authSeq.current;
+    const cancelled = () => mySeq !== authSeq.current;
+    applyAuthHeader(null); // never carry the previous outlet's token into this check
     setAuthStatus('checking');
     setAuthErrorDetail(null);
+    setAuthBlocked(false);
     let stored = null;
     try { stored = localStorage.getItem(tokenKeyFor(outlet)); } catch (e) {}
 
     if (stored) {
       try {
         const res = await axios.get(`${API_BASE}/api/owner/auth/verify`, { headers: { Authorization: `Bearer ${stored}` } });
-        if (cancelled) return;
+        if (cancelled()) return;
         applyAuthHeader(stored);
         setAuthToken(stored);
         setOwnerName(res.data.ownerName || '');
         setAuthStatus('authed');
         return;
       } catch (e) {
+        if (cancelled()) return;
+        // 402 = subscription expired / account paused: say that plainly instead of a "couldn't reach the server" screen.
+        if (e?.response?.status === 402) {
+          setAuthErrorDetail(e.response.data?.error || 'This account is unavailable. Please contact Pratyeksha support.');
+          setAuthBlocked(true);
+          setAuthStatus('error');
+          return;
+        }
         // A 401 here just means the token expired — fall through to a normal
         // status check. Anything else (network/CORS/server down) should NOT
         // be silently treated as "token invalid, ask for login" — surface it.
@@ -290,13 +307,13 @@ function OwnerProvider({ tenantId, children }) {
     }
     try {
       const res = await axios.get(`${API_BASE}/api/owner/auth/status/${outlet}`);
-      if (cancelled) return;
+      if (cancelled()) return;
       setAuthStatus(res.data.setupComplete ? 'needsLogin' : 'needsSetup');
     } catch (e) {
       // Never guess between Setup/Login on a failed request — a wrong
       // API URL, CORS block, or downed server must never look like a
       // legitimate "please log in" screen, or the real problem gets hidden.
-      if (!cancelled) {
+      if (!cancelled()) {
         console.error('[owner-auth] status check failed:', e);
         setAuthErrorDetail(describeAuthError(e, `${API_BASE}/api/owner/auth/status/${outlet}`));
         setAuthStatus('error');
@@ -326,6 +343,16 @@ function OwnerProvider({ tenantId, children }) {
     window.addEventListener('owner-auth-expired', logout);
     return () => window.removeEventListener('owner-auth-expired', logout);
   }, [logout]);
+
+  useEffect(() => {
+    const onBlocked = (ev) => {
+      setAuthErrorDetail(ev?.detail || 'This account is unavailable. Please contact Pratyeksha support.');
+      setAuthBlocked(true);
+      setAuthStatus(cur => (cur === 'authed' ? 'error' : cur));
+    };
+    window.addEventListener('owner-subscription-blocked', onBlocked);
+    return () => window.removeEventListener('owner-subscription-blocked', onBlocked);
+  }, []);
 
   // Only open the realtime connection once actually authenticated.
   useEffect(() => {
@@ -377,8 +404,8 @@ function OwnerProvider({ tenantId, children }) {
 
   const value = useMemo(() => ({
     tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent,
-    authStatus, ownerName, completeAuth, logout, authErrorDetail, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, resolveAuth]);
+    authStatus, ownerName, completeAuth, logout, authErrorDetail, authBlocked, retryAuth: resolveAuth
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, authBlocked, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
@@ -963,7 +990,7 @@ const AuthSplash = () => (
 );
 
 const AuthErrorScreen = () => {
-  const { authErrorDetail, retryAuth, tenantId } = useOwner();
+  const { authErrorDetail, authBlocked, retryAuth, tenantId } = useOwner();
   return (
     <AuthShell>
       <Card style={{ borderColor: T.dangerSoft.replace('0.14', '0.4') }}>
@@ -971,7 +998,7 @@ const AuthErrorScreen = () => {
           <div style={{ width: 34, height: 34, borderRadius: 10, background: T.dangerSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <WifiOff size={16} color={T.danger} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>Couldn't reach the server</div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{authBlocked ? 'Account unavailable' : "Couldn't reach the server"}</div>
         </div>
         <div style={{ fontSize: 12, color: T.textMed, marginBottom: 18, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}
@@ -3513,7 +3540,7 @@ export default function OwnerApp() {
   return (
     <>
       <GlobalStyles />
-      <OwnerProvider tenantId={tenantId}>
+      <OwnerProvider key={tenantId} tenantId={tenantId}>
         <AuthGate>
           <OwnerAppInner />
         </AuthGate>

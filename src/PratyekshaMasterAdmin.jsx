@@ -1488,13 +1488,13 @@ function PratyekshaMasterAdminInner() {
     'Demo Given': demoRequests.filter(r=>r.status==='Demo Given').length,
   };
 
+  // The phone match was trimmed but the name / restaurant / city matches were not, so "Rohan " (a trailing space) found nothing;
+  // and a non-string value in any field threw while filtering.
+  const demoQuery = demoSearch.trim().toLowerCase();
   const filteredDemos = demoRequests.filter(r => {
     const okFilter = demoFilter==='all' || r.status===demoFilter;
-    const okSearch = !demoSearch ||
-      r.name?.toLowerCase().includes(demoSearch.toLowerCase()) ||
-      r.restaurant?.toLowerCase().includes(demoSearch.toLowerCase()) ||
-      String(r.phone ?? '').includes(demoSearch.trim()) ||
-      r.city?.toLowerCase().includes(demoSearch.toLowerCase());
+    const has = (v) => String(v ?? '').toLowerCase().includes(demoQuery);
+    const okSearch = !demoQuery || has(r.name) || has(r.restaurant) || has(r.phone) || has(r.city);
     return okFilter && okSearch;
   });
 
