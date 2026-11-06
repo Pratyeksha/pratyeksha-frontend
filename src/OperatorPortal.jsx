@@ -61,7 +61,11 @@ axios.interceptors.response.use(
   res => res,
   async (error) => {
     const config = error.config;
-    const isRetryable = error.response?.status === 503 || error.code === 'ERR_NETWORK';
+    // Only idempotent reads are retried. Retrying a POST (new order, payment, bill settlement) after a network drop can run it
+    // twice, because the server may already have processed the first attempt.
+    const method = String(config?.method || 'get').toLowerCase();
+    const isIdempotent = method === 'get' || method === 'head';
+    const isRetryable = isIdempotent && (error.response?.status === 503 || error.code === 'ERR_NETWORK');
     if (isRetryable && !config._retried) {
       config._retried = true;
       await new Promise(r => setTimeout(r, 1500));
@@ -247,7 +251,8 @@ const OperatorPortalInner = () => {
     timeout: 20000, 
   }), []);
 
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('pratyeksha_token'));
+  // Use the same validator as every API call: an expired or legacy token must not count as signed in.
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!getOperatorToken());
   // The server answered 401 OPERATOR_AUTH_REQUIRED (old / expired session): back to the login form instead of a dashboard of errors.
   useEffect(() => {
     const onAuthRequired = () => setIsAuthenticated(false);
@@ -454,7 +459,7 @@ const [monthlySalaryRecords, setMonthlySalaryRecords] = useState([]); // per-mon
 const [salaryEditModal, setSalaryEditModal] = useState(null); // { staffId, name, currentSalary }
 const [salaryEditValue, setSalaryEditValue] = useState('');
 const [salaryEditPassword, setSalaryEditPassword] = useState('');
-const storedTableCount = parseInt(localStorage.getItem('table_count')) || 12; // value captured at login
+const storedTableCount = parseInt(localStorage.getItem('table_count'), 10) || 12; // value captured at login
 // The floor map, table pickers and staffing maths used ONLY the login-time value, so changing the number of tables (master admin /
 // onboarding) left every operator screen on the old count until they logged out and in. The live tenant config wins when loaded.
 const tableCount = Number(tenantConfig?.tableCount) >= 1 ? Math.floor(Number(tenantConfig.tableCount)) : storedTableCount;
@@ -842,7 +847,7 @@ const submitExtraRestock = async () => {
     setExtraRestockModal(null);
     setExtraRestockQty('');
     fetchExtraItems();
-  } catch { showNotif('Restock failed', 'error'); }
+  } catch (err) { showNotif(err?.response?.data?.error || 'Restock failed', 'error'); }
   finally { setIsSubmittingExtraRestock(false); }
 };
 
@@ -2241,6 +2246,8 @@ const cancelReservation = async (reservationId) => {
 };
 
 const submitQuickReserve = async () => {
+  const ps = Number(quickReserveDraft.partySize);
+  if (!(ps >= 1 && ps <= 50)) { showNotif('Party size must be between 1 and 50', 'error'); return; }
   try {
     await axios.post(`${BASE_URL}/admin/tables/${tenantId}/${quickReserveTable}/quick-reserve`, quickReserveDraft);
     showNotif(`Table ${quickReserveTable} reserved`);
@@ -2271,6 +2278,7 @@ const saveVendor = async () => {
   if (!newVendorDraft.name?.trim()) return showNotif('Vendor name is required', 'error');
   if (newVendorDraft.phone && String(newVendorDraft.phone).replace(/\D/g, '').length < 10) return showNotif('Enter a valid phone number (at least 10 digits)', 'error');
   if (newVendorDraft.leadTimeDays !== '' && !(Number(newVendorDraft.leadTimeDays) >= 0)) return showNotif('Lead time must be 0 days or more', 'error');
+  if (newVendorDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(newVendorDraft.email).trim())) return showNotif('Enter a valid vendor email address', 'error');
   if (pickupFiringRef.current.has('vendor-save')) return; // double-click created the vendor twice
   pickupFiringRef.current.add('vendor-save');
   try {
@@ -2637,7 +2645,7 @@ const discountedSub  = Math.round((finalAmt / (1 + cgstPct + sgstPct)) * 100) / 
 
 if (activePaymentType === 'split') {
         const total = Number(paymentModes.cash || 0) + Number(paymentModes.upi || 0) + Number(paymentModes.card || 0);
-        if (Math.abs(total - finalAmt) > 1) { showNotif(`Mismatch: ₹${total} vs ₹${finalAmt}`, "error"); return; }
+        if (Math.round(total * 100) !== Math.round(finalAmt * 100)) { showNotif(`Mismatch: ₹${total} vs ₹${finalAmt}`, "error"); return; }
     }
     setConfirmModal({
         show: true, title: 'Finalize Table Settlement?',
@@ -2829,7 +2837,7 @@ useEffect(() => {
   axios.get(`${BASE_URL}/admin/bill-requests/${encodeURIComponent(tenantId)}`).then((r) => {
     const b = (Array.isArray(r.data) ? r.data : []).find((x) => x.status === 'sent' && x.bill && (String(x.tableNumber) === String(selectedTable) || (x.joinedTables || []).map(String).includes(String(selectedTable))));
     if (!alive || !b) return;
-    setDiscountType('flat'); setDiscount(b.bill.settleDiscount.discount); setDiscountReason('Approved bill');
+    setDiscountType('flat'); setDiscount(Number(b.bill.settleDiscount?.discount) || 0); setDiscountReason('Approved bill');
     showNotif(`Approved bill applied: the guest was shown ₹${Number(b.bill.total).toFixed(2)}`, 'info');
   }).catch(() => {});
   return () => { alive = false; };
@@ -5867,7 +5875,7 @@ const renderMonthHeatmap = () => {
                       <CalendarClock size={11}/> RESERVED · {activeReservation.customerName || 'Walk-in'}
                       {activeReservation.partySize ? ` · ${activeReservation.partySize} guests` : ''}
                     </div>
-                    <button type="button" onClick={() => { cancelReservation(activeReservation._id); setActiveTableTicket(null); }}
+                    <button type="button" onClick={() => { const rid = activeReservation._id; setActiveTableTicket(null); setConfirmModal({ show: true, title: 'Cancel this reservation?', subtitle: 'The guest is marked cancelled and the table is released.', onConfirm: () => cancelReservation(rid) }); }}
                       style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 0', borderRadius:8, border:'1px solid rgba(226,154,88,0.3)', background:'rgba(226,154,88,0.08)', color:'#e29a58', fontSize:'0.58rem', fontWeight:900, cursor:'pointer' }}>
                       <X size={11}/> CANCEL RESERVATION
                     </button>
@@ -6409,7 +6417,7 @@ const renderMonthHeatmap = () => {
                       </button>
                       {/* Cancel */}
                       {!['served','settled','cancelled'].includes(entry.status) && (
-                        <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: `This will remove the order.`, onConfirm: async () => { try { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
+                        <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Pickup — ${entry.customerName}?`, subtitle: entry.kitchenFired ? 'The kitchen has already received this order. Cancelling only removes it from the queue, so tell the kitchen to stop cooking.' : 'This will remove the order.', onConfirm: async () => { try { await axios.delete(`${BASE_URL}/waitlist/${entry._id}`, { data: { tenantId } }); fetchCounterQueue(); showNotif(`${entry.customerName} — cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
                           style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a8a8a', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = '#8a8a8a'; }}>
@@ -6937,6 +6945,7 @@ const renderMonthHeatmap = () => {
                 if (pickupFiringRef.current.has('edit-dish')) return;
                 if (editDishData.price !== undefined && editDishData.price !== '' && !(Number(editDishData.price) > 0)) { showNotif('Price must be greater than 0', 'error'); return; }
                 if (!String(editDishData.name ?? editDishModal.name ?? '').trim()) { showNotif('Dish name cannot be empty', 'error'); return; }
+                for (const k of ['priceHalf', 'priceFull']) { const v = editDishData[k]; if (v !== undefined && v !== '' && v !== null && !(Number(v) > 0)) { showNotif(`${k === 'priceHalf' ? 'Half' : 'Full'} portion price must be greater than 0`, 'error'); return; } }
                 pickupFiringRef.current.add('edit-dish');
                 try {
                   const payload = { ...editDishData };
@@ -7086,19 +7095,22 @@ const renderMonthHeatmap = () => {
                 onClick={async () => {
                   const newVal = allHidden; // if all hidden → show all; else → hide all
                   try {
-                    await Promise.all(catItems.map(item =>
+                    const results = await Promise.allSettled(catItems.map(item =>
                       axios.patch(`${BASE_URL}/menu-item/${item._id}`, { isAvailable: newVal, _autoHiddenByIngredient: null, outOfStockReason: '', tenantId })
                     ));
+                    // Only the items the server actually saved change on screen; the rest keep their real state.
+                    const okItems = catItems.filter((_, i) => results[i].status === 'fulfilled');
+                    const okIds = new Set(okItems.map(c => c._id));
                     setMenuItems(prev => prev.map(i =>
-                      catItems.find(c => c._id === i._id)
-                        ? { ...i, isAvailable: newVal, _autoHiddenByIngredient: null }
-                        : i
+                      okIds.has(i._id) ? { ...i, isAvailable: newVal, _autoHiddenByIngredient: null } : i
                     ));
                     // Emit each update so customer menus sync instantly
-                    catItems.forEach(item => {
+                    okItems.forEach(item => {
                       socket.emit('menu_change_detected', { tenantId, itemId: item._id, updateData: { ...item, isAvailable: newVal } });
                     });
-                    showNotif(`${catName} — all ${newVal ? 'shown' : 'hidden'}`);
+                    const failedCount = results.length - okItems.length;
+                    if (failedCount > 0) showNotif(`${catName}: ${okItems.length} updated, ${failedCount} failed — check and retry`, 'error');
+                    else showNotif(`${catName} — all ${newVal ? 'shown' : 'hidden'}`);
                   } catch { showNotif('Category update failed', 'error'); }
                 }}
                 style={{
@@ -7960,7 +7972,7 @@ const renderMonthHeatmap = () => {
                       </button>
                     )}
                     {isEnded&&(
-                      <button type="button" onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();}catch{}}})}
+                      <button type="button" onClick={()=>setConfirmModal({show:true,title:'Delete announcement?',subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/announcements/${a._id}`, { data: { tenantId } });fetchAnnouncements();}catch{showNotif('Could not delete announcement','error');}}})}
                         style={{width:'26px',height:'26px',padding:0,borderRadius:'6px',cursor:'pointer',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={10}/></button>
                     )}
                   </div>
@@ -8108,6 +8120,7 @@ const renderMonthHeatmap = () => {
             if(newOffer.type==='free_item'&&!newOffer.freeItem?.trim()){showNotif('Enter the name of the free item','error');return;}
             if(Number(newOffer.minOrder)<0){showNotif('Minimum order cannot be negative','error');return;}
           }
+          if(newOffer.expiresAt && new Date(`${newOffer.expiresAt}T23:59:59+05:30`) <= new Date()){showNotif('Expiry date must be today or later','error');return;}
           try{
             const payload={
               title:newOffer.title.trim(),
@@ -8915,9 +8928,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     <div style={{...styles.receiptRow, color:'#888', fontSize:'0.75rem'}}>
       <span>{discountReason ? `Discount · ${discountReason}` : 'Discount deducted'}</span>
       <span>- ₹{
-        discountType === 'percent'
-          ? (tableBill.subtotal * (discount / 100)).toFixed(2)
-          : Number(discount).toFixed(2)
+        // Same maths as the settlement: a % discount applies to the tax-inclusive total, so show exactly what it removes.
+        (Math.round(((Number(tableBill.subtotal) || 0) + (Number(tableBill.cgst) || 0) + (Number(tableBill.sgst) || 0)
+          - billFinalAmount(tableBill, discountType, discount)) * 100) / 100).toFixed(2)
       }</span>
     </div>
   )}
@@ -11486,12 +11499,14 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                             <select value={status}
                               onChange={async e=>{
                                 const newStatus = e.target.value;
+                                // Paying from here skipped the amount and work-day calculation the payroll screen records.
+                                if (newStatus === 'Paid') { showNotif('Mark salaries as paid from Management → Payroll so the amount is recorded', 'error'); return; }
                                 try {
                                   await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${s._id}/${monthStr}`,{status:newStatus});
                                   fetchMonthlySalary(monthStr);
                                   showNotif(`${s.name} — ${monthStr} marked ${newStatus}`);
                                 } catch (err) {
-                                  showNotif(err?.response?.data?.error || 'Could not update salary status');
+                                  showNotif(err?.response?.data?.error || 'Could not update salary status', 'error');
                                 }
                               }}
                               style={{ background:'rgba(255,255,255,0.03)', color: isPaid?'rgba(211,191,162,0.8)':'rgba(255,255,255,0.3)', border:`1px solid ${isPaid?'rgba(211,191,162,0.2)':'rgba(255,255,255,0.07)'}`, padding:'5px 9px', borderRadius:'6px', fontSize:'0.58rem', fontWeight:'900', outline:'none', cursor:'pointer' }}>
@@ -12523,10 +12538,10 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
               catch { showNotif(`${newStaff.name} enrolled, but table assignment failed — assign tables from the roster`,'error'); }
             }
             showNotif(`${newStaff.name} enrolled`,'success');
-            const istResetDate=(()=>{const d=new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+            const istResetDate=(()=>{const d=new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */;return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');})();
             setNewStaff({name:'',role:'Waiter',age:'',contact:'',address:'',shiftType:'Day Shift',joiningDate:istResetDate,baseSalary:'',assignedTables:[],cookingRole:''});
             fetchManagementData();
-          } catch { showNotif('Failed to enroll','error'); }
+          } catch (err) { showNotif(err?.response?.data?.error || 'Failed to enroll', 'error'); }
           finally { delete enrollBtn.dataset.busy; }
         }} style={{
           padding:'10px 28px',
@@ -12717,7 +12732,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                         {(()=>{
                           const istNow=new Date(new Date().getTime()+330*60*1000);
                           const selectedMonthDate=new Date(viewDate.getFullYear(),viewDate.getMonth(),1);
-                          const currentMonthDate=new Date(istNow.getFullYear(),istNow.getMonth(),1);
+                          const currentMonthDate=new Date(istNow.getUTCFullYear(),istNow.getUTCMonth(),1);
                           const isFutureMonth=selectedMonthDate>currentMonthDate;
                           const monthStr=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
                           if(isFutureMonth) return (
@@ -12737,7 +12752,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                           return (
                             <button type="button" onClick={async()=>{
                               const istNow2=new Date(new Date().getTime()+330*60*1000);
-                              const currentMonthStr=istNow2.getFullYear()+'-'+String(istNow2.getMonth()+1).padStart(2,'0');
+                              const currentMonthStr=istNow2.getUTCFullYear()+'-'+String(istNow2.getUTCMonth()+1).padStart(2,'0');
                               if(monthStr>currentMonthStr){showNotif('Cannot pay future month','error');return;}
                               const monthLogs=attendanceLogs.filter(l=>(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())&&l.date?.startsWith(monthStr));
                               const workDays=[...new Set(monthLogs.map(l=>l.date))].length;
@@ -12775,7 +12790,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                           show:true,title:`Remove ${pureName}?`,
                           subtitle:'This will permanently remove the staff member.',
                           onConfirm:async()=>{
-await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
+try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } }); } catch (err) { showNotif(err?.response?.data?.error || 'Could not remove staff member', 'error'); return; }
                             showNotif(`${pureName} removed`);
                             fetchManagementData();
                           }
@@ -13417,6 +13432,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
         if (newInventoryItem.purchasePrice !== '' && newInventoryItem.purchasePrice != null && !(Number(newInventoryItem.purchasePrice) >= 0)) return showNotif("Purchase price can't be negative", "error");
         if (newInventoryItem.costPrice !== '' && newInventoryItem.costPrice != null && !(Number(newInventoryItem.costPrice) >= 0)) return showNotif("Cost price can't be negative", "error");
         if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
+        if (newInventoryItem.minThreshold !== '' && newInventoryItem.minThreshold != null && !(Number(newInventoryItem.minThreshold) >= 0)) return showNotif("Minimum threshold can't be negative", "error");
         setIsSubmittingRestock(true);
         try {
           const payload = {
@@ -13630,6 +13646,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     // A cleared box read as 0 and wiped the stock on blur; and a negative (depleted) stock is DISPLAYED as 0, so just
                     // focusing and leaving the field "changed" -5 to 0.
                     if (raw === '' || !Number.isFinite(val)) { e.target.value = Math.max(0, item.currentStock); return; }
+                    if (val < 0) { e.target.value = Math.max(0, item.currentStock); showNotif('Stock cannot be negative', 'error'); return; }
                     if (val === Math.max(0, item.currentStock)) return;
                     // Use general patch — stock only
                     try {
@@ -13660,6 +13677,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                   const rawT = String(e.target.value).trim();
                   const val = Number(rawT);
                   if (rawT === '' || !Number.isFinite(val)) { e.target.value = item.minThreshold; return; } // cleared box saved a threshold of 0
+                  if (val < 0) { e.target.value = item.minThreshold; showNotif('Threshold cannot be negative', 'error'); return; }
                   if (val === item.minThreshold) return;
                   try {
                     await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
@@ -13689,12 +13707,18 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
           const val = Number(rawW);
           const current = item.weightedAvgCost || item.costPrice || 0;
           if (rawW === '' || !Number.isFinite(val)) { e.target.value = current.toFixed(2); return; } // cleared box set the unit cost to 0 and zeroed every dish margin using it
+          if (val < 0) { e.target.value = current.toFixed(2); showNotif('Cost cannot be negative', 'error'); return; }
           if (Math.abs(val - current) < 0.001) return;
           try {
             await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
             fetchManagementData();
             showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
-          } catch (err) { e.target.value = current.toFixed(2); showNotif(err.response?.data?.error || 'Could not update cost', 'error'); }
+          } catch (err) {
+            e.target.value = current.toFixed(2);
+            // A server-side failure used to show raw database text to the operator; say what to do instead.
+            const serverMsg = err.response?.data?.error;
+            showNotif(err.response?.status >= 500 ? 'Could not save the unit cost right now. Your value was not saved; try again shortly.' : (serverMsg || 'Could not update cost'), 'error');
+          }
         }}
       />
     </div>
@@ -14742,7 +14766,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                           </button>
                         )}
                         {['pending','confirmed'].includes(entry.status) && (
-                          <button type="button" onClick={()=>setAssignTableModal(prev => ({...prev, _fromReservation:true}))}
+                          <button type="button" onClick={()=>setAssignTableModal({ ...entry, _fromReservation: true })}
                             style={{padding:'4px 10px',background:'rgba(211,191,162,0.08)',border:'1px solid rgba(211,191,162,0.2)',color:'#d3bfa2',borderRadius:'6px',fontSize:'0.58rem',fontWeight:'900',cursor:'pointer'}}>
                             SEAT
                           </button>
@@ -14868,15 +14892,21 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
             <button type="button" onClick={async()=>{
               if(!extraItemEditData.name?.trim())return showNotif('Name is required','error');
               if(!extraItemEditData.price||Number(extraItemEditData.price)<=0)return showNotif('Valid price required','error');
+              if(extraItemEditData.costPrice!==''&&Number(extraItemEditData.costPrice)<0)return showNotif('Cost cannot be negative','error');
+              // Stock is only written when the operator actually changed it: sending the value captured when the modal opened
+              // reset stock to an old number if sales had deducted stock while the modal was open.
+              const stockChanged=String(extraItemEditData.currentStock??'')!==String(extraItemEditModal.currentStock??'');
+              if(stockChanged&&(extraItemEditData.currentStock===''||Number(extraItemEditData.currentStock)<0))return showNotif('Stock must be 0 or more','error');
               try {
                 const payload={
                   name:extraItemEditData.name.trim(),category:extraItemEditData.category,
                   price:Number(extraItemEditData.price),
                   costPrice:extraItemEditData.costPrice===''?0:Number(extraItemEditData.costPrice),
-                  unit:extraItemEditData.unit,currentStock:Number(extraItemEditData.currentStock)||0,
+                  unit:extraItemEditData.unit,
                   lowStockThreshold:extraItemEditData.lowStockThreshold===''?5:Number(extraItemEditData.lowStockThreshold),
                   description:extraItemEditData.description?.trim()||'',isAvailable:extraItemEditData.isAvailable,
                 };
+                if(stockChanged) payload.currentStock=Number(extraItemEditData.currentStock);
                 const res=await axios.patch(`${BASE_URL}/extra-items/item/${extraItemEditModal._id}`,{...payload,tenantId});
                 setExtraItems(prev=>prev.map(i=>(i._id===res.data.item._id?res.data.item:i)));
                 showNotif(`${payload.name} — updated`);setExtraItemEditModal(null);
@@ -15282,7 +15312,7 @@ await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId } });
                     <button type="button" onClick={()=>setConfirmModal({
                       show:true,title:`Remove "${item.name}"?`,
                       subtitle:'This permanently removes the item from your catalog.',
-                      onConfirm:async()=>{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}?tenantId=${encodeURIComponent(tenantId)}`);fetchExtraItems();showNotif(`${item.name} removed`);}
+                      onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}?tenantId=${encodeURIComponent(tenantId)}`);}catch(err){showNotif(err?.response?.data?.error||'Could not remove item','error');return;}fetchExtraItems();showNotif(`${item.name} removed`);}
                     })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.25)';e.currentTarget.style.color='#e29a58';}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.16)';e.currentTarget.style.color='#969696';}}><X size={12} /></button>
@@ -16056,7 +16086,7 @@ style={{
               {assignTableModal.items.map(i => `${i.quantity}× ${i.name}`).join('  ·  ')}
             </div>
             <div style={{ textAlign: 'right', marginTop: '6px', fontSize: '0.7rem', fontWeight: '900', color: '#8a704d' }}>
-              ₹{assignTableModal.totalAmount.toLocaleString()}
+              ₹{(Number(assignTableModal.totalAmount) || 0).toLocaleString()}
             </div>
           </div>
         )}
@@ -16370,10 +16400,17 @@ onClick={async () => {
                 });
                 // Also update the monthly salary record for current month
                 const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-                await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${salaryEditModal.staffId}/${monthStr}`, {
-                  baseSalary: Number(salaryEditValue)
-                });
-                showNotif(`${salaryEditModal.name} salary updated to ₹${Number(salaryEditValue).toLocaleString()}`);
+                // A month that is already PAID keeps its paid amount: only the base salary (future months) changes.
+                const monthRec = monthlySalaryRecords.find(r => r.staffId?.toString() === salaryEditModal.staffId?.toString() && r.monthStr === monthStr);
+                const monthAlreadyPaid = !!(monthRec?.paidAt || monthRec?.status === 'Paid');
+                if (!monthAlreadyPaid) {
+                  await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${salaryEditModal.staffId}/${monthStr}`, {
+                    baseSalary: Number(salaryEditValue)
+                  });
+                }
+                showNotif(monthAlreadyPaid
+                  ? `${salaryEditModal.name} base salary set to ₹${Number(salaryEditValue).toLocaleString()} — from next month. This month's paid amount is unchanged.`
+                  : `${salaryEditModal.name} salary updated to ₹${Number(salaryEditValue).toLocaleString()}`);
                 setSalaryEditModal(null);
                 setSalaryEditPassword('');
                 fetchManagementData();

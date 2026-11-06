@@ -1097,13 +1097,14 @@ export default function CustomerHome() {
 
   const geoReq = useRef(0);
   const toggleNear = () => {
-    if (nearMe || geoMsg === L.en.finding || geoMsg === L.mr.finding) { geoReq.current += 1; setNearMe(false); setGeoMsg(''); return; }
-    if (!navigator.geolocation) { setGeoMsg(tr.locNA); return; }
-    setGeoMsg(tr.finding);
+    // geoMsg holds a translation KEY (not text), so the message follows the language toggle
+    if (nearMe || geoMsg === 'finding') { geoReq.current += 1; setNearMe(false); setGeoMsg(''); return; }
+    if (!navigator.geolocation) { setGeoMsg('locNA'); return; }
+    setGeoMsg('finding');
     const reqId = (geoReq.current += 1);
     navigator.geolocation.getCurrentPosition(
       (p) => { if (reqId !== geoReq.current) return; setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setNearMe(true); setGeoMsg(''); },
-      (err) => { if (reqId === geoReq.current) setGeoMsg(err?.code === 1 ? tr.locDenied : err?.code === 3 ? tr.locTimeout : tr.locBusy); },
+      (err) => { if (reqId === geoReq.current) setGeoMsg(err?.code === 1 ? 'locDenied' : err?.code === 3 ? 'locTimeout' : 'locBusy'); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }
     );
   };
@@ -1298,7 +1299,7 @@ export default function CustomerHome() {
                   e.currentTarget.blur();
                 }
               }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={tr.searchPh} aria-label={tr.search}
-                role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} style={{ width: '100%', boxSizing: 'border-box', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
+                role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} style={{ width: '100%', boxSizing: 'border-box', textOverflow: 'ellipsis', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
               {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex', padding: 4 }}><X size={15} /></button>}
               {showSug && (
                 <div id="pxh-sug" role="listbox" aria-label={tr.suggestions} style={{ position: 'absolute', left: 0, right: 0, top: 'calc(100% + 6px)', zIndex: 30, borderRadius: 16, border: '1px solid rgba(211,191,162,.22)', background: '#141414', boxShadow: '0 18px 40px rgba(0,0,0,.55)', overflow: 'hidden' }}>
@@ -1365,7 +1366,7 @@ export default function CustomerHome() {
                 <button type="button" key={a.key} className={`pxh-area${area === a.key ? ' on' : ''}`} onClick={() => chooseArea(area === a.key ? 'all' : a.key)}>{a.label} <b>{a.n}</b></button>
               ))}
             </div>
-            {geoMsg && <div role="status" style={{ marginTop: 6, fontSize: 11, color: 'rgba(211,191,162,.75)' }}>{geoMsg}</div>}
+            {geoMsg && <div role="status" style={{ marginTop: 6, fontSize: 11, color: 'rgba(211,191,162,.75)' }}>{tr[geoMsg] || ''}</div>}
           </div>
         )}
 

@@ -91,6 +91,7 @@ const SOUNDS = {
 
 const haptic = (pattern) => {
   if (!soundOn) return; // the speaker button is the one "feedback" switch
+  if (!lastPointer.t) return; // browsers block vibrate() (and log an error) until the guest has tapped the page once
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* unsupported */ }
 };
 

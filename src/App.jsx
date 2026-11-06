@@ -529,6 +529,14 @@ const waitlistSocket = useMemo(() => io(SOCKET_BASE_URL, { transports: ['websock
       rateGoogle: "Rate us on Google",
       backMenu: "BACK TO MENU",
       orderSuccess: "Order sent to kitchen!",
+      alertScanQr: "Please scan the restaurant QR code to start table ordering.",
+      alertValidMobile: "Please enter a valid 10-digit mobile number.",
+      alertAllowPopups: "Please allow pop-ups to download your invoice.",
+      alertCartPruned: "Some dishes are no longer on the menu and were removed from your cart.",
+      alertChangeWindowEnded: "The 2-minute change window has ended. Please ask the staff for any change.",
+      alertNoChanges: "No changes to send.",
+      alertOrderUpdated: "Order updated — the kitchen has been told.",
+      alertUpdateFailed: "Could not update the order. Please try again.",
       orderError: "Error sending order.",
       detailsReq: "Details required.",
       spiceHigh: "HIGH",
@@ -580,6 +588,14 @@ const waitlistSocket = useMemo(() => io(SOCKET_BASE_URL, { transports: ['websock
       rateGoogle: "आम्हाला गुगलवर रेट करा",
       backMenu: "मेनूकडे परत जा",
       orderSuccess: "ऑर्डर किचनमध्ये पाठवली आहे!",
+      alertScanQr: "टेबलवरून ऑर्डर देण्यासाठी कृपया रेस्टॉरंटचा QR कोड स्कॅन करा.",
+      alertValidMobile: "कृपया १० अंकी वैध मोबाईल नंबर टाका.",
+      alertAllowPopups: "इनव्हॉइस डाउनलोड करण्यासाठी कृपया पॉप-अप परवानगी द्या.",
+      alertCartPruned: "काही पदार्थ आता मेनूमध्ये नाहीत, त्यामुळे ते तुमच्या कार्टमधून काढले आहेत.",
+      alertChangeWindowEnded: "२ मिनिटांची बदल करण्याची वेळ संपली आहे. कोणत्याही बदलासाठी कृपया स्टाफला सांगा.",
+      alertNoChanges: "पाठवण्यासाठी कोणताही बदल नाही.",
+      alertOrderUpdated: "ऑर्डर अपडेट केली — किचनला कळवले आहे.",
+      alertUpdateFailed: "ऑर्डर अपडेट करता आली नाही. कृपया पुन्हा प्रयत्न करा.",
       orderError: "ऑर्डर पाठवताना समस्या आली.",
       detailsReq: "माहिती भरणे आवश्यक आहे.",
       spiceHigh: "जास्त तिखट",
@@ -2993,7 +3009,7 @@ const sendBatchToKitchen = async () => {
   // Direct dine-in ordering remains tied to a QR/table session. Directory,
   // notification and install routes never flip this flag on their own.
   if (!isCounterScan && !hasQrSession) {
-    triggerAlert('Please scan the restaurant QR code to start table ordering.', 'error');
+    triggerAlert('alertScanQr', 'error');
     return;
   }
   if (isPlacingOrder || placingRef.current) return;
@@ -3067,14 +3083,14 @@ if (unavailableItems.length > 0) {
           setOrderPlacedAt(Date.now());
           setPrepPct(0);
         }
-        triggerAlert(mres.data?.unchanged ? 'No changes to send.' : 'Order updated — the kitchen has been told.');
+        triggerAlert(mres.data?.unchanged ? 'alertNoChanges' : 'alertOrderUpdated');
         setModifyingOrderId(null);
         setCart({}); setSuggestions({}); setRecommendedDishes([]);
         setIsDrawerOpen(false);
         if (!mres.data?.unchanged) showPlacedScreen(15000);
       } catch (merr) {
         const code = merr?.response?.data?.code;
-        triggerAlert(merr?.response?.data?.error || 'Could not update the order. Please try again.', 'error');
+        triggerAlert(merr?.response?.data?.error || 'alertUpdateFailed', 'error');
         if (code === 'MODIFY_LOCKED' || code === 'MODIFY_WINDOW_CLOSED') {
           setModifyingOrderId(null); setModifiable(null); setCart({}); setSuggestions({});
         }
@@ -3153,7 +3169,7 @@ setPrepPct(0);
  
 const placeWaitlistOrder = async () => {
   if (!customerInfo.name.trim()) return;
-  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('Please enter a valid 10-digit mobile number.', 'error'); return; }
+  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('alertValidMobile', 'error'); return; }
   if (isPlacingOrder || placingRef.current) return;
   setIsPlacingOrder(true);             // ← ADD
   const summary = {};
@@ -3254,7 +3270,7 @@ const askNotificationPermission = async () => {
     );
   }
 };
-askNotificationPermission();
+askNotificationPermission().catch(() => {});
 
 
 
@@ -3294,7 +3310,7 @@ askNotificationPermission();
 
 const placeReservation = async () => {
   if (!customerInfo.name.trim() || !customerInfo.phone || !reservationDate || !reservationTime) return;
-  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('Please enter a valid 10-digit mobile number.', 'error'); return; }
+  if (String(customerInfo.phone || '').replace(/\D/g, '').length !== 10) { triggerAlert('alertValidMobile', 'error'); return; }
 
   if (waitlistEntry?._id && waitlistEntry?.mode === 'reservation') {
     setRegistrationStep('confirm');
@@ -3723,7 +3739,7 @@ const autoDownloadInvoicePDF = useCallback(() => {
   const blob = new Blob([html], { type: 'text/html' });
   const url  = URL.createObjectURL(blob);
   const win  = window.open(url, '_blank');
-  if (!win) triggerAlert('Please allow pop-ups to download your invoice.', 'error'); // a blocked pop-up used to fail silently
+  if (!win) triggerAlert('alertAllowPopups', 'error'); // a blocked pop-up used to fail silently
   else startInvoicePdf(win, `TaxInvoice_Table${String(tableNumber).replace(/[^A-Za-z0-9_-]/g, '')}_${invoiceNo}.pdf`);
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }, [restaurantData, finalBillItems, customerInfo, tableNumber, numberToWordsClient, approvedBill, billLines]);
@@ -3906,6 +3922,25 @@ useEffect(() => {
   } catch { /* persistence is best-effort */ }
 }, [cart, tenantId, tableNumber, isCounterScan]);
 
+// ── Drop cart lines whose dish is no longer on the menu ──
+// The cart is restored from localStorage, so a dish deleted since the guest's last visit stayed in the cart as a "ghost":
+// it inflated the badge, and placing the order silently skipped it (all ghosts => a generic "order error" the guest could never clear).
+useEffect(() => {
+  if (isLoading || modifyingOrderId || !Array.isArray(allMenuItems) || allMenuItems.length === 0) return;
+  const known = new Set(allMenuItems.map(i => String(i._id)));
+  const next = {};
+  let removed = 0;
+  Object.entries(cart).forEach(([k, q]) => {
+    const id = k.includes('-') ? k.split('-')[0] : k;
+    if (known.has(id)) next[k] = q; else removed += 1;
+  });
+  if (removed) {
+    setCart(next);
+    triggerAlert('alertCartPruned', 'error');
+  }
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [allMenuItems, cart, isLoading, modifyingOrderId]);
+
 // ── Persist placedOrders to localStorage on every change ──
 useEffect(() => {
   if (!tenantId || !tableNumber || tableNumber === '' || isCounterScan) return;
@@ -3960,7 +3995,7 @@ useEffect(() => {
   if (modifyingOrderId && !canModifyOrder) {
     setModifyingOrderId(null);
     setCart({}); setSuggestions({});
-    triggerAlert('The 2-minute change window has ended. Please ask the staff for any change.', 'error');
+    triggerAlert('alertChangeWindowEnded', 'error');
   }
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [canModifyOrder, modifyingOrderId]);
@@ -5697,7 +5732,7 @@ if (qrCheck === 'unverified') {
           <Sparkles size={11} color="#d3bfa2" />
           <span style={{ width: 40, height: 1, background: 'linear-gradient(90deg, rgba(211,191,162,0.6), transparent)' }} />
         </div>
-        <div style={styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
+        <div style={language === 'mr' ? { ...styles.poweredBy, letterSpacing: 0, fontSize: '0.7rem' } : styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
         {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
         <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><FxSoundToggle /></div>
@@ -6043,7 +6078,7 @@ if (qrCheck === 'unverified') {
             fontSize: '0.5rem', fontWeight: '900', letterSpacing: '2px',
             color: 'rgba(211,191,162,0.62)', textTransform: 'uppercase'
           }}>
-            {globalSearchResults.length} {language === 'mr' ? 'पदार्थ सापडले' : 'dishes found'}
+            {globalSearchResults.length} {language === 'mr' ? 'पदार्थ सापडले' : (globalSearchResults.length === 1 ? 'dish found' : 'dishes found')}
           </span>
         </div>
  
@@ -6373,7 +6408,7 @@ if (qrCheck === 'unverified') {
   )}
  
   {/* Dish name */}
-  {language === 'mr' ? item.name_mr : item.name}
+  {language === 'mr' ? (item.name_mr || item.name) : item.name}
  
   {/* ── ENGINEERING BADGE: BESTSELLER (gold) ── */}
 {/* ── BESTSELLER badge: isBestSeller field (auto-computed) OR star quadrant ── */}
@@ -8184,7 +8219,7 @@ if (qrCheck === 'unverified') {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                   <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontWeight: '600', color: '#fff', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {language === 'mr' ? item?.name_mr : item?.name}
+                      {language === 'mr' ? (item?.name_mr || item?.name) : item?.name}
                     </p>
                     {portion && (
                       <small style={{ color: primaryColor, fontSize: '0.62rem', fontWeight: '700' }}>
@@ -9744,7 +9779,7 @@ body: {
 contentWrapper: { 
   touchAction: 'pan-y',       // keep existing
   overflowY: 'visible',       // ← ADD THIS — don't clip children
-},  header: { padding: '50px 20px 10px', textAlign: 'center' },
+},  header: { padding: '68px 20px 10px', textAlign: 'center' },
   searchWrapper: { padding: '0 20px 15px' },
   searchContainer: { display: 'flex', alignItems: 'center', background: 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))', border: '1px solid rgba(211, 191, 162, 0.22)', borderRadius: '20px', padding: '13px 17px', gap: '11px', boxShadow: '0 10px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)' },
   searchInput: { background: 'none', border: 'none', color: '#fff', outline: 'none', width: '100%', fontSize: '0.9rem' },

@@ -1,20 +1,32 @@
-/* ─── THEME: Charcoal · Glass · Champagne Gold (shared with App.jsx / Operator) ───
-   warm white  #f7f3eb   page background
-   white       #0d0d0d   header, sidebar, tickets, panels
-   charcoal    #f7f3eb   text, overdue emphasis
-   beige       #E4D9C6   borders, soft fills
-   sage green  #d3bfa2   accents, active states, buttons
-   (Swiggy / Zomato brand colours and alert red are kept on purpose) */
+/* ─── KITCHEN DISPLAY (KDS) — Pratyeksha "Ink · Glass · Champagne" system ───────────────────────────────
+   Same visual language as the Operator Portal and the loading screen:
+   ink       #0b0b0c   page          glass   white 6% → 1.6% over #0e0e0f   panels
+   champagne #d3bfa2   accents       bronze  #8a704d                        secondary
+   cream     #f7f3eb   text          amber   #e29a58                        alerts / overdue
+   (Swiggy / Zomato brand colours are kept on purpose; type is Poppins + JetBrains Mono for timers)
+
+   What this screen does
+   • Tickets arrive in real time over the socket, and a short safety poll catches anything the socket missed.
+   • Every new ticket is announced: a chime, then the details are spoken (table / source, every dish, portion, notes).
+     The announcements are automatic. There is no microphone and no tap-to-listen: voice is output only.
+   • A speaker button on each ticket repeats its details on demand.
+   • Business logic (kds-item timing, dispatch, recall, 86, wastage, auth) is unchanged from the previous screen. */
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import SupportContact from './SupportContact.jsx';
-import { io } from "socket.io-client";
+import { io } from 'socket.io-client';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { OPERATOR_AUTH_EVENT, setKitchenToken, getOperatorToken } from './operatorAuth.js';
+import { playAlertSound } from './alertSounds.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChefHat, Timer,  StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Clock, CheckSquare, Activity, Monitor, Coffee, Layers, Flame, Mic, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown, RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench } from 'lucide-react';
+import {
+  ChefHat, Timer, StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Activity, Coffee,
+  Layers, Flame, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown,
+  RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench,
+  Volume2, VolumeX, Bike, Check, ArrowUpDown, ChevronDown,
+} from 'lucide-react';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
@@ -35,25 +47,26 @@ const useSwipe = (onLeft, onRight) => {
   const tx = useRef(null);
   return {
     onTouchStart: e => { tx.current = e.touches[0].clientX; },
-    onTouchEnd:   e => {
+    onTouchEnd: e => {
       if (tx.current === null) return;
       const diff = tx.current - e.changedTouches[0].clientX;
-      if (Math.abs(diff) > 48) diff > 0 ? onLeft?.() : onRight?.();
+      if (Math.abs(diff) > 48) { if (diff > 0) onLeft?.(); else onRight?.(); }
       tx.current = null;
-    }
+    },
   };
 };
 
 const getOrderType = order => {
-  if (order.source === 'swiggy')          return 'swiggy';
-  if (order.source === 'zomato')          return 'zomato';
+  if (order.source === 'swiggy') return 'swiggy';
+  if (order.source === 'zomato') return 'zomato';
   // tableNumber can arrive as a number from some clients: .toLowerCase() on it threw and blanked the whole board.
   const tbl = String(order.tableNumber ?? '').toLowerCase();
-  if (order.source === 'counter-pickup' || order.source === 'takeaway'
-    || tbl === 'takeaway'
-    || tbl === 'counter')  return 'parcel';
+  if (order.source === 'counter-pickup' || order.source === 'takeaway' || tbl === 'takeaway' || tbl === 'counter') return 'parcel';
   return 'dine-in'; // waitlist, reservation, direct all → dine-in
 };
+
+// "Extra items" are packaged goods that never go to the kitchen.
+const isKitchenItem = i => !!i && !i.isExtraItem && i.extraItemId == null;
 
 // Module-level so the (module-level) order card and the board share it: keys of dish checks whose save is still in flight.
 // A refresh that lands in that window used to un-tick the dish the chef had just ticked.
@@ -61,7 +74,7 @@ const pendingToggleKeys = new Set();
 
 // Same rule the order card uses to show/hide a dish (category tab + veg/non-veg mode), so totals built elsewhere match the cards.
 const isDishVisible = (item, { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode }) => {
-  if (!item || item.isExtraItem || item.extraItemId != null) return false;
+  if (!isKitchenItem(item)) return false;
   const catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap?.[item.name?.toLowerCase().trim()] || null;
   if (selectedCategory !== 'ALL' && catId !== String(selectedCategory).toLowerCase().trim()) return false;
   const isVeg = item.isVeg !== undefined ? item.isVeg !== false : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
@@ -71,12 +84,407 @@ const isDishVisible = (item, { selectedCategory, dishToCategoryMap, dishToVegMap
 const fmt = s => {
   s = Math.max(0, Math.floor(Number(s) || 0));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  const p = n => n.toString().padStart(2,'0');
+  const p = n => n.toString().padStart(2, '0');
   return h > 0 ? `${h}h ${p(m)}m` : `${p(m)}:${p(sec)}`;
 };
+const pad2 = n => (n < 10 ? `0${n}` : String(n));
 
-const REASON_OPTIONS = ['Spoiled / Expired','Overcooked','Dropped / Spilled','Excess Prep','Customer Return','Other'];
-const UNIT_OPTIONS   = ['kg','g','litre','ml','pcs','plate','portion'];
+const REASON_OPTIONS = ['Spoiled / Expired', 'Overcooked', 'Dropped / Spilled', 'Excess Prep', 'Customer Return', 'Other'];
+const UNIT_OPTIONS = ['kg', 'g', 'litre', 'ml', 'pcs', 'plate', 'portion'];
+const STATIONS = [
+  { val: 'ALL', lbl: 'ALL', Icon: Layers },
+  { val: 'DINEIN', lbl: 'DINE-IN', Icon: UtensilsCrossed },
+  { val: 'PARCEL', lbl: 'PARCEL', Icon: Package },
+  { val: 'DELIVERY', lbl: 'DELIVERY', Icon: Bike },
+];
+const EIGHTY_SIX_REASONS = [
+  { id: 'ran_out', label: 'Ran Out', icon: PackageX },
+  { id: 'quality_issue', label: 'Quality Issue', icon: ShieldAlert },
+  { id: 'equipment_failure', label: 'Equipment Failure', icon: Wrench },
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   VOICE — output only. A small queue so tickets that arrive together are read one after another, never over each other.
+═══════════════════════════════════════════════════════════════════ */
+const VOICE_PREF_KEY = 'kds_voice_prefs_v2';
+const DEFAULT_VOICE_PREFS = { voice: true, chime: true, repeat: 1, rate: 'normal' };
+const RATE_VALUE = { slow: 0.8, normal: 0.92, fast: 1.06 };
+const loadVoicePrefs = () => {
+  try { return { ...DEFAULT_VOICE_PREFS, ...JSON.parse(localStorage.getItem(VOICE_PREF_KEY) || '{}') }; } catch { return { ...DEFAULT_VOICE_PREFS }; }
+};
+
+const speechEngine = {
+  queue: [], speaking: false, current: null, watchdog: null, voices: [], onState: null, onBlocked: null,
+  supported() { return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'; },
+  refreshVoices() { try { this.voices = window.speechSynthesis.getVoices() || []; } catch { this.voices = []; } },
+  pickVoice() {
+    if (!this.voices.length) this.refreshVoices();
+    const v = this.voices;
+    return v.find(x => x.lang === 'en-IN') || v.find(x => /^en/i.test(x.lang || '') && /india/i.test(x.name || '')) || v.find(x => /^en/i.test(x.lang || '')) || v[0] || null;
+  },
+  setSpeaking(on) { this.speaking = on; try { this.onState?.(on); } catch { /* ignore */ } },
+  next() {
+    clearTimeout(this.watchdog);
+    if (!this.queue.length) { this.current = null; this.setSpeaking(false); return; }
+    this.setSpeaking(true);
+    const utt = this.queue.shift();
+    this.current = utt;
+    let advanced = false;
+    const advance = () => { if (advanced) return; advanced = true; this.next(); };
+    utt.onend = advance;
+    utt.onerror = e => { if (e && e.error === 'not-allowed') { try { this.onBlocked?.(); } catch { /* ignore */ } } advance(); };
+    // Chrome sometimes never fires onend; without this the queue would stay "speaking" forever and later tickets stay silent.
+    this.watchdog = setTimeout(() => { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } advance(); }, Math.min(45000, 5000 + String(utt.text || '').length * 120));
+    try { window.speechSynthesis.speak(utt); } catch { advance(); }
+  },
+  stop() {
+    this.queue = [];
+    clearTimeout(this.watchdog);
+    if (this.current) { this.current.onend = null; this.current.onerror = null; this.current = null; }
+    try { if (this.supported()) window.speechSynthesis.cancel(); } catch { /* ignore */ }
+    this.setSpeaking(false);
+  },
+  say(text, { repeat = 1, rate = 'normal', interrupt = false } = {}) {
+    if (!text || !this.supported()) return;
+    if (interrupt) this.stop();
+    const wasIdle = !this.speaking;
+    const voice = this.pickVoice();
+    for (let i = 0; i < Math.max(1, Math.min(3, repeat)); i++) {
+      const u = new SpeechSynthesisUtterance(String(text));
+      if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = 'en-IN';
+      u.rate = RATE_VALUE[rate] || RATE_VALUE.normal; u.pitch = 1; u.volume = 1;
+      this.queue.push(u);
+    }
+    // Chrome drops a speak() that comes straight after cancel(): after an interrupt, start the new text a moment later.
+    if (interrupt) { setTimeout(() => { if (!this.speaking && this.queue.length) this.next(); }, 90); return; }
+    if (wasIdle && !this.speaking) this.next();
+  },
+};
+
+// "A3" is read as "A 3", otherwise the voice says "a-three" as one word.
+const spokenTable = t => String(t ?? '').replace(/([A-Za-z])(\d)/g, '$1 $2').replace(/(\d)([A-Za-z])/g, '$1 $2');
+
+const spokenWho = order => {
+  const otype = getOrderType(order);
+  return otype === 'swiggy' ? 'Swiggy delivery order'
+    : otype === 'zomato' ? 'Zomato delivery order'
+      : otype === 'parcel' ? 'Pickup order'
+        : `Table ${spokenTable(order.tableNumber)}`;
+};
+
+// Everything the cook needs to hear: where it is going, then every dish with quantity, portion and notes.
+const buildTicketSpeech = (order, { replay = false } = {}) => {
+  const otype = getOrderType(order);
+  const who = spokenWho(order);
+  const items = (order.items || []).filter(isKitchenItem);
+  const mode = otype === 'parcel' ? 'parcel' : (otype === 'swiggy' || otype === 'zomato') ? 'delivery' : 'dine in';
+  const dishes = items.map(i => {
+    const qty = Number(i.quantity) || 1;
+    const portion = i.portion && String(i.portion).toLowerCase() !== 'single' && String(i.portion).toLowerCase() !== 'standard' ? `${i.portion} ` : '';
+    let d = `${qty} ${portion}${i.name}`;
+    if (i.isChefSpecial) d += ', chef special';
+    if (i.suggestion && String(i.suggestion).trim()) d += `. Note: ${String(i.suggestion).trim()}`;
+    return d;
+  });
+  const head = replay ? `${who}.` : (otype === 'dine-in' ? `New ticket for ${who}.` : `New ${who}.`);
+  const count = items.length === 1 ? '1 dish' : `${items.length} dishes`;
+  return `${head} ${count}, ${mode}. ${dishes.join('. ')}.`;
+};
+
+// Short label for the arrival toast.
+const ticketLabel = order => {
+  const t = getOrderType(order);
+  return t === 'swiggy' ? 'SWIGGY' : t === 'zomato' ? 'ZOMATO' : t === 'parcel' ? 'PARCEL' : `TABLE ${order.tableNumber}`;
+};
+
+/* ═══════════════════════════════════════════════════════════
+   STYLES — one scoped sheet (.kx). Tokens first, then header, rail, tickets, panels, skeletons.
+═══════════════════════════════════════════════════════════ */
+const KX_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
+.kx,.kx *,.kx *::before,.kx *::after{box-sizing:border-box}
+.kx{--line:rgba(211,191,162,.16);--line2:rgba(211,191,162,.32);--gold:#d3bfa2;--gold2:#b99f78;--bronze:#8a704d;--cream:#f7f3eb;--mute:#9b978d;--dim:#6f6c64;--amber:#e29a58;--swiggy:#fc8019;--zomato:#e0343f;--veg:#5d9a4e;--nonveg:#c04a4a;
+  --glass:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.016));--ease:cubic-bezier(.22,1,.36,1);
+  position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;color:var(--cream);
+  font-family:Poppins,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent;
+  background:radial-gradient(120% 80% at 50% -10%,#17140f 0%,#0b0b0c 55%,#070708 100%);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.kx button{font-family:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.kx button:disabled{cursor:default}
+.kx input,.kx select,.kx textarea{font-family:inherit}
+.kx .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.kx .no-scrollbar{scrollbar-width:none;-ms-overflow-style:none}
+.kx .no-scrollbar::-webkit-scrollbar{display:none;width:0;height:0}
+.kx :focus-visible{outline:2px solid rgba(211,191,162,.65);outline-offset:2px}
+
+/* ── header ── */
+.kx-top{display:flex;align-items:center;gap:12px;margin:10px 10px 0;padding:9px 12px;border-radius:20px;flex-shrink:0;z-index:70;position:relative;
+  background:var(--glass),#0d0d0e;border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 40px -22px rgba(0,0,0,.85)}
+.kx-brand{display:flex;align-items:center;gap:10px;min-width:0;flex-shrink:0}
+.kx-logo{background:var(--cream);border-radius:11px;padding:4px 9px;border:1px solid rgba(211,191,162,.5);box-shadow:0 8px 22px -10px rgba(211,191,162,.45);flex-shrink:0}
+.kx-logo img{display:block;width:112px;height:auto}
+.kx-brand-t{display:flex;flex-direction:column;gap:3px;min-width:0}
+.kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.58rem;font-weight:700;letter-spacing:.26em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
+.kx-live{display:inline-flex;align-items:center;gap:7px;font-size:.58rem;font-weight:600;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.kx-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;animation:kxPing 2.2s ease-out infinite}
+.kx-live.off{color:var(--amber)} .kx-live.off .kx-dot{background:var(--amber);animation:none}
+.kx-seg{display:flex;padding:3px;gap:2px;border-radius:14px;background:#070708;border:1px solid var(--line);flex-shrink:0}
+.kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border:0;border-radius:11px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;letter-spacing:.1em;white-space:nowrap;min-height:36px;transition:all .18s var(--ease)}
+.kx-seg button:hover{color:var(--cream)}
+.kx-seg button.on{background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 8px 20px -10px rgba(211,191,162,.6)}
+.kx-seg button .n{font:700 .62rem 'JetBrains Mono',monospace;opacity:.8}
+.kx-stats{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.kx-stat{min-width:78px;padding:6px 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:center}
+.kx-stat b{display:block;font:700 1.2rem/1.05 'JetBrains Mono',monospace;color:var(--cream)}
+.kx-stat span{display:block;margin-top:3px;font-size:.48rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
+.kx-stat.hot{border-color:var(--line2);background:rgba(211,191,162,.1)} .kx-stat.hot b{color:var(--gold)}
+.kx-acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.kx-ib{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;min-width:42px;padding:0 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfc7b8;font-size:.6rem;font-weight:700;letter-spacing:.1em;transition:all .18s var(--ease);flex-shrink:0}
+.kx-ib:not(:disabled):hover{border-color:var(--line2);color:var(--cream);background:rgba(255,255,255,.06)}
+.kx-ib:not(:disabled):active{transform:scale(.96)}
+.kx-ib.on{border-color:var(--line2);background:rgba(211,191,162,.13);color:var(--gold)}
+.kx-ib.mute{color:var(--dim)}
+.kx-badge{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:linear-gradient(135deg,#e6d6b8,#b99f78);color:#14110c;font:700 .58rem/19px 'JetBrains Mono',monospace;text-align:center;font-style:normal}
+.kx-eq{display:inline-flex;align-items:flex-end;gap:2px;height:14px}
+.kx-eq i{width:3px;border-radius:2px;background:var(--gold);animation:kxEq .9s ease-in-out infinite}
+.kx-eq i:nth-child(2){animation-delay:.18s} .kx-eq i:nth-child(3){animation-delay:.36s}
+.kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:310px;z-index:70;padding:16px;border-radius:20px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
+.kx-pop h4{margin:0;font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.kx-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;font-weight:500;color:#d8d1c3}
+.kx-row small{display:block;margin-top:2px;font-size:.6rem;color:var(--mute);font-weight:400}
+.kx-sw{position:relative;width:46px;height:26px;border-radius:13px;border:1px solid var(--line);background:#070708;flex-shrink:0;padding:0;transition:all .2s}
+.kx-sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#6f6c64;transition:all .2s var(--ease)}
+.kx-sw.on{background:rgba(211,191,162,.25);border-color:var(--line2)} .kx-sw.on::after{left:23px;background:var(--gold)}
+.kx-mini{display:flex;padding:2px;gap:2px;border-radius:10px;background:#070708;border:1px solid var(--line)}
+.kx-mini button{padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
+.kx-mini button.on{background:rgba(211,191,162,.2);color:var(--gold)}
+.kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:13px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;transition:all .18s var(--ease)}
+.kx-btn:not(:disabled):hover{background:rgba(211,191,162,.18)} .kx-btn:disabled{opacity:.4}
+.kx-btn.solid{border:0;background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 12px 28px -12px rgba(211,191,162,.55)}
+.kx-btn.warn{border-color:rgba(226,154,88,.5);background:rgba(226,154,88,.12);color:#f0b87c}
+.kx-btn.block{width:100%}
+
+/* ── banners: arrivals, alerts, sound unlock ── */
+.kx-toasts{position:fixed;top:calc(env(safe-area-inset-top) + 82px);left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;width:min(580px,calc(100vw - 24px));pointer-events:none}
+.kx-toast{pointer-events:auto;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:var(--glass),#121110;border:1px solid var(--line2);box-shadow:0 24px 60px -18px rgba(0,0,0,.9),0 0 0 1px rgba(211,191,162,.06);cursor:pointer}
+.kx-toast .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;background:rgba(211,191,162,.14);border:1px solid var(--line2);color:var(--gold)}
+.kx-toast.cancel{border-color:rgba(226,154,88,.55)} .kx-toast.cancel .ic{background:rgba(226,154,88,.14);border-color:rgba(226,154,88,.45);color:var(--amber)}
+.kx-toast b{display:block;font-size:.78rem;font-weight:700;letter-spacing:.06em}
+.kx-toast p{margin:2px 0 0;font-size:.68rem;color:var(--mute);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.kx-alerts{display:flex;flex-direction:column;gap:8px;margin:10px 10px 0;flex-shrink:0}
+.kx-alert{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:16px;background:linear-gradient(160deg,rgba(226,154,88,.14),rgba(226,154,88,.05)),#16120e;border:1px solid rgba(226,154,88,.4)}
+.kx-alert .l{display:flex;align-items:center;gap:12px;min-width:0}
+.kx-alert .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:rgba(226,154,88,.14);color:var(--amber);flex-shrink:0}
+.kx-alert h3{margin:0;font-size:.82rem;font-weight:700;letter-spacing:.04em}
+.kx-alert p{margin:3px 0 0;font-size:.7rem;color:#e8b98a;line-height:1.4}
+.kx-unlock{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 16px);transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:#15120d;border:1px solid var(--line2);color:var(--gold);font-size:.66rem;font-weight:700;letter-spacing:.12em;box-shadow:0 18px 44px rgba(0,0,0,.6);pointer-events:none;animation:kxBreath 2.4s ease-in-out infinite;white-space:nowrap;text-transform:uppercase}
+
+/* ── layout ── */
+.kx-body{flex:1;display:flex;gap:10px;padding:10px;min-height:0}
+.kx-rail{width:240px;flex-shrink:0;display:flex;flex-direction:column;min-height:0;padding:14px 12px;border-radius:20px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
+.kx-rail.drawer{position:fixed;left:0;top:0;bottom:0;z-index:100;width:290px;max-width:88vw;border-radius:0 22px 22px 0;padding-top:calc(env(safe-area-inset-top) + 16px)}
+.kx-rail-h{display:flex;align-items:center;gap:9px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line);flex-shrink:0}
+.kx-rail-h .ic{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
+.kx-eyebrow{flex:1;font-size:.58rem;letter-spacing:.26em;font-weight:700;color:var(--gold);opacity:.8;text-transform:uppercase}
+.kx-rail-list{display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;min-height:0}
+.kx-rail-f{flex-shrink:0;display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:12px;border-top:1px solid var(--line)}
+.kx-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;padding:9px 11px;border-radius:13px;border:1px solid transparent;background:transparent;color:#bdb6a8;font-size:.7rem;font-weight:600;letter-spacing:.04em;text-align:left;transition:all .16s var(--ease)}
+.kx-nav:hover{background:rgba(255,255,255,.04);color:var(--cream)}
+.kx-nav.on{background:rgba(211,191,162,.12);border-color:var(--line2);color:var(--cream);box-shadow:inset 3px 0 0 var(--gold)}
+.kx-nav .t{display:flex;align-items:center;gap:9px;min-width:0}
+.kx-nav .t span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kx-nav .r{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.kx-ct{min-width:28px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.07);color:var(--mute);font:700 .64rem/1.5 'JetBrains Mono',monospace;text-align:center}
+.kx-ct.hot{background:rgba(211,191,162,.2);color:var(--gold)}
+.kx-86{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
+.kx-86:hover{border-color:rgba(226,154,88,.55);color:var(--amber)}
+.kx-vegseg{display:flex;padding:3px;gap:2px;border-radius:13px;background:#070708;border:1px solid var(--line);margin-bottom:10px;flex-shrink:0}
+.kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:8px 4px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;letter-spacing:.08em;min-height:36px}
+.kx-vegseg button.on.v{background:rgba(93,154,78,.18);color:#9fcb90} .kx-vegseg button.on.n{background:rgba(192,74,74,.18);color:#e29a9a}
+.kx-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
+.kx-ribbon{display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:38px}
+.kx-prep{display:flex;align-items:center;gap:8px;overflow-x:auto;min-width:0;flex:1}
+.kx-prep-l{display:flex;align-items:center;gap:6px;font-size:.55rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
+.kx-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.68rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
+.kx-chip b{font:700 .78rem 'JetBrains Mono',monospace;color:var(--gold)}
+.kx-sortbtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.58rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
+.kx-sortbtn:hover{color:var(--cream);border-color:var(--line2)}
+.kx-search{display:flex;align-items:center;gap:10px;margin:10px 10px 0;padding:10px 14px;border-radius:15px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
+.kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.86rem}
+.kx-search input::placeholder{color:var(--dim)}
+.kx-recall{display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.025);flex-shrink:0;overflow:hidden}
+.kx-recall .l{display:flex;align-items:center;gap:6px;font-size:.54rem;letter-spacing:.18em;font-weight:700;color:var(--mute);flex-shrink:0;text-transform:uppercase}
+.kx-health{border-radius:16px;border:1px solid var(--line);background:var(--glass),#0d0d0e;flex-shrink:0;overflow:hidden}
+.kx-health-h{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;background:transparent;text-align:left}
+.kx-health-h .tt{font-size:.58rem;letter-spacing:.22em;font-weight:700;color:var(--gold);text-transform:uppercase}
+.kx-health-h .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.6rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.kx-health-h .st.warn{color:var(--amber)}
+.kx-health-b{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.kx-stg{display:grid;gap:8px}
+.kx-stg>div{padding:9px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.025)}
+.kx-stg>div.bn{border-color:rgba(226,154,88,.4)}
+.kx-bar{height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:6px}
+.kx-bar i{display:block;height:100%;border-radius:2px;background:var(--gold2);transition:width .5s ease}
+.kx-bar.bn i{background:var(--amber)}
+
+/* ── board ── */
+.kx-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--kx-col,320px),1fr));gap:14px;align-content:start;align-items:start;padding:2px 2px 18px}
+.kx-center{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:70px 20px}
+.kx-center .ic{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:var(--glass),#0d0d0e;border:1px solid var(--line);color:var(--dim)}
+.kx-center h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.26em;color:var(--mute);text-transform:uppercase}
+.kx-center p{margin:0;font-size:.7rem;color:var(--dim);font-weight:500;max-width:420px;line-height:1.55;word-break:break-word}
+.kx-tk{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;border:1px solid var(--line);background:var(--glass),#0f0e0d;box-shadow:0 22px 44px -28px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.05);max-height:min(640px,calc(100dvh - 200px));transition:border-color .3s}
+.kx-tk::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,rgba(211,191,162,.35));z-index:2}
+.kx-tk.med{--rail:var(--gold)}
+.kx-tk.high{--rail:var(--amber);border-color:rgba(226,154,88,.55);animation:kxUrgent 1.9s ease-in-out infinite}
+.kx-tk.swiggy{--rail:var(--swiggy)} .kx-tk.zomato{--rail:var(--zomato)}
+.kx-tk.fresh{border-color:rgba(230,214,184,.85);animation:kxFresh 1.6s ease-in-out 5}
+.kx-tk.fill{max-height:none;height:100%}
+.kx-tk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 14px 8px 20px}
+.kx-tk-type{display:inline-flex;align-items:center;gap:7px;font-size:.55rem;font-weight:700;letter-spacing:.2em;color:var(--gold);text-transform:uppercase}
+.kx-tk-num{margin:5px 0 7px;font-size:2.2rem;font-weight:800;line-height:1;letter-spacing:-.02em}
+.kx-tk-num.sw{color:var(--swiggy)} .kx-tk-num.zo{color:var(--zomato)}
+.kx-tk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.kx-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.52rem;font-weight:700;letter-spacing:.1em;color:#cfc7b8;text-transform:uppercase;white-space:nowrap}
+.kx-tag.gold{background:rgba(211,191,162,.16);border-color:var(--line2);color:var(--gold)}
+.kx-tag.amber{background:rgba(226,154,88,.16);border-color:rgba(226,154,88,.45);color:#f0b87c}
+.kx-tag.sw{color:var(--swiggy);border-color:rgba(252,128,25,.4);background:rgba(252,128,25,.1)}
+.kx-tag.zo{color:#ef6a73;border-color:rgba(224,52,63,.4);background:rgba(224,52,63,.1)}
+.kx-tag.id{font-family:'JetBrains Mono',monospace;color:var(--mute);letter-spacing:.04em}
+.kx-time{position:relative;width:66px;height:66px;flex-shrink:0;display:grid;place-items:center}
+.kx-time svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.kx-time .tv{position:relative;font:700 .8rem 'JetBrains Mono',monospace;letter-spacing:-.02em}
+.kx-time.high .tv{color:var(--amber)} .kx-time.med .tv{color:var(--gold)}
+.kx-late{margin-top:4px;display:block;text-align:center;font-size:.46rem;font-weight:800;letter-spacing:.16em;color:var(--amber)}
+.kx-strip{margin:0 12px 8px 18px;padding:7px 10px;border-radius:11px;font-size:.62rem;font-weight:600;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.kx-strip.sw{background:rgba(252,128,25,.08);border:1px solid rgba(252,128,25,.28);color:#ffa760}
+.kx-strip.zo{background:rgba(224,52,63,.08);border:1px solid rgba(224,52,63,.28);color:#f2848b}
+.kx-strip.mod{display:block;background:rgba(226,154,88,.1);border:1px solid rgba(226,154,88,.4);color:#f0b87c}
+.kx-prog{display:flex;align-items:center;gap:10px;margin:0 14px 8px 20px}
+.kx-prog .bar{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+.kx-prog .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#b99f78,#e6d6b8);transition:width .4s var(--ease)}
+.kx-prog span{font:700 .62rem 'JetBrains Mono',monospace;color:var(--mute)}
+.kx-prog span.ok{color:var(--gold)}
+.kx-items{display:flex;flex-direction:column;gap:7px;padding:4px 12px 8px 16px;overflow-y:auto;flex:1;min-height:0}
+.kx-it{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:11px 12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
+.kx-it:hover{border-color:var(--line2)} .kx-it:active{transform:scale(.99)}
+.kx-it.run{background:rgba(211,191,162,.06);border-color:rgba(211,191,162,.3)}
+.kx-it.done{background:transparent;opacity:.45}
+.kx-qty{min-width:40px;height:40px;padding:0 6px;border-radius:12px;display:grid;place-items:center;font:700 1.15rem 'JetBrains Mono',monospace;background:rgba(211,191,162,.14);border:1px solid rgba(211,191,162,.3);color:var(--gold)}
+.kx-it.done .kx-qty{background:rgba(255,255,255,.04);border-color:var(--line);color:var(--dim)}
+.kx-it-b{min-width:0}
+.kx-nm{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:1.02rem;font-weight:600;line-height:1.28;color:var(--cream)}
+.kx-it.done .kx-nm{text-decoration:line-through;color:var(--mute)}
+.kx-nm .sp{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:7px;background:rgba(211,191,162,.18);color:var(--gold)}
+.kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:5px;font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.kx-sub .half{color:var(--gold)}
+.kx-tm{display:inline-flex;align-items:center;gap:4px;font:700 .62rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0}
+.kx-tm.slow{padding:2px 7px;border-radius:7px;background:rgba(226,154,88,.16);border:1px solid rgba(226,154,88,.45);color:#f0b87c}
+.kx-hint{margin-top:5px;font-size:.54rem;color:var(--dim);font-style:italic}
+.kx-note{display:flex;align-items:flex-start;gap:8px;margin-top:8px;padding:8px 10px;border-radius:11px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.76rem;font-weight:600;line-height:1.38}
+.kx-note svg{flex-shrink:0;margin-top:2px}
+.kx-chk{width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(211,191,162,.42);display:grid;place-items:center;color:#14110c;flex-shrink:0;margin-top:5px;transition:all .16s var(--ease)}
+.kx-it.done .kx-chk{background:var(--gold);border-color:var(--gold)}
+.kx-vd{width:13px;height:13px;border-radius:3px;border:1.6px solid var(--veg);display:inline-grid;place-items:center;flex-shrink:0}
+.kx-vd i{width:5px;height:5px;border-radius:50%;background:var(--veg)}
+.kx-vd.n{border-color:var(--nonveg)} .kx-vd.n i{border-radius:0;background:transparent;width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:6px solid var(--nonveg)}
+.kx-tk-f{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px 16px;border-top:1px solid rgba(211,191,162,.1);flex-shrink:0}
+.kx-tk-f .row{display:flex;gap:8px}
+.kx-notebox{display:flex;gap:8px;align-items:flex-start;margin:0 12px 0 16px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.kx-notebox textarea{flex:1;background:transparent;border:0;outline:0;resize:none;color:var(--cream);font-size:.78rem;line-height:1.5;min-height:52px}
+.kx-sq{width:50px;min-height:50px;border-radius:15px;border:1px solid var(--line);background:rgba(255,255,255,.04);display:grid;place-items:center;color:#cfc7b8;flex-shrink:0;transition:all .16s var(--ease)}
+.kx-sq:not(:disabled):hover{border-color:var(--line2);color:var(--gold)} .kx-sq:not(:disabled):active{transform:scale(.95)}
+.kx-sq.on{border-color:var(--line2);color:var(--gold);background:rgba(211,191,162,.12)}
+.kx-go{flex:1;min-height:50px;padding:0 14px;border-radius:15px;border:0;display:flex;align-items:center;justify-content:center;gap:9px;font-size:.78rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#14110c;background:linear-gradient(135deg,#e6d6b8 0%,#d3bfa2 45%,#b99f78 100%);box-shadow:0 14px 30px -14px rgba(211,191,162,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .16s var(--ease),filter .16s}
+.kx-go:not(:disabled):hover{filter:brightness(1.06)} .kx-go:not(:disabled):active{transform:scale(.98)}
+.kx-go.late{background:linear-gradient(135deg,#f3c18a,#e29a58 55%,#c97a35);box-shadow:0 14px 30px -14px rgba(226,154,88,.6),inset 0 1px 0 rgba(255,255,255,.4)}
+
+/* ── summary + metrics ── */
+.kx-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
+.kx-sumc{padding:18px 12px 14px;border-radius:18px;text-align:center;background:var(--glass),#0e0e0f;border:1px solid var(--line);border-top:2px solid var(--line2)}
+.kx-sumc.p{border-color:var(--line2);border-top-color:var(--gold)}
+.kx-sumc b{display:block;font:700 2.6rem/1 'JetBrains Mono',monospace;color:var(--gold);margin-bottom:9px}
+.kx-sumc .n{font-size:.7rem;font-weight:600;color:#d8d1c3;line-height:1.35;margin-bottom:9px;text-transform:uppercase;letter-spacing:.03em}
+.kx-metrics{flex:1;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;border-radius:24px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
+.kx-metrics h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;letter-spacing:.04em}
+.kx-metrics>p{margin:0 0 20px;font-size:.66rem;color:var(--mute);letter-spacing:.06em}
+.kx-mtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:640px;margin-bottom:22px}
+.kx-mt{padding:22px 14px;border-radius:18px;text-align:center;background:#0b0b0c;border:1px solid var(--line);border-top:2px solid var(--gold)}
+.kx-mt span{display:block;font-size:.5rem;letter-spacing:.2em;font-weight:700;color:var(--mute);text-transform:uppercase;margin-bottom:10px}
+.kx-mt b{display:block;font:700 2.4rem/1 'JetBrains Mono',monospace;color:var(--gold)} .kx-mt b.sm{font-size:1.6rem;padding:.3rem 0}
+.kx-mt small{display:block;margin-top:8px;font-size:.6rem;color:var(--dim)}
+
+/* ── mobile ── */
+.kx-dots{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;flex-shrink:0;padding:0 20px}
+.kx-dots i{height:6px;width:6px;border-radius:3px;background:#262626;transition:all .25s;cursor:pointer}
+.kx-dots i.on{width:22px;background:var(--gold)}
+.kx-pager{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.kx-pager button{display:inline-flex;align-items:center;gap:6px;min-height:46px;padding:0 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.7rem;font-weight:700;letter-spacing:.1em}
+.kx-pager button:disabled{opacity:.25}
+.kx-bnav{display:flex;gap:3px;margin:0 10px 10px;padding:4px;border-radius:20px;background:var(--glass),#0d0d0e;border:1px solid var(--line);flex-shrink:0}
+.kx-bnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:54px;padding:7px 2px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-size:.5rem;font-weight:700;letter-spacing:.08em}
+.kx-bnav button.on{background:rgba(211,191,162,.16);color:var(--gold)}
+.kx-bnav button .n{font:700 .5rem 'JetBrains Mono',monospace;color:var(--gold)}
+
+/* ── side sheet (wastage) + modal (86) ── */
+.kx-scrim{position:fixed;inset:0;background:rgba(4,4,4,.62);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.kx-sheet{position:fixed;right:0;top:0;bottom:0;z-index:3001;display:flex;flex-direction:column;overflow:hidden;background:var(--glass),#0d0d0e;border-left:1px solid var(--line2);border-radius:24px 0 0 24px}
+.kx-sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);flex-shrink:0}
+.kx-sheet-h .t{display:flex;align-items:center;gap:12px}
+.kx-sheet-h .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
+.kx-sheet-h h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.08em}
+.kx-sheet-h small{display:block;margin-top:3px;font-size:.52rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
+.kx-tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
+.kx-tabs button{flex:1;padding:14px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mute);font-size:.6rem;font-weight:700;letter-spacing:.16em}
+.kx-tabs button.on{color:var(--gold);border-bottom-color:var(--gold)}
+.kx-card{padding:16px;border-radius:18px;background:#0a0a0b;border:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.kx-card>.hd{font-size:.56rem;letter-spacing:.22em;font-weight:700;color:var(--mute);text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.kx-lbl{display:block;margin-bottom:6px;font-size:.54rem;font-weight:700;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
+.kx-in{width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:#070708;color:var(--cream);font-size:.84rem;outline:0;transition:border-color .16s,box-shadow .16s}
+.kx-in:focus{border-color:var(--line2);box-shadow:0 0 0 4px rgba(211,191,162,.08)}
+.kx-in option{background:#0d0d0e;color:var(--cream)}
+.kx-pill{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:34px}
+.kx-pill.on{border-color:var(--line2);background:rgba(211,191,162,.16);color:var(--gold)}
+.kx-ent{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:#0a0a0b;border:1px solid var(--line);border-left:3px solid var(--gold2)}
+.kx-modalwrap{position:fixed;inset:0;z-index:3101;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+.kx-modal{margin:auto;display:flex;flex-direction:column;overflow:hidden;border-radius:24px;background:var(--glass),#0f0f10;border:1px solid var(--line2);box-shadow:0 40px 90px -20px rgba(0,0,0,.95)}
+.kx-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-radius:13px;border:1px solid var(--line);background:transparent;color:#cfc7b8;font-size:.78rem;font-weight:600;text-align:left;min-height:46px;transition:all .15s}
+.kx-opt.on{border-color:var(--line2);background:rgba(211,191,162,.14);color:var(--gold)}
+.kx-err{font-size:.7rem;color:#e9a57a;font-weight:600}
+
+/* ── skeleton ── */
+.kx-sk{position:relative;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,.055);border-radius:7px}
+.kx-sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(100deg,transparent 15%,rgba(233,220,195,.12) 50%,transparent 85%);animation:kxSweep 1.7s cubic-bezier(.45,0,.25,1) infinite;animation-delay:var(--d,0s)}
+
+/* ── motion ── */
+@keyframes kxPing{0%{box-shadow:0 0 0 0 rgba(211,191,162,.55)}70%,100%{box-shadow:0 0 0 8px rgba(211,191,162,0)}}
+@keyframes kxEq{0%,100%{height:3px}50%{height:14px}}
+@keyframes kxBreath{0%,100%{opacity:.75}50%{opacity:1}}
+@keyframes kxUrgent{0%,100%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 0 0 rgba(226,154,88,0)}50%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 26px 0 rgba(226,154,88,.3)}}
+@keyframes kxFresh{0%,100%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 0 0 rgba(230,214,184,0)}50%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 32px 2px rgba(230,214,184,.38)}}
+@keyframes kxSweep{to{transform:translateX(100%)}}
+@keyframes kxSpin{to{transform:rotate(360deg)}}
+.kx .spin{animation:kxSpin 1s linear infinite}
+
+/* ── responsive ── */
+.kx-mdot{display:none}
+@media (max-width:1180px){.kx-stat.opt{display:none}.kx-logo img{width:96px}}
+@media (max-width:1100px){.kx-stats{display:none}.kx-acts{margin-left:auto}.kx-seg button span.lb{display:none}.kx-seg button{padding:8px 11px}}
+@media (max-width:980px){.kx-brand-t{display:none}.kx-hide-md{display:none!important}.kx-toasts{top:calc(env(safe-area-inset-top) + 76px)}}
+@media (max-width:599px){
+  .kx-top{margin:8px 8px 0;padding:8px 9px;gap:8px;border-radius:18px}
+  .kx-logo img{width:84px} .kx-acts{gap:5px} .kx-mdot{display:inline-block}
+  .kx-ib{height:40px;min-width:40px;padding:0 10px}
+  .kx-body{padding:8px;gap:8px} .kx-main{gap:8px}
+  .kx-tk-num{font-size:2.3rem} .kx-nm{font-size:1.08rem}
+  .kx-go{min-height:54px;font-size:.84rem}
+  .kx-mtiles{grid-template-columns:1fr} .kx-pop{position:fixed;left:10px;right:10px;top:68px;width:auto}
+  .kx-toasts{top:calc(env(safe-area-inset-top) + 68px)}
+  .kx-bnav{margin:0 8px 8px} .kx-bnav button{font-size:.46rem;letter-spacing:.04em}
+}
+@media (prefers-reduced-motion:reduce){.kx *,.kx *::before,.kx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+`;
 
 /* ═══════════════════════════════════════════════════════════════════
    MAIN COMPONENT
@@ -86,30 +494,28 @@ const KitchenViewInner = () => {
 
   useEffect(() => {
     if (tenantId) {
-      try { localStorage.setItem('kitchen_tenant_id', tenantId); } catch {}
+      try { localStorage.setItem('kitchen_tenant_id', tenantId); } catch { /* storage blocked */ }
     }
   }, [tenantId]);
-  const { w }        = useWindowSize();
+  const { w } = useWindowSize();
 
-  const isMobile      = w < 600;
-  const isSmallTablet = w >= 600  && w < 840;
-  const isLargeTablet = w >= 840  && w < 1200;
-  const isTablet      = w >= 600  && w < 1200;
-  const isDesktop     = w >= 1200;
+  const isMobile = w < 600;
+  const isSmallTablet = w >= 600 && w < 840;
+  const isLargeTablet = w >= 840 && w < 1200;
+  const isTablet = w >= 600 && w < 1200;
 
   /* ── state ── */
-  const [orders,               setOrders]               = useState([]);
-  const [recallQueue,          setRecallQueue]          = useState([]);
-  const [isAggregateView,      setIsAggregateView]      = useState(false);
-  const [isNonVegMode,         setIsNonVegMode]         = useState(false);
-  const [tenantOnlyVeg,        setTenantOnlyVeg]        = useState(true);
-  const [categories,           setCategories]           = useState([]);
-  const [menuItems,            setMenuItems]            = useState([]);
-  const [selectedCategory,     setSelectedCategory]     = useState('ALL');
-  const [stationFilter,        setStationFilter]        = useState('ALL');
-  const [checkedItemsGlobal,   setCheckedItemsGlobal]   = useState({});
-  const [isListening,          setIsListening]          = useState(false);
-  const [interceptedAlerts,    setInterceptedAlerts]    = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [recallQueue, setRecallQueue] = useState([]);
+  const [isAggregateView, setIsAggregateView] = useState(false);
+  const [isNonVegMode, setIsNonVegMode] = useState(false);
+  const [tenantOnlyVeg, setTenantOnlyVeg] = useState(true);
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [stationFilter, setStationFilter] = useState('ALL');
+  const [checkedItemsGlobal, setCheckedItemsGlobal] = useState({});
+  const [interceptedAlerts, setInterceptedAlerts] = useState([]);
   // 'loading' until the first ticket fetch answers; 'error' if it failed. Before this the board showed "KITCHEN CLEAR" while loading.
   const [boardState, setBoardState] = useState('loading');
   const [boardError, setBoardError] = useState(''); // what the server actually answered when the board could not load
@@ -118,111 +524,141 @@ const KitchenViewInner = () => {
   const [eightySixModal, setEightySixModal] = useState(null); // { categoryKey, categoryName }
   const [selectedDish86, setSelectedDish86] = useState(null);
   const [selectedReason86, setSelectedReason86] = useState('ran_out');
-  const [isOnline,             setIsOnline]             = useState(navigator.onLine);
-  const [sidebarOpen,          setSidebarOpen]          = useState(false);
-  const [mobileCardIndex,      setMobileCardIndex]      = useState(0);
-  const [completedTicketsCount,setCompletedTicketsCount]= useState(0);
-  const [totalProcessingTime,  setTotalProcessingTime]  = useState(0);
-  const [showWastagePanel,     setShowWastagePanel]     = useState(false);
-  const [wastageTab,           setWastageTab]           = useState('log');
-  const [wastageForm,          setWastageForm]          = useState({ itemName:'', inventoryId:null, quantity:'', unit:'kg', reason:'Spoiled / Expired', loggedBy:'', notes:'' });
-  const [wastageSuggestions,   setWastageSuggestions]   = useState([]);
-  const [showWastageSuggest,   setShowWastageSuggest]   = useState(false);
-  const [wastageInventory,     setWastageInventory]     = useState([]);
-  const [wastageLog,           setWastageLog]           = useState([]);
-  const [wastageAnalytics,     setWastageAnalytics]     = useState(null);
-  const [wastageSaving,        setWastageSaving]        = useState(false);
-  const [wastageError,         setWastageError]         = useState('');
-  const [wastageLoading,       setWastageLoading]       = useState(false);
-  const [kitchenHealth,        setKitchenHealth]        = useState(null);
-  const [serverKdsToday,       setServerKdsToday]       = useState(null); // { count, avgSeconds } from the database
-  const [itemFinalTimes,       setItemFinalTimes]       = useState({});
-  const [searchQuery,          setSearchQuery]          = useState('');
-  const [showSearch,           setShowSearch]           = useState(false);
-  const [tenantName,           setTenantName]           = useState('');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileCardIndex, setMobileCardIndex] = useState(0);
+  const [completedTicketsCount, setCompletedTicketsCount] = useState(0);
+  const [totalProcessingTime, setTotalProcessingTime] = useState(0);
+  const [showWastagePanel, setShowWastagePanel] = useState(false);
+  const [wastageTab, setWastageTab] = useState('log');
+  const [wastageForm, setWastageForm] = useState({ itemName: '', inventoryId: null, quantity: '', unit: 'kg', reason: 'Spoiled / Expired', loggedBy: '', notes: '' });
+  const [wastageSuggestions, setWastageSuggestions] = useState([]);
+  const [showWastageSuggest, setShowWastageSuggest] = useState(false);
+  const [wastageInventory, setWastageInventory] = useState([]);
+  const [wastageLog, setWastageLog] = useState([]);
+  const [wastageAnalytics, setWastageAnalytics] = useState(null);
+  const [wastageSaving, setWastageSaving] = useState(false);
+  const [wastageError, setWastageError] = useState('');
+  const [wastageLoading, setWastageLoading] = useState(false);
+  const [kitchenHealth, setKitchenHealth] = useState(null);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [serverKdsToday, setServerKdsToday] = useState(null); // { count, avgSeconds } from the database
+  const [itemFinalTimes, setItemFinalTimes] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+  const [processingOrderIds, setProcessingOrderIds] = useState(new Set());
+  const [sortOldest, setSortOldest] = useState(() => { try { return localStorage.getItem('kds_sort_oldest') === '1'; } catch { return false; } });
+
+  /* realtime / voice state */
+  const [voicePrefs, setVoicePrefs] = useState(loadVoicePrefs);
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [freshIds, setFreshIds] = useState(() => new Set()); // tickets that arrived in the last few seconds
+  const [toasts, setToasts] = useState([]);                   // "new ticket" / "cancelled" call-outs
 
   /* ── refs ── */
-  const audioPlayer    = useRef(null);
-  const alertPlayer    = useRef(null);
-  // Browsers refuse all audio and speech until the page has had a user gesture. On a kiosk/tablet that reloads without a tap,
-  // every alert was silently swallowed by `play().catch(() => {})` and the kitchen never knew. Show a prompt until the first tap.
+  const socketRef = useRef(null);
+  const ordersRef = useRef([]);
+  const voicePrefsRef = useRef(voicePrefs);
+  const fetchSeqRef = useRef(0);
+  const lastFetchAtRef = useRef(0);
+  const seenIdsRef = useRef(new Set());      // every ticket this screen has already shown (so a poll never re-announces one)
+  const initialLoadRef = useRef(false);
+  const dispatchedRef = useRef(new Set());   // tickets dispatched here a moment ago: a slow in-flight fetch must not bring them back
+  const reconcileRef = useRef(null);
+  const timersRef = useRef([]);
+  const confirm86Busy = useRef(false);
+  const metaLoadedRef = useRef(false);      // categories / menu / tenant have been loaded at least once
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+  useEffect(() => () => { timersRef.current.forEach(clearTimeout); clearTimeout(reconcileRef.current); }, []);
+  const later = (fn, ms) => {
+    const h = setTimeout(() => { timersRef.current = timersRef.current.filter(x => x !== h); fn(); }, ms);
+    timersRef.current.push(h);
+    return h;
+  };
+
+  /* ── sound / voice setup ──
+     Browsers refuse all audio and speech until the page has had one user gesture. On a kiosk/tablet that reloads without a tap
+     the announcements would be silently swallowed, so a banner stays up until the first touch; it is the browser's rule, not a mode. */
   const [audioUnlocked, setAudioUnlocked] = useState(() => { try { return navigator.userActivation ? !!navigator.userActivation.hasBeenActive : false; } catch { return false; } });
   useEffect(() => {
     if (audioUnlocked) return undefined;
-    const unlock = () => setAudioUnlocked(true);
+    const unlock = () => {
+      setAudioUnlocked(true);
+      const waiting = ordersRef.current.filter(o => (o.items || []).some(isKitchenItem)).length;
+      const p = voicePrefsRef.current;
+      if (waiting > 0 && p.voice) speechEngine.say(`Kitchen connected. ${waiting} ${waiting === 1 ? 'ticket' : 'tickets'} waiting.`, { rate: p.rate });
+    };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
     return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
   }, [audioUnlocked]);
-  const recognitionRef = useRef(null);
-  const socketRef      = useRef(null);
-  const speechQueueRef = useRef([]);
-  const isSpeakingRef  = useRef(false);
-  const synthVoicesRef = useRef([]);
 
-  /* ── voice setup ── */
   useEffect(() => {
-    if (!('speechSynthesis' in window)) return;
-    const load = () => { synthVoicesRef.current = window.speechSynthesis.getVoices(); };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
+    speechEngine.onState = setSpeaking;
+    speechEngine.onBlocked = () => setAudioUnlocked(false); // the browser refused to speak: ask for a tap again
+    speechEngine.refreshVoices();
+    try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = () => speechEngine.refreshVoices(); } catch { /* ignore */ }
+    return () => {
+      speechEngine.onState = null; speechEngine.onBlocked = null; speechEngine.stop();
+      try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = null; } catch { /* ignore */ }
+    };
   }, []);
 
-  const speechWatchdogRef = useRef(null);
-  const processSpeechQueue = () => {
-    clearTimeout(speechWatchdogRef.current);
-    if (!speechQueueRef.current.length) { isSpeakingRef.current = false; return; }
-    isSpeakingRef.current = true;
-    const next = speechQueueRef.current.shift();
-    let advanced = false;
-    const advance = () => { if (advanced) return; advanced = true; processSpeechQueue(); };
-    next.onend = next.onerror = advance;
-    // Some browsers (notably Chrome) sometimes never fire onend. isSpeakingRef then stayed true forever and every
-    // later ticket was queued but never announced. The watchdog moves the queue along regardless.
-    speechWatchdogRef.current = setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} advance(); }, Math.min(30000, 4000 + String(next.text || '').length * 110));
-    try { window.speechSynthesis.speak(next); } catch { advance(); }
+  const updateVoicePrefs = patch => {
+    const next = { ...voicePrefsRef.current, ...patch };
+    voicePrefsRef.current = next;
+    setVoicePrefs(next);
+    try { localStorage.setItem(VOICE_PREF_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
   };
 
-  const speakOrder = order => {
-    if (!('speechSynthesis' in window)) return;
+  // opts.force: speak even if spoken details are switched off (the speaker button / test). opts.interrupt: cut off what is being said.
+  const announce = (text, opts = {}) => {
+    const p = voicePrefsRef.current;
+    if (!opts.force && !p.voice) return;
+    speechEngine.say(text, { repeat: opts.force ? 1 : p.repeat, rate: p.rate, interrupt: !!opts.interrupt });
+  };
+  const speakTicket = order => announce(buildTicketSpeech(order, { replay: true }), { force: true, interrupt: true });
+
+  const pushToast = t => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts(prev => [{ id, ...t }, ...prev].slice(0, 3));
+    later(() => setToasts(prev => prev.filter(x => x.id !== id)), t.ttl || 9000);
+  };
+  const markFresh = id => {
+    const k = String(id);
+    setFreshIds(prev => new Set(prev).add(k));
+    later(() => setFreshIds(prev => { const n = new Set(prev); n.delete(k); return n; }), 14000);
+  };
+
+  // One place for "a ticket just reached the kitchen": highlight, call-out card, chime, then the spoken details.
+  const arriveTicket = order => {
+    markFresh(order._id);
+    const kitchenItems = (order.items || []).filter(isKitchenItem);
+    pushToast({ kind: 'new', title: `NEW TICKET · ${ticketLabel(order)}`, body: kitchenItems.map(i => `${Number(i.quantity) || 1}× ${i.name}`).join(', ') });
     const otype = getOrderType(order);
-    let text = otype === 'swiggy' ? 'Chef, new Swiggy order. '
-             : otype === 'zomato' ? 'Chef, new Zomato order. '
-             : otype === 'parcel' ? 'Chef, new pickup order. '
-             : `Chef, new ticket for Table ${order.tableNumber}. `;
-    text += (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null).map(i => {
-      const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? `${i.portion} ` : '';
-      const tag = otype === 'parcel' ? 'Parcel' : 'Dine in';
-      let d = `${i.quantity} ${portion}${i.name} ${tag}`;
-      if (i.suggestion?.trim()) d += `. Note: ${i.suggestion}`;
-      return d;
-    }).join('. ');
-    const utt = new SpeechSynthesisUtterance(text);
-    const voices = synthVoicesRef.current;
-    const v = voices.find(v => v.lang === 'en-IN')
-           || voices.find(v => String(v.lang || '').startsWith('en') && String(v.name || '').toLowerCase().includes('india'))
-           || voices[0];
-    if (v) utt.voice = v;
-    utt.rate = 0.88; utt.pitch = 1.02;
-    speechQueueRef.current.push(utt);
-    if (!isSpeakingRef.current) processSpeechQueue();
+    const agg = otype === 'swiggy' || otype === 'zomato';
+    const p = voicePrefsRef.current;
+    if (p.chime) playAlertSound(agg ? 'aggregator' : 'order');
+    later(() => announce(buildTicketSpeech(order)), p.chime ? (agg ? 1600 : 1100) : 0);
   };
 
   const fetchHealth = async () => {
     try {
       const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`, { timeout: 12000 });
       setKitchenHealth(r.data);
-    } catch {}
+    } catch { /* optional panel */ }
     try {
       const s = await axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`, { timeout: 12000 });
       if (s.data && Number.isFinite(Number(s.data.count))) setServerKdsToday(s.data);
-    } catch {}
+    } catch { /* falls back to the local counters */ }
   };
 
-  const fetchSeqRef = useRef(0);
   const fetchActiveOrders = async (opts) => {
     // ordersOnly: socket-triggered refreshes don't need categories/menu/tenant again (the menu is kept live by socket events).
-    const ordersOnly = opts && opts.ordersOnly === true;
+    const ordersOnly = !!(opts && opts.ordersOnly === true);
     // Several refreshes can overlap (socket events, reconnect, the 86 button). A slow older response used to land last and
     // overwrite newer data, bringing back tickets that had already been dispatched.
     const seq = ++fetchSeqRef.current;
@@ -234,15 +670,31 @@ const KitchenViewInner = () => {
         ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: null })),
       ]);
       if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
-      const incoming = [...(ordersRes.data || [])].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+      lastFetchAtRef.current = Date.now();
+      const incoming = [...(ordersRes.data || [])]
+        .filter(o => !dispatchedRef.current.has(String(o._id)))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // Tickets this screen has never shown (the socket was down, or the tablet was asleep) are announced like any other.
+      const firstLoad = !initialLoadRef.current;
+      const unseen = incoming.filter(o => !seenIdsRef.current.has(String(o._id)));
+      incoming.forEach(o => seenIdsRef.current.add(String(o._id)));
+      initialLoadRef.current = true;
+      if (!firstLoad) {
+        unseen
+          .filter(o => (!o.status || o.status === 'pending') && (o.items || []).some(isKitchenItem))
+          .slice(0, 5).reverse().forEach(arriveTicket);
+      }
+
       setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
       setOrders(incoming);
-      if (catRes)  setCategories(catRes.data  || []);
-      if (menuRes) setMenuItems(menuRes.data  || []);
-      if (tenantRes?.data?.name)                              setTenantName(tenantRes.data.name);
-      if (tenantRes?.data?.config?.onlyVeg !== undefined)     setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
+      if (!ordersOnly) metaLoadedRef.current = true;
+      if (catRes) setCategories(catRes.data || []);
+      if (menuRes) setMenuItems(menuRes.data || []);
+      if (tenantRes?.data?.name) setTenantName(tenantRes.data.name);
+      if (tenantRes?.data?.config?.onlyVeg !== undefined) setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
       const hydrationMap = {};
-      incoming.forEach(o => o.items?.forEach((item,idx) => {
+      incoming.forEach(o => o.items?.forEach((item, idx) => {
         // Rehydrate from the persisted server state, not only the old local flag.
         // Otherwise a reload/device switch makes completed dishes look unfinished.
         if (item.isCrossedLocal || item.kdsCompletedAt) hydrationMap[`${o._id}-${idx}`] = true;
@@ -263,64 +715,13 @@ const KitchenViewInner = () => {
   };
 
   const retryBoardLoad = () => { setBoardState('loading'); fetchActiveOrders(); };
-
-  /* ── voice recognition ── */
-  const voiceHandlerRef = useRef(() => {});
-  const wantListeningRef = useRef(false);
-  const handleVoiceResult = e => {
-    const txt = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-    const hasTableWord = txt.includes('table') || txt.includes('टेबल');
-    const hasDoneWord  = /ready|complete|तयार|पूर्ण/.test(txt);
-    // "टेबल पाच तयार" (natural Marathi order) matched none of the fixed two-word phrases, so it was ignored.
-    const isCompleteCmd = (hasTableWord && hasDoneWord) || txt.includes('आर्डर तयार');
-    if (isCompleteCmd) {
-      // "ready table 5" / "complete table 5": the old regex took the word "table" itself as the table number, so the most
-      // natural English commands never matched an order. Strip the command words first, then read what is left.
-      const numWords = {
-        one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',ten:'10',
-        'एक':'1','दोन':'2','तीन':'3','चार':'4','पाच':'5','सहा':'6','सात':'7','आठ':'8','नऊ':'9','दहा':'10',
-        'दो':'2','पांच':'5','छह':'6','नौ':'9','दस':'10'
-      };
-      const left = txt.replace(/complete|ready|table|order|तयार|पूर्ण|आर्डर|ऑर्डर|टेबल|नंबर|number/giu, ' ');
-      const tokens = left.match(/[\p{L}\p{M}\p{N}]+/gu) || []; // \p{M}: Devanagari vowel signs, or "दहा" splits into "दह" + "ा"
-      let tNum = null;
-      for (const tok of tokens) { const t = tok.toLowerCase(); if (numWords[t]) { tNum = numWords[t]; break; } if (/^[a-z]?\d+[a-z]?$/i.test(t)) { tNum = t.toUpperCase(); break; } }
-      if (tNum) { const o = orders.find(x => String(x.tableNumber ?? '').toUpperCase() === String(tNum).toUpperCase()); if (o) markAsReady(o._id); }
-    }
-    if (txt.includes('recall last') || txt.includes('परत आण')) handleRecall();
-    if (txt.includes('show summary') || txt.includes('सारांश')) setIsAggregateView(v => !v);
-  };
-  voiceHandlerRef.current = handleVoiceResult; // always the latest closure (orders, recall queue)
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    // One recognizer for the lifetime of the screen. It used to be re-created on every orders/recallQueue change while the
-    // previous one kept listening, so a spoken "recall last" ran once per leaked recognizer (several tickets recalled) and
-    // Stop only reached the newest instance. The latest closure is read through a ref instead.
-    if (recognitionRef.current) return;
-    const rec = new SR();
-    rec.continuous = true; rec.interimResults = false; rec.lang = 'hi-IN';
-    rec.onresult = e => voiceHandlerRef.current(e);
-    // The browser ends continuous recognition after a stretch of silence. The mic indicator then flipped to "off" on its own
-    // (or stayed "on" while nothing listened). Restart while the chef still wants it; stop for good if the mic is blocked.
-    rec.onerror = (e) => { if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) { wantListeningRef.current = false; setIsListening(false); } };
-    rec.onend = () => {
-      if (wantListeningRef.current) setTimeout(() => { if (wantListeningRef.current) { try { rec.start(); } catch { /* already running */ } } }, 300);
-      else setIsListening(false);
-    };
-    recognitionRef.current = rec;
-    return () => { wantListeningRef.current = false; try { rec.abort(); } catch {} recognitionRef.current = null; }; // leaving the KDS left the mic recognizer running
-  }, []);
-
-  const toggleVoice = () => {
-    if (!recognitionRef.current) return alert('Speech recognition not supported.');
-    if (isListening) { wantListeningRef.current = false; try { recognitionRef.current.stop(); } catch {} setIsListening(false); }
-    else             { wantListeningRef.current = true; try { recognitionRef.current.start(); } catch { /* already running */ } setIsListening(true); }
-  };
+  const manualRefresh = async () => { setRefreshing(true); try { await fetchActiveOrders({ ordersOnly: metaLoadedRef.current }); } finally { setRefreshing(false); } };
 
   /* ── main effect: socket + initial fetch ── */
   useEffect(() => {
     if (!tenantId) { setBoardState('error'); return undefined; }
+    seenIdsRef.current = new Set();
+    initialLoadRef.current = false;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     // Blocked/throwing storage used to abort this whole effect, so the socket never connected and the KDS stayed empty.
     try {
@@ -337,56 +738,63 @@ const KitchenViewInner = () => {
     } catch { /* counters just start from zero */ }
     fetchActiveOrders();
 
-    const onOnline  = () => setIsOnline(true);
+    const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
-    window.addEventListener('online',  onOnline);
+    window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
 
-    const socket = io(SOCKET_BASE_URL, { transports: ['polling','websocket'], reconnection: true });
+    const socket = io(SOCKET_BASE_URL, { transports: ['polling', 'websocket'], reconnection: true });
     socketRef.current = socket;
     const joinRestaurant = () => socket.emit('join_restaurant', tenantId, getOperatorToken()); // staff room needs the token
     socket.on('connect', joinRestaurant);
     // Tickets/timings that changed while the socket was down are never replayed: resync on reconnect.
     let hasConnectedOnce = false;
-    socket.on('connect', () => { if (hasConnectedOnce) fetchActiveOrders(); hasConnectedOnce = true; });
-    socket.on('connect',    () => setIsOnline(true));
+    socket.on('connect', () => { if (hasConnectedOnce) fetchActiveOrders({ ordersOnly: metaLoadedRef.current }); hasConnectedOnce = true; });
+    socket.on('connect', () => setIsOnline(true));
     if (socket.connected) joinRestaurant();
     socket.on('disconnect', () => setIsOnline(false));
 
+    // The socket payload shows the ticket instantly; a moment later the server copy replaces it (timings, versions, customer details).
+    const scheduleReconcile = () => {
+      clearTimeout(reconcileRef.current);
+      reconcileRef.current = setTimeout(() => fetchActiveOrders({ ordersOnly: true }), 1500);
+    };
+
     socket.on('new_order', newOrder => {
-      if (newOrder.tenantId !== tenantId) return;
-      const kitchenItems = (newOrder.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
+      if (!newOrder || newOrder.tenantId !== tenantId) return;
+      const kitchenItems = (newOrder.items || []).filter(isKitchenItem);
       if (!kitchenItems.length) return;
       if (newOrder.status && newOrder.status !== 'pending') return;
       // Keep the FULL items array: kds-item timing calls use the index inside order.items on the
       // server, so stripping extra items here shifted every index and timed/crossed the wrong dish.
       // The card render already skips extra items.
       const cleanOrder = { ...newOrder };
-      setOrders(prev => prev.some(o => String(o._id) === String(cleanOrder._id)) ? prev : [cleanOrder, ...prev]);
+      const id = String(cleanOrder._id);
+      const alreadySeen = seenIdsRef.current.has(id);
+      seenIdsRef.current.add(id);
+      setOrders(prev => prev.some(o => String(o._id) === id) ? prev : [cleanOrder, ...prev]);
+      if (alreadySeen) return; // a poll already showed and announced it
       setMobileCardIndex(0);
-      const otype = getOrderType(cleanOrder);
-      if (otype === 'swiggy' || otype === 'zomato')
-        playCachedSound('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-      else audioPlayer.current?.play().catch(() => {});
-      speakOrder(cleanOrder);
+      arriveTicket(cleanOrder);
+      scheduleReconcile();
     });
 
     socket.on('kds_item_cross_sync', data => {
       if (data.tenantId !== tenantId) return;
       setOrders(prev => prev.map(o => {
         if (String(o._id) !== String(data.orderId)) return o;
-        const items = (o.items || []).map((it,i) => i === data.idx ? { ...it, isCrossedLocal: data.newState } : it);
+        const items = (o.items || []).map((it, i) => i === data.idx ? { ...it, isCrossedLocal: data.newState } : it);
         return { ...o, items };
       }));
     });
 
     socket.on('kds_item_timing_updated', data => {
-      if (!data || data.tenantId && data.tenantId !== tenantId) return;
+      if (!data || (data.tenantId && data.tenantId !== tenantId)) return;
       const itemIndex = Number(data.itemIndex);
       const itemPatch = data.item || {};
       setOrders(prev => prev.map(o => {
         if (String(o._id) !== String(data.orderId)) return o;
-        const items = (o.items || []).map((it,i) => i === itemIndex ? { ...it, ...itemPatch } : it);
+        const items = (o.items || []).map((it, i) => i === itemIndex ? { ...it, ...itemPatch } : it);
         return { ...o, items, ...(data.orderTiming || {}) };
       }));
       const key = `${data.orderId}-${itemIndex}`;
@@ -397,43 +805,59 @@ const KitchenViewInner = () => {
     });
 
     socket.on('order_modification_detected', data => {
-      if (data.tenantId !== tenantId) return;
-      alertPlayer.current?.play().catch(() => {});
+      if (!data || data.tenantId !== tenantId) return;
+      const p = voicePrefsRef.current;
+      if (p.chime) playAlertSound('waiter');
       let note = data.modificationNote;
+      let spoken = note ? String(note) : 'The order was changed';
       if (data.replaced) {
         // Customer changed the order inside the 2-minute window: spell out what changed for the chef.
-        const added = (data.items || []).filter(i => i.modChange === 'new').map(i => `${i.quantity}× ${i.name}`);
-        const qtyChanged = (data.items || []).filter(i => i.modChange === 'qty').map(i => `${i.name} ${i.modPrevQty}→${i.quantity}`);
-        const removed = (data.replacedInfo?.removed || []).map(i => `${i.quantity}× ${i.name}`);
+        const added = (data.items || []).filter(i => i.modChange === 'new');
+        const qtyChanged = (data.items || []).filter(i => i.modChange === 'qty');
+        const removed = data.replacedInfo?.removed || [];
         const parts = [];
-        if (added.length) parts.push(`ADDED: ${added.join(', ')}`);
-        if (qtyChanged.length) parts.push(`QTY: ${qtyChanged.join(', ')}`);
-        if (removed.length) parts.push(`REMOVED: ${removed.join(', ')}`);
+        const sp = [];
+        if (added.length) { parts.push(`ADDED: ${added.map(i => `${i.quantity}× ${i.name}`).join(', ')}`); sp.push(`Added ${added.map(i => `${i.quantity} ${i.name}`).join(', ')}`); }
+        if (qtyChanged.length) { parts.push(`QTY: ${qtyChanged.map(i => `${i.name} ${i.modPrevQty}→${i.quantity}`).join(', ')}`); sp.push(`Quantity changed. ${qtyChanged.map(i => `${i.name} from ${i.modPrevQty} to ${i.quantity}`).join(', ')}`); }
+        if (removed.length) { parts.push(`REMOVED: ${removed.map(i => `${i.quantity}× ${i.name}`).join(', ')}`); sp.push(`Removed ${removed.map(i => `${i.quantity} ${i.name}`).join(', ')}`); }
         note = `Customer REPLACED the order${parts.length ? ' — ' + parts.join(' · ') : ''}`;
+        spoken = `The customer replaced the order. ${sp.join('. ')}`;
         if (data.orderId) {
           const prefix = `${data.orderId}-`;
           setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
         }
       }
+      const where = data.tableNumber != null && String(data.tableNumber) !== '' ? `Table ${spokenTable(data.tableNumber)}` : 'An order';
+      later(() => announce(`Order change. ${where}. ${spoken}.`), p.chime ? 900 : 0);
       // Date.now() alone collided for two alerts in the same millisecond (duplicate React keys), and the list grew without bound.
       setInterceptedAlerts(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...data, modificationNote: note }, ...prev].slice(0, 25));
       fetchActiveOrders({ ordersOnly: true });
     });
 
+    // A ticket that disappears because the order was cancelled / voided must be said out loud: otherwise the cook keeps making it.
+    const removeAndNotify = (orderId, withNotice) => {
+      const gone = ordersRef.current.find(o => String(o._id) === String(orderId));
+      setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
+      if (gone && withNotice) {
+        const p = voicePrefsRef.current;
+        pushToast({ kind: 'cancel', title: `CANCELLED · ${ticketLabel(gone)}`, body: 'This ticket was cancelled. Stop preparing it.' });
+        if (p.chime) playAlertSound('cancelled');
+        later(() => announce(`Cancelled. ${spokenWho(gone)} was cancelled. Stop preparing it.`), p.chime ? 1200 : 0);
+      }
+    };
+
     // Orders can be advanced by another KDS/operator device. Remove them from
     // this pending queue immediately instead of waiting for a refresh.
     socket.on('order_status_updated', data => {
-      if (!data || data.tenantId && data.tenantId !== tenantId) return;
+      if (!data || (data.tenantId && data.tenantId !== tenantId)) return;
       const orderId = data._id || data.orderId;
       if (!orderId) return;
-      if (data.status && data.status !== 'pending') {
-        setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
-      }
+      if (data.status && data.status !== 'pending') removeAndNotify(orderId, ['cancelled', 'rejected', 'voided'].includes(String(data.status).toLowerCase()));
     });
     socket.on('order_voided', data => {
       if (!data) return;
       const orderId = data.orderId || data._id;
-      if (orderId) setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
+      if (orderId) removeAndNotify(orderId, true);
     });
 
     // ── Keep menu availability live — an item 86'd or restored from the
@@ -452,25 +876,31 @@ const KitchenViewInner = () => {
     socket.on('menu_bulk_updated', items => { if (Array.isArray(items)) setMenuItems(items); });
 
     // A tablet that slept / lost Wi-Fi can have a socket that is dead without ever firing "disconnect", so tickets sent in
-    // the meantime never appeared. Resync when the screen wakes up, and as a slow safety net while it is visible.
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchActiveOrders({ ordersOnly: true }); };
+    // the meantime never appeared. Resync when the screen wakes up, and keep a safety net while it is visible:
+    // every 10 s while the socket is down, otherwise only when nothing has been fetched for 45 s.
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchActiveOrders({ ordersOnly: metaLoadedRef.current }); };
     document.addEventListener('visibilitychange', onVisible);
-    const safetyPoll = setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) fetchActiveOrders({ ordersOnly: true }); }, 60000);
+    const safetyPoll = setInterval(() => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      const age = Date.now() - lastFetchAtRef.current;
+      if ((!socket.connected && age > 9000) || age > 45000) fetchActiveOrders({ ordersOnly: metaLoadedRef.current });
+    }, 10000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(safetyPoll);
-      ['new_order','kds_item_cross_sync','kds_item_timing_updated','order_modification_detected','order_status_updated','order_voided','menu_updated','menu_item_deleted','menu_item_restored','menu_bulk_updated']
+      clearTimeout(reconcileRef.current);
+      ['new_order', 'kds_item_cross_sync', 'kds_item_timing_updated', 'order_modification_detected', 'order_status_updated', 'order_voided', 'menu_updated', 'menu_item_deleted', 'menu_item_restored', 'menu_bulk_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
       socket.disconnect();
-      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   /* ── actions ── */
-  const [processingOrderIds, setProcessingOrderIds] = useState(new Set());
   // Fold the server's authoritative copy of one dish (incl. kdsTimingVersion) back into state. Without this the next tap
   // sent a stale version, got a 409, and the handler reverted the chef's click until a socket event happened to arrive.
   const mergeServerItem = useCallback((orderId, idx, item, orderTiming) => {
@@ -486,8 +916,10 @@ const KitchenViewInner = () => {
     if (processingOrderIds.has(orderId)) return; // block a double-tap while the request is in flight
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
+    const idKey = String(orderId);
     setProcessingOrderIds(prev => new Set(prev).add(orderId));
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
+    dispatchedRef.current.add(idKey); // a fetch that was already in flight must not bring this ticket back
     // Do not count client-side ticket age as kitchen prep time. Server timing is
     // authoritative and is what Owner/Operator analytics consume.
     if (mobileCardIndex > 0) setMobileCardIndex(i => i - 1);
@@ -496,17 +928,19 @@ const KitchenViewInner = () => {
     setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
       const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
+      later(() => dispatchedRef.current.delete(idKey), 90000);
       fetchHealth(); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
         // localStorage can throw (private mode / quota). Inside a state updater that crashed the screen, and in this try it
         // wrongly put an already-dispatched ticket back on the board.
         setRecallQueue(prev => prev.map(o => o._id === orderId ? { ...o, _kdsCountedSeconds: authoritativeSeconds } : o));
-        setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
-        setCompletedTicketsCount(prev => { const n = prev + 1; try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch {} return n; });
+        setTotalProcessingTime(prev => { const n = prev + authoritativeSeconds; try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch { /* ignore */ } return n; });
+        setCompletedTicketsCount(prev => { const n = prev + 1; try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch { /* ignore */ } return n; });
       }
     } catch (err) {
       console.error(err);
+      dispatchedRef.current.delete(idKey);
       setRecallQueue(prev => prev.filter(o => o._id !== orderId));
       // The order no longer exists / was voided or settled elsewhere: putting the ticket back left a dead card that could
       // never be dispatched. Anything else (network, 5xx) is restored so the chef can try again.
@@ -535,14 +969,15 @@ const KitchenViewInner = () => {
       setRecallQueue(prev => prev.slice(1));
       return;
     }
+    dispatchedRef.current.delete(String(recalled._id));
     // Use the server's copy, not the snapshot taken when the ticket was dispatched (stale items / crossed state).
     const fresh = recallRes.data.order || recalled;
     setOrders(prev => prev.some(o => String(o._id) === String(recalled._id)) ? prev : [fresh, ...prev]);
     setRecallQueue(prev => prev.slice(1));
-    setCompletedTicketsCount(prev => { const n = Math.max(0,prev-1); try { localStorage.setItem(`kds_completed_count_${tenantId}`,n); } catch {} return n; });
+    setCompletedTicketsCount(prev => { const n = Math.max(0, prev - 1); try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch { /* ignore */ } return n; });
     // The average is total/count, so the recalled ticket's time has to leave the total together with its count.
     const counted = Number(recalled._kdsCountedSeconds);
-    if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch {} return n; });
+    if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch { /* ignore */ } return n; });
     fetchHealth(); // the database-backed dispatched / average figures still counted the recalled ticket
   };
 
@@ -552,7 +987,6 @@ const KitchenViewInner = () => {
     setSelectedReason86('ran_out');
   };
 
-  const confirm86Busy = useRef(false);
   const confirm86 = async () => {
     if (!selectedDish86 || confirm86Busy.current) return; // a double-tap sent the same PATCH twice
     confirm86Busy.current = true;
@@ -562,7 +996,7 @@ const KitchenViewInner = () => {
         isAvailable: false,
         outOfStockReason: selectedReason86,
         outOfStockAt: new Date().toISOString(),
-        outOfStockBy: 'Kitchen'
+        outOfStockBy: 'Kitchen',
       });
       setEightySixModal(null);
       setSelectedDish86(null);
@@ -570,12 +1004,6 @@ const KitchenViewInner = () => {
     } catch { alert('Could not update item.'); }
     finally { confirm86Busy.current = false; }
   };
-
-  const EIGHTY_SIX_REASONS = [
-    { id: 'ran_out',            label: 'Ran Out',           icon: PackageX },
-    { id: 'quality_issue',      label: 'Quality Issue',     icon: ShieldAlert },
-    { id: 'equipment_failure',  label: 'Equipment Failure', icon: Wrench },
-  ];
 
   /* ── derived maps ── */
   const dishToVegMap = useMemo(() => {
@@ -595,38 +1023,53 @@ const KitchenViewInner = () => {
     menuItems.forEach(item => {
       const cId = item.categoryId?.toLowerCase().trim();
       if (!cId) return;
-      if (!p[cId]) p[cId] = { hasVeg:false, hasNonVeg:false };
+      if (!p[cId]) p[cId] = { hasVeg: false, hasNonVeg: false };
       if (item.isVeg !== false) p[cId].hasVeg = true; else p[cId].hasNonVeg = true;
     });
     return p;
   }, [menuItems]);
 
+  const stationMatches = (otype, station) => {
+    if (station === 'DINEIN') return otype === 'dine-in';
+    if (station === 'PARCEL') return otype === 'parcel';
+    if (station === 'DELIVERY') return otype === 'swiggy' || otype === 'zomato';
+    return true;
+  };
+
+  const stationCounts = useMemo(() => {
+    const c = { ALL: 0, DINEIN: 0, PARCEL: 0, DELIVERY: 0 };
+    orders.forEach(o => {
+      if (!(o.items || []).some(isKitchenItem)) return;
+      c.ALL++;
+      const t = getOrderType(o);
+      if (t === 'dine-in') c.DINEIN++; else if (t === 'parcel') c.PARCEL++; else c.DELIVERY++;
+    });
+    return c;
+  }, [orders]);
+  const pendingCount = stationCounts.ALL;
+
   const categoryPendingCounts = useMemo(() => {
     const counts = {};
     orders.forEach(order => {
-      if (!['pending','ready'].includes(order.status)) return;
-      const otype = getOrderType(order);
-      if (stationFilter === 'DINEIN'  && otype !== 'dine-in') return;
-      if (stationFilter === 'PARCEL'  && otype !== 'parcel')  return;
-      (order.items || []).forEach((item,idx) => {
-        if (item.isExtraItem || item.extraItemId != null) return;
+      if (!['pending', 'ready'].includes(order.status)) return;
+      if (!stationMatches(getOrderType(order), stationFilter)) return;
+      (order.items || []).forEach((item, idx) => {
+        if (!isKitchenItem(item)) return;
         const fId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
         if (!fId) return;
         const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
         const matches = isNonVegMode ? !isVeg : isVeg;
-        if (matches && !checkedItemsGlobal[`${order._id}-${idx}`]) counts[fId] = (counts[fId]||0) + (Number(item.quantity)||1);
+        if (matches && !checkedItemsGlobal[`${order._id}-${idx}`]) counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 1);
       });
     });
     return counts;
   }, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const hasKitchenItems = order.items?.some(i => !i.isExtraItem && i.extraItemId == null);
-      if (!hasKitchenItems) return false;
+    const list = orders.filter(order => {
+      if (!(order.items || []).some(isKitchenItem)) return false;
       const otype = getOrderType(order);
-      if (stationFilter === 'DINEIN' && otype !== 'dine-in') return false;
-      if (stationFilter === 'PARCEL' && otype !== 'parcel')  return false;
+      if (!stationMatches(otype, stationFilter)) return false;
       if (isNonVegMode) {
         const hasNV = (order.items || []).some(item => {
           const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
@@ -638,7 +1081,7 @@ const KitchenViewInner = () => {
       if (selectedCategory !== 'ALL' && !isAgg) {
         const sel = selectedCategory.toLowerCase().trim();
         const hasMatch = order.items?.some(item => {
-          if (item.isExtraItem || item.extraItemId != null) return false;
+          if (!isKitchenItem(item)) return false;
           const cId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || '';
           return cId === sel;
         });
@@ -646,28 +1089,29 @@ const KitchenViewInner = () => {
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchTable  = order.tableNumber?.toString().toLowerCase().includes(q);
+        const matchTable = order.tableNumber?.toString().toLowerCase().includes(q);
         const matchSource = order.source?.toLowerCase().includes(q);
-        const matchItem   = order.items?.some(i => i.name?.toLowerCase().includes(q));
+        const matchItem = order.items?.some(i => i.name?.toLowerCase().includes(q));
         if (!matchTable && !matchSource && !matchItem) return false;
       }
       return true;
     });
-  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery]);
+    return sortOldest ? [...list].reverse() : list; // `orders` is kept newest-first
+  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery, sortOldest]);
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
     // Built from filteredOrders + the card's own visibility rule: it used every order and every dish, so the totals disagreed
     // with the "N tickets" label beside them and with the dishes actually shown on the cards.
     const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
-    filteredOrders.forEach(o => (o.items || []).forEach((i,idx) => {
+    filteredOrders.forEach(o => (o.items || []).forEach((i, idx) => {
       if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const otype = getOrderType(o);
       const isP = otype === 'parcel';
       const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? ` (${i.portion})` : '';
       const key = `${i.name}${portion}__${isP ? 'P' : 'D'}`;
-totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
+      totals[key] = (totals[key] || 0) + (Number(i.quantity) || 1);
     }));
     return totals;
   }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
@@ -675,12 +1119,12 @@ totals[key] = (totals[key]||0) + (Number(i.quantity)||1);
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
     const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
-    filteredOrders.forEach(o => (o.items || []).forEach((i,idx) => {
+    filteredOrders.forEach(o => (o.items || []).forEach((i, idx) => {
       if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
-m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
+      m[i.name] = (m[i.name] || 0) + (Number(i.quantity) || 1);
     }));
-    return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,7);
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
 
   // Prefer the database figures (same on every KDS device and in the Owner app); the localStorage counters stay
@@ -692,7 +1136,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
       : (completedTicketsCount ? Math.floor(totalProcessingTime / completedTicketsCount) : 0);
     if (!avg) return '—';
     const a = Math.round(Number(avg));
-    return `${Math.floor(a/60)}m ${a%60}s`; // avgSeconds can be fractional: "3m 12.4285s" was shown
+    return `${Math.floor(a / 60)}m ${a % 60}s`; // avgSeconds can be fractional: "3m 12.4285s" was shown
   }, [totalProcessingTime, completedTicketsCount, serverKdsToday]);
 
   const visibleCategories = useMemo(() => {
@@ -709,7 +1153,7 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
   /* ── wastage ── */
   const fetchWastageInventory = useCallback(async () => {
-    try { const r = await axios.get(`${BASE_URL}/inventory/${tenantId}`, { timeout: 12000 }); setWastageInventory(r.data||[]); } catch { setWastageInventory([]); }
+    try { const r = await axios.get(`${BASE_URL}/inventory/${tenantId}`, { timeout: 12000 }); setWastageInventory(r.data || []); } catch { setWastageInventory([]); }
   }, [tenantId]);
   const fetchWastageLog = useCallback(async () => {
     setWastageLoading(true);
@@ -719,22 +1163,22 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
     finally { setWastageLoading(false); }
   }, [tenantId]);
   const fetchWastageAnalytics = useCallback(async () => {
-    try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`, { timeout: 12000 }); setWastageAnalytics(r.data||null); } catch { setWastageAnalytics(null); }
+    try { const r = await axios.get(`${BASE_URL}/wastage/analytics/${tenantId}`, { timeout: 12000 }); setWastageAnalytics(r.data || null); } catch { setWastageAnalytics(null); }
   }, [tenantId]);
-  useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); } }, [showWastagePanel]);
-  useEffect(() => { if (showWastagePanel && wastageTab==='report') fetchWastageAnalytics(); }, [wastageTab, showWastagePanel]);
+  useEffect(() => { if (showWastagePanel) { fetchWastageInventory(); fetchWastageLog(); } }, [showWastagePanel, fetchWastageInventory, fetchWastageLog]);
+  useEffect(() => { if (showWastagePanel && wastageTab === 'report') fetchWastageAnalytics(); }, [wastageTab, showWastagePanel, fetchWastageAnalytics]);
 
   const saveWastageEntry = async () => {
-    const { itemName,quantity,unit,reason,loggedBy } = wastageForm;
+    const { itemName, quantity, unit, reason, loggedBy } = wastageForm;
     // "0" is a truthy string and slipped through; the server then refused it and the chef saw nothing happen.
     if (!itemName.trim() || !(Number(quantity) > 0) || !loggedBy.trim()) { setWastageError('Enter an item, a quantity above 0 and your name.'); return; }
     setWastageSaving(true); setWastageError('');
     try {
       await axios.post(`${BASE_URL}/wastage/${tenantId}`, {
-        itemName: itemName.trim(), inventoryId: wastageForm.inventoryId||undefined,
-        quantity: Number(quantity), unit, reason, loggedBy: loggedBy.trim(), notes: wastageForm.notes||''
+        itemName: itemName.trim(), inventoryId: wastageForm.inventoryId || undefined,
+        quantity: Number(quantity), unit, reason, loggedBy: loggedBy.trim(), notes: wastageForm.notes || '',
       });
-      setWastageForm(p => ({ itemName:'', inventoryId:null, quantity:'', unit:'kg', reason:'Spoiled / Expired', loggedBy:p.loggedBy, notes:'' }));
+      setWastageForm(p => ({ itemName: '', inventoryId: null, quantity: '', unit: 'kg', reason: 'Spoiled / Expired', loggedBy: p.loggedBy, notes: '' }));
       setWastageSuggestions([]); setShowWastageSuggest(false);
       fetchWastageLog(); fetchWastageInventory();
     } catch (err) { console.error(err.message); setWastageError(err?.response?.data?.error || 'Could not log wastage. Check the connection and try again.'); }
@@ -747,439 +1191,356 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
     catch (err) { setWastageError(err?.response?.data?.error || 'Could not remove the entry. Try again.'); }
   };
 
+  const toggleSort = () => setSortOldest(v => { const n = !v; try { localStorage.setItem('kds_sort_oldest', n ? '1' : '0'); } catch { /* ignore */ } return n; });
+  const todayWastageCount = wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length;
+
   /* ── breakpoint helpers ── */
-  const showDrawerToggle  = isMobile || isSmallTablet;
-  const showPermanentSide = isLargeTablet || isDesktop;
-  const useCardView       = isMobile;
-  const safeCardIndex     = Math.min(mobileCardIndex, Math.max(0, filteredOrders.length - 1));
-  const swipeHandlers     = useSwipe(
+  const showDrawerToggle = isMobile || isSmallTablet;
+  const showPermanentSide = isLargeTablet || w >= 1200;
+  const useCardView = isMobile;
+  const safeCardIndex = Math.min(mobileCardIndex, Math.max(0, filteredOrders.length - 1));
+  const swipeHandlers = useSwipe(
     () => setMobileCardIndex(i => Math.min(i + 1, filteredOrders.length - 1)),
     () => setMobileCardIndex(i => Math.max(i - 1, 0))
   );
+  const gridCol = isSmallTablet ? 280 : 320;
+  const cardProps = {
+    onReady: markAsReady, dishToCategoryMap, dishToVegMap, selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
+    socketInstance: socketRef.current, isNonVegMode, tenantOnlyVeg, itemFinalTimes, setItemFinalTimes, onItemSynced: mergeServerItem, onSpeak: speakTicket,
+  };
 
-  const gridCols = isMobile ? 1 : isSmallTablet ? 2 : isLargeTablet ? 3 : 3;
+  /* ─── SECTIONS RAIL (permanent on wide screens, drawer on phones / small tablets) ─── */
+  const renderRail = (inDrawer = false) => {
+    const closeIf = () => { if (inDrawer) setSidebarOpen(false); };
+    const allSel = selectedCategory === 'ALL' && !showMetricsDashboard;
+    return (
+      <>
+        <div className="kx-rail-h">
+          <div className="ic"><Layers size={15} /></div>
+          <span className="kx-eyebrow">Sections</span>
+          {inDrawer && <button type="button" className="kx-ib" aria-label="Close" onClick={() => setSidebarOpen(false)} style={{ height: 36, minWidth: 36, padding: 0 }}><X size={15} /></button>}
+        </div>
 
-  /* ─── SIDEBAR CONTENT ─────────────────────────────────────────── */
-  const SidebarContent = ({ inDrawer = false }) => (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', gap:0 }}>
-      {/* top */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:14, borderBottom:'1px solid rgba(255,255,255,0.116)', marginBottom:14, flexShrink:0 }}>
-        <div style={rs.sidebarHeaderIcon}><Layers size={14} color="#cfcac0" /></div>
-        <span style={{ fontSize:'0.56rem', fontWeight:900, color:'rgba(211,191,162,0.59)', letterSpacing:'2.5px', flex:1, textTransform:'uppercase' }}>STATIONS</span>
-        {inDrawer && (
-          <button type="button" onClick={() => setSidebarOpen(false)} style={{ background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.165)', color:'#a2a2a2', cursor:'pointer', padding:'7px', borderRadius:8, display:'flex', alignItems:'center', transition:'all 0.15s' }}>
-            <X size={14} />
-          </button>
+        {!tenantOnlyVeg && (
+          <div className="kx-vegseg">
+            {[false, true].map(nv => (
+              <button type="button" key={String(nv)} className={isNonVegMode === nv ? `on ${nv ? 'n' : 'v'}` : ''}
+                onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}>
+                <span className={`kx-vd${nv ? ' n' : ''}`}><i /></span>{nv ? 'NON-VEG' : 'VEG'}
+              </button>
+            ))}
+          </div>
         )}
-      </div>
 
-      {/* veg / non-veg toggle */}
-      {!tenantOnlyVeg && (
-        <div style={{ display:'flex', background:'#171717', borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', padding:3, marginBottom:10, flexShrink:0 }}>
-          {[false,true].map(nv => (
-            <button type="button" key={String(nv)} onClick={() => { setIsNonVegMode(nv); setSelectedCategory('ALL'); }}
-              style={{ flex:1, padding:'7px 4px', borderRadius:7, border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all 0.15s',
-                background: isNonVegMode===nv ? (nv ? 'rgba(163,59,59,0.12)' : 'rgba(74,124,63,0.16)') : 'transparent',
-                color: isNonVegMode===nv ? (nv ? '#a33b3b' : '#3f6b37') : '#a6a6a6' }}>
-              <div style={{ width:10, height:10, border:`1.5px solid ${isNonVegMode===nv ? (nv?'#a33b3b':'#3f6b37') : '#8f928a'}`, borderRadius:nv?2:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {nv ? <div style={{ width:0, height:0, borderLeft:'2.5px solid transparent', borderRight:'2.5px solid transparent', borderBottom:`4.5px solid ${isNonVegMode?'#a33b3b':'#8f928a'}` }} />
-                    : <div style={{ width:4, height:4, borderRadius:'50%', background:!isNonVegMode?'#3f6b37':'#8f928a' }} />}
-              </div>
-              {nv ? 'NON-VEG' : 'VEG'}
+        {boardState === 'loading' && orders.length === 0 ? <KdsSidebarSkeleton /> : (
+          <div className="kx-rail-list no-scrollbar">
+            <button type="button" className={`kx-nav${allSel ? ' on' : ''}`} onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); closeIf(); }}>
+              <span className="t"><Coffee size={14} /><span>ALL SECTIONS</span></span>
+              <span className="r"><span className={`kx-ct${pendingCount > 0 ? ' hot' : ''}`}>{pad2(pendingCount)}</span></span>
             </button>
-          ))}
-        </div>
-      )}
+            {visibleCategories.map(cat => {
+              const k = cat.categoryId?.toLowerCase().trim() || '';
+              const count = categoryPendingCounts[k] || 0;
+              const sel = selectedCategory === k && !showMetricsDashboard;
+              return (
+                <button type="button" key={cat._id} className={`kx-nav${sel ? ' on' : ''}`} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); closeIf(); }}>
+                  <span className="t"><Flame size={14} color={count > 0 ? '#d3bfa2' : undefined} /><span style={{ textTransform: 'uppercase' }}>{cat.name}</span></span>
+                  <span className="r">
+                    <span role="button" tabIndex={0} className="kx-86" title={`86 a dish in "${cat.name}"`} aria-label={`86 a dish in ${cat.name}`}
+                      onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); trigger86(k, cat.name); } }}>
+                      <EyeOff size={12} />
+                    </span>
+                    <span className={`kx-ct${count > 0 ? ' hot' : ''}`}>{pad2(count)}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-      {/* section list */}
-      {boardState === 'loading' && orders.length === 0 ? <KdsSidebarSkeleton /> : (
-      <div style={{ display:'flex', flexDirection:'column', gap:4, overflowY:'auto', flex:1 }} className="no-scrollbar">
-        {/* ALL */}
-        {(() => {
-          const sel = selectedCategory === 'ALL' && !showMetricsDashboard;
-          const total = orders.filter(o => ['pending','ready'].includes(o.status)).length;
-          return (
-            <button type="button" onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <Coffee size={12} color={sel?'#f7f3eb':'#a2a2a2'} />
-                <span>ALL SECTIONS</span>
-              </div>
-              <span style={{ ...rs.countChip(sel, total>0), minWidth:24, textAlign:'center' }}>{total<10?`0${total}`:total}</span>
-            </button>
-          );
-        })()}
-
-        {visibleCategories.map(cat => {
-          const k = cat.categoryId?.toLowerCase().trim() || '';
-          const count = categoryPendingCounts[k] || 0;
-          const sel = selectedCategory === k && !showMetricsDashboard;
-          return (
-            <button type="button" key={cat._id} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(sel), justifyContent:'space-between' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-                <Flame size={12} color={sel?'#f7f3eb':count>0?'#cfcac0':'#9a9a9a'} style={{ flexShrink:0 }} />
-                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase', fontSize:'0.62rem' }}>{cat.name}</span>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-                <span title={`86 a dish in "${cat.name}"`} onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
-                  style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.116)', borderRadius:4, cursor:'pointer', color:'#9a9a9a', transition:'0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.45)'; e.currentTarget.style.color='#cfcac0'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; e.currentTarget.style.color='#9a9a9a'; }}>
-                  <EyeOff size={9} />
-                </span>
-                <span style={{ ...rs.countChip(sel, count>0), minWidth:22, textAlign:'center' }}>{count<10?`0${count}`:count}</span>
-              </div>
-            </button>
-          );
-        })}
-
-        {/* Speed Logs node */}
-        <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.099)', display:'flex', flexDirection:'column', gap:4 }}>
-          <button type="button" onClick={() => { setShowMetricsDashboard(true); setSidebarOpen(false); }} style={{ ...rs.sidebarBtn(showMetricsDashboard), justifyContent:'space-between' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <TrendingUp size={12} color={showMetricsDashboard?'#f7f3eb':'#a2a2a2'} />
-              SPEED LOGS
-            </div>
-            {dispatchedToday > 0 && (
-              <span style={{ ...rs.countChip(showMetricsDashboard, true) }}>{dispatchedToday}</span>
-            )}
+        <div className="kx-rail-f">
+          <button type="button" className={`kx-nav${showMetricsDashboard ? ' on' : ''}`} onClick={() => { setShowMetricsDashboard(true); closeIf(); }}>
+            <span className="t"><TrendingUp size={14} /><span>SPEED LOGS</span></span>
+            {dispatchedToday > 0 && <span className="r"><span className="kx-ct hot">{dispatchedToday}</span></span>}
           </button>
-          {/* Refresh */}
-          <button type="button" onClick={fetchActiveOrders} style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 10px', borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', background:'transparent', color:'#9a9a9a', cursor:'pointer', fontSize:'0.6rem', fontWeight:900, width:'100%', transition:'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.color='#cfcac0'; e.currentTarget.style.borderColor='rgba(255,255,255,0.209)'; }}
-            onMouseLeave={e => { e.currentTarget.style.color='#9a9a9a'; e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; }}>
-            <RefreshCw size={12} /> REFRESH ORDERS
+          <button type="button" className="kx-nav" onClick={() => { setShowWastagePanel(true); closeIf(); }}>
+            <span className="t"><Trash2 size={14} /><span>WASTAGE LOG</span></span>
+            {todayWastageCount > 0 && <span className="r"><span className="kx-ct hot">{todayWastageCount}</span></span>}
           </button>
+          <button type="button" className="kx-nav" onClick={() => { manualRefresh(); closeIf(); }}>
+            <span className="t"><RefreshCw size={14} className={refreshing ? 'spin' : undefined} /><span>REFRESH TICKETS</span></span>
+          </button>
+          <SupportContact style={{ marginBottom: 2 }} />
+          <PwaInstallButton kind="kitchen" compact />
         </div>
-      </div>
-      )}
-      <div style={{ paddingTop:10, marginTop:10, borderTop:'1px solid rgba(255,255,255,0.099)', flexShrink:0 }}>
-        <SupportContact style={{ marginBottom: 8 }} />
-        <PwaInstallButton kind="kitchen" compact light />
-      </div>
-    </div>
-  );
+      </>
+    );
+  };
+
+  const wastageDisabled = wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim();
+  const dishesFor86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false) : [];
 
   /* ═══════════════════════════════════════════════════════════
      RENDER
   ═══════════════════════════════════════════════════════════ */
   return (
-    <div style={rs.root}>
-      {boardState === 'loading' && <KdsSkeletonCss />}
-      <audio ref={audioPlayer} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
-      <audio ref={alertPlayer} src="https://assets.mixkit.co/active_storage/sfx/911/911-preview.mp3"  preload="auto" />
+    <div className="kx">
+      <style>{KX_CSS}</style>
+      {boardState === 'loading' && <span role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Loading kitchen tickets…</span>}
+
       {!audioUnlocked && (
-        <div style={{ position:'fixed', left:'50%', bottom:16, transform:'translateX(-50%)', zIndex:4000, padding:'9px 16px', borderRadius:99, background:'#17120c', color:'#f1e3c4', border:'1px solid rgba(233,220,195,0.5)', fontSize:'0.66rem', fontWeight:900, letterSpacing:'0.6px', boxShadow:'0 8px 28px rgba(0,0,0,0.55)', pointerEvents:'none' }}>
-          🔇 TAP ANYWHERE TO ENABLE ORDER SOUNDS &amp; VOICE
-        </div>
+        <div className="kx-unlock" role="status"><Volume2 size={15} /> Touch the screen once to switch on ticket sounds &amp; voice</div>
       )}
 
-      {/* ── DRAWER OVERLAY ── */}
+      {/* ── NEW TICKET / CANCELLED CALL-OUTS ── */}
+      <div className="kx-toasts" aria-live="assertive">
+        <AnimatePresence>
+          {toasts.map(t => (
+            <motion.div key={t.id} layout initial={{ opacity: 0, y: -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className={`kx-toast${t.kind === 'cancel' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
+              <div className="ic">{t.kind === 'cancel' ? <AlertTriangle size={19} /> : <BellRing size={20} color="#d3bfa2" />}</div>
+              <div style={{ minWidth: 0 }}><b>{t.title}</b><p>{t.body}</p></div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* ── SECTIONS DRAWER ── */}
       <AnimatePresence>
         {sidebarOpen && showDrawerToggle && (
           <>
-            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-              onClick={() => setSidebarOpen(false)}
-              style={{ position:'fixed', inset:0, background:'rgba(8,8,10,0.714)', zIndex:90, backdropFilter:'blur(3px)' }} />
-            <motion.aside initial={{ x:-310 }} animate={{ x:0 }} exit={{ x:-310 }}
-              transition={{ type:'spring', stiffness:320, damping:32 }}
-              style={{ ...rs.sidebar, position:'fixed', left:0, top:0, bottom:0, width: isSmallTablet?290:270, borderRadius:'0 16px 16px 0', zIndex:100, padding:'18px 14px' }}>
-              {SidebarContent({ inDrawer: true })}
+            <motion.div className="kx-scrim" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} />
+            <motion.aside className="kx-rail drawer" initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
+              {renderRail(true)}
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
       {/* ══════════════ HEADER ══════════════ */}
-      <header style={rs.header}>
-        {/* Left: menu + brand */}
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          {showDrawerToggle && (
-            <button type="button" onClick={() => setSidebarOpen(true)} style={rs.iconBtn}>
-              <AlignJustify size={18} color="#cfcac0" />
-            </button>
-          )}
-          <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            <div style={{ width:isMobile?28:34, height:isMobile?28:34, borderRadius:10, background:'rgba(255,255,255,0.099)', border:'1px solid rgba(211,191,162,0.42)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <ChefHat size={isMobile?15:18} color="#cfcac0" />
-            </div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ background:'#f7f3eb', borderRadius:9, padding:'3px 7px', border:'1px solid rgba(211,191,162,0.5)', boxShadow:'0 6px 18px -8px rgba(211,191,162,0.4)' }}>
-                  <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{ width:isMobile?105:130, height:'auto', display:'block' }} />
-                </div>
-                <span style={{ color:'rgba(211,191,162,0.75)', fontWeight:800, letterSpacing:'1.5px', fontSize:'0.62rem' }}>KDS</span>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
-                <span style={isOnline ? rs.dotGold : rs.dotRed} />
-                <span style={{ color:'#9a9a9a', fontSize:'0.5rem', fontWeight:900, letterSpacing:'1.5px' }}>
-                  {isOnline
-                    ? (isMobile ? 'LIVE' : tenantName ? tenantName.toUpperCase() : 'KITCHEN — ONLINE')
-                    : <span style={{ color:'#e29a58', display:'inline-flex', alignItems:'center', gap:3 }}><WifiOff size={9} /> DISCONNECTED</span>}
-                </span>
-              </div>
-            </div>
+      <header className="kx-top">
+        <div className="kx-brand">
+          {showDrawerToggle && <button type="button" className="kx-ib" aria-label="Open sections" onClick={() => setSidebarOpen(true)}><AlignJustify size={18} /></button>}
+          <div className="kx-logo"><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div>
+          <div className="kx-brand-t">
+            <span className="kx-kds"><ChefHat size={12} /> Kitchen display</span>
+            <span className={`kx-live${isOnline ? '' : ' off'}`}>
+              <i className="kx-dot" />
+              {isOnline ? (isMobile ? 'Live' : `Live${tenantName ? ` · ${tenantName}` : ''}`) : <><WifiOff size={11} /> Reconnecting…</>}
+            </span>
           </div>
         </div>
 
-        {/* Right: action cluster */}
-        <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, overflowX:'auto', scrollbarWidth:'none', msOverflowStyle:'none' }}>
+        {!isMobile && (
+          <div className="kx-seg" role="tablist" aria-label="Station">
+            {STATIONS.map(s => (
+              <button type="button" key={s.val} role="tab" aria-selected={stationFilter === s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
+                <s.Icon size={13} /><span className="lb">{s.lbl}</span>{stationCounts[s.val] > 0 && <span className="n">{stationCounts[s.val]}</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
-          {/* Station filter — tablet/desktop */}
-          {!isMobile && (
-            <div style={{ display:'flex', background:'#171717', padding:3, borderRadius:9, border:'1px solid rgba(255,255,255,0.132)', flexShrink:0 }}>
-              {[
-                { val:'ALL',    lbl:'ALL',      icon:<Monitor size={11} /> },
-                { val:'DINEIN', lbl:'DINE-IN',  icon:<UtensilsCrossed size={11} /> },
-                { val:'PARCEL', lbl:'PARCEL',   icon:<Package size={11} /> },
-              ].map(s => (
-                <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ padding:'6px 11px', background: stationFilter===s.val ? 'rgba(255,255,255,0.165)' : 'transparent', border:'none', color: stationFilter===s.val ? '#cfcac0' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', borderRadius:7, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', transition:'all 0.15s' }}>
-                  <span style={{ color: stationFilter===s.val ? '#cfcac0' : '#9a9a9a' }}>{s.icon}</span>
-                  {s.lbl}
-                </button>
-              ))}
+        <div className="kx-stats">
+          <div className={`kx-stat${pendingCount > 0 ? ' hot' : ''}`}><b>{pad2(pendingCount)}</b><span>Pending</span></div>
+          <div className="kx-stat opt"><b style={{ fontSize: '1rem', paddingTop: 2 }}>{avgClearTime}</b><span>Avg clear</span></div>
+          <div className="kx-stat opt"><b>{dispatchedToday}</b><span>Done today</span></div>
+        </div>
+
+        <div className="kx-acts">
+          {isMobile && (
+            <div className={`kx-stat${pendingCount > 0 ? ' hot' : ''}`} style={{ minWidth: 56, padding: '5px 9px' }} title={isOnline ? 'Live' : 'Reconnecting'}>
+              <b style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <i className="kx-dot" style={isOnline ? undefined : { background: '#e29a58', animation: 'none' }} />{pad2(pendingCount)}
+              </b>
             </div>
           )}
-
-          {/* Search toggle */}
-          <button type="button" onClick={() => setShowSearch(v => !v)} style={{ ...rs.utilBtn, borderColor: showSearch ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)', background: showSearch ? 'rgba(255,255,255,0.116)' : '#121212' }}>
-            <Search size={14} color={showSearch?'#cfcac0':'#a2a2a2'} />
-          </button>
-
-          {/* Voice */}
-          <button type="button" onClick={toggleVoice} className={isListening ? 'voice-pulse' : ''} style={{ ...rs.utilBtn, borderColor: isListening ? 'rgba(211,191,162,0.73)' : 'rgba(255,255,255,0.132)', background: isListening ? 'rgba(255,255,255,0.165)' : '#121212' }}>
-            <Mic size={14} color={isListening?'#cfcac0':'#a2a2a2'} />
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isListening?'#cfcac0':'#a2a2a2' }}>{isListening ? 'LIVE' : 'VOICE'}</span>}
-          </button>
-
-          {/* Aggregate toggle */}
-          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ ...rs.utilBtn, background: isAggregateView ? 'rgba(255,255,255,0.116)' : '#121212', borderColor: isAggregateView ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)' }}>
-            {isAggregateView ? <LayoutGrid size={14} color="#cfcac0" /> : <BarChart3 size={14} color="#a2a2a2" />}
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: isAggregateView?'#cfcac0':'#a2a2a2' }}>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
-          </button>
-
-          {/* Recall */}
+          <button type="button" aria-label="Search" className={`kx-ib${showSearch ? ' on' : ''}`} onClick={() => setShowSearch(v => !v)}><Search size={16} /></button>
+          {!isMobile && (
+            <button type="button" className={`kx-ib${isAggregateView ? ' on' : ''}`} onClick={() => setIsAggregateView(v => !v)}>
+              {isAggregateView ? <LayoutGrid size={16} /> : <BarChart3 size={16} />}{!isTablet && <span>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
+            </button>
+          )}
           {recallQueue.length > 0 && (
-            <button type="button" onClick={handleRecall} style={{ ...rs.utilBtn, borderColor:'rgba(211,191,162,0.45)', background:'rgba(255,255,255,0.083)', position:'relative' }}>
-              <History size={14} color="#cfcac0" />
-              {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color:'#cfcac0' }}>RECALL</span>}
-              <div style={{ position:'absolute', top:-6, right:-6, width:16, height:16, borderRadius:'50%', background:'linear-gradient(135deg,#d3bfa2,#b99f78)', color:'#0c0c0c', fontSize:'0.48rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>{recallQueue.length}</div>
+            <button type="button" className="kx-ib on" onClick={handleRecall} aria-label="Recall last ticket">
+              <History size={16} />{!isMobile && !isTablet && <span>RECALL</span>}<em className="kx-badge">{recallQueue.length}</em>
+            </button>
+          )}
+          {!isMobile && (
+            <button type="button" aria-label="Wastage log" className={`kx-ib kx-hide-md${showWastagePanel ? ' on' : ''}`} onClick={() => setShowWastagePanel(true)}>
+              <Trash2 size={16} />{todayWastageCount > 0 && <em className="kx-badge">{todayWastageCount}</em>}
             </button>
           )}
 
-          {/* Wastage */}
-          <button type="button" onClick={() => setShowWastagePanel(true)} style={{ ...rs.utilBtn, borderColor: showWastagePanel ? 'rgba(211,191,162,0.52)' : 'rgba(255,255,255,0.132)', background: showWastagePanel ? 'rgba(255,255,255,0.116)' : '#121212', position:'relative' }}>
-            <Trash2 size={14} color={showWastagePanel?'#cfcac0':'#a2a2a2'} />
-            {!isMobile && <span style={{ fontSize:'0.58rem', fontWeight:900, color: showWastagePanel?'#cfcac0':'#a2a2a2' }}>WASTAGE</span>}
-            {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length > 0 && (
-              <div style={{ position:'absolute', top:-5, right:-5, width:14, height:14, borderRadius:'50%', background:'rgba(211,191,162,1.0)', color:'#0c0c0c', fontSize:'0.44rem', fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {wastageLog.filter(e => new Date(e.loggedAt||e.createdAt).toDateString()===new Date().toDateString()).length}
-              </div>
-            )}
-          </button>
-
-
-          {/* Ticket count pill */}
-          <div style={{ background: filteredOrders.length>0 ? 'linear-gradient(135deg,#d3bfa2,#b99f78)' : '#171717', padding:'7px 13px', borderRadius:10, display:'flex', alignItems:'center', gap:6, flexShrink:0, border: filteredOrders.length===0 ? '1px solid rgba(211,191,162,0.24)' : 'none', minHeight:38 }}>
-            <span style={{ color: filteredOrders.length>0 ? '#0c0c0c' : '#8c8c8c', fontSize:'1.05rem', fontWeight:950, fontFamily:'JetBrains Mono, monospace', lineHeight:1 }}>{filteredOrders.length<10?`0${filteredOrders.length}`:filteredOrders.length}</span>
-            {!isMobile && <span style={{ color: filteredOrders.length>0 ? '#0c0c0c' : '#8c8c8c', fontSize:'0.5rem', fontWeight:900, letterSpacing:'0.5px' }}>TICKETS</span>}
+          {/* Voice announcements: output only, automatic. This is where they are tuned. */}
+          <div style={{ position: 'relative' }}>
+            <button type="button" aria-label="Voice announcements" aria-expanded={showVoiceMenu} className={`kx-ib${voicePrefs.voice ? ' on' : ' mute'}`} onClick={() => setShowVoiceMenu(v => !v)}>
+              {speaking ? <span className="kx-eq"><i /><i /><i /></span> : voicePrefs.voice ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {!isMobile && !isTablet && <span>{voicePrefs.voice ? 'VOICE ON' : 'VOICE OFF'}</span>}
+            </button>
+            <AnimatePresence>
+              {showVoiceMenu && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 65 }} onClick={() => setShowVoiceMenu(false)} />
+                  <motion.div className="kx-pop" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.97 }} transition={{ duration: 0.16 }}>
+                    <h4>Ticket announcements</h4>
+                    {!speechEngine.supported() && <div className="kx-err">This browser cannot speak. Chime and cards still work.</div>}
+                    <div className="kx-row"><div>Speak ticket details<small>Table or source, every dish, portion and notes</small></div>
+                      <button type="button" role="switch" aria-checked={voicePrefs.voice} className={`kx-sw${voicePrefs.voice ? ' on' : ''}`} onClick={() => updateVoicePrefs({ voice: !voicePrefs.voice })} /></div>
+                    <div className="kx-row"><div>New-ticket chime<small>Different tune for dine-in and delivery</small></div>
+                      <button type="button" role="switch" aria-checked={voicePrefs.chime} className={`kx-sw${voicePrefs.chime ? ' on' : ''}`} onClick={() => updateVoicePrefs({ chime: !voicePrefs.chime })} /></div>
+                    <div className="kx-row"><span>Repeat</span>
+                      <div className="kx-mini">{[1, 2].map(n => <button type="button" key={n} className={voicePrefs.repeat === n ? 'on' : ''} onClick={() => updateVoicePrefs({ repeat: n })}>{n}×</button>)}</div></div>
+                    <div className="kx-row"><span>Speed</span>
+                      <div className="kx-mini">{[['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']].map(([v, l]) => <button type="button" key={v} className={voicePrefs.rate === v ? 'on' : ''} onClick={() => updateVoicePrefs({ rate: v })}>{l}</button>)}</div></div>
+                    <button type="button" className="kx-btn block" onClick={() => { if (voicePrefsRef.current.chime) playAlertSound('order'); later(() => announce('New ticket. Table 5. 2 dishes, dine in. 2 Paneer Tikka. 1 half Dal Fry. Note: less spicy.', { force: true, interrupt: true }), 900); }}>
+                      <Volume2 size={14} /> Test announcement
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
+          {!isMobile && <button type="button" aria-label="Refresh tickets" className="kx-ib kx-hide-md" onClick={manualRefresh}><RefreshCw size={16} className={refreshing ? 'spin' : undefined} /></button>}
         </div>
       </header>
 
-      {/* ── SEARCH BAR ── */}
+      {/* ── SEARCH ── */}
       <AnimatePresence>
         {showSearch && (
-          <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            style={{ display:'flex', alignItems:'center', gap:9, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.165)', borderRadius:11, padding:'9px 14px', flexShrink:0 }}>
-            <Search size={13} color="#b9a27e" />
-            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source, or dish name…" style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#f7f3eb', fontSize:'0.82rem', fontFamily:"'Outfit',sans-serif" }} />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery('')} style={{ background:'rgba(255,255,255,0.099)', border:'1px solid rgba(255,255,255,0.198)', color:'#a6a6a6', borderRadius:6, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, fontSize:'0.58rem', fontWeight:900 }}>
-                <X size={11} /> CLEAR
-              </button>
-            )}
-            <button type="button" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background:'transparent', border:'none', color:'#9a9a9a', cursor:'pointer', display:'flex', alignItems:'center' }}>
-              <X size={14} />
-            </button>
+          <motion.div className="kx-search" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+            <Search size={15} color="#b99f78" />
+            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source or dish name…" />
+            {searchQuery && <button type="button" className="kx-pill" onClick={() => setSearchQuery('')}>CLEAR</button>}
+            <button type="button" aria-label="Close search" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background: 'transparent', border: 0, color: '#9b978d', display: 'flex' }}><X size={16} /></button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── PREP MARQUEE ── */}
-      <AnimatePresence>
-        {masterPrepMarqueeList.length > 0 && !isAggregateView && !showMetricsDashboard && (
-          <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-            style={{ display:'flex', alignItems:'center', background:'#171717', border:'1px solid rgba(255,255,255,0.116)', padding:'7px 14px', borderRadius:10, gap:10, overflow:'hidden', flexShrink:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:'0.52rem', fontWeight:900, color:'#b9a27e', letterSpacing:'1.5px', flexShrink:0 }}>
-              <Activity size={10} /> PREP QUEUE
-            </div>
-            <div style={{ width:'1px', height:'14px', background:'rgba(255,255,255,0.165)', flexShrink:0 }} />
-            <div style={{ display:'flex', gap:7, overflowX:'auto' }} className="no-scrollbar">
-              {masterPrepMarqueeList.map(([name,qty]) => (
-                <div key={name} style={{ background:'#121212', border:'1px solid rgba(255,255,255,0.165)', padding:'3px 10px', borderRadius:6, display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                  <span style={{ color:'#cfcac0', fontWeight:900, fontFamily:'monospace', fontSize:'0.72rem' }}>{qty}×</span>
-                  <span style={{ fontSize:'0.65rem', fontWeight:800, color:'#cfc7b8', whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.3px' }}>{name}</span>
+      {/* ── ORDER CHANGE ALERTS ── */}
+      {interceptedAlerts.length > 0 && (
+        <div className="kx-alerts">
+          <AnimatePresence>
+            {/* Only the latest few: an unbounded stack pushed the actual tickets off the screen during a rush. */}
+            {interceptedAlerts.slice(0, 3).map(alert => (
+              <motion.div key={alert.id} className="kx-alert" initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} style={isMobile ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
+                <div className="l">
+                  <div className="ic"><BellRing size={18} color="#e29a58" /></div>
+                  <div style={{ minWidth: 0 }}>
+                    <h3>ORDER CHANGE{alert.tableNumber != null && String(alert.tableNumber) !== '' ? ` — TABLE ${alert.tableNumber}` : ''}</h3>
+                    <p>{alert.modificationNote}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── RECALL STRIP ── */}
-      <AnimatePresence>
-        {recallQueue.length > 0 && (
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.033)', border:'1px solid rgba(255,255,255,0.116)', borderRadius:9, padding:'6px 13px', flexShrink:0, overflow:'hidden' }}>
-            <History size={10} color="rgba(211,191,162,0.45)" />
-            <span style={{ fontSize:'0.5rem', color:'rgba(211,191,162,0.45)', fontWeight:900, letterSpacing:'1px', flexShrink:0 }}>RECALL ({recallQueue.length}/10)</span>
-            <div style={{ display:'flex', gap:5, overflowX:'auto' }} className="no-scrollbar">
-              {recallQueue.map((o,i) => (
-                <span key={i} style={{ fontSize:'0.56rem', fontWeight:900, padding:'2px 8px', borderRadius:5, background: i===0 ? 'rgba(255,255,255,0.165)' : '#080808', border:`1px solid ${i===0?'rgba(255,255,255,0.209)':'rgba(255,255,255,0.11)'}`, color: i===0?'#cfcac0':'#9a9a9a', whiteSpace:'nowrap', flexShrink:0, fontFamily:'monospace' }}>
-                  {getOrderType(o)==='parcel' ? 'PARCEL' : `T-${o.tableNumber}`} · {o.items?.length}
-                </span>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── MODIFICATION ALERTS ── */}
-      <AnimatePresence>
-        {/* Only the latest few: an unbounded stack pushed the actual tickets off the screen during a rush. */}
-        {interceptedAlerts.slice(0, 3).map(alert => (
-          <motion.div key={alert.id} initial={{ scale:0.95, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ opacity:0 }}
-            style={{ background:'#2b2219', border:'1px solid rgba(226,154,88,0.3)', padding: isMobile ? '12px 14px' : '13px 20px', borderRadius:13, display:'flex', alignItems:'center', justifyContent:'space-between', flexDirection: isMobile ? 'column' : 'row', gap:12, flexShrink:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ background:'rgba(226,154,88,0.1)', padding:9, borderRadius:9, flexShrink:0 }}><BellRing size={17} color="#e29a58" /></div>
-              <div>
-                <h3 style={{ margin:0, fontSize: isMobile ? '0.82rem' : '0.95rem', fontWeight:900, color:'#f7f3eb' }}>ORDER CHANGE — TABLE {alert.tableNumber}</h3>
-                <p style={{ margin:'3px 0 0', color:'#a6a6a6', fontSize:'0.65rem' }}>
-                  Modification: <span style={{ color:'#d08a4a', fontWeight:700 }}>"{alert.modificationNote}"</span>
-                </p>
-              </div>
-            </div>
-            <button type="button" onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}
-              style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(226,154,88,0.3)', color:'#e29a58', padding:'9px 16px', borderRadius:8, fontSize:'0.66rem', fontWeight:900, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, transition:'all 0.15s' }}>
-              ACKNOWLEDGE
-            </button>
-          </motion.div>
-        ))}
-        {interceptedAlerts.length > 3 && (
-          <motion.div key="alerts-more" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'8px 14px', borderRadius:10, background:'#2b2219', border:'1px solid rgba(226,154,88,0.3)', color:'#d08a4a', fontSize:'0.64rem', fontWeight:900 }}>
-            <span>+{interceptedAlerts.length - 3} MORE ORDER CHANGES</span>
-            <button type="button" onClick={() => setInterceptedAlerts([])} style={{ background:'transparent', border:'1px solid rgba(226,154,88,0.4)', color:'#e29a58', padding:'5px 12px', borderRadius:7, fontSize:'0.6rem', fontWeight:900, cursor:'pointer' }}>ACKNOWLEDGE ALL</button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <button type="button" className="kx-btn warn" onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}>Acknowledge</button>
+              </motion.div>
+            ))}
+            {interceptedAlerts.length > 3 && (
+              <motion.div key="alerts-more" className="kx-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ padding: '8px 14px' }}>
+                <span style={{ fontSize: '.68rem', fontWeight: 700, color: '#f0b87c' }}>+{interceptedAlerts.length - 3} MORE ORDER CHANGES</span>
+                <button type="button" className="kx-btn warn" style={{ minHeight: 36 }} onClick={() => setInterceptedAlerts([])}>Acknowledge all</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* ══════════════ BODY ══════════════ */}
-      <div style={rs.body}>
-        {/* PERMANENT SIDEBAR */}
-        {showPermanentSide && (
-          <aside style={{ ...rs.sidebar, width: isLargeTablet ? 210 : 240 }}>
-            {SidebarContent({})}
-          </aside>
-        )}
+      <div className="kx-body">
+        {showPermanentSide && <aside className="kx-rail" style={{ width: isLargeTablet ? 214 : 240 }}>{renderRail(false)}</aside>}
 
-        {/* MAIN WORKSPACE */}
-        <main style={{ ...rs.workspace, display:'flex', flexDirection:'column', gap:12 }} className="no-scrollbar">
+        <main className="kx-main">
+          {/* prep queue + sort */}
+          {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1) && (
+            <div className="kx-ribbon">
+              {masterPrepMarqueeList.length > 0 && (
+                <div className="kx-prep no-scrollbar">
+                  <span className="kx-prep-l"><Activity size={12} /> Prep queue</span>
+                  {masterPrepMarqueeList.map(([name, qty]) => <span key={name} className="kx-chip"><b>{qty}×</b>{name}</span>)}
+                </div>
+              )}
+              {filteredOrders.length > 1 && (
+                <button type="button" className="kx-sortbtn" onClick={toggleSort} style={{ marginLeft: 'auto' }}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
+              )}
+            </div>
+          )}
 
-          {/* KITCHEN HEALTH */}
+          {/* recall strip */}
+          {recallQueue.length > 0 && (
+            <div className="kx-recall">
+              <span className="l"><History size={12} /> Recall {recallQueue.length}/10</span>
+              <div className="kx-prep no-scrollbar">
+                {recallQueue.map((o, i) => <span key={o._id || i} className={`kx-tag${i === 0 ? ' gold' : ''}`} style={{ fontFamily: "'JetBrains Mono',monospace" }}>{getOrderType(o) === 'parcel' ? 'PARCEL' : `T-${o.tableNumber}`} · {o.items?.length}</span>)}
+              </div>
+            </div>
+          )}
+
+          {/* kitchen health (collapsed by default) */}
           {kitchenHealth?.stations?.length > 0 && !showMetricsDashboard && (
-            <div style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)', borderRadius:13, padding:'13px 15px', flexShrink:0 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                  <Activity size={12} color="#cfcac0" />
-                  <span style={{ color:'rgba(211,191,162,0.8)', fontSize:'0.53rem', fontWeight:900, letterSpacing:'2px', textTransform:'uppercase' }}>KITCHEN HEALTH</span>
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:5, background: kitchenHealth.bottleneck ? 'rgba(226,154,88,0.08)' : 'rgba(255,255,255,0.066)', border:`1px solid ${kitchenHealth.bottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(247,243,235,0.264)'}` }}>
-                  {kitchenHealth.bottleneck ? <AlertTriangle size={9} color="#e29a58" /> : <CheckCircle2 size={9} color="#cfcac0" />}
-                  <span style={{ fontSize:'0.5rem', fontWeight:900, color: kitchenHealth.bottleneck ? '#e29a58' : '#b9a27e', letterSpacing:'0.5px' }}>
-                    {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck?.name || kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
-                  </span>
-                </div>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(kitchenHealth.stations.slice(0,5).length, isMobile?2:5)},1fr)`, gap:8 }}>
-                {kitchenHealth.stations.slice(0,5).map(s => (
-                  <div key={s.name} style={{ background:'#121212', border:`1px solid ${s.isBottleneck ? 'rgba(226,154,88,0.2)' : 'rgba(255,255,255,0.099)'}`, borderRadius:8, padding:'9px 10px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-                      <span style={{ fontSize:'0.55rem', color: s.isBottleneck ? '#e29a58' : '#a6a6a6', fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1, marginRight:4 }}>{s.name}</span>
-                      <span style={{ fontSize:'0.54rem', fontFamily:'monospace', fontWeight:900, color: s.isBottleneck ? '#e29a58' : '#9a9a9a', flexShrink:0 }}>{s.orderCount ?? s.pending ?? 0}</span>
-                    </div>
-                    <div style={{ height:3, background:'rgba(255,255,255,0.099)', borderRadius:2, overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${Math.min(100, Math.max(0, Math.round(Number(s.loadPct ?? 0) || 0)))}%`, background: s.isBottleneck ? '#e29a58' : 'rgba(211,191,162,0.66)', borderRadius:2, transition:'width 0.5s ease' }} />
-                    </div>
+            <div className="kx-health">
+              <button type="button" className="kx-health-h" onClick={() => setHealthOpen(v => !v)} aria-expanded={healthOpen}>
+                <Activity size={14} color="#d3bfa2" /><span className="tt">Kitchen health</span>
+                <span className={`st${kitchenHealth.bottleneck ? ' warn' : ''}`}>
+                  {kitchenHealth.bottleneck ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+                  {kitchenHealth.bottleneck ? `BOTTLENECK: ${kitchenHealth.bottleneck?.name || kitchenHealth.bottleneck}` : 'ALL STATIONS NORMAL'}
+                  <ChevronDown size={14} style={{ transform: healthOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                </span>
+              </button>
+              {healthOpen && (
+                <div className="kx-health-b">
+                  <div className="kx-stg" style={{ gridTemplateColumns: `repeat(${Math.min(kitchenHealth.stations.slice(0, 5).length, isMobile ? 2 : 5)},1fr)` }}>
+                    {kitchenHealth.stations.slice(0, 5).map(s => (
+                      <div key={s.name} className={s.isBottleneck ? 'bn' : ''}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: '.64rem', fontWeight: 600, color: s.isBottleneck ? '#e29a58' : '#cfc7b8' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                          <span className="mono">{s.orderCount ?? s.pending ?? 0}</span>
+                        </div>
+                        <div className={`kx-bar${s.isBottleneck ? ' bn' : ''}`}><i style={{ width: `${Math.min(100, Math.max(0, Math.round(Number(s.loadPct ?? 0) || 0)))}%` }} /></div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {kitchenHealth.recommendation && (
-                <div style={{ display:'flex', alignItems:'flex-start', gap:7, marginTop:10, padding:'8px 11px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.099)', borderRadius:8 }}>
-                  <Zap size={11} color="#b9a27e" style={{ flexShrink:0, marginTop:1 }} />
-                  <span style={{ fontSize:'0.6rem', color:'#a2a2a2', lineHeight:1.55 }}>{kitchenHealth.recommendation}</span>
+                  {kitchenHealth.recommendation && <div style={{ display: 'flex', gap: 8, fontSize: '.7rem', color: '#bdb6a8', lineHeight: 1.55 }}><Zap size={13} color="#b99f78" style={{ flexShrink: 0, marginTop: 2 }} />{kitchenHealth.recommendation}</div>}
                 </div>
               )}
             </div>
           )}
 
-          {/* SPEED METRICS PANEL */}
+          {/* SPEED METRICS */}
           {showMetricsDashboard && (
-            <motion.div initial={{ opacity:0, y:15 }} animate={{ opacity:1, y:0 }}
-              style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.132)', borderRadius:16, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, padding: isMobile ? '36px 20px' : '52px 30px', minHeight:300 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                <TrendingUp size={22} color="#cfcac0" />
-                <h2 style={{ margin:0, fontSize: isMobile ? '0.9rem' : '1.1rem', fontWeight:900, letterSpacing:'3px', color:'#f7f3eb', textTransform:'uppercase' }}>Speed Metrics</h2>
+            <motion.div className="kx-metrics" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <TrendingUp size={24} color="#d3bfa2" />
+              <h2>Speed metrics</h2>
+              <p>Session performance — resets at midnight IST</p>
+              <div className="kx-mtiles">
+                <div className="kx-mt"><span>Tickets dispatched</span><b>{dispatchedToday}</b><small>today</small></div>
+                <div className="kx-mt"><span>Avg clear time</span><b className="sm">{avgClearTime}</b><small>per ticket</small></div>
+                <div className="kx-mt"><span>Currently pending</span><b>{pendingCount}</b><small>active tickets</small></div>
               </div>
-              <p style={{ color:'#8c8c8c', fontSize:'0.6rem', marginBottom:32, letterSpacing:'0.5px', textAlign:'center' }}>Session performance — resets at midnight IST</p>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, width:'100%', maxWidth:520, marginBottom:28 }}>
-                {[
-                  { label:'TICKETS DISPATCHED', value:dispatchedToday, sub:'today', big:true },
-                  { label:'AVG CLEAR TIME',      value:avgClearTime,          sub:'per ticket', big:false },
-                  { label:'CURRENTLY PENDING',   value:orders.filter(o => (o.items || []).some(i => !i.isExtraItem && i.extraItemId == null)).length, sub:'active tickets', big:true },
-                ].map(s => (
-                  <div key={s.label} style={{ background:'#121212', border:'1px solid rgba(255,255,255,0.132)', borderTop:'2px solid rgba(255,255,255,0.171)', padding:'22px 20px', borderRadius:13, textAlign:'center' }}>
-                    <div style={{ fontSize:'0.5rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:10 }}>{s.label}</div>
-                    <div style={{ fontSize: s.big ? '2.8rem' : '1.8rem', fontWeight:950, color:'#cfcac0', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:6 }}>{s.value}</div>
-                    <div style={{ fontSize:'0.58rem', color:'#8c8c8c', fontWeight:700 }}>{s.sub}</div>
-                  </div>
-                ))}
-              </div>
-              <button type="button" onClick={() => setShowMetricsDashboard(false)}
-                style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.209)', color:'#cfcac0', padding:'11px 28px', borderRadius:10, fontSize:'0.7rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><ChevronLeft size={13} /> BACK TO KITCHEN</span>
-              </button>
+              <button type="button" className="kx-btn" onClick={() => setShowMetricsDashboard(false)}><ChevronLeft size={15} /> Back to kitchen</button>
             </motion.div>
           )}
 
-          {/* AGGREGATE SUMMARY */}
+          {/* BATCH PREP SUMMARY */}
           {!showMetricsDashboard && isAggregateView && (
-            <div style={{ flex:1, overflowY:'auto' }} className="no-scrollbar">
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
-                <BarChart3 size={14} color="#b9a27e" />
-                <span style={{ fontSize:'0.57rem', fontWeight:900, color:'#a6a6a6', letterSpacing:'2px', textTransform:'uppercase' }}>BATCH PREP SUMMARY</span>
-                <span style={{ marginLeft:'auto', fontSize:'0.54rem', color:'#8c8c8c', fontFamily:'monospace' }}>
-                  {Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets
-                </span>
+            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
+                <BarChart3 size={15} color="#b99f78" />
+                <span className="kx-prep-l" style={{ color: '#cfc7b8' }}>Batch prep summary</span>
+                <span className="mono" style={{ marginLeft: 'auto', fontSize: '.64rem', color: '#9b978d' }}>{Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets</span>
               </div>
               {Object.keys(aggregatedTotals).length === 0 ? (
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:12 }}>
-                  <ChefHat size={32} color="#707070" />
-                  <p style={{ color:'#8c8c8c', fontWeight:900, fontSize:'0.82rem', letterSpacing:'2px', margin:0 }}>KITCHEN CLEAR</p>
-                </div>
+                <div className="kx-center"><div className="ic"><ChefHat size={32} /></div><h3>Kitchen clear</h3></div>
               ) : (
-                <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isMobile?'140px':'160px'}, 1fr))`, gap: isMobile ? 10 : 13 }}>
+                <div className="kx-sum">
                   {Object.entries(aggregatedTotals).map(([key, qty]) => {
                     const [namePart, typePart] = key.split('__');
                     const isParcel = typePart === 'P';
                     return (
-                      <div key={key} style={{ background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:`1px solid ${isParcel?'rgba(211,191,162,0.42)':'rgba(255,255,255,0.116)'}`, borderTop:`2px solid ${isParcel?'rgba(211,191,162,0.73)':'rgba(255,255,255,0.171)'}`, borderRadius:13, padding: isMobile ? '16px 12px' : '20px 14px', textAlign:'center' }}>
-                        <div style={{ fontSize: isMobile ? '2.4rem' : '2.8rem', fontWeight:900, color:'#cfcac0', fontFamily:'JetBrains Mono, monospace', lineHeight:1, marginBottom:8 }}>{qty<10?`0${qty}`:qty}</div>
-                        <div style={{ fontSize: isMobile ? '0.62rem' : '0.67rem', color:'#a6a6a6', fontWeight:800, textTransform:'uppercase', lineHeight:1.4, marginBottom:7 }}>{namePart}</div>
-                        <div style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:'0.47rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background: isParcel ? 'rgba(255,255,255,0.132)' : 'rgba(255,255,255,0.017)', color: isParcel ? '#cfcac0' : '#a6a6a6', border:`1px solid ${isParcel?'rgba(255,255,255,0.171)':'rgba(255,255,255,0.066)'}` }}>
-                          {isParcel ? <Package size={8} /> : <UtensilsCrossed size={8} />}
-                          {isParcel ? 'PARCEL' : 'DINE-IN'}
-                        </div>
+                      <div key={key} className={`kx-sumc${isParcel ? ' p' : ''}`}>
+                        <b>{pad2(qty)}</b>
+                        <div className="n">{namePart}</div>
+                        <span className={`kx-tag${isParcel ? ' gold' : ''}`}>{isParcel ? <Package size={10} /> : <UtensilsCrossed size={10} />}{isParcel ? 'PARCEL' : 'DINE-IN'}</span>
                       </div>
                     );
                   })}
@@ -1188,76 +1549,52 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
             </div>
           )}
 
-          {/* MOBILE SWIPE CARDS */}
+          {/* MOBILE — one ticket at a time, swipe */}
           {!showMetricsDashboard && !isAggregateView && useCardView && (
             boardState === 'loading' && orders.length === 0 ? (
-              <div aria-hidden="true" style={{ flex:1, display:'flex', flexDirection:'column', gap:10, overflow:'hidden' }}>
-                <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:5, flexShrink:0, padding:'0 20px' }}>
-                  <Sk w={20} h={6} r={3} style={{ background:'rgba(211,191,162,0.25)' }} />
-                  {[0,1,2,3].map(i => <Sk key={i} w={6} h={6} r={3} />)}
-                </div>
-                <div style={{ flex:1, overflow:'hidden' }}><KdsCardSkeleton isMobile /></div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-                  <Sk w={84} h={36} r={10} /><Sk w={40} h={10} r={4} /><Sk w={84} h={36} r={10} />
-                </div>
+              <div aria-hidden="true" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflow: 'hidden' }}><KdsCardSkeleton fill /></div>
               </div>
             ) : boardState === 'error' && orders.length === 0 ? (
               <KdsLoadError onRetry={retryBoardLoad} detail={boardError} />
             ) : filteredOrders.length === 0 ? (
-              <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
-                <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
-                <div style={{ textAlign:'center' }}>
-                  <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
-                  <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Waiting for next order…</p>
-                  <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
-                </div>
+              <div className="kx-center" style={{ flex: 1 }}>
+                <div className="ic"><ChefHat size={30} /></div>
+                <h3>Kitchen clear</h3><p>Waiting for the next ticket…</p>
+                <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
               </div>
             ) : (
-              <div style={{ flex:1, display:'flex', flexDirection:'column', gap:10, overflow:'hidden' }}>
-                {/* Dot nav */}
-                <div style={{ display:'flex', justifyContent:'center', gap:5, flexShrink:0, flexWrap:'wrap', padding:'0 20px' }}>
-                  {filteredOrders.map((_,i) => (
-                    <div key={i} onClick={() => setMobileCardIndex(i)} style={{ width: i===safeCardIndex ? 20 : 6, height:6, borderRadius:3, background: i===safeCardIndex ? '#d3bfa2' : '#202020', transition:'all 0.25s', cursor:'pointer' }} />
-                  ))}
-                </div>
-                {/* Card */}
-                <div style={{ flex:1, overflow:'hidden' }} {...swipeHandlers}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', minHeight: 0 }}>
+                <div className="kx-dots">{filteredOrders.map((o, i) => <i key={o._id} className={i === safeCardIndex ? 'on' : ''} onClick={() => setMobileCardIndex(i)} />)}</div>
+                <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }} {...swipeHandlers}>
                   <AnimatePresence mode="wait">
-                    <motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity:0, x:50 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-50 }} style={{ height:'100%' }}>
-                      {filteredOrders[safeCardIndex] && (
-                        <KDSOrderCard order={filteredOrders[safeCardIndex]} isNewest={safeCardIndex===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={true} isTablet={false} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
-                      )}
+                    <motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} style={{ height: '100%' }}>
+                      {filteredOrders[safeCardIndex] && <KDSOrderCard order={filteredOrders[safeCardIndex]} fresh={freshIds.has(String(filteredOrders[safeCardIndex]._id))} fill isMobile {...cardProps} />}
                     </motion.div>
                   </AnimatePresence>
                 </div>
-                {/* Prev/Next */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-                  <button type="button" onClick={() => setMobileCardIndex(i => Math.max(0,i-1))} disabled={safeCardIndex===0} style={{ ...rs.navBtn, opacity: safeCardIndex===0 ? 0.25 : 1 }}><ChevronLeft size={16} /> PREV</button>
-                  <span style={{ color:'#a6a6a6', fontSize:'0.7rem', fontWeight:900, fontFamily:'monospace' }}>{safeCardIndex+1} / {filteredOrders.length}</span>
-                  <button type="button" onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length-1,i+1))} disabled={safeCardIndex===filteredOrders.length-1} style={{ ...rs.navBtn, opacity: safeCardIndex===filteredOrders.length-1 ? 0.25 : 1 }}>NEXT <ChevronRight size={16} /></button>
+                <div className="kx-pager">
+                  <button type="button" onClick={() => setMobileCardIndex(i => Math.max(0, i - 1))} disabled={safeCardIndex === 0}><ChevronLeft size={16} /> PREV</button>
+                  <span className="mono" style={{ color: '#9b978d', fontSize: '.76rem', fontWeight: 700 }}>{safeCardIndex + 1} / {filteredOrders.length}</span>
+                  <button type="button" onClick={() => setMobileCardIndex(i => Math.min(filteredOrders.length - 1, i + 1))} disabled={safeCardIndex === filteredOrders.length - 1}>NEXT <ChevronRight size={16} /></button>
                 </div>
               </div>
             )
           )}
 
-          {/* TABLET/DESKTOP GRID */}
+          {/* TABLET / DESKTOP — ticket wall */}
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
-            <div style={{ flex:1, overflowY:'auto', display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${isSmallTablet?'240px':'300px'},1fr))`, gap: isTablet ? 12 : 16, alignContent:'flex-start' }} className="no-scrollbar">
-              {boardState === 'loading' && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} isTablet={isTablet} />)}
-              {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn:'1/-1', display:'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
+            <div className="kx-grid no-scrollbar" style={{ '--kx-col': `${gridCol}px` }}>
+              {boardState === 'loading' && orders.length === 0 && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} />)}
+              {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
-                {filteredOrders.map((order,i) => (
-                  <KDSOrderCard key={order._id} order={order} isNewest={i===0} onReady={markAsReady} dishToCategoryMap={dishToCategoryMap} dishToVegMap={dishToVegMap} selectedCategory={selectedCategory} checkedItemsGlobal={checkedItemsGlobal} setCheckedItemsGlobal={setCheckedItemsGlobal} socketInstance={socketRef.current} isNonVegMode={isNonVegMode} tenantOnlyVeg={tenantOnlyVeg} isMobile={false} isTablet={isTablet} itemFinalTimes={itemFinalTimes} setItemFinalTimes={setItemFinalTimes} onItemSynced={mergeServerItem} />
-                ))}
+                {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
               </AnimatePresence>
               {boardState === 'ready' && filteredOrders.length === 0 && (
-                <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
-                  <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.099)', display:'flex', alignItems:'center', justifyContent:'center' }}><ChefHat size={30} color="#707070" /></div>
-                  <div style={{ textAlign:'center' }}>
-                    <p style={{ fontWeight:900, color:'#8c8c8c', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>KITCHEN CLEAR</p>
-                    <p style={{ fontSize:'0.6rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>All tickets dispatched</p>
-                    <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
-                  </div>
+                <div className="kx-center">
+                  <div className="ic"><ChefHat size={32} /></div>
+                  <h3>Kitchen clear</h3><p>All tickets dispatched. New ones appear here the moment they are placed.</p>
+                  <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
                 </div>
               )}
             </div>
@@ -1267,259 +1604,153 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
 
       {/* MOBILE BOTTOM NAV */}
       {isMobile && (
-        <nav style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)', borderRadius:14, padding:'3px', flexShrink:0, gap:2 }}>
-          {[
-            { val:'ALL',    lbl:'ALL',     icon:<Monitor size={16} /> },
-            { val:'DINEIN', lbl:'DINE-IN', icon:<UtensilsCrossed size={16} /> },
-            { val:'PARCEL', lbl:'PARCEL',  icon:<Package size={16} /> },
-          ].map(s => (
-            <button type="button" key={s.val} onClick={() => setStationFilter(s.val)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: stationFilter===s.val ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: stationFilter===s.val ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
-              {s.icon}
-              <span style={{ fontSize:'0.48rem', fontWeight:900, letterSpacing:'0.3px' }}>{s.lbl}</span>
-              {s.val !== 'ALL' && (() => {
-                // Count from every ticket, not filteredOrders (already narrowed by the active station, so the other badge always read 0).
-                const c = orders.filter(o => {
-                  if (!(o.items || []).some(i => !i.isExtraItem && i.extraItemId == null)) return false;
-                  const t = getOrderType(o);
-                  return s.val==='DINEIN' ? t==='dine-in' : t==='parcel';
-                }).length;
-                return c > 0 ? <span style={{ fontSize:'0.44rem', fontFamily:'monospace', fontWeight:900, color:'#b9a27e' }}>{c}</span> : null;
-              })()}
+        <nav className="kx-bnav">
+          {STATIONS.map(s => (
+            <button type="button" key={s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
+              <s.Icon size={17} />{s.lbl}{s.val !== 'ALL' && stationCounts[s.val] > 0 ? <span className="n">{stationCounts[s.val]}</span> : null}
             </button>
           ))}
-          <button type="button" onClick={() => setIsAggregateView(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: isAggregateView ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: isAggregateView ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
-            <BarChart3 size={16} />
-            <span style={{ fontSize:'0.48rem', fontWeight:900 }}>SUMMARY</span>
-          </button>
-          <button type="button" onClick={() => setShowMetricsDashboard(v => !v)} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 3px', background: showMetricsDashboard ? 'rgba(255,255,255,0.132)' : 'transparent', border:'none', cursor:'pointer', borderRadius:11, gap:3, minHeight:50, color: showMetricsDashboard ? '#cfcac0' : '#9a9a9a', transition:'all 0.15s' }}>
-            <TrendingUp size={16} />
-            <span style={{ fontSize:'0.48rem', fontWeight:900 }}>METRICS</span>
-          </button>
+          <button type="button" className={isAggregateView ? 'on' : ''} onClick={() => { setShowMetricsDashboard(false); setIsAggregateView(v => !v); }}><BarChart3 size={17} />SUMMARY</button>
+          <button type="button" className={showMetricsDashboard ? 'on' : ''} onClick={() => setShowMetricsDashboard(v => !v)}><TrendingUp size={17} />METRICS</button>
         </nav>
       )}
 
-      {/* WASTAGE PANEL */}
+      {/* ── WASTAGE PANEL ── */}
       <AnimatePresence>
         {showWastagePanel && (
           <>
-            <motion.div initial={{ opacity:0 }} animate={{ opacity:0.4 }} exit={{ opacity:0 }}
-              onClick={() => setShowWastagePanel(false)}
-              style={{ position:'fixed', inset:0, background:'#050505', zIndex:3000, backdropFilter:'blur(4px)' }} />
-            <motion.div initial={{ x:'100%' }} animate={{ x:0 }} exit={{ x:'100%' }}
-              transition={{ type:'spring', stiffness:300, damping:32 }}
-              style={{ position:'fixed', right:0, top:0, bottom:0, width: isMobile ? '100vw' : isTablet ? 420 : 500, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderLeft:'1px solid rgba(255,255,255,0.132)', borderRadius: isMobile ? 0 : '16px 0 0 16px', zIndex:3001, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-
-              {/* Panel header */}
-              <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.099)', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <Trash2 size={16} color="#cfcac0" />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight:900, fontSize:'0.88rem', color:'#f7f3eb', letterSpacing:0.3 }}>WASTAGE LOG</div>
-                    <div style={{ fontSize:'0.5rem', color:'#9a9a9a', fontWeight:900, letterSpacing:'1.5px', marginTop:2, textTransform:'uppercase' }}>Spoilage · Overcooked · Dropped · Excess</div>
-                  </div>
-                </div>
-                <button type="button" onClick={() => setShowWastagePanel(false)} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.165)', color:'#9a9a9a', padding:8, borderRadius:9, cursor:'pointer', display:'flex', alignItems:'center' }}>
-                  <X size={16} />
-                </button>
+            <motion.div className="kx-scrim" style={{ zIndex: 3000 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWastagePanel(false)} />
+            <motion.div className="kx-sheet" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }}
+              style={{ width: isMobile ? '100vw' : isTablet ? 430 : 500, borderRadius: isMobile ? 0 : undefined }}>
+              <div className="kx-sheet-h">
+                <div className="t"><div className="ic"><Trash2 size={17} /></div><div><h3>WASTAGE LOG</h3><small>Spoilage · Overcooked · Dropped · Excess</small></div></div>
+                <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setShowWastagePanel(false)}><X size={16} /></button>
               </div>
-
-              {/* Tabs */}
-              <div style={{ display:'flex', background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', borderBottom:'1px solid rgba(255,255,255,0.099)', flexShrink:0 }}>
-                {[['log','LOG ENTRY'],['report','MONTHLY REPORT']].map(([t,lbl]) => (
-                  <button type="button" key={t} onClick={() => setWastageTab(t)} style={{ flex:1, padding:'12px 0', background:'transparent', border:'none', cursor:'pointer', fontSize:'0.58rem', fontWeight:900, letterSpacing:'1px', color: wastageTab===t ? '#cfcac0' : '#9a9a9a', borderBottom:`2px solid ${wastageTab===t ? 'rgba(211,191,162,0.8)' : 'transparent'}`, transition:'all 0.15s' }}>
-                    {lbl}
-                  </button>
-                ))}
+              <div className="kx-tabs">
+                {[['log', 'LOG ENTRY'], ['report', 'MONTHLY REPORT']].map(([t, lbl]) => <button type="button" key={t} className={wastageTab === t ? 'on' : ''} onClick={() => setWastageTab(t)}>{lbl}</button>)}
               </div>
-
-              {/* Panel body */}
-              <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }} className="custom-scroll">
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 24px' }}>
                 {wastageTab === 'log' ? (
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                    {/* NEW ENTRY FORM */}
-                    <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.132)', borderRadius:14, padding:'16px', display:'flex', flexDirection:'column', gap:12 }}>
-                      <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#a6a6a6', letterSpacing:'2px', textTransform:'uppercase', paddingBottom:10, borderBottom:'1px solid rgba(255,255,255,0.083)' }}>NEW ENTRY</div>
-
-                      {/* item name */}
-                      <div style={{ position:'relative' }}>
-                        <label style={wFormLabel}>INGREDIENT *</label>
-                        <input value={wastageForm.itemName}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div className="kx-card">
+                      <div className="hd">New entry</div>
+                      <div style={{ position: 'relative' }}>
+                        <label className="kx-lbl">Ingredient *</label>
+                        <input className="kx-in" value={wastageForm.itemName} placeholder="Type ingredient name…"
                           onChange={e => {
                             const v = e.target.value;
-                            setWastageForm(p => ({ ...p, itemName:v, inventoryId:null }));
-                            if (v.length >= 2) { const m = wastageInventory.filter(i => String(i.itemName || '').toLowerCase().includes(v.toLowerCase())).slice(0,5); setWastageSuggestions(m); setShowWastageSuggest(true); }
+                            setWastageForm(p => ({ ...p, itemName: v, inventoryId: null }));
+                            if (v.length >= 2) { const m = wastageInventory.filter(i => String(i.itemName || '').toLowerCase().includes(v.toLowerCase())).slice(0, 5); setWastageSuggestions(m); setShowWastageSuggest(true); }
                             else setShowWastageSuggest(false);
                           }}
-                          onBlur={() => setTimeout(() => setShowWastageSuggest(false), 150)}
-                          placeholder="Type ingredient name…" style={wInput} />
+                          onBlur={() => setTimeout(() => setShowWastageSuggest(false), 150)} />
                         {showWastageSuggest && wastageSuggestions.length > 0 && (
-                          <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.198)', borderRadius:9, zIndex:10, overflow:'hidden', marginTop:2, boxShadow:'0 8px 24px rgba(255,255,255,0.066)' }}>
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#121213', border: '1px solid rgba(211,191,162,.32)', borderRadius: 12, zIndex: 10, overflow: 'hidden', marginTop: 4, boxShadow: '0 16px 40px rgba(0,0,0,.7)' }}>
                             {wastageSuggestions.map(s => (
-                              <button type="button" key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName:s.itemName, inventoryId:s._id, unit:s.unit||'kg' })); setShowWastageSuggest(false); }}
-                                style={{ width:'100%', padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#cfc7b8', fontSize:'0.75rem', fontWeight:700, textAlign:'left', transition:'background 0.1s' }}
-                                onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.099)'}
-                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                <span>{s.itemName}</span>
-                                <span style={{ fontSize:'0.58rem', color:'#a6a6a6', fontFamily:'monospace' }}>{s.currentStock}{s.unit}</span>
+                              <button type="button" key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName: s.itemName, inventoryId: s._id, unit: s.unit || 'kg' })); setShowWastageSuggest(false); }}
+                                style={{ width: '100%', padding: '11px 14px', background: 'transparent', border: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.78rem', fontWeight: 600, textAlign: 'left' }}>
+                                <span>{s.itemName}</span><span className="mono" style={{ fontSize: '.62rem', color: '#9b978d' }}>{s.currentStock}{s.unit}</span>
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
-
-                      {/* qty + unit */}
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                        <div>
-                          <label style={wFormLabel}>QUANTITY *</label>
-                          <input type="number" min="0.01" step="0.01" placeholder="0.00" value={wastageForm.quantity} onChange={e => setWastageForm(p => ({ ...p, quantity:e.target.value }))} style={wInput} />
-                        </div>
-                        <div>
-                          <label style={wFormLabel}>UNIT</label>
-                          <select value={wastageForm.unit} onChange={e => setWastageForm(p => ({ ...p, unit:e.target.value }))} style={wInput}>
-                            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
-                        </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div><label className="kx-lbl">Quantity *</label><input className="kx-in" type="number" min="0.01" step="0.01" placeholder="0.00" value={wastageForm.quantity} onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))} /></div>
+                        <div><label className="kx-lbl">Unit</label><select className="kx-in" value={wastageForm.unit} onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}>{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
                       </div>
-
-                      {/* reason chips */}
                       <div>
-                        <label style={wFormLabel}>REASON *</label>
-                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                          {REASON_OPTIONS.map(r => (
-                            <button type="button" key={r} onClick={() => setWastageForm(p => ({ ...p, reason:r }))}
-                              style={{ padding:'5px 10px', borderRadius:7, border:`1px solid ${wastageForm.reason===r?'rgba(211,191,162,0.59)':'rgba(255,255,255,0.132)'}`, background: wastageForm.reason===r ? 'rgba(255,255,255,0.165)' : 'transparent', color: wastageForm.reason===r ? '#cfcac0' : '#a6a6a6', fontSize:'0.58rem', fontWeight:900, cursor:'pointer', transition:'all 0.15s' }}>
-                              {r}
-                            </button>
-                          ))}
-                        </div>
+                        <label className="kx-lbl">Reason *</label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{REASON_OPTIONS.map(r => <button type="button" key={r} className={`kx-pill${wastageForm.reason === r ? ' on' : ''}`} onClick={() => setWastageForm(p => ({ ...p, reason: r }))}>{r}</button>)}</div>
                       </div>
-
-                      {/* logged by */}
-                      <div>
-                        <label style={wFormLabel}>LOGGED BY *</label>
-                        <input value={wastageForm.loggedBy} onChange={e => setWastageForm(p => ({ ...p, loggedBy:e.target.value }))} placeholder="Chef / Staff name" style={wInput} />
-                      </div>
-
-                      {/* notes */}
-                      <div>
-                        <label style={wFormLabel}>NOTES (optional)</label>
-                        <input value={wastageForm.notes} onChange={e => setWastageForm(p => ({ ...p, notes:e.target.value }))} placeholder="Any context…" style={wInput} />
-                      </div>
-
-                      {/* save button */}
-                      {wastageError && <div style={{ fontSize:'0.62rem', color:'#d98b8b', fontWeight:700, marginBottom:8 }}>{wastageError}</div>}
-                      <button type="button" onClick={saveWastageEntry} disabled={wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()}
-                        style={{ padding:'12px', borderRadius:11, border:'none', background: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#171717' : 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))', color: (wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim()) ? '#9a9a9a' : '#f7f3eb', fontWeight:900, fontSize:'0.72rem', cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:46 }}>
-                        {wastageSaving ? <><RotateCcw size={13} style={{ animation:'spin 1s linear infinite' }} /> SAVING…</> : <><Trash2 size={13} /> LOG WASTAGE</>}
+                      <div><label className="kx-lbl">Logged by *</label><input className="kx-in" value={wastageForm.loggedBy} onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))} placeholder="Chef / Staff name" /></div>
+                      <div><label className="kx-lbl">Notes (optional)</label><input className="kx-in" value={wastageForm.notes} onChange={e => setWastageForm(p => ({ ...p, notes: e.target.value }))} placeholder="Any context…" /></div>
+                      {wastageError && <div className="kx-err">{wastageError}</div>}
+                      <button type="button" className="kx-btn solid block" onClick={saveWastageEntry} disabled={wastageDisabled} style={{ minHeight: 48 }}>
+                        {wastageSaving ? <><RotateCcw size={14} className="spin" /> Saving…</> : <><Trash2 size={14} /> Log wastage</>}
                       </button>
                     </div>
 
-                    {/* LOG LIST */}
                     {wastageLoading ? (
-                      <div style={{ textAlign:'center', padding:'24px', color:'#9a9a9a', fontSize:'0.7rem' }}>Loading log…</div>
+                      <div style={{ textAlign: 'center', padding: 24, color: '#9b978d', fontSize: '.74rem' }}>Loading log…</div>
                     ) : wastageLog.length > 0 ? (
                       <div>
-                        <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'2px', textTransform:'uppercase', marginBottom:10 }}>TODAY'S ENTRIES — {wastageLog.length}</div>
-                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        <div className="kx-lbl" style={{ marginBottom: 10 }}>Today's entries — {wastageLog.length}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                           {[...wastageLog].reverse().map(e => (
-                            <div key={e._id} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.099)', borderLeft:'3px solid rgba(255,255,255,0.171)', borderRadius:10, padding:'11px 14px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-                              <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
-                                  <span style={{ fontWeight:800, fontSize:'0.76rem', color:'#cfc7b8' }}>{e.itemName}</span>
-                                  <span style={{ fontSize:'0.52rem', fontFamily:'monospace', color:'#b9a27e', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.124)' }}>{e.quantity}{e.unit}</span>
-                                  {Number(e.totalCost) > 0 && <span style={{ fontSize:'0.54rem', color:'#cfcac0', fontFamily:'monospace', marginLeft:'auto', fontWeight:900 }}>₹{Number(e.totalCost).toFixed(0)}</span>}
+                            <div key={e._id} className="kx-ent">
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontWeight: 600, fontSize: '.84rem' }}>{e.itemName}</span>
+                                  <span className="kx-tag gold mono">{e.quantity}{e.unit}</span>
+                                  {Number(e.totalCost) > 0 && <span className="mono" style={{ marginLeft: 'auto', fontSize: '.7rem', color: '#d3bfa2', fontWeight: 700 }}>₹{Number(e.totalCost).toFixed(0)}</span>}
                                 </div>
-                                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                                  <span style={{ fontSize:'0.5rem', padding:'1px 6px', borderRadius:4, background:'rgba(255,255,255,0.066)', color:'#a2a2a2', border:'1px solid rgba(255,255,255,0.116)', fontWeight:700 }}>{e.reason}</span>
-                                  <span style={{ fontSize:'0.5rem', color:'#9a9a9a', fontWeight:700 }}>{e.loggedBy}</span>
-                                  {e.notes && <span style={{ fontSize:'0.5rem', color:'#8c8c8c', fontStyle:'italic' }}>{e.notes}</span>}
+                                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <span className="kx-tag">{e.reason}</span>
+                                  <span style={{ fontSize: '.62rem', color: '#9b978d' }}>{e.loggedBy}</span>
+                                  {e.notes && <span style={{ fontSize: '.62rem', color: '#6f6c64', fontStyle: 'italic' }}>{e.notes}</span>}
                                 </div>
                               </div>
-                              <button type="button" onClick={() => deleteWastageEntry(e._id)} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.099)', color:'#9a9a9a', padding:'5px', borderRadius:7, cursor:'pointer', display:'flex', alignItems:'center', transition:'all 0.15s', flexShrink:0 }}
-                                onMouseEnter={ev => { ev.currentTarget.style.borderColor='rgba(255,255,255,0.209)'; ev.currentTarget.style.color='#cfcac0'; }}
-                                onMouseLeave={ev => { ev.currentTarget.style.borderColor='rgba(255,255,255,0.099)'; ev.currentTarget.style.color='#9a9a9a'; }}>
-                                <X size={12} />
-                              </button>
+                              <button type="button" aria-label="Remove entry" className="kx-sq" style={{ width: 34, minHeight: 34, borderRadius: 10 }} onClick={() => deleteWastageEntry(e._id)}><X size={13} /></button>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <div style={{ textAlign:'center', padding:'30px 20px', background:'#080808', borderRadius:12, border:'1px dashed rgba(255,255,255,0.099)' }}>
-                        <div style={{ fontSize:'0.64rem', color:'#8c8c8c', fontWeight:700 }}>No wastage entries today</div>
-                      </div>
+                      <div style={{ textAlign: 'center', padding: '30px 20px', borderRadius: 16, border: '1px dashed rgba(211,191,162,.2)', fontSize: '.72rem', color: '#6f6c64', fontWeight: 500 }}>No wastage entries today</div>
                     )}
                   </div>
                 ) : (
-                  /* REPORT TAB */
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {wastageAnalytics ? (
                       <>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
                           {[
-                            { l:'TOTAL COST', v:`₹${Math.round(wastageAnalytics.totalCost||0).toLocaleString()}` },
-                            { l:'ENTRIES',   v:wastageAnalytics.totalEntries||0 },
-                            { l:'TOP ITEM',  v:wastageAnalytics.topWasted?.[0]?.name||'—' },
+                            { l: 'TOTAL COST', v: `₹${Math.round(wastageAnalytics.totalCost || 0).toLocaleString()}` },
+                            { l: 'ENTRIES', v: wastageAnalytics.totalEntries || 0 },
+                            { l: 'TOP ITEM', v: wastageAnalytics.topWasted?.[0]?.name || '—' },
                           ].map(s => (
-                            <div key={s.l} style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:11, padding:'12px 10px', textAlign:'center' }}>
-                              <div style={{ fontSize:'0.48rem', color:'#9a9a9a', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:6 }}>{s.l}</div>
-                              <div style={{ fontSize:'1.05rem', fontWeight:900, color:'#cfcac0', fontFamily:'monospace' }}>{s.v}</div>
+                            <div key={s.l} className="kx-card" style={{ padding: '12px 10px', textAlign: 'center', gap: 6 }}>
+                              <div className="kx-lbl" style={{ margin: 0 }}>{s.l}</div>
+                              <div className="mono" style={{ fontSize: '1rem', fontWeight: 700, color: '#d3bfa2', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.v}</div>
                             </div>
                           ))}
                         </div>
-
                         {wastageAnalytics.byReason && Object.keys(wastageAnalytics.byReason).length > 0 && (
-                          <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:12, padding:'14px 16px' }}>
-                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.8px', textTransform:'uppercase', marginBottom:14, paddingBottom:10, borderBottom:'1px solid rgba(255,255,255,0.083)', display:'flex', alignItems:'center', gap:6 }}>
-                              <Scale size={11} color="#a6a6a6" /> BY REASON
-                            </div>
-                            {Object.entries(wastageAnalytics.byReason).sort((a,b) => (Number(b[1]?.cost) || 0) - (Number(a[1]?.cost) || 0)).map(([reason, data]) => {
-                              const pct = wastageAnalytics.totalEntries > 0 ? Math.round(((Number(data.count) || 0)/wastageAnalytics.totalEntries)*100) : 0;
+                          <div className="kx-card">
+                            <div className="hd" style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Scale size={12} /> By reason</div>
+                            {Object.entries(wastageAnalytics.byReason).sort((a, b) => (Number(b[1]?.cost) || 0) - (Number(a[1]?.cost) || 0)).map(([reason, data]) => {
+                              const pct = wastageAnalytics.totalEntries > 0 ? Math.round(((Number(data.count) || 0) / wastageAnalytics.totalEntries) * 100) : 0;
                               return (
-                                <div key={reason} style={{ marginBottom:10 }}>
-                                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
-                                    <span style={{ fontSize:'0.64rem', fontWeight:800, color:'#a6a6a6' }}>{reason}</span>
-                                    <span style={{ fontSize:'0.62rem', fontWeight:900, color:'#cfcac0', fontFamily:'monospace' }}>
-                                      {Number(data.cost) > 0 ? `₹${Number(data.cost).toFixed(0)}` : `${Number(data.count) || 0}×`}
-                                      <span style={{ color:'#9a9a9a', fontWeight:600, marginLeft:6 }}>{pct}%</span>
-                                    </span>
+                                <div key={reason}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.72rem', fontWeight: 600 }}>
+                                    <span>{reason}</span>
+                                    <span className="mono" style={{ color: '#d3bfa2' }}>{Number(data.cost) > 0 ? `₹${Number(data.cost).toFixed(0)}` : `${Number(data.count) || 0}×`}<span style={{ color: '#6f6c64', marginLeft: 7 }}>{pct}%</span></span>
                                   </div>
-                                  <div style={{ height:4, background:'rgba(255,255,255,0.083)', borderRadius:2, overflow:'hidden' }}>
-                                    <div style={{ height:'100%', width:`${pct}%`, background:'rgba(211,191,162,0.52)', borderRadius:2, transition:'width 0.6s ease' }} />
-                                  </div>
+                                  <div className="kx-bar"><i style={{ width: `${pct}%` }} /></div>
                                 </div>
                               );
                             })}
                           </div>
                         )}
-
-                        {(wastageAnalytics.dailyTrend||[]).length > 0 && (
-                          <div style={{ background:'#080808', border:'1px solid rgba(255,255,255,0.116)', borderRadius:12, padding:'14px 16px' }}>
-                            <div style={{ fontSize:'0.52rem', fontWeight:900, color:'#9a9a9a', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
-                              <TrendingDown size={11} color="#b9a27e" /> DAILY COST TREND (30 days)
-                            </div>
-                            <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:52 }}>
+                        {(wastageAnalytics.dailyTrend || []).length > 0 && (
+                          <div className="kx-card">
+                            <div className="hd" style={{ display: 'flex', alignItems: 'center', gap: 7 }}><TrendingDown size={12} /> Daily cost trend (30 days)</div>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 56 }}>
                               {(() => {
                                 const maxC = Math.max(...wastageAnalytics.dailyTrend.map(d => Number(d.cost) || 0), 1);
                                 return wastageAnalytics.dailyTrend.map(d => (
                                   <div key={d.date} title={`${d.date}: ₹${(Number(d.cost) || 0).toFixed(0)}`}
-                                    style={{ flex:1, minWidth:0, height:`${Math.max(8, Math.round(((Number(d.cost) || 0)/maxC)*100))}%`, background: Number(d.cost)>0 ? `rgba(107,127,95,${0.25+((Number(d.cost) || 0)/maxC)*0.6})` : '#eee6d6', borderRadius:'3px 3px 0 0', transition:'height 0.4s ease' }} />
+                                    style={{ flex: 1, minWidth: 0, height: `${Math.max(8, Math.round(((Number(d.cost) || 0) / maxC) * 100))}%`, background: Number(d.cost) > 0 ? `rgba(211,191,162,${0.25 + ((Number(d.cost) || 0) / maxC) * 0.65})` : 'rgba(255,255,255,.06)', borderRadius: '3px 3px 0 0' }} />
                                 ));
                               })()}
                             </div>
                           </div>
                         )}
-
-                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'11px', background:'transparent', border:'1px solid rgba(255,255,255,0.198)', color:'#b9a27e', borderRadius:10, fontSize:'0.64rem', fontWeight:900, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                          <RefreshCw size={12} /> REFRESH REPORT
-                        </button>
+                        <button type="button" className="kx-btn block" onClick={fetchWastageAnalytics}><RefreshCw size={13} /> Refresh report</button>
                       </>
                     ) : (
-                      <div style={{ textAlign:'center', padding:'40px 20px' }}>
-                        <button type="button" onClick={fetchWastageAnalytics} style={{ padding:'10px 22px', background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)', color:'#b9a27e', borderRadius:9, fontSize:'0.65rem', fontWeight:900, cursor:'pointer' }}>LOAD MONTHLY REPORT</button>
-                      </div>
+                      <div style={{ textAlign: 'center', padding: '40px 20px' }}><button type="button" className="kx-btn" onClick={fetchWastageAnalytics}>Load monthly report</button></div>
                     )}
                   </div>
                 )}
@@ -1529,142 +1760,71 @@ m[i.name] = (m[i.name]||0) + (Number(i.quantity)||1);
         )}
       </AnimatePresence>
 
-      {/* 86 (OUT OF STOCK) MODAL — pick the dish, pick a reason, hide it with the reason logged */}
+      {/* ── 86 (OUT OF STOCK) MODAL — pick the dish, pick a reason, hide it with the reason logged ── */}
       <AnimatePresence>
         {eightySixModal && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.4 }} exit={{ opacity: 0 }}
-              onClick={() => setEightySixModal(null)}
-              style={{ position: 'fixed', inset: 0, background: '#050505', zIndex: 3100, backdropFilter: 'blur(4px)' }} />
-            {/* Centering + scroll wrapper — must stay transform-free: framer-motion owns
-                the transform on the modal below via animate={{scale,y}}, and mixing that
-                with a manual translate(-50%,-50%) here made the centering offset get
-                silently dropped, which is why this used to open off-screen at the bottom. */}
-            <div onClick={() => setEightySixModal(null)}
-              style={{ position: 'fixed', inset: 0, zIndex: 3101, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-            <motion.div onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-              style={{ width: isMobile ? '92vw' : 420, maxHeight: 'calc(82vh - 40px)', background: 'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border: '1px solid rgba(255,255,255,0.198)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: 'auto', boxShadow: '0 30px 80px rgba(255,255,255,0.099)' }}>
-
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.132)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(226,154,88,0.12)', border: '1px solid rgba(226,154,88,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <PackageX size={15} color="#f7f3eb" />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: '0.8rem', color: '#f7f3eb' }}>86 A DISH</div>
-                    <div style={{ fontSize: '0.5rem', color: '#9a9a9a', fontWeight: 800, letterSpacing: '0.5px', marginTop: 2, textTransform: 'uppercase' }}>{eightySixModal.categoryName}</div>
-                  </div>
+            <motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEightySixModal(null)} />
+            {/* Centering wrapper must stay transform-free: framer-motion owns the transform on the modal below. */}
+            <div className="kx-modalwrap" onClick={() => setEightySixModal(null)}>
+              <motion.div className="kx-modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 440, maxHeight: 'calc(88vh - 40px)' }}>
+                <div className="kx-sheet-h">
+                  <div className="t"><div className="ic" style={{ background: 'rgba(226,154,88,.12)', borderColor: 'rgba(226,154,88,.4)', color: '#e29a58' }}><PackageX size={17} /></div><div><h3>86 A DISH</h3><small>{eightySixModal.categoryName}</small></div></div>
+                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setEightySixModal(null)}><X size={16} /></button>
                 </div>
-                <button type="button" onClick={() => setEightySixModal(null)} style={{ background: '#080808', border: '1px solid rgba(255,255,255,0.165)', color: '#9a9a9a', padding: 7, borderRadius: 8, cursor: 'pointer', display: 'flex' }}>
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.56rem', fontWeight: 900, color: '#9a9a9a', letterSpacing: '1px', marginBottom: 9, textTransform: 'uppercase' }}>Which dish?</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 200, overflowY: 'auto' }}>
-                  {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).map(dish => (
-                    <button type="button" key={dish._id} onClick={() => setSelectedDish86(dish)}
-                      style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: selectedDish86?._id === dish._id ? '#cfcac0' : '#a6a6a6', background: selectedDish86?._id === dish._id ? 'rgba(255,255,255,0.149)' : 'transparent', border: `1px solid ${selectedDish86?._id === dish._id ? 'rgba(211,191,162,0.59)' : 'rgba(247,243,235,0.231)'}`, transition: 'all 0.15s' }}>
-                      {dish.name}
-                    </button>
-                  ))}
-                  {menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false).length === 0 && (
-                    <div style={{ fontSize: '0.62rem', color: '#9a9a9a', fontStyle: 'italic', padding: '8px 2px' }}>Everything in this category is already 86'd.</div>
+                <div style={{ padding: '16px 20px 20px', overflowY: 'auto' }}>
+                  <div className="kx-lbl">Which dish?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 220, overflowY: 'auto' }}>
+                    {dishesFor86.map(dish => <button type="button" key={dish._id} className={`kx-opt${selectedDish86?._id === dish._id ? ' on' : ''}`} onClick={() => setSelectedDish86(dish)}>{dish.name}</button>)}
+                    {dishesFor86.length === 0 && <div style={{ fontSize: '.7rem', color: '#9b978d', fontStyle: 'italic', padding: '8px 2px' }}>Everything in this category is already 86'd.</div>}
+                  </div>
+                  {selectedDish86 && (
+                    <>
+                      <div className="kx-lbl">Why?</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+                        {EIGHTY_SIX_REASONS.map(r => { const RIcon = r.icon; return <button type="button" key={r.id} className={`kx-opt${selectedReason86 === r.id ? ' on' : ''}`} onClick={() => setSelectedReason86(r.id)}><RIcon size={15} />{r.label}</button>; })}
+                      </div>
+                      <button type="button" className="kx-btn warn block" style={{ minHeight: 50 }} onClick={confirm86}><EyeOff size={15} /> 86 "{selectedDish86.name}"</button>
+                    </>
                   )}
                 </div>
-
-                {selectedDish86 && (
-                  <>
-                    <div style={{ fontSize: '0.56rem', fontWeight: 900, color: '#9a9a9a', letterSpacing: '1px', marginBottom: 9, textTransform: 'uppercase' }}>Why?</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-                      {EIGHTY_SIX_REASONS.map(r => {
-                        const RIcon = r.icon;
-                        const active = selectedReason86 === r.id;
-                        return (
-                          <button type="button" key={r.id} onClick={() => setSelectedReason86(r.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 700, color: active ? '#cfcac0' : '#a6a6a6', background: active ? 'rgba(255,255,255,0.149)' : 'transparent', border: `1px solid ${active ? 'rgba(211,191,162,0.59)' : 'rgba(255,255,255,0.116)'}`, transition: 'all 0.15s' }}>
-                            <RIcon size={13} />
-                            {r.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button type="button" onClick={confirm86}
-                      style={{ width: '100%', padding: '13px 0', borderRadius: 11, border: '1px solid rgba(226,154,88,0.5)', background: 'rgba(226,154,88,0.12)', color: '#f7f3eb', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <EyeOff size={14} /> 86 "{selectedDish86.name}"
-                    </button>
-                  </>
-                )}
-              </div>
-            </motion.div>
+              </motion.div>
             </div>
           </>
         )}
       </AnimatePresence>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; background: #080808; color: #f7f3eb; overflow: hidden; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
-        button { font-family: 'Outfit', sans-serif; }
-        input, select, textarea { font-family: 'Outfit', sans-serif; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .custom-scroll::-webkit-scrollbar { width: 3px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.198); border-radius: 10px; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes strobePulse { 0% { box-shadow: 0 0 0 0 rgba(211,191,162,0.73); } 70% { box-shadow: 0 0 0 10px rgba(255,255,255,0.0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } }
-        .voice-pulse { animation: strobePulse 1.8s infinite; border-radius: 9px; }
-        @keyframes urgentPulse { 0%,100% { border-color: rgba(226,154,88,0.45); box-shadow: 0 0 0 0 rgba(226,154,88,0); } 50% { border-color: rgba(226,154,88,1); box-shadow: 0 0 22px rgba(226,154,88,0.28); } }
-        .flash-card-pulse { animation: urgentPulse 1.8s ease-in-out infinite; }
-        @keyframes newOrder { 0% { transform: scale(0.97); box-shadow: 0 0 0 0 rgba(211,191,162,0.59); } 50% { transform: scale(1); box-shadow: 0 0 20px 4px rgba(255,255,255,0.198); } 100% { transform: scale(1); box-shadow: none; } }
-        .new-order-flash { animation: newOrder 0.6s ease forwards; }
-        @keyframes kdsRise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
-        @keyframes kdsSheen { 0% { background-position: -140% 0; } 100% { background-position: 240% 0; } }
-        @keyframes kdsGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.0); } 50% { box-shadow: 0 0 26px -4px rgba(255,255,255,0.193); } }
-        main > div > div, section > div > div { animation: kdsRise .45s cubic-bezier(.22,1,.36,1) both; }
-        button { transition: transform .18s cubic-bezier(.22,1,.36,1), filter .18s, box-shadow .18s, border-color .18s, background .18s; }
-        button:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.08); }
-        button:not(:disabled):active { transform: translateY(0) scale(0.98); }
-        input:focus, textarea:focus, select:focus { border-color: rgba(211,191,162,0.6) !important; box-shadow: 0 0 0 4px rgba(255,255,255,0.055) !important; outline: none; }
-        ::selection { background: rgba(255,255,255,0.193); }
-        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
-      `}</style>
     </div>
   );
 };
 
 /* ═══════════════════════════════════════════════════════════════════
-   KDS ORDER CARD COMPONENT
+   TICKET CARD
 ═══════════════════════════════════════════════════════════════════ */
 // forwardRef: <AnimatePresence mode="popLayout"> hands every child a ref to measure it. A plain function component cannot take one
 // ("Function components cannot be given refs"), so an exiting ticket could not be measured and the grid jumped when a ticket was dispatched.
 const KDSOrderCard = React.forwardRef(({
-  order, onReady, isNewest,
+  order, onReady, fresh, fill,
   dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-  socketInstance, isNonVegMode, tenantOnlyVeg,
-  isMobile, isTablet,
-  itemFinalTimes, setItemFinalTimes, onItemSynced
+  socketInstance, isNonVegMode, tenantOnlyVeg, isMobile,
+  itemFinalTimes, setItemFinalTimes, onItemSynced, onSpeak,
 }, ref) => {
   // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
-  const tenantId     = order.tenantId;
-  const otype        = getOrderType(order);
-  const isAggOrder   = otype === 'swiggy' || otype === 'zomato';
+  const tenantId = order.tenantId;
+  const otype = getOrderType(order);
+  const isAggOrder = otype === 'swiggy' || otype === 'zomato';
   const isParcelOrder = otype === 'parcel';
 
-  const [seconds,       setSeconds]       = useState(0);
-  const [itemStartTimes,setItemStartTimes]= useState({});
-  const [itemElapsed,   setItemElapsed]   = useState({});
-  const [showNote,      setShowNote]      = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [itemStartTimes, setItemStartTimes] = useState({});
+  const [itemElapsed, setItemElapsed] = useState({});
+  const [showNote, setShowNote] = useState(false);
   // The server has no field for kitchen notes, so this stays on this device. It used to vanish on every refresh / reconnect;
   // keep it per ticket in localStorage (blocked storage just means it is not remembered).
   const noteKey = `kds_note_${order._id}`;
-  const [localNote,     setLocalNoteState] = useState(() => { try { return localStorage.getItem(`kds_note_${order._id}`) || ''; } catch { return ''; } });
-  const setLocalNote = v => { setLocalNoteState(v); try { v ? localStorage.setItem(noteKey, v) : localStorage.removeItem(noteKey); } catch {} };
+  const [localNote, setLocalNoteState] = useState(() => { try { return localStorage.getItem(`kds_note_${order._id}`) || ''; } catch { return ''; } });
+  const setLocalNote = v => { setLocalNoteState(v); try { if (v) localStorage.setItem(noteKey, v); else localStorage.removeItem(noteKey); } catch { /* ignore */ } };
 
   /* The customer replaced the dishes: per-dish local timers are keyed by line index and would now point at different dishes */
   useEffect(() => {
@@ -1685,7 +1845,7 @@ const KDSOrderCard = React.forwardRef(({
     const starts = {};
     const finals = {};
     (order.items || []).forEach((item, idx) => {
-      if (item.isExtraItem || item.extraItemId != null) return;
+      if (!isKitchenItem(item)) return;
       const start = item.kdsStartedAt || order.kdsStartedAt || order.createdAt;
       if (start && !item.kdsCompletedAt && !item.isCrossedLocal) starts[idx] = new Date(start).getTime();
       if (item.kdsPrepTimeSeconds != null) finals[`${order._id}-${idx}`] = Number(item.kdsPrepTimeSeconds);
@@ -1698,7 +1858,7 @@ const KDSOrderCard = React.forwardRef(({
   useEffect(() => {
     if (Object.keys(itemStartTimes).length === 0) { setItemElapsed(prev => (Object.keys(prev).length ? {} : prev)); return undefined; }
     const t = setInterval(() => {
-      setItemElapsed(prev => {
+      setItemElapsed(() => {
         const u = {};
         Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
           u[idx] = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
@@ -1709,31 +1869,17 @@ const KDSOrderCard = React.forwardRef(({
     return () => clearInterval(t);
   }, [itemStartTimes]);
 
-  const urgency = seconds >= 900 ? 'high' : seconds >= 450 ? 'medium' : 'low';
+  const urgency = seconds >= 900 ? 'high' : seconds >= 450 ? 'med' : 'low';
+  const ringColor = urgency === 'high' ? '#e29a58' : urgency === 'med' ? '#d3bfa2' : '#8a704d';
 
-  const accentColor = {
-    swiggy:   '#fc8019',
-    zomato:   '#cb202d',
-    high:     'rgba(211,191,162,1.0)',
-    medium:   'rgba(211,191,162,0.622)',
-    low:      'rgba(247,243,235,0.33)',
-  };
-  const topBarColor = isAggOrder
-    ? accentColor[otype]
-    : urgency === 'high'
-      ? 'linear-gradient(90deg,#f7f3eb,#cfcac0)'
-      : urgency === 'medium'
-        ? 'rgba(211,191,162,0.562)'
-        : 'rgba(247,243,235,0.264)';
-
-  const kitchenItems = (order.items || []).filter(i => !i.isExtraItem && i.extraItemId == null);
-  const checkedCount  = (order.items || []).reduce((n, it, idx) => (!it.isExtraItem && it.extraItemId == null && checkedItemsGlobal[`${order._id}-${idx}`]) ? n + 1 : n, 0);
-  const totalItems    = kitchenItems.length;
-  const progressPct   = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
-  const allDone       = progressPct === 100 && totalItems > 0;
+  const kitchenItems = (order.items || []).filter(isKitchenItem);
+  const checkedCount = (order.items || []).reduce((n, it, idx) => (isKitchenItem(it) && checkedItemsGlobal[`${order._id}-${idx}`]) ? n + 1 : n, 0);
+  const totalItems = kitchenItems.length;
+  const progressPct = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
+  const allDone = progressPct === 100 && totalItems > 0;
 
   const toggleItemCrossed = async idx => {
-    const key  = `${order._id}-${idx}`;
+    const key = `${order._id}-${idx}`;
     // A second tap while the first save is in flight carried the same (now stale) version: guaranteed 409 and a flicker.
     if (pendingToggleKeys.has(key)) return;
     const next = !checkedItemsGlobal[key];
@@ -1741,12 +1887,12 @@ const KDSOrderCard = React.forwardRef(({
     const startMs = itemStartTimes[idx] || new Date(order.items?.[idx]?.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime();
     setItemStartTimes(prev => ({ ...prev, [idx]: startMs }));
     setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
-    socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState:next });
+    socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: next });
     try {
       const currentItem = order.items?.[idx] || {};
       const r = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
         itemIndex: idx, completed: next, tenantId,
-        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
+        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0,
       });
       onItemSynced?.(order._id, idx, r.data?.item, r.data?.order ? { prepTimeSeconds: r.data.order.prepTimeSeconds, prepTimeMinutes: r.data.order.prepTimeMinutes } : null);
       if (next && r.data?.item?.kdsPrepTimeSeconds != null) {
@@ -1763,10 +1909,10 @@ const KDSOrderCard = React.forwardRef(({
         }
         setItemStartTimes(prev => ({ ...prev, [idx]: authoritative.kdsStartedAt ? new Date(authoritative.kdsStartedAt).getTime() : startMs }));
         // Other screens were told `next` before the save; tell them what the server really holds.
-        socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
+        socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
       } else {
         setCheckedItemsGlobal(prev => ({ ...prev, [key]: !next }));
-        socketInstance?.emit('kds_item_cross_sync', { orderId:order._id, tenantId:order.tenantId, idx, newState: !next });
+        socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !next });
       }
       console.error('KDS item timing save failed:', err?.message || err);
     } finally { pendingToggleKeys.delete(key); }
@@ -1792,7 +1938,7 @@ const KDSOrderCard = React.forwardRef(({
       const currentItem = order.items?.[idx] || {};
       const sr = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
         itemIndex: idx, action: 'start', tenantId,
-        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0
+        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0,
       });
       onItemSynced?.(order._id, idx, sr.data?.item, null);
     } catch (err) {
@@ -1802,514 +1948,201 @@ const KDSOrderCard = React.forwardRef(({
     }
   };
 
-  /* Header label */
-  const tableLabel = otype === 'swiggy' ? <span style={{ color:'#fc8019' }}>SWIGGY</span>
-    : otype === 'zomato'  ? <span style={{ color:'#cb202d' }}>ZOMATO</span>
-    : isParcelOrder ? <span style={{ color:'#17120c' }}>PARCEL</span>
-    : <span style={{ color:'#17120c' }}>T-{order.tableNumber}</span>;
-
-  const sourceMeta = {
-    waitlist: { label:'WAITLIST', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
-    reservation: { label:'RESERVATION', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
-    'counter-pickup': { label:'PICKUP', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
-    swiggy:          { label:'SWIGGY',     color:'#fc8019', bg:'rgba(252,128,25,0.1)',  border:'rgba(252,128,25,0.3)' },
-    zomato:          { label:'ZOMATO',     color:'#cb202d', bg:'rgba(203,32,45,0.1)',   border:'rgba(203,32,45,0.3)' },
-    takeaway: { label:'TAKEAWAY', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
-    direct: { label:'DINE-IN', color:'#3a3225', bg:'rgba(23,18,12,0.08)', border:'rgba(23,18,12,0.2)' },
-  };
-  const sm = sourceMeta[order.source] || sourceMeta.direct;
+  const sourceLabel = {
+    waitlist: 'WAITLIST', reservation: 'RESERVATION', 'counter-pickup': 'PICKUP', takeaway: 'TAKEAWAY', direct: 'DINE-IN', swiggy: 'SWIGGY', zomato: 'ZOMATO',
+  }[order.source] || 'DINE-IN';
+  const TypeIcon = isAggOrder ? Bike : isParcelOrder ? Package : UtensilsCrossed;
+  const typeLabel = isAggOrder ? 'DELIVERY' : isParcelOrder ? 'PARCEL' : 'DINE-IN';
+  const numClass = otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : '';
+  const tableLabel = otype === 'swiggy' ? 'SWIGGY' : otype === 'zomato' ? 'ZOMATO' : isParcelOrder ? 'PARCEL' : `T-${order.tableNumber}`;
+  const firstOpenIdx = (order.items || []).findIndex((it, i) => isKitchenItem(it) && !checkedItemsGlobal[`${order._id}-${i}`]);
+  const circ = 2 * Math.PI * 19;
 
   return (
-    <motion.div
+    <motion.article
       ref={ref}
       layout
-      initial={{ opacity:0, y:16, scale:0.98 }}
-      animate={{ opacity:1, y:0,  scale:1 }}
-      exit={{ opacity:0, scale:0.96 }}
-      className={urgency === 'high' ? 'flash-card-pulse' : isNewest ? 'new-order-flash' : ''}
-      style={{
-        borderRadius:16,
-        padding: isMobile ? '14px' : isTablet ? '14px' : '16px',
-        display:'flex', flexDirection:'column',
-        height: isMobile ? '100%' : isTablet ? 390 : 420,
-        border: `1px solid ${isAggOrder ? accentColor[otype]+'40' : isNewest ? 'rgba(233,220,195,0.55)' : 'rgba(233,220,195,0.2)'}`,
-        position:'relative', overflow:'hidden',
-        background:'linear-gradient(160deg, rgba(233,220,195,0.06), rgba(233,220,195,0.015)), #0c0a08',
-        boxShadow: isAggOrder ? `0 0 28px ${accentColor[otype]}14` : isNewest ? '0 0 22px rgba(247,243,235,0.165)' : '0 4px 18px rgba(247,243,235,0.091)',
-        transition:'border-color 0.3s',
-      }}>
-
-      {/* TOP URGENCY BAR */}
-      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:topBarColor, flexShrink:0 }} />
-
-      {/* ── CARD HEADER ── */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', margin:(isMobile||isTablet)?'-14px -14px 12px':'-16px -16px 12px', padding:(isMobile||isTablet)?'17px 14px 12px':'19px 16px 13px', gap:8, background:'linear-gradient(135deg, #f1e8d4 0%, #e6d9bd 55%, #dccdad 100%)', borderBottom:'1px solid rgba(23,18,12,0.12)', color:'#17120c' }}>
-        {/* Left — table / platform */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
-            <h2 style={{ fontSize: isMobile?'1.7rem':isTablet?'1.6rem':'1.9rem', margin:0, fontWeight:900, lineHeight:1, letterSpacing:'-0.5px', color:'#17120c' }}>
-              {tableLabel}
-            </h2>
-            {isNewest && (
-              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#17120c', color:'#ecdcb9', border:'1px solid #17120c', letterSpacing:'0.5px', flexShrink:0 }}>NEW</span>
-            )}
-            {order.isModified && (
-              <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'2px 7px', borderRadius:5, background:'#e29a58', color:'#f7f3eb', letterSpacing:'0.5px', flexShrink:0 }}>REPLACED</span>
-            )}
-          </div>
-          {/* Source + order ID row */}
-          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-            <span style={{ fontSize:'0.47rem', fontWeight:900, padding:'2px 6px', borderRadius:4, letterSpacing:'0.5px', textTransform:'uppercase', background:sm.bg, color:sm.color, border:`1px solid ${sm.border}` }}>
-              {sm.label}
-            </span>
-            <span style={{ fontSize:'0.48rem', color:'#6f624c', fontFamily:'monospace', fontWeight:900 }}>
-              #{String(order._id).slice(-4).toUpperCase()}
-            </span>
-            {order.aggregatorOrderId && (
-              <span style={{ fontSize:'0.48rem', color: accentColor[otype]+'99', fontFamily:'monospace' }}>
-                ·{order.aggregatorOrderId.toString().slice(-6)}
-              </span>
-            )}
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      className={`kx-tk ${urgency}${otype === 'swiggy' ? ' swiggy' : otype === 'zomato' ? ' zomato' : ''}${fresh ? ' fresh' : ''}${fill ? ' fill' : ''}`}
+    >
+      {/* ── HEADER ── */}
+      <div className="kx-tk-h">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <span className="kx-tk-type"><TypeIcon size={13} /> {typeLabel}</span>
+          <div className={`kx-tk-num${numClass}`}>{tableLabel}</div>
+          <div className="kx-tk-meta">
+            {fresh && <span className="kx-tag gold">NEW</span>}
+            {order.isModified && <span className="kx-tag amber">REPLACED</span>}
+            <span className={`kx-tag${otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : ''}`}>{sourceLabel}</span>
+            <span className="kx-tag id">#{String(order._id).slice(-4).toUpperCase()}{order.aggregatorOrderId ? ` · ${order.aggregatorOrderId.toString().slice(-6)}` : ''}</span>
           </div>
         </div>
-
-        {/* Right — timer */}
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:9, border:`1.5px solid ${urgency==='high' ? '#17120c' : urgency==='medium' ? '#8a704d' : 'rgba(23,18,12,0.28)'}`, background: urgency==='high' ? '#17120c' : urgency==='medium' ? 'rgba(138,112,77,0.14)' : 'rgba(23,18,12,0.06)' }}>
-            <Clock size={12} color={urgency==='high'?'#e29a58':urgency==='medium'?'#6b5334':'#4a3f2e'} />
-            <span style={{ fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize: isMobile?'0.88rem':'0.92rem', color:urgency==='high'?'#f1e3c4':urgency==='medium'?'#5c4527':'#2c2418', letterSpacing:'-0.3px' }}>
-              {fmt(seconds)}
-            </span>
+        <div>
+          <div className={`kx-time ${urgency}`} aria-label={`Ticket age ${fmt(seconds)}`}>
+            <svg viewBox="0 0 44 44" width="66" height="66" aria-hidden="true">
+              <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3.5" />
+              <circle cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.min(1, seconds / 900) * circ} ${circ}`} />
+            </svg>
+            <span className="tv">{fmt(seconds)}</span>
           </div>
-          {urgency !== 'low' && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize:'0.43rem', fontWeight:900, color: urgency==='high' ? '#8a4f12' : '#6b5334', letterSpacing:'0.5px', textTransform:'uppercase' }}>
-              {urgency==='high' && <Zap size={8} />} {urgency==='high' ? 'OVERDUE' : 'DELAYED'}
-            </span>
-          )}
+          {urgency !== 'low' && <span className="kx-late">{urgency === 'high' ? 'OVERDUE' : 'DELAYED'}</span>}
         </div>
       </div>
 
-      {/* AGGREGATOR CUSTOMER STRIP */}
+      {/* AGGREGATOR STRIP */}
       {isAggOrder && (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10, padding:'6px 10px', borderRadius:8, background: otype==='zomato' ? 'rgba(203,32,45,0.07)' : 'rgba(252,128,25,0.07)', border:`1px solid ${otype==='zomato'?'rgba(203,32,45,0.2)':'rgba(252,128,25,0.2)'}` }}>
-          <span style={{ fontSize:'0.52rem', fontWeight:900, letterSpacing:'0.8px', color:accentColor[otype], display:'flex', alignItems:'center', gap:4 }}>
-            <Zap size={10} /> {otype.toUpperCase()} ORDER
-          </span>
-          {order.aggregatorCustomer?.name && (
-            <span style={{ fontSize:'0.6rem', color:'#a6a6a6', fontWeight:700 }}>{order.aggregatorCustomer.name}</span>
-          )}
-          {order.aggregatorRaw?.expectedDeliveryTime && (
-            <span style={{ fontSize:'0.52rem', color:'rgba(211,191,162,0.59)', fontFamily:'monospace' }}>
-              ~{order.aggregatorRaw.expectedDeliveryTime}m
-            </span>
-          )}
+        <div className={`kx-strip ${otype === 'zomato' ? 'zo' : 'sw'}`}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 800, letterSpacing: '.1em' }}><Zap size={12} /> {otype.toUpperCase()} ORDER</span>
+          {order.aggregatorCustomer?.name && <span style={{ color: '#cfc7b8' }}>{order.aggregatorCustomer.name}</span>}
+          {order.aggregatorRaw?.expectedDeliveryTime && <span className="mono">~{order.aggregatorRaw.expectedDeliveryTime}m</span>}
         </div>
       )}
 
       {/* REPLACED STRIP — what the customer changed */}
       {order.isModified && (
-        <div style={{ marginBottom:10, padding:'6px 10px', borderRadius:8, background:'rgba(226,154,88,0.08)', border:'1px solid rgba(226,154,88,0.3)', fontSize:'0.55rem', color:'#d08a4a', fontWeight:700, lineHeight:1.4 }}>
-          <div style={{ fontWeight:900, letterSpacing:'0.6px' }}>⚠ ORDER REPLACED BY CUSTOMER</div>
-          {(order.replacedInfo?.previousItems || []).length > 0 && (
-            <div style={{ fontWeight:600, opacity:0.9 }}>Was: {(order.replacedInfo.previousItems).map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>
-          )}
-          {(order.replacedInfo?.removed || []).length > 0 && (
-            <div style={{ fontWeight:800 }}>Removed: {(order.replacedInfo.removed).map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>
-          )}
+        <div className="kx-strip mod">
+          <div style={{ fontWeight: 800, letterSpacing: '.08em' }}>⚠ ORDER REPLACED BY CUSTOMER</div>
+          {(order.replacedInfo?.previousItems || []).length > 0 && <div style={{ fontWeight: 500 }}>Was: {order.replacedInfo.previousItems.map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>}
+          {(order.replacedInfo?.removed || []).length > 0 && <div style={{ fontWeight: 700 }}>Removed: {order.replacedInfo.removed.map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>}
         </div>
       )}
 
-      {/* PREP PROGRESS BAR */}
+      {/* PREP PROGRESS */}
       {totalItems > 0 && (
-        <div style={{ marginBottom:10 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-            <span style={{ fontSize:'0.47rem', color:'#9a9a9a', fontWeight:900, textTransform:'uppercase', letterSpacing:'0.8px' }}>PREP PROGRESS</span>
-            <span style={{ fontSize:'0.52rem', fontWeight:900, color: allDone ? '#cfcac0' : '#9a9a9a', fontFamily:'monospace' }}>{checkedCount}/{totalItems}</span>
-          </div>
-          <div style={{ height:3, background:'rgba(255,255,255,0.083)', borderRadius:2, overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${progressPct}%`, background: allDone ? 'linear-gradient(90deg,#e6d6b8,#b99f78)' : urgency==='high' ? 'rgba(211,191,162,0.8)' : 'rgba(247,243,235,0.418)', borderRadius:2, transition:'width 0.4s ease' }} />
-          </div>
+        <div className="kx-prog">
+          <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
+          <span className={allDone ? 'ok' : ''}>{checkedCount}/{totalItems}</span>
         </div>
       )}
 
-      {/* ITEM LIST */}
-      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }} className="custom-scroll">
+      {/* ── DISHES ── */}
+      <div className="kx-items no-scrollbar">
         {(order.items || []).map((item, idx) => {
-          if (item.isExtraItem || item.extraItemId != null) return null;
+          if (!isKitchenItem(item)) return null;
 
-          let catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
+          const catId = item.categoryId?.toLowerCase().trim() || dishToCategoryMap[item.name?.toLowerCase().trim()] || null;
           if (selectedCategory !== 'ALL' && catId !== selectedCategory.toLowerCase().trim()) return null;
 
-          const isVeg = item.isVeg !== undefined
-            ? item.isVeg !== false
-            : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
-          const modeMatch = tenantOnlyVeg ? true : isNonVegMode ? !isVeg : isVeg;
+          const isVeg = item.isVeg !== undefined ? item.isVeg !== false : (dishToVegMap?.[item.name?.toLowerCase().trim()] !== false);
+          const modeMatch = tenantOnlyVeg ? true : (isNonVegMode ? !isVeg : isVeg);
           if (!modeMatch) return null;
 
-          const crossed      = !!checkedItemsGlobal[`${order._id}-${idx}`];
-          const hasStarted   = !!itemStartTimes[idx] || !!item.kdsStartedAt;
-          const elapsedSecs  = Math.max(0, Math.round(item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0)));
-          const isSlow       = hasStarted && !crossed && elapsedSecs >= 300;
-          const finalSecs    = Math.max(0, Math.round(Number(itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs) || 0)); // fractional server seconds rendered as "3m 12.4285s"
-
-          /* Per-item source tag */
-          const itemTag = isAggOrder
-            ? { label: otype.toUpperCase(), color: accentColor[otype], bg:`${accentColor[otype]}10`, border:`${accentColor[otype]}30`, icon:<Zap size={9}/> }
-            : isParcelOrder
-              ? { label:'PARCEL',  color:'#cfcac0', bg:'rgba(247,243,235,0.154)', border:'rgba(255,255,255,0.198)', icon:<Package size={9}/> }
-              : { label:'DINE-IN', color:'#a6a6a6', bg:'rgba(247,243,235,0.033)', border:'rgba(255,255,255,0.083)', icon:<UtensilsCrossed size={9}/> };
+          const crossed = !!checkedItemsGlobal[`${order._id}-${idx}`];
+          const hasStarted = !!itemStartTimes[idx] || !!item.kdsStartedAt;
+          const elapsedSecs = Math.max(0, Math.round(item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0)));
+          const isSlow = hasStarted && !crossed && elapsedSecs >= 300;
+          const finalSecs = Math.max(0, Math.round(Number(itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs) || 0)); // fractional server seconds rendered as "3m 12.4285s"
+          const portionTxt = item.portion?.toUpperCase() || 'STANDARD';
 
           return (
             <div
               key={idx}
+              role="button" tabIndex={0} aria-pressed={crossed}
+              className={`kx-it${crossed ? ' done' : hasStarted ? ' run' : ''}`}
               onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } toggleItemCrossed(idx); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItemCrossed(idx); } }}
               onContextMenu={e => startItemTimer(idx, e)}
               onTouchStart={() => { lpFiredRef.current = false; clearTimeout(lpTimerRef.current); lpTimerRef.current = setTimeout(() => { lpFiredRef.current = true; startItemTimer(idx, null); }, 550); }}
               onTouchEnd={() => clearTimeout(lpTimerRef.current)}
               onTouchMove={() => clearTimeout(lpTimerRef.current)}
               onTouchCancel={() => clearTimeout(lpTimerRef.current)}
-              style={{
-                display:'flex', alignItems:'flex-start', gap:10,
-                padding: isMobile?'10px 11px':'11px 12px',
-                borderRadius:10,
-                background: crossed ? '#080808' : hasStarted ? '#101010' : '#0d0d0d',
-                border: `1px solid ${crossed ? 'rgba(255,255,255,0.066)' : hasStarted ? 'rgba(211,191,162,0.42)' : 'rgba(247,243,235,0.198)'}`,
-                borderLeft: `3px solid ${crossed ? 'rgba(255,255,255,0.066)' : hasStarted ? 'rgba(211,191,162,0.66)' : 'rgba(247,243,235,0.264)'}`,
-                cursor:'pointer', transition:'all 0.15s', userSelect:'none',
-                opacity: crossed ? 0.5 : 1,
-              }}>
-
-              {/* Qty badge */}
-              <div style={{ width:28, height:28, borderRadius:7, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'JetBrains Mono, monospace', fontWeight:900, fontSize:'0.85rem', background: crossed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.149)', border:`1px solid ${crossed?'rgba(255,255,255,0.066)':'rgba(255,255,255,0.171)'}`, color: crossed ? '#9a9a9a' : '#cfcac0' }}>
-                {item.quantity}
-              </div>
-
-              <div style={{ flex:1, minWidth:0 }}>
-                {/* Name row */}
-                <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:3 }}>
-                  <span style={{ fontSize: isMobile?'0.86rem':isTablet?'0.83rem':'0.9rem', fontWeight:700, lineHeight:1.25, textDecoration: crossed ? 'line-through' : 'none', color: crossed ? '#9a9a9a' : item.isChefSpecial ? '#f7f3eb' : '#f7f3eb', background: item.isChefSpecial && !crossed ? 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))' : 'transparent', padding: item.isChefSpecial && !crossed ? '1px 6px' : 0, borderRadius: item.isChefSpecial ? 4 : 0 }}>
-                    {item.isChefSpecial && !crossed && <Sparkles size={10} style={{ display:'inline', marginRight:3 }} />}
-                    {item.name}
+            >
+              <div className="kx-qty">{item.quantity}</div>
+              <div className="kx-it-b">
+                <div className="kx-nm">
+                  {!tenantOnlyVeg && <span className={`kx-vd${isVeg ? '' : ' n'}`}><i /></span>}
+                  <span className={item.isChefSpecial && !crossed ? 'sp' : undefined} style={item.isChefSpecial && !crossed ? undefined : { display: 'contents' }}>
+                    {item.isChefSpecial && !crossed && <Sparkles size={12} />}{item.name}
                   </span>
-                  {item.modChange && !crossed && (
-                    <span style={{ fontSize:'0.43rem', fontWeight:900, padding:'1px 6px', borderRadius:4, background:'#e29a58', color:'#f7f3eb', letterSpacing:'0.4px', flexShrink:0 }}>
-                      {item.modChange === 'new' ? 'NEW' : `QTY ${item.modPrevQty}→${item.quantity}`}
-                    </span>
-                  )}
-
-                  {/* Veg/NonVeg dot */}
-                  {!tenantOnlyVeg && !crossed && (
-                    <div style={{ width:10, height:10, border:`1.5px solid ${isVeg?'#4a7c3f':'#8a3030'}`, borderRadius: isVeg?'50%':2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {isVeg
-                        ? <div style={{ width:4, height:4, borderRadius:'50%', background:'#4a7c3f' }} />
-                        : <div style={{ width:0, height:0, borderLeft:'2.5px solid transparent', borderRight:'2.5px solid transparent', borderBottom:'4px solid #8a3030' }} />}
-                    </div>
-                  )}
-
-                  {/* Source tag */}
-                  {!crossed && (
-                    <div style={{ fontSize:'0.46rem', padding:'1px 5px', borderRadius:4, background:itemTag.bg, color:itemTag.color, border:`1px solid ${itemTag.border}`, fontWeight:900, display:'inline-flex', alignItems:'center', gap:2 }}>
-                      {itemTag.icon} {itemTag.label}
-                    </div>
-                  )}
+                  {item.modChange && !crossed && <span className="kx-tag amber">{item.modChange === 'new' ? 'NEW' : `QTY ${item.modPrevQty}→${item.quantity}`}</span>}
                 </div>
-
-                {/* Portion */}
                 {!crossed && (
-                  <div style={{ fontSize:'0.58rem', fontWeight:900, color: item.portion?.toLowerCase()==='half' ? '#cfcac0' : '#a6a6a6', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.3px' }}>
-                    {item.portion?.toUpperCase() || 'STANDARD'}
+                  <div className="kx-sub">
+                    <span className={item.portion?.toLowerCase() === 'half' ? 'half' : undefined}>{portionTxt}</span>
+                    {hasStarted && (
+                      <span className={`kx-tm${isSlow ? ' slow' : ''}`}>
+                        <Timer size={11} />{`${Math.floor(elapsedSecs / 60)}:${(elapsedSecs % 60).toString().padStart(2, '0')}`}
+                        {isSlow && <><AlertTriangle size={10} strokeWidth={2.5} /> SLOW</>}
+                      </span>
+                    )}
                   </div>
                 )}
-
-                {/* Cook timer */}
-                {hasStarted && !crossed && (
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', fontWeight:900, color: isSlow ? '#cfcac0' : 'rgba(211,191,162,0.52)', background: isSlow ? 'rgba(255,255,255,0.116)' : 'transparent', padding: isSlow ? '2px 6px' : 0, borderRadius:4, border: isSlow ? '1px solid rgba(255,255,255,0.171)' : 'none', fontFamily:'monospace' }}>
-                    <Timer size={9} />
-                    {`${Math.floor(elapsedSecs/60)}:${(elapsedSecs%60).toString().padStart(2,'0')}`}
-                    {isSlow && <span style={{ display:'inline-flex', alignItems:'center', gap:2, fontSize:'0.44rem' }}><AlertTriangle size={8} strokeWidth={2.5} /> SLOW</span>}
-                  </div>
-                )}
-
-                {/* Done time */}
-                {crossed && hasStarted && (
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:2, fontSize:'0.52rem', color:'#9a9a9a', fontFamily:'monospace', fontWeight:900 }}>
-                    <Timer size={9} /> Done {Math.floor(finalSecs/60)}m {finalSecs%60}s
-                  </div>
-                )}
-
-                {/* Long-press hint — only on first unchecked */}
-                {!hasStarted && !crossed && idx === order.items.findIndex(i => !checkedItemsGlobal[`${order._id}-${order.items.indexOf(i)}`] && !i.isExtraItem && i.extraItemId == null) && (
-                  <div style={{ fontSize:'0.46rem', color:'rgba(247,243,235,0.341)', marginTop:2, fontStyle:'italic' }}>Hold to start cook timer</div>
-                )}
-
-                {/* Suggestion note */}
-                {item.suggestion && !crossed && (
-                  <div style={{ display:'flex', alignItems:'flex-start', gap:5, marginTop:5, padding:'5px 8px', borderRadius:7, background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.132)' }}>
-                    <StickyNote size={9} color="#b9a27e" style={{ flexShrink:0, marginTop:1 }} />
-                    <span style={{ fontSize:'0.6rem', color:'#cfcac0', fontWeight:700, textTransform:'uppercase', lineHeight:1.4 }}>{item.suggestion}</span>
-                  </div>
-                )}
+                {crossed && hasStarted && <div className="kx-sub"><span className="kx-tm" style={{ color: '#9b978d' }}><Timer size={11} /> Done {Math.floor(finalSecs / 60)}m {finalSecs % 60}s</span></div>}
+                {!hasStarted && !crossed && idx === firstOpenIdx && <div className="kx-hint">Hold to start cook timer</div>}
+                {item.suggestion && !crossed && <div className="kx-note"><StickyNote size={14} /><span>{item.suggestion}</span></div>}
               </div>
-
-              {/* Cross indicator */}
-              {crossed && <CheckSquare size={16} color="rgba(211,191,162,0.52)" style={{ flexShrink:0, marginTop:2 }} />}
+              <div className="kx-chk">{crossed && <Check size={16} strokeWidth={3} />}</div>
             </div>
           );
         })}
       </div>
 
-      {/* CHEF NOTE PANEL */}
+      {/* CHEF NOTE */}
       {showNote && (
-        <div style={{ marginTop:8, background:'rgba(255,255,255,0.066)', border:'1px solid rgba(255,255,255,0.165)', borderRadius:9, padding:'10px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
-          <StickyNote size={12} color="#b9a27e" style={{ flexShrink:0, marginTop:2 }} />
-          <textarea value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Private note for this ticket (shown on this screen only)…"
-            style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#cfcac0', fontSize:'0.72rem', resize:'none', fontFamily:"'Outfit', sans-serif", lineHeight:1.5, minHeight:52 }} rows={2} />
+        <div className="kx-notebox">
+          <StickyNote size={14} color="#b99f78" style={{ flexShrink: 0, marginTop: 3 }} />
+          <textarea rows={2} value={localNote} onChange={e => setLocalNote(e.target.value)} placeholder="Private note for this ticket (shown on this screen only)…" />
         </div>
       )}
 
-      {/* BOTTOM ACTIONS */}
-      <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
-        {/* Note toggle — small secondary action */}
-        <div style={{ display:'flex', justifyContent:'flex-end' }}>
-          <button type="button" onClick={() => setShowNote(v => !v)} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 9px', background:'transparent', border:'1px solid rgba(255,255,255,0.116)', color:'#a6a6a6', borderRadius:7, fontSize:'0.5rem', fontWeight:900, cursor:'pointer', letterSpacing:'0.5px', transition:'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(211,191,162,0.41)'; e.currentTarget.style.color='#cfcac0'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.116)'; e.currentTarget.style.color='#a6a6a6'; }}>
-            <StickyNote size={10} /> {showNote ? 'HIDE NOTE' : 'ADD NOTE'}
+      {/* ── ACTIONS ── */}
+      <div className="kx-tk-f">
+        <div className="row">
+          <button type="button" className={`kx-sq${showNote || localNote ? ' on' : ''}`} aria-label={showNote ? 'Hide note' : 'Add note'} title="Note" onClick={() => setShowNote(v => !v)}><StickyNote size={18} /></button>
+          <button type="button" className="kx-sq" aria-label="Read this ticket aloud" title="Read aloud" onClick={() => onSpeak?.(order)}><Volume2 size={19} /></button>
+          <button type="button" className={`kx-go${urgency === 'high' ? ' late' : ''}`} onClick={() => onReady(order._id)} style={isMobile ? { minHeight: 54 } : undefined}>
+            {urgency === 'high' && <Flame size={15} strokeWidth={2.5} />}
+            {urgency === 'high' ? 'Overdue — dispatch' : allDone ? <><CheckCircle2 size={15} /> All ready — dispatch</> : <>Complete ticket <ArrowRight size={14} /></>}
           </button>
         </div>
-
-        {/* DISPATCH BUTTON */}
-        <button type="button"
-          onClick={() => onReady(order._id)}
-          style={{
-            width:'100%',
-            padding: isMobile?'15px':isTablet?'13px':'14px',
-            borderRadius:12,
-            border: urgency==='high' ? '1px solid #e29a58' : '1px solid rgba(233,220,195,0.55)',
-            fontWeight:900,
-            fontSize: isMobile?'0.86rem':isTablet?'0.75rem':'0.78rem',
-            cursor:'pointer',
-            textTransform:'uppercase', letterSpacing:'0.8px',
-            transition:'all 0.2s',
-            background: urgency==='high'
-              ? '#17120c'
-              : 'linear-gradient(135deg, #f1e8d4, #e3d5b8 55%, #d6c5a0)',
-            boxShadow: allDone ? '0 8px 22px -8px rgba(233,220,195,0.55)' : 'none',
-            color: urgency==='high' ? '#f1e3c4' : '#17120c',
-            minHeight: isMobile?50:44,
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-          }}>
-          {urgency === 'high' && <Flame size={14} color="#e29a58" strokeWidth={2.5} />}
-          {urgency === 'high'
-            ? 'OVERDUE — DISPATCH NOW'
-            : allDone
-              ? <><CheckCircle2 size={14} /> ALL READY — DISPATCH</>
-              : <>COMPLETE TICKET <ArrowRight size={13} /></>}
-        </button>
       </div>
-    </motion.div>
+    </motion.article>
   );
 });
 KDSOrderCard.displayName = 'KDSOrderCard';
 
-/* ─────────────────────────────────────────────────────────────
-   STYLE TOKENS
-───────────────────────────────────────────────────────────── */
-const rs = {
-  root: {
-    position:'fixed', inset:0,
-    display:'flex', flexDirection:'column',
-    background:'radial-gradient(ellipse 900px 520px at 12% -6%, rgba(233,220,195,0.07), transparent 60%), radial-gradient(ellipse 760px 480px at 100% 0%, rgba(233,220,195,0.06), transparent 55%), radial-gradient(ellipse 1100px 700px at 50% 112%, rgba(233,220,195,0.05), transparent 60%), #080706', padding:'12px', gap:10,
-    overflow:'hidden',
-  },
-  header: {
-    display:'flex', justifyContent:'space-between', alignItems:'center',
-    background:'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))', backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)', padding:'9px 13px',
-    borderRadius:18, border:'1px solid rgba(255,255,255,0.11)', boxShadow:'0 18px 44px -24px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)',
-    flexShrink:0, zIndex:10, gap:8, minHeight:52,
-    overflowX:'hidden',
-  },
-  iconBtn: {
-    background:'#121212', border:'1px solid rgba(255,255,255,0.165)',
-    padding:'8px', borderRadius:9, cursor:'pointer',
-    display:'flex', alignItems:'center', flexShrink:0,
-    transition:'all 0.15s',
-  },
-  utilBtn: {
-    background:'#121212', border:'1px solid rgba(255,255,255,0.132)',
-    color:'#f7f3eb', padding:'7px 11px', borderRadius:9,
-    cursor:'pointer', display:'flex', alignItems:'center',
-    gap:5, transition:'all 0.15s', flexShrink:0, minHeight:36,
-  },
-  dotGold: {
-    width:5, height:5, background:'#d3bfa2', borderRadius:'50%',
-    boxShadow:'0 0 7px rgba(211,191,162,1.0)', flexShrink:0,
-  },
-  dotRed: {
-    width:5, height:5, background:'#e29a58', borderRadius:'50%',
-    boxShadow:'0 0 7px rgba(226,154,88,0.49)', flexShrink:0,
-  },
-  body: { display:'flex', flex:1, gap:10, overflow:'hidden', minHeight:0 },
-  sidebar: {
-    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.116)',
-    borderRadius:13, display:'flex', flexDirection:'column',
-    padding:'15px 12px', flexShrink:0, height:'100%', overflowY:'auto',
-  },
-  sidebarHeaderIcon: {
-    width:28, height:28, borderRadius:8,
-    background:'rgba(255,255,255,0.083)', border:'1px solid rgba(255,255,255,0.198)',
-    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
-  },
-  sidebarBtn: (active) => ({
-    display:'flex', alignItems:'center', padding:'10px 10px',
-    borderRadius:9, border: active ? 'none' : '1px solid rgba(255,255,255,0.116)',
-    background: active ? 'linear-gradient(160deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06))' : 'rgba(255,255,255,0.033)',
-    color: active ? '#f7f3eb' : '#a6a6a6',
-    cursor:'pointer', fontSize:'0.64rem', fontWeight: active ? 900 : 800,
-    width:'100%', textAlign:'left', transition:'all 0.15s',
-    letterSpacing:'0.3px', minHeight:40, gap:0,
-    boxShadow: active ? '0 4px 12px rgba(255,255,255,0.154)' : 'none',
-  }),
-  countChip: (active, hasItems) => ({
-    fontSize:'0.54rem', fontFamily:'monospace', padding:'1px 6px',
-    borderRadius:5, fontWeight:900,
-    background: active ? 'rgba(255,255,255,0.22)' : hasItems ? 'rgba(255,255,255,0.132)' : 'rgba(247,243,235,0.099)',
-    color: active ? '#f7f3eb' : hasItems ? '#cfcac0' : '#9a9a9a',
-    border: active ? 'none' : hasItems ? '1px solid rgba(255,255,255,0.171)' : '1px solid rgba(247,243,235,0.165)',
-  }),
-  workspace: {
-    flex:1, overflowY:'auto', minWidth:0,
-  },
-  navBtn: {
-    display:'flex', alignItems:'center', gap:5,
-    background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(255,255,255,0.165)',
-    color:'#cfcac0', padding:'10px 14px', borderRadius:9,
-    cursor:'pointer', fontSize:'0.7rem', fontWeight:800, minHeight:44,
-    transition:'all 0.15s',
-  },
-};
-
-const wInput = {
-  width:'100%', padding:'10px 12px',
-  background:'#080808', border:'1px solid rgba(255,255,255,0.165)',
-  color:'#f7f3eb', borderRadius:9, fontSize:'0.8rem',
-  outline:'none', boxSizing:'border-box',
-  fontFamily:"'Outfit', sans-serif",
-  transition:'border-color 0.15s',
-};
-
-const wFormLabel = {
-  display:'block', fontSize:'0.5rem', color:'#9a9a9a',
-  fontWeight:900, letterSpacing:'1.2px', marginBottom:6,
-  textTransform:'uppercase',
-};
-
-
 /* ═══════════════════════════════════════════════════════════
-   LOADING SKELETONS — mirror the real KDS geometry (ticket card, sidebar list) so nothing shifts when data arrives.
-   One calm sweep, staggered across the cards; motion is switched off for prefers-reduced-motion.
+   LOADING / EMPTY / ERROR STATES
 ═══════════════════════════════════════════════════════════ */
-const KDS_SKELETON_CSS = `
-.kdsk{position:relative;overflow:hidden;background:rgba(255,255,255,0.055);border-radius:6px;flex-shrink:0}
-.kdsk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
-  background:linear-gradient(100deg,transparent 15%,rgba(233,220,195,0.11) 50%,transparent 85%);
-  animation:kdsk-sweep 1.7s cubic-bezier(.45,0,.25,1) infinite;animation-delay:var(--kdsk-d,0s)}
-.kdsk-ink{background:rgba(23,18,12,0.12)}
-.kdsk-ink::after{background:linear-gradient(100deg,transparent 15%,rgba(255,255,255,0.42) 50%,transparent 85%)}
-@keyframes kdsk-sweep{to{transform:translateX(100%)}}
-@media (prefers-reduced-motion:reduce){.kdsk::after{animation:none;opacity:0}}
-`;
+const Sk = ({ w, h, r = 7, style }) => <div className="kx-sk" style={{ width: w, height: h, borderRadius: r, ...style }} />;
 
-const KdsSkeletonCss = () => (
-  <>
-    <style>{KDS_SKELETON_CSS}</style>
-    <span role="status" style={{ position:'absolute', width:1, height:1, overflow:'hidden', clip:'rect(0 0 0 0)', whiteSpace:'nowrap' }}>Loading kitchen tickets…</span>
-  </>
-);
-
-const Sk = ({ w, h, r = 6, ink = false, style }) => (
-  <div className={`kdsk${ink ? ' kdsk-ink' : ''}`} style={{ width:w, height:h, borderRadius:r, ...style }} />
-);
-
-/* One ticket: same shell, cream header band, progress row, dish rows and dispatch button as KDSOrderCard. */
-const KdsCardSkeleton = ({ index = 0, isMobile = false, isTablet = false }) => {
-  const pad = (isMobile || isTablet) ? 14 : 16;
-  const rows = isMobile ? 5 : isTablet ? 3 : 4;
-  return (
-    <div aria-hidden="true" style={{
-      '--kdsk-d': `${index * 0.14}s`,
-      borderRadius:16, padding:pad, display:'flex', flexDirection:'column', boxSizing:'border-box',
-      height: isMobile ? '100%' : isTablet ? 390 : 420,
-      border:'1px solid rgba(233,220,195,0.2)', position:'relative', overflow:'hidden',
-      background:'linear-gradient(160deg, rgba(233,220,195,0.06), rgba(233,220,195,0.015)), #0c0a08',
-    }}>
-      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:'rgba(233,220,195,0.22)' }} />
-
-      {/* header band */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8,
-        margin:`-${pad}px -${pad}px 12px`, padding: pad === 14 ? '17px 14px 12px' : '19px 16px 13px',
-        background:'linear-gradient(135deg, #f1e8d4 0%, #e6d9bd 55%, #dccdad 100%)', borderBottom:'1px solid rgba(23,18,12,0.12)' }}>
-        <div style={{ flex:1, minWidth:0 }}>
-          <Sk ink w={isMobile ? 64 : 78} h={isMobile ? 27 : 30} r={7} style={{ marginBottom:5 }} />
-          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-            <Sk ink w={46} h={15} r={4} />
-            <Sk ink w={34} h={11} r={4} />
-          </div>
-        </div>
-        <Sk ink w={80} h={31} r={9} />
+/* Same shell as a ticket (header + ring, progress, dish rows, action row) so nothing shifts when data arrives. */
+const KdsCardSkeleton = ({ index = 0, fill = false }) => (
+  <div aria-hidden="true" className={`kx-tk${fill ? ' fill' : ''}`} style={{ '--d': `${index * 0.14}s`, minHeight: fill ? undefined : 360 }}>
+    <div className="kx-tk-h">
+      <div style={{ flex: 1 }}>
+        <Sk w={64} h={10} r={4} />
+        <Sk w={110} h={34} r={9} style={{ margin: '8px 0' }} />
+        <div style={{ display: 'flex', gap: 6 }}><Sk w={52} h={16} r={6} /><Sk w={44} h={16} r={6} /></div>
       </div>
-
-      {/* prep progress */}
-      <div style={{ marginBottom:10 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-          <Sk w={70} h={8} r={3} />
-          <Sk w={24} h={8} r={3} />
-        </div>
-        <Sk w="100%" h={3} r={2} />
-      </div>
-
-      {/* dish rows */}
-      <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', gap:4 }}>
-        {Array.from({ length: rows }, (_, i) => (
-          <div key={i} style={{
-            display:'flex', alignItems:'flex-start', gap:10, padding: isMobile ? '10px 11px' : '11px 12px',
-            borderRadius:10, background:'#0d0d0d', border:'1px solid rgba(247,243,235,0.07)', borderLeft:'3px solid rgba(247,243,235,0.12)',
-          }}>
-            <Sk w={28} h={28} r={7} />
-            <div style={{ flex:1, minWidth:0, paddingTop:2 }}>
-              <Sk w={`${58 + ((i * 17 + index * 9) % 30)}%`} h={13} r={4} style={{ marginBottom:7 }} />
-              <Sk w={`${26 + ((i * 11 + index * 7) % 20)}%`} h={8} r={3} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* bottom actions */}
-      <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:10, flexShrink:0 }}>
-        <div style={{ display:'flex', justifyContent:'flex-end' }}><Sk w={70} h={22} r={7} /></div>
-        <Sk w="100%" h={isMobile ? 50 : 44} r={12} style={{ background:'rgba(233,220,195,0.09)', border:'1px solid rgba(233,220,195,0.16)' }} />
-      </div>
+      <Sk w={66} h={66} r={33} />
     </div>
-  );
-};
-
-/* Sidebar station list: ALL + category rows, same 40px buttons as rs.sidebarBtn. */
-const KdsSidebarSkeleton = () => (
-  <div aria-hidden="true" style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflow:'hidden' }}>
-    {[78, 62, 84, 56, 70, 66].map((w, i) => (
-      <div key={i} style={{ '--kdsk-d': `${i * 0.1}s`, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 10px', minHeight:40,
-        borderRadius:9, border:'1px solid rgba(255,255,255,0.116)', background:'rgba(255,255,255,0.033)', boxSizing:'border-box' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <Sk w={12} h={12} r={4} />
-          <Sk w={Math.round(w * 0.9)} h={9} r={3} />
+    <div style={{ padding: '4px 12px 8px 16px', display: 'flex', flexDirection: 'column', gap: 7, flex: 1 }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} className="kx-it" style={{ cursor: 'default' }}>
+          <Sk w={40} h={40} r={12} />
+          <div style={{ paddingTop: 3 }}><Sk w={`${58 + ((i * 17 + index * 9) % 30)}%`} h={14} r={4} style={{ marginBottom: 8 }} /><Sk w={`${26 + ((i * 11 + index * 7) % 20)}%`} h={9} r={3} /></div>
+          <Sk w={28} h={28} r={14} />
         </div>
-        <Sk w={24} h={16} r={6} />
+      ))}
+    </div>
+    <div className="kx-tk-f"><div className="row"><Sk w={50} h={50} r={15} /><Sk w={50} h={50} r={15} /><Sk w="100%" h={50} r={15} style={{ flex: 1 }} /></div></div>
+  </div>
+);
+
+const KdsSidebarSkeleton = () => (
+  <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflow: 'hidden' }}>
+    {[78, 62, 84, 56, 70, 66].map((w, i) => (
+      <div key={i} className="kx-nav" style={{ '--d': `${i * 0.1}s`, cursor: 'default' }}>
+        <span className="t"><Sk w={14} h={14} r={4} /><Sk w={Math.round(w * 0.9)} h={10} r={3} /></span>
+        <Sk w={28} h={18} r={7} />
       </div>
     ))}
   </div>
 );
 
-/* First load failed: say so and offer a retry instead of an endless skeleton or a false "KITCHEN CLEAR". */
 /* Shown under "KITCHEN CLEAR": says whether nothing arrived, or orders arrived and were hidden (station / veg / category / search filters,
    or tickets that contain only extra items, which never go to the kitchen). Without it both cases look identical. */
 const KdsEmptyDetail = ({ loaded, shown, tenantId, at }) => {
@@ -2317,36 +2150,24 @@ const KdsEmptyDetail = ({ loaded, shown, tenantId, at }) => {
   try { host = new URL(BASE_URL, window.location.origin).host; } catch { host = String(BASE_URL || ''); }
   const hidden = Math.max(0, loaded - shown);
   return (
-    <p data-testid="kds-empty-detail" style={{ fontSize:'0.58rem', color:'#6f6f6f', margin:'10px 0 0', fontWeight:700, maxWidth:420, lineHeight:1.5, wordBreak:'break-word' }}>
+    <p data-testid="kds-empty-detail" style={{ fontSize: '.62rem', color: '#6f6c64', margin: '4px 0 0', fontWeight: 500, maxWidth: 440, lineHeight: 1.55, wordBreak: 'break-word' }}>
       {`Loaded ${loaded} pending order${loaded === 1 ? '' : 's'} for "${tenantId || '?'}" from ${host}${at ? ` at ${new Date(at).toLocaleTimeString()}` : ''}.`}
       {hidden > 0 ? ` ${hidden} hidden by the station / veg / category / search filter or because ${hidden === 1 ? 'it has' : 'they have'} only extra items.` : (loaded === 0 ? ' Nothing is waiting in the kitchen.' : '')}
     </p>
   );
 };
 
+/* First load failed: say so and offer a retry instead of an endless skeleton or a false "KITCHEN CLEAR". */
 const KdsLoadError = ({ onRetry, detail }) => (
-  <div role="alert" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px', gap:14 }}>
-    <div style={{ width:64, height:64, borderRadius:18, background:'linear-gradient(160deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02)), #090909', border:'1px solid rgba(226,154,88,0.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <WifiOff size={28} color="#e29a58" />
-    </div>
-    <div style={{ textAlign:'center' }}>
-      <p style={{ fontWeight:900, color:'#cfcac0', fontSize:'0.85rem', letterSpacing:'2px', margin:'0 0 4px' }}>COULDN'T LOAD TICKETS</p>
-      <p style={{ fontSize:'0.62rem', color:'#8c8c8c', margin:0, fontWeight:700 }}>Check the connection. This screen keeps retrying every minute.</p>
-      {detail && <p data-testid="kds-error-detail" style={{ fontSize:'0.62rem', color:'#e29a58', margin:'8px 0 0', fontWeight:700, wordBreak:'break-word' }}>{detail}</p>}
-    </div>
-    <button type="button" onClick={onRetry} style={{ padding:'10px 22px', borderRadius:10, border:'1px solid rgba(233,220,195,0.55)', background:'linear-gradient(135deg, #f1e8d4, #e3d5b8 55%, #d6c5a0)', color:'#17120c', fontWeight:900, fontSize:'0.7rem', letterSpacing:'0.8px', cursor:'pointer' }}>TRY AGAIN</button>
+  <div role="alert" className="kx-center" style={{ flex: 1 }}>
+    <div className="ic" style={{ borderColor: 'rgba(226,154,88,.4)', color: '#e29a58' }}><WifiOff size={30} /></div>
+    <h3 style={{ color: '#d3bfa2' }}>Couldn't load tickets</h3>
+    <p>Check the connection. This screen keeps retrying every few seconds.</p>
+    {detail && <p data-testid="kds-error-detail" style={{ color: '#e29a58', fontWeight: 600 }}>{detail}</p>}
+    <button type="button" className="kx-btn solid" onClick={onRetry}>Try again</button>
   </div>
 );
 
-// One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
-const __sfxCache = {};
-const playCachedSound = (url) => {
-  try {
-    const a = __sfxCache[url] || (__sfxCache[url] = new Audio(url));
-    a.currentTime = 0;
-    const p = a.play(); if (p && p.catch) p.catch(() => {});
-  } catch { /* autoplay blocked / unsupported */ }
-};
 /* The kitchen screen opens straight from its link, exactly as before. Only if the server answers "sign-in required"
    (REQUIRE_OPERATOR_AUTH is on and this tablet has no valid session) does it show a sign-in form, using the restaurant's
    operator account. The session is stored under its own key and lasts 30 days. */
@@ -2376,23 +2197,22 @@ const KitchenView = () => {
       const st = ex?.response?.status, d = ex?.response?.data;
       setErr(!st ? 'Cannot reach the server. Check the internet connection.'
         : st === 402 ? (d?.error || 'This subscription has expired.')
-        : st === 429 ? (d?.error || 'Too many attempts. Try again in a few minutes.')
-        : st === 401 ? 'Incorrect username or password.' : (d?.error || 'Sign-in failed. Please try again.'));
+          : st === 429 ? (d?.error || 'Too many attempts. Try again in a few minutes.')
+            : st === 401 ? 'Incorrect username or password.' : (d?.error || 'Sign-in failed. Please try again.'));
     } finally { setBusy(false); }
   };
-  const field = { background: '#1a1a1a', border: '1px solid #3a3a3a', borderRadius: 10, padding: '14px 16px', color: '#f2f2f2', fontSize: 17, outline: 'none' };
   return (
-    <div style={{ minHeight: '100vh', background: '#0d0d0d', color: '#f2f2f2', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14, background: '#151515', border: '1px solid #2a2a2a', borderRadius: 16, padding: 28 }}>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>Kitchen sign-in</div>
-        <div style={{ fontSize: 14, color: '#a0a0a0' }}>Sign in with the restaurant account to open the kitchen screen on this device.</div>
-        <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Username" autoCapitalize="none" autoCorrect="off" autoComplete="username" style={field} />
-        <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" autoComplete="current-password" style={field} />
-        {err && <div role="alert" style={{ fontSize: 14, color: '#ff7a70' }}>{err}</div>}
-        <button type="submit" disabled={busy || !form.username || !form.password}
-          style={{ background: '#f5b82e', color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '14px 16px', fontSize: 17, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy || !form.username || !form.password ? 0.6 : 1 }}>
-          {busy ? 'Signing in...' : 'Sign in'}
-        </button>
+    <div className="kx" style={{ display: 'grid', placeItems: 'center', padding: 24 }}>
+      <style>{KX_CSS}</style>
+      <form onSubmit={submit} className="kx-modal" style={{ width: '100%', maxWidth: 400, padding: 28, gap: 14 }}>
+        <div className="kx-logo" style={{ alignSelf: 'flex-start' }}><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div>
+        <div className="kx-kds" style={{ marginTop: 6 }}><ChefHat size={13} /> Kitchen display</div>
+        <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '1.6rem', fontWeight: 700 }}>Kitchen sign-in</div>
+        <div style={{ fontSize: '.8rem', color: '#9b978d', lineHeight: 1.5 }}>Sign in with the restaurant account to open the kitchen screen on this device.</div>
+        <input className="kx-in" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Username" autoCapitalize="none" autoCorrect="off" autoComplete="username" style={{ padding: '14px 16px', fontSize: '1rem' }} />
+        <input className="kx-in" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" autoComplete="current-password" style={{ padding: '14px 16px', fontSize: '1rem' }} />
+        {err && <div role="alert" className="kx-err">{err}</div>}
+        <button type="submit" className="kx-btn solid block" disabled={busy || !form.username || !form.password} style={{ minHeight: 52 }}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
     </div>
   );

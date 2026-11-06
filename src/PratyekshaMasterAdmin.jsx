@@ -403,7 +403,7 @@ function useCountUp(target, duration = 700) {
 
 const CountUp = (props) => {
   const val = useCountUp(props.value);
-  return <>{val.toLocaleString()}</>;
+  return <>{val.toLocaleString('en-IN')}</>;
 };
 
 const IosInstallSteps = () => (
@@ -708,6 +708,15 @@ const SubscriptionModal = ({ client, onClose, onChanged, onRenew, onToggle, flas
 
 /* ── JSON menu import ── */
 /** One dropzone that parses a single JSON file into an array under `arrayKey` (e.g. "categories"). */
+/** Fetches the example menu JSON with the admin token and saves it. A plain link cannot send the token, so it came back 401. */
+async function downloadMenuTemplate() {
+  const res = await axios.get(`${BASE_URL}/admin/master/menu-template`);
+  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'pratyeksha-menu-template.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) => {
   const [file, setFile] = useState(null);
   const [count, setCount] = useState(null);
@@ -767,18 +776,19 @@ const SingleJsonDropzone = ({ label, arrayKey, hint, onParsed, accentDanger }) =
 
 /** Two independent JSON uploads — categories and menu items are separate files, as requested. */
 const DualJsonUpload = ({ onChange }) => {
-  const [categories, setCategoriesArr] = useState(null);
-  const [menuItems, setMenuItemsArr] = useState(null);
-  const update = (cats, items) => onChange({ categories: cats, menuItems: items });
+  // The file is parsed asynchronously, so the callback ran with the *other* box's value from the render it was created in: loading
+  // both files close together could report one of them as empty. The latest pair lives in a ref instead.
+  const latest = useRef({ categories: null, menuItems: null });
+  const setPart = (key, arr) => { latest.current = { ...latest.current, [key]: arr }; onChange({ ...latest.current }); };
   return (
     <div>
       <SingleJsonDropzone
         label="Categories JSON" arrayKey="categories" hint="e.g. Starters, Main Course, Desserts…"
-        onParsed={(arr) => { setCategoriesArr(arr); update(arr, menuItems); }}
+        onParsed={(arr) => setPart('categories', arr)}
       />
       <SingleJsonDropzone
         label="Menu Items JSON" arrayKey="menuItems" hint="Each item needs categoryId, name, price"
-        onParsed={(arr) => { setMenuItemsArr(arr); update(categories, arr); }}
+        onParsed={(arr) => setPart('menuItems', arr)}
       />
     </div>
   );
@@ -793,11 +803,8 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
   if (!target) return null;
 
   const downloadTemplate = async () => {
-    try {
-      const res = await axios.get(`${BASE_URL}/admin/master/menu-template`);
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pratyeksha-menu-template.json'; a.click();
-    } catch (e) { flash('Could not download template', 'error'); }
+    try { await downloadMenuTemplate(); }
+    catch (e) { flash('Could not download template', 'error'); }
   };
 
   const hasContent = (pending.categories?.length > 0) || (pending.menuItems?.length > 0);
@@ -1172,28 +1179,41 @@ function PratyekshaMasterAdminInner() {
   const now = new Date();
 
   /* ── fetch ── */
+  // Renew / toggle / delete each refetch, and two overlapping fetches could land out of order so the older list overwrote the newer one.
+  const fetchSeq = useRef(0);
   const fetchData = useCallback(async () => {
+    const mySeq = ++fetchSeq.current;
     try {
       const [cRes, sRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/master/tenants`),
         axios.get(`${BASE_URL}/admin/master/analytics`),
       ]);
+      if (mySeq !== fetchSeq.current) return;
       setClients(cRes.data || []);
       setStats(sRes.data || {});
     } catch(e){ console.error(e); flash(e?.response?.data?.error || 'Could not load clients. Check the connection and refresh.', 'error'); }
     finally{ setLoading(false); }
   }, [flash]);
 
-  const fetchDemos = useCallback(async () => {
-    setDemoLoading(true);
+  const fetchDemos = useCallback(async (silent = false) => {
+    if (!silent) setDemoLoading(true);
     try {
       const r = await axios.get(`${BASE_URL}/admin/master/demo-requests`);
       setDemoRequests(r.data || []);
-    } catch(e){ console.error(e); }
-    finally{ setDemoLoading(false); }
-  }, []);
+    } catch(e){
+      console.error(e);
+      // A failed load left an empty list reading "No requests found", which looks like there are none. Background refreshes stay quiet.
+      if (!silent) flash(e?.response?.data?.error || 'Could not load demo requests. Check the connection and refresh.', 'error');
+    }
+    finally{ if (!silent) setDemoLoading(false); }
+  }, [flash]);
 
   useEffect(() => { fetchData(); fetchDemos(); fetchNotifications(); fetchExpenses(); }, []);
+  // New demo requests are the inbound pipeline, but the list only loaded once: a page left open never showed new ones until Refresh.
+  useEffect(() => {
+    const id = setInterval(() => { if (document.visibilityState === 'visible') fetchDemos(true); }, 60000);
+    return () => clearInterval(id);
+  }, [fetchDemos]);
   // selectedDemo is a copy taken when the row was clicked: after a refresh the drawer kept showing the old status / details.
   useEffect(() => {
     setSelectedDemo(cur => {
@@ -1296,6 +1316,8 @@ function PratyekshaMasterAdminInner() {
     if (String(onboarding.pincode || '').trim() && !/^\d{6}$/.test(String(onboarding.pincode).trim())) { setOnboardError('Pincode must be 6 digits.'); return; }
     if (String(onboarding.contact || '').trim() && String(onboarding.contact).replace(/\D/g, '').length < 10) { setOnboardError('Contact number must have at least 10 digits.'); return; }
     if (String(onboarding.mapsUrl || '').trim() && !/^https?:\/\//i.test(String(onboarding.mapsUrl).trim())) { setOnboardError('Google Maps link must start with http:// or https://'); return; }
+    const gstinClean = String(onboarding.gstin || '').replace(/\s+/g, '').toUpperCase();
+    if (gstinClean && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/.test(gstinClean)) { setOnboardError('GSTIN must be 15 characters, like 27AABCU1234F1Z5 (or leave it blank).'); return; }
     const paidNum = Number(onboarding.paidAmount);
     if (String(onboarding.paidAmount).trim() !== '' && (!Number.isFinite(paidNum) || paidNum < 0)) { setOnboardError('Amount received must be 0 or more.'); return; }
     if (onboarding.paidAt && onboarding.paidAt > todayIST()) { setOnboardError('Payment date cannot be in the future.'); return; }
@@ -1318,6 +1340,7 @@ function PratyekshaMasterAdminInner() {
       const trimmed = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, (typeof v === 'string' && !/password/i.test(k)) ? v.trim() : v]));
       const res = await axios.post(`${BASE_URL}/admin/master/onboard`, {
         ...trimmed,
+        gstin: gstinClean,
         tableCount:Number(onboarding.tableCount),
         taxPercentage:Number(onboarding.taxPercentage),
         planMonths:Number(onboarding.planMonths),
@@ -1362,9 +1385,13 @@ function PratyekshaMasterAdminInner() {
     try {
       const r = await axios.get(`${BASE_URL}/admin/master/notifications`);
       setNotifications(r.data || []);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      // A failed load left "No notifications sent yet", which reads as if nothing had ever been sent.
+      flash(e?.response?.data?.error || 'Could not load notifications. Check the connection and refresh.', 'error');
+    }
     finally { setNotifLoading(false); }
-  }, []);
+  }, [flash]);
 
   const sendNotification = async () => {
     if (!notifCompose.title.trim() || !notifCompose.message.trim()) { flash('Title and message are required', 'error'); return; }
@@ -1413,9 +1440,13 @@ function PratyekshaMasterAdminInner() {
       ]);
       setExpenses(expRes.data || []);
       setExpenseSummary(sumRes.data || null);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      // Same as above: "No costs logged yet" is wrong when the load simply failed, and the net-revenue figures silently disappear.
+      flash(e?.response?.data?.error || 'Could not load operating costs. Check the connection and refresh.', 'error');
+    }
     finally { setExpenseLoading(false); }
-  }, []);
+  }, [flash]);
 
   const resetExpenseForm = () => {
     setExpenseForm({ category: 'domain', label: '', amount: '', date: new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10), recurring: false, recurringInterval: 'monthly', vendor: '', notes: '' });
@@ -1449,6 +1480,8 @@ function PratyekshaMasterAdminInner() {
       recurringInterval: exp.recurringInterval || 'monthly', vendor: exp.vendor || '', notes: exp.notes || ''
     });
     setEditingExpenseId(exp._id);
+    // The form sits above a long list: without this, Edit appeared to do nothing.
+    requestAnimationFrame(() => document.getElementById('expense-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
   const deleteExpense = async (id) => {
@@ -1463,14 +1496,16 @@ function PratyekshaMasterAdminInner() {
 
   /* ── derived ── */
   const stateCounts = clients.reduce((m, c) => { const st = subOf(c).state; m[st] = (m[st] || 0) + 1; return m; }, {});
+  // The "No expiry" tab disappears once nobody is in that state; if it was the active filter the list went blank with no tab to leave it.
+  const activeClientFilter = (clientFilter === 'unset' && !(stateCounts.unset || 0)) ? 'all' : clientFilter;
   const filteredClients = clients
     .filter(c => {
       const st = subOf(c).state;
-      if (clientFilter==='active')   return st === 'active' || st === 'expiring';
-      if (clientFilter==='expiring') return st === 'expiring';
-      if (clientFilter==='expired')  return st === 'expired';
-      if (clientFilter==='disabled') return st === 'disabled';
-      if (clientFilter==='unset')    return st === 'unset';
+      if (activeClientFilter==='active')   return st === 'active' || st === 'expiring';
+      if (activeClientFilter==='expiring') return st === 'expiring';
+      if (activeClientFilter==='expired')  return st === 'expired';
+      if (activeClientFilter==='disabled') return st === 'disabled';
+      if (activeClientFilter==='unset')    return st === 'unset';
       return true;
     })
     .filter(c => {
@@ -1559,9 +1594,9 @@ function PratyekshaMasterAdminInner() {
           <div style={{ marginBottom:20, padding:'14px', background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10 }}>
             <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'0.8px', textTransform:'uppercase', marginBottom:6 }}>Net Platform Revenue</div>
             <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#d3bfa2' : C.danger, lineHeight:1, marginBottom:6, fontFamily:'JetBrains Mono, monospace' }}>
-              ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString()}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
+              ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
             </div>
-            <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString()}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString()}</span></div>
+            <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString('en-IN')}</span></div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
               {[
                 { val:stats.activeCount   ||0, lbl:'Active',   c:'#d3bfa2' },   /* light gold */
@@ -1606,7 +1641,7 @@ function PratyekshaMasterAdminInner() {
                   <div style={{ fontSize:11.5, fontWeight:600, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:10, color:C.textDim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.tenantId}</div>
                 </div>
-                <div style={{ fontSize:10.5, color:'#8a704d', fontWeight:700, fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString()}</div>
+                <div style={{ fontSize:10.5, color:'#8a704d', fontWeight:700, fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString('en-IN')}</div>
               </div>
             ))}
             {clients.length === 0 && <div style={{ fontSize:11, color:C.textDim, padding:'12px 4px' }}>No clients yet.</div>}
@@ -1908,7 +1943,7 @@ function PratyekshaMasterAdminInner() {
               */}
               <div className="p-stat-grid p-stagger" style={{ marginBottom:20 }}>
                 {[
-                  { icon:Wallet, label:'Net Revenue', val:stats.netRevenue ?? stats.totalRevenue ?? 0, prefix:'₹', sub:`Gross ₹${(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString()} − costs ₹${(stats.totalExpenses||0).toLocaleString()}`, accent:'#d3bfa2' },
+                  { icon:Wallet, label:'Net Revenue', val:stats.netRevenue ?? stats.totalRevenue ?? 0, prefix:'₹', sub:`Gross ₹${(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')} − costs ₹${(stats.totalExpenses||0).toLocaleString('en-IN')}`, accent:'#d3bfa2' },
                   { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:'#d3bfa2' },
                   { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:C.warning },
                   { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:'#8a704d' },
@@ -1937,13 +1972,13 @@ function PratyekshaMasterAdminInner() {
                     <div>
                       <div style={{ fontSize:11, color:C.textDim, fontWeight:500 }}>Net Revenue</div>
                       <div style={{ fontSize:18, fontWeight:700, color: expenseSummary.netRevenue>=0 ? '#d3bfa2' : C.danger, fontFamily:'JetBrains Mono, monospace' }}>
-                        ₹{Math.abs(expenseSummary.netRevenue).toLocaleString()}{expenseSummary.netRevenue<0 ? ' (loss)' : ''}
+                        ₹{Math.abs(expenseSummary.netRevenue).toLocaleString('en-IN')}{expenseSummary.netRevenue<0 ? ' (loss)' : ''}
                       </div>
                     </div>
                   </div>
                   <div style={{ fontSize:11.5, color:C.textDim, display:'flex', gap:14, flexWrap:'wrap' }}>
-                    <span>Gross ₹{expenseSummary.totalRevenue.toLocaleString()}</span>
-                    <span style={{ color:C.danger }}>− Costs ₹{expenseSummary.totalExpenses.toLocaleString()}</span>
+                    <span>Gross ₹{expenseSummary.totalRevenue.toLocaleString('en-IN')}</span>
+                    <span style={{ color:C.danger }}>− Costs ₹{expenseSummary.totalExpenses.toLocaleString('en-IN')}</span>
                   </div>
                   <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:5, color:C.textDim, fontSize:11.5, fontWeight:600 }}>
                     View Operating Costs <ChevronRight size={13} />
@@ -1981,7 +2016,7 @@ function PratyekshaMasterAdminInner() {
                           <span style={{ fontSize:13, fontWeight:500, color:C.text }}>{c.name}</span>
                         </div>
                         {/* revenue figure: dark amber — complements the light gold bars */}
-                        <span style={{ fontSize:13, fontWeight:600, color:'#8a704d', fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString()}</span>
+                        <span style={{ fontSize:13, fontWeight:600, color:'#8a704d', fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString('en-IN')}</span>
                       </div>
                       <div style={{ height:3, background:C.border, borderRadius:99, overflow:'hidden' }}>
                         {/* bar fill: light gold */}
@@ -2080,13 +2115,13 @@ function PratyekshaMasterAdminInner() {
                 { id:'disabled', label:'Disabled', count:stateCounts.disabled||0 },
                 ...((stateCounts.unset||0) > 0 ? [{ id:'unset', label:'No expiry', count:stateCounts.unset }] : []),
               ].map(f => (
-                <button type="button" key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(clientFilter===f.id)}>
+                <button type="button" key={f.id} onClick={()=>setClientFilter(f.id)} style={filterTab(activeClientFilter===f.id)}>
                   {f.label}
                   <span style={{
                     fontSize:11, fontWeight:600, padding:'1px 7px', borderRadius:99,
-                    background: clientFilter===f.id ? 'rgba(211,191,162,0.1)' : C.bgCard,
-                    color: clientFilter===f.id ? '#d3bfa2' : C.textDim,
-                    border: `1px solid ${clientFilter===f.id ? 'rgba(211,191,162,0.25)' : C.border}`,
+                    background: activeClientFilter===f.id ? 'rgba(211,191,162,0.1)' : C.bgCard,
+                    color: activeClientFilter===f.id ? '#d3bfa2' : C.textDim,
+                    border: `1px solid ${activeClientFilter===f.id ? 'rgba(211,191,162,0.25)' : C.border}`,
                   }}>{f.count}</span>
                 </button>
               ))}
@@ -2152,7 +2187,7 @@ function PratyekshaMasterAdminInner() {
                         </td>
                         <td className="hide-mob">
                           {/* revenue: dark amber — pairs with light gold bar fills */}
-                          <span style={{ fontWeight:700, color:'#8a704d', fontSize:13, fontFamily:'JetBrains Mono, monospace' }}>₹{(client.totalPaidAmount||0).toLocaleString()}</span>
+                          <span style={{ fontWeight:700, color:'#8a704d', fontSize:13, fontFamily:'JetBrains Mono, monospace' }}>₹{(client.totalPaidAmount||0).toLocaleString('en-IN')}</span>
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
@@ -2438,9 +2473,9 @@ function PratyekshaMasterAdminInner() {
                     Upload the client's categories and menu items as JSON instead of typing them in by hand — both are optional and independent. Skip this and the client starts with 5 default categories and no dishes.
                   </div>
                   <DualJsonUpload key={onboardUploadKey} onChange={({ categories, menuItems }) => { setOnboardCategories(categories); setOnboardMenuItems(menuItems); }} />
-                  <a href={`${BASE_URL}/admin/master/menu-template`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:C.textDim, display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none' }}>
-                    <FileDown size={12} /> View example template
-                  </a>
+                  <button type="button" onClick={() => downloadMenuTemplate().catch(() => flash('Could not download template', 'error'))} style={{ fontSize:11, color:C.textDim, display:'inline-flex', alignItems:'center', gap:6, background:'transparent', border:'none', padding:0, cursor:'pointer' }}>
+                    <FileDown size={12} /> Download example template
+                  </button>
                 </div>
 
                 {/* Submit — primary: light gold solid; secondary: ghost */}
@@ -2592,7 +2627,7 @@ function PratyekshaMasterAdminInner() {
                           <span>&middot;</span>
                           <span>{(Array.isArray(n.audience) ? n.audience : []).join(' + ') || '—'}</span>
                           <span>&middot;</span>
-                          <span>{pending ? `Scheduled ${new Date(n.scheduledAt).toLocaleString()}` : `Delivered ${new Date(n.scheduledAt).toLocaleString()}`}</span>
+                          <span>{pending ? `Scheduled ${new Date(n.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST` : `Delivered ${new Date(n.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`}</span>
                         </div>
                       </div>
                       {pending && (
@@ -2640,14 +2675,14 @@ function PratyekshaMasterAdminInner() {
                       <k.icon size={15} color={k.accent} strokeWidth={1.5} />
                     </div>
                     <div style={{ fontSize:11, color:C.textDim, fontWeight:500, marginBottom:4 }}>{k.label}</div>
-                    <div style={{ fontSize:22, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}{Math.abs(k.val).toLocaleString()}{k.val < 0 ? ' (loss)' : ''}</div>
+                    <div style={{ fontSize:22, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}{Math.abs(k.val).toLocaleString('en-IN')}{k.val < 0 ? ' (loss)' : ''}</div>
                     {k.sub && <div style={{ fontSize:10.5, color:C.textDim }}>{k.sub}</div>}
                   </div>
                 ))}
               </div>
             )}
 
-            <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
+            <div id="expense-form" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
               <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
                 {editingExpenseId ? <Edit3 size={14} color="#d3bfa2" /> : <PlusCircle size={14} color="#d3bfa2" />}
                 {editingExpenseId ? 'Edit Cost' : 'Add a Cost'}
@@ -2716,7 +2751,7 @@ function PratyekshaMasterAdminInner() {
                       <div key={c.category}>
                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, fontSize:12 }}>
                           <span style={{ color:C.textMid, fontWeight:600 }}>{c.label}</span>
-                          <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{cAmt.toLocaleString()} <span style={{ color:C.textDim }}>({pct}%)</span></span>
+                          <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{cAmt.toLocaleString('en-IN')} <span style={{ color:C.textDim }}>({pct}%)</span></span>
                         </div>
                         <div style={{ height:6, borderRadius:100, background:C.bgDark, overflow:'hidden' }}>
                           <div style={{ width:`${pct}%`, height:'100%', background:'#d3bfa2', borderRadius:100 }} />
@@ -2754,7 +2789,7 @@ function PratyekshaMasterAdminInner() {
                         </td>
                         <td style={{ padding:'12px', fontSize:12, color:C.textMid }}>{EXPENSE_CATEGORY_LABELS_FRONTEND[e.category] || e.category}</td>
                         <td style={{ padding:'12px', fontSize:12, color:C.textDim }}>{new Date(e.date).toLocaleDateString(undefined, { timeZone: 'Asia/Kolkata' })}</td>
-                        <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString()}</td>
+                        <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString('en-IN')}</td>
                         <td style={{ padding:'12px', borderRadius:'0 10px 10px 0', textAlign:'right' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
                             <button type="button" onClick={()=>editExpense(e)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Edit3 size={11} /></button>

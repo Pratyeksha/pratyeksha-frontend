@@ -427,17 +427,21 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
   const [error, setError] = useState(null);
   const paramsKey = JSON.stringify(params);
   const reqSeq = useRef(0);
+  const dataRef = useRef(null);
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   const fetchData = useCallback(async (silent) => {
     const mySeq = ++reqSeq.current;
-    if (!silent) setLoading(true);
-    setError(null);
+    if (!silent) { setLoading(true); setError(null); }
     try {
       const res = await api.get(path.replace(':tenantId', tenantId), { params });
       if (mySeq !== reqSeq.current) return;
-      setData(res.data);
+      setData(res.data); setError(null);
     } catch (e) {
       if (mySeq !== reqSeq.current) return;
+      // A background refresh that fails (a brief network blip) used to swap the whole page for an error screen even though good data was
+      // already showing. Keep what is on screen; only a foreground load, or a page with nothing yet, shows the error.
+      if (silent && dataRef.current != null) return;
       setError(e?.response?.data?.error || e.message || 'Failed to load');
     } finally {
       if (mySeq === reqSeq.current) setLoading(false);
@@ -452,7 +456,8 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
     return () => clearInterval(id);
   }, [refreshMs, fetchData]);
 
-  return { data, loading, error, refetch: () => fetchData(true) };
+  // Retry on the error screen must show a spinner; refreshes behind existing data stay silent.
+  return { data, loading, error, refetch: () => fetchData(dataRef.current != null) };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -610,20 +615,23 @@ const SectionHeading = ({ icon: Icon, title, action }) => (
 function useCountUp(target, duration = 700) {
   const numericTarget = Number(target) || 0;
   const [display, setDisplay] = useState(numericTarget);
-  const prevRef = useRef(numericTarget);
+  // Tracks what is actually on screen. It used to hold the last *finished* target, so a new value arriving mid-animation restarted from
+  // a stale number, and returning to that stale number skipped the animation and left a half-way figure showing.
+  const shownRef = useRef(numericTarget);
   useEffect(() => {
-    const start = prevRef.current;
+    const start = shownRef.current;
     const end = numericTarget;
-    if (start === end) return;
+    if (start === end) { setDisplay(end); return; }
     let startTime = null;
     let raf;
     const step = (ts) => {
       if (!startTime) startTime = ts;
       const progress = Math.min(1, (ts - startTime) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(start + (end - start) * eased));
+      const v = progress < 1 ? Math.round(start + (end - start) * eased) : end;
+      shownRef.current = v;
+      setDisplay(v);
       if (progress < 1) raf = requestAnimationFrame(step);
-      else prevRef.current = end;
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
@@ -672,7 +680,7 @@ const ProgressBar = ({ pct, tone = 'gold', height = 8 }) => {
   const colors = { gold: T.primary, danger: T.danger, warning: T.warning };
   return (
     <div style={{ width: '100%', height, borderRadius: 100, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-      <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, height: '100%', background: colors[tone], borderRadius: 100, transition: 'width .5s ease' }} />
+      <div style={{ width: `${Math.min(100, Math.max(0, Number(pct) || 0))}%`, height: '100%', background: colors[tone], borderRadius: 100, transition: 'width .5s ease' }} />
     </div>
   );
 };
@@ -882,7 +890,7 @@ const PillTabs = ({ options, value, onChange }) => (
 );
 
 const Toggle = ({ checked, onChange }) => (
-  <button type="button" onClick={() => onChange(!checked)} className="pown-btn" style={{
+  <button type="button" role="switch" aria-checked={!!checked} onClick={() => onChange(!checked)} className="pown-btn" style={{
     width: 40, height: 23, borderRadius: 100, background: checked ? T.primary : 'rgba(255,255,255,0.12)',
     position: 'relative', flexShrink: 0
   }}>
@@ -894,12 +902,20 @@ const Toggle = ({ checked, onChange }) => (
 );
 
 const Modal = ({ open, onClose, title, children, width = 420 }) => {
+  const downOnBackdrop = useRef(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return (
-    <div style={{
+    <div role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16
-    }} onClick={onClose}>
+    }} onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose?.(); downOnBackdrop.current = false; }}>
       <div className="pown-fade-in" onClick={e => e.stopPropagation()} style={{
         width, maxWidth: '100%', maxHeight: '85vh', overflowY: 'auto', background: T.surfaceRaised,
         border: `1px solid ${T.borderStrong}`, borderRadius: 18, padding: 22
@@ -943,15 +959,29 @@ const GhostBtn = ({ children, onClick, icon: Icon, style, disabled }) => (
   }}>{Icon && <Icon size={14} className={Icon === Loader2 ? 'pown-pulse' : ''} />}{children}</button>
 );
 
+function useFlash(ms = 3200) {
+  const [toast, setToast] = useState(null);
+  const timer = useRef(null);
+  const flash = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(null), ms);
+  }, [ms]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return [toast, flash];
+}
+
 const Toast = ({ message }) => {
   if (!message) return null;
+  // flash() carries failures too ("Could not save settings"); they used to get the same green tick as successes.
+  const isError = /could not|couldn.t|failed|unable|must be|error|invalid/i.test(String(message));
   return (
-    <div className="pown-fade-in" style={{
+    <div role="status" aria-live="polite" className="pown-fade-in" style={{
       position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 300,
       background: T.surfaceRaised, border: `1px solid ${T.borderStrong}`, borderRadius: 12,
       padding: '11px 18px', fontSize: 12.5, fontWeight: 700, color: T.textHigh, boxShadow: T.glowHover,
       display: 'flex', alignItems: 'center', gap: 8
-    }}><CheckCircle2 size={15} color={T.primary} />{message}</div>
+    }}>{isError ? <AlertTriangle size={15} color={T.danger} /> : <CheckCircle2 size={15} color={T.primary} />}{message}</div>
   );
 };
 
@@ -991,6 +1021,9 @@ const AuthSplash = () => (
 
 const AuthErrorScreen = () => {
   const { authErrorDetail, authBlocked, retryAuth, tenantId } = useOwner();
+  const navigate = useNavigate();
+  // The launcher jumps straight to the remembered outlet, so a mistyped or removed outlet left no way to pick another one.
+  const switchOutlet = () => { try { localStorage.removeItem(LAST_TENANT_KEY); } catch (e) {} navigate('/owner'); };
   return (
     <AuthShell>
       <Card style={{ borderColor: T.dangerSoft.replace('0.14', '0.4') }}>
@@ -1004,6 +1037,7 @@ const AuthErrorScreen = () => {
           {authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}
         </div>
         <PrimaryBtn icon={RefreshCcw} onClick={retryAuth} style={{ width: '100%', justifyContent: 'center' }}>Retry</PrimaryBtn>
+        <button type="button" onClick={switchOutlet} className="pown-btn" style={{ width: '100%', marginTop: 10, background: 'transparent', color: T.textLow, fontSize: 12, fontWeight: 700, padding: '8px 0' }}>Use a different outlet</button>
       </Card>
     </AuthShell>
   );
@@ -1279,7 +1313,8 @@ const MobileDrawer = ({ open, onClose }) => {
       <div style={{
         position: 'fixed', top: 0, left: 0, bottom: 0, width: 288, maxWidth: '84vw', zIndex: 195,
         background: `linear-gradient(180deg, ${T.surfaceRaised} 0%, ${T.bg} 100%)`, borderRight: `1px solid ${T.borderStrong}`,
-        transform: open ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform .32s cubic-bezier(.4,0,.2,1)',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)', transition: `transform .32s cubic-bezier(.4,0,.2,1), visibility 0s linear ${open ? '0s' : '.32s'}`,
+        visibility: open ? 'visible' : 'hidden', // a closed drawer's links stayed in the tab order
         display: 'flex', flexDirection: 'column', boxShadow: open ? '20px 0 60px -20px rgba(0,0,0,0.6)' : 'none'
       }}>
         <div style={{ padding: '22px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -1355,8 +1390,19 @@ const BottomNav = ({ onMore }) => {
 const TopBar = ({ onMenu }) => {
   const { tenantId, connected } = useOwner();
   const location = useLocation();
-  const current = NAV_ITEMS.find(i => location.pathname.includes(`/${i.key}`));
+  // `includes('/menu')` matched the outlet id too (e.g. /owner/menu_house/dashboard titled the page "Menu Intelligence"): compare the page segment only.
+  const pageKey = location.pathname.split('/')[3];
+  const current = NAV_ITEMS.find(i => i.key === pageKey);
   const [outletMenuOpen, setOutletMenuOpen] = useState(false);
+  const outletMenuRef = useRef(null);
+  useEffect(() => { setOutletMenuOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!outletMenuOpen) return;
+    const onDown = (e) => { if (outletMenuRef.current && !outletMenuRef.current.contains(e.target)) setOutletMenuOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOutletMenuOpen(false); };
+    document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [outletMenuOpen]);
   return (
     <header style={{
       flexShrink: 0, zIndex: 50, background: 'rgba(6,6,6,0.72)', backdropFilter: 'blur(18px)',
@@ -1378,7 +1424,7 @@ const TopBar = ({ onMenu }) => {
           </div>
         </div>
       </div>
-      <div style={{ position: 'relative' }}>
+      <div ref={outletMenuRef} style={{ position: 'relative' }}>
         <button type="button" onClick={() => setOutletMenuOpen(v => !v)} className="pown-btn" style={{
           display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
           borderRadius: 12, padding: '9px 14px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, boxShadow: T.glow
@@ -1523,11 +1569,11 @@ const greetingFor = (hour) => hour < 5 ? 'Working late' : hour < 12 ? 'Good morn
 const LiveClock = () => {
   const [now, setNow] = useState(() => new Date(Date.now() + 330 * 60000));
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date(Date.now() + 330 * 60000)), 30000);
+    const id = setInterval(() => setNow(new Date(Date.now() + 330 * 60000)), 10000); // 30s left the displayed minute up to 30s late
     return () => clearInterval(id);
   }, []);
   const hour = now.getUTCHours();
-  const time = now.toISOString().substr(11, 5);
+  const time = now.toISOString().slice(11, 16);
   const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 2 }}>
@@ -1547,6 +1593,8 @@ const LiveClock = () => {
 const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color = T.primary }) => (
   <ResponsiveContainer width="100%" height={height}>
     <BarChart data={data}>
+      {height >= 100 && <XAxis dataKey={xKey} tick={AxisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" />}
+      {height >= 100 && <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [fmtINRc(v), 'Revenue']} labelFormatter={(l) => `Hour ${l}`} />}
       <Bar dataKey={dataKey} radius={[3, 3, 0, 0]} fill={color} />
     </BarChart>
   </ResponsiveContainer>
@@ -1592,7 +1640,7 @@ const DonutChart = ({ items, valueFormat = (v) => v, centerValue, centerLabel, s
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={rows} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="98%" paddingAngle={rows.length > 1 ? 2 : 0} stroke="#2b2b30" strokeWidth={2} isAnimationActive={false}>
-              {rows.map((r, i) => <Cell key={r.label} fill={r.color || VIZ[i % VIZ.length]} />)}
+              {rows.map((r, i) => <Cell key={`${r.label}-${i}`} fill={r.color || VIZ[i % VIZ.length]} />)}
             </Pie>
             <Tooltip {...chartTooltipStyle} formatter={(v, n) => [valueFormat(v), n]} />
           </PieChart>
@@ -1604,7 +1652,7 @@ const DonutChart = ({ items, valueFormat = (v) => v, centerValue, centerLabel, s
       </div>
       <div style={{ flex: '1 1 160px', minWidth: 150, display: 'grid', gap: 9 }}>
         {rows.map((r, i) => (
-          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12 }}>
+          <div key={`${r.label}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12 }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, flex: '0 0 auto', background: r.color || VIZ[i % VIZ.length] }} />
             <span style={{ flex: 1, minWidth: 0, color: T.textMed, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
             <span className="pown-mono" style={{ color: T.textHigh, fontWeight: 700 }}>{valueFormat(r.value)}</span>
@@ -1643,7 +1691,7 @@ const ColumnChart = ({ data, valueFormat = (v) => v, height = 200, color = T.pri
         <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} tickFormatter={valueFormat} />
         <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
         <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false}>
-          {rows.map((r) => <Cell key={r.label} fill={highlightLabel && r.label === highlightLabel ? T.primary : color} fillOpacity={highlightLabel && r.label !== highlightLabel ? 0.55 : 1} />)}
+          {rows.map((r, i) => <Cell key={`${r.label}-${i}`} fill={highlightLabel && r.label === highlightLabel ? T.primary : color} fillOpacity={highlightLabel && r.label !== highlightLabel ? 0.55 : 1} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -1682,7 +1730,7 @@ const DashboardPage = () => {
         <KpiCard icon={LayoutGrid} label="LIVE TABLES" value={`${data.tables.occupied} / ${data.tables.total}`}
           sub={`${data.tables.billPending} bill pending · ${data.tables.free} free`} />
         <KpiCard icon={Wallet} label="GROSS PROFIT" value={`\u20B9${animatedProfit.toLocaleString('en-IN')}`}
-          sub={`${100 - data.liveProfit.foodCostPct}% margin est.`} />
+          sub={data.revenue.today > 0 ? `${100 - data.liveProfit.foodCostPct}% margin est.` : 'No sales yet today'} /> {/* with no revenue the food-cost % is 0, which read as a "100% margin" */}
         <KpiCard icon={Target} label="BREAK-EVEN" value={`${data.breakEven.pct}% achieved`}
           sub={`\u20B9${data.breakEven.remaining.toLocaleString('en-IN')} more to target`} />
       </div>
@@ -1901,7 +1949,7 @@ const PnlPage = () => {
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ fontSize: 12.5, color: T.textLow, fontWeight: 700 }}>The real-time margin view — no other Indian POS shows you this live.</div>
-        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+        <input type="month" value={month} onChange={e => { if (e.target.value) setMonth(e.target.value); /* clearing it sent month="" and the page errored */ }} style={{ ...inputStyle, width: 160 }} />
       </div>
 
       <DataBoundary skeleton={<SkPnl />} loading={loading} error={error} onRetry={refetch} empty={data && data.revenue === 0}
@@ -2169,8 +2217,9 @@ const InventoryPage = () => {
                   </div>
                 )}
               <GhostBtn icon={Phone} style={{ marginTop: 14 }} onClick={() => {
-                const msg = encodeURIComponent(`Hi, please deliver:\n${data.criticalItems.slice(0, 6).map(i => `- ${i.name}`).join('\n')}\n\nThank you.`);
-                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                // Was encoded twice (msg, then again in the URL), so the vendor received literal "%0A" and "%20" instead of line breaks and spaces.
+                const msg = `Hi, please deliver:\n${data.criticalItems.slice(0, 6).map(i => `- ${i.name}`).join('\n')}\n\nThank you.`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
               }}>Contact Vendor on WhatsApp</GhostBtn>
             </Card>
 
@@ -2316,6 +2365,7 @@ const ScoreLine = ({ label, value, pass, target }) => (
     <div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: T.textMed }}>{label}</div>
       <div className="pown-mono" style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
+      {target && <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 2 }}>Target {target}</div>}{/* target was passed in by every caller but never shown */}
     </div>
     {pass ? <CheckCircle2 size={16} color={T.primary} /> : <AlertTriangle size={16} color={T.warning} />}
   </div>
@@ -2333,7 +2383,7 @@ const StaffPage = () => {
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+        <input type="month" value={month} onChange={e => { if (e.target.value) setMonth(e.target.value); /* clearing it sent month="" and the page errored */ }} style={{ ...inputStyle, width: 160 }} />
       </div>
       <DataBoundary skeleton={<SkStaff />} loading={loading} error={error} onRetry={refetch}>
         {data && (
@@ -2431,6 +2481,9 @@ const PrivacyRequestsCard = ({ tenantId }) => {
   }, [tenantId]);
   useEffect(() => { if (tenantId) load(); }, [tenantId, load]);
   const resolve = async (id, action) => {
+    if (busyId) return;
+    // Erasing a guest's data cannot be undone and was a single click.
+    if (action === 'erase' && !window.confirm('Permanently delete this guest\'s data? Bills are kept for tax records with their name and number removed. This cannot be undone.')) return;
     setBusyId(id);
     try {
       await api.post(`/api/data-requests/${encodeURIComponent(tenantId)}/${id}/resolve`, { action });
@@ -2468,16 +2521,19 @@ const CustomersPage = () => {
   const { tenantId } = useOwner();
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState('');
+  const [sentOnce, setSentOnce] = useState(false);
 
   const sendWinback = async () => {
-    if (!data?.atRiskList?.length) return;
+    if (sending || sentOnce || !data?.atRiskList?.length) return;
+    // This messages every at-risk customer with an offer, and could be fired again with another click: confirm first, then lock.
+    if (!window.confirm(`Send the 15% win-back offer to ${data.atRiskList.length} customers now? This cannot be undone.`)) return;
     setSending(true);
     try {
       await api.post(`/api/owner/customers/winback/${tenantId}`, {
         phones: data.atRiskList.map(c => c.phone),
         message: `We miss you! Here's 15% off your next visit. Valid 7 days.`
       });
-      setSendMsg('Win-back offer sent');
+      setSendMsg('Win-back offer sent'); setSentOnce(true);
     } catch (e) {
       setSendMsg(e?.response?.data?.error || 'Could not send win-back offer');
     } finally { setSending(false); setTimeout(() => setSendMsg(''), 3500); }
@@ -2518,8 +2574,8 @@ const CustomersPage = () => {
               <p style={{ fontSize: 12.5, color: T.textMed, lineHeight: 1.6, marginBottom: 14 }}>
                 "We miss you! Here's 15% off your next visit. Valid 7 days." — sent to customers silent for 30+ days. Estimated response rate 25–30%.
               </p>
-              <PrimaryBtn icon={Send} onClick={sendWinback} disabled={sending || !data.atRiskList.length}>
-                {sending ? 'Sending…' : `Send to ${data.atRiskList.length} At-Risk Customers`}
+              <PrimaryBtn icon={Send} onClick={sendWinback} disabled={sending || sentOnce || !data.atRiskList.length}>
+                {sending ? 'Sending…' : sentOnce ? 'Offer sent' : `Send to ${data.atRiskList.length} At-Risk Customers`}
               </PrimaryBtn>
               {sendMsg && <div role="status" style={{ marginTop: 8, fontSize: 12, color: T.textLow }}>{sendMsg}</div>}
             </Card>
@@ -2628,7 +2684,7 @@ const AlertsPage = () => {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 600 }}>{a.message}</div>
                       <div className="pown-mono" style={{ fontSize: 10.5, color: T.textLow, marginTop: 3 }}>
-                        {new Date(a.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · {a.category}
+                        {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · {a.category}
                       </div>
                     </div>
                     {!a.isRead && <button type="button" onClick={() => markRead(a._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11 }}>Mark read</button>}
@@ -2651,8 +2707,7 @@ const CompliancePage = () => {
   const [month, setMonth] = useState(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7));
   const { data, loading, error, refetch } = useOwnerData('/api/owner/reports/gst/:tenantId', { params: { month }, refreshMs: 120000 });
   const { tenantId } = useOwner();
-  const [toast, setToast] = useState(null);
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+  const [toast, flash] = useFlash();
 
   const exportInvoiceRegister = () => {
     if (!data) return;
@@ -2699,7 +2754,7 @@ const CompliancePage = () => {
   return (
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+        <input type="month" value={month} onChange={e => { if (e.target.value) setMonth(e.target.value); /* clearing it sent month="" and the page errored */ }} style={{ ...inputStyle, width: 160 }} />
       </div>
       <DataBoundary skeleton={<SkCompliance />} loading={loading} error={error} onRetry={refetch}>
         {data && (
@@ -2740,6 +2795,7 @@ const CompliancePage = () => {
             <Card padded={false}>
               <div style={{ padding: '18px 20px 0' }}><SectionHeading title="Invoice Register" /></div>
               <div className="pown-scroll-hint"><ArrowLeftRight size={12} />Scroll sideways for more columns</div>
+              {data.invoiceRegister.length > 200 && <div style={{ padding: '0 20px 8px', fontSize: 11, color: T.textLow }}>Showing the first 200 of {data.invoiceRegister.length} invoices. The Excel downloads include all of them.</div>}
               <div className="pown-scrollpane" style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse' }}>
                   <thead><tr>{['Bill No', 'Date', 'Table', 'Amount', 'GST', 'Payment'].map((h, i) => (
@@ -2784,8 +2840,7 @@ const REPORT_TYPES = [
 const ReportsPage = () => {
   const { tenantId } = useOwner();
   const [downloading, setDownloading] = useState(null);
-  const [toast, setToast] = useState(null);
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+  const [toast, flash] = useFlash();
 
   const buildDaily = (d) => {
     const doc = newBrandedPdf('Daily Closing Report', `${d.date} · ${tenantId}`);
@@ -2852,6 +2907,7 @@ const ReportsPage = () => {
   ]);
 
   const download = async (type) => {
+    if (downloading) return; // two clicks at once raced the shared "downloading" flag
     setDownloading(type);
     try {
       if (type === 'daily') buildDaily((await api.get(`/api/owner/reports/daily/${tenantId}`)).data);
@@ -3018,8 +3074,10 @@ const GrowthPage = () => {
             <tbody>
               {GROWTH_COMPARISON.map((row, i) => (
                 <tr key={i} className="pown-row-hover" style={{ borderTop: `1px solid ${T.border}` }}>
-                  <td style={{ padding: '13px 22px', fontSize: 12.5, color: T.textLow, display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                    <X size={14} color={T.danger} style={{ marginTop: 2, flexShrink: 0 }} />{row.manual}
+                  <td style={{ padding: '13px 22px', fontSize: 12.5, color: T.textLow }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                      <X size={14} color={T.danger} style={{ marginTop: 2, flexShrink: 0 }} />{row.manual}
+                    </div>
                   </td>
                   <td style={{ padding: '13px 22px', fontSize: 12.5, color: T.textHigh, fontWeight: 500 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
@@ -3078,12 +3136,14 @@ const PaymentCard = ({ tenantId }) => {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ text: '', ok: true });
   const [clearAcc, setClearAcc] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const UPI_RE = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/;
   useEffect(() => {
     let alive = true;
     api.get(`/api/owner/payment/${tenantId}`)
       .then(r => { if (alive) setForm({ ...r.data, accountNumber: '' }); })
-      .catch(() => { if (alive) setForm({ upiId: '', payeeName: '', bankName: '', accountHolder: '', accountNumberMasked: '', hasAccountNumber: false, ifsc: '', accountNumber: '' }); });
+      // A failed load used to fall back to a blank form, and Save then overwrote the stored UPI ID and bank details with empty values.
+      .catch(() => { if (alive) { setLoadFailed(true); setForm({ upiId: '', payeeName: '', bankName: '', accountHolder: '', accountNumberMasked: '', hasAccountNumber: false, ifsc: '', accountNumber: '' }); } });
     return () => { alive = false; };
   }, [tenantId]);
   if (!form) return null;
@@ -3091,6 +3151,7 @@ const PaymentCard = ({ tenantId }) => {
   const upi = String(form.upiId || '').trim();
   const upiBad = upi && !UPI_RE.test(upi);
   const save = async () => {
+    if (loadFailed) { setMsg({ text: 'Your saved payment details could not be loaded, so saving is turned off to avoid overwriting them. Reload the page and try again.', ok: false }); return; }
     // same rules as the server, so mistakes are caught before they cost a customer a failed payment
     if (upiBad) { setMsg({ text: 'UPI ID looks wrong. It should look like name@bank (for example shop@okhdfcbank).', ok: false }); return; }
     if (upi && !String(form.payeeName || '').trim()) { setMsg({ text: 'Enter the name customers will see when they pay (your restaurant name).', ok: false }); return; }
@@ -3111,6 +3172,7 @@ const PaymentCard = ({ tenantId }) => {
   return (
     <Card>
       <SectionHeading icon={Wallet} title="Online Payments (UPI) & Bank Details" />
+      {loadFailed && <div style={{ fontSize: 11.5, color: '#c9806a', marginBottom: 12 }}>Could not load your saved payment details. Reload the page before editing.</div>}
       <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.6, marginBottom: 14 }}>
         With a UPI ID saved, the guest's bill shows Google Pay, PhonePe and Paytm buttons. Tapping one opens that app with your restaurant name and the exact bill amount filled in; the guest only enters their PIN.
         Use your <b style={{ color: T.textMed }}>business / merchant UPI ID</b> (from your bank or payment app) — apps are more likely to decline payments to personal IDs for business amounts.
@@ -3148,7 +3210,7 @@ const PaymentCard = ({ tenantId }) => {
         </label>
       )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving' : 'Save payment details'}</PrimaryBtn>
+        <PrimaryBtn icon={Check} onClick={save} disabled={saving || loadFailed}>{saving ? 'Saving' : 'Save payment details'}</PrimaryBtn>
         {msg.text && <span style={{ fontSize: 11.5, color: msg.ok ? T.textMed : '#c9806a', lineHeight: 1.5 }}>{msg.text}</span>}
       </div>
     </Card>
@@ -3159,9 +3221,11 @@ const LocationCard = ({ tenantId }) => {
   const [addr, setAddr] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    api.get(`/api/tenant/location/${tenantId}`).then(r => { if (alive) setAddr(r.data?.address || {}); }).catch(() => { if (alive) setAddr({}); });
+    // A failed load used to show an empty form that Save then wrote over the stored area / landmark / map link / coordinates.
+    api.get(`/api/tenant/location/${tenantId}`).then(r => { if (alive) setAddr(r.data?.address || {}); }).catch(() => { if (alive) { setLoadFailed(true); setAddr({}); } });
     return () => { alive = false; };
   }, [tenantId]);
   const set = (k, v) => setAddr(a => ({ ...a, [k]: v }));
@@ -3175,6 +3239,11 @@ const LocationCard = ({ tenantId }) => {
     );
   };
   const save = async () => {
+    if (loadFailed) { setMsg('Your saved location could not be loaded, so saving is turned off to avoid overwriting it. Reload the page and try again.'); return; }
+    const latStr = String(addr.lat ?? '').trim(), lngStr = String(addr.lng ?? '').trim();
+    if (latStr !== '' && (!Number.isFinite(Number(latStr)) || Math.abs(Number(latStr)) > 90)) { setMsg('Latitude must be a number between -90 and 90'); return; }
+    if (lngStr !== '' && (!Number.isFinite(Number(lngStr)) || Math.abs(Number(lngStr)) > 180)) { setMsg('Longitude must be a number between -180 and 180'); return; }
+    if (String(addr.mapsUrl || '').trim() && !/^https?:\/\//i.test(String(addr.mapsUrl).trim())) { setMsg('The Google Maps link must start with http:// or https://'); return; }
     setSaving(true); setMsg('');
     try {
       const body = { area: addr.area || '', landmark: addr.landmark || '', mapsUrl: addr.mapsUrl || '', lat: addr.lat ?? '', lng: addr.lng ?? '' };
@@ -3201,7 +3270,7 @@ const LocationCard = ({ tenantId }) => {
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <GhostBtn icon={Crosshair} onClick={useHere}>Use my current position</GhostBtn>
-        <PrimaryBtn icon={Check} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save location'}</PrimaryBtn>
+        <PrimaryBtn icon={Check} onClick={save} disabled={saving || loadFailed}>{saving ? 'Saving…' : 'Save location'}</PrimaryBtn>
         {msg && <span style={{ fontSize: 11.5, color: T.textMed }}>{msg}</span>}
       </div>
     </Card>
@@ -3233,14 +3302,18 @@ const SettingsPage = () => {
   const [announceOpen, setAnnounceOpen] = useState(false);
   const [eightySixOpen, setEightySixOpen] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
-  const [toast, setToast] = useState(null);
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+  const [toast, flash] = useFlash();
 
   useEffect(() => { if (data) setForm(data); }, [data]);
 
   const save = async () => {
+    // An emptied or negative target went to the server as-is.
+    for (const [k, label] of [['dailyTarget', 'Daily'], ['monthlyTarget', 'Monthly']]) {
+      const raw = String(form[k] ?? '').trim();
+      if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < 0) { flash(`${label} target must be a number (0 or more)`); return; }
+    }
     setSaving(true);
-    try { await api.put(`/api/owner/settings/${tenantId}`, form); refetch(); flash('Settings saved'); }
+    try { await api.put(`/api/owner/settings/${tenantId}`, { ...form, dailyTarget: Number(form.dailyTarget), monthlyTarget: Number(form.monthlyTarget) }); refetch(); flash('Settings saved'); }
     catch (e) { flash(e?.response?.data?.error || 'Could not save settings'); }
     finally { setSaving(false); }
   };
@@ -3483,10 +3556,10 @@ const ChangePasswordForm = ({ tenantId, onDone }) => {
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const canSubmit = current && next.length >= 6 && next === confirm;
+  const canSubmit = current && next.length >= 6 && next === confirm && next !== current;
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || saving) return;
     setSaving(true); setError(null);
     try {
       await api.put(`/api/owner/auth/change-password/${tenantId}`, { currentPassword: current, newPassword: next });
@@ -3503,6 +3576,7 @@ const ChangePasswordForm = ({ tenantId, onDone }) => {
       <Field label="CONFIRM NEW PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} /></Field>
       {next && next.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Needs at least 6 characters.</div>}
       {confirm && next !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
+      {next && current && next === current && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>The new password must be different from the current one.</div>}
       {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
       <PrimaryBtn icon={saving ? Loader2 : Check} onClick={submit} disabled={saving || !canSubmit}>{saving ? 'Updating…' : 'Update Password'}</PrimaryBtn>
     </div>
@@ -3567,13 +3641,14 @@ export function OwnerLauncher() {
   useEffect(() => {
     let last = null;
     try { last = localStorage.getItem(LAST_TENANT_KEY); } catch (e) {}
-    if (last) navigate(`/owner/${last}/dashboard`, { replace: true });
+    if (last) navigate(`/owner/${encodeURIComponent(last)}/dashboard`, { replace: true });
     else setChecking(false);
   }, [navigate]);
 
   const go = () => {
-    const id = outletInput.trim();
-    if (id) navigate(`/owner/${id}/dashboard`);
+    // Outlet ids are lower-case with no spaces; a pasted "Jay Ambe " or a stray "/" made a wrong or broken URL.
+    const id = outletInput.trim().toLowerCase().replace(/\s+/g, '_');
+    if (id) navigate(`/owner/${encodeURIComponent(id)}/dashboard`);
   };
 
   if (checking) return null;

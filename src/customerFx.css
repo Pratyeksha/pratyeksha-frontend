@@ -70,9 +70,6 @@
 .fx-rise { animation: fxRise .42s cubic-bezier(.2,.8,.3,1) both; }
 @keyframes fxRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
-/* keyboard focus + search glow */
-[data-customer] input:focus-visible, [data-customer] textarea:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(211,191,162,.22); transition: box-shadow .18s ease; }
-
 @media (prefers-reduced-motion: reduce) {
   .fx-badge::after, .fx-cart-halo::after, .pxh-status.open i, .pxh-status.soon i, .fx-pop, .fx-rise { animation: none !important; }
   [data-customer] button:not(:disabled):active, [data-customer] [role="button"]:active { scale: 1; }
