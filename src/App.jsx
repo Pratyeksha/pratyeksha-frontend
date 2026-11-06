@@ -24,6 +24,7 @@ import UpiPay from './UpiPay.jsx';
 import { decideEntry } from './sessionPolicy.js';
 import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
+import { fx, FxSoundToggle } from './customerFx.jsx';
 import InvalidQrScreen from './InvalidQrScreen.jsx';
 import { useBillStatus, BillWaitingScreen, ApprovedBillCard } from './billFlow.jsx';
 const BASE_URL = API_BASE_URL;
@@ -1163,6 +1164,8 @@ onClick={() => setNotificationBanner(null)}
   const alertTimerRef = useRef(null);
   useEffect(() => () => { if (alertTimerRef.current) clearTimeout(alertTimerRef.current); }, []);
   const triggerAlert = (msgKey, type = 'success') => {
+    if (type === 'error') fx.error();
+    else if (msgKey === 'orderSuccess') fx.success();
     setAlert({ show: true, msg: (t[language] && t[language][msgKey]) || msgKey, type });
     if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
     alertTimerRef.current = setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
@@ -2881,9 +2884,11 @@ const notifyWaiter = async (serviceType = "Custom") => {
   const addToCart = (item, portion) => {
     const cartKey = portion === 'Single' ? item._id : `${item._id}-${portion}`;
     setCart(prev => ({ ...prev, [cartKey]: (prev[cartKey] || 0) + 1 }));
+    fx.add();
   };
 
   const removeFromCart = (cartKey) => {
+    fx.remove();
     setCart(prev => {
       const newCart = { ...prev };
       if (newCart[cartKey] > 1) newCart[cartKey] -= 1;
@@ -5597,7 +5602,7 @@ if (qrCheck === 'unverified') {
 )}
 
       <header style={styles.header}>
-        <div style={{ position:'absolute', top:'14px', left:'14px', zIndex:6 }}><PwaInstallButton kind="customer" compact /></div>
+        
         <div style={styles.langToggleBox}>
           <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
@@ -5694,6 +5699,8 @@ if (qrCheck === 'unverified') {
         </div>
         <div style={styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
+        {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><FxSoundToggle /></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -6136,7 +6143,7 @@ if (qrCheck === 'unverified') {
                     {/* Engineering badge inline */}
 {/* ── BESTSELLER — isBestSeller field or star quadrant ── */}
 {(isStar || item.isBestSeller === true) && (
-  <span style={{
+  <span className="fx-badge" style={{
     fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px',
     borderRadius: '3px',
     background: 'rgba(211,191,162,0.08)',
@@ -6151,7 +6158,7 @@ if (qrCheck === 'unverified') {
 
 {/* ── MUST TRY — puzzle quadrant, only when NOT chef special ── */}
 {isPuzzle && !isStar && !item.isBestSeller && item.isChefSpecial !== true && (
-  <span style={{
+  <span className="fx-badge" style={{
     fontSize: '0.46rem', fontWeight: '900', padding: '1px 6px',
     borderRadius: '3px',
     background: 'rgba(189,168,138,0.08)',
@@ -6323,7 +6330,7 @@ if (qrCheck === 'unverified') {
 <div style={styles.tagContainer}>
   {/* Chef Pick — ONLY when isChefSpecial is explicitly true */}
   {item.isChefSpecial === true && (
-    <div style={styles.chefTag}>
+    <div className="fx-badge" style={styles.chefTag}>
       <Sparkles size={10} style={{ marginRight: '4px' }} />
       {language === 'mr' ? 'शेफ पसंती' : 'CHEF PICK'}
     </div>
@@ -6371,7 +6378,7 @@ if (qrCheck === 'unverified') {
   {/* ── ENGINEERING BADGE: BESTSELLER (gold) ── */}
 {/* ── BESTSELLER badge: isBestSeller field (auto-computed) OR star quadrant ── */}
 {(item.isBestSeller === true || item._eng?.quadrant === 'star') && (
-  <span style={{
+  <span className="fx-badge" style={{
     display: 'inline-flex', alignItems: 'center', gap: '3px',
     fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
     padding: '2px 7px', borderRadius: '4px',
@@ -6388,7 +6395,7 @@ if (qrCheck === 'unverified') {
 
 {/* ── MUST TRY: puzzle quadrant AND isChefSpecial is NOT true ── */}
 {item._eng?.quadrant === 'puzzle' && item.isChefSpecial !== true && (
-  <span style={{
+  <span className="fx-badge" style={{
     display: 'inline-flex', alignItems: 'center', gap: '3px',
     fontSize: '0.48rem', fontWeight: '900', letterSpacing: '0.5px',
     padding: '2px 7px', borderRadius: '4px',
@@ -6869,13 +6876,14 @@ if (qrCheck === 'unverified') {
       {/* FABs RIGHT SIDE */}
 {/* FABs RIGHT SIDE */}
 <div style={styles.rightFabContainer}>
-  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}} onClick={() => setIsWaiterModalOpen(true)}>
+  <motion.div data-fx="open" initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}} onClick={() => setIsWaiterModalOpen(true)}>
     <SpoonForkIcon size={24} color="#d3bfa2" strokeWidth={1.8} />
   </motion.div>
 
   {/* EXTRA ITEMS FAB */}
   {extraItems.filter(i => i.isAvailable).length > 0 && (
     <motion.div
+      data-fx="open"
       initial={{ scale: 0 }} animate={{ scale: 1 }}
       whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: 'linear-gradient(160deg, rgba(40,36,28,0.92), rgba(18,17,15,0.94))', border: '1px solid rgba(211,191,162,0.4)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 28px rgba(0,0,0,0.5), 0 0 0 4px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.08)'}}
       onClick={() => { setIsExtraItemsOpen(true); setExtraItemCart({}); setActiveExtraCategory('All'); setExtraItemSearchQuery(''); }}
@@ -6885,9 +6893,9 @@ if (qrCheck === 'unverified') {
   )}
 
   {(totalItemsInCart > 0 || hasPlacedInitialOrder) && (
-    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: PX.gold, boxShadow: '0 14px 32px rgba(211,191,162,0.38), 0 0 0 4px rgba(211,191,162,0.12), inset 0 1px 0 rgba(255,255,255,0.55)'}} onClick={() => setIsDrawerOpen(true)}>
+    <motion.div data-fx="select" data-fx-cart="1" className={totalItemsInCart > 0 ? 'fx-cart-halo' : undefined} initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.92 }} style={{...styles.fabBase, background: PX.gold, boxShadow: '0 14px 32px rgba(211,191,162,0.38), 0 0 0 4px rgba(211,191,162,0.12), inset 0 1px 0 rgba(255,255,255,0.55)'}} onClick={() => setIsDrawerOpen(true)}>
       <Utensils size={24} color="#14110c" strokeWidth={2.2} />
-      {totalItemsInCart > 0 && <span style={styles.fabBadge}>{convertToMrNumber(totalItemsInCart)}</span>}
+      {totalItemsInCart > 0 && <span key={totalItemsInCart} className="fx-pop" style={styles.fabBadge}>{convertToMrNumber(totalItemsInCart)}</span>}
     </motion.div>
   )}
 </div>
@@ -9436,34 +9444,30 @@ if (qrCheck === 'unverified') {
               <svg width="110" height="110" viewBox="0 0 110 110" fill="none" xmlns="http://www.w3.org/2000/svg">
  
                 {/* Steam lines — animated */}
-                <motion.line x1="38" y1="28" x2="38" y2="12"
-                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"
-                  animate={{ y1: [28, 22, 28], y2: [12, 6, 12], opacity: [0.6, 0.1, 0.6] }}
-                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-                />
-                <motion.line x1="55" y1="22" x2="55" y2="6"
-                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.8"
-                  animate={{ y1: [22, 15, 22], y2: [6, -1, 6], opacity: [0.8, 0.1, 0.8] }}
-                  transition={{ repeat: Infinity, duration: 2.3, delay: 0.4, ease: 'easeInOut' }}
-                />
-                <motion.line x1="72" y1="28" x2="72" y2="12"
-                  stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"
-                  animate={{ y1: [28, 22, 28], y2: [12, 6, 12], opacity: [0.6, 0.1, 0.6] }}
-                  transition={{ repeat: Infinity, duration: 1.8, delay: 0.8, ease: 'easeInOut' }}
-                />
+                <line x1="38" y1="28" x2="38" y2="12" stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6">
+                  <animate attributeName="y1" values="28;22;28" dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="12;6;12" dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite" />
+                </line>
+                <line x1="55" y1="22" x2="55" y2="6" stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.8">
+                  <animate attributeName="y1" values="22;15;22" dur="2.3s" begin="0.4s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="6;-1;6" dur="2.3s" begin="0.4s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2.3s" begin="0.4s" repeatCount="indefinite" />
+                </line>
+                <line x1="72" y1="28" x2="72" y2="12" stroke="#c9a84c" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6">
+                  <animate attributeName="y1" values="28;22;28" dur="1.8s" begin="0.8s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="12;6;12" dur="1.8s" begin="0.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.8s" begin="0.8s" repeatCount="indefinite" />
+                </line>
  
                 {/* Pot lid */}
-                <motion.ellipse cx="55" cy="38" rx="28" ry="8"
-                  fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1.2"
-                  animate={{ cy: [38, 36, 38] }}
-                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
-                />
+                <ellipse cx="55" cy="38" rx="28" ry="8" fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1.2">
+                  <animate attributeName="cy" values="38;36;38" dur="1.6s" repeatCount="indefinite" />
+                </ellipse>
                 {/* Lid handle */}
-                <motion.rect x="49" y="31" width="12" height="6" rx="3"
-                  fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1"
-                  animate={{ y: [31, 29, 31] }}
-                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
-                />
+                <rect x="49" y="31" width="12" height="6" rx="3" fill="#1a1a1a" stroke="#c9a84c" strokeWidth="1">
+                  <animate attributeName="y" values="31;29;31" dur="1.6s" repeatCount="indefinite" />
+                </rect>
  
                 {/* Pot body */}
                 <rect x="24" y="44" width="62" height="38" rx="8"
@@ -9471,19 +9475,18 @@ if (qrCheck === 'unverified') {
                 />
  
                 {/* Pot liquid — bubbling fill */}
-                <motion.rect x="26" y="52" width="58" height="28" rx="5"
-                  fill="rgba(201,168,76,0.08)"
-                  animate={{ height: [28, 30, 28], y: [52, 50, 52] }}
-                  transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
-                />
+                <rect x="26" y="52" width="58" height="28" rx="5" fill="rgba(201,168,76,0.08)">
+                  <animate attributeName="height" values="28;30;28" dur="1.6s" repeatCount="indefinite" />
+                  <animate attributeName="y" values="52;50;52" dur="1.6s" repeatCount="indefinite" />
+                </rect>
  
                 {/* Bubble dots inside pot */}
                 {[[40,64],[55,60],[68,66],[48,70]].map(([cx,cy],i) => (
-                  <motion.circle key={i} cx={cx} cy={cy} r="2"
-                    fill="rgba(201,168,76,0.4)"
-                    animate={{ cy: [cy, cy - 6, cy], opacity: [0.4, 0.1, 0.4], r: [2, 1, 2] }}
-                    transition={{ repeat: Infinity, duration: 1.4, delay: i * 0.35, ease: 'easeInOut' }}
-                  />
+                  <circle key={i} cx={cx} cy={cy} r="2" fill="rgba(201,168,76,0.4)">
+                    <animate attributeName="cy" values={`${cy};${cy - 6};${cy}`} dur="1.4s" begin={`${i * 0.35}s`} repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.4s" begin={`${i * 0.35}s`} repeatCount="indefinite" />
+                    <animate attributeName="r" values="2;1;2" dur="1.4s" begin={`${i * 0.35}s`} repeatCount="indefinite" />
+                  </circle>
                 ))}
  
                 {/* Pot handles */}
@@ -9501,11 +9504,10 @@ if (qrCheck === 'unverified') {
                   />
                 ))}
                 {/* Flame glow under pot */}
-                <motion.ellipse cx="55" cy="85" rx="20" ry="4"
-                  fill="rgba(201,168,76,0.08)"
-                  animate={{ rx: [20, 24, 20], opacity: [0.08, 0.18, 0.08] }}
-                  transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
-                />
+                <ellipse cx="55" cy="85" rx="20" ry="4" fill="rgba(201,168,76,0.08)">
+                  <animate attributeName="rx" values="20;24;20" dur="1.2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.08;0.18;0.08" dur="1.2s" repeatCount="indefinite" />
+                </ellipse>
  
               </svg>
             </div>

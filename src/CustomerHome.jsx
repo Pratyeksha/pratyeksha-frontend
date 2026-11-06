@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
+import { fx, FxSoundToggle } from './customerFx.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
 
@@ -923,8 +924,8 @@ export default function CustomerHome() {
     navigate(`/${encodeURIComponent(tenant.tenantId)}?entry=home${svc}`);
   };
 
-  const toggleFav = (id) => {
-    if (!favs.includes(id)) track(id, 'save');
+  const toggleFav = (id, el) => {
+    if (!favs.includes(id)) { track(id, 'save'); fx.like(el); }
     setFavs((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev];
       writeList(FAV_KEY, next);
@@ -1235,7 +1236,6 @@ export default function CustomerHome() {
 
         {/* ── Top bar: install · logo · scan · offers ── */}
         <header style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <PwaInstallButton kind="customer" compact />
           <div style={{ background: '#f7f3eb', borderRadius: 12, padding: '5px 9px', display: 'flex', alignItems: 'center' }}>
             <img src={logo} alt="Pratyeksha" style={{ width: 132, height: 'auto', display: 'block' }} />
           </div>
@@ -1266,9 +1266,16 @@ export default function CustomerHome() {
 
         {/* ── Greeting + search ── */}
         <section style={{ padding: '26px 0 14px' }}>
-          <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
-            {greetingLine}<span style={{ color: GOLD }}>.</span>
-          </h1>
+          {/* The install button used to sit in the top bar; with logo + language + scan + offers it pushed the offers button off a 390px screen. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
+              {greetingLine}<span style={{ color: GOLD }}>.</span>
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <PwaInstallButton kind="customer" compact />
+              <FxSoundToggle />
+            </div>
+          </div>
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>
@@ -1557,7 +1564,7 @@ export default function CustomerHome() {
                       {hasPlace(tenant) && (
                         <button type="button" className="pxh-nav" onClick={() => setSheetTenant(tenant)} aria-label={`Map and directions for ${tenant.name}`}><Navigation size={14} /></button>
                       )}
-                      <button type="button" className={`pxh-heart${isFav ? ' on' : ''}`} onClick={() => toggleFav(tenant.tenantId)} aria-label={isFav ? 'Remove from saved' : 'Save'} aria-pressed={isFav}>
+                      <button type="button" className={`pxh-heart${isFav ? ' on' : ''}`} data-fx="like" onClick={(e) => toggleFav(tenant.tenantId, e.currentTarget)} aria-label={isFav ? 'Remove from saved' : 'Save'} aria-pressed={isFav}>
                         <Heart size={14} fill={isFav ? 'currentColor' : 'none'} />
                       </button>
                     </motion.div>
