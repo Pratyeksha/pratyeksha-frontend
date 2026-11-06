@@ -80,3 +80,19 @@
 
 /* saved-heart pop on the discovery cards */
 .pxh-heart.on svg { animation: fxPop .42s cubic-bezier(.3,1.7,.5,1); }
+
+/* ── cart drawer: "View final bill" card ── */
+.fx-billcard { position: relative; overflow: hidden; width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer;
+  padding: 12px 14px; border-radius: 18px; border: 1px solid rgba(211,191,162,.28);
+  background: linear-gradient(135deg, rgba(211,191,162,.1), rgba(255,255,255,.03) 60%); color: #f7f3eb; }
+.fx-billcard::after { content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; transform: skewX(-18deg); pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent); animation: fxSweep 4.2s ease-in-out infinite; }
+.fx-billcard-ico { position: relative; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center;
+  color: #14110c; background: linear-gradient(160deg, #e6d6bb, #b9a081); box-shadow: 0 6px 16px rgba(211,191,162,.25); }
+.fx-billcard-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #7bd88f; border: 2px solid #14110c; animation: fxBlink 1s ease-in-out infinite; }
+.fx-billcard-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fx-billcard-txt b { font-size: .86rem; font-weight: 800; letter-spacing: .2px; }
+.fx-billcard-txt small { font-size: .66rem; font-weight: 600; color: rgba(247,243,235,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-billcard-go { flex: 0 0 auto; color: #d3bfa2; transition: transform .18s ease; }
+.fx-billcard:active .fx-billcard-go { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) { .fx-billcard::after, .fx-billcard-dot { animation: none !important; } }

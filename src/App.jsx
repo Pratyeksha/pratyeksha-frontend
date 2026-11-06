@@ -8428,12 +8428,29 @@ if (qrCheck === 'unverified') {
           </button>
         )}
         {!isCounterScan && (
-          <button type="button"
-            style={styles.billLinkBtn}
-            onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}
-          >
-            {t[language].viewFinalBill}
-          </button>
+          (() => {
+            const billItemCount = finalBillItems.reduce((n, i) => n + (Number(i.quantity) || 0), 0);
+            const billSub = finalBillItems.reduce((a, i) => a + (Number(i.subtotal) || 0), 0);
+            const billReady = !!approvedBill && billFlow?.status === 'sent';
+            const mr = language === 'mr';
+            const sub = billReady
+              ? (mr ? 'तुमचे बिल तयार आहे — पैसे भरा' : 'Your bill is ready — tap to pay')
+              : billItemCount > 0
+                ? (mr ? `${convertToMrNumber(billItemCount)} वस्तू · ₹${convertToMrNumber(Math.round(billSub))} + कर` : `${billItemCount} item${billItemCount === 1 ? '' : 's'} · ₹${Math.round(billSub)} + taxes`)
+                : (mr ? 'पहिल्या ऑर्डरनंतर दिसेल' : 'Shows after your first order');
+            return (
+              <button type="button" className="fx-billcard" data-fx="open"
+                onClick={() => { setIsDrawerOpen(false); setIsBillOpen(true); }}
+                style={{ marginTop: 14 }}>
+                <span className="fx-billcard-ico"><ReceiptText size={20} strokeWidth={1.9} />{billReady && <i className="fx-billcard-dot" />}</span>
+                <span className="fx-billcard-txt">
+                  <b>{mr ? 'अंतिम बिल पहा' : 'View final bill'}</b>
+                  <small>{sub}</small>
+                </span>
+                <ChevronRight size={18} className="fx-billcard-go" />
+              </button>
+            );
+          })()
         )}
       </div>
     </motion.div>
