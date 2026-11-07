@@ -195,6 +195,7 @@ export const fx = {
   play,
   tap: () => play('tap'),
   // the cart button mounts on the first add, so give React a moment to render it before aiming at it
+  select: () => { play('select'); haptic(10); },
   add: () => { play('add'); haptic(14); setTimeout(flyToCart, 90); },
   remove: () => { play('remove'); haptic(8); },
   success: () => { play('success'); haptic([30, 40, 30, 40, 70]); confetti(); },

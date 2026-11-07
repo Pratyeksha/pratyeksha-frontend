@@ -13,7 +13,7 @@ import {
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
-  Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star, User, ShieldCheck, Lock
+  Shuffle, Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star, User, ShieldCheck, Lock
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
@@ -25,6 +25,7 @@ import { decideEntry } from './sessionPolicy.js';
 import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
 import { fx, FxSoundToggle } from './customerFx.jsx';
+import ExtraItemsSheet from './ExtraItemsSheet.jsx';
 import InvalidQrScreen from './InvalidQrScreen.jsx';
 import { useBillStatus, BillWaitingScreen, ApprovedBillCard } from './billFlow.jsx';
 const BASE_URL = API_BASE_URL;
@@ -298,6 +299,9 @@ const PratyekshaPremiumMenu = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [quickFilter, setQuickFilter] = useState('none'); // none | best | chef | budget
+  const [highlightId, setHighlightId] = useState(null);
+  const surpriseTimers = useRef([]);
   
   const [filterVegOnly, setFilterVegOnly] = useState(true);
   
@@ -650,6 +654,29 @@ return allMenuItems
     return (a.name || '').localeCompare(b.name || '');
   });
 }, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
+
+const shownItems = useMemo(() => {
+  if (quickFilter === 'none') return filteredMenuItems;
+  return filteredMenuItems.filter(i => {
+    if (quickFilter === 'best') return i.isBestSeller === true || (i.bestsellerRank ?? 999) < 999;
+    if (quickFilter === 'chef') return i.isChefSpecial === true;
+    if (quickFilter === 'budget') return (Number(i.priceHalf) || Number(i.priceFull) || Number(i.price) || Infinity) <= 150;
+    return true;
+  });
+}, [filteredMenuItems, quickFilter]);
+useEffect(() => () => { surpriseTimers.current.forEach(clearTimeout); }, []);
+const surpriseMe = () => {
+  const pool = allMenuItems.filter(i => i.isAvailable !== false && (filterVegOnly ? i.isVeg === true : i.isVeg !== true));
+  if (pool.length === 0) return;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  fx.success();
+  setQuickFilter('none'); setSearchQuery(''); setSelectedCategoryId(pick.categoryId || 'all'); setHighlightId(pick._id);
+  surpriseTimers.current.forEach(clearTimeout);
+  surpriseTimers.current = [
+    setTimeout(() => { document.getElementById(`dish-${pick._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 380),
+    setTimeout(() => setHighlightId(null), 3200),
+  ];
+};
 
 const cartUnavailableCheck = useMemo(() => {
   if (!cart || Object.keys(cart).length === 0) return [];
@@ -6286,6 +6313,32 @@ if (qrCheck === 'unverified') {
         </nav>
       </div>
 
+      {/* QUICK FILTERS + SURPRISE ME */}
+      {!searchQuery && (
+        <div className="qf-row no-scrollbar" role="toolbar" aria-label={language === 'mr' ? 'झटपट फिल्टर' : 'Quick filters'}>
+          {[
+            ['best', language === 'mr' ? 'बेस्टसेलर' : 'Bestsellers', Sparkles],
+            ['chef', language === 'mr' ? 'शेफ पसंती' : "Chef's picks", Sparkles],
+            ['budget', language === 'mr' ? '₹१५० च्या आत' : 'Under ₹150', Tag],
+          ].map(([k, label, Ico]) => (
+            <button key={k} type="button" data-fx="select" aria-pressed={quickFilter === k}
+              className={`qf-chip${quickFilter === k ? ' on' : ''}`}
+              onClick={() => setQuickFilter(prev => (prev === k ? 'none' : k))}>
+              <Ico size={12} />{label}
+            </button>
+          ))}
+          <button type="button" className="qf-chip qf-surprise" onClick={surpriseMe}>
+            <Shuffle size={12} />{language === 'mr' ? 'काहीतरी खास!' : 'Surprise me'}
+          </button>
+        </div>
+      )}
+      {quickFilter !== 'none' && !searchQuery && shownItems.length === 0 && (
+        <div className="qf-empty">
+          {language === 'mr' ? 'या श्रेणीत काही सापडले नाही.' : 'Nothing matches here.'}{' '}
+          <button type="button" onClick={() => setQuickFilter('none')}>{language === 'mr' ? 'फिल्टर काढा' : 'Clear filter'}</button>
+        </div>
+      )}
+
       {/* MENU GRID */}
       <motion.div style={styles.contentWrapper} drag="x" dragConstraints={{ left: 0, right: 0 }} onDragEnd={(_, info) => { if (info.offset.x < -50) handleSwipe('left'); if (info.offset.x > 50) handleSwipe('right'); }}>
         <AnimatePresence mode="wait">
@@ -6380,8 +6433,8 @@ if (qrCheck === 'unverified') {
   </div>
 )}
 
-{filteredMenuItems.map((item) => (
-              <div key={item._id} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
+{shownItems.map((item) => (
+              <div key={item._id} id={`dish-${item._id}`} className={`px-dish${highlightId === item._id ? ' px-hl' : ''}`} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
 <div style={styles.tagContainer}>
   {/* Chef Pick — ONLY when isChefSpecial is explicitly true */}
   {item.isChefSpecial === true && (
@@ -7011,741 +7064,22 @@ if (qrCheck === 'unverified') {
 
 
 {/* EXTRA ITEMS MODAL */}
-<AnimatePresence>
-  {isExtraItemsOpen && (
-    <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-      style={{ ...styles.fullscreenModal, zIndex: 5200, background: '#060608', display: 'flex', flexDirection: 'column' }}
-    >
+<ExtraItemsSheet
+  open={isExtraItemsOpen}
+  language={language}
+  items={extraItems}
+  loading={extraItemsLoading}
+  cart={extraItemCart}
+  setCart={setExtraItemCart}
+  category={activeExtraCategory}
+  setCategory={setActiveExtraCategory}
+  query={extraItemSearchQuery}
+  setQuery={setExtraItemSearchQuery}
+  onClose={() => { setIsExtraItemsOpen(false); setExtraItemCart({}); setExtraItemSearchQuery(''); setActiveExtraCategory('All'); }}
+  onSend={sendExtraItemsRequest}
+/>
 
-      {/* TOP GOLD SHIMMER */}
-      <div style={{
-        height: '2px', flexShrink: 0,
-        background: 'linear-gradient(90deg, transparent 0%, rgba(201,168,76,0.15) 20%, rgba(201,168,76,0.7) 50%, rgba(201,168,76,0.15) 80%, transparent 100%)'
-      }}/>
-
-      {/* ── HEADER ── */}
-      <div style={{
-        padding: '16px 18px 14px',
-        background: 'linear-gradient(180deg, rgba(201,168,76,0.06) 0%, transparent 100%)',
-        borderBottom: '1px solid rgba(201,168,76,0.08)',
-        flexShrink: 0, position: 'relative', overflow: 'hidden'
-      }}>
-        {/* ambient glow top-right */}
-        <div style={{
-          position: 'absolute', top: '-20px', right: '-20px',
-          width: '160px', height: '100px',
-          background: 'radial-gradient(ellipse at top right, rgba(201,168,76,0.1) 0%, transparent 70%)',
-          pointerEvents: 'none'
-        }}/>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Icon tile */}
-            <div style={{
-              width: '46px', height: '46px', borderRadius: '14px', flexShrink: 0,
-              background: 'linear-gradient(135deg, rgba(201,168,76,0.12), rgba(201,168,76,0.04))',
-              border: '1px solid rgba(201,168,76,0.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 20px rgba(201,168,76,0.12)'
-            }}>
-              <ShoppingBag size={20} color="#c9a84c" strokeWidth={1.6}/>
-            </div>
-            <div>
-              <div style={{
-                fontSize: '0.42rem', fontWeight: '900', letterSpacing: '2.5px',
-                color: 'rgba(201,168,76,0.45)', textTransform: 'uppercase', marginBottom: '3px'
-              }}>
-                {language === 'mr' ? 'काउंटरवरून मागवा' : 'ORDER FROM COUNTER'}
-              </div>
-              <h2 style={{
-                color: '#d3bfa2', margin: 0,
-                fontSize: '1.08rem', fontWeight: '900', letterSpacing: '-0.2px', lineHeight: 1
-              }}>
-                {language === 'mr' ? 'अतिरिक्त वस्तू' : 'Extra Items'}
-              </h2>
-              <p style={{
-                color: 'rgba(211,191,162,0.62)', fontSize: '0.56rem',
-                margin: '4px 0 0', fontWeight: '700', letterSpacing: '0.4px',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}>
-                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(201,168,76,0.35)', display: 'inline-block', flexShrink: 0 }}/>
-                {language === 'mr' ? 'थंड पेये · आईस्क्रीम · स्नॅक्स' : 'COLD DRINKS · ICE CREAM · SNACKS & MORE'}
-              </p>
-            </div>
-          </div>
-
-          {/* Cart summary chip — appears when items added */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {Object.keys(extraItemCart).length > 0 && (
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 11px',
-                  background: 'rgba(201,168,76,0.1)',
-                  border: '1px solid rgba(201,168,76,0.25)',
-                  borderRadius: '20px'
-                }}>
-                <div style={{
-                  width: '18px', height: '18px', borderRadius: '50%',
-                  background: 'linear-gradient(135deg,#c9a84c,#bda88a)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.5rem', fontWeight: '900', color: '#000'
-                }}>
-                  {Object.values(extraItemCart).reduce((a, b) => a + b, 0)}
-                </div>
-                <span style={{ fontSize: '0.62rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace' }}>
-                  ₹{Object.entries(extraItemCart).reduce((acc, [id, qty]) => {
-                    const item = extraItems.find(i => i._id === id);
-                    return acc + (item?.price || 0) * qty;
-                  }, 0).toLocaleString()}
-                </span>
-              </motion.div>
-            )}
-
-            {/* Close button */}
-            <button type="button"
-              onClick={() => {
-                setIsExtraItemsOpen(false);
-                setExtraItemCart({});
-                setExtraItemSearchQuery('');
-                setActiveExtraCategory('All');
-              }}
-              style={{
-                width: '36px', height: '36px', borderRadius: '11px', flexShrink: 0,
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: 'rgba(255,255,255,0.52)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)';
-                e.currentTarget.style.color = '#d3bfa2';
-                e.currentTarget.style.background = 'rgba(211,191,162,0.05)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                e.currentTarget.style.color = 'rgba(255,255,255,0.3)';
-                e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-              }}
-            >
-              <X size={15}/>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── SEARCH BAR ── */}
-      <div style={{ padding: '13px 16px 8px', flexShrink: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          background: 'rgba(211,191,162,0.04)',
-          border: '1px solid rgba(211,191,162,0.1)',
-          borderRadius: '14px', padding: '11px 14px', gap: '10px',
-          transition: 'border-color 0.2s'
-        }}>
-          <Search size={15} color="rgba(201,168,76,0.4)" strokeWidth={1.8}/>
-          <input
-            type="text"
-            placeholder={language === 'mr' ? 'वस्तू शोधा...' : 'Search drinks, ice cream, snacks...'}
-            value={extraItemSearchQuery}
-            onChange={e => setExtraItemSearchQuery(e.target.value)}
-            style={{
-              background: 'none', border: 'none', color: '#fff',
-              outline: 'none', fontSize: '0.84rem', width: '100%',
-              fontFamily: 'Poppins, sans-serif'
-            }}
-          />
-          {extraItemSearchQuery.length > 0 && (
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setExtraItemSearchQuery('')}
-              style={{
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '6px', color: 'rgba(211,191,162,0.62)', cursor: 'pointer',
-                padding: '3px 7px', display: 'flex', alignItems: 'center', gap: '4px',
-                fontSize: '0.52rem', fontWeight: '800', flexShrink: 0
-              }}
-            >
-              <X size={10}/> CLEAR
-            </motion.button>
-          )}
-        </div>
-      </div>
-
-      {/* ── CATEGORY PILLS ── */}
-      {(() => {
-        const cats = ['All', ...new Set(extraItems.filter(i => i.isAvailable).map(i => i.category))];
-        const catMeta = {
-          'All':             { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>, mr: 'सर्व' },
-          'Cold Drinks':     { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M8 2h8l-1 8H9L8 2z"/><path d="M9 10c0 5 6 5 6 10H9c0-5 6-5 6-10"/><path d="M7 22h10"/></svg>, mr: 'थंड पेये' },
-          'Ice Cream':       { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 22l4-9H8l4 9z"/><circle cx="12" cy="8" r="5"/></svg>, mr: 'आईस्क्रीम' },
-          'Packaged Snacks': { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>, mr: 'स्नॅक्स' },
-          'Juices':          { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/></svg>, mr: 'ज्यूस' },
-          'Mineral Water':   { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>, mr: 'पाणी' },
-          'Dairy':           { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M8 2h8l1 10H7L8 2z"/><path d="M7 12v8a2 2 0 002 2h6a2 2 0 002-2v-8"/></svg>, mr: 'दुग्धजन्य' },
-          'Sweets':          { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>, mr: 'मिठाई' },
-          'Tobacco':         { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="2" y1="12" x2="22" y2="12"/><path d="M20 8c0-2-1-4-4-4s-4 2-4 4"/></svg>, mr: 'तंबाखू' },
-          'Other':           { svg: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>, mr: 'इतर' },
-        };
-        return (
-          <div style={{ overflowX: 'auto', flexShrink: 0 }} className="no-scrollbar">
-            <div style={{ display: 'flex', gap: '7px', padding: '2px 16px 12px', minWidth: 'max-content' }}>
-              {cats.map(cat => {
-                const isActive = activeExtraCategory === cat;
-                const meta = catMeta[cat] || catMeta['Other'];
-                return (
-                  <motion.button
-                    key={cat}
-                    whileTap={{ scale: 0.93 }}
-                    onClick={() => setActiveExtraCategory(cat)}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '5px',
-                      padding: '7px 13px', borderRadius: '20px', border: 'none',
-                      cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                      fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.3px',
-                      background: isActive
-                        ? 'linear-gradient(135deg, #c9a84c 0%, #bda88a 100%)'
-                        : 'rgba(211,191,162,0.05)',
-                      color: isActive ? '#0c0c0c' : 'rgba(211,191,162,0.38)',
-                      outline: isActive ? 'none' : '1px solid rgba(211,191,162,0.1)',
-                      boxShadow: isActive ? '0 4px 16px rgba(201,168,76,0.25)' : 'none',
-                      transition: 'all 0.18s',
-                    }}
-                  >
-                    <span style={{ color: isActive ? '#0c0c0c' : 'rgba(211,191,162,0.38)', display: 'flex', flexShrink: 0 }}>
-                      {meta.svg}
-                    </span>
-                    {cat === 'All'
-                      ? (language === 'mr' ? meta.mr : 'All')
-                      : (language === 'mr' ? (meta.mr || cat) : cat)}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── ITEMS LIST (scrollable body) ── */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '0' }} className="no-scrollbar">
-        {(() => {
-          const categoryIconMap = {
-            'Cold Drinks':    { icon: GlassWater,  color: '#c9a84c' },
-            'Ice Cream':      { icon: IceCream2,   color: '#d3bfa2' },
-            'Packaged Snacks':{ icon: Cookie,      color: '#c9a84c' },
-            'Juices':         { icon: Apple,       color: '#bda88a' },
-            'Mineral Water':  { icon: Droplets,    color: '#d3bfa2' },
-            'Dairy':          { icon: Milk,        color: '#e0d8cc' },
-            'Sweets':         { icon: Candy,       color: '#c9a84c' },
-            'Coffee':         { icon: Coffee,      color: '#bda88a' },
-            'Snacks':         { icon: Sandwich,    color: '#c9a84c' },
-            'Beverages':      { icon: Wind,        color: '#d3bfa2' },
-            'Other':          { icon: Box,         color: '#8a7060' },
-          };
-          const getCatMeta = (cat) => categoryIconMap[cat] || { icon: Box, color: '#8a7060' };
-
-          const filtered = extraItems.filter(i => {
-            if (!i.isAvailable) return false;
-            const matchCat = activeExtraCategory === 'All' || i.category === activeExtraCategory;
-            const matchSearch = i.name.toLowerCase().includes(extraItemSearchQuery.toLowerCase());
-            return matchCat && matchSearch;
-          });
-
-          if (filtered.length === 0) return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', gap: '14px' }}>
-              <div style={{
-                width: '64px', height: '64px', borderRadius: '20px', margin: '0 auto',
-                background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <Package size={28} color="rgba(201,168,76,0.2)" strokeWidth={1.4}/>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'rgba(255,255,255,0.52)', marginBottom: '5px', textAlign: 'center' }}>
-                  {language === 'mr' ? 'कोणतीही वस्तू सापडली नाही' : 'No items found'}
-                </div>
-                <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.52)', fontWeight: '600', textAlign: 'center' }}>
-                  {extraItemSearchQuery
-                    ? (language === 'mr' ? 'वेगळा शब्द वापरा' : `No results for "${extraItemSearchQuery}"`)
-                    : (language === 'mr' ? 'वेगळी श्रेणी निवडा' : 'Try a different category')}
-                </div>
-              </div>
-              {extraItemSearchQuery && (
-                <button type="button" onClick={() => setExtraItemSearchQuery('')}
-                  style={{ padding: '8px 18px', borderRadius: '20px', background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer' }}>
-                  {language === 'mr' ? 'शोध साफ करा' : 'CLEAR SEARCH'}
-                </button>
-              )}
-            </div>
-          );
-
-          // Group by category
-          const grouped = {};
-          filtered.forEach(item => {
-            const cat = item.category || 'Other';
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(item);
-          });
-
-          return (
-            <div style={{ padding: '4px 14px 180px' }}>
-              {Object.entries(grouped).map(([cat, items]) => {
-                const meta = getCatMeta(cat);
-                const CatIcon = meta.icon;
-                return (
-                  <div key={cat} style={{ marginBottom: '28px' }}>
-
-                    {/* ── Category header ── */}
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: '9px',
-                      marginBottom: '12px', padding: '0 2px'
-                    }}>
-                      <div style={{
-                        width: '28px', height: '28px', borderRadius: '9px', flexShrink: 0,
-                        background: 'rgba(201,168,76,0.07)',
-                        border: '1px solid rgba(201,168,76,0.16)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}>
-                        <CatIcon size={13} color="#c9a84c" strokeWidth={1.7}/>
-                      </div>
-                      <span style={{
-                        fontSize: '0.58rem', fontWeight: '900',
-                        color: 'rgba(201,168,76,0.5)',
-                        letterSpacing: '2px', textTransform: 'uppercase'
-                      }}>
-                        {language === 'mr'
-                          ? ({'Cold Drinks':'थंड पेये','Ice Cream':'आईस्क्रीम','Packaged Snacks':'पॅकेज्ड स्नॅक्स','Juices':'ज्यूस','Mineral Water':'मिनरल वॉटर','Dairy':'दुग्धजन्य','Sweets':'मिठाई','Coffee':'कॉफी','Snacks':'स्नॅक्स','Other':'इतर'}[cat] || cat)
-                          : cat}
-                      </span>
-                      <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(201,168,76,0.1), transparent)' }}/>
-                      <span style={{
-                        fontSize: '0.48rem', fontWeight: '900',
-                        color: 'rgba(211,191,162,0.62)', letterSpacing: '0.8px'
-                      }}>
-                        {items.length} {language === 'mr' ? 'वस्तू' : 'items'}
-                      </span>
-                    </div>
-
-                    {/* ── Item cards ── */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {items.map((item, idx) => {
-                        const qty = extraItemCart[item._id] || 0;
-                        const threshold = item.lowStockThreshold ?? 5;
-                        const isLow = item.currentStock > 0 && item.currentStock <= threshold;
-                        const isOut = item.currentStock <= 0;
-                        const ItemIcon = getCatMeta(item.category).icon;
-                        const stockRemaining = item.currentStock - qty;
-                        const almostGone = stockRemaining > 0 && stockRemaining <= 3;
-
-                        return (
-                          <motion.div
-                            key={item._id}
-                            layout
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: isOut ? 0.32 : 1, y: 0 }}
-                            transition={{ delay: idx * 0.035, type: 'spring', damping: 24 }}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: '12px',
-                              background: qty > 0
-                                ? 'linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.04) 100%)'
-                                : 'rgba(255,255,255,0.02)',
-                              border: `1px solid ${
-                                qty > 0
-                                  ? 'rgba(201,168,76,0.25)'
-                                  : isLow
-                                    ? 'rgba(201,168,76,0.1)'
-                                    : 'rgba(211,191,162,0.06)'}`,
-                              borderRadius: '16px',
-                              padding: '12px 13px',
-                              position: 'relative', overflow: 'hidden',
-                              transition: 'all 0.22s ease',
-                              cursor: isOut ? 'default' : 'pointer'
-                            }}
-                            onClick={() => {
-                              if (isOut) return;
-                              if (qty === 0) setExtraItemCart(prev => ({ ...prev, [item._id]: 1 }));
-                            }}
-                          >
-                            {/* Selected shimmer line */}
-                            {qty > 0 && (
-                              <div style={{
-                                position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px',
-                                background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.5), transparent)',
-                                pointerEvents: 'none'
-                              }}/>
-                            )}
-
-                            {/* Left glow when selected */}
-                            {qty > 0 && (
-                              <div style={{
-                                position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px',
-                                background: 'linear-gradient(180deg, transparent, rgba(201,168,76,0.6), transparent)',
-                                borderRadius: '16px 0 0 16px',
-                                pointerEvents: 'none'
-                              }}/>
-                            )}
-
-                            {/* Icon */}
-                            <div style={{
-                              width: '44px', height: '44px', borderRadius: '13px', flexShrink: 0,
-                              background: qty > 0
-                                ? 'rgba(201,168,76,0.12)'
-                                : isOut
-                                  ? 'rgba(255,255,255,0.02)'
-                                  : 'rgba(211,191,162,0.04)',
-                              border: `1px solid ${
-                                qty > 0
-                                  ? 'rgba(201,168,76,0.28)'
-                                  : isOut
-                                    ? 'rgba(255,255,255,0.05)'
-                                    : 'rgba(211,191,162,0.08)'}`,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              transition: 'all 0.22s'
-                            }}>
-                              <ItemIcon
-                                size={19}
-                                color={qty > 0 ? '#c9a84c' : isOut ? 'rgba(211,191,162,0.15)' : 'rgba(211,191,162,0.3)'}
-                                strokeWidth={1.5}
-                              />
-                            </div>
-
-                            {/* Info */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{
-                                fontSize: '0.88rem', fontWeight: '700',
-                                color: qty > 0 ? '#fff' : isOut ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.75)',
-                                marginBottom: '4px', lineHeight: 1.2,
-                                transition: 'color 0.2s',
-                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                              }}>
-                                {item.name}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                <span style={{
-                                  fontSize: '0.86rem', fontWeight: '900',
-                                  color: qty > 0 ? '#c9a84c' : 'rgba(201,168,76,0.6)',
-                                  fontFamily: 'monospace', transition: 'color 0.2s'
-                                }}>
-                                  ₹{item.price}
-                                </span>
-                                <span style={{
-                                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)',
-                                  fontWeight: '700'
-                                }}>
-                                  / {item.unit}
-                                </span>
-
-                                {/* OUT OF STOCK badge */}
-                                {isOut && (
-                                  <span style={{
-                                    fontSize: '0.48rem', padding: '2px 7px',
-                                    background: 'rgba(211,191,162,0.04)',
-                                    color: 'rgba(211,191,162,0.62)',
-                                    borderRadius: '5px', fontWeight: '900',
-                                    border: '1px solid rgba(211,191,162,0.1)',
-                                    letterSpacing: '0.5px'
-                                  }}>
-                                    {language === 'mr' ? 'उपलब्ध नाही' : 'SOLD OUT'}
-                                  </span>
-                                )}
-
-                                {/* LOW STOCK badge */}
-                                {isLow && !isOut && (
-                                  <span style={{
-                                    fontSize: '0.48rem', padding: '2px 7px',
-                                    background: 'rgba(201,168,76,0.07)',
-                                    color: '#c9a84c',
-                                    borderRadius: '5px', fontWeight: '900',
-                                    border: '1px solid rgba(201,168,76,0.18)',
-                                    letterSpacing: '0.3px',
-                                    display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                  }}>
-                                    <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                    {language === 'mr' ? `${item.currentStock} शिल्लक` : `${item.currentStock} left`}
-                                  </span>
-                                )}
-
-                                {/* Almost gone warning when in cart */}
-                                {almostGone && qty > 0 && (
-                                  <motion.span
-                                    initial={{ scale: 0.8, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    style={{
-                                      fontSize: '0.46rem', padding: '2px 6px',
-                                      background: 'rgba(255,140,0,0.08)',
-                                      color: 'rgba(255,140,0,0.8)',
-                                      borderRadius: '4px', fontWeight: '900',
-                                      border: '1px solid rgba(255,140,0,0.15)'
-                                    }}>
-                                    {language === 'mr' ? `फक्त ${stockRemaining} शिल्लक` : `only ${stockRemaining} more`}
-                                  </motion.span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* ── ADD / QUANTITY CONTROLS ── */}
-                            {isOut ? (
-                              <div style={{
-                                fontSize: '0.5rem', color: 'rgba(211,191,162,0.62)',
-                                fontWeight: '900', letterSpacing: '0.5px',
-                                textAlign: 'center', minWidth: '58px'
-                              }}>
-                                {language === 'mr' ? 'नाही' : 'N/A'}
-                              </div>
-                            ) : qty === 0 ? (
-                              <motion.button
-                                whileTap={{ scale: 0.91 }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setExtraItemCart(prev => ({ ...prev, [item._id]: 1 }));
-                                }}
-                                style={{
-                                  padding: '9px 15px', borderRadius: '11px',
-                                  border: '1px solid rgba(201,168,76,0.28)',
-                                  background: 'rgba(201,168,76,0.06)',
-                                  color: '#c9a84c',
-                                  fontWeight: '900', fontSize: '0.68rem',
-                                  cursor: 'pointer', flexShrink: 0,
-                                  letterSpacing: '0.5px',
-                                  transition: 'all 0.15s',
-                                  fontFamily: 'Poppins, sans-serif',
-                                  display: 'flex', alignItems: 'center', gap: '5px'
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.background = 'rgba(201,168,76,0.13)';
-                                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.5)';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.background = 'rgba(201,168,76,0.06)';
-                                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.28)';
-                                }}
-                              >
-                                <Plus size={12} strokeWidth={2.5}/>
-                                {language === 'mr' ? 'निवडा' : 'ADD'}
-                              </motion.button>
-                            ) : (
-                              <motion.div
-                                initial={{ scale: 0.82, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                onClick={e => e.stopPropagation()}
-                                style={{
-                                  display: 'flex', alignItems: 'center',
-                                  background: 'rgba(201,168,76,0.09)',
-                                  border: '1px solid rgba(201,168,76,0.25)',
-                                  borderRadius: '12px', overflow: 'hidden', flexShrink: 0
-                                }}
-                              >
-                                {/* Minus */}
-                                <motion.button
-                                  whileTap={{ scale: 0.88 }}
-                                  onClick={() => setExtraItemCart(prev => {
-                                    const n = { ...prev };
-                                    if (n[item._id] <= 1) delete n[item._id];
-                                    else n[item._id] -= 1;
-                                    return n;
-                                  })}
-                                  style={{
-                                    width: '36px', height: '36px', background: 'transparent',
-                                    border: 'none', color: '#c9a84c', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    transition: 'background 0.12s'
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(201,168,76,0.12)'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                >
-                                  <Minus size={14} strokeWidth={2.5}/>
-                                </motion.button>
-
-                                {/* Count */}
-                                <div style={{
-                                  minWidth: '30px', textAlign: 'center',
-                                  fontSize: '0.92rem', fontWeight: '900',
-                                  color: '#fff', fontFamily: 'monospace',
-                                  borderLeft: '1px solid rgba(201,168,76,0.15)',
-                                  borderRight: '1px solid rgba(201,168,76,0.15)',
-                                  lineHeight: '36px', height: '36px', padding: '0 4px',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}>
-                                  <motion.span
-                                    key={qty}
-                                    initial={{ scale: 1.3 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ type: 'spring', damping: 20 }}
-                                  >
-                                    {qty}
-                                  </motion.span>
-                                </div>
-
-                                {/* Plus */}
-                                <motion.button
-                                  whileTap={{ scale: 0.88 }}
-                                  onClick={() => {
-                                    const current = extraItemCart[item._id] || 0;
-                                    if (Number.isFinite(Number(item.currentStock)) && item.currentStock !== null && current >= item.currentStock) return;
-                                    setExtraItemCart(prev => ({ ...prev, [item._id]: current + 1 }));
-                                  }}
-                                  style={{
-                                    width: '36px', height: '36px', background: 'transparent',
-                                    border: 'none',
-                                    color: qty >= item.currentStock ? 'rgba(201,168,76,0.2)' : '#c9a84c',
-                                    cursor: qty >= item.currentStock ? 'not-allowed' : 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    transition: 'all 0.12s'
-                                  }}
-                                  onMouseEnter={e => { if (qty < item.currentStock) e.currentTarget.style.background = 'rgba(201,168,76,0.12)'; }}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                >
-                                  <Plus size={14} strokeWidth={2.5}/>
-                                </motion.button>
-                              </motion.div>
-                            )}
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* ── STICKY CART FOOTER ── */}
-      <AnimatePresence>
-        {Object.keys(extraItemCart).length > 0 && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-            style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0,
-              padding: '16px 16px 40px',
-              background: 'linear-gradient(to top, #060608 60%, rgba(6,6,8,0.96) 80%, transparent 100%)',
-              backdropFilter: 'blur(16px)',
-              flexShrink: 0
-            }}
-          >
-            {/* Selected items preview strip */}
-            <div style={{
-              display: 'flex', gap: '6px', marginBottom: '12px',
-              overflowX: 'auto', paddingBottom: '2px'
-            }} className="no-scrollbar">
-              {Object.entries(extraItemCart).map(([id, qty]) => {
-                const item = extraItems.find(i => i._id === id);
-                if (!item) return null;
-                return (
-                  <div key={id} style={{
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '4px 9px',
-                    background: 'rgba(201,168,76,0.08)',
-                    border: '1px solid rgba(201,168,76,0.18)',
-                    borderRadius: '20px', flexShrink: 0
-                  }}>
-                    <span style={{ fontSize: '0.58rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace' }}>×{qty}</span>
-                    <span style={{ fontSize: '0.58rem', fontWeight: '700', color: 'rgba(211,191,162,0.7)', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <button type="button"
-                      onClick={() => setExtraItemCart(prev => { const n = { ...prev }; delete n[id]; return n; })}
-                      style={{ background: 'none', border: 'none', color: 'rgba(201,168,76,0.4)', cursor: 'pointer', padding: '0', display: 'flex', marginLeft: '2px' }}>
-                      <X size={10}/>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Summary row */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '12px', padding: '10px 14px',
-              background: 'rgba(201,168,76,0.05)',
-              border: '1px solid rgba(201,168,76,0.12)',
-              borderRadius: '13px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '8px',
-                  background: 'linear-gradient(135deg, rgba(201,168,76,0.2), rgba(201,168,76,0.08))',
-                  border: '1px solid rgba(201,168,76,0.25)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.65rem', fontWeight: '900', color: '#c9a84c', fontFamily: 'monospace'
-                }}>
-                  {Object.values(extraItemCart).reduce((a, b) => a + b, 0)}
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.65rem', fontWeight: '800', color: 'rgba(255,255,255,0.55)' }}>
-                    {Object.keys(extraItemCart).length} {language === 'mr' ? 'प्रकार' : 'type'}{Object.keys(extraItemCart).length > 1 ? 's' : ''}
-                  </div>
-                  <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.52)', fontWeight: '700', letterSpacing: '0.5px' }}>
-                    {language === 'mr' ? 'निवडल्या' : 'SELECTED'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{
-                  fontSize: '1.08rem', fontWeight: '900',
-                  color: '#c9a84c', fontFamily: 'monospace', letterSpacing: '-0.5px'
-                }}>
-                  ₹{Object.entries(extraItemCart).reduce((acc, [id, qty]) => {
-                    const item = extraItems.find(i => i._id === id);
-                    return acc + (item?.price || 0) * qty;
-                  }, 0).toLocaleString()}
-                </div>
-                <div style={{ fontSize: '0.46rem', color: 'rgba(255,255,255,0.52)', fontWeight: '800', letterSpacing: '0.8px' }}>
-                  {language === 'mr' ? 'अंदाजे रक्कम' : 'ESTIMATED TOTAL'}
-                </div>
-              </div>
-            </div>
-
-            {/* CTA button */}
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={sendExtraItemsRequest}
-              style={{
-                width: '100%', padding: '16px',
-                background: 'linear-gradient(135deg, #c9a84c 0%, #bda88a 100%)',
-                border: 'none', borderRadius: '15px',
-                color: '#0c0c0c', fontWeight: '900', fontSize: '0.9rem',
-                cursor: 'pointer', letterSpacing: '0.3px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                boxShadow: '0 8px 32px rgba(201,168,76,0.28), 0 2px 8px rgba(0,0,0,0.4)',
-                fontFamily: 'Poppins, sans-serif',
-                position: 'relative', overflow: 'hidden'
-              }}
-            >
-              {/* Shimmer sweep */}
-              <motion.div
-                animate={{ x: ['-100%', '250%'] }}
-                transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut', repeatDelay: 1.2 }}
-                style={{
-                  position: 'absolute', top: 0, bottom: 0, width: '50px',
-                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
-                  pointerEvents: 'none'
-                }}
-              />
-              <SpoonForkIcon size={17} color="#0c0c0c" strokeWidth={2.2}/>
-              {language === 'mr' ? 'वेटरला विनंती पाठवा' : 'REQUEST TO WAITER'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0c0c0c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </motion.button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-    </motion.div>
-  )}
-</AnimatePresence>
-
-{/* CHECKOUT / BILL SUMMARY PAGE */}
+      {/* CHECKOUT / BILL SUMMARY PAGE */}
       <AnimatePresence>
         {isBillOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{...styles.fullscreenModal, zIndex: 6000}}>
@@ -8478,7 +7812,7 @@ if (qrCheck === 'unverified') {
             const sub = billReady
               ? (mr ? 'तुमचे बिल तयार आहे — पैसे भरा' : 'Your bill is ready — tap to pay')
               : billItemCount > 0
-                ? (mr ? `${convertToMrNumber(billItemCount)} वस्तू · ₹${convertToMrNumber(Math.round(billSub))} + कर` : `${billItemCount} item${billItemCount === 1 ? '' : 's'} · ₹${Math.round(billSub)} + taxes`)
+                ? (mr ? `${convertToMrNumber(billItemCount)} वस्तू ऑर्डर केल्या` : `${billItemCount} item${billItemCount === 1 ? '' : 's'} ordered`)
                 : (mr ? 'पहिल्या ऑर्डरनंतर दिसेल' : 'Shows after your first order');
             return (
               <button type="button" className="fx-billcard" data-fx="open"
