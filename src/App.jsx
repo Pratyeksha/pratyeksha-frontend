@@ -24,7 +24,7 @@ import UpiPay from './UpiPay.jsx';
 import { decideEntry } from './sessionPolicy.js';
 import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
-import { fx, PrefsMenu } from './customerFx.jsx';
+import { fx, PrefsMenu, CustomerExtras, TimeGreeting } from './customerFx.jsx';
 import ExtraItemsSheet from './ExtraItemsSheet.jsx';
 import DietToggle, { SeatedTimer } from './DietToggle.jsx';
 import InvalidQrScreen from './InvalidQrScreen.jsx';
@@ -312,6 +312,8 @@ const PratyekshaPremiumMenu = () => {
   const surpriseTimers = useRef([]);
   
   const [filterVegOnly, setFilterVegOnly] = useState(true);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const [searchFocus, setSearchFocus] = useState(false);
   
   const [language, setLanguage] = useState('en'); 
   const [tenantId, setTenantId] = useState('');
@@ -680,6 +682,8 @@ useEffect(() => {
   if (!tenantId) return;
   favLoaded.current = false;
   try { const v = JSON.parse(localStorage.getItem(`px_menu_favs_${tenantId}`) || '[]'); setFavIds(Array.isArray(v) ? v : []); } catch { setFavIds([]); }
+  try { const r = JSON.parse(localStorage.getItem(`px_menu_recent_${tenantId}`) || '[]'); setRecentSearches(Array.isArray(r) ? r.filter((x) => typeof x === 'string').slice(0, 5) : []); } catch { setRecentSearches([]); }
+  try { if (localStorage.getItem(`px_menu_diet_${tenantId}`) === 'all') setFilterVegOnly(false); } catch { /* blocked */ }
   try { const m = JSON.parse(localStorage.getItem(`px_last_meal_${tenantId}`) || 'null'); setLastMeal(m && m.items && Object.keys(m.items).length ? m : null); } catch { setLastMeal(null); }
   favLoaded.current = true;
 }, [tenantId]);
@@ -687,6 +691,16 @@ useEffect(() => {
   if (!tenantId || !favLoaded.current) return;
   try { localStorage.setItem(`px_menu_favs_${tenantId}`, JSON.stringify(favIds)); } catch { /* storage blocked */ }
 }, [favIds, tenantId]);
+const rememberSearch = (q) => {
+  const v = String(q || '').trim();
+  if (v.length < 2 || !tenantId) return;
+  setRecentSearches((prev) => {
+    const next = [v, ...prev.filter((x) => x.toLowerCase() !== v.toLowerCase())].slice(0, 5);
+    try { localStorage.setItem(`px_menu_recent_${tenantId}`, JSON.stringify(next)); } catch { /* blocked */ }
+    return next;
+  });
+};
+const clearRecentSearches = () => { setRecentSearches([]); try { localStorage.removeItem(`px_menu_recent_${tenantId}`); } catch { /* blocked */ } };
 const speechCtor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
 const startVoice = () => {
   if (!speechCtor) return;
@@ -1779,7 +1793,7 @@ useEffect(() => {
     setFilterVegOnly(true);
     return;
   }
-  if (!filterVegOnly) {
+  if (!filterVegOnly && allMenuItems.length > 0) {
     const hasNonVegInCategory = allMenuItems.some(i => {
       const matchesCategory = selectedCategoryId === 'all' || i.categoryId === selectedCategoryId;
       return matchesCategory && i.isVeg !== true && i.isAvailable !== false;
@@ -5712,12 +5726,12 @@ if (qrCheck === 'unverified') {
           <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
           </button>
-          <PrefsMenu lang={language} />
+          <PrefsMenu lang={language} /><CustomerExtras lang={language} banner={false} />
         </div>
         
 {hasNonVegInView && (
   <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 5 }}>
-    <DietToggle vegOnly={filterVegOnly} onChange={setFilterVegOnly} language={language} />
+    <DietToggle vegOnly={filterVegOnly} onChange={(v) => { setFilterVegOnly(v); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
   </div>
 )}
         <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
@@ -5729,6 +5743,7 @@ if (qrCheck === 'unverified') {
         <div style={language === 'mr' ? { ...styles.poweredBy, letterSpacing: 0, fontSize: '0.7rem' } : styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
         {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
+        <div style={{ textAlign: 'center', marginTop: 8 }}><TimeGreeting lang={language} style={language === 'mr' ? { letterSpacing: 0, textTransform: 'none' } : undefined} /></div>
         <div style={{ display:'flex', justifyContent:'center', alignItems:'center', flexWrap: 'wrap', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><SeatedTimer language={language} /></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
@@ -6036,6 +6051,10 @@ if (qrCheck === 'unverified') {
         style={styles.searchInput}
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
+        onFocus={() => setSearchFocus(true)}
+        onBlur={() => { setTimeout(() => setSearchFocus(false), 150); rememberSearch(searchQuery); }}
+        onKeyDown={e => { if (e.key === 'Enter') { rememberSearch(searchQuery); e.currentTarget.blur(); } }}
+        enterKeyHint="search"
       />
       {speechCtor && searchQuery.length === 0 && (
         <button type="button" onClick={startVoice} aria-label={language === 'mr' ? 'बोलून शोधा' : 'Search by voice'} aria-pressed={listening}
@@ -6055,6 +6074,15 @@ if (qrCheck === 'unverified') {
       )}
     </div>
  
+    {searchFocus && searchQuery.length === 0 && recentSearches.length > 0 && (
+      <div className="px-recent" role="group" aria-label={language === 'mr' ? 'अलीकडील शोध' : 'Recent searches'}>
+        <span className="px-recent-l">{language === 'mr' ? 'अलीकडील' : 'Recent'}</span>
+        {recentSearches.map((r) => (
+          <button key={r} type="button" className="px-recent-c" onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearchQuery(r); fx.select(); }}>{r}</button>
+        ))}
+        <button type="button" className="px-recent-x" onMouseDown={(e) => e.preventDefault()} onClick={clearRecentSearches} aria-label={language === 'mr' ? 'अलीकडील शोध पुसा' : 'Clear recent searches'}><X size={12} /></button>
+      </div>
+    )}
     {/* ── PREMIUM SEARCH SUGGESTIONS DROPDOWN ── */}
     {globalSearchResults.length > 0 && searchQuery.length >= 2 && (
       <div style={{

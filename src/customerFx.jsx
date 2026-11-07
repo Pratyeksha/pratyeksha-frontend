@@ -12,7 +12,8 @@
 // prefers-reduced-motion for every animation. Staff screens (kitchen / operator / owner) are untouched.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowUp, WifiOff, Wifi, Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
 import './customerFx.css';
 
 const SOUND_KEY = 'pxh_fx_sound';
@@ -274,7 +275,7 @@ const holdAwake = async () => {
   try { if (navigator.wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener?.('release', () => { wakeLock = null; }); } } catch { /* denied or unsupported */ }
 };
 const releaseAwake = async () => { try { await wakeLock?.release(); } catch { /* none */ } wakeLock = null; };
-const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
+const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_menu_recent_/, /^px_menu_diet_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
 const clearSavedData = () => { try { Object.keys(localStorage).filter((k) => PRIVATE_KEYS.some((r) => r.test(k))).forEach((k) => localStorage.removeItem(k)); } catch { /* blocked */ } };
 
 export function PrefsMenu({ lang = 'en', size = 16, style }) {
@@ -351,6 +352,48 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
       )}
     </div>
   );
+}
+
+/** Small guest-side niceties, mounted once per page: an offline / back-online banner and a back-to-top button. */
+export function CustomerExtras({ lang = 'en', banner = true }) {
+  const mr = lang === 'mr';
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [back, setBack] = useState(false);
+  const [top, setTop] = useState(false);
+  useEffect(() => {
+    let t = 0;
+    const off = () => { window.clearTimeout(t); setBack(false); setOnline(false); };
+    const on = () => { setOnline(true); setBack(true); window.clearTimeout(t); t = window.setTimeout(() => setBack(false), 2600); };
+    window.addEventListener('offline', off); window.addEventListener('online', on);
+    return () => { window.removeEventListener('offline', off); window.removeEventListener('online', on); window.clearTimeout(t); };
+  }, []);
+  useEffect(() => {
+    let raf = 0;
+    const h = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setTop(window.scrollY > 700); }); };
+    h(); window.addEventListener('scroll', h, { passive: true });
+    return () => { window.removeEventListener('scroll', h); if (raf) cancelAnimationFrame(raf); };
+  }, []);
+  if (typeof document === 'undefined') return null;
+  const goTop = () => { const calm = document.documentElement.getAttribute('data-reduce-motion') === 'on' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); fx.tap(); };
+  return createPortal(
+    <>
+      {banner && (!online || back) && (
+        <div className={`fx-net ${online ? 'ok' : 'bad'}`} role="status" aria-live="polite">
+          {online ? <Wifi size={14} /> : <WifiOff size={14} />}
+          <span>{online ? (mr ? 'पुन्हा ऑनलाइन' : 'Back online') : (mr ? 'इंटरनेट नाही — तुम्ही ऑफलाइन आहात' : "You're offline — some things may not load")}</span>
+        </div>
+      )}
+      <button type="button" className={`fx-top${top ? ' show' : ''}`} onClick={goTop} aria-label={mr ? 'वर जा' : 'Back to top'} tabIndex={top ? 0 : -1} data-fx="silent"><ArrowUp size={17} /></button>
+    </>, document.body);
+}
+
+/** "Good evening" by the guest's clock, one quiet line for the header. */
+export function TimeGreeting({ lang = 'en', style }) {
+  const [h, setH] = useState(() => new Date().getHours());
+  useEffect(() => { const id = window.setInterval(() => setH(new Date().getHours()), 300000); return () => window.clearInterval(id); }, []);
+  const k = h < 5 ? 'n' : h < 12 ? 'm' : h < 17 ? 'a' : h < 21 ? 'e' : 'n';
+  const T = { en: { m: 'Good morning', a: 'Good afternoon', e: 'Good evening', n: 'Late-night cravings?' }, mr: { m: 'शुभ प्रभात', a: 'शुभ दुपार', e: 'शुभ संध्याकाळ', n: 'रात्रीची भूक?' } };
+  return <span className="fx-greet" style={style}>{(T[lang] || T.en)[k]}</span>;
 }
 
 export function FxSoundToggle({ size = 16, style, lang = 'en' }) {

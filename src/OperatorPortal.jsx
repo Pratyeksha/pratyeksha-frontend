@@ -477,39 +477,9 @@ const [expenseList, setExpenseList] = useState({ items: [], total: 0 });
 const [shiftNotes, setShiftNotes] = useState([]);
 const [shiftForm, setShiftForm] = useState({ shift: 'Morning', author: '', note: '', priority: 'normal' });
 const [shiftView, setShiftView] = useState('open');
-const [checkHistory, setCheckHistory] = useState([]);
-const [issueStatus, setIssueStatus] = useState('all');
-const [stockOnlyChanged, setStockOnlyChanged] = useState(false);
-const [checklistData, setChecklistData] = useState({ day: '', items: [], logs: [] });
-const [checkForm, setCheckForm] = useState({ title: '', phase: 'Opening', assignee: '' });
-const [issuesData, setIssuesData] = useState([]);
-const [issueFilter, setIssueFilter] = useState('all');
-const [issueForm, setIssueForm] = useState({ kind: 'Complaint', title: '', details: '', tableNumber: '', customerName: '', customerPhone: '', amount: '' });
-const [stockCounts, setStockCounts] = useState([]);
-const [stockCountDraft, setStockCountDraft] = useState({});
-const [stockCountBy, setStockCountBy] = useState('');
 const fetchShiftNotes = async () => {
   try { const r = await axios.get(`${BASE_URL}/admin/shift-notes/${tenantId}`); setShiftNotes(r.data.notes || []); }
   catch { showNotif('Could not load the shift log', 'error'); }
-};
-const fetchChecklists = async () => {
-  try {
-    const r = await axios.get(`${BASE_URL}/admin/checklists/${tenantId}`);
-    setChecklistData(r.data);
-    const days = Array.from({ length: 7 }, (_, k) => new Date(Date.now() + 330 * 60000 - (k + 1) * 864e5).toISOString().slice(0, 10)).reverse();
-    const past = await Promise.all(days.map(d => axios.get(`${BASE_URL}/admin/checklists/${tenantId}?day=${d}`)
-      .then(x => ({ day: d, done: (x.data.logs || []).length, total: (x.data.items || []).length }))
-      .catch(() => ({ day: d, done: 0, total: 0 }))));
-    setCheckHistory(past);
-  } catch { showNotif('Could not load checklists', 'error'); }
-};
-const fetchIssues = async () => {
-  try { const r = await axios.get(`${BASE_URL}/admin/issues/${tenantId}`); setIssuesData(r.data.issues || []); }
-  catch { showNotif('Could not load issues', 'error'); }
-};
-const fetchStockCounts = async () => {
-  try { const r = await axios.get(`${BASE_URL}/admin/stock-counts/${tenantId}`); setStockCounts(r.data.counts || []); }
-  catch { showNotif('Could not load stock counts', 'error'); }
 };
 const fetchCompliance = async () => {
   try { const r = await axios.get(`${BASE_URL}/admin/compliance/${tenantId}`); setComplianceItems(r.data.items || []); }
@@ -533,9 +503,6 @@ useEffect(() => {
   if (activeTab === 'equipment') fetchEquipment();
   if (activeTab === 'pending') { fetchPayables(); fetchCompliance(); fetchEquipment(); }
   if (activeTab === 'shiftlog') fetchShiftNotes();
-  if (activeTab === 'checklists') fetchChecklists();
-  if (activeTab === 'issues') fetchIssues();
-  if (activeTab === 'stocktake') { fetchStockCounts(); fetchManagementData(); }
   if (activeTab === 'payables') fetchExpenses();
 }, [activeTab]);
 const storedTableCount = parseInt(localStorage.getItem('table_count'), 10) || 12; // value captured at login
@@ -2225,18 +2192,21 @@ const releaseTableLock = async () => {
 
 const floorLayout = useMemo(() => {
   if (localFloorLayout) return localFloorLayout;
-  const saved = tenantConfig?.floorLayout;
-  if (saved && saved.length > 0) return saved;
+  const saved = tenantConfig?.floorLayout || [];
   const count = tenantConfig?.tableCount || 12;
   const perRow = Math.max(3, Math.ceil(Math.sqrt(count * 2.4)));
   const rows = Math.ceil(count / perRow);
-  return Array.from({ length: count }, (_, i) => ({
+  const defaults = Array.from({ length: count }, (_, i) => ({
     tableNumber: String(i + 1),
     x: 8 + (i % perRow) * (84 / Math.max(1, perRow - 1 || 1)),
     y: 12 + Math.floor(i / perRow) * (72 / Math.max(1, rows - 1 || 1)),
     seats: 4,
     groupId: ''
   }));
+  // Keep every table that was placed, and give any table without a saved position its default spot.
+  // Before this, tables missing from the saved layout were not drawn at all.
+  const placed = new Set(saved.map(t => String(t.tableNumber)));
+  return [...saved, ...defaults.filter(d => !placed.has(d.tableNumber))];
 }, [localFloorLayout, tenantConfig]);
 
 // Returns true only when the layout was really saved. Callers used to announce "Tables joined" (and clear their selection)
@@ -5125,9 +5095,6 @@ const renderMonthHeatmap = () => {
           {id:'compliance',     label:'Compliance',      icon:<ShieldCheck size={16}/>, badge: null},
           {id:'equipment',      label:'Equipment',       icon:<Wrench size={16}/>, badge: null},
           {id:'shiftlog',       label:'Shift Log',       icon:<FileClock size={16}/>, badge: null},
-          {id:'checklists',     label:'Checklists',      icon:<ClipboardCheck size={16}/>, badge: null},
-          {id:'issues',         label:'Issues',          icon:<ShieldAlert size={16}/>, badge: null},
-          {id:'stocktake',      label:'Stock Take',      icon:<Layers size={16}/>, badge: null},
           {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
         ]
       },
@@ -5290,9 +5257,6 @@ const renderMonthHeatmap = () => {
          activeTab==='compliance'?'COMPLIANCE':
          activeTab==='equipment'?'EQUIPMENT':
          activeTab==='shiftlog'?'SHIFT LOG':
-         activeTab==='checklists'?'CHECKLISTS':
-         activeTab==='issues'?'ISSUES':
-         activeTab==='stocktake'?'STOCK TAKE':
          activeTab==='menu'?'MENU EDITOR':
          activeTab==='insights'?'INSIGHTS':
          activeTab==='intelligence'?'AI INTELLIGENCE':
@@ -5318,9 +5282,6 @@ const renderMonthHeatmap = () => {
          activeTab==='dayclose'?'Reconcile the day  Payments  Cash drawer':
          activeTab==='compliance'?'Licences  Certificates  Renewals':
          activeTab==='shiftlog'?'Handover between shifts  Urgent items':
-         activeTab==='checklists'?'Opening  Mid-shift  Closing routine':
-         activeTab==='issues'?'Complaints  Incidents  Refunds':
-         activeTab==='stocktake'?'Physical count  Variance at cost':
          activeTab==='equipment'?'Service schedule  Service history':
          activeTab==='payables'?'Vendor bills  Due dates  Payments':
          activeTab==='inventory'?'Stock levels · Procurement · Wastage':
@@ -5641,21 +5602,6 @@ const renderMonthHeatmap = () => {
         <section style={styles.scrollArea} className="custom-scroll">
 <RenewalReminder tenantId={tenantId} style={{ margin: '0 0 14px' }} />
 
-{activeTab === 'pending' && (() => {
-  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
-  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
-  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const floor = floorLayout || [];
-  const taken = new Set((occupiedTables || []).map(String));
-  const exportRows = () => downloadCsv('floor-status.csv', ['Table', 'Seats', 'Status now'], floor.map(t => [t.tableNumber, t.seats ?? '', taken.has(String(t.tableNumber)) ? 'occupied' : 'free']));
-  if (floor.length === 0) return null;
-  return (
-    <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '12px 18px', marginBottom: '0' }}>
-      <div style={{ fontSize: '0.66rem', color: '#B4B4B4' }}>{floor.length} tables · <span style={{ color: '#ECDCB9', fontWeight: '800' }}>{taken.size} occupied</span> · {floor.length - taken.size} free right now</div>
-      {csvButton(exportRows, 'Export the floor status')}
-    </div>
-  );
-})()}
 
 {activeTab === 'pending' && (
   
@@ -5729,18 +5675,18 @@ const renderMonthHeatmap = () => {
         {turn != null && <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700' }}>Average table turn today <span style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>~{turn}m</span></span>}
       </div>
       {rows.map(row => (
-        <div key={row.title} style={{ display: 'grid', gridTemplateColumns: '84px repeat(4, minmax(0, 1fr))', gap: '10px', alignItems: 'stretch' }}>
+        <div key={row.title} style={{ display: 'grid', gridTemplateColumns: '84px repeat(4, minmax(0, 1fr))', gap: '8px', alignItems: 'stretch' }}>
           <div style={{ display: 'flex', alignItems: 'center', fontSize: '0.56rem', letterSpacing: '1.4px', textTransform: 'uppercase', color: '#8a704d', fontWeight: '900' }}>{row.title}</div>
           {row.tiles.map(t => (
             <div key={t.label} style={{
-              padding: '13px 15px', borderRadius: '14px',
+              padding: '9px 12px', borderRadius: '12px',
               background: t.hot ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
               border: `1px solid ${t.hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.1)'}`,
               boxShadow: '0 12px 26px rgba(0,0,0,0.3)',
             }}>
               <div style={{ fontSize: '0.56rem', letterSpacing: '1.3px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>{t.label}</div>
-              <div style={{ marginTop: '7px', display: 'flex', alignItems: 'baseline', gap: '7px' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: t.hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{t.value}</span>
+              <div style={{ marginTop: '5px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '1.05rem', fontWeight: '900', color: t.hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{t.value}</span>
                 <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
               </div>
             </div>
@@ -5817,7 +5763,7 @@ const renderMonthHeatmap = () => {
     }}
     onMouseUp={() => setDraggingTable(null)}
     onMouseLeave={() => setDraggingTable(null)}
-    style={{ position:'relative', width:'100%', height: 'min(520px, 78vw)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
+    style={{ position:'relative', width:'100%', height: 'clamp(180px, 22vw, 240px)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
 
     {/* Connector lines between joined tables */}
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
@@ -5850,8 +5796,8 @@ const renderMonthHeatmap = () => {
           }}
           title={`Table ${t.tableNumber}${t.seats ? ` · ${t.seats} seats` : ''} — ₹${rev.toLocaleString()} today`}
           style={{
-            position:'absolute', left:`${t.x}%`, top:`${t.y}%`, transform:'translate(-50%,-50%)',
-            width: 'clamp(58px, 12vw, 84px)', height: 'clamp(58px, 12vw, 84px)', borderRadius:'16px',
+            position:'absolute', left:`clamp(34px, ${t.x}%, calc(100% - 34px))`, top:`clamp(34px, ${t.y}%, calc(100% - 34px))`, transform:'translate(-50%,-50%)',
+            width: 'clamp(50px, 7.5vw, 62px)', height: 'clamp(50px, 7.5vw, 62px)', borderRadius:'14px',
             background: colors.bg,
             border: `2.5px solid ${isSelectedForJoin ? '#d3bfa2' : orderStatus ? ORDER_STATUS_RING[orderStatus] : isReserved ? '#8a704d' : colors.border}`,
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
@@ -6508,8 +6454,8 @@ const renderMonthHeatmap = () => {
                       </div>
                     </div>
 
-                    {/* Right: Amount + settle */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
+                    {/* Right: Amount + actions, one row */}
+                    <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexShrink: 0, maxWidth: '420px' }}>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.54rem', color: '#969696', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
@@ -7554,289 +7500,9 @@ const renderMonthHeatmap = () => {
   );
 })()}
 
-{activeTab === 'checklists' && (() => {
-  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
-  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
-  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
-  const items = checklistData.items || [];
-  const doneIds = new Set((checklistData.logs || []).map(l => String(l.itemId)));
-  const phases = ['Opening', 'Mid-shift', 'Closing'];
-  const doneCount = items.filter(i => doneIds.has(String(i._id))).length;
-  const pct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
-  const tick = async (item) => {
-    try {
-      await axios.post(`${BASE_URL}/admin/checklists/${tenantId}/${item._id}/tick`, { day: checklistData.day, done: !doneIds.has(String(item._id)), doneBy: 'Operator' });
-      fetchChecklists();
-    } catch (err) { showNotif(err.response?.data?.error || 'Could not update the task', 'error'); }
-  };
-  const add = async () => {
-    if (!checkForm.title.trim()) return showNotif('Describe the task', 'error');
-    try { await axios.post(`${BASE_URL}/admin/checklists/${tenantId}`, checkForm); setCheckForm(p => ({ ...p, title: '', assignee: '' })); fetchChecklists(); showNotif('Task added'); }
-    catch (err) { showNotif(err.response?.data?.error || 'Could not add the task', 'error'); }
-  };
-  return (
-    <div key="checklists" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
-      <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '18px' }}>
-        <div>
-          <div style={label}>Today · {checklistData.day ? new Date(`${checklistData.day}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: '2-digit', month: 'short' }) : ''}</div>
-          <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.6rem', fontWeight: '900', color: pct === 100 ? '#d3bfa2' : '#ECDCB9' }}>{doneCount} of {items.length} done</div>
-        </div>
-        <div style={{ flex: 1, maxWidth: '420px' }}>
-          <div style={{ height: '8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#d3bfa2,#B8923A)', borderRadius: '6px', transition: 'width 0.3s' }} />
-          </div>
-          <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#8a8a8a' }}>{pct === 100 ? 'Everything is ticked for today' : `${items.length - doneCount} still open`}</div>
-        </div>
-      </div>
-      <div style={card}>
-        <div style={label}>Last 7 days · completion against today's list</div>
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '10px', alignItems: 'end', height: '90px' }}>
-          {checkHistory.map(h => { const pc = h.total ? Math.round((h.done / h.total) * 100) : 0; return (
-            <div key={h.day} title={`${h.done} of ${h.total}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%', justifyContent: 'flex-end' }}>
-              <span style={{ fontFamily: 'monospace', fontSize: '0.56rem', color: '#d3bfa2' }}>{h.total ? `${pc}%` : '-'}</span>
-              <div style={{ width: '100%', height: `${Math.max(4, pc * 0.6)}px`, borderRadius: '6px', background: pc === 100 ? '#d3bfa2' : 'rgba(211,191,162,0.22)' }} />
-              <span style={{ fontSize: '0.5rem', color: '#8a8a8a' }}>{new Date(`${h.day}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short' })}</span>
-            </div>); })}
-        </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '14px', alignItems: 'start' }}>
-        {phases.map(ph => {
-          const list = items.filter(i => i.phase === ph);
-          const done = list.filter(i => doneIds.has(String(i._id))).length;
-          return (
-            <div key={ph} style={card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={label}>{ph}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '0.66rem', color: '#d3bfa2' }}>{done}/{list.length}</span>
-              </div>
-              {list.length === 0 ? (
-                <div style={{ marginTop: '18px', fontSize: '0.64rem', color: '#8a8a8a' }}>No tasks for this phase yet.</div>
-              ) : list.map(item => {
-                const on = doneIds.has(String(item._id));
-                return (
-                  <div key={item._id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '10px', alignItems: 'center', padding: '10px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                    <button type="button" onClick={() => tick(item)} aria-label={on ? 'Mark not done' : 'Mark done'} style={{ width: '20px', height: '20px', borderRadius: '6px', cursor: 'pointer', padding: 0,
-                      background: on ? '#d3bfa2' : 'transparent', border: `1px solid ${on ? '#d3bfa2' : 'rgba(211,191,162,0.35)'}`, color: '#0c0c0c', fontSize: '0.7rem', fontWeight: '900' }}>{on ? '✓' : ''}</button>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '0.7rem', color: on ? '#8a8a8a' : '#ECDCB9', fontWeight: '700', textDecoration: on ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
-                      {item.assignee && <div style={{ marginTop: '2px', fontSize: '0.58rem', color: '#8a8a8a' }}>{item.assignee}</div>}
-                    </div>
-                    <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove "${item.title}"?`, subtitle: 'It will stop appearing on future days. Past records are kept.', onConfirm: async () => {
-                      try { await axios.delete(`${BASE_URL}/admin/checklists/${tenantId}/${item._id}`); fetchChecklists(); showNotif('Task removed'); }
-                      catch (err) { showNotif(err.response?.data?.error || 'Could not remove', 'error'); }
-                    } })} style={{ padding: '4px 7px', borderRadius: '7px', cursor: 'pointer', fontSize: '0.5rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>REMOVE</button>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-      <div style={card}>
-        <div style={label}>Add a recurring task</div>
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px' }}>
-          <input placeholder="e.g. Check fridge temperatures and note them" value={checkForm.title} style={input} onChange={e => setCheckForm(p => ({ ...p, title: e.target.value }))} />
-          <select value={checkForm.phase} style={input} onChange={e => setCheckForm(p => ({ ...p, phase: e.target.value }))}>{phases.map(p => <option key={p} value={p}>{p}</option>)}</select>
-          <input placeholder="Assigned to" value={checkForm.assignee} style={input} onChange={e => setCheckForm(p => ({ ...p, assignee: e.target.value }))} />
-          <button type="button" onClick={add} style={{ padding: '0 18px', borderRadius: '10px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.6rem', fontWeight: '900' }}>ADD</button>
-        </div>
-      </div>
-    </div>
-  );
-})()}
 
-{activeTab === 'issues' && (() => {
-  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
-  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
-  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
-  const list = issuesData || [];
-  const open = list.filter(i => i.status === 'open');
-  const refunds = list.filter(i => i.kind === 'Refund' && i.status === 'resolved').reduce((n, i) => n + (Number(i.amount) || 0), 0);
-  const shown = list.filter(i => (issueFilter === 'all' || i.kind === issueFilter) && (issueStatus === 'all' || i.status === issueStatus));
-  const when = (d) => new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
-  const add = async () => {
-    if (!issueForm.title.trim()) return showNotif('Describe what happened', 'error');
-    try {
-      await axios.post(`${BASE_URL}/admin/issues/${tenantId}`, { ...issueForm, amount: Number(issueForm.amount) || 0 });
-      setIssueForm({ kind: 'Complaint', title: '', details: '', tableNumber: '', customerName: '', customerPhone: '', amount: '' });
-      showNotif('Logged'); fetchIssues();
-    } catch (err) { showNotif(err.response?.data?.error || 'Could not log it', 'error'); }
-  };
-  const resolve = async (i) => {
-    const text = window.prompt('How was it resolved?', i.resolution || '');
-    if (text === null) return;
-    try { await axios.patch(`${BASE_URL}/admin/issues/${tenantId}/${i._id}`, { status: 'resolved', resolution: text }); fetchIssues(); }
-    catch (err) { showNotif(err.response?.data?.error || 'Could not resolve', 'error'); }
-  };
-  const tile = (l, v, sub, hot) => (
-    <div style={{ ...card, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}>
-      <div style={label}>{l}</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
-      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
-    </div>
-  );
-  return (
-    <div key="issues" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('issues.csv', ['Logged','Kind','Title','Table','Guest','Phone','Amount (₹)','Status','Resolution','Details'], (issuesData || []).map(i => [istDate(i.createdAt), i.kind, i.title, i.tableNumber, i.customerName, i.customerPhone, i.amount, i.status, i.resolution, i.details])); })}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
-        {tile('Open', open.length, open.length ? 'need an answer' : 'nothing open', open.length > 0)}
-        {tile('Refunded', `₹${refunds.toLocaleString('en-IN')}`, 'resolved refunds', false)}
-        {tile('Logged', list.length, 'complaints, incidents and refunds', false)}
-        {tile('Avg time to resolve', (() => { const r = list.filter(i => i.status === 'resolved' && i.resolvedAt); if (!r.length) return '-'; const h = r.reduce((n, i) => n + (new Date(i.resolvedAt) - new Date(i.createdAt)), 0) / r.length / 3.6e6; return h < 24 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`; })(), 'from logged to resolved', false)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
-        <div style={card}>
-          <div style={label}>Log an issue</div>
-          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <select value={issueForm.kind} style={input} onChange={e => setIssueForm(p => ({ ...p, kind: e.target.value }))}>{['Complaint', 'Incident', 'Refund'].map(k => <option key={k} value={k}>{k}</option>)}</select>
-              <input placeholder="Table" value={issueForm.tableNumber} style={input} onChange={e => setIssueForm(p => ({ ...p, tableNumber: e.target.value }))} />
-            </div>
-            <input placeholder="What happened" value={issueForm.title} style={input} onChange={e => setIssueForm(p => ({ ...p, title: e.target.value }))} />
-            <textarea rows={2} placeholder="Details" value={issueForm.details} style={{ ...input, resize: 'vertical' }} onChange={e => setIssueForm(p => ({ ...p, details: e.target.value }))} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-              <input placeholder="Guest name" value={issueForm.customerName} style={input} onChange={e => setIssueForm(p => ({ ...p, customerName: e.target.value }))} />
-              <input placeholder="Phone" value={issueForm.customerPhone} style={input} onChange={e => setIssueForm(p => ({ ...p, customerPhone: e.target.value }))} />
-              <input type="number" min="0" placeholder="₹ refund" value={issueForm.amount} style={{ ...input, fontFamily: 'monospace' }} onChange={e => setIssueForm(p => ({ ...p, amount: e.target.value }))} />
-            </div>
-            <button type="button" onClick={add} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>LOG ISSUE</button>
-          </div>
-        </div>
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={label}>Issues</span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {['all', 'Complaint', 'Incident', 'Refund'].map(k => (
-                <button key={k} type="button" onClick={() => setIssueFilter(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: issueFilter === k ? '#d3bfa2' : '#070707', color: issueFilter === k ? '#0c0c0c' : '#969696', border: `1px solid ${issueFilter === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{k === 'all' ? 'All' : k}</button>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>{[['all', 'All'], ['open', 'Open'], ['resolved', 'Resolved']].map(([k, t]) => (<button key={k} type="button" onClick={() => setIssueStatus(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: issueStatus === k ? '#d3bfa2' : '#070707', color: issueStatus === k ? '#0c0c0c' : '#969696', border: `1px solid ${issueStatus === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{t}</button>))}</div>
-          {shown.length === 0 ? (
-            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
-              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>Nothing logged</div>
-              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Complaints, accidents and refunds go here, with how each was resolved.</div>
-            </div>
-          ) : shown.map(i => (
-            <div key={i._id} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr auto', gap: '10px', alignItems: 'center', padding: '11px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: i.status === 'resolved' ? 0.6 : 1 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.72rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.title}</div>
-                <div style={{ marginTop: '2px', fontSize: '0.6rem', color: '#8a8a8a' }}>{[i.kind, i.tableNumber && `Table ${i.tableNumber}`, i.customerName, when(i.createdAt)].filter(Boolean).join(' · ')}{i.status === 'resolved' && i.resolution ? ` — ${i.resolution}` : ''}</div>
-              </div>
-              <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#d3bfa2' }}>{i.amount ? `₹${Number(i.amount).toLocaleString('en-IN')}` : ''}</span>
-              {i.status === 'open'
-                ? <button type="button" onClick={() => resolve(i)} style={{ padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>RESOLVE</button>
-                : <span style={{ fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', color: '#8a8a8a' }}>RESOLVED</span>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-})()}
 
-{activeTab === 'stocktake' && (() => {
-  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
-  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
-  const input = { boxSizing: 'border-box', padding: '8px 10px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '9px', color: '#ECDCB9', fontSize: '0.72rem', outline: 'none', fontFamily: 'monospace', width: '110px' };
-  const rows = [...(inventory || [])].sort((a, b) => String(a.itemName).localeCompare(String(b.itemName)));
-  const entered = Object.entries(stockCountDraft).filter(([, v]) => v !== '' && v != null);
-  const preview = entered.map(([id, v]) => {
-    const it = rows.find(r => String(r._id) === id); if (!it) return null;
-    const exp = Number(it.currentStock) || 0, c = Number(v), wac = Number(it.weightedAvgCost || it.costPrice) || 0;
-    return { id, it, exp, c, diff: Math.round((c - exp) * 1000) / 1000, value: Math.round((c - exp) * wac * 100) / 100 };
-  }).filter(Boolean);
-  const net = preview.reduce((n, p) => n + p.value, 0);
-  const changed = preview.filter(p => p.diff !== 0).length;
-  const apply = async () => {
-    if (preview.length === 0) return showNotif('Enter at least one counted quantity', 'error');
-    if (!window.confirm(`Apply this count? ${changed} ingredient${changed === 1 ? '' : 's'} will change, net ${net >= 0 ? '+' : '-'}₹${Math.abs(net).toLocaleString('en-IN')} at cost.`)) return;
-    try {
-      const r = await axios.post(`${BASE_URL}/admin/stock-counts/${tenantId}`, { countedBy: stockCountBy || 'Operator', lines: preview.map(p => ({ inventoryId: p.id, counted: p.c })) });
-      setStockCountDraft({}); showNotif(`Stock count applied: ${r.data.count.changedCount} changed`); fetchStockCounts(); fetchManagementData();
-    } catch (err) { showNotif(err.response?.data?.error || 'Could not apply the count', 'error'); }
-  };
-  const history = stockCounts || [];
-  return (
-    <div key="stocktake" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('stock-valuation.csv', ['Ingredient','Unit','Stock','Cost per unit (WAC)','Value (₹)','Min threshold'], [...(inventory || [])].sort((a, b) => String(a.itemName).localeCompare(String(b.itemName))).map(i => { const w = Number(i.weightedAvgCost || i.costPrice) || 0; const q = Math.max(0, Number(i.currentStock) || 0); return [i.itemName, i.unit, Number(i.currentStock) || 0, w.toFixed(2), Math.round(q * w * 100) / 100, i.minThreshold]; })); })}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={label}>Counted this sheet</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: '#ECDCB9' }}>{entered.length} of {rows.length}</div></div>
-        <div style={{ ...card, padding: '16px 18px', border: `1px solid ${changed ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}><div style={label}>Ingredients that change</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: changed ? '#d3bfa2' : '#ECDCB9' }}>{changed}</div></div>
-        <div style={{ ...card, padding: '16px 18px', border: `1px solid ${net < 0 ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}><div style={label}>Net variance at cost</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: net < 0 ? '#d3bfa2' : '#ECDCB9' }}>{net >= 0 ? '+' : '-'}₹{Math.abs(net).toLocaleString('en-IN')}</div></div>
-      </div>
-      <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div style={label}>Count sheet · enter what is physically on the shelf</div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <input placeholder="Counted by" value={stockCountBy} onChange={e => setStockCountBy(e.target.value)} style={{ ...input, width: '160px', fontFamily: 'inherit' }} />
-            <button type="button" onClick={() => setStockOnlyChanged(v => !v)} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: stockOnlyChanged ? '#d3bfa2' : 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: stockOnlyChanged ? '#0c0c0c' : '#d3bfa2', fontSize: '0.58rem', fontWeight: '900' }}>ONLY CHANGED</button>
-            <button type="button" onClick={() => setStockCountDraft(Object.fromEntries(rows.map(r => [String(r._id), String(Number(r.currentStock) || 0)])))} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900' }}>FILL SYSTEM</button>
-            <button type="button" onClick={() => setStockCountDraft({})} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a', fontSize: '0.58rem', fontWeight: '900' }}>CLEAR</button>
-            <button type="button" onClick={apply} style={{ padding: '9px 16px', borderRadius: '9px', cursor: 'pointer', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.6px' }}>APPLY COUNT</button>
-          </div>
-        </div>
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '2fr 0.8fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '8px 4px', borderBottom: '1px solid rgba(211,191,162,0.12)' }}>
-          {['Ingredient', 'Unit', 'System', 'Counted', 'Difference', 'Value at cost'].map(h => <span key={h} style={label}>{h}</span>)}
-        </div>
-        <div style={{ maxHeight: '460px', overflowY: 'auto' }}>
-          {(stockOnlyChanged ? rows.filter(r => preview.some(p => p.id === String(r._id) && p.diff !== 0)) : rows).map(it => {
-            const id = String(it._id);
-            const v = stockCountDraft[id];
-            const p = preview.find(x => x.id === id);
-            return (
-              <div key={id} style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 1fr 1fr 1fr 1fr', gap: '10px', alignItems: 'center', padding: '8px 4px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                <span style={{ fontSize: '0.7rem', color: '#ECDCB9', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.itemName}</span>
-                <span style={{ fontSize: '0.6rem', color: '#8a8a8a', textTransform: 'uppercase' }}>{it.unit}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#B4B4B4' }}>{Number(it.currentStock || 0)}</span>
-                <input type="number" min="0" step="0.001" value={v ?? ''} placeholder="-" onChange={e => setStockCountDraft(d => ({ ...d, [id]: e.target.value }))} style={input} />
-                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: p && p.diff !== 0 ? '#d3bfa2' : '#8a8a8a', fontWeight: '800' }}>{p ? (p.diff > 0 ? '+' : '') + p.diff : ''}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: p && p.value < 0 ? '#d3bfa2' : '#B4B4B4' }}>{p ? `${p.value >= 0 ? '+' : '-'}₹${Math.abs(p.value).toLocaleString('en-IN')}` : ''}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div style={card}>
-        <div style={label}>Recent counts</div>
-        {history.length === 0 ? (
-          <div style={{ marginTop: '18px', fontSize: '0.64rem', color: '#8a8a8a' }}>No stock counts applied yet. Run one at least once a month.</div>
-        ) : history.map(c => (
-          <div key={c._id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '10px', padding: '9px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.66rem', color: '#B4B4B4' }}>
-            <span>{new Date(c.countedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</span>
-            <span>{c.countedBy || 'Operator'}</span>
-            <span>{c.changedCount} changed of {c.lines.length}</span>
-            <span style={{ fontFamily: 'monospace', color: c.netVarianceValue < 0 ? '#d3bfa2' : '#ECDCB9' }}>{c.netVarianceValue >= 0 ? '+' : '-'}₹{Math.abs(c.netVarianceValue).toLocaleString('en-IN')}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-})()}
 
-{activeTab === 'menu' && (() => {
-  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
-  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
-  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const items = menuItems || [];
-  const hidden = items.filter(i => i.isAvailable === false);
-  const noHalfFull = items.filter(i => !(Number(i.priceHalf) > 0) && !(Number(i.priceFull) > 0));
-  const exportRows = () => downloadCsv('menu.csv', ['Dish', 'Category', 'Price (₹)', 'Half (₹)', 'Full (₹)', 'Veg', 'Available', 'Best seller'], items.map(i => [i.name, i.categoryId, i.price, i.priceHalf || '', i.priceFull || '', i.isVeg ? 'veg' : 'non-veg', i.isAvailable === false ? 'no' : 'yes', i.isBestSeller ? 'yes' : 'no']));
-  if (items.length === 0) return null;
-  return (
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div>
-          <div style={P.label}>Menu health</div>
-          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{items.length} dishes · {hidden.length} hidden from guests{noHalfFull.length ? ` · ${noHalfFull.length} with no half or full price` : ''}</div>
-        </div>
-        {csvButton(exportRows, 'Export the menu')}
-      </div>
-      {hidden.length > 0 && (
-        <div style={{ marginTop: '10px', fontSize: '0.64rem', color: '#8a8a8a' }}>Hidden now: {hidden.slice(0, 8).map(h => h.name).join(' · ')}{hidden.length > 8 ? ` and ${hidden.length - 8} more` : ''}</div>
-      )}
-    </div>
-  );
-})()}
 
 {activeTab === 'menu' && (
   <motion.div key="menu" initial={false} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -9636,30 +9302,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
  
 
           {/* ── BILLING ── */}
-          {activeTab==='billing' && (() => {
-  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
-  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
-  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const days = Object.values((analytics || []).reduce((m, r) => { const k = String(r._id); const a = m[k] || { d: k, cash: 0, upi: 0, card: 0, revenue: 0, bills: 0 }; a.cash += Number(r.cash) || 0; a.upi += Number(r.upi) || 0; a.card += Number(r.card) || 0; a.revenue += Number(r.revenue) || 0; a.bills += Number(r.count) || 0; m[k] = a; return m; }, {})).sort((x, y) => y.d.localeCompare(x.d)).slice(0, 7);
-  const exportRows = () => downloadCsv('payment-mix-7-days.csv', ['Date', 'Bills', 'Revenue (₹)', 'Cash (₹)', 'UPI (₹)', 'Card (₹)'], days.map(d => [d.d, d.bills, d.revenue, d.cash, d.upi, d.card]));
-  if (days.length === 0) return null;
-  return (
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div><div style={P.label}>Payment mix, last 7 days</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{money(days.reduce((n, d) => n + d.revenue, 0))} billed across {days.reduce((n, d) => n + d.bills, 0)} bills</div></div>
-        {csvButton(exportRows, 'Export the 7-day payment mix')}
-      </div>
-      <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px', alignItems: 'end', height: '74px' }}>
-        {[...days].reverse().map(d => { const max = Math.max(...days.map(x => x.revenue), 1); const h = Math.max(4, Math.round((d.revenue / max) * 60)); return (
-          <div key={d.d} title={`${money(d.revenue)} · cash ${money(d.cash)} · UPI ${money(d.upi)} · card ${money(d.card)}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-            <div style={{ width: '100%', height: `${h}px`, borderRadius: '5px', background: 'linear-gradient(180deg,#d3bfa2,#8A704D)' }} />
-            <span style={{ fontSize: '0.5rem', color: '#8a8a8a' }}>{new Date(`${d.d}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}</span>
-          </div>); })}
-      </div>
-    </div>
-  );
-})()}
-
+          
 {activeTab==='billing' && (
             <motion.div key="billing" initial={false} animate={{opacity:1}} style={{display:'flex',gap:'50px'}}>
               <div style={{flex:1}}>
@@ -15022,26 +14665,6 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           {/* ════════════════════════════════════════════
               RECIPES — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
-{activeTab === 'recipes' && (() => {
-  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
-  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
-  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const list = recipes || [];
-  const lines = [];
-  list.forEach(r => (r.ingredients || []).forEach(ing => lines.push([r.dishName || r.name || r.menuItemName || '', ing.itemName || ing.name || ing.inventoryName || '', ing.quantityUsed ?? ing.qty ?? '', ing.unit || ''])));
-  if (list.length === 0) return null;
-  return (
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div>
-          <div style={P.label}>Recipe book</div>
-          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{list.length} {list.length === 1 ? 'dish' : 'dishes'} costed from {lines.length} ingredient lines</div>
-        </div>
-        {csvButton(() => downloadCsv('recipes.csv', ['Dish', 'Ingredient', 'Quantity', 'Unit'], lines), 'Export every recipe line')}
-      </div>
-    </div>
-  );
-})()}
 
 {activeTab === 'recipes' && (
   <motion.div key="recipes" initial={false} animate={{ opacity: 1, y: 0 }}

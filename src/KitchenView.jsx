@@ -25,7 +25,7 @@ import {
   ChefHat, Timer, StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Activity, Coffee,
   Layers, Flame, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown,
   RefreshCw, Search, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Scale, PackageX, ShieldAlert, Wrench,
-  Volume2, VolumeX, Bike, Check, ArrowUpDown, ChevronDown,
+  Volume2, VolumeX, Bike, Check, ArrowUpDown, ChevronDown, Settings, Maximize, Minimize, Siren,
 } from 'lucide-react';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // crossed spoon & fork instead of the bell
@@ -114,19 +114,37 @@ const EIGHTY_SIX_REASONS = [
    VOICE — output only. A small queue so tickets that arrive together are read one after another, never over each other.
 ═══════════════════════════════════════════════════════════════════ */
 const VOICE_PREF_KEY = 'kds_voice_prefs_v2';
-const DEFAULT_VOICE_PREFS = { voice: true, chime: true, dispatchSound: true, repeat: 1, rate: 'normal' };
+const DEFAULT_VOICE_PREFS = { voice: true, chime: true, dispatchSound: true, overdueAlert: true, repeat: 1, rate: 'normal', volume: 1, voiceName: '' };
 const RATE_VALUE = { slow: 0.8, normal: 0.92, fast: 1.06 };
 const loadVoicePrefs = () => {
   try { return { ...DEFAULT_VOICE_PREFS, ...JSON.parse(localStorage.getItem(VOICE_PREF_KEY) || '{}') }; } catch { return { ...DEFAULT_VOICE_PREFS }; }
+};
+
+/* ═══ DISPLAY SETTINGS (per device) ═══ */
+const DISPLAY_KEY = 'kds_display_v1';
+const DEFAULT_DISPLAY = { size: 'normal', warnSec: 450, lateSec: 900, keepAwake: true };
+const SIZE_ZOOM = { small: 0.82, normal: 1, large: 1.18 };
+const WARN_OPTIONS = [['5 min', 300], ['7½ min', 450], ['10 min', 600]];
+const LATE_OPTIONS = [['10 min', 600], ['15 min', 900], ['20 min', 1200], ['30 min', 1800]];
+const loadDisplay = () => {
+  try {
+    const d = { ...DEFAULT_DISPLAY, ...JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}') };
+    if (!SIZE_ZOOM[d.size]) d.size = DEFAULT_DISPLAY.size;
+    if (!WARN_OPTIONS.some(([, s]) => s === d.warnSec) || !LATE_OPTIONS.some(([, s]) => s === d.lateSec) || d.warnSec >= d.lateSec) { d.warnSec = DEFAULT_DISPLAY.warnSec; d.lateSec = DEFAULT_DISPLAY.lateSec; }
+    d.keepAwake = d.keepAwake !== false;
+    return d;
+  } catch { return { ...DEFAULT_DISPLAY }; }
 };
 
 const speechEngine = {
   queue: [], speaking: false, current: null, watchdog: null, voices: [], onState: null, onBlocked: null,
   supported() { return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'; },
   refreshVoices() { try { this.voices = window.speechSynthesis.getVoices() || []; } catch { this.voices = []; } },
-  pickVoice() {
+  pickVoice(name) {
     if (!this.voices.length) this.refreshVoices();
     const v = this.voices;
+    const chosen = name ? v.find(x => x.name === name) : null;
+    if (chosen) return chosen;
     return v.find(x => x.lang === 'en-IN') || v.find(x => /^en/i.test(x.lang || '') && /india/i.test(x.name || '')) || v.find(x => /^en/i.test(x.lang || '')) || v[0] || null;
   },
   setSpeaking(on) { this.speaking = on; try { this.onState?.(on); } catch { /* ignore */ } },
@@ -151,15 +169,15 @@ const speechEngine = {
     try { if (this.supported()) window.speechSynthesis.cancel(); } catch { /* ignore */ }
     this.setSpeaking(false);
   },
-  say(text, { repeat = 1, rate = 'normal', interrupt = false } = {}) {
+  say(text, { repeat = 1, rate = 'normal', interrupt = false, volume = 1, voiceName = '' } = {}) {
     if (!text || !this.supported()) return;
     if (interrupt) this.stop();
     const wasIdle = !this.speaking;
-    const voice = this.pickVoice();
+    const voice = this.pickVoice(voiceName);
     for (let i = 0; i < Math.max(1, Math.min(3, repeat)); i++) {
       const u = new SpeechSynthesisUtterance(String(text));
       if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = 'en-IN';
-      u.rate = RATE_VALUE[rate] || RATE_VALUE.normal; u.pitch = 1; u.volume = 1;
+      u.rate = RATE_VALUE[rate] || RATE_VALUE.normal; u.pitch = 1; u.volume = Math.min(1, Math.max(0.1, Number(volume) || 1));
       this.queue.push(u);
     }
     // Chrome drops a speak() that comes straight after cancel(): after an interrupt, start the new text a moment later.
@@ -306,13 +324,17 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-eq{display:inline-flex;align-items:flex-end;gap:2px;height:14px}
 .kx-eq i{width:3px;border-radius:2px;background:var(--gold);animation:kxEq .9s ease-in-out infinite}
 .kx-eq i:nth-child(2){animation-delay:.18s} .kx-eq i:nth-child(3){animation-delay:.36s}
-.kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:292px;z-index:70;padding:14px;border-radius:16px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
+.kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:292px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:70;padding:14px;border-radius:16px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
 .kx-pop h4{margin:0;font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
 .kx-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;font-weight:500;color:#d8d1c3}
 .kx-row small{display:block;margin-top:2px;font-size:.6rem;color:var(--mute);font-weight:400}
 .kx-sw{position:relative;width:46px;height:26px;border-radius:13px;border:1px solid var(--line);background:#070708;flex-shrink:0;padding:0;transition:all .2s}
 .kx-sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#6f6c64;transition:all .2s var(--ease)}
 .kx-sw.on{background:rgba(211,191,162,.25);border-color:var(--line2)} .kx-sw.on::after{left:23px;background:var(--gold)}
+.kx-range{width:100%;accent-color:#d3bfa2;height:4px}
+.kx-duo{display:flex;gap:4px}
+.kx-duo .kx-nav{flex:1;min-width:0}
+.kx-duo .kx-nav.sq{flex:0 0 38px;justify-content:center;padding:6px 0}
 .kx-mini{display:flex;padding:2px;gap:2px;border-radius:10px;background:#070708;border:1px solid var(--line)}
 .kx-mini button{padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
 .kx-mini button.on{background:rgba(211,191,162,.2);color:var(--gold)}
@@ -370,6 +392,9 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-prep-l{display:flex;align-items:center;gap:6px;font-size:.55rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
 .kx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.62rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
 .kx-chip b{font:700 .7rem 'JetBrains Mono',monospace;color:var(--gold)}
+.kx-latebtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid rgba(226,154,88,.5);background:rgba(226,154,88,.1);font-size:.54rem;font-weight:800;letter-spacing:.12em;color:#f0b87c;flex-shrink:0;text-transform:uppercase}
+.kx-latebtn b{font:700 .62rem 'JetBrains Mono',monospace}
+.kx-latebtn.on{background:rgba(226,154,88,.28);border-color:var(--amber);color:#ffe2c0}
 .kx-sortbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.54rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
 .kx-sortbtn:hover{color:var(--cream);border-color:var(--line2)}
 .kx-search{display:flex;align-items:center;gap:8px;margin:8px 8px 0;padding:7px 12px;border-radius:12px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
@@ -393,6 +418,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
    height to its row, so the rows collapsed and the next row slid over the ticket above it. */
 .kx-grid{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:grid;grid-template-columns:repeat(auto-fill,minmax(262px,1fr));grid-auto-rows:max-content;gap:10px;align-content:start;align-items:start;padding:2px 2px 14px}
 .kx-grid>*{min-width:0}
+.kx-grid .kx-tk{zoom:var(--kx-zoom,1)} /* ticket size setting: Small / Normal / Large */
 .kx-center{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:70px 20px}
 .kx-center .ic{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:var(--glass),#0d0d0e;border:1px solid var(--line);color:var(--dim)}
 .kx-center h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.26em;color:var(--mute);text-transform:uppercase}
@@ -481,7 +507,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-metrics{flex:1;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;border-radius:24px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
 .kx-metrics h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.25rem;font-weight:700;letter-spacing:.04em}
 .kx-metrics>p{margin:0 0 20px;font-size:.66rem;color:var(--mute);letter-spacing:.06em}
-.kx-mtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:640px;margin-bottom:22px}
+.kx-mtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;width:100%;max-width:860px;margin-bottom:18px}
 .kx-mt{padding:16px 10px;border-radius:14px;text-align:center;background:#0b0b0c;border:1px solid var(--line);border-top:2px solid var(--gold)}
 .kx-mt span{display:block;font-size:.5rem;letter-spacing:.2em;font-weight:700;color:var(--mute);text-transform:uppercase;margin-bottom:10px}
 .kx-mt b{display:block;font:700 1.8rem/1 'JetBrains Mono',monospace;color:var(--gold)} .kx-mt b.sm{font-size:1.3rem;padding:.3rem 0}
@@ -514,6 +540,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-card>.hd{font-size:.56rem;letter-spacing:.22em;font-weight:700;color:var(--mute);text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .kx-lbl{display:block;margin-bottom:6px;font-size:.54rem;font-weight:700;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
 .kx-in{width:100%;padding:8px 11px;border-radius:10px;border:1px solid var(--line);background:#070708;color:var(--cream);font-size:.76rem;outline:0;transition:border-color .16s,box-shadow .16s}
+.kx select.kx-in{background-color:#070708;color:var(--cream);color-scheme:dark}
 .kx-in:focus{border-color:var(--line2);box-shadow:0 0 0 4px rgba(211,191,162,.08)}
 .kx-in option{background:#0d0d0e;color:var(--cream)}
 .kx-pill{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:34px}
@@ -546,6 +573,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 /* newer-CSS upgrades, only where the browser understands them (older kitchen tablets keep the plain fallbacks above) */
 @supports (width:min(1px,2px)){.kx-grid{grid-template-columns:repeat(auto-fill,minmax(min(var(--kx-col,262px),100%),1fr))}.kx-tk{max-height:var(--kx-maxh,min(460px,max(230px,calc(100vh - 175px))))}}
 @supports (width:min(1px,2px)) and (height:100dvh){.kx-tk{max-height:var(--kx-maxh,min(460px,max(230px,calc(100dvh - 175px))))}}
+@media (max-height:600px){.kx-rail{overflow-y:auto}.kx-rail-list{flex:none;overflow:visible}}
 @media (max-height:520px){.kx-health,.kx-ribbon{display:none}.kx-tk{--kx-maxh:max(230px,calc(100vh - 112px))}.kx-top{padding-top:4px;padding-bottom:4px}}
 .kx-ib.attn{border-color:rgba(226,154,88,.6);color:var(--amber);background:rgba(226,154,88,.1);animation:kxBreath 2s ease-in-out infinite}
 @media (max-width:599px){
@@ -632,6 +660,14 @@ const KitchenViewInner = () => {
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [display, setDisplay] = useState(loadDisplay);          // ticket size + delayed / overdue limits (this device)
+  const [showSettings, setShowSettings] = useState(false);
+  const [lateIds, setLateIds] = useState(() => new Set());      // tickets older than the overdue limit
+  const [oldestWait, setOldestWait] = useState(0);
+  const [showLateOnly, setShowLateOnly] = useState(false);
+  const [voiceList, setVoiceList] = useState([]);
+  const [awakeOn, setAwakeOn] = useState(false);                // the screen wake lock is held
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundMissed, setSoundMissed] = useState(false); // a ticket arrived (or speech was refused) before the browser allowed sound
   const [freshIds, setFreshIds] = useState(() => new Set()); // tickets that arrived in the last few seconds
   const [toasts, setToasts] = useState([]);
@@ -651,6 +687,10 @@ const KitchenViewInner = () => {
   const confirm86Busy = useRef(false);
   const recentSocketRef = useRef(new Map()); // id -> { order, ts }: tickets the socket delivered in the last 20 s (a slower fetch must not drop them)
   const sortOldestRef = useRef(false);
+  const displayRef = useRef(display);
+  const alertedLateRef = useRef(new Set());  // tickets already announced as overdue
+  const lateSeededRef = useRef(false);
+  const checkLateRef = useRef(null);
   const gridRef = useRef(null);
   const anchorRef = useRef(null);          // the ticket at the top of the visible board and how far down it sits
   const audioUnlockedRef = useRef(false);
@@ -675,7 +715,7 @@ const KitchenViewInner = () => {
       setAudioUnlocked(true); setSoundMissed(false);
       const waiting = ordersRef.current.filter(o => (o.items || []).some(isKitchenItem)).length;
       const p = voicePrefsRef.current;
-      if (waiting > 0 && p.voice) speechEngine.say(`Kitchen connected. ${waiting} ${waiting === 1 ? 'ticket' : 'tickets'} waiting.`, { rate: p.rate });
+      if (waiting > 0 && p.voice) speechEngine.say(`Kitchen connected. ${waiting} ${waiting === 1 ? 'ticket' : 'tickets'} waiting.`, { rate: p.rate, volume: p.volume, voiceName: p.voiceName });
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
@@ -685,8 +725,14 @@ const KitchenViewInner = () => {
   useEffect(() => {
     speechEngine.onState = setSpeaking;
     speechEngine.onBlocked = () => { setAudioUnlocked(false); setSoundMissed(true); }; // the browser refused to speak: ask for a tap again
-    speechEngine.refreshVoices();
-    try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = () => speechEngine.refreshVoices(); } catch { /* ignore */ }
+    const syncVoices = () => {
+      speechEngine.refreshVoices();
+      const list = speechEngine.voices.map(v => ({ name: v.name, lang: v.lang }));
+      list.sort((a, b) => (/^en/i.test(b.lang) ? 1 : 0) - (/^en/i.test(a.lang) ? 1 : 0) || a.name.localeCompare(b.name));
+      setVoiceList(list.slice(0, 60));
+    };
+    syncVoices();
+    try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = syncVoices; } catch { /* ignore */ }
     return () => {
       speechEngine.onState = null; speechEngine.onBlocked = null; speechEngine.stop();
       try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = null; } catch { /* ignore */ }
@@ -700,11 +746,22 @@ const KitchenViewInner = () => {
     try { localStorage.setItem(VOICE_PREF_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
   };
 
+  const updateDisplay = patch => {
+    const n = { ...displayRef.current, ...patch };
+    if (n.warnSec >= n.lateSec) {   // "delayed" must come before "overdue": move the other limit out of the way
+      if ('warnSec' in patch) n.lateSec = (LATE_OPTIONS.find(([, s]) => s > n.warnSec) || LATE_OPTIONS[LATE_OPTIONS.length - 1])[1];
+      else n.warnSec = ([...WARN_OPTIONS].reverse().find(([, s]) => s < n.lateSec) || WARN_OPTIONS[0])[1];
+    }
+    displayRef.current = n;
+    setDisplay(n);
+    try { localStorage.setItem(DISPLAY_KEY, JSON.stringify(n)); } catch { /* storage blocked */ }
+  };
+
   // opts.force: speak even if spoken details are switched off (the speaker button / test). opts.interrupt: cut off what is being said.
   const announce = (text, opts = {}) => {
     const p = voicePrefsRef.current;
     if (!opts.force && !p.voice) return;
-    speechEngine.say(text, { repeat: opts.force ? 1 : p.repeat, rate: p.rate, interrupt: !!opts.interrupt });
+    speechEngine.say(text, { repeat: opts.force ? 1 : p.repeat, rate: p.rate, interrupt: !!opts.interrupt, volume: p.volume, voiceName: p.voiceName });
   };
   const speakTicket = order => announce(buildTicketSpeech(order, { replay: true }), { force: true, interrupt: true });
 
@@ -1171,6 +1228,7 @@ const KitchenViewInner = () => {
       if (!(order.items || []).some(isKitchenItem)) return false;
       const otype = getOrderType(order);
       if (!stationMatches(otype, stationFilter)) return false;
+      if (showLateOnly && lateIds.size > 0 && !lateIds.has(String(order._id))) return false;
       if (isNonVegMode) {
         const hasNV = (order.items || []).some(item => {
           const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
@@ -1199,7 +1257,7 @@ const KitchenViewInner = () => {
     });
     // Always sort by creation time: a recalled ticket is put back at the front and would otherwise sit in the wrong place.
     return [...list].sort((a, b) => sortOldest ? createdMs(a) - createdMs(b) : createdMs(b) - createdMs(a));
-  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery, sortOldest]);
+  }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery, sortOldest, showLateOnly, lateIds]);
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
@@ -1295,6 +1353,85 @@ const KitchenViewInner = () => {
   const toggleSort = () => setSortOldest(v => { const n = !v; sortOldestRef.current = n; try { localStorage.setItem('kds_sort_oldest', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const todayWastageCount = wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length;
 
+  /* ── overdue alerts ──
+     Every few seconds: which tickets are past the overdue limit (for the LATE filter and metrics), and say it once when a ticket crosses it.
+     Tickets that are already overdue when the screen opens (or when the limit is changed) are marked as announced without an alarm. */
+  const alertOverdue = (list, lateSec) => {
+    const p = voicePrefsRef.current;
+    if (!p.overdueAlert) return;
+    const mins = Math.round(lateSec / 60);
+    const names = list.slice(0, 4);
+    const more = list.length - names.length;
+    pushToast({ kind: 'late', title: `OVERDUE · ${names.map(shortLabel).join(', ')}${more > 0 ? ` +${more}` : ''}`, body: `Waiting over ${mins} minutes. Please check.` });
+    if (p.chime) playAlertSound('expiry');
+    later(() => announce(`Overdue. ${names.map(spokenWho).join(', ')}${more > 0 ? ` and ${more} more` : ''}. Waiting over ${mins} minutes.`), p.chime ? 1300 : 0);
+  };
+  useEffect(() => {
+    lateSeededRef.current = false;
+    const lateSec = display.lateSec;
+    const check = () => {
+      const now = Date.now();
+      const late = new Set();
+      const fresh = [];
+      const live = new Set();
+      let oldest = 0;
+      ordersRef.current.forEach(o => {
+        if (!(o.items || []).some(isKitchenItem)) return;
+        const id = String(o._id);
+        live.add(id);
+        const age = Math.max(0, (now - createdMs(o)) / 1000);
+        if (age > oldest) oldest = age;
+        if (age >= lateSec) { late.add(id); if (!alertedLateRef.current.has(id)) { alertedLateRef.current.add(id); fresh.push(o); } }
+      });
+      alertedLateRef.current.forEach(id => { if (!live.has(id)) alertedLateRef.current.delete(id); });
+      setOldestWait(Math.floor(oldest));
+      setLateIds(prev => (prev.size === late.size && [...late].every(x => prev.has(x))) ? prev : late);
+      if (!initialLoadRef.current) return;
+      if (!lateSeededRef.current) { lateSeededRef.current = true; return; }
+      if (fresh.length) alertOverdue(fresh, lateSec);
+    };
+    checkLateRef.current = check;
+    check();
+    const t = setInterval(check, 5000);
+    return () => { clearInterval(t); checkLateRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [display.lateSec]);
+
+  // also whenever the ticket list changes, so the LATE chip shows the moment tickets load (not up to 5 s later)
+  useEffect(() => { checkLateRef.current?.(); }, [orders]);
+
+  /* ── keep the screen awake (a sleeping tablet silently misses tickets) ── */
+  useEffect(() => {
+    if (!display.keepAwake || typeof navigator === 'undefined' || !('wakeLock' in navigator)) { setAwakeOn(false); return undefined; }
+    let lock = null;
+    let stopped = false;
+    const acquire = async () => {
+      try {
+        lock = await navigator.wakeLock.request('screen');
+        if (stopped) { try { lock.release(); } catch { /* ignore */ } return; }
+        setAwakeOn(true);
+        lock.addEventListener?.('release', () => { if (!stopped) setAwakeOn(false); });
+      } catch { setAwakeOn(false); }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') acquire(); }; // the lock is dropped whenever the page is hidden
+    acquire();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopped = true; document.removeEventListener('visibilitychange', onVisible); try { lock?.release(); } catch { /* ignore */ } setAwakeOn(false); };
+  }, [display.keepAwake]);
+
+  const fullscreenSupported = typeof document !== 'undefined' && !!document.documentElement?.requestFullscreen;
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { /* the browser refused (needs a tap, or is not allowed here) */ }
+  };
+
   /* ── keep the board steady ──
      A ticket that arrives (or leaves) above the part of the board you are looking at used to shove everything down or up by a row, so
      the ticket you were about to tap moved under your finger. Remember the first visible ticket and put the scroll back after each change. */
@@ -1325,7 +1462,8 @@ const KitchenViewInner = () => {
   useEffect(() => {
     const onKey = e => {
       if (e.key !== 'Escape') return;
-      if (eightySixModal) setEightySixModal(null);
+      if (showSettings) setShowSettings(false);
+      else if (eightySixModal) setEightySixModal(null);
       else if (showWastagePanel) setShowWastagePanel(false);
       else if (showVoiceMenu) setShowVoiceMenu(false);
       else if (sidebarOpen) setSidebarOpen(false);
@@ -1333,7 +1471,7 @@ const KitchenViewInner = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [eightySixModal, showWastagePanel, showVoiceMenu, sidebarOpen, showSearch]);
+  }, [showSettings, eightySixModal, showWastagePanel, showVoiceMenu, sidebarOpen, showSearch]);
 
   /* ── breakpoint helpers ── */
   const showDrawerToggle = isMobile || isSmallTablet;
@@ -1344,8 +1482,10 @@ const KitchenViewInner = () => {
     () => setMobileCardIndex(i => Math.min(i + 1, filteredOrders.length - 1)),
     () => setMobileCardIndex(i => Math.max(i - 1, 0))
   );
-  const gridCol = isSmallTablet ? 250 : 262;
+  const zoom = SIZE_ZOOM[display.size] || 1;
+  const gridCol = Math.round((isSmallTablet ? 250 : 262) * zoom);
   const cardProps = {
+    warnSec: display.warnSec, lateSec: display.lateSec,
     onReady: markAsReady, dishToCategoryMap, dishToVegMap, selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
     socketRef, isNonVegMode, tenantOnlyVeg, itemFinalTimes, setItemFinalTimes, onItemSynced: mergeServerItem, onSpeak: speakTicket,
   };
@@ -1418,6 +1558,16 @@ const KitchenViewInner = () => {
           <button type="button" className="kx-nav" onClick={() => { manualRefresh(); closeIf(); }}>
             <span className="t"><RefreshCw size={14} className={refreshing ? 'spin' : undefined} /><span>REFRESH TICKETS</span></span>
           </button>
+          <div className="kx-duo">
+            <button type="button" className="kx-nav" onClick={() => { setShowSettings(true); closeIf(); }}>
+              <span className="t"><Settings size={14} /><span>DISPLAY &amp; ALERTS</span></span>
+            </button>
+            {fullscreenSupported && (
+              <button type="button" className="kx-nav sq" aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'} title={isFullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen}>
+                {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+              </button>
+            )}
+          </div>
           <SupportContact style={{ marginBottom: 2 }} />
           <PwaInstallButton kind="kitchen" compact />
         </div>
@@ -1428,8 +1578,8 @@ const KitchenViewInner = () => {
   const renderToast = (t, compact = false) => (
     <Motion.div key={t.id} layout initial={{ opacity: 0, y: compact ? 8 : -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-      className={`kx-toast${compact ? ' compact' : ''}${t.kind === 'cancel' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
-      <div className="ic">{t.kind === 'cancel' ? <AlertTriangle size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
+      className={`kx-toast${compact ? ' compact' : ''}${t.kind === 'cancel' || t.kind === 'late' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
+      <div className="ic">{t.kind === 'late' ? <Siren size={15} /> : t.kind === 'cancel' ? <AlertTriangle size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
       <div style={{ minWidth: 0 }}><b>{t.title}</b><p>{t.body}</p></div>
     </Motion.div>
   );
@@ -1547,7 +1697,18 @@ const KitchenViewInner = () => {
                       <div className="kx-mini">{[1, 2].map(n => <button type="button" key={n} className={voicePrefs.repeat === n ? 'on' : ''} onClick={() => updateVoicePrefs({ repeat: n })}>{n}×</button>)}</div></div>
                     <div className="kx-row"><span>Speed</span>
                       <div className="kx-mini">{[['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']].map(([v, l]) => <button type="button" key={v} className={voicePrefs.rate === v ? 'on' : ''} onClick={() => updateVoicePrefs({ rate: v })}>{l}</button>)}</div></div>
-                    <button type="button" className="kx-btn block" onClick={() => { if (voicePrefsRef.current.chime) playAlertSound('order'); later(() => announce('New ticket. Table 5. 2 dishes, dine in. 2 Paneer Tikka. 1 half Dal Fry. Note: less spicy.', { force: true, interrupt: true }), 900); }}>
+                    <div className="kx-row"><div>Overdue alert<small>Chime + voice when a ticket passes {Math.round(display.lateSec / 60)} min</small></div>
+                      <button type="button" role="switch" aria-checked={voicePrefs.overdueAlert} className={`kx-sw${voicePrefs.overdueAlert ? ' on' : ''}`} onClick={() => updateVoicePrefs({ overdueAlert: !voicePrefs.overdueAlert })} /></div>
+                    <div><div className="kx-row" style={{ marginBottom: 6 }}><span>Volume</span><span className="mono" style={{ fontSize: '.66rem', color: '#9b978d' }}>{Math.round((voicePrefs.volume || 1) * 100)}%</span></div>
+                      <input className="kx-range" type="range" min="30" max="100" step="10" aria-label="Voice volume" value={Math.round((voicePrefs.volume || 1) * 100)} onChange={e => updateVoicePrefs({ volume: Number(e.target.value) / 100 })} /></div>
+                    {voiceList.length > 1 && (
+                      <div><label className="kx-lbl">Voice</label>
+                        <select className="kx-in" aria-label="Voice" value={voicePrefs.voiceName || ''} onChange={e => updateVoicePrefs({ voiceName: e.target.value })}>
+                          <option value="">Automatic (Indian English)</option>
+                          {voiceList.map(v => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                        </select></div>
+                    )}
+                    <button type="button" className="kx-btn block" onClick={() => { if (voicePrefsRef.current.chime) playAlertSound('order'); later(() => announce('New ticket for Table 5. 2 dishes, dine in. 2 Paneer Tikka. 1 half Dal Fry. Note: less spicy.', { force: true, interrupt: true }), 900); }}>
                       <Volume2 size={14} /> Test announcement
                     </button>
                   </Motion.div>
@@ -1604,7 +1765,7 @@ const KitchenViewInner = () => {
 
         <main className="kx-main">
           {/* prep queue + sort */}
-          {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1) && (
+          {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1 || lateIds.size > 0) && (
             <div className="kx-ribbon">
               {masterPrepMarqueeList.length > 0 && (
                 <div className="kx-prep no-scrollbar">
@@ -1612,8 +1773,14 @@ const KitchenViewInner = () => {
                   {masterPrepMarqueeList.map(([name, qty]) => <span key={name} className="kx-chip"><b>{qty}×</b>{name}</span>)}
                 </div>
               )}
+              {lateIds.size > 0 && (
+                <button type="button" className={`kx-latebtn${showLateOnly ? ' on' : ''}`} aria-pressed={showLateOnly} onClick={() => setShowLateOnly(v => !v)} style={{ marginLeft: 'auto' }}
+                  title={showLateOnly ? 'Show all tickets' : `Show only tickets older than ${Math.round(display.lateSec / 60)} minutes`}>
+                  <Siren size={12} /> {showLateOnly ? 'Showing late' : 'Late'} <b>{lateIds.size}</b>
+                </button>
+              )}
               {filteredOrders.length > 1 && (
-                <button type="button" className="kx-sortbtn" onClick={toggleSort} style={{ marginLeft: 'auto' }}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
+                <button type="button" className="kx-sortbtn" onClick={toggleSort} style={lateIds.size > 0 ? undefined : { marginLeft: 'auto' }}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
               )}
             </div>
           )}
@@ -1658,6 +1825,8 @@ const KitchenViewInner = () => {
                 <div className="kx-mt"><span>Tickets dispatched</span><b>{dispatchedToday}</b><small>today</small></div>
                 <div className="kx-mt"><span>Avg clear time</span><b className="sm">{avgClearTime}</b><small>per ticket</small></div>
                 <div className="kx-mt"><span>Currently pending</span><b>{pendingCount}</b><small>active tickets</small></div>
+                <div className="kx-mt"><span>Late now</span><b style={lateIds.size ? { color: '#e29a58' } : undefined}>{lateIds.size}</b><small>over {Math.round(display.lateSec / 60)} min</small></div>
+                <div className="kx-mt"><span>Longest wait</span><b className="sm">{pendingCount ? fmt(oldestWait) : '—'}</b><small>oldest ticket</small></div>
               </div>
               <button type="button" className="kx-btn" onClick={() => setShowMetricsDashboard(false)}><ChevronLeft size={15} /> Back to kitchen</button>
             </Motion.div>
@@ -1727,7 +1896,7 @@ const KitchenViewInner = () => {
 
           {/* TABLET / DESKTOP — ticket wall */}
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
-            <div className="kx-grid no-scrollbar" ref={gridRef} onScroll={captureAnchor} style={{ '--kx-col': `${gridCol}px` }}>
+            <div className="kx-grid no-scrollbar" ref={gridRef} onScroll={captureAnchor} style={{ '--kx-col': `${gridCol}px`, '--kx-zoom': zoom }}>
               {boardState === 'loading' && orders.length === 0 && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} />)}
               {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
@@ -1903,6 +2072,40 @@ const KitchenViewInner = () => {
         )}
       </AnimatePresence>
 
+      {/* ── DISPLAY & ALERTS (saved on this device) ── */}
+      <AnimatePresence>
+        {showSettings && (
+          <>
+            <Motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSettings(false)} />
+            <div className="kx-modalwrap" onClick={() => setShowSettings(false)}>
+              <Motion.div className="kx-modal" role="dialog" aria-label="Display and alerts" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 400, maxHeight: 'calc(88vh - 20px)' }}>
+                <div className="kx-sheet-h">
+                  <div className="t"><div className="ic"><Settings size={15} /></div><div><h3>DISPLAY &amp; ALERTS</h3><small>Saved on this screen only</small></div></div>
+                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 34, minWidth: 34, padding: 0 }} onClick={() => setShowSettings(false)}><X size={15} /></button>
+                </div>
+                <div style={{ padding: '12px 14px 14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="kx-row"><div>Ticket size<small>Make tickets smaller or larger</small></div>
+                    <div className="kx-mini">{[['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']].map(([v, l]) => <button type="button" key={v} className={display.size === v ? 'on' : ''} onClick={() => updateDisplay({ size: v })}>{l}</button>)}</div></div>
+                  <div className="kx-row"><div>Delayed after<small>Ring turns gold, "DELAYED" shows</small></div>
+                    <div className="kx-mini">{WARN_OPTIONS.map(([l, sec]) => <button type="button" key={sec} className={display.warnSec === sec ? 'on' : ''} onClick={() => updateDisplay({ warnSec: sec })}>{l}</button>)}</div></div>
+                  <div className="kx-row"><div style={{ minWidth: 0 }}>Overdue after<small>Amber glow, alert, late filter</small></div>
+                    <div className="kx-mini">{LATE_OPTIONS.map(([l, sec]) => <button type="button" key={sec} className={display.lateSec === sec ? 'on' : ''} onClick={() => updateDisplay({ lateSec: sec })}>{l}</button>)}</div></div>
+                  <div className="kx-row"><div>Overdue alert<small>Chime + voice, once per ticket</small></div>
+                    <button type="button" role="switch" aria-checked={voicePrefs.overdueAlert} aria-label="Overdue alert" className={`kx-sw${voicePrefs.overdueAlert ? ' on' : ''}`} onClick={() => updateVoicePrefs({ overdueAlert: !voicePrefs.overdueAlert })} /></div>
+                  <div className="kx-row"><div>Keep screen awake<small>{!('wakeLock' in navigator) ? 'Not supported by this browser' : display.keepAwake ? (awakeOn ? 'Active: the screen will not sleep' : 'Waiting for the browser to allow it') : 'Screen may sleep and miss tickets'}</small></div>
+                    <button type="button" role="switch" aria-checked={display.keepAwake} aria-label="Keep screen awake" className={`kx-sw${display.keepAwake ? ' on' : ''}`} onClick={() => updateDisplay({ keepAwake: !display.keepAwake })} /></div>
+                  {fullscreenSupported && (
+                    <button type="button" className="kx-btn block" onClick={toggleFullscreen}>{isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />} {isFullscreen ? 'Exit full screen' : 'Go full screen'}</button>
+                  )}
+                  <button type="button" className="kx-btn block" onClick={() => { updateDisplay({ ...DEFAULT_DISPLAY }); }} style={{ borderColor: 'rgba(211,191,162,.16)', background: 'transparent', color: '#9b978d' }}>Reset to defaults</button>
+                </div>
+              </Motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* ── 86 (OUT OF STOCK) MODAL — pick the dish, pick a reason, hide it with the reason logged ── */}
       <AnimatePresence>
         {eightySixModal && (
@@ -1947,7 +2150,7 @@ const KitchenViewInner = () => {
 // forwardRef: <AnimatePresence mode="popLayout"> hands every child a ref to measure it. A plain function component cannot take one
 // ("Function components cannot be given refs"), so an exiting ticket could not be measured and the grid jumped when a ticket was dispatched.
 const KDSOrderCard = React.forwardRef(({
-  order, onReady, fresh, fill, modInfo,
+  order, onReady, fresh, fill, modInfo, warnSec = 450, lateSec = 900,
   dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
   socketRef, isNonVegMode, tenantOnlyVeg, isMobile,
@@ -2012,7 +2215,7 @@ const KDSOrderCard = React.forwardRef(({
     return () => clearInterval(t);
   }, [itemStartTimes]);
 
-  const urgency = seconds >= 900 ? 'high' : seconds >= 450 ? 'med' : 'low';
+  const urgency = seconds >= lateSec ? 'high' : seconds >= warnSec ? 'med' : 'low';
   const ringColor = urgency === 'high' ? '#e29a58' : urgency === 'med' ? '#d3bfa2' : '#8a704d';
 
   const kitchenItems = (order.items || []).filter(isKitchenItem);
@@ -2102,6 +2305,7 @@ const KDSOrderCard = React.forwardRef(({
   };
   const removedDishes = modInfo?.removed?.length ? modInfo.removed : (order.replacedInfo?.removed || []);
   const isMod = !!order.isModified || !!modInfo;
+  const hasNote = kitchenItems.some(i => i.suggestion && String(i.suggestion).trim());
 
   const sourceLabel = {
     waitlist: 'WAITLIST', reservation: 'RESERVATION', 'counter-pickup': 'PICKUP', takeaway: 'TAKEAWAY', direct: 'DINE-IN', swiggy: 'SWIGGY', zomato: 'ZOMATO',
@@ -2131,6 +2335,7 @@ const KDSOrderCard = React.forwardRef(({
           <div className="kx-tk-meta">
             {fresh && !isMod && <span className="kx-tag gold">NEW</span>}
             {isMod && <span className="kx-tag amber">MODIFIED</span>}
+            {hasNote && <span className="kx-tag amber">NOTE</span>}
             <span className={`kx-tag${otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : ''}`}>{sourceLabel}</span>
             <span className="kx-tag id">#{String(order._id).slice(-4).toUpperCase()}{order.aggregatorOrderId ? ` · ${order.aggregatorOrderId.toString().slice(-6)}` : ''}</span>
           </div>
@@ -2139,7 +2344,7 @@ const KDSOrderCard = React.forwardRef(({
           <div className={`kx-time ${urgency}`} aria-label={`Ticket age ${fmt(seconds)}`}>
             <svg viewBox="0 0 44 44" width="50" height="50" aria-hidden="true">
               <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3.5" />
-              <circle cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.min(1, seconds / 900) * circ} ${circ}`} />
+              <circle cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.min(1, seconds / lateSec) * circ} ${circ}`} />
             </svg>
             <span className="tv" style={seconds >= 3600 ? { fontSize: '.54rem' } : undefined}>{fmt(seconds)}</span>
           </div>
