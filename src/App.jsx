@@ -13,7 +13,7 @@ import {
   Clock3, Users, ChevronLeft,RefreshCw ,
   Hourglass, MapPin, CalendarClock, CircleDot, Hash, ArrowLeft,
   Package, UserCheck, MinusCircle, PlusCircle,  GlassWater, IceCream2, Cookie, Apple, Milk, Candy, Coffee, Sandwich, Wind, Box,Leaf, Drumstick, Tag,
-  Shuffle, Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star, User, ShieldCheck, Lock
+  Mic, Share2, Heart, ArrowDownUp, Shuffle, Sun, Moon, ArrowUp, WifiOff, AlertTriangle, Star, User, ShieldCheck, Lock
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
@@ -24,8 +24,9 @@ import UpiPay from './UpiPay.jsx';
 import { decideEntry } from './sessionPolicy.js';
 import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
-import { fx, FxSoundToggle } from './customerFx.jsx';
+import { fx, PrefsMenu } from './customerFx.jsx';
 import ExtraItemsSheet from './ExtraItemsSheet.jsx';
+import DietToggle, { SeatedTimer } from './DietToggle.jsx';
 import InvalidQrScreen from './InvalidQrScreen.jsx';
 import { useBillStatus, BillWaitingScreen, ApprovedBillCard } from './billFlow.jsx';
 const BASE_URL = API_BASE_URL;
@@ -301,6 +302,13 @@ const PratyekshaPremiumMenu = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState('none'); // none | best | chef | budget
   const [highlightId, setHighlightId] = useState(null);
+  const [sortMode, setSortMode] = useState('rec'); // rec | asc | desc
+  const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
+  const [favIds, setFavIds] = useState([]);
+  const favLoaded = useRef(false);
+  const [lastMeal, setLastMeal] = useState(null);  // { at, items: { cartKey: qty } } from this guest's previous order
+  const [lastMealHidden, setLastMealHidden] = useState(false);
   const surpriseTimers = useRef([]);
   
   const [filterVegOnly, setFilterVegOnly] = useState(true);
@@ -656,14 +664,48 @@ return allMenuItems
 }, [allMenuItems, selectedCategoryId, searchQuery, filterVegOnly]);
 
 const shownItems = useMemo(() => {
-  if (quickFilter === 'none') return filteredMenuItems;
-  return filteredMenuItems.filter(i => {
+  const priceOf = (i) => Number(i.priceHalf) || Number(i.priceFull) || Number(i.price) || 0;
+  const base = quickFilter === 'none' ? filteredMenuItems : filteredMenuItems.filter(i => {
+    if (quickFilter === 'fav') return favIds.includes(i._id);
+    if (quickFilter === 'top') return (i._eng?.qtySold || 0) > 0;
     if (quickFilter === 'best') return i.isBestSeller === true || (i.bestsellerRank ?? 999) < 999;
     if (quickFilter === 'chef') return i.isChefSpecial === true;
     if (quickFilter === 'budget') return (Number(i.priceHalf) || Number(i.priceFull) || Number(i.price) || Infinity) <= 150;
     return true;
   });
-}, [filteredMenuItems, quickFilter]);
+  if (sortMode === 'rec') return quickFilter === 'top' ? [...base].sort((x, y) => (y._eng?.qtySold || 0) - (x._eng?.qtySold || 0)) : base;
+  return [...base].sort((x, y) => (sortMode === 'asc' ? priceOf(x) - priceOf(y) : priceOf(y) - priceOf(x)));
+}, [filteredMenuItems, quickFilter, sortMode, favIds]);
+useEffect(() => {
+  if (!tenantId) return;
+  favLoaded.current = false;
+  try { const v = JSON.parse(localStorage.getItem(`px_menu_favs_${tenantId}`) || '[]'); setFavIds(Array.isArray(v) ? v : []); } catch { setFavIds([]); }
+  try { const m = JSON.parse(localStorage.getItem(`px_last_meal_${tenantId}`) || 'null'); setLastMeal(m && m.items && Object.keys(m.items).length ? m : null); } catch { setLastMeal(null); }
+  favLoaded.current = true;
+}, [tenantId]);
+useEffect(() => {
+  if (!tenantId || !favLoaded.current) return;
+  try { localStorage.setItem(`px_menu_favs_${tenantId}`, JSON.stringify(favIds)); } catch { /* storage blocked */ }
+}, [favIds, tenantId]);
+const speechCtor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+const startVoice = () => {
+  if (!speechCtor) return;
+  if (listening) { try { recRef.current?.stop(); } catch { /* already stopped */ } return; }
+  try {
+    const r = new speechCtor();
+    r.lang = language === 'mr' ? 'mr-IN' : 'en-IN'; r.interimResults = false; r.maxAlternatives = 1;
+    r.onresult = (e) => { const txt = e.results?.[0]?.[0]?.transcript; if (txt) { setSearchQuery(String(txt).replace(/[.?!]+$/, '')); fx.success(); } };
+    r.onend = () => setListening(false);
+    r.onerror = () => setListening(false);
+    recRef.current = r; setListening(true); r.start();
+  } catch { setListening(false); }
+};
+useEffect(() => () => { try { recRef.current?.abort(); } catch { /* none */ } }, []);
+const shareDish = async (item) => {
+  const text = `${(language === 'mr' && item.name_mr) || item.name} — ₹${item.priceFull || item.price || item.priceHalf || ''}${restaurantData?.name ? ` at ${restaurantData.name}` : ''}`;
+  try { await navigator.share({ title: item.name, text, url: window.location.href.split('&qr=')[0] }); fx.success(); } catch { /* cancelled */ }
+};
+const toggleDishFav = (id) => { setFavIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id])); fx.like(); };
 useEffect(() => () => { surpriseTimers.current.forEach(clearTimeout); }, []);
 const surpriseMe = () => {
   const pool = allMenuItems.filter(i => i.isAvailable !== false && (filterVegOnly ? i.isVeg === true : i.isVeg !== true));
@@ -3175,6 +3217,7 @@ setPrepPct(0);
     }
  
     triggerAlert("orderSuccess");
+    try { if (tenantId && cart && Object.keys(cart).length) { const snap = { at: Date.now(), items: { ...cart } }; localStorage.setItem(`px_last_meal_${tenantId}`, JSON.stringify(snap)); localStorage.setItem('px_last_place', JSON.stringify({ tenantId, name: restaurantData?.name || '', at: Date.now() })); } } catch { /* storage blocked */ }
     setHasPlacedInitialOrder(true);
     setCart({});
     setSuggestions({});
@@ -5665,92 +5708,16 @@ if (qrCheck === 'unverified') {
 
       <header style={styles.header}>
         
-        <div style={styles.langToggleBox}>
+        <div style={{...styles.langToggleBox, display: 'flex', alignItems: 'center', gap: 8}}>
           <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
           </button>
+          <PrefsMenu lang={language} />
         </div>
         
 {hasNonVegInView && (
-  <div style={{
-    position: 'absolute', top: '15px', left: '15px',
-    display: 'flex',
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '20px',
-    padding: '4px',
-    gap: '4px',
-    zIndex: 5
-  }}>
-    {/* VEG */}
-    <button type="button"
-      onClick={() => setFilterVegOnly(true)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '6px',
-        padding: '7px 12px', borderRadius: '16px', border: 'none',
-        cursor: 'pointer',
-        background: 'transparent',
-        outline: filterVegOnly
-          ? '1.5px solid rgba(211, 191, 162, 0.2)'
-          : '1px solid transparent',
-        transition: 'all 0.2s ease'
-      }}
-    >
-      {/* Veg square symbol */}
-      <span style={{
-        width: '12px', height: '12px', flexShrink: 0,
-        border: '2px solid #4a7c3f',
-        borderRadius: '2px',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <span style={{
-          width: '5px', height: '5px', borderRadius: '50%',
-          background: '#4a7c3f'
-        }} />
-      </span>
-      <span style={{
-        fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: filterVegOnly ? '#c9a84c' : 'rgba(255,255,255,0.3)'
-      }}>
-        {language === 'mr' ? 'शाकाहारी' : 'VEG'}
-      </span>
-    </button>
-
-    {/* NON-VEG */}
-    <button type="button"
-      onClick={() => setFilterVegOnly(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '6px',
-        padding: '7px 12px', borderRadius: '16px', border: 'none',
-        cursor: 'pointer',
-        background: 'transparent',
-        outline: !filterVegOnly
-          ? '1.5px solid rgba(211, 191, 162, 0.2)'
-          : '1px solid transparent',
-        transition: 'all 0.2s ease'
-      }}
-    >
-      {/* Non-veg triangle symbol */}
-      <span style={{
-        width: '12px', height: '12px', flexShrink: 0,
-        border: '2px solid #8a3030',
-        borderRadius: '2px',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <span style={{
-          width: 0, height: 0,
-          borderLeft: '3.5px solid transparent',
-          borderRight: '3.5px solid transparent',
-          borderBottom: '6px solid #8a3030'
-        }} />
-      </span>
-      <span style={{
-        fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.5px',
-        color: !filterVegOnly ? '#c9a84c' : 'rgba(255,255,255,0.3)'
-      }}>
-        {language === 'mr' ? 'मांसाहारी' : 'NON-VEG'}
-      </span>
-    </button>
+  <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 5 }}>
+    <DietToggle vegOnly={filterVegOnly} onChange={setFilterVegOnly} language={language} />
   </div>
 )}
         <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
@@ -5762,7 +5729,7 @@ if (qrCheck === 'unverified') {
         <div style={language === 'mr' ? { ...styles.poweredBy, letterSpacing: 0, fontSize: '0.7rem' } : styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
         {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
-        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><FxSoundToggle lang={language} /></div>
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', flexWrap: 'wrap', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><SeatedTimer language={language} /></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -6070,6 +6037,10 @@ if (qrCheck === 'unverified') {
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
       />
+      {speechCtor && searchQuery.length === 0 && (
+        <button type="button" onClick={startVoice} aria-label={language === 'mr' ? 'बोलून शोधा' : 'Search by voice'} aria-pressed={listening}
+          className={`px-mic${listening ? ' on' : ''}`}><Mic size={16} /></button>
+      )}
       {searchQuery.length > 0 && (
         <button type="button"
           onClick={() => setSearchQuery('')}
@@ -6313,11 +6284,35 @@ if (qrCheck === 'unverified') {
         </nav>
       </div>
 
+      {/* ORDER AGAIN — the guest's previous meal at this place, one tap */}
+      {(() => {
+        if (!lastMeal || lastMealHidden || !allMenuItems.length || Object.keys(cart).length > 0 || hasPlacedInitialOrder) return null;
+        const rows = Object.entries(lastMeal.items).map(([key, qty]) => {
+          const id = key.split('-')[0];
+          const item = allMenuItems.find(m => String(m._id) === id);
+          return item && item.isAvailable !== false ? { key, qty: Number(qty) || 0, item } : null;
+        }).filter(r => r && r.qty > 0);
+        if (rows.length === 0) return null;
+        const names = rows.slice(0, 2).map(r => `${r.qty}× ${(language === 'mr' && r.item.name_mr) || r.item.name}`).join(', ');
+        const more = rows.length > 2 ? ` +${rows.length - 2}` : '';
+        return (
+          <div className="oa-card" role="region" aria-label={language === 'mr' ? 'पुन्हा ऑर्डर करा' : 'Order again'}>
+            <div className="oa-ico"><RefreshCw size={18} /></div>
+            <div className="oa-txt"><small>{language === 'mr' ? 'तुमची मागची ऑर्डर' : 'LAST TIME YOU HAD'}</small><b>{names}{more}</b></div>
+            <button type="button" className="oa-btn" data-fx="select" onClick={() => {
+              setCart(prev => { const n = { ...prev }; rows.forEach(r => { n[r.key] = (n[r.key] || 0) + r.qty; }); return n; });
+              fx.add(); setLastMealHidden(true);
+            }}>{language === 'mr' ? 'सर्व जोडा' : 'Add all'}</button>
+            <button type="button" className="oa-x" onClick={() => setLastMealHidden(true)} aria-label={language === 'mr' ? 'बंद करा' : 'Dismiss'}><X size={14} /></button>
+          </div>
+        );
+      })()}
       {/* QUICK FILTERS + SURPRISE ME */}
       {!searchQuery && (
         <div className="qf-row no-scrollbar" role="toolbar" aria-label={language === 'mr' ? 'झटपट फिल्टर' : 'Quick filters'}>
           {[
             ['best', language === 'mr' ? 'बेस्टसेलर' : 'Bestsellers', Sparkles],
+            ['top', language === 'mr' ? 'सर्वाधिक मागणी' : 'Most ordered', Flame],
             ['chef', language === 'mr' ? 'शेफ पसंती' : "Chef's picks", Sparkles],
             ['budget', language === 'mr' ? '₹१५० च्या आत' : 'Under ₹150', Tag],
           ].map(([k, label, Ico]) => (
@@ -6327,6 +6322,18 @@ if (qrCheck === 'unverified') {
               <Ico size={12} />{label}
             </button>
           ))}
+          {favIds.length > 0 && (
+            <button type="button" data-fx="select" aria-pressed={quickFilter === 'fav'} className={`qf-chip${quickFilter === 'fav' ? ' on' : ''}`}
+              onClick={() => setQuickFilter(prev => (prev === 'fav' ? 'none' : 'fav'))}>
+              <Heart size={12} fill={quickFilter === 'fav' ? 'currentColor' : 'none'} />{language === 'mr' ? 'आवडते' : 'Favourites'}
+            </button>
+          )}
+          <button type="button" data-fx="select" className={`qf-chip${sortMode !== 'rec' ? ' on' : ''}`}
+            onClick={() => setSortMode(m => (m === 'rec' ? 'asc' : m === 'asc' ? 'desc' : 'rec'))}
+            aria-label={language === 'mr' ? 'क्रमवारी बदला' : 'Change sort order'}>
+            <ArrowDownUp size={12} />
+            {sortMode === 'rec' ? (language === 'mr' ? 'शिफारस केलेले' : 'Recommended') : sortMode === 'asc' ? (language === 'mr' ? 'किंमत ↑' : 'Price: low to high') : (language === 'mr' ? 'किंमत ↓' : 'Price: high to low')}
+          </button>
           <button type="button" className="qf-chip qf-surprise" onClick={surpriseMe}>
             <Shuffle size={12} />{language === 'mr' ? 'काहीतरी खास!' : 'Surprise me'}
           </button>
@@ -6435,6 +6442,16 @@ if (qrCheck === 'unverified') {
 
 {shownItems.map((item) => (
               <div key={item._id} id={`dish-${item._id}`} className={`px-dish${highlightId === item._id ? ' px-hl' : ''}`} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
+<button type="button" className={`px-heart${favIds.includes(item._id) ? ' on' : ''}`} aria-pressed={favIds.includes(item._id)}
+  aria-label={favIds.includes(item._id) ? (language === 'mr' ? 'आवडत्यांमधून काढा' : 'Remove from favourites') : (language === 'mr' ? 'आवडत्यांमध्ये जोडा' : 'Add to favourites')}
+  onClick={(e) => { e.stopPropagation(); toggleDishFav(item._id); }}>
+  <Heart size={15} fill={favIds.includes(item._id) ? 'currentColor' : 'none'} />
+</button>
+{typeof navigator !== 'undefined' && navigator.share && (
+  <button type="button" className="px-heart px-share" onClick={(e) => { e.stopPropagation(); shareDish(item); }} aria-label={language === 'mr' ? 'हा पदार्थ शेअर करा' : 'Share this dish'}>
+    <Share2 size={14} />
+  </button>
+)}
 <div style={styles.tagContainer}>
   {/* Chef Pick — ONLY when isChefSpecial is explicitly true */}
   {item.isChefSpecial === true && (

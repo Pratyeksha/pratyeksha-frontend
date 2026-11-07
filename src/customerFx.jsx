@@ -12,7 +12,7 @@
 // prefers-reduced-motion for every animation. Staff screens (kitchen / operator / owner) are untouched.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
 import './customerFx.css';
 
 const SOUND_KEY = 'pxh_fx_sound';
@@ -20,6 +20,12 @@ const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefine
 
 const readSoundPref = () => { try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; } };
 let soundOn = isBrowser ? readSoundPref() : true;
+const HAPTIC_KEY = 'px_fx_haptic';
+const MOTION_KEY = 'px_reduce_motion';
+const readFlag = (k, dflt) => { try { const v = localStorage.getItem(k); return v === null ? dflt : v === 'on'; } catch { return dflt; } };
+let hapticOn = isBrowser ? readFlag(HAPTIC_KEY, true) : true;
+const applyMotion = (on) => { try { if (on) document.documentElement.setAttribute('data-reduce-motion', '1'); else document.documentElement.removeAttribute('data-reduce-motion'); } catch { /* no DOM */ } };
+if (isBrowser) applyMotion(readFlag(MOTION_KEY, false));
 const listeners = new Set();
 
 const reducedMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
@@ -90,7 +96,7 @@ const SOUNDS = {
 };
 
 const haptic = (pattern) => {
-  if (!soundOn) return; // the speaker button is the one "feedback" switch
+  if (!hapticOn) return; // the vibration switch in the preferences menu
   if (!lastPointer.t) return; // browsers block vibrate() (and log an error) until the guest has tapped the page once
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* unsupported */ }
 };
@@ -236,6 +242,117 @@ if (isBrowser && !window.__pxhFxInstalled) {
 }
 
 // ── UI: the speaker toggle ──────────────────────────────────────────────────
+// Text size: scales every rem-based size on guest pages (100% -> 112% -> 125%). Remembered on this device.
+const TEXT_KEY = 'px_text_scale';
+const TEXT_STEPS = [100, 112, 125];
+const readTextScale = () => { try { const v = Number(localStorage.getItem(TEXT_KEY)); return TEXT_STEPS.includes(v) ? v : 100; } catch { return 100; } };
+const applyTextScale = (v) => { try { document.documentElement.style.fontSize = v === 100 ? '' : `${v}%`; } catch { /* no DOM */ } };
+if (typeof document !== 'undefined') applyTextScale(readTextScale());
+
+export function TextSizeToggle({ size = 16, style, lang = 'en' }) {
+  const mr = lang === 'mr';
+  const [v, setV] = useState(readTextScale);
+  const next = () => {
+    const n = TEXT_STEPS[(TEXT_STEPS.indexOf(v) + 1) % TEXT_STEPS.length];
+    setV(n); applyTextScale(n);
+    try { localStorage.setItem(TEXT_KEY, String(n)); } catch { /* storage blocked */ }
+  };
+  const label = mr ? `अक्षरांचा आकार ${v}%` : `Text size ${v}%`;
+  return (
+    <button type="button" className="fx-sound-btn fx-text-btn" data-fx="select" aria-label={label} title={label} onClick={next} style={style}>
+      <Type size={size} strokeWidth={2} />
+      {v !== 100 && <i className="fx-text-dot" aria-hidden="true" />}
+    </button>
+  );
+}
+
+/** One small button that opens the guest's preferences: sound, vibration, text size, reduced motion. */
+// Keep the screen on (Screen Wake Lock) so the guest can watch their order status without the phone locking.
+const AWAKE_KEY = 'px_keep_awake';
+let wakeLock = null;
+const holdAwake = async () => {
+  try { if (navigator.wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener?.('release', () => { wakeLock = null; }); } } catch { /* denied or unsupported */ }
+};
+const releaseAwake = async () => { try { await wakeLock?.release(); } catch { /* none */ } wakeLock = null; };
+const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
+const clearSavedData = () => { try { Object.keys(localStorage).filter((k) => PRIVATE_KEYS.some((r) => r.test(k))).forEach((k) => localStorage.removeItem(k)); } catch { /* blocked */ } };
+
+export function PrefsMenu({ lang = 'en', size = 16, style }) {
+  const mr = lang === 'mr';
+  const [open, setOpen] = useState(false);
+  const [snd, setSnd] = useState(soundOn);
+  const [vib, setVib] = useState(hapticOn);
+  const [rm, setRm] = useState(() => readFlag(MOTION_KEY, false));
+  const [scale, setScale] = useState(readTextScale);
+  const [awake, setAwake] = useState(() => readFlag(AWAKE_KEY, false));
+  const [confirmClear, setConfirmClear] = useState(false);
+  const canWake = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+  const box = React.useRef(null);
+  useEffect(() => { const fn = (v) => setSnd(v); listeners.add(fn); return () => { listeners.delete(fn); }; }, []);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  useEffect(() => {
+    if (!awake || !canWake) return undefined;
+    holdAwake();
+    const again = () => { if (!document.hidden && !wakeLock) holdAwake(); };
+    document.addEventListener('visibilitychange', again);
+    return () => { document.removeEventListener('visibilitychange', again); releaseAwake(); };
+  }, [awake, canWake]);
+  const setKeepAwake = (on) => { setAwake(on); try { localStorage.setItem(AWAKE_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
+  const setVibration = (on) => { hapticOn = on; setVib(on); try { localStorage.setItem(HAPTIC_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } if (on && navigator.vibrate && lastPointer.t) { try { navigator.vibrate(18); } catch { /* unsupported */ } } };
+  const setMotion = (on) => { setRm(on); applyMotion(on); try { localStorage.setItem(MOTION_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
+  const step = (d) => {
+    const i = Math.max(0, Math.min(TEXT_STEPS.length - 1, TEXT_STEPS.indexOf(scale) + d));
+    const n = TEXT_STEPS[i]; setScale(n); applyTextScale(n);
+    try { localStorage.setItem(TEXT_KEY, String(n)); } catch { /* blocked */ }
+  };
+  const L = mr
+    ? { title: 'माझ्या आवडीनिवडी', sound: 'आवाज', vib: 'कंपन', size: 'अक्षरांचा आकार', motion: 'कमी हालचाल', awake: 'स्क्रीन सुरू ठेवा', clear: 'माझा जतन केलेला डेटा पुसा', clearAsk: 'नक्की पुसायचे?', yes: 'हो, पुसा', no: 'नको', open: 'आवडीनिवडी' }
+    : { title: 'My preferences', sound: 'Sounds', vib: 'Vibration', size: 'Text size', motion: 'Reduce motion', awake: 'Keep screen on', clear: 'Clear my saved data', clearAsk: 'Remove favourites and last orders from this phone?', yes: 'Yes, clear', no: 'Cancel', open: 'Preferences' };
+  const Row = ({ icon, label, on, set }) => (
+    <button type="button" className="fx-pref-row" role="switch" aria-checked={on} onClick={() => set(!on)}>
+      <span className="fx-pref-ico">{icon}</span><span className="fx-pref-lbl">{label}</span><span className={`fx-switch${on ? ' on' : ''}`}><i /></span>
+    </button>
+  );
+  return (
+    <div className="fx-prefs" ref={box}>
+      <button type="button" className="fx-sound-btn" data-fx="off" aria-haspopup="dialog" aria-expanded={open} aria-label={L.open} title={L.open} style={style} onClick={() => setOpen((v) => !v)}>
+        <SlidersHorizontal size={size} strokeWidth={2} />
+      </button>
+      {open && (
+        <div className="fx-pref-pop" role="dialog" aria-label={L.title}>
+          <div className="fx-pref-h">{L.title}</div>
+          <Row icon={snd ? <Volume2 size={15} /> : <VolumeX size={15} />} label={L.sound} on={snd} set={(v) => fx.setSound(v)} />
+          <Row icon={<Vibrate size={15} />} label={L.vib} on={vib} set={setVibration} />
+          <Row icon={<Wind size={15} />} label={L.motion} on={rm} set={setMotion} />
+          {canWake && <Row icon={<MonitorSmartphone size={15} />} label={L.awake} on={awake} set={setKeepAwake} />}
+          <div className="fx-pref-row static">
+            <span className="fx-pref-ico"><Type size={15} /></span><span className="fx-pref-lbl">{L.size}</span>
+            <span className="fx-step">
+              <button type="button" data-fx="select" onClick={() => step(-1)} disabled={scale === TEXT_STEPS[0]} aria-label="−"><Minus size={13} /></button>
+              <b>{scale}%</b>
+              <button type="button" data-fx="select" onClick={() => step(1)} disabled={scale === TEXT_STEPS[TEXT_STEPS.length - 1]} aria-label="+"><Plus size={13} /></button>
+            </span>
+          </div>
+          {!confirmClear ? (
+            <button type="button" className="fx-pref-clear" onClick={() => setConfirmClear(true)}><Trash2 size={13} />{L.clear}</button>
+          ) : (
+            <div className="fx-pref-confirm" role="alertdialog" aria-label={L.clearAsk}>
+              <p>{L.clearAsk}</p>
+              <div><button type="button" onClick={() => setConfirmClear(false)}>{L.no}</button><button type="button" className="danger" onClick={() => { clearSavedData(); window.location.reload(); }}>{L.yes}</button></div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FxSoundToggle({ size = 16, style, lang = 'en' }) {
   const mr = lang === 'mr';
   const [on, setOn] = useState(soundOn);

@@ -28,13 +28,13 @@ const C = {
   /* backgrounds */
   bg:      '#141416',
   bgDark:  '#101012',
-  bgCard:  '#1b1b1e',
+  bgCard:  'linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.016))',   /* glass card surface — identical to the Tracking tab */
   bgCard2: '#232327',
   bgInput: '#17171a',
 
   /* borders */
-  border:    '#2e2e34',
-  borderMid: '#3b3b42',
+  border:    'rgba(211,191,162,0.16)',   /* gold-tinted hairline, same as Tracking's LINE */
+  borderMid: 'rgba(211,191,162,0.28)',
 
   /* ── TWO-TONE GOLD SYSTEM ── */
   goldPrimary: '#d3bfa2',          /* light warm gold  — active nav, CTA buttons, key numbers */
@@ -45,7 +45,7 @@ const C = {
   goldSecondBorder: 'rgba(138,112,77,0.2)',
 
   /* text */
-  text:      '#e8e8e8',   /* near-white primary body */
+  text:      '#f1ede4',   /* warm near-white body — same as Tracking */
   textMid:   '#a8a8a8',   /* secondary body */
   textDim:   '#8a8a92',   /* labels, placeholders */
   textFaint: '#6e6e76',   /* very dim */
@@ -125,7 +125,8 @@ const GLOBAL_CSS = `
   /* Input focus — light gold ring */
   .p-inp { transition: border-color 0.15s, box-shadow 0.15s; outline: none; }
   .p-modal { text-align: left; }
-  .p-modal input[type=checkbox], .p-modal input[type=radio] { accent-color: #d3bfa2; }
+  .p-modal input[type=checkbox], .p-modal input[type=radio], .p-main input[type=checkbox], .p-main input[type=radio] { accent-color: #d3bfa2; }
+  .p-main input[type=date], .p-main input[type=datetime-local], .p-main select { color-scheme: dark; }
   .p-modal input[type=date] { color-scheme: dark; }
   .p-inp:focus {
     border-color: rgba(211,191,162,0.45) !important;
@@ -135,23 +136,24 @@ const GLOBAL_CSS = `
   .p-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .p-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
   .p-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .p-filterbar { display: flex; border-bottom: 1px solid #313137; flex-shrink: 0; background: #101012; overflow-x: auto; }
+  /* Filter tabs are pills (same as the Tracking tab's section tabs), not an underlined strip */
+  .p-filterbar { display: flex; gap: 6px; flex-shrink: 0; overflow-x: auto; padding-bottom: 14px; }
   .p-filterbar::-webkit-scrollbar { display: none; }
   .p-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .p-main { min-height: 0; }
   .p-main > .p-scroll { min-height: 0; width: 100%; }
-  .p-pad { padding: 24px 32px 48px; }
+  .p-pad { padding: 8px clamp(14px,2.4vw,34px) 48px; }
 
   .p-row { transition: background 0.1s; }
-  .p-row:hover { background: #222226 !important; }
+  .p-row:hover { background: rgba(211,191,162,0.06) !important; }
 
   /* Card hover — light gold border + gentle lift */
   .p-card { transition: border-color 0.18s, transform 0.2s cubic-bezier(.4,0,.2,1), box-shadow 0.2s; }
-  .p-card:hover { border-color: rgba(211,191,162,0.22) !important; }
+  .p-card:hover { border-color: rgba(211,191,162,0.32) !important; }
   .p-card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -14px rgba(0,0,0,0.55); }
 
   .p-demo-card { transition: background 0.1s, border-color 0.1s; cursor: pointer; }
-  .p-demo-card:hover { background: #222226 !important; }
+  .p-demo-card:hover { background: rgba(211,191,162,0.06) !important; border-color: rgba(211,191,162,0.3) !important; }
 
   /* Nav hover — subtle light gold tint */
   .p-nav-item:hover { background: rgba(211,191,162,0.04) !important; color: #d3bfa2 !important; }
@@ -166,7 +168,7 @@ const GLOBAL_CSS = `
 
   /* Modal overlay */
   .p-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .p-modal { background: #222226; border: 1px solid #3b3b42; border-radius: 16px; padding: 22px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; }
+  .p-modal { background: linear-gradient(160deg, #26262a, #1a1a1d); border: 1px solid rgba(211,191,162,0.26); border-radius: 18px; padding: 22px; width: 420px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05); }
 
   /* Table horizontal scroll + hint */
   .p-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -217,7 +219,8 @@ const GLOBAL_CSS = `
     .p-demo-list.has-detail { display: none !important; }
   }
   @media (max-width: 480px) {
-    .p-stat-grid { grid-template-columns: 1fr; }
+    .p-stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }   /* two tiles per row on phones instead of one tall card each */
+    .p-tile-val { font-size: 21px !important; }
     .hide-sm { display: none !important; }
   }
   @media (min-width: 769px) {
@@ -276,16 +279,75 @@ const ClientStatusDot = ({ client }) => {
 /* Section heading inside forms/drawers */
 const SectionLabel = ({ children, icon: Icon }) => (
   <div style={{
-    fontSize: 11, fontWeight: 600, color: C.textDim,
-    letterSpacing: '0.6px', textTransform: 'uppercase',
-    marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7,
+    fontSize: 11, fontWeight: 800, color: '#d3bfa2',   /* gold small-caps title, same as the Tracking tab's section titles */
+    letterSpacing: '1.6px', textTransform: 'uppercase',
+    marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8,
   }}>
-    {Icon && <Icon size={12} color={C.textDim} strokeWidth={1.5} />}
+    {Icon && <Icon size={13} color="#d3bfa2" strokeWidth={1.8} />}
     {children}
   </div>
 );
 
 /* Thin horizontal rule */
+/* ═══ Tracking-tab design language ═══ */
+const GOLD = '#d3bfa2', BRONZE = '#8a704d', IVORY = '#efe6d6', COPPER = '#e29a58', SAND = '#b9a27e', TAUPE = '#7d7d85';
+const LINE = 'rgba(211,191,162,0.16)';
+const MONO = "'JetBrains Mono', ui-monospace, monospace";
+const SERIF = "'Playfair Display', Georgia, serif";
+const GOLD_GRAD = 'linear-gradient(135deg,#e6d6b8,#d3bfa2)';
+const CARD = { background: 'linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.016))', border: `1px solid ${LINE}`, borderRadius: 18, boxShadow: '0 18px 44px -22px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)' };
+const ghost = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 11, border: `1px solid ${LINE}`, background: 'rgba(255,255,255,0.03)', color: '#e8e2d8', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', fontFamily: 'inherit' };
+const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 11, border: 0, background: GOLD_GRAD, color: '#14110c', fontSize: 12, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' };
+const fieldBox = { padding: '8px 12px', borderRadius: 11, border: `1px solid ${LINE}`, background: 'rgba(255,255,255,0.03)', color: '#f1ede4', fontSize: 12, fontFamily: 'inherit' };
+
+/** Page title block: gold eyebrow, serif title, quiet subtitle, optional controls on the right. */
+const PageHeader = ({ icon: Icon, eyebrow, title, subtitle, children }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 10, letterSpacing: 2.4, color: GOLD, fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 7 }}>{Icon && <Icon size={13} />} {eyebrow}</div>
+      <h1 style={{ fontFamily: SERIF, fontSize: 'clamp(26px,3.2vw,36px)', fontWeight: 700, margin: '8px 0 4px', color: '#f7f3eb', letterSpacing: 0.3, lineHeight: 1.15, textAlign: 'left' }}>{title}</h1>
+      {subtitle && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{subtitle}</div>}
+    </div>
+    {children && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>{children}</div>}
+  </div>
+);
+
+/** KPI tile: tinted icon + small-caps label, mono figure, quiet sub-line. */
+const Tile = ({ icon: Icon, label, value, sub, tone = GOLD, onClick }) => (
+  <div className={onClick ? 'p-card p-card-lift' : undefined} onClick={onClick} style={{ ...CARD, padding: '16px 16px 14px', minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+      <Icon size={13} color={tone} /> {label}
+    </div>
+    <div className="p-tile-val" style={{ marginTop: 10, fontSize: 26, fontWeight: 700, color: '#f7f3eb', fontFamily: MONO, letterSpacing: -0.5, overflowWrap: 'anywhere' }}>{value}</div>
+    {sub && <div style={{ marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{sub}</div>}
+  </div>
+);
+
+/** Content card with a gold small-caps title and an optional hint / right-hand control. */
+const Section = ({ title, hint, right, children, style }) => (
+  <section style={{ ...CARD, padding: 18, minWidth: 0, ...style }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: GOLD, textTransform: 'uppercase' }}>{title}</div>
+        {hint && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>{hint}</div>}
+      </div>
+      {right}
+    </div>
+    {children}
+  </section>
+);
+
+/** Progress bar with the bronze → gold gradient. */
+const GBar = ({ value, max, color = GOLD, height = 7 }) => (
+  <div style={{ height, borderRadius: 99, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+    <div style={{ width: `${max ? Math.max(2, Math.min(100, (value / max) * 100)) : 0}%`, height: '100%', background: `linear-gradient(90deg, ${BRONZE}, ${color})`, borderRadius: 99 }} />
+  </div>
+);
+
+const Pill = ({ children, color = GOLD }) => (
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, fontSize: 10, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}1f`, border: `1px solid ${color}44` }}>{children}</span>
+);
+
 const Div = () => <div style={{ height: 1, background: C.border, margin: '16px 0' }} />;
 
 /* Form row wrapper */
@@ -293,12 +355,12 @@ const LabeledInput = ({ label, required, hint, children }) => (
   <div>
     <label style={{
       display: 'block', marginBottom: 6,
-      fontSize: 11, fontWeight: 600, letterSpacing: '0.3px',
-      color: required ? C.textMid : C.textDim,
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
+      color: required ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.55)',
     }}>
       {label}
       {/* required asterisk in dark amber — visible but not shouty */}
-      {required && <span style={{ color: '#8a704d', marginLeft: 3 }}>*</span>}
+      {required && <span style={{ color: '#e29a58', marginLeft: 3 }}>*</span>}
     </label>
     {children}
     {hint && <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>{hint}</div>}
@@ -308,9 +370,9 @@ const LabeledInput = ({ label, required, hint, children }) => (
 /* Base input style */
 const inp = {
   width: '100%', padding: '10px 12px',
-  background: C.bgInput, border: `1px solid ${C.borderMid}`,
-  color: C.text, borderRadius: 8, fontSize: 13,
-  outline: 'none', boxSizing: 'border-box',
+  background: 'rgba(255,255,255,0.03)', border: `1px solid ${LINE}`,
+  color: C.text, borderRadius: 11, fontSize: 13,
+  outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 };
 
 /* ── Subscription state: the server computes it once (subscriptionView) and every screen reads that. ── */
@@ -625,7 +687,7 @@ const RenewModal = ({ client, onClose, onSubmit }) => {
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="button" onClick={submit} disabled={busy || !months || !amount || (!products.pratyeksha && !products.feedbackSuite)} style={{
           flex: 1, padding: '11px', borderRadius: 9, border: 'none', cursor: 'pointer',
-          background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700,
+          background:GOLD_GRAD, color: '#14110c', fontSize: 13, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: busy ? 0.6 : 1
         }}>{busy ? 'Renewing…' : 'Confirm Renewal'}</button>
         <button type="button" onClick={onClose} disabled={busy} style={{ flex: 1, padding: '11px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -692,14 +754,14 @@ const SubscriptionModal = ({ client, onClose, onChanged, onRenew, onToggle, flas
               <input className="p-inp" style={inp} maxLength={300} placeholder="Reason (optional)" value={note} onChange={e => setNote(e.target.value)} />
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" disabled={busy || !expiry} onClick={() => save(expiry, 'Expiry updated')} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !expiry ? 0.6 : 1 }}>Save expiry</button>
+              <button type="button" disabled={busy || !expiry} onClick={() => save(expiry, 'Expiry updated')} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background:GOLD_GRAD, color: '#14110c', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: busy || !expiry ? 0.6 : 1 }}>Save expiry</button>
               <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Expire ${client.name} at the end of today (India time)? Their apps will lock at midnight unless you renew.`)) save(todayIST(), 'Plan will expire at the end of today (India time)'); }} style={{ padding: '9px 14px', borderRadius: 8, border: `1px solid ${C.borderMid}`, background: 'transparent', color: C.textMid, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Expire today</button>
               <span style={{ fontSize: 11, color: C.textDim, alignSelf: 'center' }}>A date means the end of that day (India time).</span>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={onRenew} style={{ flex: 1, minWidth: 140, padding: '10px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><RotateCcw size={14} /> Record payment / renew</button>
+            <button type="button" onClick={onRenew} style={{ flex: 1, minWidth: 140, padding: '10px', borderRadius: 9, border: 'none', background:GOLD_GRAD, color: '#14110c', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><RotateCcw size={14} /> Record payment / renew</button>
             <button type="button" onClick={onToggle} style={{ flex: 1, minWidth: 140, padding: '10px', borderRadius: 9, border: `1px solid ${C.borderMid}`, background: 'transparent', color: data.isActive ? C.danger : '#d3bfa2', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Power size={14} /> {data.isActive ? 'Disable client' : 'Enable client'}</button>
           </div>
 
@@ -863,7 +925,7 @@ const ImportMenuModal = ({ target, onClose, onDone, flash }) => {
           <div style={{ fontSize: 12.5, color: C.textMid, marginBottom: 20 }}>
             {result.counts.categories} categories &middot; {result.counts.menuItems} menu items written ({mode})
           </div>
-          <button type="button" onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background: '#d3bfa2', color: '#0f0f11', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <button type="button" onClick={onClose} style={{ width: '100%', padding: '11px', borderRadius: 9, border: 'none', background:GOLD_GRAD, color: '#14110c', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
       ) : (
         <>
@@ -1568,13 +1630,12 @@ function PratyekshaMasterAdminInner() {
   */
   /* filter tab active style */
   const filterTab = (isActive) => ({
-    padding:'10px 14px', background:'transparent', border:'none', cursor:'pointer',
-    fontSize:12, fontWeight: isActive ? 600 : 400,
-    color: isActive ? C.text : C.textDim,
-    /* active underline in light gold */
-    borderBottom: `2px solid ${isActive ? '#d3bfa2' : 'transparent'}`,
-    display:'flex', alignItems:'center', gap:7,
-    transition:'all 0.12s', whiteSpace:'nowrap', flexShrink:0,
+    flex:'0 0 auto', display:'inline-flex', alignItems:'center', gap:7, padding:'9px 14px', borderRadius:13, cursor:'pointer',
+    fontSize:12, fontWeight:700, fontFamily:'inherit',
+    border:`1px solid ${isActive ? 'rgba(211,191,162,0.5)' : LINE}`,
+    background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
+    color: isActive ? '#f7f3eb' : 'rgba(255,255,255,0.55)',
+    transition:'all 0.12s', whiteSpace:'nowrap',
   });
 
   /* ════════════════════════════════════════
@@ -1702,28 +1763,23 @@ function PratyekshaMasterAdminInner() {
               style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
 
               {/* Header */}
-              <div className="p-header" style={{ padding:'20px 32px 14px', background:C.bgDark, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', flexWrap:'wrap', gap:12 }}>
-                  <div>
-                    <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:4 }}>Inbound Pipeline</div>
-                    <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:'-0.3px', lineHeight:1 }}>Demo Requests</h1>
-                    <div style={{ fontSize:12, color:C.textDim, marginTop:4 }}>
-                      {/* pending count in light gold */}
-                      <span style={{ color:'#d3bfa2', fontWeight:600 }}>{demoCounts.Pending}</span>
-                      {' '}pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} completed
-                    </div>
-                  </div>
+              <div className="p-header" style={{ padding:'26px clamp(14px,2.4vw,34px) 16px', flexShrink:0 }}>
+                <PageHeader icon={CalendarClock} eyebrow="Inbound pipeline" title="Demo requests"
+                  subtitle={<>
+                    <span style={{ color:GOLD, fontWeight:700 }}>{demoCounts.Pending}</span>
+                    {' '}pending · {demoCounts.Contacted} contacted · {demoCounts['Demo Given']} completed
+                  </>}>
                   <div style={{ position:'relative' }}>
-                    <Search size={13} color={C.textDim} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
-                    <input className="p-inp" placeholder="Search requests…" value={demoSearch}
+                    <Search size={13} color="rgba(255,255,255,0.4)" style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
+                    <input className="p-inp" placeholder="Search requests…" aria-label="Search demo requests" value={demoSearch}
                       onChange={e=>setDemoSearch(e.target.value)}
-                      style={{ ...inp, paddingLeft:34, width:200, fontSize:13 }} />
+                      style={{ ...fieldBox, paddingLeft:32, width:210 }} />
                   </div>
-                </div>
+                </PageHeader>
               </div>
 
               {/* Filter tabs — active underline in light gold */}
-              <div className="p-filterbar" style={{ padding:'0 32px' }}>
+              <div className="p-filterbar" style={{ padding:'0 clamp(14px,2.4vw,34px) 14px' }}>
                 {[
                   { id:'all',        label:'All',       count:demoCounts.all },
                   { id:'Pending',    label:'Pending',   count:demoCounts.Pending, urgent:true },
@@ -1950,159 +2006,93 @@ function PratyekshaMasterAdminInner() {
         {/* ══ DASHBOARD ══ */}
         {activeSection==='dashboard' && (
           <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
-            <div className="p-header" style={{ padding:'20px 32px 14px', background:C.bgDark, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', flexWrap:'wrap', gap:12 }}>
-                <div>
-                  <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:4 }}>Overview</div>
-                  <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:'-0.3px', lineHeight:1 }}>Dashboard</h1>
-                </div>
-                {/* primary CTA: light gold bg */}
-                <button type="button" onClick={()=>navTo('onboard')} style={{
-                  display:'flex', alignItems:'center', gap:7, padding:'9px 16px',
-                  background:'#d3bfa2', color:'#0f0f11', border:'none', borderRadius:9,
-                  fontSize:13, fontWeight:600, cursor:'pointer',
-                }}>
-                  <UserPlus size={13} /> Onboard Client
-                </button>
-              </div>
+            <div className="p-header" style={{ padding:'26px clamp(14px,2.4vw,34px) 16px', flexShrink:0 }}>
+              <PageHeader icon={BarChart3} eyebrow="Overview" title="Dashboard" subtitle="Subscriptions, revenue and renewals across every client">
+                <button type="button" onClick={()=>navTo('onboard')} style={primaryBtn}><UserPlus size={13} /> Onboard client</button>
+              </PageHeader>
             </div>
 
             <div className="p-scroll no-sb p-pad">
-              {/* KPI cards:
-                  Revenue → light gold accent
-                  Active  → light gold accent
-                  others  → their own status color
-              */}
-              <div className="p-stat-grid p-stagger" style={{ marginBottom:20 }}>
+              {/* KPI tiles — the same Tile as the Tracking tab */}
+              <div className="p-stat-grid p-stagger" style={{ marginBottom:14 }}>
                 {[
-                  { icon:Wallet, label:'Net Revenue', val:stats.netRevenue ?? stats.totalRevenue ?? 0, prefix:'₹', sub:`Gross ₹${(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')} − costs ₹${(stats.totalExpenses||0).toLocaleString('en-IN')}`, accent:'#d3bfa2' },
-                  { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:'#d3bfa2' },
-                  { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:C.warning },
-                  { icon:Calendar,    label:'Expiring Soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:'#8a704d' },
+                  { icon:Wallet, label:'Net revenue', val:stats.netRevenue ?? stats.totalRevenue ?? 0, prefix:'₹', sub:`Gross ₹${(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')} − costs ₹${(stats.totalExpenses||0).toLocaleString('en-IN')}`, accent:GOLD },
+                  { icon:ShieldCheck, label:'Active',        val:stats.activeCount  ||0,             sub:'Live subscriptions', accent:GOLD },
+                  { icon:AlertTriangle,label:'Expired',      val:stats.expiredCount ||0,             sub:'Need renewal',    accent:COPPER },
+                  { icon:Calendar,    label:'Expiring soon', val:stats.expiringSoon ||0,             sub:'Within 30 days',  accent:SAND },
                 ].map(k => (
-                  <div key={k.label} className="p-card p-card-lift" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px 16px' }}>
-                    <div style={{ width:32, height:32, borderRadius:8, background:`${k.accent}14`, border:`1px solid ${k.accent}22`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
-                      <k.icon size={15} color={k.accent} strokeWidth={1.5} />
-                    </div>
-                    <div style={{ fontSize:11, color:C.textDim, fontWeight:500, marginBottom:4 }}>{k.label}</div>
-                    <div style={{ fontSize:24, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}<CountUp value={k.val} /></div>
-                    <div style={{ fontSize:11, color:C.textDim }}>{k.sub}</div>
-                  </div>
+                  <Tile key={k.label} icon={k.icon} label={k.label} tone={k.accent} sub={k.sub}
+                    value={<>{k.prefix}<CountUp value={k.val} /></>} />
                 ))}
               </div>
 
               {/* Net revenue strip — gross revenue minus operating costs */}
               {expenseSummary && (
-                <div className="p-card p-card-lift" onClick={()=>navTo('expenses')} style={{
-                  background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'16px 20px',
-                  marginBottom:18, cursor:'pointer', display:'flex', alignItems:'center', gap:20, flexWrap:'wrap'
-                }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <div style={{ width:32, height:32, borderRadius:8, background:'rgba(211,191,162,0.08)', border:'1px solid rgba(211,191,162,0.15)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <Wallet size={15} color="#d3bfa2" strokeWidth={1.5} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize:11, color:C.textDim, fontWeight:500 }}>Net Revenue</div>
-                      <div style={{ fontSize:18, fontWeight:700, color: expenseSummary.netRevenue>=0 ? '#d3bfa2' : C.danger, fontFamily:'JetBrains Mono, monospace' }}>
-                        ₹{Math.abs(expenseSummary.netRevenue).toLocaleString('en-IN')}{expenseSummary.netRevenue<0 ? ' (loss)' : ''}
-                      </div>
+                <div className="p-card p-card-lift" onClick={()=>navTo('expenses')} style={{ ...CARD, padding:'16px 20px', marginBottom:14, cursor:'pointer', display:'flex', alignItems:'center', gap:20, flexWrap:'wrap' }}>
+                  <div>
+                    <div style={{ fontSize:10, color:'rgba(255,255,255,0.5)', fontWeight:800, letterSpacing:1.4, textTransform:'uppercase', display:'flex', alignItems:'center', gap:8 }}><Wallet size={13} color={GOLD} /> Net revenue after costs</div>
+                    <div style={{ marginTop:8, fontSize:22, fontWeight:700, color: expenseSummary.netRevenue>=0 ? '#f7f3eb' : COPPER, fontFamily:MONO, letterSpacing:-0.5 }}>
+                      ₹{Math.abs(expenseSummary.netRevenue).toLocaleString('en-IN')}{expenseSummary.netRevenue<0 ? ' (loss)' : ''}
                     </div>
                   </div>
-                  <div style={{ fontSize:11.5, color:C.textDim, display:'flex', gap:14, flexWrap:'wrap' }}>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.5)', display:'flex', gap:16, flexWrap:'wrap', fontFamily:MONO }}>
                     <span>Gross ₹{expenseSummary.totalRevenue.toLocaleString('en-IN')}</span>
-                    <span style={{ color:C.danger }}>− Costs ₹{expenseSummary.totalExpenses.toLocaleString('en-IN')}</span>
+                    <span style={{ color:COPPER }}>− Costs ₹{expenseSummary.totalExpenses.toLocaleString('en-IN')}</span>
                   </div>
-                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:5, color:C.textDim, fontSize:11.5, fontWeight:600 }}>
-                    View Operating Costs <ChevronRight size={13} />
+                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:5, color:GOLD, fontSize:11.5, fontWeight:700 }}>
+                    View operating costs <ChevronRight size={13} />
                   </div>
                 </div>
               )}
 
-              {/* Warning banner */}
+              {/* Renewal warning */}
               {(stats.expiringSoon||0)>0 && (
-                <div style={{ background:'rgba(138,112,77,0.05)', border:`1px solid rgba(138,112,77,0.22)`, borderRadius:10, padding:'12px 16px', display:'flex', alignItems:'center', gap:12, marginBottom:18 }}>
-                  <AlertCircle size={16} color='#8a704d' strokeWidth={1.5} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{stats.expiringSoon} subscription{stats.expiringSoon>1?'s':''} expiring within 30 days</div>
-                    <div style={{ fontSize:12, color:C.textDim, marginTop:2 }}>Reach out proactively before expiry</div>
+                <div style={{ ...CARD, padding:'12px 16px', display:'flex', alignItems:'center', gap:12, marginBottom:14, borderColor:'rgba(226,154,88,0.4)' }}>
+                  <AlertCircle size={16} color={COPPER} strokeWidth={1.8} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#f7f3eb' }}>{stats.expiringSoon} subscription{stats.expiringSoon>1?'s':''} expiring within 30 days</div>
+                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.45)', marginTop:2 }}>Reach out proactively before expiry</div>
                   </div>
-                  <button type="button" onClick={()=>{ setClientFilter('expiring'); navTo('clients'); }} style={{
-                    padding:'6px 12px', background:'rgba(138,112,77,0.08)', border:`1px solid rgba(138,112,77,0.22)`,
-                    color:'#8a704d', borderRadius:7, fontSize:12, fontWeight:500, cursor:'pointer',
-                  }}>View</button>
+                  <button type="button" onClick={()=>{ setClientFilter('expiring'); navTo('clients'); }} style={ghost}>View</button>
                 </div>
               )}
 
               <div className="p-chart-grid">
-                {/* Top earners chart */}
-                <div className="p-card" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                    <Trophy size={13} color={C.textDim} strokeWidth={1.5} />
-                    <span style={{ fontSize:12, fontWeight:600, color:C.textMid }}>Top Revenue Clients</span>
-                  </div>
-                  {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).slice(0,6).map((c,i) => (
-                    <div key={c._id} style={{ marginBottom:12 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, alignItems:'center' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                          <span style={{ fontSize:11, color:C.textFaint, minWidth:14 }}>#{i+1}</span>
-                          <span style={{ fontSize:13, fontWeight:500, color:C.text }}>{c.name}</span>
+                <Section title="Top revenue clients" hint="By total paid to Pratyeksha">
+                  {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).slice(0,6).map((c,i) => {
+                    const maxPaid = Math.max(...clients.map(x => x.totalPaidAmount||0), 1);
+                    return (
+                      <div key={c._id} style={{ marginBottom:11 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:5, gap:10 }}>
+                          <span style={{ color:'#f1ede4', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i+1}. {c.name}</span>
+                          <span style={{ fontFamily:MONO, color:GOLD, flexShrink:0 }}>₹{(c.totalPaidAmount||0).toLocaleString('en-IN')}</span>
                         </div>
-                        {/* revenue figure: dark amber — complements the light gold bars */}
-                        <span style={{ fontSize:13, fontWeight:600, color:'#8a704d', fontFamily:'JetBrains Mono, monospace' }}>₹{(c.totalPaidAmount||0).toLocaleString('en-IN')}</span>
+                        <GBar value={c.totalPaidAmount||0} max={maxPaid} />
                       </div>
-                      <div style={{ height:3, background:C.border, borderRadius:99, overflow:'hidden' }}>
-                        {/* bar fill: light gold */}
-                        <div style={{ height:'100%', borderRadius:99, background:'#d3bfa2', opacity:0.5,
-                          width:`${Math.min(100,((c.totalPaidAmount||0)/Math.max(...clients.map(x => x.totalPaidAmount||0), 1))*100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    );
+                  })}
+                  {clients.length === 0 && <div style={{ padding:'22px 8px', textAlign:'center', fontSize:12, color:'rgba(255,255,255,0.38)' }}>No clients yet</div>}
+                </Section>
 
-                {/* Subscription health */}
-                <div className="p-card" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px', display:'flex', flexDirection:'column' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                    <BarChart3 size={13} color={C.textDim} strokeWidth={1.5} />
-                    <span style={{ fontSize:12, fontWeight:600, color:C.textMid }}>Subscription Health</span>
-                  </div>
+                <Section title="Subscription health" hint="Share of all clients" style={{ display:'flex', flexDirection:'column' }}>
                   {[
-                    { label:'Active',   val:stats.activeCount  ||0, c:'#d3bfa2', pct:((stats.activeCount  ||0)/Math.max(stats.totalClients||1,1))*100 },
-                    { label:'Expired',  val:stats.expiredCount ||0, c:C.warning, pct:((stats.expiredCount ||0)/Math.max(stats.totalClients||1,1))*100 },
-                    { label:'Disabled', val:stats.disabledCount||0, c:C.danger,  pct:((stats.disabledCount||0)/Math.max(stats.totalClients||1,1))*100 },
-                  ].map(s => (
-                    <div key={s.label} style={{ marginBottom:14 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5, alignItems:'center' }}>
-                        <span style={{ fontSize:12, color:C.textMid }}>{s.label}</span>
-                        <span style={{ fontSize:13, fontWeight:600, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>
-                          {s.val} <span style={{ color:C.textDim, fontSize:11, fontFamily:'Inter,sans-serif' }}>({Math.round(s.pct)}%)</span>
-                        </span>
+                    { label:'Active',   val:stats.activeCount  ||0, c:GOLD,   pct:((stats.activeCount  ||0)/Math.max(stats.totalClients||1,1))*100 },
+                    { label:'Expired',  val:stats.expiredCount ||0, c:COPPER, pct:((stats.expiredCount ||0)/Math.max(stats.totalClients||1,1))*100 },
+                    { label:'Disabled', val:stats.disabledCount||0, c:TAUPE,  pct:((stats.disabledCount||0)/Math.max(stats.totalClients||1,1))*100 },
+                  ].map(s2 => (
+                    <div key={s2.label} style={{ marginBottom:13 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12, marginBottom:5 }}>
+                        <span style={{ display:'flex', alignItems:'center', gap:8 }}>{s2.label}</span>
+                        <span style={{ fontFamily:MONO, color:s2.c, fontWeight:700 }}>{s2.val} <span style={{ color:'rgba(255,255,255,0.4)', fontSize:11, fontFamily:'Inter,sans-serif', fontWeight:400 }}>({Math.round(s2.pct)}%)</span></span>
                       </div>
-                      <div style={{ height:4, background:C.border, borderRadius:99, overflow:'hidden' }}>
-                        <div style={{ height:'100%', width:`${s.pct}%`, background:s.c, borderRadius:99, opacity:0.72 }} />
-                      </div>
+                      <GBar value={s2.pct} max={100} color={s2.c} />
                     </div>
                   ))}
-                  <Div />
-                  <div style={{ display:'flex', gap:8, marginTop:'auto' }}>
-                    {/* primary action: light gold */}
-                    <button type="button" onClick={()=>navTo('onboard')} style={{
-                      flex:1, padding:'10px', background:'#d3bfa2', border:'none', color:'#0f0f11',
-                      borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
-                      display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    }}>
-                      <UserPlus size={12} /> Onboard
-                    </button>
-                    {/* secondary: dark amber outline */}
-                    <button type="button" onClick={()=>navTo('clients')} style={{
-                      flex:1, padding:'10px', background:'transparent',
-                      border:`1px solid rgba(138,112,77,0.3)`, color:'#8a704d',
-                      borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer',
-                      display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    }}>
-                      <Building2 size={12} /> Clients
-                    </button>
+                  <div style={{ display:'flex', gap:8, marginTop:'auto', paddingTop:8 }}>
+                    <button type="button" onClick={()=>navTo('onboard')} style={{ ...primaryBtn, flex:1, justifyContent:'center' }}><UserPlus size={12} /> Onboard</button>
+                    <button type="button" onClick={()=>navTo('clients')} style={{ ...ghost, flex:1, justifyContent:'center' }}><Building2 size={12} /> Clients</button>
                   </div>
-                </div>
+                </Section>
               </div>
             </div>
           </div>
@@ -2111,33 +2101,20 @@ function PratyekshaMasterAdminInner() {
         {/* ══ CLIENTS ══ */}
         {activeSection==='clients' && (
           <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
-            <div className="p-header" style={{ padding:'20px 32px 14px', background:C.bgDark, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', flexWrap:'wrap', gap:12 }}>
-                <div>
-                  <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:4 }}>Accounts</div>
-                  <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:'-0.3px', lineHeight:1 }}>Client Partners</h1>
-                  <div style={{ fontSize:12, color:C.textDim, marginTop:4 }}>{filteredClients.length} of {clients.length} shown</div>
+            <div className="p-header" style={{ padding:'26px clamp(14px,2.4vw,34px) 16px', flexShrink:0 }}>
+              <PageHeader icon={Building2} eyebrow="Accounts" title="Client partners" subtitle={`${filteredClients.length} of ${clients.length} shown`}>
+                <div style={{ position:'relative' }}>
+                  <Search size={13} color="rgba(255,255,255,0.4)" style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
+                  <input className="p-inp" placeholder="Search clients…" aria-label="Search clients" value={searchTerm}
+                    onChange={e=>setSearchTerm(e.target.value)}
+                    style={{ ...fieldBox, paddingLeft:32, width:200 }} />
                 </div>
-                <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                  <div style={{ position:'relative' }}>
-                    <Search size={13} color={C.textDim} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
-                    <input className="p-inp" placeholder="Search…" value={searchTerm}
-                      onChange={e=>setSearchTerm(e.target.value)}
-                      style={{ ...inp, paddingLeft:34, width:180, fontSize:13 }} />
-                  </div>
-                  <button type="button" onClick={()=>navTo('onboard')} style={{
-                    display:'flex', alignItems:'center', gap:6, padding:'9px 14px',
-                    background:'#d3bfa2', border:'none', color:'#0f0f11',
-                    borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap',
-                  }}>
-                    <Plus size={13} /> New Client
-                  </button>
-                </div>
-              </div>
+                <button type="button" onClick={()=>navTo('onboard')} style={primaryBtn}><Plus size={13} /> New client</button>
+              </PageHeader>
             </div>
 
             {/* Filter tabs */}
-            <div className="p-filterbar" style={{ padding:'0 32px' }}>
+            <div className="p-filterbar" style={{ padding:'0 clamp(14px,2.4vw,34px) 14px' }}>
               {[
                 { id:'all',      label:'All',      count:clients.length },
                 // Counted with the same subOf() the rows are filtered by: server totals could disagree with the visible list.
@@ -2160,16 +2137,17 @@ function PratyekshaMasterAdminInner() {
             </div>
 
             {/* Clients table */}
-            <div className="p-scroll no-sb" style={{ padding:'14px 32px 40px', overflowX:'auto' }}>
-              <table className="p-clients-table" style={{ width:'100%', borderCollapse:'separate', borderSpacing:'0 4px' }}>
+            <div className="p-scroll no-sb" style={{ padding:'0 clamp(14px,2.4vw,34px) 40px', overflowX:'auto' }}>
+              <div style={{ ...CARD, padding:'6px 10px 10px', minWidth:0 }}>
+              <table className="p-clients-table" style={{ width:'100%', borderCollapse:'collapse' }}>
                 <thead>
-                  <tr style={{ fontSize:11, color:C.textDim, textTransform:'uppercase', letterSpacing:'0.8px' }}>
+                  <tr style={{ borderBottom:`1px solid ${LINE}` }}>
                     {['Partner','Type','Expiry','Status','Revenue','Actions'].map((h,i) => (
                       <th key={h} className={i===1||i===2||i===4?'hide-mob':''} style={{
                         width: ['20%','9%','16%','9%','9%',undefined][i],
-                        paddingLeft: i===0?14:0, paddingBottom:8,
+                        paddingLeft: i===0?14:0, padding: undefined, paddingTop:12, paddingBottom:10,
                         textAlign: i===5?'right':'left', paddingRight: i===5?10:0,
-                        fontWeight:600,
+                        fontSize:10, letterSpacing:1.2, textTransform:'uppercase', color:'rgba(255,255,255,0.45)', fontWeight:800, whiteSpace:'nowrap',
                       }}>{h}</th>
                     ))}
                   </tr>
@@ -2179,8 +2157,8 @@ function PratyekshaMasterAdminInner() {
                     const st = getClientStatus(client);
                     const dl = getDaysLeft(client);
                     return (
-                      <motion.tr layout key={client._id} className="p-row" style={{ background:C.bgCard }}>
-                        <td style={{ paddingLeft:14, paddingTop:12, paddingBottom:12, borderRadius:'10px 0 0 10px' }}>
+                      <motion.tr layout key={client._id} className="p-row" style={{ background:'transparent', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ paddingLeft:14, paddingTop:12, paddingBottom:12, }}>
                           <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                             <ClientStatusDot client={client} />
                             <div>
@@ -2222,7 +2200,7 @@ function PratyekshaMasterAdminInner() {
                           {/* revenue: dark amber — pairs with light gold bar fills */}
                           <span style={{ fontWeight:700, color:'#8a704d', fontSize:13, fontFamily:'JetBrains Mono, monospace' }}>₹{(client.totalPaidAmount||0).toLocaleString('en-IN')}</span>
                         </td>
-                        <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
+                        <td style={{ textAlign:'right', paddingRight:10 }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap' }}>
                             <button type="button" onClick={()=>{ setDocsClientId(String(client._id || client.tenantId)); navTo('documents'); }} title="Prepare welcome / invoice / agreement" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
@@ -2283,6 +2261,7 @@ function PratyekshaMasterAdminInner() {
                   })}
                 </tbody>
               </table>
+              </div>
               {filteredClients.length===0 && (
                 <div style={{ textAlign:'center', padding:'80px 0', color:C.textDim }}>
                   <Building2 size={28} color={C.border} style={{ marginBottom:12 }} />
@@ -2296,10 +2275,8 @@ function PratyekshaMasterAdminInner() {
         {/* ══ ONBOARD ══ */}
         {activeSection==='onboard' && (
           <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
-            <div className="p-header" style={{ padding:'20px 32px 14px', background:C.bgDark, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-              <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:4 }}>New Client</div>
-              <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:'-0.3px', lineHeight:1 }}>Client Onboarding</h1>
-              <div style={{ fontSize:12, color:C.textDim, marginTop:4 }}>Register a restaurant or café on Pratyeksha</div>
+            <div className="p-header" style={{ padding:'26px clamp(14px,2.4vw,34px) 16px', flexShrink:0 }}>
+              <PageHeader icon={UserPlus} eyebrow="New client" title="Client onboarding" subtitle="Register a restaurant or café on Pratyeksha" />
             </div>
 
             <div className="p-scroll no-sb p-pad">
@@ -2363,7 +2340,7 @@ function PratyekshaMasterAdminInner() {
               <div style={{ display:'grid', gap:16, maxWidth:820 }}>
 
                 {/* Business Info */}
-                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px' }}>
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px' }}>
                   <SectionLabel icon={Store}>Business Information</SectionLabel>
                   <div className="p-form-grid">
                     <LabeledInput label="Restaurant / Café Name" required>
@@ -2390,7 +2367,7 @@ function PratyekshaMasterAdminInner() {
                 </div>
 
                 {/* Address */}
-                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px' }}>
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px' }}>
                   <SectionLabel icon={MapPin}>Address</SectionLabel>
                   <div className="p-form-grid">
                     <div style={{ gridColumn:'span 2' }}>
@@ -2420,7 +2397,7 @@ function PratyekshaMasterAdminInner() {
                 </div>
 
                 {/* Credentials */}
-                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px' }}>
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px' }}>
                   <SectionLabel icon={ShieldCheck}>Admin Credentials</SectionLabel>
                   <div className="p-form-grid">
                     <LabeledInput label="Username" required hint="Used to login to operator portal">
@@ -2441,7 +2418,7 @@ function PratyekshaMasterAdminInner() {
                 </div>
 
                 {/* Subscription — left border in dark amber */}
-                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderLeft:`2px solid rgba(138,112,77,0.4)`, borderRadius:12, padding:'20px' }}>
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderLeft:`2px solid rgba(138,112,77,0.4)`, borderRadius:18, padding:'20px' }}>
                   <SectionLabel icon={Wallet}>Subscription & Payment</SectionLabel>
                   <div style={{ fontSize:12, color:C.textDim, marginBottom:14, marginTop:-6 }}>Collect via GPay manually and record below.</div>
                   <div className="p-form-grid">
@@ -2497,7 +2474,7 @@ function PratyekshaMasterAdminInner() {
                 </div>
 
                 {/* Menu setup — optional JSON uploads instead of manual entry */}
-                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:18 }}>
+                <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px 22px', marginBottom:18 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:4 }}>
                     <FileJson size={15} color="#d3bfa2" />
                     <div style={{ fontSize:13.5, fontWeight:700, color:C.text }}>Menu Setup (optional)</div>
@@ -2549,13 +2526,12 @@ function PratyekshaMasterAdminInner() {
         )}
 
         {activeSection==='notifications' && (
-          <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 900, width:'100%' }}>
-            <div style={{ marginBottom:22 }}>
-              <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Notifications</div>
-              <div style={{ fontSize:12.5, color:C.textDim }}>Send a message to one client, several, or everyone — shows up inside their Owner App and Operator Portal only.</div>
+          <div className="p-scroll no-sb p-fade-in" style={{ padding:'26px clamp(14px,2.4vw,34px) 48px', maxWidth: 1000, width:'100%' }}>
+            <div style={{ marginBottom:20 }}>
+              <PageHeader icon={Bell} eyebrow="Platform" title="Notifications" subtitle="Send a message to one client or everyone. It shows up inside their Owner App and Operator Portal only." />
             </div>
 
-            <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:24 }}>
+            <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px 22px', marginBottom:24 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
                 <LabeledInput label="Send To">
                   <select className="p-inp" style={inp} value={notifCompose.target} onChange={e=>setNotifCompose(c=>({...c, target:e.target.value, tenantId:''}))}>
@@ -2636,7 +2612,7 @@ function PratyekshaMasterAdminInner() {
               </button>
             </div>
 
-            <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>History</div>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:1.6, color:GOLD, textTransform:'uppercase', marginBottom:12 }}>History</div>
             {notifLoading ? (
               <div style={{ fontSize:12.5, color:C.textDim }}>Loading…</div>
             ) : notifications.length === 0 ? (
@@ -2677,10 +2653,9 @@ function PratyekshaMasterAdminInner() {
         )}
 
         {activeSection==='expenses' && (
-          <div className="p-scroll no-sb p-fade-in" style={{ padding:'20px 32px 40px', maxWidth: 980, width:'100%' }}>
-            <div style={{ marginBottom:22 }}>
-              <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>Operating Costs</div>
-              <div style={{ fontSize:12.5, color:C.textDim }}>Domain, hosting, email, QR stands, SMS/WhatsApp — every platform cost is deducted from gross collections to show the real net position.</div>
+          <div className="p-scroll no-sb p-fade-in" style={{ padding:'26px clamp(14px,2.4vw,34px) 48px', maxWidth: 1180, width:'100%' }}>
+            <div style={{ marginBottom:20 }}>
+              <PageHeader icon={Receipt} eyebrow="Platform" title="Operating costs" subtitle="Domain, hosting, email, QR stands, SMS and WhatsApp. Every cost is deducted from gross collections to show the real net position." />
               <div style={{ display:'flex', gap:7, flexWrap:'wrap', marginTop:12 }}>
                 {[
                   ['domain','Domain renewal'], ['email','Email / SMTP'], ['qr_stands','QR stand supply'],
@@ -2698,27 +2673,21 @@ function PratyekshaMasterAdminInner() {
             {expenseSummary && (
               <div className="p-stat-grid p-stagger" style={{ marginBottom:22 }}>
                 {[
-                  { icon:IndianRupee, label:'Platform Revenue', val:expenseSummary.totalRevenue, prefix:'₹', accent:'#d3bfa2' },
-                  { icon:TrendingDown, label:'Total Operating Costs', val:expenseSummary.totalExpenses, prefix:'₹', accent:C.danger },
-                  { icon:Wallet, label:'Net Revenue', val:expenseSummary.netRevenue, prefix:'₹', accent: expenseSummary.netRevenue >= 0 ? '#d3bfa2' : C.danger },
-                  { icon:Receipt, label:'Monthly Run-Rate', val:expenseSummary.monthlyRunRate, prefix:'₹', accent:'#8a704d', sub:'committed recurring costs' },
+                  { icon:IndianRupee, label:'Platform revenue', val:expenseSummary.totalRevenue, prefix:'₹', accent:GOLD },
+                  { icon:TrendingDown, label:'Operating costs', val:expenseSummary.totalExpenses, prefix:'₹', accent:COPPER },
+                  { icon:Wallet, label:'Net revenue', val:expenseSummary.netRevenue, prefix:'₹', accent: expenseSummary.netRevenue >= 0 ? GOLD : COPPER },
+                  { icon:Receipt, label:'Monthly run-rate', val:expenseSummary.monthlyRunRate, prefix:'₹', accent:SAND, sub:'committed recurring costs' },
                 ].map(k => (
-                  <div key={k.label} className="p-card p-card-lift" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'18px 16px' }}>
-                    <div style={{ width:32, height:32, borderRadius:8, background:`${k.accent}14`, border:`1px solid ${k.accent}22`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
-                      <k.icon size={15} color={k.accent} strokeWidth={1.5} />
-                    </div>
-                    <div style={{ fontSize:11, color:C.textDim, fontWeight:500, marginBottom:4 }}>{k.label}</div>
-                    <div style={{ fontSize:22, fontWeight:700, color:k.accent, lineHeight:1, marginBottom:3, fontFamily:'JetBrains Mono, monospace' }}>{k.prefix}{Math.abs(k.val).toLocaleString('en-IN')}{k.val < 0 ? ' (loss)' : ''}</div>
-                    {k.sub && <div style={{ fontSize:10.5, color:C.textDim }}>{k.sub}</div>}
-                  </div>
+                  <Tile key={k.label} icon={k.icon} label={k.label} tone={k.accent} sub={k.sub}
+                    value={<>{k.prefix}{Math.abs(Number(k.val) || 0).toLocaleString('en-IN')}{Number(k.val) < 0 ? ' (loss)' : ''}</>} />
                 ))}
               </div>
             )}
 
-            <div id="expense-form" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
-                {editingExpenseId ? <Edit3 size={14} color="#d3bfa2" /> : <PlusCircle size={14} color="#d3bfa2" />}
-                {editingExpenseId ? 'Edit Cost' : 'Add a Cost'}
+            <div id="expense-form" style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px 22px', marginBottom:22 }}>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1.6, color:GOLD, textTransform:'uppercase', marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
+                {editingExpenseId ? <Edit3 size={13} color="#d3bfa2" /> : <PlusCircle size={13} color="#d3bfa2" />}
+                {editingExpenseId ? 'Edit cost' : 'Add a cost'}
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
                 <LabeledInput label="Category">
@@ -2774,8 +2743,8 @@ function PratyekshaMasterAdminInner() {
             </div>
 
             {expenseSummary?.categoryBreakdown?.length > 0 && (
-              <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:12, padding:'20px 22px', marginBottom:22 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:14 }}>By Category</div>
+              <div style={{ background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:18, padding:'20px 22px', marginBottom:22 }}>
+                <div style={{ fontSize:11, fontWeight:800, letterSpacing:1.6, color:GOLD, textTransform:'uppercase', marginBottom:14 }}>By category</div>
                 <div style={{ display:'grid', gap:10 }}>
                   {expenseSummary.categoryBreakdown.map(c => {
                     const cAmt = Number(c.amount) || 0;
@@ -2786,9 +2755,7 @@ function PratyekshaMasterAdminInner() {
                           <span style={{ color:C.textMid, fontWeight:600 }}>{c.label}</span>
                           <span style={{ color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{cAmt.toLocaleString('en-IN')} <span style={{ color:C.textDim }}>({pct}%)</span></span>
                         </div>
-                        <div style={{ height:6, borderRadius:100, background:C.bgDark, overflow:'hidden' }}>
-                          <div style={{ width:`${pct}%`, height:'100%', background:'#d3bfa2', borderRadius:100 }} />
-                        </div>
+                        <GBar value={pct} max={100} />
                       </div>
                     );
                   })}
@@ -2796,34 +2763,32 @@ function PratyekshaMasterAdminInner() {
               </div>
             )}
 
-            <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>All Costs</div>
+            <Section title="All costs" hint={expenses.length ? `${expenses.length} logged` : undefined}>
             {expenseLoading ? (
               <div style={{ fontSize:12.5, color:C.textDim }}>Loading…</div>
             ) : expenses.length === 0 ? (
-              <div style={{ fontSize:12.5, color:C.textDim, padding:'20px 0' }}>No costs logged yet.</div>
+              <div style={{ padding:'22px 8px', textAlign:'center', fontSize:12, color:'rgba(255,255,255,0.38)' }}>No costs logged yet.</div>
             ) : (
               <div className="p-table-scroll">
-                <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:'0 4px', minWidth:640 }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', minWidth:640, fontSize:12 }}>
                   <thead>
-                    <tr style={{ fontSize:11, color:C.textDim, textTransform:'uppercase', letterSpacing:'0.8px' }}>
-                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Cost</th>
-                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Category</th>
-                      <th style={{ textAlign:'left', padding:'0 12px 8px' }}>Date</th>
-                      <th style={{ textAlign:'right', padding:'0 12px 8px' }}>Amount</th>
-                      <th style={{ textAlign:'right', padding:'0 12px 8px' }}></th>
+                    <tr style={{ borderBottom:`1px solid ${LINE}` }}>
+                      {[['Cost','left'],['Category','left'],['Date','left'],['Amount','right'],['','right']].map(([h,al],i) => (
+                        <th key={i} style={{ textAlign:al, padding:'10px 12px', fontSize:10, letterSpacing:1.2, textTransform:'uppercase', color:'rgba(255,255,255,0.45)', fontWeight:800, whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {expenses.map(e => (
-                      <tr key={e._id} style={{ background:C.bgCard }}>
-                        <td style={{ padding:'12px', borderRadius:'10px 0 0 10px' }}>
+                      <tr key={e._id} className="p-row" style={{ borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding:'12px' }}>
                           <div style={{ fontSize:12.5, fontWeight:600, color:C.text }}>{e.label}</div>
                           {e.vendor && <div style={{ fontSize:11, color:C.textDim, marginTop:2 }}>{e.vendor}{e.recurring ? ` · ${e.recurringInterval}` : ''}</div>}
                         </td>
                         <td style={{ padding:'12px', fontSize:12, color:C.textMid }}>{EXPENSE_CATEGORY_LABELS_FRONTEND[e.category] || e.category}</td>
                         <td style={{ padding:'12px', fontSize:12, color:C.textDim }}>{new Date(e.date).toLocaleDateString(undefined, { timeZone: 'Asia/Kolkata' })}</td>
-                        <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:C.text, fontFamily:'JetBrains Mono, monospace' }}>₹{e.amount.toLocaleString('en-IN')}</td>
-                        <td style={{ padding:'12px', borderRadius:'0 10px 10px 0', textAlign:'right' }}>
+                        <td style={{ padding:'12px', textAlign:'right', fontSize:13, fontWeight:700, color:GOLD, fontFamily:MONO }}>₹{e.amount.toLocaleString('en-IN')}</td>
+                        <td style={{ padding:'12px', textAlign:'right' }}>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
                             <button type="button" onClick={()=>editExpense(e)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.textDim, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Edit3 size={11} /></button>
                             <button type="button" onClick={()=>deleteExpense(e._id)} style={{ background:'transparent', border:`1px solid ${C.border}`, color:C.danger, borderRadius:7, padding:'5px 8px', cursor:'pointer' }}><Trash2 size={11} /></button>
@@ -2835,6 +2800,7 @@ function PratyekshaMasterAdminInner() {
                 </table>
               </div>
             )}
+            </Section>
           </div>
         )}
 

@@ -462,6 +462,82 @@ const [salaryEditPassword, setSalaryEditPassword] = useState('');
 const [payPrompt, setPayPrompt] = useState(null);      // staff salary payment waiting for the operator password
 const [payPassword, setPayPassword] = useState('');
 const [payBusy, setPayBusy] = useState(false);
+const [dayCloseDay, setDayCloseDay] = useState(null);       // Daily Close: the selected day
+const [dayCloseCounted, setDayCloseCounted] = useState(''); // Daily Close: cash counted in the drawer
+const todayISTForm = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+const [payables, setPayables] = useState(null);
+const [payablesFilter, setPayablesFilter] = useState('all');
+const [payableForm, setPayableForm] = useState({ vendorName: '', invoiceNo: '', amount: '', billDate: todayISTForm(), dueDate: '', notes: '' });
+const [expenseForm, setExpenseForm] = useState({ category: 'utilities', description: '', amount: '', spentOn: todayISTForm() });
+const [complianceItems, setComplianceItems] = useState([]);
+const [complianceForm, setComplianceForm] = useState({ name: '', authority: '', reference: '', issuedOn: '', expiresOn: '', notes: '' });
+const [equipmentData, setEquipmentData] = useState({ items: [], logs: [] });
+const [equipForm, setEquipForm] = useState({ name: '', location: '', serviceEveryDays: '90', lastServicedOn: '' });
+const [expenseList, setExpenseList] = useState({ items: [], total: 0 });
+const [shiftNotes, setShiftNotes] = useState([]);
+const [shiftForm, setShiftForm] = useState({ shift: 'Morning', author: '', note: '', priority: 'normal' });
+const [shiftView, setShiftView] = useState('open');
+const [checkHistory, setCheckHistory] = useState([]);
+const [issueStatus, setIssueStatus] = useState('all');
+const [stockOnlyChanged, setStockOnlyChanged] = useState(false);
+const [checklistData, setChecklistData] = useState({ day: '', items: [], logs: [] });
+const [checkForm, setCheckForm] = useState({ title: '', phase: 'Opening', assignee: '' });
+const [issuesData, setIssuesData] = useState([]);
+const [issueFilter, setIssueFilter] = useState('all');
+const [issueForm, setIssueForm] = useState({ kind: 'Complaint', title: '', details: '', tableNumber: '', customerName: '', customerPhone: '', amount: '' });
+const [stockCounts, setStockCounts] = useState([]);
+const [stockCountDraft, setStockCountDraft] = useState({});
+const [stockCountBy, setStockCountBy] = useState('');
+const fetchShiftNotes = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/shift-notes/${tenantId}`); setShiftNotes(r.data.notes || []); }
+  catch { showNotif('Could not load the shift log', 'error'); }
+};
+const fetchChecklists = async () => {
+  try {
+    const r = await axios.get(`${BASE_URL}/admin/checklists/${tenantId}`);
+    setChecklistData(r.data);
+    const days = Array.from({ length: 7 }, (_, k) => new Date(Date.now() + 330 * 60000 - (k + 1) * 864e5).toISOString().slice(0, 10)).reverse();
+    const past = await Promise.all(days.map(d => axios.get(`${BASE_URL}/admin/checklists/${tenantId}?day=${d}`)
+      .then(x => ({ day: d, done: (x.data.logs || []).length, total: (x.data.items || []).length }))
+      .catch(() => ({ day: d, done: 0, total: 0 }))));
+    setCheckHistory(past);
+  } catch { showNotif('Could not load checklists', 'error'); }
+};
+const fetchIssues = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/issues/${tenantId}`); setIssuesData(r.data.issues || []); }
+  catch { showNotif('Could not load issues', 'error'); }
+};
+const fetchStockCounts = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/stock-counts/${tenantId}`); setStockCounts(r.data.counts || []); }
+  catch { showNotif('Could not load stock counts', 'error'); }
+};
+const fetchCompliance = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/compliance/${tenantId}`); setComplianceItems(r.data.items || []); }
+  catch { showNotif('Could not load compliance records', 'error'); }
+};
+const fetchEquipment = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/equipment/${tenantId}`); setEquipmentData({ items: r.data.items || [], logs: r.data.logs || [] }); }
+  catch { showNotif('Could not load equipment', 'error'); }
+};
+const fetchExpenses = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/expenses/${tenantId}?month=${todayISTForm().slice(0, 7)}`); setExpenseList(r.data); }
+  catch { showNotif('Could not load running costs', 'error'); }
+};
+const fetchPayables = async () => {
+  try { const r = await axios.get(`${BASE_URL}/admin/payables/${tenantId}`); setPayables(r.data); }
+  catch { showNotif('Could not load payables', 'error'); }
+};
+useEffect(() => {
+  if (activeTab === 'payables') { fetchPayables(); fetchExpenses(); }
+  if (activeTab === 'compliance') fetchCompliance();
+  if (activeTab === 'equipment') fetchEquipment();
+  if (activeTab === 'pending') { fetchPayables(); fetchCompliance(); fetchEquipment(); }
+  if (activeTab === 'shiftlog') fetchShiftNotes();
+  if (activeTab === 'checklists') fetchChecklists();
+  if (activeTab === 'issues') fetchIssues();
+  if (activeTab === 'stocktake') { fetchStockCounts(); fetchManagementData(); }
+  if (activeTab === 'payables') fetchExpenses();
+}, [activeTab]);
 const storedTableCount = parseInt(localStorage.getItem('table_count'), 10) || 12; // value captured at login
 // The floor map, table pickers and staffing maths used ONLY the login-time value, so changing the number of tables (master admin /
 // onboarding) left every operator screen on the old count until they logged out and in. The live tenant config wins when loaded.
@@ -3036,6 +3112,21 @@ useEffect(() => {
 
 
 
+// CSV export for the registers. Values are quoted so commas and line breaks in notes cannot break the file.
+const downloadCsv = (fileName, headers, rows) => {
+  const esc = (v) => { const t = v == null ? '' : String(v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const body = [headers, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff' + body], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+const istDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
+const csvButton = (onClick, title = 'Export CSV') => (
+  <button type="button" onClick={onClick} title={title} style={{ padding: '8px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.7px', whiteSpace: 'nowrap' }}>EXPORT CSV</button>
+);
+
 const SEG_META = {
   all:       { label:'All',      color:'#d3bfa2', bg:'rgba(211,191,162,0.1)'  },
   new:       { label:'New',      color:'#ecdcb9', bg:'rgba(138,154,126,0.12)' },
@@ -5029,6 +5120,14 @@ const renderMonthHeatmap = () => {
         items: [
           {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
           {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
+          {id:'dayclose',      label:'Daily Close',     icon:<ClipboardList size={16}/>, badge: null},
+          {id:'payables',       label:'Payables',        icon:<Wallet size={16}/>, badge: null},
+          {id:'compliance',     label:'Compliance',      icon:<ShieldCheck size={16}/>, badge: null},
+          {id:'equipment',      label:'Equipment',       icon:<Wrench size={16}/>, badge: null},
+          {id:'shiftlog',       label:'Shift Log',       icon:<FileClock size={16}/>, badge: null},
+          {id:'checklists',     label:'Checklists',      icon:<ClipboardCheck size={16}/>, badge: null},
+          {id:'issues',         label:'Issues',          icon:<ShieldAlert size={16}/>, badge: null},
+          {id:'stocktake',      label:'Stock Take',      icon:<Layers size={16}/>, badge: null},
           {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
         ]
       },
@@ -5186,6 +5285,14 @@ const renderMonthHeatmap = () => {
       <h1 style={{...styles.pageTitle,fontSize:'0.95rem',margin:0,letterSpacing:'2px',lineHeight:1}} className="p-page-title">
         {activeTab==='pending'?'LIVE KITCHEN':
          activeTab==='billing'?'BILLING HUB':
+         activeTab==='dayclose'?'DAILY CLOSE':
+         activeTab==='payables'?'PAYABLES':
+         activeTab==='compliance'?'COMPLIANCE':
+         activeTab==='equipment'?'EQUIPMENT':
+         activeTab==='shiftlog'?'SHIFT LOG':
+         activeTab==='checklists'?'CHECKLISTS':
+         activeTab==='issues'?'ISSUES':
+         activeTab==='stocktake'?'STOCK TAKE':
          activeTab==='menu'?'MENU EDITOR':
          activeTab==='insights'?'INSIGHTS':
          activeTab==='intelligence'?'AI INTELLIGENCE':
@@ -5208,6 +5315,14 @@ const renderMonthHeatmap = () => {
          activeTab==='assist'?'Ask anything about your restaurant data':
          activeTab==='audit'?'Order history · Settlement log':
          activeTab==='management'?'Staff roster · Attendance · Payroll':
+         activeTab==='dayclose'?'Reconcile the day  Payments  Cash drawer':
+         activeTab==='compliance'?'Licences  Certificates  Renewals':
+         activeTab==='shiftlog'?'Handover between shifts  Urgent items':
+         activeTab==='checklists'?'Opening  Mid-shift  Closing routine':
+         activeTab==='issues'?'Complaints  Incidents  Refunds':
+         activeTab==='stocktake'?'Physical count  Variance at cost':
+         activeTab==='equipment'?'Service schedule  Service history':
+         activeTab==='payables'?'Vendor bills  Due dates  Payments':
          activeTab==='inventory'?'Stock levels · Procurement · Wastage':
          activeTab==='extras'?'Beverages · Snacks · Retail catalog':
          activeTab==='recipes'?'Recipe costing · Ingredient mapping':
@@ -5526,6 +5641,22 @@ const renderMonthHeatmap = () => {
         <section style={styles.scrollArea} className="custom-scroll">
 <RenewalReminder tenantId={tenantId} style={{ margin: '0 0 14px' }} />
 
+{activeTab === 'pending' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const floor = floorLayout || [];
+  const taken = new Set((occupiedTables || []).map(String));
+  const exportRows = () => downloadCsv('floor-status.csv', ['Table', 'Seats', 'Status now'], floor.map(t => [t.tableNumber, t.seats ?? '', taken.has(String(t.tableNumber)) ? 'occupied' : 'free']));
+  if (floor.length === 0) return null;
+  return (
+    <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '12px 18px', marginBottom: '0' }}>
+      <div style={{ fontSize: '0.66rem', color: '#B4B4B4' }}>{floor.length} tables · <span style={{ color: '#ECDCB9', fontWeight: '800' }}>{taken.size} occupied</span> · {floor.length - taken.size} free right now</div>
+      {csvButton(exportRows, 'Export the floor status')}
+    </div>
+  );
+})()}
+
 {activeTab === 'pending' && (
   
 // ═══════════════════════════════════════════════════════════════════════
@@ -5543,110 +5674,83 @@ const renderMonthHeatmap = () => {
   style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
 
 
-{/* ── OCCUPANCY DASHBOARD ── */}
-<div style={{
-  display:'grid', gridTemplateColumns:'auto 1fr', gap:'14px',
-  background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border:'1px solid rgba(211,191,162,0.12)',
-  borderRadius:'16px', padding:'18px 20px', marginBottom:'20px',
-  alignItems:'center'
-}}>
-  {/* SVG Donut */}
-  <div style={{ position:'relative', width:'88px', height:'88px', flexShrink:0 }}>
-    <svg width="88" height="88" viewBox="0 0 88 88">
-      {(() => {
-        const r = 34, cx = 44, cy = 44;
-        const circ = 2 * Math.PI * r;
-        const segments = [
-          { key:'occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2' },
-          { key:'bill_pending', val:tableOccupancyBreakdown.bill_pending, color:'#b8923a' },
-          { key:'reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d' },
-          { key:'free',         val:tableOccupancyBreakdown.free,         color:'#0c0c0c'  },
-        ];
-        let offset = 0;
-        return segments.map(seg => {
-          const pct  = tableOccupancyBreakdown.total > 0 ? seg.val / tableOccupancyBreakdown.total : 0;
-          const dash = pct * circ;
-          const el   = (
-            <circle key={seg.key}
-              cx={cx} cy={cy} r={r}
-              fill="none" stroke={seg.color} strokeWidth="14"
-              strokeDasharray={`${dash} ${circ - dash}`}
-              strokeDashoffset={-offset}
-              style={{ transform:'rotate(-90deg)', transformOrigin:'44px 44px', transition:'stroke-dasharray 0.6s ease' }}
-            />
-          );
-          offset += dash;
-          return el;
-        });
-      })()}
-    </svg>
-    <div style={{
-      position:'absolute', inset:0, display:'flex', flexDirection:'column',
-      alignItems:'center', justifyContent:'center'
-    }}>
-      <div style={{ fontSize:'1.4rem', fontWeight:'900', color:'#fff', lineHeight:1, fontFamily:'monospace' }}>
-        {tableOccupancyBreakdown.occupancyRate}%
-      </div>
-      <div style={{ fontSize:'0.44rem', color:'#b4b4b4', fontWeight:'900', letterSpacing:'1px', marginTop:'2px' }}>FULL</div>
+{/* ── DUE THIS WEEK: reminders from the registers, each one opens its tab ── */}
+{(() => {
+  const nowMs = Date.now(), day = 864e5;
+  const billsDue = (payables?.bills || []).filter(b => b.status === 'unpaid' && new Date(b.dueDate).getTime() <= nowMs + 7 * day);
+  const billsOverdue = billsDue.filter(b => new Date(b.dueDate).getTime() < nowMs);
+  const licences = (complianceItems || []).filter(i => { const n = (new Date(i.expiresOn).getTime() - nowMs) / day; return n <= 30; });
+  const services = (equipmentData.items || []).filter(e => { if (!e.lastServicedOn) return true; const due = new Date(e.lastServicedOn).getTime() + e.serviceEveryDays * day; return due <= nowMs + 14 * day; });
+  const chips = [
+    billsDue.length && { tab: 'payables', tone: billsOverdue.length > 0, text: `${billsDue.length} vendor ${billsDue.length === 1 ? 'bill' : 'bills'} due${billsOverdue.length ? ` · ${billsOverdue.length} overdue` : ''}` },
+    licences.length && { tab: 'compliance', tone: licences.some(i => new Date(i.expiresOn).getTime() < nowMs), text: `${licences.length} ${licences.length === 1 ? 'licence' : 'licences'} to renew` },
+    services.length && { tab: 'equipment', tone: services.some(e => !e.lastServicedOn), text: `${services.length} ${services.length === 1 ? 'service' : 'services'} due` },
+  ].filter(Boolean);
+  if (chips.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '0 2px' }}>
+      <span style={{ fontSize: '0.56rem', letterSpacing: '1.6px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>Due this week</span>
+      {chips.map(c => (
+        <button key={c.tab} type="button" onClick={() => setActiveTab(c.tab)} style={{ padding: '6px 12px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.6rem', fontWeight: '800', whiteSpace: 'nowrap',
+          background: c.tone ? '#d3bfa2' : 'transparent', color: c.tone ? '#0c0c0c' : '#d3bfa2', border: `1px solid ${c.tone ? '#d3bfa2' : 'rgba(211,191,162,0.3)'}` }}>{c.text} →</button>
+      ))}
     </div>
-  </div>
-
-  {/* Legend + stats */}
-  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-    {[
-      { label:'Free',         val:tableOccupancyBreakdown.free,         color:'#969696', sub:'tables' },
-      { label:'Occupied',     val:tableOccupancyBreakdown.occupied,     color:'#d3bfa2', sub:'tables' },
-      { label:'Bill Pending', val:tableOccupancyBreakdown.bill_pending, color:'#b8923a', sub:'tables' },
-      { label:'Reserved',     val:tableOccupancyBreakdown.reserved,     color:'#8a704d', sub:'tables' },
-    ].map((s, i) => (
-      <div key={i} style={{
-        padding:'10px 12px', borderRadius:'10px',
-        background:'rgba(255,255,255,0.02)',
-        border:`1px solid ${s.color === '#969696' ? '#0c0c0c' : `${s.color}20`}`,
-        display:'flex', flexDirection:'column', gap:'2px'
-      }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-          <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:s.color, flexShrink:0 }}/>
-          <span style={{ fontSize:'0.5rem', color:'#969696', fontWeight:'900', letterSpacing:'1px', textTransform:'uppercase' }}>{s.label}</span>
-        </div>
-        <div style={{ fontSize:'1.2rem', fontWeight:'900', color:s.color, fontFamily:'monospace', lineHeight:1 }}>{s.val}</div>
+  );
+})()}
+      {/* ── LIVE STRIP: one figure per fact, two rows, nothing repeated ── */}
+{(() => {
+  const now = Date.now();
+  const b = tableOccupancyBreakdown;
+  const dine = waitlistEntries.length;
+  const longest = dine ? Math.max(...waitlistEntries.map(e => Math.floor((now - new Date(e.createdAt)) / 60000))) : 0;
+  const cooking = pickupEntries.filter(e => e.kitchenFired && e.status !== 'pickup-ready').length;
+  const ready = pickupEntries.filter(e => e.status === 'pickup-ready').length;
+  const toConfirm = reservationEntries.filter(r => r.status === 'pending').length;
+  const covers = reservationEntries.filter(r => ['pending', 'confirmed'].includes(r.status)).reduce((n, r) => n + (Number(r.partySize) || 0), 0);
+  const rows = [
+    { title: 'Floor', tiles: [
+      { label: 'Free tables', value: b.free, sub: `of ${b.total}`, hot: false },
+      { label: 'Occupied', value: b.occupied, sub: 'guests seated', hot: false },
+      { label: 'Bill pending', value: b.bill_pending, sub: 'awaiting payment', hot: b.bill_pending > 0 },
+      { label: 'Held for booking', value: b.reserved, sub: 'confirmed tables', hot: false },
+    ] },
+    { title: 'Queue', tiles: [
+      { label: 'Dine-in waiting', value: dine, sub: dine ? `longest ${formatDuration(longest)}` : 'nobody waiting', hot: dine > 0 },
+      { label: 'Pickups cooking', value: cooking, sub: 'in the kitchen', hot: false },
+      { label: 'Ready to collect', value: ready, sub: 'call the guest', hot: ready > 0 },
+      { label: 'To confirm', value: toConfirm, sub: `${covers} covers booked`, hot: toConfirm > 0 },
+    ] },
+  ];
+  const turn = turnTimeData?.today?.avg;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '0 0 4px', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 2px' }}>
+        <span style={{ fontSize: '0.56rem', letterSpacing: '1.8px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>Service now</span>
+        {turn != null && <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700' }}>Average table turn today <span style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>~{turn}m</span></span>}
       </div>
-    ))}
-  </div>
-  {turnTimeData?.today?.avg != null && (
-  <div style={{
-    marginTop:'12px', paddingTop:'12px',
-    borderTop:'1px solid rgba(211,191,162,0.12)',
-    display:'flex', alignItems:'center', gap:'10px'
-  }}>
-    <Timer size={13} color="#8a704d" strokeWidth={1.5}/>
-    <div style={{ flex: 1 }}>
-      <span style={{ fontSize:'0.68rem', fontWeight:'900', color:'#d3bfa2', fontFamily:'monospace' }}>
-        ~{turnTimeData.today.avg}m
-      </span>
-      <span style={{ fontSize:'0.58rem', color:'#a6a6a6', fontWeight:'600', marginLeft:'6px' }}>
-        avg table turn time today
-      </span>
-    </div>
-    {turnTimeData.yesterday?.avg != null && (() => {
-      const diff = turnTimeData.today.avg - turnTimeData.yesterday.avg;
-      const faster = diff < 0;
-      return (
-        <div title={`Yesterday: ~${turnTimeData.yesterday.avg}m`} style={{ display:'flex', alignItems:'center', gap:'3px', fontSize:'0.56rem', fontWeight:'900', color: faster ? '#ecdcb9' : diff > 0 ? '#b8923a' : '#b4b4b4' }}>
-          {diff !== 0 && (faster ? <ArrowDownRight size={11}/> : <ArrowUpRight size={11}/>)}
-          {diff === 0 ? 'same as yesterday' : `${Math.abs(diff)}m ${faster ? 'faster' : 'slower'} vs yday`}
+      {rows.map(row => (
+        <div key={row.title} style={{ display: 'grid', gridTemplateColumns: '84px repeat(4, minmax(0, 1fr))', gap: '10px', alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', alignItems: 'center', fontSize: '0.56rem', letterSpacing: '1.4px', textTransform: 'uppercase', color: '#8a704d', fontWeight: '900' }}>{row.title}</div>
+          {row.tiles.map(t => (
+            <div key={t.label} style={{
+              padding: '13px 15px', borderRadius: '14px',
+              background: t.hot ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+              border: `1px solid ${t.hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.1)'}`,
+              boxShadow: '0 12px 26px rgba(0,0,0,0.3)',
+            }}>
+              <div style={{ fontSize: '0.56rem', letterSpacing: '1.3px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>{t.label}</div>
+              <div style={{ marginTop: '7px', display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: t.hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{t.value}</span>
+                <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
+              </div>
+            </div>
+          ))}
         </div>
-      );
-    })()}
-  </div>
-)}
-{turnTimeData?.last7Days?.avg != null && (
-  <div style={{ marginTop:'4px', fontSize:'0.5rem', color:'#969696', fontWeight:'700', paddingLeft:'23px' }}>
-    7-day average: ~{turnTimeData.last7Days.avg}m ({turnTimeData.last7Days.samples} tables)
-  </div>
-)}
+      ))}
+    </div>
+  );
+})()}
 
-</div>
 
 {/* ══════════════════════════════════════════════════
     LIVE FLOOR MAP — revenue heat + status ring + service calls + joins
@@ -6169,35 +6273,6 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
 
-    {/* Queue summary strip */}
-    {(() => {
-      const now = Date.now();
-      const dineWaiting = waitlistEntries.length;
-      const longestMins = dineWaiting ? Math.max(...waitlistEntries.map(e => Math.floor((now - new Date(e.createdAt)) / 60000))) : 0;
-      const inKitchen = pickupEntries.filter(e => e.kitchenFired && e.status !== 'pickup-ready').length;
-      const readyPickup = pickupEntries.filter(e => e.status === 'pickup-ready').length;
-      const resPending = reservationEntries.filter(r => r.status === 'pending').length;
-      const covers = reservationEntries.filter(r => ['pending', 'confirmed'].includes(r.status)).reduce((n, r) => n + (Number(r.partySize) || 0), 0);
-      const tile = (label, value, sub, strong) => (
-        <div style={{ flex: 1, minWidth: '130px', padding: '13px 15px', borderRadius: '14px', background: strong ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : 'linear-gradient(165deg,#17181c 0%,#0e0f12 100%)',
-          border: `1px solid ${strong ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.09)'}`, boxShadow: '0 12px 26px rgba(0,0,0,0.3)' }}>
-          <div style={{ fontSize: '0.64rem', letterSpacing: '1.6px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>{label}</div>
-          <div style={{ marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-            <span style={{ fontFamily: 'monospace', fontSize: '1.35rem', fontWeight: '900', color: strong ? '#d3bfa2' : '#f0ebe0' }}>{value}</span>
-            {sub && <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</span>}
-          </div>
-        </div>
-      );
-      return (
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', padding: '16px 20px 0' }}>
-          {tile('Dine-in waiting', dineWaiting, longestMins ? `longest ${formatDuration(longestMins)}` : 'none', dineWaiting > 0)}
-          {tile('Pickups in kitchen', inKitchen, 'preparing', false)}
-          {tile('Ready for pickup', readyPickup, 'collect now', readyPickup > 0)}
-          {tile('Reservations', resPending, 'to confirm', resPending > 0)}
-          {tile('Expected covers', covers, 'today', false)}
-        </div>
-      );
-    })()}
     {/* Tab bar + Search */}
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderBottom: '1px solid rgba(211,191,162,0.04)' }}>
       <div style={{ display: 'flex' }}>
@@ -6808,6 +6883,961 @@ const renderMonthHeatmap = () => {
  
 
 {/* ── MENU ── */}
+{activeTab === 'dayclose' && (() => {
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const dayLabel = (id) => {
+    const d = new Date(`${id}T00:00:00+05:30`);
+    return Number.isNaN(d.getTime()) ? String(id) : d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  };
+  const shortDay = (id) => {
+    const d = new Date(`${id}T00:00:00+05:30`);
+    return Number.isNaN(d.getTime()) ? String(id) : d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+  };
+  // The analytics feed returns one row per settled bill, so a day has many rows. Add them up per date, as Billing Hub does.
+  const dayMap = new Map();
+  (analytics || []).forEach(r => {
+    const k = String(r._id);
+    const acc = dayMap.get(k) || { _id: k, revenue: 0, count: 0, cash: 0, upi: 0, card: 0, discount: 0 };
+    acc.revenue += Number(r.revenue) || 0;
+    acc.count += Number(r.count) || 0;
+    acc.cash += Number(r.cash) || 0;
+    acc.upi += Number(r.upi) || 0;
+    acc.card += Number(r.card) || 0;
+    acc.discount += Number(r.discount) || 0;
+    dayMap.set(k, acc);
+  });
+  const days = [...dayMap.values()].sort((x, y) => y._id.localeCompare(x._id));
+  const selectedId = dayCloseDay || (days.find(d => d._id === istTodayStr) ? istTodayStr : days[0]?._id) || null;
+  const day = days.find(d => d._id === selectedId) || null;
+  const revenue = Number(day?.revenue) || 0;
+  const bills = Number(day?.count) || 0;
+  const cash = Number(day?.cash) || 0;
+  const upi = Number(day?.upi) || 0;
+  const card = Number(day?.card) || 0;
+  const discount = Number(day?.discount) || 0;
+  const unrecorded = Math.max(0, Math.round((revenue - (cash + upi + card)) * 100) / 100);
+  const avgBill = bills > 0 ? Math.round(revenue / bills) : 0;
+  const counted = dayCloseCounted === '' ? null : Number(dayCloseCounted);
+  const variance = counted === null || Number.isNaN(counted) ? null : Math.round((counted - cash) * 100) / 100;
+  const verdict = variance === null ? null
+    : Math.abs(variance) < 1 ? 'Balanced'
+    : variance < 0 ? `Short by ${money(Math.abs(variance))}` : `Over by ${money(variance)}`;
+  const pct = (v) => (revenue > 0 ? Math.round((v / revenue) * 100) : 0);
+  const panel = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...panel, padding: '16px 18px', background: hot ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : panel.background, border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}`, textAlign: 'left' }}>
+      <div style={label}>{l}</div>
+      <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.5rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      {sub && <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>}
+    </div>
+  );
+  const bar = (name, value, color) => (
+    <div key={name} style={{ marginBottom: '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+        <span style={{ fontSize: '0.7rem', color: '#ECDCB9', fontWeight: '800' }}>{name}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#d3bfa2' }}>{money(value)} <span style={{ color: '#8a8a8a' }}>· {pct(value)}%</span></span>
+      </div>
+      <div style={{ height: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct(value)}%`, borderRadius: '4px', background: color }} />
+      </div>
+    </div>
+  );
+  const copySummary = () => {
+    const text = [
+      `Daily close · ${dayLabel(selectedId)}`,
+      `Gross revenue: ${money(revenue)}`,
+      `Bills settled: ${bills} (average ${money(avgBill)})`,
+      `Discounts given: ${money(discount)}`,
+      `Cash ${money(cash)} · UPI ${money(upi)} · Card ${money(card)}`,
+      unrecorded > 0 ? `Not recorded by payment mode: ${money(unrecorded)}` : null,
+      counted !== null ? `Cash counted: ${money(counted)} · ${verdict}` : 'Cash counted: not entered',
+    ].filter(Boolean).join('\n');
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => showNotif('Close summary copied'), () => showNotif('Could not copy', 'error'));
+  };
+
+  return (
+    <div key="dayclose" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      {days.length === 0 ? (
+        <div style={{ ...panel, textAlign: 'center', padding: '48px 24px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#ECDCB9', fontWeight: '800' }}>No settled bills for this month yet</div>
+          <div style={{ marginTop: '6px', fontSize: '0.66rem', color: '#8a8a8a' }}>Each day appears here once its first bill is settled.</div>
+        </div>
+      ) : (
+        <>
+          {/* Day picker */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '2px' }}>
+            {days.slice(0, 14).map(d => {
+              const on = d._id === selectedId;
+              return (
+                <button key={d._id} type="button" onClick={() => { setDayCloseDay(d._id); setDayCloseCounted(''); }}
+                  style={{ flex: '0 0 auto', textAlign: 'left', padding: '10px 14px', borderRadius: '12px', cursor: 'pointer',
+                    background: on ? 'linear-gradient(160deg, rgba(211,191,162,0.18), rgba(211,191,162,0.04))' : '#090909',
+                    border: `1px solid ${on ? 'rgba(211,191,162,0.45)' : 'rgba(211,191,162,0.1)'}` }}>
+                  <div style={{ fontSize: '0.62rem', color: on ? '#ECDCB9' : '#969696', fontWeight: '800', letterSpacing: '0.6px' }}>{shortDay(d._id)}{d._id === istTodayStr ? ' · TODAY' : ''}</div>
+                  <div style={{ marginTop: '4px', fontFamily: 'monospace', fontSize: '0.78rem', color: on ? '#d3bfa2' : '#B4B4B4', fontWeight: '800' }}>{money(d.revenue)}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: '0.8rem', color: '#ECDCB9', fontWeight: '800' }}>{dayLabel(selectedId)}</div>
+
+          {/* Headline figures, each shown once */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+            {tile('Gross revenue', money(revenue), 'after tax and discounts', true)}
+            {tile('Bills settled', bills, bills === 1 ? '1 bill' : `${bills} bills`, false)}
+            {tile('Average bill', money(avgBill), 'revenue per bill', false)}
+            {tile('Discounts given', money(discount), discount > 0 ? `${pct(discount)}% of revenue` : 'none today', false)}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)', gap: '14px', alignItems: 'start' }}>
+            {/* Payment mix */}
+            <div style={panel}>
+              <div style={label}>Payment mix</div>
+              <div style={{ marginTop: '16px' }}>
+                {bar('Cash', cash, '#d3bfa2')}
+                {bar('UPI', upi, '#B8923A')}
+                {bar('Card', card, '#8A704D')}
+              </div>
+              {unrecorded > 0 && (
+                <div style={{ marginTop: '4px', padding: '11px 13px', borderRadius: '10px', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.22)', display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <span style={{ fontSize: '0.66rem', color: '#ECDCB9', fontWeight: '800' }}>Not recorded by payment mode</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#d3bfa2', fontWeight: '900' }}>{money(unrecorded)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Cash drawer */}
+            <div style={panel}>
+              <div style={label}>Cash drawer</div>
+              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '0.7rem', color: '#969696' }}>Expected cash (cash mode, today)</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', color: '#ECDCB9', fontWeight: '900' }}>{money(cash)}</span>
+              </div>
+              <div style={{ marginTop: '14px' }}>
+                <label style={{ ...label, display: 'block', marginBottom: '7px' }}>Cash counted</label>
+                <input type="number" min="0" placeholder="Enter the drawer total" value={dayCloseCounted}
+                  onChange={e => setDayCloseCounted(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', background: '#070707', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px', color: '#ECDCB9', fontFamily: 'monospace', fontSize: '0.9rem', outline: 'none' }} />
+              </div>
+              <div style={{ marginTop: '16px', padding: '14px', borderRadius: '12px', background: '#070707', border: '1px solid rgba(211,191,162,0.12)' }}>
+                <div style={label}>Result</div>
+                <div style={{ marginTop: '6px', fontSize: '1rem', fontWeight: '900', color: verdict && verdict !== 'Balanced' ? '#d3bfa2' : '#ECDCB9' }}>
+                  {verdict ?? 'Enter the counted cash'}
+                </div>
+                {verdict === 'Balanced' && <div style={{ marginTop: '4px', fontSize: '0.62rem', color: '#8a8a8a' }}>Drawer matches the day's cash sales.</div>}
+              </div>
+              <button type="button" onClick={copySummary}
+                style={{ marginTop: '14px', width: '100%', padding: '11px', borderRadius: '10px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.66rem', fontWeight: '900', letterSpacing: '0.8px' }}>
+                COPY CLOSE SUMMARY
+              </button>
+            </div>
+          </div>
+
+          {/* Recent days */}
+          <div style={panel}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={label}>This month</div>{csvButton(() => downloadCsv('daily-close-month.csv', ['Date','Bills','Revenue (₹)','Cash','UPI','Card','Discounts'], days.map(d => [d._id, d.count, d.revenue, d.cash, d.upi, d.card, d.discount])))}</div>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.3fr 0.6fr 1fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '8px 10px', borderBottom: '1px solid rgba(211,191,162,0.12)' }}>
+              {['Day', 'Bills', 'Revenue', 'Cash', 'UPI', 'Card', 'Discounts'].map(h => <span key={h} style={label}>{h}</span>)}
+            </div>
+            {days.map(d => {
+              const on = d._id === selectedId;
+              return (
+                <div key={d._id} role="button" tabIndex={0} onClick={() => { setDayCloseDay(d._id); setDayCloseCounted(''); }}
+                  style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.6fr 1fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '10px', cursor: 'pointer', fontSize: '0.7rem',
+                    color: on ? '#ECDCB9' : '#B4B4B4', background: on ? 'rgba(211,191,162,0.07)' : 'transparent', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span style={{ fontWeight: '800' }}>{shortDay(d._id)}{d._id === istTodayStr ? ' · today' : ''}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{Number(d.count) || 0}</span>
+                  <span style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{money(d.revenue)}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{money(d.cash)}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{money(d.upi)}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{money(d.card)}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{money(d.discount)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+})()}
+
+{activeTab === 'payables' && (() => {
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const todayIST = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const panel = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const bills = payables?.bills || [];
+  const sum = payables?.summary || { outstanding: 0, unpaidCount: 0, overdue: 0, overdueCount: 0, dueSoon: 0, dueSoonCount: 0 };
+  const now = Date.now();
+  const status = (b) => {
+    if (b.status === 'paid') return { text: `Paid ${b.paidAt ? new Date(b.paidAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' }) : ''}`, hot: false, rank: 3 };
+    const days = Math.ceil((new Date(b.dueDate).getTime() - now) / 864e5);
+    if (days < 0) return { text: `Overdue ${Math.abs(days)}d`, hot: true, rank: 0 };
+    if (days <= 7) return { text: days === 0 ? 'Due today' : `Due in ${days}d`, hot: true, rank: 1 };
+    return { text: `Due ${new Date(b.dueDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}`, hot: false, rank: 2 };
+  };
+  const shown = bills.filter(b => payablesFilter === 'all' ? true
+    : payablesFilter === 'paid' ? b.status === 'paid'
+    : payablesFilter === 'overdue' ? b.status === 'unpaid' && new Date(b.dueDate).getTime() < now
+    : b.status === 'unpaid');
+  const submit = async () => {
+    const f = payableForm;
+    if (!f.vendorName.trim()) return showNotif('Enter the vendor name', 'error');
+    if (!(Number(f.amount) > 0)) return showNotif('Amount must be more than 0', 'error');
+    if (!f.billDate || !f.dueDate) return showNotif('Bill date and due date are required', 'error');
+    if (f.dueDate < f.billDate) return showNotif('Due date cannot be before the bill date', 'error');
+    try {
+      await axios.post(`${BASE_URL}/admin/payables/${tenantId}`, { ...f, tenantId });
+      setPayableForm({ vendorName: '', invoiceNo: '', amount: '', billDate: todayIST(), dueDate: '', notes: '' });
+      showNotif('Bill recorded');
+      fetchPayables();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not record the bill', 'error'); }
+  };
+  const toggle = async (b) => {
+    try {
+      await axios.patch(`${BASE_URL}/admin/payables/${tenantId}/${b._id}`, { status: b.status === 'paid' ? 'unpaid' : 'paid' });
+      fetchPayables();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not update the bill', 'error'); }
+  };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...panel, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}`, background: hot ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : panel.background }}>
+      <div style={label}>{l}</div>
+      <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
+    </div>
+  );
+  return (
+    <div key="payables" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('payables.csv', ['Vendor','Invoice','Amount','Bill date','Due date','Status','Paid on','Notes'], (payables?.bills || []).map(b => [b.vendorName, b.invoiceNo, b.amount, istDate(b.billDate), istDate(b.dueDate), b.status, b.paidAt ? istDate(b.paidAt) : '', b.notes])); })}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        {tile('Outstanding', money(sum.outstanding), `${sum.unpaidCount} unpaid ${sum.unpaidCount === 1 ? 'bill' : 'bills'}`, sum.outstanding > 0)}
+        {tile('Overdue', money(sum.overdue), sum.overdueCount ? `${sum.overdueCount} past due` : 'nothing overdue', sum.overdueCount > 0)}
+        {tile('Due in 7 days', money(sum.dueSoon), sum.dueSoonCount ? `${sum.dueSoonCount} coming up` : 'nothing soon', false)}
+        {tile('Bills on record', bills.length, 'all time', false)}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        {/* Record a bill */}
+        <div style={panel}>
+          <div style={label}>Record a vendor bill</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <div>
+              <div style={{ ...label, marginBottom: '6px' }}>Vendor</div>
+              <input list="payable-vendors" placeholder="Vendor name" value={payableForm.vendorName} style={input}
+                onChange={e => setPayableForm(p => ({ ...p, vendorName: e.target.value }))} />
+              <datalist id="payable-vendors">{vendors.map(v => <option key={v._id} value={v.name} />)}</datalist>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <div style={{ ...label, marginBottom: '6px' }}>Invoice no.</div>
+                <input placeholder="Optional" value={payableForm.invoiceNo} style={input} onChange={e => setPayableForm(p => ({ ...p, invoiceNo: e.target.value }))} />
+              </div>
+              <div>
+                <div style={{ ...label, marginBottom: '6px' }}>Amount (₹)</div>
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={payableForm.amount} style={{ ...input, fontFamily: 'monospace' }} onChange={e => setPayableForm(p => ({ ...p, amount: e.target.value }))} />
+              </div>
+              <div>
+                <div style={{ ...label, marginBottom: '6px' }}>Bill date</div>
+                <input type="date" value={payableForm.billDate} style={{ ...input, colorScheme: 'dark' }} onChange={e => setPayableForm(p => ({ ...p, billDate: e.target.value }))} />
+              </div>
+              <div>
+                <div style={{ ...label, marginBottom: '6px' }}>Due date</div>
+                <input type="date" value={payableForm.dueDate} style={{ ...input, colorScheme: 'dark' }} onChange={e => setPayableForm(p => ({ ...p, dueDate: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <div style={{ ...label, marginBottom: '6px' }}>Notes</div>
+              <input placeholder="Optional" value={payableForm.notes} style={input} onChange={e => setPayableForm(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+            <button type="button" onClick={submit}
+              style={{ marginTop: '4px', padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>
+              RECORD BILL
+            </button>
+          </div>
+        </div>
+
+        {/* Bills */}
+        <div style={panel}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={label}>Bills</div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {[['all', 'All'], ['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid']].map(([k, t]) => (
+                <button key={k} type="button" onClick={() => setPayablesFilter(k)}
+                  style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.6px',
+                    background: payablesFilter === k ? '#d3bfa2' : '#070707', color: payablesFilter === k ? '#0c0c0c' : '#969696',
+                    border: `1px solid ${payablesFilter === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{t}</button>
+              ))}
+            </div>
+          </div>
+          {shown.length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '28px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>{bills.length === 0 ? 'No vendor bills recorded yet' : 'No bills match this filter'}</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>{bills.length === 0 ? 'Record a bill from a supplier on the left. Its due date will show here.' : 'Try another filter.'}</div>
+            </div>
+          ) : (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.9fr 1fr 1.1fr', gap: '10px', padding: '8px 10px', borderBottom: '1px solid rgba(211,191,162,0.12)' }}>
+                {['Vendor', 'Amount', 'Due', 'Status', ''].map((h, i) => <span key={i} style={label}>{h}</span>)}
+              </div>
+              {shown.map(b => {
+                const st = status(b);
+                return (
+                  <div key={b._id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.9fr 1fr 1.1fr', gap: '10px', alignItems: 'center', padding: '11px 10px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.vendorName}</div>
+                      <div style={{ marginTop: '2px', fontSize: '0.6rem', color: '#8a8a8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[b.invoiceNo && `#${b.invoiceNo}`, b.notes].filter(Boolean).join(' · ') || 'No reference'}</div>
+                    </div>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.74rem', color: '#d3bfa2', fontWeight: '800' }}>{money(b.amount)}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.66rem', color: '#B4B4B4' }}>{new Date(b.dueDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}</span>
+                    <span style={{ justifySelf: 'start', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', padding: '4px 9px', borderRadius: '999px', textTransform: 'uppercase',
+                      color: st.hot ? '#0c0c0c' : '#B4B4B4', background: st.hot ? '#d3bfa2' : 'rgba(255,255,255,0.04)', border: `1px solid ${st.hot ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{st.text}</span>
+                    <div style={{ display: 'flex', gap: '6px', justifySelf: 'end' }}>
+                      <button type="button" onClick={() => toggle(b)}
+                        style={{ padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>
+                        {b.status === 'paid' ? 'UNDO' : 'MARK PAID'}
+                      </button>
+                      <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove the ${money(b.amount)} bill from ${b.vendorName}?`, subtitle: 'This deletes the record. It cannot be undone.', onConfirm: async () => {
+                        try { await axios.delete(`${BASE_URL}/admin/payables/${tenantId}/${b._id}`); fetchPayables(); showNotif('Bill removed'); }
+                        catch (err) { showNotif(err.response?.data?.error || 'Could not remove the bill', 'error'); }
+                      } })}
+                        style={{ padding: '6px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>
+                        REMOVE
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {(() => {
+        const unpaid = bills.filter(b => b.status === 'unpaid');
+        const byVendor = {};
+        unpaid.forEach(b => { const v = byVendor[b.vendorName] || { name: b.vendorName, total: 0, count: 0, due: Infinity }; v.total += b.amount; v.count += 1; v.due = Math.min(v.due, new Date(b.dueDate).getTime()); byVendor[b.vendorName] = v; });
+        const list = Object.values(byVendor).sort((x, y) => y.total - x.total);
+        if (list.length === 0) return null;
+        return (
+          <div style={panel}>
+            <div style={label}>Owed by vendor</div>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+              {list.map(v => { const late = v.due < now; return (
+                <div key={v.name} style={{ padding: '12px 14px', borderRadius: '12px', background: '#070707', border: `1px solid ${late ? 'rgba(211,191,162,0.4)' : 'rgba(211,191,162,0.12)'}` }}>
+                  <div style={{ fontSize: '0.7rem', color: '#ECDCB9', fontWeight: '800' }}>{v.name}</div>
+                  <div style={{ marginTop: '6px', fontFamily: 'monospace', fontSize: '1rem', color: '#d3bfa2', fontWeight: '900' }}>{money(v.total)}</div>
+                  <div style={{ marginTop: '4px', fontSize: '0.58rem', color: late ? '#d3bfa2' : '#8a8a8a', fontWeight: late ? '800' : '400' }}>{v.count} {v.count === 1 ? 'bill' : 'bills'} · {late ? 'overdue' : `next due ${new Date(v.due).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}`}</div>
+                </div>); })}
+            </div>
+          </div>
+        );
+      })()}
+      {/* Running costs: rent, utilities and other spending that no other tab records */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        <div style={panel}>
+          <div style={label}>Record a running cost</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <select value={expenseForm.category} style={input} onChange={e => setExpenseForm(p => ({ ...p, category: e.target.value }))}>
+                {[['rent', 'Rent'], ['utilities', 'Utilities'], ['marketing', 'Marketing'], ['repairs', 'Repairs'], ['licences', 'Licences & permits'], ['other', 'Other']].map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <input type="number" min="0" step="0.01" placeholder="Amount (₹)" value={expenseForm.amount} style={{ ...input, fontFamily: 'monospace' }} onChange={e => setExpenseForm(p => ({ ...p, amount: e.target.value }))} />
+            </div>
+            <input placeholder="Description, e.g. May electricity bill" value={expenseForm.description} style={input} onChange={e => setExpenseForm(p => ({ ...p, description: e.target.value }))} />
+            <input type="date" value={expenseForm.spentOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setExpenseForm(p => ({ ...p, spentOn: e.target.value }))} />
+            <button type="button" onClick={async () => {
+              const f = expenseForm;
+              if (!f.description.trim()) return showNotif('Describe the cost', 'error');
+              if (!(Number(f.amount) > 0)) return showNotif('Amount must be more than 0', 'error');
+              if (!f.spentOn) return showNotif('Choose the date', 'error');
+              try {
+                await axios.post(`${BASE_URL}/admin/expenses/${tenantId}`, { ...f, tenantId });
+                setExpenseForm({ category: 'utilities', description: '', amount: '', spentOn: todayISTForm() });
+                showNotif('Running cost recorded'); fetchExpenses();
+              } catch (err) { showNotif(err.response?.data?.error || 'Could not record the cost', 'error'); }
+            }} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>RECORD COST</button>
+          </div>
+        </div>
+        <div style={panel}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={label}>Running costs this month</span>
+            <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#d3bfa2', fontWeight: '900' }}>₹{Number(expenseList.total || 0).toLocaleString('en-IN')}</span>
+          </div>
+          {(expenseList.items || []).length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>No running costs this month</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Rent, utilities and repairs go here.</div>
+            </div>
+          ) : (expenseList.items || []).map(e => (
+            <div key={e._id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.9fr auto', gap: '10px', alignItems: 'center', padding: '10px 2px', marginTop: '6px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+              <span style={{ fontSize: '0.72rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.description}</span>
+              <span style={{ fontSize: '0.62rem', color: '#B4B4B4' }}>{new Date(e.spentOn).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}</span>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#d3bfa2', fontWeight: '800' }}>₹{Number(e.amount).toLocaleString('en-IN')}</span>
+              <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove "${e.description}"?`, subtitle: 'This removes the cost from this month.', onConfirm: async () => {
+                try { await axios.delete(`${BASE_URL}/admin/expenses/${tenantId}/${e._id}`); fetchExpenses(); showNotif('Removed'); }
+                catch (err) { showNotif(err.response?.data?.error || 'Could not remove', 'error'); }
+              } })} style={{ padding: '5px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>REMOVE</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'compliance' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)' };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const days = (d) => Math.ceil((new Date(d).getTime() - Date.now()) / 864e5);
+  const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+  const items = complianceItems || [];
+  const expired = items.filter(i => days(i.expiresOn) < 0);
+  const soon = items.filter(i => { const n = days(i.expiresOn); return n >= 0 && n <= 30; });
+  const valid = items.length - expired.length - soon.length;
+  const status = (i) => { const n = days(i.expiresOn); return n < 0 ? { t: `Expired ${Math.abs(n)}d ago`, hot: true } : n <= 30 ? { t: `Renew in ${n}d`, hot: true } : { t: `Valid · ${fmt(i.expiresOn)}`, hot: false }; };
+  const [form, setForm] = [complianceForm, setComplianceForm];
+  const save = async () => {
+    if (!form.name.trim()) return showNotif('Name the licence or certificate', 'error');
+    if (!form.expiresOn) return showNotif('Enter the expiry date', 'error');
+    try {
+      await axios.post(`${BASE_URL}/admin/compliance/${tenantId}`, { ...form, tenantId });
+      setComplianceForm({ name: '', authority: '', reference: '', issuedOn: '', expiresOn: '', notes: '' });
+      showNotif('Saved'); fetchCompliance();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not save', 'error'); }
+  };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...card, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : P.line}` }}>
+      <div style={label}>{l}</div>
+      <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
+    </div>
+  );
+  return (
+    <div key="compliance" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('compliance.csv', ['Licence / certificate','Authority','Reference','Issued','Expires','Notes'], (complianceItems || []).map(i => [i.name, i.authority, i.reference, istDate(i.issuedOn), istDate(i.expiresOn), i.notes])); })}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        {tile('Expired', expired.length, expired.length ? 'renew before serving' : 'none expired', expired.length > 0)}
+        {tile('Renew within 30 days', soon.length, soon.length ? 'start renewal now' : 'nothing due soon', soon.length > 0)}
+        {tile('Valid', valid, 'current certificates', false)}
+        {tile('On record', items.length, 'licences and certificates', false)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        <div style={card}>
+          <div style={label}>Add a licence or certificate</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <input placeholder="e.g. FSSAI licence, Trade licence, Fire NOC" value={form.name} style={input} onChange={e => setComplianceForm(p => ({ ...p, name: e.target.value }))} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <input placeholder="Issuing authority" value={form.authority} style={input} onChange={e => setComplianceForm(p => ({ ...p, authority: e.target.value }))} />
+              <input placeholder="Licence / certificate no." value={form.reference} style={input} onChange={e => setComplianceForm(p => ({ ...p, reference: e.target.value }))} />
+              <div><div style={{ ...label, marginBottom: '6px' }}>Issued</div><input type="date" value={form.issuedOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setComplianceForm(p => ({ ...p, issuedOn: e.target.value }))} /></div>
+              <div><div style={{ ...label, marginBottom: '6px' }}>Expires</div><input type="date" value={form.expiresOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setComplianceForm(p => ({ ...p, expiresOn: e.target.value }))} /></div>
+            </div>
+            <input placeholder="Notes (optional)" value={form.notes} style={input} onChange={e => setComplianceForm(p => ({ ...p, notes: e.target.value }))} />
+            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE</button>
+          </div>
+        </div>
+        <div style={card}>
+          <div style={label}>Renewal calendar, soonest first</div>
+          {items.length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>Nothing on record yet</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Add your FSSAI licence, trade licence and certificates so renewals are never missed.</div>
+            </div>
+          ) : items.map(i => {
+            const s = status(i);
+            return (
+              <div key={i._id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto auto', gap: '10px', alignItems: 'center', padding: '11px 4px', marginTop: '6px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.name}</div>
+                  <div style={{ marginTop: '2px', fontSize: '0.6rem', color: '#8a8a8a' }}>{[i.authority, i.reference && `No. ${i.reference}`, i.notes].filter(Boolean).join(' · ') || 'No details'}</div>
+                </div>
+                <span style={{ justifySelf: 'start', whiteSpace: 'nowrap', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', padding: '4px 9px', borderRadius: '999px', textTransform: 'uppercase',
+                  color: s.hot ? '#0c0c0c' : '#B4B4B4', background: s.hot ? '#d3bfa2' : 'rgba(255,255,255,0.04)', border: `1px solid ${s.hot ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{s.t}</span>
+                <button type="button" onClick={async () => {
+                  const def = new Date(new Date(i.expiresOn).getTime() + 365 * 864e5).toISOString().slice(0, 10);
+                  const next = window.prompt(`New expiry date for ${i.name} (YYYY-MM-DD)`, def);
+                  if (!next) return;
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(next.trim())) return showNotif('Use the format YYYY-MM-DD', 'error');
+                  try { await axios.patch(`${BASE_URL}/admin/compliance/${tenantId}/${i._id}`, { expiresOn: next.trim() }); showNotif(`${i.name} renewed`); fetchCompliance(); }
+                  catch (err) { showNotif(err.response?.data?.error || 'Could not renew', 'error'); }
+                }} style={{ padding: '5px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>RENEW</button>
+                <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove ${i.name}?`, subtitle: 'Remove this record from the renewal calendar.', onConfirm: async () => {
+                  try { await axios.delete(`${BASE_URL}/admin/compliance/${tenantId}/${i._id}`); fetchCompliance(); showNotif('Removed'); }
+                  catch (err) { showNotif(err.response?.data?.error || 'Could not remove', 'error'); }
+                } })} style={{ padding: '5px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>REMOVE</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'equipment' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)' };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const items = equipmentData.items || [];
+  const logs = equipmentData.logs || [];
+  const dayMs = 864e5;
+  const dueIn = (e) => (e.lastServicedOn ? Math.ceil((new Date(e.lastServicedOn).getTime() + e.serviceEveryDays * dayMs - Date.now()) / dayMs) : null);
+  const dIST = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : 'Never';
+  const overdue = items.filter(e => dueIn(e) === null || dueIn(e) < 0);
+  const soon = items.filter(e => { const n = dueIn(e); return n !== null && n >= 0 && n <= 14; });
+  const spent = logs.reduce((n, l) => n + (Number(l.cost) || 0), 0);
+  const status = (e) => { const n = dueIn(e); if (n === null) return { t: 'Never serviced', hot: true }; if (n < 0) return { t: `Overdue ${Math.abs(n)}d`, hot: true }; if (n <= 14) return { t: `Due in ${n}d`, hot: true }; return { t: `Next ${dIST(new Date(new Date(e.lastServicedOn).getTime() + e.serviceEveryDays * dayMs))}`, hot: false }; };
+  const addItem = async () => {
+    if (!equipForm.name.trim()) return showNotif('Name the equipment', 'error');
+    if (!(Number(equipForm.serviceEveryDays) >= 1)) return showNotif('Service interval must be at least 1 day', 'error');
+    try {
+      await axios.post(`${BASE_URL}/admin/equipment/${tenantId}`, { ...equipForm, tenantId });
+      setEquipForm({ name: '', location: '', serviceEveryDays: '90', lastServicedOn: '' }); showNotif('Equipment added'); fetchEquipment();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not add the equipment', 'error'); }
+  };
+  const logService = async (e) => {
+    try {
+      await axios.post(`${BASE_URL}/admin/equipment/${tenantId}/${e._id}/service`, { tenantId, by: 'Service visit', cost: 0, serviceDate: new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10) });
+      showNotif(`${e.name} service logged`); fetchEquipment();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not log the service', 'error'); }
+  };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...card, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : P.line}` }}>
+      <div style={label}>{l}</div>
+      <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
+    </div>
+  );
+  return (
+    <div key="equipment" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('equipment-services.csv', ['Equipment','Location','Service every (days)','Last serviced','Service date','Serviced by','Cost (₹)','Notes'], (equipmentData.logs || []).map(l => { const e = (equipmentData.items || []).find(x => String(x._id) === String(l.equipmentId)) || {}; return [e.name, e.location, e.serviceEveryDays, istDate(e.lastServicedOn), istDate(l.serviceDate), l.by, l.cost, l.notes]; })); })}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        {tile('Equipment', items.length, 'tracked', false)}
+        {tile('Overdue or never serviced', overdue.length, overdue.length ? 'book a service' : 'all on schedule', overdue.length > 0)}
+        {tile('Due within 14 days', soon.length, soon.length ? 'confirm the visit' : 'nothing due soon', soon.length > 0)}
+        {tile('Service spend, on record', `₹${spent.toLocaleString('en-IN')}`, `${logs.length} service ${logs.length === 1 ? 'visit' : 'visits'}`, false)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        <div style={card}>
+          <div style={label}>Add equipment</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <input placeholder="e.g. Walk-in chiller, Tandoor, Hood exhaust" value={equipForm.name} style={input} onChange={e => setEquipForm(p => ({ ...p, name: e.target.value }))} />
+            <input placeholder="Location" value={equipForm.location} style={input} onChange={e => setEquipForm(p => ({ ...p, location: e.target.value }))} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div><div style={{ ...label, marginBottom: '6px' }}>Service every (days)</div><input type="number" min="1" value={equipForm.serviceEveryDays} style={input} onChange={e => setEquipForm(p => ({ ...p, serviceEveryDays: e.target.value }))} /></div>
+              <div><div style={{ ...label, marginBottom: '6px' }}>Last serviced</div><input type="date" value={equipForm.lastServicedOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setEquipForm(p => ({ ...p, lastServicedOn: e.target.value }))} /></div>
+            </div>
+            <button type="button" onClick={addItem} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>ADD EQUIPMENT</button>
+          </div>
+        </div>
+        <div style={card}>
+          <div style={label}>Service schedule</div>
+          {items.length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>No equipment tracked yet</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Add fridges, ovens, fryers and extraction so each service date is remembered.</div>
+            </div>
+          ) : items.map(e => {
+            const s = status(e);
+            const allForItem = logs.filter(l => String(l.equipmentId) === String(e._id)); const history = allForItem.slice(0, 3); const spend = allForItem.reduce((n, l) => n + (Number(l.cost) || 0), 0);
+            return (
+              <div key={e._id} style={{ padding: '12px 4px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto auto', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name}</div>
+                    <div style={{ marginTop: '2px', fontSize: '0.6rem', color: '#8a8a8a' }}>{[e.location, `every ${e.serviceEveryDays} days`, `last ${dIST(e.lastServicedOn)}`].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  <span style={{ justifySelf: 'start', whiteSpace: 'nowrap', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', padding: '4px 9px', borderRadius: '999px', textTransform: 'uppercase',
+                    color: s.hot ? '#0c0c0c' : '#B4B4B4', background: s.hot ? '#d3bfa2' : 'rgba(255,255,255,0.04)', border: `1px solid ${s.hot ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{s.t}</span>
+                  <button type="button" onClick={() => logService(e)} style={{ padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>LOG SERVICE</button>
+                  <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove ${e.name}?`, subtitle: 'Its service history is removed too.', onConfirm: async () => {
+                    try { await axios.delete(`${BASE_URL}/admin/equipment/${tenantId}/${e._id}`); fetchEquipment(); showNotif('Removed'); }
+                    catch (err) { showNotif(err.response?.data?.error || 'Could not remove', 'error'); }
+                  } })} style={{ padding: '6px 9px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.54rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>REMOVE</button>
+                </div>
+                {history.length > 0 && (
+                  <div style={{ marginTop: '8px', fontSize: '0.6rem', color: '#8a8a8a' }}>
+                    Spend ₹{spend.toLocaleString('en-IN')} · {allForItem.length} {allForItem.length === 1 ? 'visit' : 'visits'} · Recent: {history.map(h => `${dIST(h.serviceDate)}${h.by ? ` (${h.by})` : ''}${h.cost ? ` ₹${h.cost}` : ''}`).join('  ·  ')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'shiftlog' && (() => {
+  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const allNotes = shiftNotes || [];
+  const notes = allNotes.filter(n => shiftView === 'all' ? true : shiftView === 'urgent' ? (n.priority === 'urgent' && n.status === 'open') : shiftView === 'resolved' ? n.status === 'resolved' : n.status === 'open');
+  const open = allNotes.filter(n => n.status === 'open');
+  const urgent = open.filter(n => n.priority === 'urgent');
+  const when = (d) => new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+  const save = async () => {
+    if (!shiftForm.note.trim()) return showNotif('Write the note first', 'error');
+    try {
+      await axios.post(`${BASE_URL}/admin/shift-notes/${tenantId}`, shiftForm);
+      setShiftForm(p => ({ ...p, note: '', priority: 'normal' })); showNotif('Handover saved'); fetchShiftNotes();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not save', 'error'); }
+  };
+  const setStatus = async (n, status) => {
+    try { await axios.patch(`${BASE_URL}/admin/shift-notes/${tenantId}/${n._id}`, { status }); fetchShiftNotes(); }
+    catch (err) { showNotif(err.response?.data?.error || 'Could not update', 'error'); }
+  };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...card, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}>
+      <div style={label}>{l}</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
+    </div>
+  );
+  return (
+    <div key="shiftlog" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        {tile('Open handovers', open.length, 'waiting to be actioned', open.length > 0)}
+        {tile('Urgent', urgent.length, urgent.length ? 'act before the next shift' : 'nothing urgent', urgent.length > 0)}
+        {tile('Resolved, last 3 days', allNotes.filter(n => n.status === 'resolved').length, 'closed out', false)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        <div style={card}>
+          <div style={label}>Hand over to the next shift</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <select value={shiftForm.shift} style={input} onChange={e => setShiftForm(p => ({ ...p, shift: e.target.value }))}>{['Morning', 'Evening', 'Night'].map(s => <option key={s} value={s}>{s} shift</option>)}</select>
+              <input placeholder="Your name" value={shiftForm.author} style={input} onChange={e => setShiftForm(p => ({ ...p, author: e.target.value }))} />
+            </div>
+            <textarea rows={4} placeholder="What the next shift must know: guests, equipment, stock running low, pending bills, promises made" value={shiftForm.note} style={{ ...input, resize: 'vertical' }} onChange={e => setShiftForm(p => ({ ...p, note: e.target.value }))} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {['normal', 'urgent'].map(pr => (
+                <button key={pr} type="button" onClick={() => setShiftForm(p => ({ ...p, priority: pr }))} style={{ flex: 1, padding: '9px', borderRadius: '9px', cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.6px', textTransform: 'uppercase',
+                  background: shiftForm.priority === pr ? '#d3bfa2' : 'transparent', color: shiftForm.priority === pr ? '#0c0c0c' : '#969696', border: `1px solid ${shiftForm.priority === pr ? '#d3bfa2' : 'rgba(211,191,162,0.18)'}` }}>{pr}</button>
+              ))}
+            </div>
+            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE HANDOVER</button>
+          </div>
+        </div>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}><div style={label}>Handovers</div><div style={{ display: 'flex', gap: '6px' }}>{[['open', 'Open'], ['urgent', 'Urgent'], ['resolved', 'Resolved'], ['all', 'All']].map(([k, t]) => (<button key={k} type="button" onClick={() => setShiftView(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: shiftView === k ? '#d3bfa2' : '#070707', color: shiftView === k ? '#0c0c0c' : '#969696', border: `1px solid ${shiftView === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{t}</button>))}</div></div>
+          {notes.length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>No handovers yet</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Write one at the end of each shift so nothing is lost between teams.</div>
+            </div>
+          ) : notes.map(n => (
+            <div key={n._id} style={{ padding: '12px 4px', borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: n.status === 'resolved' ? 0.55 : 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {n.priority === 'urgent' && <span style={{ fontSize: '0.54rem', fontWeight: '900', letterSpacing: '0.6px', padding: '3px 8px', borderRadius: '999px', background: '#d3bfa2', color: '#0c0c0c' }}>URGENT</span>}
+                  <span style={{ fontSize: '0.66rem', color: '#ECDCB9', fontWeight: '800' }}>{n.shift} shift{n.author ? ` · ${n.author}` : ''}</span>
+                  <span style={{ fontSize: '0.6rem', color: '#8a8a8a' }}>{when(n.createdAt)}</span>
+                </div>
+                <button type="button" onClick={() => setStatus(n, n.status === 'open' ? 'resolved' : 'open')} style={{ padding: '5px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>{n.status === 'open' ? 'MARK DONE' : 'REOPEN'}</button>
+              </div>
+              <div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#B4B4B4', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{n.note}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'checklists' && (() => {
+  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const items = checklistData.items || [];
+  const doneIds = new Set((checklistData.logs || []).map(l => String(l.itemId)));
+  const phases = ['Opening', 'Mid-shift', 'Closing'];
+  const doneCount = items.filter(i => doneIds.has(String(i._id))).length;
+  const pct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+  const tick = async (item) => {
+    try {
+      await axios.post(`${BASE_URL}/admin/checklists/${tenantId}/${item._id}/tick`, { day: checklistData.day, done: !doneIds.has(String(item._id)), doneBy: 'Operator' });
+      fetchChecklists();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not update the task', 'error'); }
+  };
+  const add = async () => {
+    if (!checkForm.title.trim()) return showNotif('Describe the task', 'error');
+    try { await axios.post(`${BASE_URL}/admin/checklists/${tenantId}`, checkForm); setCheckForm(p => ({ ...p, title: '', assignee: '' })); fetchChecklists(); showNotif('Task added'); }
+    catch (err) { showNotif(err.response?.data?.error || 'Could not add the task', 'error'); }
+  };
+  return (
+    <div key="checklists" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '18px' }}>
+        <div>
+          <div style={label}>Today · {checklistData.day ? new Date(`${checklistData.day}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: '2-digit', month: 'short' }) : ''}</div>
+          <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.6rem', fontWeight: '900', color: pct === 100 ? '#d3bfa2' : '#ECDCB9' }}>{doneCount} of {items.length} done</div>
+        </div>
+        <div style={{ flex: 1, maxWidth: '420px' }}>
+          <div style={{ height: '8px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#d3bfa2,#B8923A)', borderRadius: '6px', transition: 'width 0.3s' }} />
+          </div>
+          <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#8a8a8a' }}>{pct === 100 ? 'Everything is ticked for today' : `${items.length - doneCount} still open`}</div>
+        </div>
+      </div>
+      <div style={card}>
+        <div style={label}>Last 7 days · completion against today's list</div>
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '10px', alignItems: 'end', height: '90px' }}>
+          {checkHistory.map(h => { const pc = h.total ? Math.round((h.done / h.total) * 100) : 0; return (
+            <div key={h.day} title={`${h.done} of ${h.total}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%', justifyContent: 'flex-end' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.56rem', color: '#d3bfa2' }}>{h.total ? `${pc}%` : '-'}</span>
+              <div style={{ width: '100%', height: `${Math.max(4, pc * 0.6)}px`, borderRadius: '6px', background: pc === 100 ? '#d3bfa2' : 'rgba(211,191,162,0.22)' }} />
+              <span style={{ fontSize: '0.5rem', color: '#8a8a8a' }}>{new Date(`${h.day}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short' })}</span>
+            </div>); })}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '14px', alignItems: 'start' }}>
+        {phases.map(ph => {
+          const list = items.filter(i => i.phase === ph);
+          const done = list.filter(i => doneIds.has(String(i._id))).length;
+          return (
+            <div key={ph} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={label}>{ph}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.66rem', color: '#d3bfa2' }}>{done}/{list.length}</span>
+              </div>
+              {list.length === 0 ? (
+                <div style={{ marginTop: '18px', fontSize: '0.64rem', color: '#8a8a8a' }}>No tasks for this phase yet.</div>
+              ) : list.map(item => {
+                const on = doneIds.has(String(item._id));
+                return (
+                  <div key={item._id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '10px', alignItems: 'center', padding: '10px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <button type="button" onClick={() => tick(item)} aria-label={on ? 'Mark not done' : 'Mark done'} style={{ width: '20px', height: '20px', borderRadius: '6px', cursor: 'pointer', padding: 0,
+                      background: on ? '#d3bfa2' : 'transparent', border: `1px solid ${on ? '#d3bfa2' : 'rgba(211,191,162,0.35)'}`, color: '#0c0c0c', fontSize: '0.7rem', fontWeight: '900' }}>{on ? '✓' : ''}</button>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.7rem', color: on ? '#8a8a8a' : '#ECDCB9', fontWeight: '700', textDecoration: on ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                      {item.assignee && <div style={{ marginTop: '2px', fontSize: '0.58rem', color: '#8a8a8a' }}>{item.assignee}</div>}
+                    </div>
+                    <button type="button" onClick={() => setConfirmModal({ show: true, title: `Remove "${item.title}"?`, subtitle: 'It will stop appearing on future days. Past records are kept.', onConfirm: async () => {
+                      try { await axios.delete(`${BASE_URL}/admin/checklists/${tenantId}/${item._id}`); fetchChecklists(); showNotif('Task removed'); }
+                      catch (err) { showNotif(err.response?.data?.error || 'Could not remove', 'error'); }
+                    } })} style={{ padding: '4px 7px', borderRadius: '7px', cursor: 'pointer', fontSize: '0.5rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a' }}>REMOVE</button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <div style={card}>
+        <div style={label}>Add a recurring task</div>
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px' }}>
+          <input placeholder="e.g. Check fridge temperatures and note them" value={checkForm.title} style={input} onChange={e => setCheckForm(p => ({ ...p, title: e.target.value }))} />
+          <select value={checkForm.phase} style={input} onChange={e => setCheckForm(p => ({ ...p, phase: e.target.value }))}>{phases.map(p => <option key={p} value={p}>{p}</option>)}</select>
+          <input placeholder="Assigned to" value={checkForm.assignee} style={input} onChange={e => setCheckForm(p => ({ ...p, assignee: e.target.value }))} />
+          <button type="button" onClick={add} style={{ padding: '0 18px', borderRadius: '10px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.6rem', fontWeight: '900' }}>ADD</button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'issues' && (() => {
+  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '10px', color: '#ECDCB9', fontSize: '0.74rem', outline: 'none' };
+  const list = issuesData || [];
+  const open = list.filter(i => i.status === 'open');
+  const refunds = list.filter(i => i.kind === 'Refund' && i.status === 'resolved').reduce((n, i) => n + (Number(i.amount) || 0), 0);
+  const shown = list.filter(i => (issueFilter === 'all' || i.kind === issueFilter) && (issueStatus === 'all' || i.status === issueStatus));
+  const when = (d) => new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+  const add = async () => {
+    if (!issueForm.title.trim()) return showNotif('Describe what happened', 'error');
+    try {
+      await axios.post(`${BASE_URL}/admin/issues/${tenantId}`, { ...issueForm, amount: Number(issueForm.amount) || 0 });
+      setIssueForm({ kind: 'Complaint', title: '', details: '', tableNumber: '', customerName: '', customerPhone: '', amount: '' });
+      showNotif('Logged'); fetchIssues();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not log it', 'error'); }
+  };
+  const resolve = async (i) => {
+    const text = window.prompt('How was it resolved?', i.resolution || '');
+    if (text === null) return;
+    try { await axios.patch(`${BASE_URL}/admin/issues/${tenantId}/${i._id}`, { status: 'resolved', resolution: text }); fetchIssues(); }
+    catch (err) { showNotif(err.response?.data?.error || 'Could not resolve', 'error'); }
+  };
+  const tile = (l, v, sub, hot) => (
+    <div style={{ ...card, padding: '16px 18px', border: `1px solid ${hot ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}>
+      <div style={label}>{l}</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: hot ? '#d3bfa2' : '#ECDCB9', lineHeight: 1 }}>{v}</div>
+      <div style={{ marginTop: '6px', fontSize: '0.62rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</div>
+    </div>
+  );
+  return (
+    <div key="issues" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('issues.csv', ['Logged','Kind','Title','Table','Guest','Phone','Amount (₹)','Status','Resolution','Details'], (issuesData || []).map(i => [istDate(i.createdAt), i.kind, i.title, i.tableNumber, i.customerName, i.customerPhone, i.amount, i.status, i.resolution, i.details])); })}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        {tile('Open', open.length, open.length ? 'need an answer' : 'nothing open', open.length > 0)}
+        {tile('Refunded', `₹${refunds.toLocaleString('en-IN')}`, 'resolved refunds', false)}
+        {tile('Logged', list.length, 'complaints, incidents and refunds', false)}
+        {tile('Avg time to resolve', (() => { const r = list.filter(i => i.status === 'resolved' && i.resolvedAt); if (!r.length) return '-'; const h = r.reduce((n, i) => n + (new Date(i.resolvedAt) - new Date(i.createdAt)), 0) / r.length / 3.6e6; return h < 24 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`; })(), 'from logged to resolved', false)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+        <div style={card}>
+          <div style={label}>Log an issue</div>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <select value={issueForm.kind} style={input} onChange={e => setIssueForm(p => ({ ...p, kind: e.target.value }))}>{['Complaint', 'Incident', 'Refund'].map(k => <option key={k} value={k}>{k}</option>)}</select>
+              <input placeholder="Table" value={issueForm.tableNumber} style={input} onChange={e => setIssueForm(p => ({ ...p, tableNumber: e.target.value }))} />
+            </div>
+            <input placeholder="What happened" value={issueForm.title} style={input} onChange={e => setIssueForm(p => ({ ...p, title: e.target.value }))} />
+            <textarea rows={2} placeholder="Details" value={issueForm.details} style={{ ...input, resize: 'vertical' }} onChange={e => setIssueForm(p => ({ ...p, details: e.target.value }))} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              <input placeholder="Guest name" value={issueForm.customerName} style={input} onChange={e => setIssueForm(p => ({ ...p, customerName: e.target.value }))} />
+              <input placeholder="Phone" value={issueForm.customerPhone} style={input} onChange={e => setIssueForm(p => ({ ...p, customerPhone: e.target.value }))} />
+              <input type="number" min="0" placeholder="₹ refund" value={issueForm.amount} style={{ ...input, fontFamily: 'monospace' }} onChange={e => setIssueForm(p => ({ ...p, amount: e.target.value }))} />
+            </div>
+            <button type="button" onClick={add} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>LOG ISSUE</button>
+          </div>
+        </div>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={label}>Issues</span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['all', 'Complaint', 'Incident', 'Refund'].map(k => (
+                <button key={k} type="button" onClick={() => setIssueFilter(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: issueFilter === k ? '#d3bfa2' : '#070707', color: issueFilter === k ? '#0c0c0c' : '#969696', border: `1px solid ${issueFilter === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{k === 'all' ? 'All' : k}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>{[['all', 'All'], ['open', 'Open'], ['resolved', 'Resolved']].map(([k, t]) => (<button key={k} type="button" onClick={() => setIssueStatus(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: issueStatus === k ? '#d3bfa2' : '#070707', color: issueStatus === k ? '#0c0c0c' : '#969696', border: `1px solid ${issueStatus === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{t}</button>))}</div>
+          {shown.length === 0 ? (
+            <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>Nothing logged</div>
+              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Complaints, accidents and refunds go here, with how each was resolved.</div>
+            </div>
+          ) : shown.map(i => (
+            <div key={i._id} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr auto', gap: '10px', alignItems: 'center', padding: '11px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: i.status === 'resolved' ? 0.6 : 1 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '0.72rem', color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.title}</div>
+                <div style={{ marginTop: '2px', fontSize: '0.6rem', color: '#8a8a8a' }}>{[i.kind, i.tableNumber && `Table ${i.tableNumber}`, i.customerName, when(i.createdAt)].filter(Boolean).join(' · ')}{i.status === 'resolved' && i.resolution ? ` — ${i.resolution}` : ''}</div>
+              </div>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#d3bfa2' }}>{i.amount ? `₹${Number(i.amount).toLocaleString('en-IN')}` : ''}</span>
+              {i.status === 'open'
+                ? <button type="button" onClick={() => resolve(i)} style={{ padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', whiteSpace: 'nowrap' }}>RESOLVE</button>
+                : <span style={{ fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', color: '#8a8a8a' }}>RESOLVED</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'stocktake' && (() => {
+  const card = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '16px', padding: '20px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left' };
+  const label = { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' };
+  const input = { boxSizing: 'border-box', padding: '8px 10px', background: '#070707', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '9px', color: '#ECDCB9', fontSize: '0.72rem', outline: 'none', fontFamily: 'monospace', width: '110px' };
+  const rows = [...(inventory || [])].sort((a, b) => String(a.itemName).localeCompare(String(b.itemName)));
+  const entered = Object.entries(stockCountDraft).filter(([, v]) => v !== '' && v != null);
+  const preview = entered.map(([id, v]) => {
+    const it = rows.find(r => String(r._id) === id); if (!it) return null;
+    const exp = Number(it.currentStock) || 0, c = Number(v), wac = Number(it.weightedAvgCost || it.costPrice) || 0;
+    return { id, it, exp, c, diff: Math.round((c - exp) * 1000) / 1000, value: Math.round((c - exp) * wac * 100) / 100 };
+  }).filter(Boolean);
+  const net = preview.reduce((n, p) => n + p.value, 0);
+  const changed = preview.filter(p => p.diff !== 0).length;
+  const apply = async () => {
+    if (preview.length === 0) return showNotif('Enter at least one counted quantity', 'error');
+    if (!window.confirm(`Apply this count? ${changed} ingredient${changed === 1 ? '' : 's'} will change, net ${net >= 0 ? '+' : '-'}₹${Math.abs(net).toLocaleString('en-IN')} at cost.`)) return;
+    try {
+      const r = await axios.post(`${BASE_URL}/admin/stock-counts/${tenantId}`, { countedBy: stockCountBy || 'Operator', lines: preview.map(p => ({ inventoryId: p.id, counted: p.c })) });
+      setStockCountDraft({}); showNotif(`Stock count applied: ${r.data.count.changedCount} changed`); fetchStockCounts(); fetchManagementData();
+    } catch (err) { showNotif(err.response?.data?.error || 'Could not apply the count', 'error'); }
+  };
+  const history = stockCounts || [];
+  return (
+    <div key="stocktake" style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{csvButton(() => { downloadCsv('stock-valuation.csv', ['Ingredient','Unit','Stock','Cost per unit (WAC)','Value (₹)','Min threshold'], [...(inventory || [])].sort((a, b) => String(a.itemName).localeCompare(String(b.itemName))).map(i => { const w = Number(i.weightedAvgCost || i.costPrice) || 0; const q = Math.max(0, Number(i.currentStock) || 0); return [i.itemName, i.unit, Number(i.currentStock) || 0, w.toFixed(2), Math.round(q * w * 100) / 100, i.minThreshold]; })); })}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={label}>Counted this sheet</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: '#ECDCB9' }}>{entered.length} of {rows.length}</div></div>
+        <div style={{ ...card, padding: '16px 18px', border: `1px solid ${changed ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}><div style={label}>Ingredients that change</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: changed ? '#d3bfa2' : '#ECDCB9' }}>{changed}</div></div>
+        <div style={{ ...card, padding: '16px 18px', border: `1px solid ${net < 0 ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.12)'}` }}><div style={label}>Net variance at cost</div><div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: '900', color: net < 0 ? '#d3bfa2' : '#ECDCB9' }}>{net >= 0 ? '+' : '-'}₹{Math.abs(net).toLocaleString('en-IN')}</div></div>
+      </div>
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={label}>Count sheet · enter what is physically on the shelf</div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input placeholder="Counted by" value={stockCountBy} onChange={e => setStockCountBy(e.target.value)} style={{ ...input, width: '160px', fontFamily: 'inherit' }} />
+            <button type="button" onClick={() => setStockOnlyChanged(v => !v)} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: stockOnlyChanged ? '#d3bfa2' : 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: stockOnlyChanged ? '#0c0c0c' : '#d3bfa2', fontSize: '0.58rem', fontWeight: '900' }}>ONLY CHANGED</button>
+            <button type="button" onClick={() => setStockCountDraft(Object.fromEntries(rows.map(r => [String(r._id), String(Number(r.currentStock) || 0)])))} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900' }}>FILL SYSTEM</button>
+            <button type="button" onClick={() => setStockCountDraft({})} style={{ padding: '9px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: '#8a8a8a', fontSize: '0.58rem', fontWeight: '900' }}>CLEAR</button>
+            <button type="button" onClick={apply} style={{ padding: '9px 16px', borderRadius: '9px', cursor: 'pointer', border: 'none', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.6rem', fontWeight: '900', letterSpacing: '0.6px' }}>APPLY COUNT</button>
+          </div>
+        </div>
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '2fr 0.8fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '8px 4px', borderBottom: '1px solid rgba(211,191,162,0.12)' }}>
+          {['Ingredient', 'Unit', 'System', 'Counted', 'Difference', 'Value at cost'].map(h => <span key={h} style={label}>{h}</span>)}
+        </div>
+        <div style={{ maxHeight: '460px', overflowY: 'auto' }}>
+          {(stockOnlyChanged ? rows.filter(r => preview.some(p => p.id === String(r._id) && p.diff !== 0)) : rows).map(it => {
+            const id = String(it._id);
+            const v = stockCountDraft[id];
+            const p = preview.find(x => x.id === id);
+            return (
+              <div key={id} style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 1fr 1fr 1fr 1fr', gap: '10px', alignItems: 'center', padding: '8px 4px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <span style={{ fontSize: '0.7rem', color: '#ECDCB9', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.itemName}</span>
+                <span style={{ fontSize: '0.6rem', color: '#8a8a8a', textTransform: 'uppercase' }}>{it.unit}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#B4B4B4' }}>{Number(it.currentStock || 0)}</span>
+                <input type="number" min="0" step="0.001" value={v ?? ''} placeholder="-" onChange={e => setStockCountDraft(d => ({ ...d, [id]: e.target.value }))} style={input} />
+                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: p && p.diff !== 0 ? '#d3bfa2' : '#8a8a8a', fontWeight: '800' }}>{p ? (p.diff > 0 ? '+' : '') + p.diff : ''}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: p && p.value < 0 ? '#d3bfa2' : '#B4B4B4' }}>{p ? `${p.value >= 0 ? '+' : '-'}₹${Math.abs(p.value).toLocaleString('en-IN')}` : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={card}>
+        <div style={label}>Recent counts</div>
+        {history.length === 0 ? (
+          <div style={{ marginTop: '18px', fontSize: '0.64rem', color: '#8a8a8a' }}>No stock counts applied yet. Run one at least once a month.</div>
+        ) : history.map(c => (
+          <div key={c._id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '10px', padding: '9px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.66rem', color: '#B4B4B4' }}>
+            <span>{new Date(c.countedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            <span>{c.countedBy || 'Operator'}</span>
+            <span>{c.changedCount} changed of {c.lines.length}</span>
+            <span style={{ fontFamily: 'monospace', color: c.netVarianceValue < 0 ? '#d3bfa2' : '#ECDCB9' }}>{c.netVarianceValue >= 0 ? '+' : '-'}₹{Math.abs(c.netVarianceValue).toLocaleString('en-IN')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab === 'menu' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const items = menuItems || [];
+  const hidden = items.filter(i => i.isAvailable === false);
+  const noHalfFull = items.filter(i => !(Number(i.priceHalf) > 0) && !(Number(i.priceFull) > 0));
+  const exportRows = () => downloadCsv('menu.csv', ['Dish', 'Category', 'Price (₹)', 'Half (₹)', 'Full (₹)', 'Veg', 'Available', 'Best seller'], items.map(i => [i.name, i.categoryId, i.price, i.priceHalf || '', i.priceFull || '', i.isVeg ? 'veg' : 'non-veg', i.isAvailable === false ? 'no' : 'yes', i.isBestSeller ? 'yes' : 'no']));
+  if (items.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Menu health</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{items.length} dishes · {hidden.length} hidden from guests{noHalfFull.length ? ` · ${noHalfFull.length} with no half or full price` : ''}</div>
+        </div>
+        {csvButton(exportRows, 'Export the menu')}
+      </div>
+      {hidden.length > 0 && (
+        <div style={{ marginTop: '10px', fontSize: '0.64rem', color: '#8a8a8a' }}>Hidden now: {hidden.slice(0, 8).map(h => h.name).join(' · ')}{hidden.length > 8 ? ` and ${hidden.length - 8} more` : ''}</div>
+      )}
+    </div>
+  );
+})()}
+
 {activeTab === 'menu' && (
   <motion.div key="menu" initial={false} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
@@ -7342,6 +8372,7 @@ const renderMonthHeatmap = () => {
           <div style={{ fontSize: '10px', letterSpacing: '2.4px', textTransform: 'uppercase', color: P.gold, fontWeight: 800 }}>Guest intelligence</div>
           <div style={{ marginTop: '4px', fontSize: '12px', color: P.muted }}>Segments, visit history and lifetime value</div>
         </div>
+        {csvButton(() => downloadCsv('guests.csv', ['Name','Phone','Segment','Visits','Total spent (₹)','Average order (₹)','Last visit','Favourite dish'], (customerDir.customers || []).map(c => [c.name, c.phone, c.segment, c.visitCount, c.totalSpend, c.avgOrderValue, c.daysSinceVisit == null ? '' : `${c.daysSinceVisit} days ago`, c.topDish])))}
         <button type="button" onClick={() => fetchCustomerDir(customerSegFilter, customerSearch)}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '10px',
             background: 'transparent', border: `1px solid ${P.line}`, color: P.brass, cursor: 'pointer', fontSize: '11px', fontWeight: 800, letterSpacing: '1px' }}>
@@ -7595,6 +8626,38 @@ const renderMonthHeatmap = () => {
   );
 })()}
 
+
+{activeTab === 'marketing' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const list = [...(offers || [])].sort((a, b) => (Number(b.totalDiscount) || 0) - (Number(a.totalDiscount) || 0));
+  const given = list.reduce((n, o) => n + (Number(o.totalDiscount) || 0), 0);
+  const live = list.filter(o => o.isActive !== false && (!o.expiresAt || new Date(o.expiresAt).getTime() > Date.now())).length;
+  const exportRows = () => downloadCsv('offers.csv', ['Offer', 'Active', 'Used', 'Discount given (₹)', 'Expires'], list.map(o => [o.title, o.isActive !== false ? 'yes' : 'no', o.usageCount || 0, o.totalDiscount || 0, o.expiresAt ? istDate(o.expiresAt) : 'never']));
+  if (list.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Offer performance</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{live} live {live === 1 ? 'offer' : 'offers'} · {money(given)} given away in total</div>
+        </div>
+        {csvButton(exportRows, 'Export offer performance')}
+      </div>
+      <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.8fr 0.7fr 0.6fr 1fr 1fr', gap: '10px', fontSize: '0.66rem', color: '#B4B4B4' }}>
+        {['Offer', 'Status', 'Used', 'Discount given', 'Expires'].map(h => <span key={h} style={P.label}>{h}</span>)}
+        {list.slice(0, 6).map(o => [
+          <span key={o._id + 't'} style={{ color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title}</span>,
+          <span key={o._id + 's'} style={{ color: o.isActive !== false ? '#d3bfa2' : '#8a8a8a' }}>{o.isActive !== false ? 'Live' : 'Paused'}</span>,
+          <span key={o._id + 'u'} style={{ fontFamily: 'monospace' }}>{o.usageCount || 0}</span>,
+          <span key={o._id + 'd'} style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{money(o.totalDiscount)}</span>,
+          <span key={o._id + 'e'}>{o.expiresAt ? istDate(o.expiresAt) : 'Never'}</span>,
+        ])}
+      </div>
+    </div>
+  );
+})()}
 
 {activeTab === 'marketing' && (
 <motion.div key="marketing" initial={false} animate={{opacity:1,y:0}}
@@ -8573,7 +9636,31 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
  
 
           {/* ── BILLING ── */}
-          {activeTab==='billing' && (
+          {activeTab==='billing' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const days = Object.values((analytics || []).reduce((m, r) => { const k = String(r._id); const a = m[k] || { d: k, cash: 0, upi: 0, card: 0, revenue: 0, bills: 0 }; a.cash += Number(r.cash) || 0; a.upi += Number(r.upi) || 0; a.card += Number(r.card) || 0; a.revenue += Number(r.revenue) || 0; a.bills += Number(r.count) || 0; m[k] = a; return m; }, {})).sort((x, y) => y.d.localeCompare(x.d)).slice(0, 7);
+  const exportRows = () => downloadCsv('payment-mix-7-days.csv', ['Date', 'Bills', 'Revenue (₹)', 'Cash (₹)', 'UPI (₹)', 'Card (₹)'], days.map(d => [d.d, d.bills, d.revenue, d.cash, d.upi, d.card]));
+  if (days.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div><div style={P.label}>Payment mix, last 7 days</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{money(days.reduce((n, d) => n + d.revenue, 0))} billed across {days.reduce((n, d) => n + d.bills, 0)} bills</div></div>
+        {csvButton(exportRows, 'Export the 7-day payment mix')}
+      </div>
+      <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px', alignItems: 'end', height: '74px' }}>
+        {[...days].reverse().map(d => { const max = Math.max(...days.map(x => x.revenue), 1); const h = Math.max(4, Math.round((d.revenue / max) * 60)); return (
+          <div key={d.d} title={`${money(d.revenue)} · cash ${money(d.cash)} · UPI ${money(d.upi)} · card ${money(d.card)}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+            <div style={{ width: '100%', height: `${h}px`, borderRadius: '5px', background: 'linear-gradient(180deg,#d3bfa2,#8A704D)' }} />
+            <span style={{ fontSize: '0.5rem', color: '#8a8a8a' }}>{new Date(`${d.d}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}</span>
+          </div>); })}
+      </div>
+    </div>
+  );
+})()}
+
+{activeTab==='billing' && (
             <motion.div key="billing" initial={false} animate={{opacity:1}} style={{display:'flex',gap:'50px'}}>
               <div style={{flex:1}}>
                 <div style={styles.specialModeRow}>
@@ -10366,6 +11453,24 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 
          {/* ── INSIGHTS ── */}
 {/* ── INSIGHTS TAB ── */}
+{activeTab === 'insights' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const list = [...(profitabilityData || [])].filter(d => d.hasRecipe !== false);
+  const byMargin = [...list].sort((a, b) => (Number(b.marginPct) || 0) - (Number(a.marginPct) || 0));
+  const exportRows = () => downloadCsv('dish-profitability.csv', ['Dish', 'Sold', 'Margin %', 'Has recipe'], (profitabilityData || []).map(d => [d.name, d.totalQtySold || 0, d.marginPct ?? '', d.hasRecipe === false ? 'no' : 'yes']));
+  if (!profitabilityData || profitabilityData.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div><div style={P.label}>Dish profitability, this month</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>Best margin: {byMargin[0]?.name || '-'} · lowest: {byMargin[byMargin.length - 1]?.name || '-'}</div></div>
+        {csvButton(exportRows, 'Export dish profitability')}
+      </div>
+    </div>
+  );
+})()}
+
 {activeTab === 'insights' && (
 <motion.div
   key="insights"
@@ -11840,6 +12945,25 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 
 {/* ── PREMIUM AUDIT TRAIL TAB ── */}
 {/* ───────────────── AUDIT TRAIL TAB ───────────────── */}
+{activeTab === 'audit' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const logs = auditLogs || [];
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const todays = logs.filter(l => new Date(l.createdAt).toISOString().slice(0, 10) === today).length;
+  const exportRows = () => downloadCsv('audit-log.csv', ['When (IST)', 'Action', 'Who', 'Category', 'Entity', 'Note', 'Before', 'After'], logs.map(l => [new Date(l.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), l.action || '', l.actorName || '', l.category || '', l.entity || '', l.note || '', l.before ? JSON.stringify(l.before) : '', l.after ? JSON.stringify(l.after) : '']));
+  if (logs.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div><div style={P.label}>Audit trail</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{todays} {todays === 1 ? 'change' : 'changes'} today · {logs.length} on record</div></div>
+        {csvButton(exportRows, 'Export the audit trail')}
+      </div>
+    </div>
+  );
+})()}
+
 {activeTab === 'audit' && (
   <motion.div key="audit" initial={false} animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
@@ -11987,6 +13111,25 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 )}
 
 {/* ── PRATYEKSHA OPERATOR ASSISTANT ── */}
+{activeTab === 'assist' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const msgs = assistMessages || [];
+  const exportText = () => {
+    const text = msgs.map(m => `[${new Date(m.ts || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}] ${m.role === 'user' ? 'You' : 'Assistant'}: ${m.text}`).join('\n\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'assistant-transcript.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  if (msgs.length < 2) return null;
+  return (
+    <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <div><div style={P.label}>This conversation</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{Math.floor(msgs.length / 2)} {Math.floor(msgs.length / 2) === 1 ? 'question' : 'questions'} asked this session</div></div>
+      <button type="button" onClick={exportText} style={{ padding: '8px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.7px' }}>SAVE TRANSCRIPT</button>
+    </div>
+  );
+})()}
+
 {activeTab === 'assist' && (
   <motion.div
     key="assist"
@@ -12362,6 +13505,44 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 )}
 
           {/* ── MANAGEMENT ── */}
+{activeTab === 'management' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const month = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7);
+  const byStaff = (staff || []).map(m => {
+    const logs = (attendanceLogs || []).filter(l => (l.staffId === m._id || String(l.staffId) === String(m._id)) && String(l.date || '').startsWith(month));
+    const days = new Set(logs.filter(l => l.clockIn).map(l => l.date)).size;
+    const hours = logs.reduce((n, l) => n + (Number(l.totalWorkingHours) || 0), 0);
+    const auto = logs.filter(l => l.autoClosed).length;
+    return { m, days, hours: Math.round(hours * 10) / 10, auto };
+  });
+  const flagged = byStaff.reduce((n, r) => n + r.auto, 0);
+  const exportRows = () => downloadCsv(`attendance-${month}.csv`, ['Staff', 'Role', 'Days worked', 'Hours', 'Auto-closed shifts', 'Base salary (₹)'], byStaff.map(r => [r.m.name, r.m.role, r.days, r.hours, r.auto, r.m.baseSalary]));
+  if (!staff || staff.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Attendance this month</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{byStaff.reduce((n, r) => n + r.days, 0)} days worked across {staff.length} staff{flagged ? ` · ${flagged} shift${flagged === 1 ? '' : 's'} need a manager's correction` : ''}</div>
+        </div>
+        {csvButton(exportRows, 'Export attendance for payroll')}
+      </div>
+      <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.8fr 0.8fr 0.9fr', gap: '10px', fontSize: '0.66rem', color: '#B4B4B4' }}>
+        {['Staff', 'Role', 'Days', 'Hours', 'To review'].map(h => <span key={h} style={P.label}>{h}</span>)}
+        {byStaff.slice(0, 10).map(r => [
+          <span key={r.m._id + 'n'} style={{ color: '#ECDCB9', fontWeight: '800' }}>{r.m.name}</span>,
+          <span key={r.m._id + 'r'}>{r.m.role}</span>,
+          <span key={r.m._id + 'd'} style={{ fontFamily: 'monospace' }}>{r.days}</span>,
+          <span key={r.m._id + 'h'} style={{ fontFamily: 'monospace' }}>{r.hours}</span>,
+          <span key={r.m._id + 'a'} style={{ color: r.auto ? '#d3bfa2' : '#8a8a8a', fontWeight: r.auto ? '800' : '400' }}>{r.auto ? `${r.auto} auto-closed` : 'none'}</span>,
+        ])}
+      </div>
+    </div>
+  );
+})()}
+
 {activeTab==='management' && (
 <motion.div key="management" initial={false} animate={{opacity:1,y:0}} transition={{duration:0.4}}
   style={{display:'flex',flexDirection:'column',gap:'32px',paddingBottom:'100px',width:'100%'}}>
@@ -13048,6 +14229,47 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           {/* ════════════════════════════════════════════
               INVENTORY — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
+{activeTab === 'inventory' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const rows = (inventory || []).filter(i => (Number(i.currentStock) || 0) <= (Number(i.minThreshold) || 0)).map(i => {
+    const w = Number(i.weightedAvgCost || i.costPrice) || 0;
+    const proc = (procurementData || []).find(p => String(p._id) === String(i._id));
+    const avg = Number(proc?.avgDailyUsage) || 0;
+    const need = Math.max(0, Math.ceil(avg * 14 - (Number(i.currentStock) || 0)));
+    const qty = need || Math.ceil((Number(i.minThreshold) || 0) * 2);
+    return { i, qty, cost: Math.round(qty * w * 100) / 100, days: proc?.daysRemaining ?? null };
+  }).sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
+  const total = rows.reduce((n, r) => n + r.cost, 0);
+  const exportRows = () => downloadCsv('reorder-list.csv', ['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost (₹)', 'Days left'], rows.map(r => [r.i.itemName, r.i.unit, r.i.currentStock, r.i.minThreshold, r.qty, r.cost, r.days ?? '']));
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Reorder now</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{rows.length === 0 ? 'Everything is above its minimum' : `${rows.length} ${rows.length === 1 ? 'ingredient' : 'ingredients'} at or below minimum · about ${money(total)} to restock`}</div>
+        </div>
+        {rows.length > 0 && csvButton(exportRows, 'Export the reorder list')}
+      </div>
+      {rows.length > 0 && (
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr', gap: '10px', fontSize: '0.66rem', color: '#B4B4B4' }}>
+          {['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost', 'Days left'].map(h => <span key={h} style={P.label}>{h}</span>)}
+          {rows.slice(0, 8).map(r => [
+            <span key={r.i._id + 'n'} style={{ color: '#ECDCB9', fontWeight: '800' }}>{r.i.itemName}</span>,
+            <span key={r.i._id + 'u'}>{r.i.unit}</span>,
+            <span key={r.i._id + 's'} style={{ fontFamily: 'monospace' }}>{Number(r.i.currentStock) || 0}</span>,
+            <span key={r.i._id + 'm'} style={{ fontFamily: 'monospace' }}>{Number(r.i.minThreshold) || 0}</span>,
+            <span key={r.i._id + 'q'} style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{r.qty}</span>,
+            <span key={r.i._id + 'c'} style={{ fontFamily: 'monospace' }}>{money(r.cost)}</span>,
+            <span key={r.i._id + 'd'}>{r.days == null ? '-' : r.days <= 3 ? `${r.days}d · urgent` : `${r.days}d`}</span>,
+          ])}
+        </div>
+      )}
+    </div>
+  );
+})()}
+
 {activeTab === 'inventory' && (() => {
   /* ── Premium palette: obsidian, brass, ivory. Alerts use brass weight, never red / green / orange. ── */
   const P = {
@@ -13800,6 +15022,27 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           {/* ════════════════════════════════════════════
               RECIPES — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
+{activeTab === 'recipes' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const list = recipes || [];
+  const lines = [];
+  list.forEach(r => (r.ingredients || []).forEach(ing => lines.push([r.dishName || r.name || r.menuItemName || '', ing.itemName || ing.name || ing.inventoryName || '', ing.quantityUsed ?? ing.qty ?? '', ing.unit || ''])));
+  if (list.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Recipe book</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{list.length} {list.length === 1 ? 'dish' : 'dishes'} costed from {lines.length} ingredient lines</div>
+        </div>
+        {csvButton(() => downloadCsv('recipes.csv', ['Dish', 'Ingredient', 'Quantity', 'Unit'], lines), 'Export every recipe line')}
+      </div>
+    </div>
+  );
+})()}
+
 {activeTab === 'recipes' && (
   <motion.div key="recipes" initial={false} animate={{ opacity: 1, y: 0 }}
     style={{ display: 'flex', flexDirection: 'column', gap: '22px', paddingBottom: '100px', width: '100%', maxWidth: '1100px', margin: '0 auto' }}>
@@ -14481,6 +15724,28 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           {/* ════════════════════════════════════════════
     EXTRA ITEMS — Cold drinks, Ice creams, etc.
     ════════════════════════════════════════════ */}
+
+{activeTab==='extras' && (() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const items = extraItems || [];
+  const low = items.filter(i => (Number(i.currentStock) || 0) <= (Number(i.lowStockThreshold) || 0));
+  const value = items.reduce((n, i) => n + (Number(i.currentStock) || 0) * (Number(i.costPrice) || 0), 0);
+  const exportRows = () => downloadCsv('extra-items.csv', ['Item', 'Category', 'Unit', 'In stock', 'Low at', 'Price (₹)', 'Cost (₹)', 'Available'], items.map(i => [i.name, i.category, i.unit, i.currentStock, i.lowStockThreshold, i.price, i.costPrice, i.isAvailable === false ? 'no' : 'yes']));
+  if (items.length === 0) return null;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Beverages and retail</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{low.length ? `${low.length} at or below their low-stock mark: ${low.slice(0, 4).map(i => i.name).join(', ')}` : 'All items above their low-stock mark'} · stock worth {money(value)} at cost</div>
+        </div>
+        {csvButton(exportRows, 'Export extra items')}
+      </div>
+    </div>
+  );
+})()}
 
 {activeTab==='extras' && (
 <motion.div key="extras" initial={false} animate={{opacity:1,y:0}}
@@ -15851,7 +17116,7 @@ onClick={async () => {
       setConfirmModal({
         show: true,
         title: `T${id} is still in use`,
-        subtitle: `${err.response.data.error} Assign ${assignTableModal?.customerName || 'this party'} anyway?`,
+        subtitle: `${err.response.data.error} Seat ${assignTableModal?.customerName || 'this party'} here anyway?`,
         onConfirm: async () => {
           try {
             const forced = assignTableModal._fromReservation

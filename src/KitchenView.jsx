@@ -11,7 +11,7 @@
      The announcements are automatic. There is no microphone and no tap-to-listen: voice is output only.
    • A speaker button on each ticket repeats its details on demand.
    • Business logic (kds-item timing, dispatch, recall, 86, wastage, auth) is unchanged from the previous screen. */
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback } from 'react';
 import SupportContact from './SupportContact.jsx';
 import { io } from 'socket.io-client';
 import axios from 'axios';
@@ -224,6 +224,30 @@ const buildModSpeech = (who, m, fallbackNote) => {
   return `Order modified. ${who}. ${parts.join('. ')}${parts.length ? '.' : ''}`;
 };
 
+const sameName = (a, b) => String(a || '').toLowerCase().trim() === String(b || '').toLowerCase().trim();
+// A second change to the same ticket must not wipe the first one's highlight (a dish added earlier is still uncooked).
+// Keeps the very first "from" quantity and the latest "to"; a dish added then removed (or removed then added back) cancels out.
+const mergeModification = (prev, next) => {
+  if (!prev) return next;
+  const added = prev.added.map(a => ({ ...a }));
+  next.added.forEach(a => { const i = added.findIndex(x => sameName(x.name, a.name)); if (i >= 0) added[i].quantity = a.quantity; else added.push({ ...a }); });
+  const qty = prev.qty.map(q => ({ ...q }));
+  next.qty.forEach(q => { const i = qty.findIndex(x => sameName(x.name, q.name)); if (i >= 0) qty[i].to = q.to; else qty.push({ ...q }); });
+  const removed = prev.removed.map(r => ({ ...r }));
+  next.removed.forEach(r => { const i = removed.findIndex(x => sameName(x.name, r.name)); if (i >= 0) removed[i].quantity = r.quantity; else removed.push({ ...r }); });
+  const gone = n => next.removed.some(r => sameName(r.name, n));
+  return {
+    added: added.filter(a => !gone(a.name)),
+    qty: qty.filter(q => !gone(q.name)),
+    removed: removed.filter(r => !next.added.some(a => sameName(a.name, r.name))),
+  };
+};
+// "T-5" / "PARCEL" / "SWIGGY": the shortest name a cook recognises a ticket by.
+const shortLabel = o => {
+  const t = getOrderType(o);
+  return t === 'swiggy' ? 'SWIGGY' : t === 'zomato' ? 'ZOMATO' : t === 'parcel' ? 'PARCEL' : `T-${String(o.tableNumber ?? '').trim() || '?'}`;
+};
+
 // Short label for the arrival toast.
 const ticketLabel = order => {
   const t = getOrderType(order);
@@ -239,7 +263,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx,.kx *,.kx *::before,.kx *::after{box-sizing:border-box}
 .kx{--line:rgba(211,191,162,.16);--line2:rgba(211,191,162,.32);--gold:#d3bfa2;--gold2:#b99f78;--bronze:#8a704d;--cream:#f7f3eb;--mute:#9b978d;--dim:#6f6c64;--amber:#e29a58;--swiggy:#fc8019;--zomato:#e0343f;--veg:#5d9a4e;--nonveg:#c04a4a;
   --glass:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.016));--ease:cubic-bezier(.22,1,.36,1);
-  position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;color:var(--cream);
+  position:fixed;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;overflow:hidden;color:var(--cream);
   font-family:Poppins,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent;
   background:radial-gradient(120% 80% at 50% -10%,#17140f 0%,#0b0b0c 55%,#070708 100%);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -351,8 +375,6 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-search{display:flex;align-items:center;gap:8px;margin:8px 8px 0;padding:7px 12px;border-radius:12px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
 .kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.8rem}
 .kx-search input::placeholder{color:var(--dim)}
-.kx-recall{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.025);flex-shrink:0;overflow:hidden}
-.kx-recall .l{display:flex;align-items:center;gap:6px;font-size:.54rem;letter-spacing:.18em;font-weight:700;color:var(--mute);flex-shrink:0;text-transform:uppercase}
 .kx-health{border-radius:12px;border:1px solid var(--line);background:var(--glass),#0d0d0e;flex-shrink:0;overflow:hidden}
 .kx-health-h{display:flex;align-items:center;gap:8px;width:100%;padding:6px 12px;border:0;background:transparent;text-align:left}
 .kx-health-h .tt{font-size:.58rem;letter-spacing:.22em;font-weight:700;color:var(--gold);text-transform:uppercase}
@@ -369,13 +391,13 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 /* ── board ── */
 /* grid-auto-rows:max-content is what stops tickets overlapping: with the default auto rows a ticket (overflow:hidden + max-height) contributed almost no
    height to its row, so the rows collapsed and the next row slid over the ticket above it. */
-.kx-grid{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(var(--kx-col,262px),100%),1fr));grid-auto-rows:max-content;gap:10px;align-content:start;align-items:start;padding:2px 2px 14px}
+.kx-grid{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:grid;grid-template-columns:repeat(auto-fill,minmax(262px,1fr));grid-auto-rows:max-content;gap:10px;align-content:start;align-items:start;padding:2px 2px 14px}
 .kx-grid>*{min-width:0}
 .kx-center{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:70px 20px}
 .kx-center .ic{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:var(--glass),#0d0d0e;border:1px solid var(--line);color:var(--dim)}
 .kx-center h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.26em;color:var(--mute);text-transform:uppercase}
 .kx-center p{margin:0;font-size:.7rem;color:var(--dim);font-weight:500;max-width:420px;line-height:1.55;word-break:break-word}
-.kx-tk{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:var(--glass),#0f0e0d;box-shadow:0 16px 32px -24px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.05);height:var(--kx-h,auto);max-height:var(--kx-maxh,min(460px,max(230px,calc(100dvh - 175px))));transition:border-color .3s}
+.kx-tk{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:var(--glass),#0f0e0d;box-shadow:0 16px 32px -24px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.05);height:var(--kx-h,auto);max-height:460px;transition:border-color .3s}
 .kx-tk::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--rail,rgba(211,191,162,.35));z-index:2}
 .kx-tk.med{--rail:var(--gold)}
 .kx-tk.high{--rail:var(--amber);border-color:rgba(226,154,88,.55)}
@@ -521,7 +543,10 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 @media (max-width:1180px){.kx-stat.opt{display:none}}
 @media (max-width:1100px){.kx-stats{display:none}.kx-acts{margin-left:auto}.kx-seg button span.lb{display:none}.kx-seg button{padding:5px 9px}}
 @media (max-width:980px){.kx-brand-t{display:none}.kx-hide-md{display:none!important}.kx-toasts{top:calc(env(safe-area-inset-top) + 62px)}}
-@media (max-height:520px){.kx-health,.kx-ribbon{display:none}.kx-tk{--kx-maxh:max(230px,calc(100dvh - 112px))}.kx-top{padding-top:4px;padding-bottom:4px}}
+/* newer-CSS upgrades, only where the browser understands them (older kitchen tablets keep the plain fallbacks above) */
+@supports (width:min(1px,2px)){.kx-grid{grid-template-columns:repeat(auto-fill,minmax(min(var(--kx-col,262px),100%),1fr))}.kx-tk{max-height:var(--kx-maxh,min(460px,max(230px,calc(100vh - 175px))))}}
+@supports (width:min(1px,2px)) and (height:100dvh){.kx-tk{max-height:var(--kx-maxh,min(460px,max(230px,calc(100dvh - 175px))))}}
+@media (max-height:520px){.kx-health,.kx-ribbon{display:none}.kx-tk{--kx-maxh:max(230px,calc(100vh - 112px))}.kx-top{padding-top:4px;padding-bottom:4px}}
 .kx-ib.attn{border-color:rgba(226,154,88,.6);color:var(--amber);background:rgba(226,154,88,.1);animation:kxBreath 2s ease-in-out infinite}
 @media (max-width:599px){
   .kx-top{margin:6px 6px 0;padding:5px 7px;gap:6px;border-radius:14px}
@@ -626,6 +651,8 @@ const KitchenViewInner = () => {
   const confirm86Busy = useRef(false);
   const recentSocketRef = useRef(new Map()); // id -> { order, ts }: tickets the socket delivered in the last 20 s (a slower fetch must not drop them)
   const sortOldestRef = useRef(false);
+  const gridRef = useRef(null);
+  const anchorRef = useRef(null);          // the ticket at the top of the visible board and how far down it sits
   const audioUnlockedRef = useRef(false);
   const metaLoadedRef = useRef(false);      // categories / menu / tenant have been loaded at least once
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -756,7 +783,9 @@ const KitchenViewInner = () => {
         if (!incomingIds.has(id) && !dispatchedRef.current.has(id)) kept.push(v.order);
       });
       setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
-      setOrders(kept.length ? [...kept, ...incoming].sort((a, b) => createdMs(b) - createdMs(a)) : incoming);
+      const nextOrders = kept.length ? [...kept, ...incoming].sort((a, b) => createdMs(b) - createdMs(a)) : incoming;
+      setOrders(nextOrders);
+      setModInfo(prev => { const live = new Set(nextOrders.map(o => String(o._id))); const dead = Object.keys(prev).filter(k => !live.has(k)); if (!dead.length) return prev; const n = { ...prev }; dead.forEach(k => delete n[k]); return n; });
       if (!ordersOnly) metaLoadedRef.current = true;
       if (catRes) setCategories(catRes.data || []);
       if (menuRes) setMenuItems(menuRes.data || []);
@@ -881,7 +910,7 @@ const KitchenViewInner = () => {
       const mod = extractModification(data);
       const orderId = data.orderId ? String(data.orderId) : '';
       if (orderId) {
-        if (!modIsEmpty(mod)) setModInfo(prev => ({ ...prev, [orderId]: mod }));
+        if (!modIsEmpty(mod)) setModInfo(prev => ({ ...prev, [orderId]: mergeModification(prev[orderId], mod) }));
         markFresh(orderId); // the ticket glows so the cook finds it
         // Per-dish timers belong to the old line items: restart them for the changed ticket.
         const prefix = `${orderId}-`;
@@ -1000,6 +1029,7 @@ const KitchenViewInner = () => {
     try {
       const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
       later(() => dispatchedRef.current.delete(idKey), 90000);
+      try { localStorage.removeItem(`kds_note_${orderId}`); } catch { /* ignore */ } // the private ticket note is no longer needed
       fetchHealth(); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
@@ -1265,6 +1295,46 @@ const KitchenViewInner = () => {
   const toggleSort = () => setSortOldest(v => { const n = !v; sortOldestRef.current = n; try { localStorage.setItem('kds_sort_oldest', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const todayWastageCount = wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length;
 
+  /* ── keep the board steady ──
+     A ticket that arrives (or leaves) above the part of the board you are looking at used to shove everything down or up by a row, so
+     the ticket you were about to tap moved under your finger. Remember the first visible ticket and put the scroll back after each change. */
+  const captureAnchor = () => {
+    const g = gridRef.current;
+    if (!g) return;
+    const cards = g.querySelectorAll('[data-oid]');
+    for (const c of cards) {
+      if (c.style.position === 'absolute') continue; // a ticket that is animating out
+      if (c.offsetTop + c.offsetHeight > g.scrollTop + 4) { anchorRef.current = { id: c.getAttribute('data-oid'), top: c.offsetTop - g.scrollTop }; return; }
+    }
+    anchorRef.current = null;
+  };
+  useLayoutEffect(() => {
+    const g = gridRef.current;
+    const a = anchorRef.current;
+    if (g && a && g.scrollTop > 0) {
+      const el = Array.from(g.querySelectorAll('[data-oid]')).find(c => c.getAttribute('data-oid') === a.id);
+      if (el && el.style.position !== 'absolute') {
+        const delta = el.offsetTop - g.scrollTop - a.top;
+        if (Math.abs(delta) > 1) g.scrollTop += delta;
+      }
+    }
+    captureAnchor();
+  }, [orders, stationFilter, selectedCategory, searchQuery, sortOldest, isNonVegMode]);
+
+  // Escape closes whatever is open, topmost first.
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key !== 'Escape') return;
+      if (eightySixModal) setEightySixModal(null);
+      else if (showWastagePanel) setShowWastagePanel(false);
+      else if (showVoiceMenu) setShowVoiceMenu(false);
+      else if (sidebarOpen) setSidebarOpen(false);
+      else if (showSearch) { setShowSearch(false); setSearchQuery(''); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [eightySixModal, showWastagePanel, showVoiceMenu, sidebarOpen, showSearch]);
+
   /* ── breakpoint helpers ── */
   const showDrawerToggle = isMobile || isSmallTablet;
   const showPermanentSide = isLargeTablet || w >= 1200;
@@ -1443,8 +1513,9 @@ const KitchenViewInner = () => {
             </button>
           )}
           {recallQueue.length > 0 && (
-            <button type="button" className="kx-ib on" onClick={handleRecall} aria-label="Recall last ticket">
-              <History size={16} />{!isMobile && !isTablet && <span>RECALL</span>}<em className="kx-badge">{recallQueue.length}</em>
+            <button type="button" className="kx-ib on" onClick={handleRecall} aria-label="Recall last ticket"
+              title={`Recall ${recallQueue.length}/10: ${recallQueue.map(o => `${shortLabel(o)} (${(o.items || []).filter(isKitchenItem).length})`).join(', ')}`}>
+              <History size={16} />{!isMobile && !isTablet && <span>RECALL {shortLabel(recallQueue[0])}</span>}<em className="kx-badge">{recallQueue.length}</em>
             </button>
           )}
           {!isMobile && (
@@ -1544,16 +1615,6 @@ const KitchenViewInner = () => {
               {filteredOrders.length > 1 && (
                 <button type="button" className="kx-sortbtn" onClick={toggleSort} style={{ marginLeft: 'auto' }}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
               )}
-            </div>
-          )}
-
-          {/* recall strip */}
-          {recallQueue.length > 0 && (
-            <div className="kx-recall">
-              <span className="l"><History size={12} /> Recall {recallQueue.length}/10</span>
-              <div className="kx-prep no-scrollbar">
-                {recallQueue.map((o, i) => <span key={o._id || i} className={`kx-tag${i === 0 ? ' gold' : ''}`} style={{ fontFamily: "'JetBrains Mono',monospace" }}>{getOrderType(o) === 'parcel' ? 'PARCEL' : `T-${o.tableNumber}`} · {o.items?.length}</span>)}
-              </div>
             </div>
           )}
 
@@ -1666,7 +1727,7 @@ const KitchenViewInner = () => {
 
           {/* TABLET / DESKTOP — ticket wall */}
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
-            <div className="kx-grid no-scrollbar" style={{ '--kx-col': `${gridCol}px` }}>
+            <div className="kx-grid no-scrollbar" ref={gridRef} onScroll={captureAnchor} style={{ '--kx-col': `${gridCol}px` }}>
               {boardState === 'loading' && orders.length === 0 && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} />)}
               {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
@@ -2055,6 +2116,7 @@ const KDSOrderCard = React.forwardRef(({
   return (
     <Motion.article
       ref={ref}
+      data-oid={order._id}
       layout
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}

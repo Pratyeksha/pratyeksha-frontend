@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
-import { fx, FxSoundToggle } from './customerFx.jsx';
+import { fx, FxSoundToggle, TextSizeToggle } from './customerFx.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
 
@@ -1382,7 +1382,7 @@ export default function CustomerHome() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
               <PwaInstallButton kind="customer" compact />
-              <FxSoundToggle lang={lang} />
+              <TextSizeToggle lang={lang} /><FxSoundToggle lang={lang} />
             </div>
           </div>
           <HeroLine lang={lang} />
@@ -1564,7 +1564,7 @@ export default function CustomerHome() {
         {/* ── Restaurants ── */}
         <section style={{ marginTop: 14 }}>
           {!loading && !loadError && filtered.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '0 0 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, rowGap: 8, flexWrap: 'wrap', margin: '0 0 12px' }}>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontWeight: 700, letterSpacing: .3 }}>
                 {filtered.length} {filtered.length === 1 ? tr.place : tr.places}{area !== 'all' && areaChips.find((a) => a.key === area) ? ` ${tr.inArea} ${areaChips.find((a) => a.key === area).label}` : ''}{nearMe ? tr.nearest : ''}
                 <button type="button" className="pxh-share" onClick={shareView} aria-label={tr.shareView} title={tr.shareView}><Share2 size={12} /></button>
