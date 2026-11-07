@@ -70,7 +70,7 @@ const BrandLogo = ({ className = "", alt = "Pratyeksha" }) => (
     src={LOGO_SRC}
     alt={alt}
     loading="eager"
-    fetchPriority="high"
+    fetchpriority="high"
     decoding="async"
   />
 );
@@ -299,6 +299,14 @@ const I = ({ name, size = 20, stroke = 1.5, className = "" }) => (
     {icons[name]}
   </Icon>
 );
+const MODULE_MINI = {
+  experience: { kpis: [["Menu views", "1,284"], ["Orders via QR", "312"]], bars: [38, 52, 44, 70, 58, 86, 74], rows: ["Table 12 · placed", "Table 5 · served"] },
+  operations: { kpis: [["Avg. prep", "11 min"], ["Open tickets", "7"]], bars: [60, 48, 72, 40, 66, 52, 44], rows: ["Butter Naan · 4:10", "Cold Coffee · 1:35"] },
+  billing: { kpis: [["Today", "₹48,260"], ["GST (CGST+SGST)", "₹2,298"]], bars: [30, 42, 55, 49, 68, 80, 92], rows: ["Invoice #1042 · UPI", "Invoice #1043 · Cash"] },
+  inventory: { kpis: [["Low stock", "3 items"], ["Wastage", "−18%"]], bars: [82, 74, 66, 58, 49, 41, 36], rows: ["Paneer · 1.2 kg left", "Milk · reorder"] },
+  intelligence: { kpis: [["Repeat guests", "42%"], ["Peak hour", "8–9 pm"]], bars: [28, 36, 50, 47, 76, 90, 64], rows: ["Best seller · Masala Dosa", "Slow mover · Soup"] },
+  marketing: { kpis: [["Campaign reach", "2.4k"], ["Redeemed", "186"]], bars: [20, 34, 41, 63, 57, 78, 88], rows: ["Weekend offer · live", "Win-back · scheduled"] },
+};
 const modules = [
   {
     id: "experience",
@@ -827,8 +835,37 @@ const INSTAGRAM_HIGHLIGHTS = [
   { title: "Book Demo", icon: "arrowUpRight", tone: "sage", url: INSTAGRAM_PROFILE_URL, note: "Take the next step" },
 ];
 
+const HERO_HEADLINE_WORDS = ["harmony.", "your control.", "clear focus.", "good flow."];
 const HERO_ROTATING_WORDS = ["in sync.", "more smoothly.", "with clarity.", "beautifully."];
 
+const HERO_FEED = [
+  { t: "Table 12", m: "Order placed · 3 items", k: "NEW" },
+  { t: "Kitchen", m: "Butter Naan fired · 4 min", k: "COOKING" },
+  { t: "Table 5", m: "Bill requested", k: "BILL" },
+  { t: "Table 8", m: "Order served · ₹840", k: "DONE" },
+  { t: "Stock", m: "Paneer running low", k: "ALERT" },
+  { t: "Table 3", m: "Feedback · 5 stars", k: "LOVE" },
+  { t: "Table 9", m: "Order placed · 2 items", k: "NEW" },
+];
+function HeroLiveFeed() {
+  const [n, setN] = useState(3);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const id = window.setInterval(() => { if (!document.hidden) setN((v) => v + 1); }, 2400);
+    return () => window.clearInterval(id);
+  }, []);
+  const rows = [0, 1, 2].map((j) => ({ ...HERO_FEED[(n - j) % HERO_FEED.length], id: n - j }));
+  return (
+    <div className="hero-feed" aria-label="Live activity example">
+      {rows.map((r) => (
+        <div key={r.id} className={`hero-feed-row k-${r.k.toLowerCase()}`}>
+          <span className="hero-feed-tag">{r.k}</span>
+          <span className="hero-feed-txt"><b>{r.t}</b><small>{r.m}</small></span>
+        </div>
+      ))}
+    </div>
+  );
+}
 function TypewriterWords({ words = HERO_ROTATING_WORDS, typeSpeed = 76, deleteSpeed = 42, pause = 1450 }) {
   const [wordIndex, setWordIndex] = useState(0);
   const [displayed, setDisplayed] = useState("");
@@ -1655,7 +1692,9 @@ class AppErrorBoundary extends React.Component {
   }
 }
 function App() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    try { return sessionStorage.getItem("pratyeksha_intro_seen") !== "1"; } catch { return true; }
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1694,7 +1733,7 @@ function App() {
   useEffect(() => {
     document.body.classList.add("pratyeksha-page");
 
-    // Warm the logo cache immediately so the 7-second opening screen never waits on the brand asset.
+    // Warm the logo cache immediately so the opening screen never waits on the brand asset.
     let logoPreload = null;
     try {
       logoPreload = document.createElement("link");
@@ -1708,9 +1747,11 @@ function App() {
       logoWarmup.src = LOGO_SRC;
     } catch {}
 
+    // Short branded intro, shown once per browser session; a revisit goes straight to the page.
     const timer = setTimeout(() => {
+      try { sessionStorage.setItem("pratyeksha_intro_seen", "1"); } catch { /* storage blocked */ }
       setLoading(false);
-    }, 7000);
+    }, 1500);
 
     return () => {
       clearTimeout(timer);
@@ -1804,7 +1845,7 @@ function App() {
     referrer.setAttribute("content", "strict-origin-when-cross-origin");
     let robots = document.querySelector('meta[name="robots"]');
     if (!robots) { robots = document.createElement("meta"); robots.name = "robots"; document.head.appendChild(robots); }
-    robots.setAttribute("content", "index,follow,max-image-preview:large");
+    robots.setAttribute("content", pageKey === "thankYou" || pageKey === "notFound" ? "noindex,follow" : "index,follow,max-image-preview:large");
     const canonicalUrl = window.location.origin + window.location.pathname;
     let canonical = document.querySelector('link[rel="canonical"]');
     if (!canonical) {
@@ -1827,7 +1868,20 @@ function App() {
     setMeta("og:type", "website");
     setMeta("og:url", canonicalUrl);
     setMeta("og:image", `${window.location.origin}/og-image.png`);
-    setMeta("og:image:alt", "Pratyeksha restaurant experience system logo");
+    setMeta("og:image:alt", "Pratyeksha restaurant experience system");
+    setMeta("og:site_name", "Pratyeksha");
+    setMeta("og:locale", "en_IN");
+    setMeta("og:image:width", "1959");
+    setMeta("og:image:height", "803");
+    const setNamed = (name, content) => {
+      let tag = document.querySelector(`meta[name="${name}"]`);
+      if (!tag) { tag = document.createElement("meta"); tag.setAttribute("name", name); document.head.appendChild(tag); }
+      tag.setAttribute("content", content);
+    };
+    setNamed("twitter:card", "summary_large_image");
+    setNamed("twitter:title", title);
+    setNamed("twitter:description", description);
+    setNamed("twitter:image", `${window.location.origin}/og-image.png`);
     let structuredData = document.getElementById("pratyeksha-structured-data");
     if (!structuredData) {
       structuredData = document.createElement("script");
@@ -1835,15 +1889,37 @@ function App() {
       structuredData.type = "application/ld+json";
       document.head.appendChild(structuredData);
     }
-    structuredData.textContent = JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      name: "Pratyeksha",
-      url: canonicalUrl,
-      email: "hello.pratyeksha@gmail.com",
-      telephone: "+91 87676 22654",
-      description: "Restaurant experience system for cafés and restaurants."
-    });
+    const origin = window.location.origin;
+    const graph = [
+      {
+        "@type": "Organization",
+        "@id": `${origin}/#org`,
+        name: "Pratyeksha",
+        url: origin,
+        logo: `${origin}/pratyeksha-logo.png`,
+        email: "hello.pratyeksha@gmail.com",
+        telephone: "+91 87676 22654",
+        address: { "@type": "PostalAddress", addressLocality: "Kolhapur", addressRegion: "Maharashtra", addressCountry: "IN" },
+      },
+      { "@type": "WebSite", "@id": `${origin}/#website`, url: origin, name: "Pratyeksha", inLanguage: "en-IN", publisher: { "@id": `${origin}/#org` } },
+    ];
+    if (pageKey === "home") {
+      graph.push({
+        "@type": "SoftwareApplication",
+        name: "Pratyeksha",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web, Android, iOS",
+        description: PAGE_META.home.description,
+        url: `${origin}/landing`,
+        publisher: { "@id": `${origin}/#org` },
+        featureList: modules.flatMap((m) => m.features).slice(0, 24),
+      });
+      graph.push({
+        "@type": "FAQPage",
+        mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+      });
+    }
+    structuredData.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
   }, [legalPage, currentPath, sent]);
   useEffect(() => {
     const sectionIds = ["home", "system", "experience", "operations", "intelligence", "marketing", "signature", "journey", "command", "fusion", "faq", "demo"];
@@ -1895,6 +1971,143 @@ function App() {
     );
     elements.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
+  }, [loading, legalPage]);
+  // Premium motion layer: staggered scroll reveals, hero tilt + parallax, magnetic buttons, auto-hiding nav.
+  useEffect(() => {
+    if (loading || legalPage) return undefined;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const root = document.documentElement;
+    const fine = window.matchMedia?.("(pointer: fine)").matches;
+    const SEL = ".site section:not(.hero) :is(.eyebrow,.section-heading,.module-copy>*,.module-visual,.use-card,.signature-card,.journey-step,.journey-visual,.matrix,.moment-stats,.fusion-ticket,.faq-item,.product-detail,.product-tab,.footer-column)";
+    const all = Array.from(document.querySelectorAll(SEL));
+    const nodes = all.filter((n) => n.tagName !== "H2" && !n.parentElement?.closest(SEL));
+    const seen = new Map();
+    nodes.forEach((n) => {
+      const p = n.parentElement;
+      const i = seen.get(p) || 0;
+      seen.set(p, i + 1);
+      n.style.setProperty("--px-d", `${Math.min(i, 5) * 80}ms`);
+      n.setAttribute("data-px", "out");
+    });
+    // Headings: split into words so each word rises in turn (text nodes only; nested <em> keeps its styling).
+    const heads = Array.from(document.querySelectorAll(".site section:not(.hero) h2"));
+    const splitWords = (el, counter) => {
+      Array.from(el.childNodes).forEach((c) => {
+        if (c.nodeType === 3) {
+          const frag = document.createDocumentFragment();
+          c.textContent.split(/(\s+)/).forEach((part) => {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(" ")); return; }
+            const w = document.createElement("span");
+            w.className = "px-w";
+            w.style.setProperty("--wi", String(counter.n++));
+            w.textContent = part;
+            frag.appendChild(w);
+          });
+          el.replaceChild(frag, c);
+        } else if (c.nodeType === 1 && c.tagName !== "BR") splitWords(c, counter);
+      });
+    };
+    heads.forEach((h) => { splitWords(h, { n: 0 }); h.setAttribute("data-px-h", "out"); });
+    // Count-up numbers.
+    const counters = Array.from(document.querySelectorAll(".moment-stats strong")).map((el) => {
+      const m = /^(\d+)(.*)$/.exec(el.textContent.trim());
+      return m ? { el, to: Number(m[1]), tail: m[2], done: false } : null;
+    }).filter(Boolean);
+    const runCount = (c) => {
+      if (c.done) return;
+      c.done = true;
+      const t0 = performance.now();
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / 1300);
+        c.el.textContent = `${Math.round(c.to * (1 - Math.pow(1 - k, 3)))}${c.tail}`;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    const counterEls = new Map(counters.map((c) => [c.el.closest(".moment-stats") || c.el, c]));
+    counters.forEach((c) => { c.el.textContent = `0${c.tail}`; });
+    root.classList.add("px-motion");
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        if (e.target.hasAttribute("data-px-h")) e.target.setAttribute("data-px-h", "in");
+        if (e.target.hasAttribute("data-px")) e.target.setAttribute("data-px", "in");
+        counters.forEach((c) => { if (c.el.closest(".moment-stats") === e.target) runCount(c); });
+        io.unobserve(e.target);
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px -6% 0px" });
+    nodes.forEach((n) => io.observe(n));
+    heads.forEach((h) => io.observe(h));
+    void counterEls;
+    const drifters = Array.from(document.querySelectorAll(".module-visual, .journey-visual"));
+
+    let raf = 0;
+    let lastY = window.scrollY;
+    const nav = document.querySelector(".nav");
+    const heroRight = document.querySelector(".hero-right");
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const y = window.scrollY;
+        if (nav) {
+          const dy = y - lastY;
+          if (y > 420 && dy > 8) nav.classList.add("px-nav-hide");
+          else if (dy < -4 || y < 420) nav.classList.remove("px-nav-hide");
+        }
+        lastY = y;
+        if (heroRight && y < window.innerHeight * 1.2) heroRight.style.setProperty("--px-par", `${(y * 0.06).toFixed(1)}px`);
+        root.style.setProperty("--px-hp", Math.min(1, Math.max(0, y / (window.innerHeight * 0.8))).toFixed(3));
+        const vh = window.innerHeight;
+        drifters.forEach((d) => {
+          const r = d.getBoundingClientRect();
+          if (r.bottom < -80 || r.top > vh + 80) return;
+          d.style.setProperty("--px-p", Math.max(-1, Math.min(1, (r.top + r.height / 2 - vh / 2) / vh)).toFixed(3));
+        });
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    let onMove = null;
+    let onLeave = null;
+    if (fine) {
+      const card = heroRight?.querySelector(".restaurant-card");
+      onMove = (ev) => {
+        if (card && heroRight.contains(ev.target)) {
+          const r = heroRight.getBoundingClientRect();
+          const x = (ev.clientX - r.left) / r.width - 0.5;
+          const y = (ev.clientY - r.top) / r.height - 0.5;
+          card.style.setProperty("--ry", `${(x * 9).toFixed(2)}deg`);
+          card.style.setProperty("--rx", `${(-y * 7).toFixed(2)}deg`);
+        }
+        const b = ev.target.closest?.(".button.primary, .nav-demo");
+        if (b) {
+          const r = b.getBoundingClientRect();
+          b.style.translate = `${((ev.clientX - r.left - r.width / 2) * 0.18).toFixed(1)}px ${((ev.clientY - r.top - r.height / 2) * 0.28).toFixed(1)}px`;
+        }
+      };
+      onLeave = (ev) => {
+        const t = ev.target;
+        if (t?.matches?.(".button.primary, .nav-demo")) t.style.translate = "";
+        if (card && t === heroRight) { card.style.setProperty("--ry", "0deg"); card.style.setProperty("--rx", "0deg"); }
+      };
+      document.addEventListener("pointermove", onMove, { passive: true });
+      document.addEventListener("pointerout", onLeave, { passive: true });
+    }
+    return () => {
+      io.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      if (onMove) document.removeEventListener("pointermove", onMove);
+      if (onLeave) document.removeEventListener("pointerout", onLeave);
+      if (raf) cancelAnimationFrame(raf);
+      root.classList.remove("px-motion");
+      nav?.classList.remove("px-nav-hide");
+      nodes.forEach((n) => { n.removeAttribute("data-px"); n.style.removeProperty("--px-d"); });
+      heads.forEach((h) => h.removeAttribute("data-px-h"));
+      root.style.removeProperty("--px-hp");
+    };
   }, [loading, legalPage]);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -2347,7 +2560,7 @@ function App() {
             <h1 className="hero-title reveal delay-1 hero-title-premium">
               Your restaurant.
               <br />
-              More in <em><TypewriterWords words={["harmony.", "your control.", "clear focus.", "good flow."]} /></em>
+              More in <em><TypewriterWords words={HERO_HEADLINE_WORDS} /></em>
             </h1>
             <p className="hero-description reveal delay-2">
               Orders, kitchen flow, stock and guest relationships should work together—not compete for your attention. Pratyeksha brings the moving parts into one connected view, helping you spend less time chasing updates and more time shaping the business you want to build.
@@ -2411,20 +2624,7 @@ function App() {
                   <strong>Order Experience</strong>
                 </div>
               </div>
-              <div className="restaurant-stats">
-                <div>
-                  <small>ORDER FLOW</small>
-                  <strong><I name="check-circle" size={15} /> Connected</strong>
-                </div>
-                <div>
-                  <small>KITCHEN</small>
-                  <strong><I name="timer" size={15} /> In view</strong>
-                </div>
-                <div>
-                  <small>DECISIONS</small>
-                  <strong><I name="chart-no-axes-combined" size={15} /> Informed</strong>
-                </div>
-              </div>
+              <HeroLiveFeed />
               <div className="mini-order">
                 <div className="mini-icon">
                   <I name="qr" size={16} />
@@ -2601,18 +2801,29 @@ function App() {
                     <small>Pratyeksha / {module.eyebrow}</small>
                   </div>
                   <div className="visual-body">
-                    <div className="visual-symbol">
-                      <I name={module.icon} size={38} stroke={1.2} />
+                    <div className="visual-top">
+                      <div className="visual-symbol">
+                        <I name={module.icon} size={26} stroke={1.3} />
+                      </div>
+                      <div className="visual-title">
+                        <small>SAMPLE VIEW</small>
+                        <strong>{module.eyebrow}</strong>
+                      </div>
                     </div>
-                    <div className="visual-title">
-                      <small>CONNECTED MODULE</small>
-                      <strong>{module.title}</strong>
+                    <div className="visual-kpis">
+                      {(MODULE_MINI[module.id]?.kpis || []).map(([k, v]) => (
+                        <div key={k}><small>{k}</small><b>{v}</b></div>
+                      ))}
                     </div>
-                    <div className="visual-bars">
-                      <i style={{ width: "88%" }} />
-                      <i style={{ width: "62%" }} />
-                      <i style={{ width: "76%" }} />
-                      <i style={{ width: "45%" }} />
+                    <div className="visual-chart" aria-hidden="true">
+                      {(MODULE_MINI[module.id]?.bars || []).map((h, i) => (
+                        <i key={i} style={{ "--h": `${h}%`, "--i": i }} />
+                      ))}
+                    </div>
+                    <div className="visual-rows">
+                      {(MODULE_MINI[module.id]?.rows || []).map((r) => (
+                        <span key={r}><i />{r}</span>
+                      ))}
                     </div>
                     <div className="visual-status">
                       <span>
@@ -8705,6 +8916,105 @@ section:not(.hero):not(.product-section){scroll-margin-top:80px}
 @media(max-width:620px){.demo-form-wrap{padding:23px 17px 30px!important}.demo-form-wrap:after{right:16px!important;font-size:6px!important}.hero-right .restaurant-card{border-radius:21px!important}}
 @media(prefers-reduced-motion:reduce){.hero-right .floating-note,.demo-form-wrap:before{animation:none!important}.demo-form-wrap,.demo-form-wrap .submit-button{transition:none!important}}
 
+
+/* ===== Landing hero redesign (final layer) ===== */
+.nav .desktop-nav button{color:#4a4436!important}
+.nav .desktop-nav button:hover,.nav .desktop-nav button.active{color:#1b1812!important}
+.nav .desktop-nav .nav-demo{color:#f7f1e4!important}
+main .hero{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:center;gap:clamp(8px,3vw,48px)}
+main .hero:after{display:none}
+main .hero-right{background:transparent!important;min-height:0!important;padding:112px clamp(16px,4vw,64px) 80px 0;overflow:visible}
+main .hero-left{min-height:0!important;padding:132px 0 80px clamp(24px,6vw,96px)!important}
+main .hero-eyebrow{display:inline-flex!important;width:fit-content;max-width:100%;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.6);border:1px solid rgba(102,112,74,.22);color:#5a6340}
+main .hero-eyebrow span{width:7px;height:7px;border-radius:50%;background:#7b8a55;flex:0 0 auto;animation:heroLive 1.8s ease-out infinite}
+@keyframes heroLive{0%{box-shadow:0 0 0 0 rgba(123,138,85,.55)}70%,100%{box-shadow:0 0 0 8px rgba(123,138,85,0)}}
+main .hero-title-premium{font-size:clamp(2.7rem,6.2vw,6rem);line-height:1.02}
+main .hero-right .restaurant-card{width:100%;max-width:430px;margin-inline:auto;position:relative;background:linear-gradient(160deg,#25231b,#14130f)!important;border:1px solid rgba(220,193,145,.22)!important;box-shadow:0 40px 90px rgba(33,29,20,.28)!important;border-radius:26px!important;overflow:hidden;color:#f4ecdc}
+main .hero-right .restaurant-card small{color:#c8ad7b!important}
+main .hero-right .restaurant-card strong{color:#f6efdf!important}
+main .hero-right .restaurant-top .live{background:rgba(123,216,143,.12)!important;color:#9fe3ae!important;border-color:rgba(123,216,143,.28)!important}
+main .hero-right .restaurant-card{justify-content:flex-start!important}
+main .hero-right .hero-orbit,main .hero-right .hero-glow{opacity:.55}
+.hero-feed,.hero-feed *{text-align:left}
+.hero-feed{margin:0!important;flex:0 0 auto!important;display:flex;flex-direction:column;gap:8px;padding:14px 18px;min-height:176px}
+.hero-feed-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);animation:heroFeedIn .5s cubic-bezier(.2,.8,.3,1) both}
+.hero-feed-row:nth-child(2){opacity:.75}.hero-feed-row:nth-child(3){opacity:.5}
+@keyframes heroFeedIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+.hero-feed-tag{flex:0 0 auto;min-width:64px;text-align:center;font:600 9px/1 'DM Mono',monospace;letter-spacing:.12em;padding:6px 8px;border-radius:999px;background:rgba(211,191,162,.16);color:#e6d6bb}
+.k-new .hero-feed-tag{background:rgba(123,216,143,.16);color:#9fe3ae}
+.k-alert .hero-feed-tag{background:rgba(240,170,90,.18);color:#f3b873}
+.k-bill .hero-feed-tag{background:rgba(120,170,240,.16);color:#a9c9f5}
+.hero-feed-txt{align-items:flex-start;display:flex;flex-direction:column;min-width:0;gap:2px}
+.hero-feed-txt b{font:600 13px/1.2 'DM Sans',sans-serif;color:#f6efdf}
+.hero-feed-txt small{font:400 11px/1.3 'DM Sans',sans-serif;color:rgba(244,236,220,.62)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){
+  main .hero{grid-template-columns:1fr;gap:0}
+  main .hero-left{padding:104px 20px 28px!important}
+  main .hero-right{padding:0 16px 84px}
+  main .hero-right .floating-note{display:none}
+}
+@media(prefers-reduced-motion:reduce){main .hero-eyebrow span,.hero-feed-row{animation:none!important}}
+
+/* ===== Premium motion & polish layer ===== */
+html{scroll-behavior:smooth}
+.nav:not(.nav-scrolled) .desktop-nav button:not(.nav-demo){color:#4a4436!important}
+.nav.nav-scrolled .desktop-nav button:not(.nav-demo){color:rgba(247,241,228,.78)!important}
+.nav.nav-scrolled .desktop-nav button:not(.nav-demo):hover,.nav.nav-scrolled .desktop-nav button:not(.nav-demo).active{color:#fff!important}
+.nav .desktop-nav .nav-demo{color:#f7f1e4!important}
+.nav.nav-scrolled .desktop-nav .nav-demo{background:#e6d6bb!important;color:#14110c!important}
+.nav{transition:background .45s ease,border-color .45s ease,box-shadow .45s ease,translate .5s cubic-bezier(.2,.8,.2,1)!important}
+.nav.px-nav-hide{translate:0 -110%}
+@keyframes pxUp{from{opacity:0;translate:0 34px;filter:blur(8px)}to{opacity:1;translate:0 0;filter:blur(0)}}
+@keyframes pxFloat{0%,100%{translate:0 0}50%{translate:0 -10px}}
+@keyframes pxShine{0%{left:-70%}60%,100%{left:140%}}
+@keyframes pxLine{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+html.px-motion [data-px="out"]{opacity:0!important;filter:blur(7px)!important;translate:0 38px}
+html.px-motion [data-px="in"]{opacity:1!important;filter:blur(0)!important;translate:0 0;transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--px-d,0ms),filter .9s cubic-bezier(.2,.7,.2,1) var(--px-d,0ms),translate .95s cubic-bezier(.2,.7,.2,1) var(--px-d,0ms)}
+/* hero entrance on load */
+main .hero-left>*{animation:pxUp 1s cubic-bezier(.2,.7,.2,1) both}
+main .hero-left>*:nth-child(1){animation-delay:.05s}main .hero-left>*:nth-child(2){animation-delay:.18s}main .hero-left>*:nth-child(3){animation-delay:.32s}main .hero-left>*:nth-child(4){animation-delay:.46s}main .hero-left>*:nth-child(5){animation-delay:.58s}main .hero-left>*:nth-child(n+6){animation-delay:.7s}
+main .hero-right .restaurant-card{transform:perspective(1100px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg))!important;transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .4s ease!important;animation:pxFloat 7s ease-in-out infinite!important;will-change:transform}
+main .hero-right .floating-note{animation:pxFloat 6s ease-in-out infinite!important}
+main .hero-right .floating-note.note-two{animation-delay:-3s!important}
+main .hero-right .hero-orbit{translate:0 var(--px-par,0px)}
+/* buttons: shine sweep + magnetic ease */
+.button{position:relative;overflow:hidden;transition:translate .25s cubic-bezier(.2,.7,.2,1),transform .3s ease,box-shadow .3s ease,background .3s ease!important}
+.button.primary:after{content:"";position:absolute;top:0;bottom:0;left:-70%;width:45%;transform:skewX(-20deg);background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);animation:pxShine 3.8s ease-in-out infinite;pointer-events:none}
+.button:active{transform:scale(.97)!important}
+/* cards: soft lift + gold edge */
+.use-card,.signature-card,.fusion-ticket,.module-visual,.product-tab{transition:transform .5s cubic-bezier(.2,.7,.2,1),box-shadow .5s ease,border-color .4s ease!important}
+.use-card:hover,.signature-card:hover,.fusion-ticket:hover{transform:translateY(-8px)!important;box-shadow:0 28px 60px rgba(33,29,20,.16),0 0 0 1px rgba(184,151,94,.35)!important}
+/* headings: gold hairline that draws in */
+.section-heading:after,.module-number:after{content:"";display:block;width:54px;height:1px;margin-top:18px;background:linear-gradient(90deg,#b8975e,transparent);transform-origin:left;animation:pxLine 1.2s .2s both}
+.scroll-progress{background:linear-gradient(90deg,#b8975e,#e6d6bb)!important;height:3px!important}
+::selection{background:rgba(184,151,94,.35)}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}main .hero-left>*,main .hero-right .restaurant-card,main .hero-right .floating-note,.button.primary:after,.section-heading:after,.module-number:after{animation:none!important}html.px-motion [data-px]{opacity:1!important;filter:none!important;translate:none!important}}
+
+/* ===== Scroll animation + module visual refinements ===== */
+.px-w{display:inline-block}
+html.px-motion [data-px-h="out"] .px-w{opacity:0;translate:0 .55em;filter:blur(6px)}
+html.px-motion [data-px-h="in"] .px-w{opacity:1;translate:0 0;filter:blur(0);transition:opacity .8s cubic-bezier(.2,.7,.2,1) calc(var(--wi)*55ms),translate .9s cubic-bezier(.2,.7,.2,1) calc(var(--wi)*55ms),filter .8s ease calc(var(--wi)*55ms)}
+main .hero-left{opacity:calc(1 - var(--px-hp,0)*.85);translate:0 calc(var(--px-hp,0)*-46px)}
+main .hero-right .restaurant-card{opacity:calc(1 - var(--px-hp,0)*.6)}
+.module-visual{--px-p:0}
+.module-visual .visual-window{translate:0 calc(var(--px-p)*-26px);will-change:translate}
+.module-visual .visual-float.float-top{translate:0 calc(var(--px-p)*42px)}
+.module-visual .visual-float.float-bottom{translate:0 calc(var(--px-p)*-52px)}
+.visual-body{display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:10px;padding:18px!important;text-align:left}
+.visual-top{display:flex;align-items:center;gap:12px}
+.visual-top .visual-symbol{width:44px!important;height:44px!important;margin:0!important;flex:0 0 auto;display:grid;place-items:center}
+.visual-top .visual-title{text-align:left!important;margin:0!important}
+.visual-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.visual-kpis div{padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09)}
+.visual-kpis small{display:block;font:500 9px/1.2 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;opacity:.65;margin-bottom:5px}
+.visual-kpis b{font:700 1.15rem/1 'DM Sans',sans-serif;color:#f6efdf}
+.visual-chart{display:flex;align-items:flex-end;gap:7px;height:54px;padding:6px 2px 0}
+.visual-chart i{flex:1;height:var(--h);border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,#d8bd8a,rgba(216,189,138,.25));transform-origin:bottom;transform:scaleY(.12);opacity:.5;transition:transform .9s cubic-bezier(.2,.7,.2,1) calc(var(--i)*70ms + 250ms),opacity .6s ease calc(var(--i)*70ms + 250ms)}
+html:not(.px-motion) .visual-chart i,[data-px="in"] .visual-chart i{transform:none;opacity:1}
+.visual-rows{display:flex;flex-direction:column;gap:7px}
+.visual-rows span{display:flex;align-items:center;gap:9px;font:500 12px/1.2 'DM Sans',sans-serif;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.045)}
+.visual-rows span i{width:6px;height:6px;border-radius:50%;background:#8fd9a0;flex:0 0 auto;animation:fxBlink 1.6s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){main .hero-left,main .hero-right .restaurant-card{opacity:1;translate:none}.module-visual .visual-window,.module-visual .visual-float{translate:none}.visual-chart i{transform:none;opacity:1;transition:none}html.px-motion [data-px-h] .px-w{opacity:1;translate:none;filter:none}}
 
 `;
 export default function Pratyeksha() {
